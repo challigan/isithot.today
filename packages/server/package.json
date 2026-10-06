@@ -1,0 +1,15 @@
+{
+  "name": "@isithot/server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared API handlers (today, search) used by the Netlify functions and server-rendered pages.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@isithot/core": "workspace:*",
+    "@isithot/providers": "workspace:*",
+    "@netlify/blobs": "^11.1.3"
+  }
+}

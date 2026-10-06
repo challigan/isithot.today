@@ -1,0 +1,11 @@
+{
+  "name": "@isithot/functions",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Netlify Functions serving /api/v1/*. Thin adapters over @isithot/server.",
+  "dependencies": {
+    "@isithot/server": "workspace:*",
+    "@netlify/functions": "^6.0.2"
+  }
+}

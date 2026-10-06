@@ -1,0 +1,13 @@
+{
+  "name": "@isithot/providers",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Data source adapters: Open-Meteo forecast and geocoding, NASA POWER climatology.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@isithot/core": "workspace:*"
+  }
+}

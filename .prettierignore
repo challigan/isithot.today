@@ -1,0 +1,8 @@
+pnpm-lock.yaml
+dist/
+.astro/
+.netlify/
+coverage/
+reference/
+data/cities.json
+packages/providers/test/fixtures/
