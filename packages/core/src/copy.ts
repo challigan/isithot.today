@@ -73,6 +73,14 @@ export const COPY = {
   unitsLabel: 'Temperature units',
 } as const;
 
+/** Messages for the API error envelope. */
+export const ERROR_MESSAGES = {
+  bad_location: 'Latitude and longitude must be decimal degrees.',
+  not_found: 'There is no page for that place.',
+  upstream_unavailable: COPY.unavailable,
+  rate_limited: 'Too many requests. Try again in a minute.',
+} as const;
+
 export function question(city?: string | null): string {
   return city ? `Is it hot in ${city} today?` : COPY.question;
 }

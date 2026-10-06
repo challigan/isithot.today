@@ -1,0 +1,45 @@
+{
+ "type": "Feature",
+ "geometry": {
+  "type": "Point",
+  "coordinates": [
+   -1.5,
+   55,
+   50
+  ]
+ },
+ "properties": {
+  "parameter": {
+   "T2M_MAX": {
+    "JAN": 6.8,
+    "FEB": 7.6,
+    "MAR": 9.8,
+    "APR": 12.8,
+    "MAY": 15.9,
+    "JUN": 18.1,
+    "JUL": 18.9,
+    "AUG": 18.1,
+    "SEP": 15.9,
+    "OCT": 12.8,
+    "NOV": 9.8,
+    "DEC": 7.6,
+    "ANN": 12.8
+   }
+  }
+ },
+ "header": {
+  "title": "NASA/POWER synthetic climatology",
+  "fill_value": -999
+ },
+ "messages": [],
+ "parameters": {
+  "T2M_MAX": {
+   "units": "C",
+   "longname": "Temperature at 2 Meters Maximum"
+  }
+ },
+ "times": {
+  "data": 0,
+  "process": 0
+ }
+}

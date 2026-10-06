@@ -6,7 +6,6 @@
   "include": [
     "packages/*/src/**/*.ts",
     "packages/*/test/**/*.ts",
-    "functions/**/*.mts",
     "scripts/**/*.ts",
     "e2e/**/*.ts",
     "vitest.config.ts",
