@@ -1,0 +1,23 @@
+#!/usr/bin/env node
+/** Prints which models returned data in the recorded fixtures (used in CI logs). */
+import { readFileSync } from 'node:fs';
+
+const dir = new URL('../packages/providers/test/fixtures/', import.meta.url);
+const read = (name) => JSON.parse(readFileSync(new URL(name, dir), 'utf8'));
+
+for (const name of ['open-meteo-forecast-newcastle.json', 'open-meteo-forecast-seville.json']) {
+  const f = read(name);
+  console.log(`${name}: timezone=${f.timezone} dates=${f.daily.time.join(',')}`);
+  for (const [key, values] of Object.entries(f.daily)) {
+    if (key === 'time') continue;
+    console.log(`  ${key}: ${JSON.stringify(values)}`);
+  }
+  const hourlyKeys = Object.keys(f.hourly ?? {}).filter((k) => k !== 'time');
+  console.log(`  hourly keys: ${hourlyKeys.join(', ')}`);
+}
+const nasa = read('nasa-power-newcastle.json');
+console.log(`nasa T2M_MAX: ${JSON.stringify(nasa.properties?.parameter?.T2M_MAX)}`);
+const search = read('open-meteo-search-newcastle.json');
+console.log(
+  `search: ${search.results?.map((r) => `${r.name}/${r.country_code}/${r.id}`).join(', ')}`,
+);

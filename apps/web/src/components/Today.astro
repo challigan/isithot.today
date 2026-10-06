@@ -1,0 +1,112 @@
+---
+/**
+ * The answer, verdict, model agreement and outbound links. Rendered on the server with data
+ * (city pages) or in its loading state (home page); the browser script updates the same nodes.
+ */
+import {
+  COPY,
+  outboundLinks,
+  question as questionFor,
+  type ApiLocation,
+  type NearbyCity,
+  type TodayResponse,
+} from '@isithot/core';
+import { GLYPHS, listHtml, stripHtml } from '../lib/view';
+
+interface Props {
+  data: TodayResponse | null;
+  /** City pages ask about the city by name. */
+  city?: string | null;
+  state: 'loading' | 'ready' | 'error';
+}
+
+const { data, city = null, state } = Astro.props;
+const day = data?.days[0] ?? null;
+const location: ApiLocation | null = data?.location ?? null;
+const links = outboundLinks(location);
+const nearby: NearbyCity[] = data?.nearby ?? [];
+const escape = (text: string): string =>
+  text.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+const nearbyHtml = nearby
+  .map((c) => `<a href="/in/${encodeURIComponent(c.slug)}">${escape(c.name)}</a>`)
+  .join(', ');
+const answer = state === 'error' ? COPY.unavailable : (day?.answer ?? COPY.checking);
+// Placeholders keep the layout steady while loading.
+const placeholderModels = Array.from(
+  { length: 8 },
+  () => '<li><span class="t">00°</span><span class="n">Model</span></li>',
+).join('');
+---
+
+<main id="main" tabindex="-1">
+  <svg
+    class="glyph"
+    id="glyph"
+    viewBox="0 0 120 120"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="3"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    aria-hidden="true"
+    set:html={day ? GLYPHS[day.band] : ''}
+  />
+  <p class="question" id="question">
+    {questionFor(city)}
+  </p>
+  <div aria-live="polite" aria-atomic="true" id="live">
+    <h1 class="answer" id="answer">
+      {answer}
+    </h1>
+    <p class="verdict hold" id="verdict">
+      {day?.verdict ?? "It's warm, not hot."}
+    </p>
+  </div>
+  <p class="detail hold" id="detail">
+    {day?.detail ??
+      'High of 00°, feels like 00°. Warmest around 0pm. 0° warmer than usual for September.'}
+  </p>
+  <button class="button retry" id="retry" type="button" hidden={state !== 'error'}>
+    {COPY.retry}
+  </button>
+  <p class="stale" id="stale" hidden={!data?.stale}>
+    {COPY.stale}
+  </p>
+
+  <section class="models hold" id="models" aria-labelledby="models-h">
+    <h2 id="models-h">
+      <span id="agree">{day?.agreementText ?? '0 of 0 forecasts agree within 2°'}</span>
+    </h2>
+    <p class="sr-only" id="strip-summary">
+      {day?.stripSummary ?? ''}
+    </p>
+    <div class="strip" id="strip" aria-hidden="true" set:html={day ? stripHtml(day) : ''} />
+    <div class="scale" aria-hidden="true">
+      <span id="smin">{day ? `${day.scale.min}°` : '0°'}</span>
+      <span id="smax">{day ? `${day.scale.max}°` : '0°'}</span>
+    </div>
+    <ul class="list" id="list" set:html={day ? listHtml(day) : placeholderModels} />
+    <p class="limited" id="limited" hidden={!day?.limitedText}>
+      {COPY.limited}
+    </p>
+  </section>
+
+  <p class="more" id="more">
+    {COPY.outboundIntro}
+    <a id="out-0" href={links[0]!.url} target="_blank" rel="noopener">
+      BBC Weather
+    </a>
+    ,
+    <a id="out-1" href={links[1]!.url} target="_blank" rel="noopener">
+      Met Office
+    </a>{' '}
+    or
+    <a id="out-2" href={links[2]!.url} target="_blank" rel="noopener">
+      AccuWeather
+    </a>
+    .
+  </p>
+  <p class="nearby" id="nearby" hidden={nearby.length === 0}>
+    {COPY.nearby} <span id="nearby-links" set:html={nearbyHtml} />
+  </p>
+</main>

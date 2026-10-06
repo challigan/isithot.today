@@ -19,7 +19,7 @@ import {
   type TodayResponse,
 } from '@isithot/core';
 import { fetchClimateNormals, fetchForecast, type Forecast } from '@isithot/providers';
-import { cityBySlug, cityForPlace } from './cities';
+import { cityBySlug, cityForPlace, nearbyCities } from './cities';
 import type { ServerDeps } from './deps';
 import { errorResult, privateCache, publicCache, type HandlerResult } from './http';
 import { reverseGeocode } from './reverse';
@@ -54,8 +54,9 @@ const COUNTRY = /^[A-Za-z]{2}$/;
 
 function clean(value: string | null, max = 80): string | null {
   if (!value) return null;
-  // eslint-disable-next-line no-control-regex
   const text = value
+    // Strip control characters and angle brackets from user-supplied names.
+    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f<>]/g, '')
     .trim()
     .slice(0, max);
@@ -275,6 +276,7 @@ export async function getToday(
     days: days.map((d) => formatDay(d, units)),
     updatedAt: new Date(loaded.fetchedAt).toISOString(),
     attribution: [COPY.forecastCredit, COPY.climateCredit],
+    nearby: nearbyCities(point, 4, located.slug).map((c) => ({ slug: c.slug, name: c.name })),
   };
   if (loaded.stale) body.stale = true;
 

@@ -1,5 +1,5 @@
 import type { Config } from '@netlify/functions';
-import { handleRateLimited } from '@isithot/server';
+import { handleRateLimited } from '../lib/server.mjs';
 
 /** The rate limiter rewrites over-limit requests here so clients get the JSON error envelope. */
 export default async (): Promise<Response> => handleRateLimited();

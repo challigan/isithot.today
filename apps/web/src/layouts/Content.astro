@@ -1,0 +1,31 @@
+---
+import Base from './Base.astro';
+import Footer from '../components/Footer.astro';
+import { PALETTES, SITE_NAME } from '@isithot/core';
+
+interface Props {
+  title: string;
+  description: string;
+  path: string;
+}
+const { title, description, path } = Astro.props;
+---
+
+<Base
+  title={`${title} | ${SITE_NAME}`}
+  description={description}
+  canonical={new URL(path, Astro.site).toString()}
+  palette={PALETTES.mild}
+>
+  <div class="wrap">
+    <header>
+      <a class="brand" href="/">
+        isithot<span>.today</span>
+      </a>
+    </header>
+    <main id="main" class="prose" tabindex="-1">
+      <slot />
+    </main>
+    <Footer />
+  </div>
+</Base>

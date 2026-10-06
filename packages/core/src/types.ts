@@ -74,6 +74,13 @@ export interface TodayResponse {
   attribution: string[];
   /** Present and true when upstream failed and this is a cached result under 6 hours old. */
   stale?: boolean;
+  /** The nearest city pages, for "Nearby" links. */
+  nearby?: NearbyCity[];
+}
+
+export interface NearbyCity {
+  slug: string;
+  name: string;
 }
 
 export interface SearchResult {

@@ -1,0 +1,9 @@
+---
+import Base from '../layouts/Base.astro';
+import NotFound from '../components/NotFound.astro';
+import { PALETTES, SITE_NAME } from '@isithot/core';
+---
+
+<Base title={`Not found | ${SITE_NAME}`} palette={PALETTES.cold} noindex>
+  <NotFound />
+</Base>

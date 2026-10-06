@@ -1,12 +1,15 @@
 import type { Config, Context } from '@netlify/functions';
-import { handleSearch } from '@isithot/server';
+import { handleSearch } from '../lib/server.mjs';
 
-export default async (request: Request, context: Context): Promise<Response> =>
-  handleSearch(request, {
+export default async (request: Request, context: Context): Promise<Response> => {
+  const response = await handleSearch(request, {
     env: (name) => Netlify.env.get(name),
     deployContext: context.deploy?.context,
     waitUntil: (promise) => context.waitUntil(promise),
   });
+  response.headers.set('x-isithot-via', 'function');
+  return response;
+};
 
 export const config: Config = {
   path: '/api/v1/search',

@@ -94,6 +94,8 @@ describe('GET /api/v1/today', () => {
       'Climate data: NASA POWER',
     ]);
     expect(body.updatedAt).toBe(NOW.toISOString());
+    expect(body.nearby).toHaveLength(4);
+    expect(body.nearby!.map((c) => c.slug)).not.toContain('newcastle-upon-tyne-gb');
     expect(body.stale).toBeUndefined();
     expect(r.headers['Cache-Control']).toBe('public, max-age=600');
   });

@@ -1,8 +1,8 @@
 import type { Config, Context } from '@netlify/functions';
-import { handleToday } from '@isithot/server';
+import { handleToday } from '../lib/server.mjs';
 
-export default async (request: Request, context: Context): Promise<Response> =>
-  handleToday(request, {
+export default async (request: Request, context: Context): Promise<Response> => {
+  const response = await handleToday(request, {
     env: (name) => Netlify.env.get(name),
     deployContext: context.deploy?.context,
     waitUntil: (promise) => context.waitUntil(promise),
@@ -14,6 +14,9 @@ export default async (request: Request, context: Context): Promise<Response> =>
       lon: context.geo?.longitude,
     },
   });
+  response.headers.set('x-isithot-via', 'function');
+  return response;
+};
 
 // Must be a literal: Netlify reads it statically. Mirrors RATE_LIMIT in packages/core/config.ts.
 export const config: Config = {

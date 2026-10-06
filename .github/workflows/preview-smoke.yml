@@ -1,0 +1,49 @@
+name: Deploy preview smoke test
+
+# Waits for the Netlify deploy preview of this pull request, then checks the live API and
+# pages against the real upstream data. Also records fresh upstream fixtures as an artifact.
+on:
+  pull_request:
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PREVIEW: https://deploy-preview-${{ github.event.number }}--isithotapp.netlify.app
+      SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Record live upstream fixtures
+        run: pnpm fixtures && node scripts/summarise-fixtures.mjs
+        continue-on-error: true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: live-fixtures
+          path: packages/providers/test/fixtures/
+          retention-days: 14
+
+      - name: Wait for the deploy preview of this commit
+        run: |
+          for i in $(seq 1 90); do
+            commit=$(curl -fsS "$PREVIEW/version.json" 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).commit)}catch{console.log("")}})')
+            if [ "$commit" = "$SHA" ]; then echo "Preview is live for $SHA"; exit 0; fi
+            echo "Waiting ($i): preview has '${commit:-nothing}'"
+            sleep 10
+          done
+          echo "Timed out waiting for the deploy preview"; exit 1
+
+      - name: Smoke test the preview
+        run: node scripts/smoke.mjs "$PREVIEW"

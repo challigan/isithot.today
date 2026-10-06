@@ -71,6 +71,10 @@ export const COPY = {
   forecastCredit: 'Forecast data: Open-Meteo.com (CC BY 4.0)',
   climateCredit: 'Climate data: NASA POWER',
   unitsLabel: 'Temperature units',
+  changeLocation: 'change location',
+  stale: 'Showing the last forecast we have. It will refresh shortly.',
+  previewLabel: 'Preview each kind of day',
+  previewNote: 'Sample data for design preview.',
 } as const;
 
 /** Messages for the API error envelope. */

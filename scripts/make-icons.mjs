@@ -1,0 +1,40 @@
+#!/usr/bin/env node
+/** Renders the PWA icons, apple-touch-icon and favicon.ico from public/favicon.svg. */
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { Resvg } from '@resvg/resvg-js';
+
+const pub = new URL('../apps/web/public/', import.meta.url);
+const svg = readFileSync(new URL('favicon.svg', pub), 'utf8');
+// Maskable icons need the artwork inside the central 80% safe zone, on a full-bleed background.
+const maskable = svg
+  .replace(
+    '<rect width="120" height="120" rx="26" fill="url(#g)"/>',
+    '<rect width="120" height="120" fill="url(#g)"/>',
+  )
+  .replace('<g fill="none"', '<g transform="translate(12 12) scale(.8)" fill="none"');
+
+const render = (source, size) =>
+  new Resvg(source, { fitTo: { mode: 'width', value: size } }).render().asPng();
+
+mkdirSync(new URL('icons/', pub), { recursive: true });
+writeFileSync(new URL('icons/icon-192.png', pub), render(svg, 192));
+writeFileSync(new URL('icons/icon-512.png', pub), render(svg, 512));
+writeFileSync(new URL('icons/icon-maskable-512.png', pub), render(maskable, 512));
+writeFileSync(new URL('apple-touch-icon.png', pub), render(maskable, 180));
+
+// A one-image .ico holding a 32×32 PNG.
+const png = render(svg, 32);
+const header = Buffer.alloc(22);
+header.writeUInt16LE(0, 0);
+header.writeUInt16LE(1, 2);
+header.writeUInt16LE(1, 4);
+header.writeUInt8(32, 6);
+header.writeUInt8(32, 7);
+header.writeUInt8(0, 8);
+header.writeUInt8(0, 9);
+header.writeUInt16LE(1, 10);
+header.writeUInt16LE(32, 12);
+header.writeUInt32LE(png.length, 14);
+header.writeUInt32LE(22, 18);
+writeFileSync(new URL('favicon.ico', pub), Buffer.concat([header, png]));
+console.log('icons written');

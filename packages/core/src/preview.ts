@@ -91,6 +91,7 @@ const SAMPLES: Record<Band, Sample> = {
 };
 
 export const PREVIEW_BANDS: readonly Band[] = BANDS;
+export { BAND_LABELS } from './copy';
 
 export function previewResponse(band: Band, units: Units = 'c'): TodayResponse {
   const s = SAMPLES[band];

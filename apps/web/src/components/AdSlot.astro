@@ -1,0 +1,30 @@
+---
+/**
+ * The single display ad. Every ad goes through this component so the future paid tier is a
+ * one-line switch (`adsDisabled`). Nothing renders unless PUBLIC_ADS_ENABLED is "true".
+ */
+interface Props {
+  /** Set for visitors who paid to remove ads. */
+  adsDisabled?: boolean;
+}
+const { adsDisabled = false } = Astro.props;
+const client = import.meta.env.PUBLIC_ADSENSE_CLIENT;
+const slot = import.meta.env.PUBLIC_ADSENSE_SLOT;
+const enabled = import.meta.env.PUBLIC_ADS_ENABLED === 'true' && !!client && !!slot && !adsDisabled;
+---
+
+{enabled && (
+  <aside class="ad-slot" aria-label="Advertisement" data-ad-client={client}>
+    <ins
+      class="adsbygoogle"
+      data-ad-client={client}
+      data-ad-slot={slot}
+      data-ad-format="auto"
+      data-full-width-responsive="true"
+    />
+  </aside>
+)}
+{enabled && <script>
+  import { loadAds } from '../scripts/ads';
+  loadAds();
+</script>}

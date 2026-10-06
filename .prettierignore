@@ -4,5 +4,6 @@ dist/
 .netlify/
 coverage/
 reference/
-data/cities.json
+data/
+functions/lib/server.mjs
 packages/providers/test/fixtures/
