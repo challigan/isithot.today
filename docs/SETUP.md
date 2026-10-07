@@ -42,7 +42,8 @@ scale with the number of distinct places, not page views.
    domain; `www` redirects to it.
 
 Canonical URLs, the sitemap and OG image links use Netlify's `URL` variable, which follows the
-primary domain, so nothing in code changes.
+primary domain, so nothing in code changes. The address is read at build time, so trigger a
+redeploy (**Deploys → Trigger deploy**) after changing the primary domain.
 
 ## 4. Cloudflare Web Analytics (cookieless, free)
 
