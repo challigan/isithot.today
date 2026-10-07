@@ -32,9 +32,21 @@ production, responses carry `x-isithot-via: function` when the dedicated functio
 - **Normal daily highs come from NASA POWER's `T2M + T2M_RANGE / 2`, not `T2M_MAX`.**
   Checked against live responses: in the climatology endpoint `T2M_MAX` is the highest
   temperature of the period, and `T2M_MAX_AVG` is the average _hottest day_ of each month.
-  Both put London's January normal at 11–12°C and its July normal at 29°C (the real normal
-  daily highs are about 8°C and 24°C). The monthly mean temperature plus half the average daily
-  range is the standard estimate of the mean daily high.
+  Both put London's January normal at 11–12°C and its July normal at 29°C. The monthly mean
+  temperature plus half the average daily range is the standard estimate of the mean daily
+  high. Against published 1991–2020 normals it runs about 1–2°C cool:
+
+  | Normal daily high, °C | NASA estimate | Published normal |
+  | --------------------- | ------------- | ---------------- |
+  | London, Jan / Jul     | 6.8 / 22.6    | 8.4 / 23.9       |
+  | Seville, Jan / Aug    | 14.3 / 37.1   | 16.6 / 36.2      |
+  | Newcastle, Jan / Jul  | 5.3 / 18.5    | 7.6 / 20.4       |
+  | Singapore, Jan / Apr  | 28.1 / 30.2   | 30.6 / 32.0      |
+
+  That is inside the spec's "a degree or two", but it tilts the "warmer than usual" line
+  warm. **Needs a decision**: accept it, add a +1°C calibration (one constant), or later
+  precompute normals from a station-based dataset.
+
 - **Climate cells follow NASA's grid.** NASA POWER serves MERRA-2 data on 0.5° × 0.625°
   cells. Rounding to 0.5° both ways put Newcastle in a cell that is mostly North Sea (January
   normal 10°C), so lookups snap to the real cell centres instead.

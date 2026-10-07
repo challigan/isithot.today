@@ -22,6 +22,11 @@ export default defineConfig({
   compressHTML: true,
   devToolbar: { enabled: false },
   vite: {
-    server: { fs: { allow: ['../..'] } },
+    server: {
+      fs: { allow: ['../..'] },
+      // The e2e server turns the dev error overlay off: Netlify's local edge-function
+      // emulation logs unrelated errors that would otherwise cover the page under test.
+      hmr: process.env.E2E ? { overlay: false } : undefined,
+    },
   },
 });

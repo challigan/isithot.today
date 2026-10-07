@@ -30,6 +30,6 @@ export default defineConfig({
     url: `http://127.0.0.1:${port}/version.json`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
-    env: { DATA_SOURCE: 'synthetic', E2E_PORT: String(port) },
+    env: { DATA_SOURCE: 'synthetic', E2E_PORT: String(port), E2E: '1' },
   },
 });

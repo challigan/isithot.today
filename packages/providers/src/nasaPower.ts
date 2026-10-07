@@ -61,7 +61,7 @@ export function parseClimatology(json: unknown): MonthlyNormals {
     const r = range[key];
     // NASA POWER uses -999 as its fill value.
     if (!isFiniteNumber(m) || !isFiniteNumber(r) || m <= -999 || r <= -999) return null;
-    return Math.round((m + r / 2) * 100) / 100;
+    return m + r / 2;
   });
   if (!isValidNormals(monthly)) throw new ProviderError('nasa-power', 'missing monthly values');
   return monthly;
