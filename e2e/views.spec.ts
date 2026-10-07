@@ -153,7 +153,7 @@ test.describe('Now | Today | This week', () => {
       }));
     await page.locator('#tab-week').click();
     await expectView(page, 'week');
-    // Never shorter than Today, so tall screens do not re-centre the page on every switch.
+    // Never shorter than Today, so what is below the views does not move up on every switch.
     await expect
       .poll(async () => {
         const h = await heights();
@@ -165,6 +165,35 @@ test.describe('Now | Today | This week', () => {
     await expect
       .poll(async () => Math.abs((await heights()).views - (await heights()).today))
       .toBeLessThan(1);
+  });
+
+  test('the content stays put when switching views', async ({ page }) => {
+    // A screen taller than the page, with This week taller than Today (as it is when the
+    // week's summary runs long, or few models answer for today).
+    await page.setViewportSize({ width: page.viewportSize()!.width, height: 1600 });
+    await page.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        const style = document.createElement('style');
+        style.textContent = '#view-week .ahead { padding-bottom: 40rem }';
+        document.head.append(style);
+      });
+    });
+    await ready(page);
+    const tops = () =>
+      page.evaluate(() => {
+        const views = document.getElementById('views')!;
+        const panel = [...views.querySelectorAll<HTMLElement>('.view')].find((p) => !p.inert)!;
+        return {
+          tabs: Math.round(document.getElementById('tabs')!.getBoundingClientRect().top),
+          question: Math.round(panel.querySelector('.question')!.getBoundingClientRect().top),
+        };
+      });
+    const today = await tops();
+    for (const view of ['week', 'now', 'today'] as const) {
+      await page.locator(`#tab-${view}`).click();
+      await expectView(page, view);
+      await expect.poll(tops, `${view} lines up with Today`).toEqual(today);
+    }
   });
 
   test('swipes change the view on a phone', async ({ page }, info) => {

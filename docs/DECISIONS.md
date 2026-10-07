@@ -96,8 +96,9 @@ a tab bar at the top on every screen, and swiping on phones.
   library): swipe on touch screens, sideways trackpad swipes on desktops, the tabs and arrow
   keys everywhere. Pages arrive with only Today in the scroller, so the first paint is the
   approved design; Now and This week join on first use, and the scroller then takes the
-  height of the view on screen, never less than Today's (on screens taller than the page the
-  content is centred, so a changing height would move it and the tab bar). The page colours follow the view on screen, switching about
+  height of the view on screen, never less than Today's (so the links and ad space below stay
+  put). The page sits at the top of the screen rather than centred in it: the views differ in
+  height, and centred content would move up and down, tab bar included, on every switch. The page colours follow the view on screen, switching about
   two thirds of the way through a swipe with a quicker fade than an arriving answer. ARIA
   tabs pattern throughout; inactive views are `inert`, and screen readers hear the answer of
   the view they move to.

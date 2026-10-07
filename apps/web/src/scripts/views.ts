@@ -54,9 +54,9 @@ export function wireViews(events: ViewsEvents): ViewsController | null {
   let lastWidth = scroller.clientWidth;
 
   /**
-   * The scroller is as tall as the view on screen, and never shorter than Today: on screens
-   * taller than the page the content is centred, and a changing height would move it (and
-   * the tab bar) on every switch. Taller views are clipped mid-swipe, then fit on arrival.
+   * The scroller is as tall as the view on screen, and never shorter than Today, so the links,
+   * ad space and footer below it stay where they are when switching to a shorter view. Taller
+   * views are clipped mid-swipe, then fit on arrival.
    */
   function fitHeight(): void {
     if (!revealed) return;
