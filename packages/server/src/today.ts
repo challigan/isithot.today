@@ -6,31 +6,42 @@ import {
   MODELS,
   computeDay,
   computeNow,
+  computeRainDay,
+  computeRainNow,
+  computeRainWeek,
   computeWeek,
   defaultUnitsForCountry,
   formatDay,
   formatNow,
+  formatRainDay,
+  formatRainNow,
+  formatRainWeek,
   formatWeek,
   cellKey,
   gridKey,
   isValidLatLon,
   climateRange,
   hourlySeries,
+  judgeRainSeries,
   judgeSeries,
   localDate,
   parseUnits,
+  rainSeries,
+  rainUnit,
   roundPoint,
   snapToCell,
   type ApiLocation,
   type DayComputation,
   type LatLon,
   type MonthlyNormals,
+  type RainDayComputation,
   type TodayResponse,
 } from '@isithot/core';
 import {
   FORECAST_CACHE_VERSION,
   fetchClimateNormals,
   fetchForecast,
+  fetchRainNormals,
   type Forecast,
 } from '@isithot/providers';
 import { cityBySlug, cityForPlace, nearbyCities } from './cities';
@@ -193,9 +204,9 @@ function startsToday(forecast: Forecast, now: Date): boolean {
 async function loadForecast(
   point: LatLon,
   deps: ServerDeps,
+  nowDate: Date,
 ): Promise<(ForecastEntry & { stale: boolean }) | null> {
   const key = `forecast/v${FORECAST_CACHE_VERSION}/${gridKey(point, GRID.forecast)}`;
-  const nowDate = deps.now();
   const now = nowDate.getTime();
   const entry = await deps.cache.get<ForecastEntry>(key);
   if (
@@ -233,9 +244,17 @@ async function loadForecast(
 
 type NormalsResult = { normals: MonthlyNormals | null; pending: boolean };
 
-async function loadNormals(point: LatLon, deps: ServerDeps): Promise<NormalsResult> {
-  const cell = snapToCell(point, GRID.climate);
-  const key = `climate/v4/${cellKey(point, GRID.climate)}`;
+/**
+ * Twelve monthly values from NASA POWER, cached per climate cell for good (a failure for an
+ * hour). A response waits at most CLIMATE_WAIT_MS for a cell it has not seen, then answers
+ * without them and finishes filling the cache in the background.
+ */
+async function loadMonthly(
+  key: string,
+  label: string,
+  fetchMonthly: () => Promise<MonthlyNormals>,
+  deps: ServerDeps,
+): Promise<NormalsResult> {
   const now = deps.now().getTime();
   const entry = await deps.cache.get<ClimateEntry>(key);
   if (entry?.normals) return { normals: entry.normals, pending: false };
@@ -243,16 +262,13 @@ async function loadNormals(point: LatLon, deps: ServerDeps): Promise<NormalsResu
     return { normals: null, pending: false };
   }
 
-  const pending = fetchClimateNormals(
-    { url: deps.config.nasaPowerUrl, fetch: deps.fetch, timeoutMs: 9000 },
-    cell,
-  )
+  const pending = fetchMonthly()
     .then(async (normals) => {
       await deps.cache.set<ClimateEntry>(key, { fetchedAt: now, normals: [...normals] });
       return normals;
     })
     .catch(async (err: unknown) => {
-      deps.log(`climate normals unavailable for ${key}: ${String(err)}`);
+      deps.log(`${label} unavailable for ${key}: ${String(err)}`);
       await deps.cache.set<ClimateEntry>(key, { fetchedAt: now, normals: null });
       return null;
     });
@@ -264,11 +280,46 @@ async function loadNormals(point: LatLon, deps: ServerDeps): Promise<NormalsResu
   const result = await Promise.race([pending, timeout]);
   clearTimeout(timer);
   if (result === 'timeout') {
-    // Answer now without normals; finish filling the cache in the background.
     deps.waitUntil(pending);
     return { normals: null, pending: true };
   }
   return { normals: result, pending: false };
+}
+
+/** Normal daily highs, for judging hot. */
+function loadNormals(point: LatLon, deps: ServerDeps): Promise<NormalsResult> {
+  const config = { url: deps.config.nasaPowerUrl, fetch: deps.fetch, timeoutMs: 9000 };
+  return loadMonthly(
+    `climate/v4/${cellKey(point, GRID.climate)}`,
+    'climate normals',
+    () => fetchClimateNormals(config, snapToCell(point, GRID.climate)),
+    deps,
+  );
+}
+
+/**
+ * Normal rainfall, for the week's "wetter than usual" line. Its own request and cache entry,
+ * so a problem with it can never hold up or break the hot normals.
+ */
+function loadRainNormals(point: LatLon, deps: ServerDeps): Promise<NormalsResult> {
+  const config = { url: deps.config.nasaPowerUrl, fetch: deps.fetch, timeoutMs: 9000 };
+  return loadMonthly(
+    `climate-rain/v1/${cellKey(point, GRID.climate)}`,
+    'rain normals',
+    () => fetchRainNormals(config, snapToCell(point, GRID.climate)),
+    deps,
+  );
+}
+
+/**
+ * Seconds until the next forecast hour starts. Today's rain answer covers the rest of the day
+ * from the moment of the request, so no cache may keep it past the hour.
+ */
+function secondsToNextHour(forecast: Forecast, now: number): number | null {
+  for (const day of forecast.days) {
+    for (const h of day.hourly) if (h.time > now) return Math.ceil((h.time - now) / 1000);
+  }
+  return null;
 }
 
 export async function getToday(
@@ -288,18 +339,22 @@ export async function getToday(
     if (!located) return errorResult('bad_location', ERROR_MESSAGES.bad_location);
   }
 
+  // One clock reading for the whole answer, so no part of it can fall either side of an hour.
+  const nowDate = deps.now();
+  const nowTime = nowDate.getTime();
   const explicitUnits = parseUnits(params.get('units'));
   const units = explicitUnits ?? defaultUnitsForCountry(geo?.country ?? located.country);
 
   const point = { lat: located.lat, lon: located.lon };
-  const [loaded, climate] = await Promise.all([
-    loadForecast(point, deps),
+  const [loaded, climate, rainClimate] = await Promise.all([
+    loadForecast(point, deps, nowDate),
     loadNormals(point, deps),
+    loadRainNormals(point, deps),
   ]);
   const normals = climate.normals;
   if (!loaded) return errorResult('upstream_unavailable', ERROR_MESSAGES.upstream_unavailable);
 
-  const today = localDate(loaded.forecast.timezone, deps.now());
+  const today = localDate(loaded.forecast.timezone, nowDate);
   const days = loaded.forecast.days
     .filter((d) => d.date >= today)
     .map((d) => computeDay(d, normals))
@@ -311,7 +366,7 @@ export async function getToday(
   const range = normals ? climateRange(normals) : null;
   const now = computeNow(
     judgeSeries(hourlySeries(loaded.forecast.days), range, units, loaded.forecast.timezone),
-    deps.now().getTime(),
+    nowTime,
   );
   const week = computeWeek(days, normals);
   const body: TodayResponse = {
@@ -327,11 +382,37 @@ export async function getToday(
   if (week) body.week = formatWeek(week, units);
   if (loaded.stale) body.stale = true;
 
+  // Is it wet? Today is the rest of the day from now; later days are whole days.
+  const forecastDays = loaded.forecast.days.filter((d) => d.date >= today);
+  const rainToday =
+    forecastDays[0]?.date === today ? computeRainDay(forecastDays[0], { from: nowTime }) : null;
+  if (rainToday) {
+    const later = forecastDays
+      .slice(1)
+      .map((d) => computeRainDay(d))
+      .filter((d): d is RainDayComputation => d !== null);
+    const rainNow = computeRainNow(
+      judgeRainSeries(rainSeries(loaded.forecast.days), units, loaded.forecast.timezone),
+      nowTime,
+    );
+    const rainWeek = computeRainWeek([rainToday, ...later], rainClimate.normals);
+    const unit = rainUnit(units);
+    body.rain = {
+      unit,
+      days: [rainToday, ...later.slice(0, 1)].map((d) => formatRainDay(d, units)),
+    };
+    if (rainNow) body.rain.now = formatRainNow(rainNow, unit);
+    if (rainWeek) body.rain.week = formatRainWeek(rainWeek, units);
+  }
+
   // Responses that depend on the visitor (IP location or country-default units) must not be
   // shared by the CDN.
   const shared = located.source !== 'ip' && explicitUnits !== null;
-  // Short cache while stale, or while climate normals are still loading in the background.
-  const maxAge = loaded.stale || climate.pending ? 60 : CACHE.edgeMaxAge;
+  // Short cache while stale, or while climate normals are still loading in the background, and
+  // never past the next hour (today's rain answer is for the rest of the day from now).
+  let maxAge = loaded.stale || climate.pending || rainClimate.pending ? 60 : CACHE.edgeMaxAge;
+  const toNextHour = secondsToNextHour(loaded.forecast, nowTime);
+  if (toNextHour !== null) maxAge = Math.min(maxAge, Math.max(60, toNextHour));
   const headers = shared ? publicCache(maxAge) : privateCache(Math.min(maxAge, 300));
-  return { status: 200, body, headers };
+  return { status: 200, body, headers, maxAge };
 }

@@ -34,7 +34,8 @@ const result = city ? await todayForCity(city.slug, platformFrom(Astro.locals), 
 const data = result?.status === 200 ? (result.body as TodayResponse) : null;
 const day = data?.days[0] ?? null;
 
-const cache = day ? CACHE.cityPage : 60;
+// Never past the next hour: the page carries today's rain answer for the rest of the day.
+const cache = day ? Math.min(CACHE.cityPage, result?.maxAge ?? CACHE.cityPage) : 60;
 if (city) {
   Astro.response.headers.set('Cache-Control', `public, max-age=${Math.min(cache, 300)}`);
   Astro.response.headers.set(
