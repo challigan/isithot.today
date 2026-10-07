@@ -154,13 +154,17 @@ today and tomorrow (never more than two); the rest of the week is summarised in 
 
 ## Performance
 
-Measured by the deploy-preview workflow (Lighthouse 12, mobile, simulated slow 4G) on
-`deploy-preview-1`. SEO shows 66 there only because Netlify marks deploy previews `noindex`.
+Measured by the deploy-preview workflow (Lighthouse 12, mobile, simulated slow 4G), with
+Netlify's review toolbar left out (it is added to deploy previews only, and its long task
+alone pushed the simulated home LCP past 5 s). SEO shows 66 on previews only because Netlify
+marks them `noindex`; the live site scores 100.
 
-| Page            | Performance | Accessibility | LCP   | CLS   | Notes                       |
-| --------------- | ----------- | ------------- | ----- | ----- | --------------------------- |
-| `/`             | 97          | 100           | 1.7 s | 0.008 | answer fetched from the API |
-| `/in/london-gb` | 100 (local) | 100           | 1.8 s | 0     | server-rendered, CDN-cached |
+| Page            | Performance | Accessibility | Best practices | LCP   | CLS   |
+| --------------- | ----------- | ------------- | -------------- | ----- | ----- |
+| `/`             | 100         | 100           | 100            | 1.1 s | 0.004 |
+| `/in/london-gb` | 100         | 100           | 100            | 1.5 s | 0     |
+
+The workflow also measures https://isithot.today on every run, for comparison.
 
 Site JS is about 12 KB gzipped (budget 25 KB, checked in CI by `scripts/js-budget.mjs`; it
 was 8 KB before Now and This week). Cached API responses come back from the
