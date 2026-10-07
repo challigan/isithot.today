@@ -11,25 +11,31 @@ import {
   PALETTES,
   SEARCH,
   SITE_NAME,
+  VIEWS,
   VIEW_LABELS,
   computeNow,
   formatNow,
   outboundLinks,
   pageTitle,
-  question,
   roundToGrid,
-  type ApiDay,
+  viewDisplay,
   type ApiError,
   type ApiNow,
   type Band,
+  type DisplayFor,
   type Palette,
   type SearchResponse,
   type SearchResult,
+  type TodayDisplay,
+  type TodayModels,
   type TodayResponse,
+  type Topic,
   type Units,
   type View,
+  type ViewDisplay,
+  type WeekDisplay,
 } from '@isithot/core';
-import { GLYPHS, hoursHtml, listHtml, pct, stripLayout, weekHtml } from '../lib/view';
+import { glyphFor, hoursHtml, listHtml, pct, weekHtml } from '../lib/view';
 import { wireViews, type ViewsController } from './views';
 
 declare global {
@@ -97,6 +103,8 @@ const mode = app.dataset.mode === 'city' ? 'city' : 'home';
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const params = new URLSearchParams(location.search);
 const preview = params.get('preview') === '1';
+/** The question the page answers. */
+const topic: Topic = app.dataset.topic === 'wet' ? 'wet' : 'hot';
 
 let units: Units = 'c';
 let view: View = 'today';
@@ -129,11 +137,12 @@ function applyPalette(p: Palette): void {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', p.g1);
 }
 
-/** The band shown by a view, or null when that view has no data. */
-function viewBand(res: TodayResponse, v: View): Band | null {
-  if (v === 'now') return nowShown?.band ?? null;
-  if (v === 'week') return res.week?.band ?? null;
-  return res.days[0]?.band ?? null;
+/** What a view shows for an answer (core `viewDisplay`), with "now" for this minute. */
+function shown<V extends View>(res: TodayResponse, v: V): DisplayFor<V> {
+  return viewDisplay(res, topic, v, 'ready', {
+    city: mode === 'city' ? res.location.name : null,
+    now: nowShown,
+  });
 }
 
 /**
@@ -142,14 +151,13 @@ function viewBand(res: TodayResponse, v: View): Band | null {
  * fades through a mid-tone on a mid-tone.
  */
 function applyViewPalette(switching = false): void {
-  const band = current ? viewBand(current, view) : null;
   const root = document.documentElement;
   if (switching) {
     root.dataset.switching = '';
     clearTimeout(switchTimer);
     switchTimer = setTimeout(() => delete root.dataset.switching, 450);
   }
-  applyPalette(band ? PALETTES[band] : LOADING_PALETTE);
+  applyPalette(current ? shown(current, view).palette : LOADING_PALETTE);
 }
 let switchTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -185,31 +193,54 @@ function popAnswer(): void {
   el.classList.add('pop');
 }
 
-function renderStrip(day: ApiDay): void {
+/** Each view's nodes: Today's ids are bare ("answer"), the others' prefixed ("now-answer"). */
+const viewId = (v: View, name: string): string => (v === 'today' ? name : `${v}-${name}`);
+
+/** What every view has: its band, icon, question and answer lines. */
+function renderPanel(d: ViewDisplay): void {
+  const panel = $(`view-${d.view}`);
+  if (panel) {
+    // A restored snapshot hides an out-of-date "now" until it has been worked out again.
+    panel.removeAttribute('data-pending');
+    panel.dataset.band = d.band ?? '';
+    panel.toggleAttribute('data-empty', d.empty);
+  }
+  const glyph = $(viewId(d.view, 'glyph'));
+  if (glyph) glyph.innerHTML = glyphFor(d.band);
+  for (const key of ['question', 'answer', 'verdict', 'detail'] as const) {
+    setText(viewId(d.view, key), d[key]);
+  }
+}
+
+/** The models strip moves to its new positions rather than being redrawn. */
+function renderStrip(m: TodayModels): void {
   const strip = $('strip');
   if (!strip) return;
-  const layout = stripLayout(day);
-  let band = strip.querySelector<HTMLElement>('.band');
-  if (!band) {
-    band = document.createElement('div');
-    band.className = 'band';
-    strip.prepend(band);
+  let zone = strip.querySelector<HTMLElement>('.band');
+  if (m.zone) {
+    if (!zone) {
+      zone = document.createElement('div');
+      zone.className = 'band';
+      strip.prepend(zone);
+    }
+    zone.style.left = pct(m.zone.left);
+    zone.style.width = pct(m.zone.width);
+  } else {
+    zone?.remove();
   }
-  band.style.left = pct(layout.band.left);
-  band.style.width = pct(layout.band.width);
   const dots = Array.from(strip.querySelectorAll<HTMLElement>('.dot'));
-  while (dots.length < layout.dots.length) {
+  while (dots.length < m.dots.length) {
     const dot = document.createElement('div');
     dot.className = 'dot';
     // Start new dots at the consensus so they slide into place.
-    dot.style.left = pct(layout.band.left + layout.band.width / 2);
+    dot.style.left = pct(m.origin);
     strip.append(dot);
     dots.push(dot);
   }
-  while (dots.length > layout.dots.length) dots.pop()!.remove();
+  while (dots.length > m.dots.length) dots.pop()!.remove();
   // Let freshly added dots get a starting position before moving them.
   requestAnimationFrame(() => {
-    layout.dots.forEach((d, i) => {
+    m.dots.forEach((d, i) => {
       const dot = dots[i]!;
       dot.style.left = pct(d.left);
       dot.classList.toggle('out', d.out);
@@ -252,31 +283,13 @@ function render(res: TodayResponse, animate: boolean): void {
   current = res;
   units = res.units;
   setState('ready');
-  const city = mode === 'city' ? res.location.name : null;
-  renderNow(res, city);
+  renderNow(res);
   applyViewPalette();
-  const glyph = $('glyph');
-  if (glyph) glyph.innerHTML = GLYPHS[day.band];
-  const today = $('view-today');
-  if (today) today.dataset.band = day.band;
   setText('place', res.location.name);
-  setText('question', question(city));
-  setText('answer', day.answer);
-  if (animate && changed) popAnswer();
-  setText('verdict', day.verdict);
-  setText('detail', day.detail);
-  setText('agree', day.agreementText);
-  setText('strip-summary', day.stripSummary);
-  setText('smin', `${day.scale.min}°`);
-  setText('smax', `${day.scale.max}°`);
-  const list = $('list');
-  if (list) list.innerHTML = listHtml(day);
-  const limited = $('limited');
-  if (limited) limited.hidden = !day.limitedText;
+  renderToday(shown(res, 'today'), animate && changed);
   const stale = $('stale');
   if (stale) stale.hidden = !res.stale;
-  renderStrip(day);
-  renderWeek(res, city);
+  renderWeek(shown(res, 'week'));
   renderLinks(res);
   renderUnits();
   document.title =
@@ -307,46 +320,50 @@ function outOfDate(res: TodayResponse): boolean {
   return now.date > (res.days[0]?.date ?? '');
 }
 
-/** The Now view. Without data for right now it says so instead. */
-function renderNow(res: TodayResponse, city: string | null): void {
-  const now = nowFor(res);
-  nowShown = now;
-  const panel = $('view-now');
-  panel?.removeAttribute('data-pending');
-  if (panel) panel.dataset.band = now?.band ?? '';
-  setText('now-question', question(city, 'now'));
-  setText('now-answer', now?.answer ?? COPY.notAvailable);
-  $('view-now')?.toggleAttribute('data-empty', !now);
-  const glyph = $('now-glyph');
-  if (glyph) glyph.innerHTML = now ? GLYPHS[now.band] : '';
-  setText('now-verdict', now?.verdict ?? '');
-  setText('now-detail', now?.detail ?? '');
+/**
+ * The Today view: answer lines, then the models strip and list. The answer pops before the
+ * strip is touched, so new dots still slide in from the consensus.
+ */
+function renderToday(d: TodayDisplay, pop: boolean): void {
+  renderPanel(d);
+  if (pop) popAnswer();
+  const m = d.models;
+  setText('agree', m.heading);
+  setText('strip-summary', m.summary);
+  setText('smin', m.min);
+  setText('smax', m.max);
+  const list = $('list');
+  if (list) list.innerHTML = listHtml(m);
+  const limited = $('limited');
+  if (limited) limited.hidden = !m.limited;
+  renderStrip(m);
+}
+
+/** The Now view, worked out again for this minute. Without data for it, it says so instead. */
+function renderNow(res: TodayResponse): void {
+  nowShown = nowFor(res);
+  const d = shown(res, 'now');
+  renderPanel(d);
+  setText('now-h', d.heading);
   const hours = $('now-hours');
-  if (hours) hours.innerHTML = now ? hoursHtml(now) : '';
+  if (hours) hours.innerHTML = hoursHtml(d.items);
 }
 
 /** The This week view. */
-function renderWeek(res: TodayResponse, city: string | null): void {
-  const week = res.week ?? null;
-  const panel = $('view-week');
-  if (panel) panel.dataset.band = week?.band ?? '';
-  setText('week-question', question(city, 'week'));
-  setText('week-answer', week?.answer ?? COPY.notAvailable);
-  $('view-week')?.toggleAttribute('data-empty', !week);
-  const glyph = $('week-glyph');
-  if (glyph) glyph.innerHTML = week ? GLYPHS[week.band] : '';
-  setText('week-verdict', week?.verdict ?? '');
-  setText('week-detail', week?.detail ?? '');
+function renderWeek(d: WeekDisplay): void {
+  renderPanel(d);
+  setText('week-h', d.heading);
   const days = $('week-days');
-  if (days) days.innerHTML = week ? weekHtml(week) : '';
+  if (days) days.innerHTML = weekHtml(d.items);
 }
 
-/** Loading and error states show the same message in every view. */
-function setAnswers(text: string): void {
-  for (const id of ['answer', 'now-answer', 'week-answer']) setText(id, text);
-  for (const id of ['glyph', 'now-glyph', 'week-glyph']) {
-    const glyph = $(id);
-    if (glyph) glyph.innerHTML = '';
+/** Loading and error states show the same message in every view; the rest stays hidden. */
+function setAnswers(state: 'loading' | 'error'): void {
+  for (const v of VIEWS) {
+    const d = viewDisplay(null, topic, v, state);
+    setText(viewId(v, 'answer'), d.answer);
+    const glyph = $(viewId(v, 'glyph'));
+    if (glyph) glyph.innerHTML = glyphFor(d.band);
   }
 }
 
@@ -354,14 +371,14 @@ function renderLoading(): void {
   if (current) return; // Keep showing the previous answer while refreshing.
   setState('loading');
   applyPalette(LOADING_PALETTE);
-  setAnswers(COPY.checking);
+  setAnswers('loading');
 }
 
 function renderError(): void {
   if (current) return; // A stale answer beats an error.
   setState('error');
   applyPalette(LOADING_PALETTE);
-  setAnswers(COPY.unavailable);
+  setAnswers('error');
 }
 
 function setNote(kind: 'none' | 'exact' | 'approximate'): void {
@@ -731,7 +748,7 @@ function refreshNow(): void {
     void load(target, { quiet: true, animate: false, fresh: true });
     return;
   }
-  renderNow(current, mode === 'city' ? current.location.name : null);
+  renderNow(current);
   if (view === 'now') applyViewPalette();
 }
 

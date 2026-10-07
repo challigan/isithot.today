@@ -1,9 +1,11 @@
 /**
  * Markup shared by server-rendered pages and the browser, so both paint exactly the same
- * thing. Everything here is built from numbers and our own model names; place names are
- * never passed through these helpers.
+ * thing. The layout and words come from core `viewDisplay`; everything here is built from
+ * numbers, our own model names and our own copy. Place names are never passed through these
+ * helpers.
  */
-import { BLEND, type ApiDay, type ApiNow, type ApiWeek, type Band } from '@isithot/core';
+import type { Band, NowItem, RainBand, TodayModels, WeekItem } from '@isithot/core';
+import { RAIN_GLYPHS } from './wetGlyphs';
 
 const rays = (n: number, r1: number, r2: number, cx = 60, cy = 60): string =>
   Array.from({ length: n }, (_, i) => {
@@ -31,37 +33,23 @@ export const GLYPHS: Record<Band, string> = {
   scorching: `<circle cx="60" cy="60" r="22" fill="currentColor" fill-opacity=".3"/><circle cx="60" cy="60" r="29" opacity=".5"/><g class="spin">${rays(16, 36, 54)}</g>`,
 };
 
-export interface StripLayout {
-  band: { left: number; width: number };
-  dots: Array<{ left: number; out: boolean; title: string }>;
-}
+const ALL_GLYPHS: Record<string, string> = { ...GLYPHS, ...RAIN_GLYPHS };
 
-const clamp = (v: number): number => Math.min(100, Math.max(0, v));
-
-/** Positions (in %) for the agreement band and one dot per model. */
-export function stripLayout(day: ApiDay): StripLayout {
-  const lo = day.scale.min;
-  const hi = day.scale.max;
-  const pos = (t: number): number => clamp(((t - lo) / (hi - lo || 1)) * 100);
-  const left = pos(day.consensus.bandLow);
-  const right = pos(day.consensus.bandHigh);
-  return {
-    band: { left, width: right - left },
-    dots: day.models.map((m) => ({
-      left: pos(m.value),
-      out: !m.agrees,
-      title: `${m.name} ${m.high}°`,
-    })),
-  };
+/** The icon for a band of either topic, or nothing without one. */
+export function glyphFor(band: Band | RainBand | null): string {
+  return (band && ALL_GLYPHS[band]) || '';
 }
 
 const pct = (v: number): string => `${Number(v.toFixed(3))}%`;
 
-export function stripHtml(day: ApiDay): string {
-  const layout = stripLayout(day);
+/** The highlighted zone and one dot per model. */
+export function stripHtml(models: TodayModels): string {
+  const zone = models.zone
+    ? `<div class="band" style="left:${pct(models.zone.left)};width:${pct(models.zone.width)}"></div>`
+    : '';
   return (
-    `<div class="band" style="left:${pct(layout.band.left)};width:${pct(layout.band.width)}"></div>` +
-    layout.dots
+    zone +
+    models.dots
       .map(
         (d) =>
           `<div class="dot${d.out ? ' out' : ''}" style="left:${pct(d.left)}" title="${d.title}"></div>`,
@@ -70,39 +58,35 @@ export function stripHtml(day: ApiDay): string {
   );
 }
 
-export function listHtml(day: ApiDay): string {
-  return day.models
+export function listHtml(models: TodayModels): string {
+  return models.items
     .map(
       (m) =>
-        `<li class="${m.agrees ? '' : 'out'}"><span class="t">${m.high}°</span><span class="n">${m.name}</span></li>`,
+        `<li class="${m.out ? 'out' : ''}"><span class="t">${m.value}</span><span class="n">${m.name}</span></li>`,
     )
     .join('');
 }
 
-/** The next few hours: temperature over the time, like the model list. */
-export function hoursHtml(now: ApiNow): string {
-  return now.hours
-    .map(
-      (h) => `<li><span class="t">${h.temperature}°</span><span class="n">${h.label}</span></li>`,
+/**
+ * The next few hours: the value over the time, like the model list. Rows with their own
+ * screen reader text ("60% chance at 3pm") read that instead of the two figures.
+ */
+export function hoursHtml(items: readonly NowItem[]): string {
+  return items
+    .map((h) =>
+      h.sr
+        ? `<li><span class="t" aria-hidden="true">${h.value}</span><span class="n" aria-hidden="true">${h.label}</span><span class="sr-only">${h.sr}</span></li>`
+        : `<li><span class="t">${h.value}</span><span class="n">${h.label}</span></li>`,
     )
     .join('');
 }
 
-/** Dot positions (in %) for each day's high on a shared scale across the week. */
-export function weekLayout(week: ApiWeek): number[] {
-  const highs = week.days.map((d) => d.high);
-  const lo = Math.min(...highs) - BLEND.stripPadding;
-  const hi = Math.max(...highs) + BLEND.stripPadding;
-  return highs.map((h) => clamp(((h - lo) / (hi - lo)) * 100));
-}
-
-/** One row per day: name, a dot for the high on the week's scale, the high and its band. */
-export function weekHtml(week: ApiWeek): string {
-  const left = weekLayout(week);
-  return week.days
+/** One row per day: name, a dot on the week's scale, the value and its band. */
+export function weekHtml(items: readonly WeekItem[]): string {
+  return items
     .map(
-      (d, i) =>
-        `<li><span class="d">${d.label}</span><span class="track" aria-hidden="true"><span class="dot" style="left:${pct(left[i]!)}"></span></span><span class="t">${d.high}°</span><span class="a">${d.bandLabel}</span></li>`,
+      (d) =>
+        `<li><span class="d">${d.label}</span><span class="track" aria-hidden="true">${d.left === null ? '' : `<span class="dot" style="left:${pct(d.left)}"></span>`}</span><span class="t">${d.value}</span><span class="a">${d.bandLabel}</span></li>`,
     )
     .join('');
 }
