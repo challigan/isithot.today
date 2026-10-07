@@ -2,7 +2,7 @@
  * Every user-facing string. The website, the API and the future apps all read from here so
  * the words never drift apart. Sentence case everywhere.
  */
-import { SITES, type Band, type RainBand, type Topic } from './config';
+import { RAIN_BANDS, SITES, type Band, type RainBand, type Topic } from './config';
 
 export const SITE_NAME = SITES.hot.name;
 
@@ -55,6 +55,14 @@ export const VIEW_LABELS: Record<View, string> = {
   week: 'This week',
 };
 
+/** The middle view's label in the evening, when it answers for tomorrow. */
+export const TOMORROW_LABEL = 'Tomorrow';
+
+/** A view's tab label: the middle view reads "Tomorrow" while it shows tomorrow. */
+export function viewLabel(view: View, tomorrow = false): string {
+  return view === 'today' && tomorrow ? TOMORROW_LABEL : VIEW_LABELS[view];
+}
+
 const VIEW_WHEN: Record<View, string> = {
   now: 'right now',
   today: 'today',
@@ -68,6 +76,16 @@ export const VERDICTS: Record<Band, string> = {
   warm: "It's warm, not hot.",
   hot: "It's hot.",
   scorching: "It's scorching.",
+};
+
+/** Tomorrow's verdict (the API's `days[1]`). */
+export const TOMORROW_VERDICTS: Record<Band, string> = {
+  freezing: "It'll be freezing.",
+  cold: "It'll be cold.",
+  mild: "It'll be mild.",
+  warm: "It'll be warm, not hot.",
+  hot: "It'll be hot.",
+  scorching: "It'll be scorching.",
 };
 
 /** The week view's verdict line. */
@@ -135,10 +153,19 @@ export const ERROR_MESSAGES = {
   rate_limited: 'Too many requests. Try again in a minute.',
 } as const;
 
-/** "Is it hot today?" / "Is it wet in London right now?" */
-export function question(city?: string | null, view: View = 'today', topic: Topic = 'hot'): string {
-  const when = VIEW_WHEN[view];
-  return city ? `Is it ${topic} in ${city} ${when}?` : `Is it ${topic} ${when}?`;
+/**
+ * "Is it hot today?" / "Is it wet in London right now?", and for the middle view while it shows
+ * tomorrow, "Will it be hot in London tomorrow?".
+ */
+export function question(
+  city?: string | null,
+  view: View = 'today',
+  topic: Topic = 'hot',
+  tomorrow = false,
+): string {
+  const where = city ? ` in ${city}` : '';
+  if (view === 'today' && tomorrow) return `Will it be ${topic}${where} tomorrow?`;
+  return `Is it ${topic}${where} ${VIEW_WHEN[view]}?`;
 }
 
 export function monthName(date: string): string {
@@ -202,13 +229,25 @@ export function pageTitle(args: { city?: string | null; answer: string; high: nu
   return `${question(args.city)} ${args.answer} ${args.high}° | ${SITE_NAME}`;
 }
 
-/** "Is it wet in London today? Yes. Rain | isitwet.today" */
+/**
+ * "Is it wet in London today? Yes. Rain | isitwet.today". A day of rain (or wetter) that mostly
+ * falls as snow is "Snow", or "Heavy snow" when heavy, as its verdict says.
+ */
 export function wetPageTitle(args: {
   city?: string | null;
   answer: string;
   band: RainBand;
+  /** The day's `snow`. */
+  snow: 'none' | 'some' | 'most';
 }): string {
-  return `${question(args.city, 'today', 'wet')} ${args.answer} ${RAIN_BAND_LABELS[args.band]} | ${SITES.wet.name}`;
+  const rank = RAIN_BANDS.indexOf(args.band);
+  const label =
+    args.snow === 'most' && rank >= RAIN_BANDS.indexOf('rain')
+      ? rank >= RAIN_BANDS.indexOf('heavy')
+        ? HEAVY_SNOW_LABEL
+        : SNOW_LABEL
+      : RAIN_BAND_LABELS[args.band];
+  return `${question(args.city, 'today', 'wet')} ${args.answer} ${label} | ${SITES.wet.name}`;
 }
 
 export const DEFAULT_TITLE = `Is it hot today? | ${SITE_NAME}`;
@@ -238,6 +277,8 @@ export const RAIN_BAND_LABELS: Record<RainBand, string> = {
 
 /** The week row label for a day of rain (or wetter) that mostly falls as snow. */
 export const SNOW_LABEL = 'Snow';
+/** A heavy (or wetter) day of snow, in the page title. */
+export const HEAVY_SNOW_LABEL = 'Heavy snow';
 
 export const RAIN_ANSWERS: Record<RainBand, string> = {
   dry: 'No.',
@@ -301,6 +342,7 @@ export const RAIN_COPY = {
   restOfDay: 'For the rest of the day.',
   allDay: 'All day.',
   setToLast: 'Set to last the next 12 hours.',
+  showersNext12: 'On and off for the next 12 hours.',
   dryNext12: 'Dry for the next 12 hours.',
   noWeekTotal: 'Not enough forecasts for a weekly total.',
   barelyAnyRain: 'Barely any rain all week.',
@@ -361,6 +403,11 @@ export function rainFromLine(hour: number): string {
 
 export function showersFromLine(hour: number): string {
   return `Showers possible from about ${formatHour(hour)}.`;
+}
+
+/** When showers under way now clear. */
+export function dryFromLine(hour: number): string {
+  return `Dry from about ${formatHour(hour)}.`;
 }
 
 /** "6 of 8 forecasts expect rain" / "1 of 8 forecasts expects rain". */

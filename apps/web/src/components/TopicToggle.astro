@@ -1,7 +1,9 @@
 ---
 /**
  * Hot | Wet. Pages open on their own site's topic (isithot.today on Hot, isitwet.today on Wet);
- * pressing the other re-renders the same views in place (scripts/app.ts).
+ * pressing the other re-renders the same views in place (scripts/app.ts). Above the tab bar from
+ * 640px up; on phones it floats at the bottom of the screen, in thumb reach (styles/global.css),
+ * while staying first in the markup so the question still comes before the period.
  */
 import { COPY, TOPICS, TOPIC_LABELS, type Topic } from '@isithot/core';
 import { TOPIC_ICONS } from '../lib/wetGlyphs';

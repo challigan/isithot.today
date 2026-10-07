@@ -10,6 +10,7 @@ import {
   RAIN_NOW_PHRASES,
   RAIN_NOW_VERDICTS,
   SNOW_VERDICTS,
+  dryFromLine,
   easingLine,
   formatHour,
   rainFromLine,
@@ -101,6 +102,8 @@ export function judgeRainSeries(
       chance2h: round2(p.chance2h),
       band: p.band,
       snow: p.snow,
+      // Decided in mm, so the words never depend on the units.
+      light: p.amount < RAIN.lightBelow,
     };
   });
 }
@@ -139,57 +142,65 @@ export function computeRainNow(
 }
 
 /** "Light rain now.", "Snow now."… */
-function nowPhrase(p: ApiRainPoint, unit: RainUnit): string {
-  const light = p.amount < toRainUnits(RAIN.lightBelow, unit);
+function nowPhrase(p: ApiRainPoint): string {
   if (snowy(p.band, p.snow)) {
     if (p.band !== 'rain') return RAIN_COPY.heavySnowNow;
-    return light ? RAIN_COPY.lightSnowNow : RAIN_COPY.snowNow;
+    return p.light ? RAIN_COPY.lightSnowNow : RAIN_COPY.snowNow;
   }
-  if (p.band === 'rain' && light) return RAIN_COPY.lightRainNow;
+  if (p.band === 'rain' && p.light) return RAIN_COPY.lightRainNow;
   return RAIN_NOW_PHRASES[p.band];
 }
 
-/** What the next 12 hours bring: when rain eases off, or when it is likely to start. */
+/** The hours that start the Now view's rows: two-hour blocks from the next full hour. */
+export function rainRows(now: RainNowComputation): ApiRainPoint[] {
+  const next = now.series.find((q) => q.time > now.time);
+  const rows: ApiRainPoint[] = [];
+  for (let k = 0; next && k < NOW.rows; k++) {
+    const q = now.series.find((s) => s.time === next.time + k * NOW.stepHours * HOUR);
+    if (q) rows.push(q);
+  }
+  return rows;
+}
+
+/**
+ * What the next 12 hours bring: when rain (or showers) under way now eases off, or when rain is
+ * likely to start. "Dry for the next 12 hours" only when no row below it shows a fair chance.
+ */
 export function rainTrendLine(now: RainNowComputation): string {
   const start = now.current.time;
   const ahead = now.series.filter((p) => p.time > start && p.time <= start + 12 * HOUR);
-  if (isRain(now.current.band)) {
-    const easing = ahead.find((p) => rank(p.band) <= rank('spots'));
-    return easing ? easingLine(easing.hour) : RAIN_COPY.setToLast;
-  }
+  const easing = ahead.find((p) => rank(p.band) <= rank('spots'));
+  if (isRain(now.current.band)) return easing ? easingLine(easing.hour) : RAIN_COPY.setToLast;
   const rain = ahead.find((p) => isRain(p.band));
   if (rain) return rainFromLine(rain.hour);
+  if (now.current.band === 'showers') {
+    return easing ? dryFromLine(easing.hour) : RAIN_COPY.showersNext12;
+  }
+  // The first showery hour, or the first row with a fair chance, whichever comes first.
   const showers = ahead.find((p) => p.band === 'showers');
-  return showers ? showersFromLine(showers.hour) : RAIN_COPY.dryNext12;
+  const row = rainRows(now).find((p) => p.chance2h >= RAIN.maybeFrom);
+  const first = row && !(showers && showers.time < row.time) ? row : showers;
+  return first ? showersFromLine(first.hour) : RAIN_COPY.dryNext12;
 }
 
 export function formatRainNow(now: RainNowComputation, unit: RainUnit): ApiRainNow {
   const p = now.current;
   let verdict = RAIN_NOW_VERDICTS[p.band];
   if (snowy(p.band, p.snow)) verdict = p.band === 'rain' ? SNOW_VERDICTS.now : SNOW_VERDICTS.heavy;
-  // Two-hour blocks from the next full hour.
-  const next = now.series.find((q) => q.time > now.time);
-  const hours: ApiRainNow['hours'] = [];
-  for (let k = 0; next && k < NOW.rows; k++) {
-    const q = now.series.find((s) => s.time === next.time + k * NOW.stepHours * HOUR);
-    if (q) {
-      hours.push({
-        time: new Date(q.time).toISOString(),
-        label: formatHour(q.hour),
-        chance: Math.round(q.chance2h * 10) * 10,
-      });
-    }
-  }
   return {
     time: new Date(now.time).toISOString(),
     band: p.band,
     answer: RAIN_ANSWERS[p.band],
     verdict,
-    detail: `${nowPhrase(p, unit)} ${rainTrendLine(now)}`,
+    detail: `${nowPhrase(p)} ${rainTrendLine(now)}`,
     amount: roundRain(p.amount, unit),
     chance: p.chance,
     snow: p.snow,
-    hours,
+    hours: rainRows(now).map((q) => ({
+      time: new Date(q.time).toISOString(),
+      label: formatHour(q.hour),
+      chance: Math.round(q.chance2h * 10) * 10,
+    })),
     series: now.series.map((q) => ({ ...q })),
   };
 }

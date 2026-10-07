@@ -4,6 +4,7 @@ import { climateRange, normalForDate, type MonthlyNormals } from './climate';
 import {
   ANSWERS,
   COPY,
+  TOMORROW_VERDICTS,
   VERDICTS,
   agreementLine,
   anomalyLine,
@@ -50,9 +51,10 @@ export function agreementTolerance(units: Units): number {
 
 /**
  * The API response formatter: converts to display units at the edge and builds every copy
- * string from copy.ts.
+ * string from copy.ts. `tomorrow` words the verdict for tomorrow ("It'll be hot."); every other
+ * string reads the same for either day.
  */
-export function formatDay(day: DayComputation, units: Units): ApiDay {
+export function formatDay(day: DayComputation, units: Units, tomorrow = false): ApiDay {
   const b = day.blend;
   const tolerance = agreementTolerance(units);
   const consensus = toUnits(b.high, units);
@@ -82,7 +84,7 @@ export function formatDay(day: DayComputation, units: Units): ApiDay {
     date: day.date,
     band: day.verdict.band,
     answer: ANSWERS[day.verdict.band],
-    verdict: VERDICTS[day.verdict.band],
+    verdict: (tomorrow ? TOMORROW_VERDICTS : VERDICTS)[day.verdict.band],
     high,
     feelsLike,
     peakTime,

@@ -33,6 +33,7 @@ import {
   type RainThresholds,
   windowThresholds,
   atLeast,
+  rank,
   isRain,
   median,
   shareAtLeast,
@@ -51,13 +52,21 @@ export interface RainModelTotal {
   total: number;
   /** The part of `total` that falls at or below the snow line. */
   snow: number;
+  /**
+   * Expects rain over the window: a total of at least the window's wet amount or, for the rest
+   * of today, an hour's wet amount in the current hour (a model with rain now expects rain today).
+   */
+  wet: boolean;
 }
 
-/** The share of models with rain in one local hour of the window. */
+/** One local hour of the window with rain data. */
 export interface RainHourChance {
   /** Local hour of day, 0–23. */
   hour: number;
+  /** The share of models with rain in the hour. */
   chance: number;
+  /** The hour judged with the hourly thresholds, as the Now view judges it. */
+  band: RainBand;
 }
 
 /** One window's result in mm at full precision, before formatting. */
@@ -75,7 +84,7 @@ export interface RainDayComputation {
   thresholds: RainThresholds;
   /** Models with a value for every hour of the window. */
   models: RainModelTotal[];
-  /** Models expecting rain: a total of at least `thresholds.wet`. */
+  /** Models expecting rain (`RainModelTotal.wet`). */
   wet: number;
   /** wet / models, 0–1. */
   chance: number;
@@ -89,6 +98,11 @@ export interface RainDayComputation {
   hourly: RainHourChance[];
   /** The likely hours, end exclusive (24 is midnight), or null. */
   likely: { from: number; to: number } | null;
+  /**
+   * The rest of today only: the current hour is judged rain or wetter, so the Now view says it
+   * is raining. Today then says when it eases off as Now does, and expects rain.
+   */
+  raining: boolean;
 }
 
 export interface RainDayOptions {
@@ -116,6 +130,8 @@ export function computeRainDay(day: DayData, opts: RainDayOptions = {}): RainDay
       window.push({ h, weight: (60 - Math.floor((fromTime - h.time) / 60_000)) / 60 });
     }
   }
+  // The hour containing the moment (the rest of today only): the hour the Now view judges.
+  const current = window.find((w) => w.h.time <= fromTime)?.h;
 
   let models: RainModelTotal[];
   let hours = 24;
@@ -123,37 +139,54 @@ export function computeRainDay(day: DayData, opts: RainDayOptions = {}): RainDay
   if (partial) {
     if (window.length === 0) return null;
     hours = window.reduce((sum, w) => sum + w.weight, 0);
-    thresholds = windowThresholds(hours);
+    // Never less than an hour's thresholds, so the day's last minutes are not judged against
+    // next to nothing.
+    thresholds = windowThresholds(Math.max(1, hours));
     models = day.models.flatMap((m, i) => {
       let total = 0;
       let snow = 0;
+      let now = 0;
       for (const { h, weight } of window) {
         const rain = h.rain?.[i];
         if (!isFiniteNumber(rain)) return [];
         total += rain * weight;
         if (isSnow(h.temps[i])) snow += rain * weight;
+        if (h === current) now = rain;
       }
-      return [{ id: m.id, name: m.name, total, snow }];
+      const wet = atLeast(total, thresholds.wet) || atLeast(now, RAIN.hour.wet);
+      return [{ id: m.id, name: m.name, total, snow, wet }];
     });
   } else {
     models = day.models.flatMap((m) =>
       isFiniteNumber(m.rain)
-        ? [{ id: m.id, name: m.name, total: m.rain, snow: isFiniteNumber(m.snow) ? m.snow : 0 }]
+        ? [
+            {
+              id: m.id,
+              name: m.name,
+              total: m.rain,
+              snow: isFiniteNumber(m.snow) ? m.snow : 0,
+              wet: atLeast(m.rain, thresholds.wet),
+            },
+          ]
         : [],
     );
   }
   if (models.length === 0) return null;
 
   const totals = models.map((m) => m.total);
-  const wet = totals.filter((v) => atLeast(v, thresholds.wet)).length;
+  const wet = models.filter((m) => m.wet).length;
   const rainSum = totals.reduce((a, b) => a + b, 0);
   const snowShare = rainSum > 0 ? models.reduce((a, m) => a + m.snow, 0) / rainSum : 0;
 
   const hourly: RainHourChance[] = [];
+  const hourThresholds = windowThresholds(1);
+  let raining = false;
   for (const { h } of window) {
     const values = (h.rain ?? []).filter(isFiniteNumber);
     if (values.length > 0) {
-      hourly.push({ hour: h.hour, chance: shareAtLeast(values, RAIN.hour.wet) });
+      const band = rainBand(values, hourThresholds);
+      hourly.push({ hour: h.hour, chance: shareAtLeast(values, RAIN.hour.wet), band });
+      if (h === current) raining = isRain(band);
     }
   }
   const likelyHours = hourly.filter((c) => c.chance >= RAIN.hourLikely);
@@ -168,7 +201,7 @@ export function computeRainDay(day: DayData, opts: RainDayOptions = {}): RainDay
     wet,
     chance: wet / models.length,
     amount: median(totals),
-    band: rainBand(totals, thresholds),
+    band: rainBand(totals, thresholds, wet / models.length),
     snowShare,
     snow: snowAmount(snowShare),
     hourly,
@@ -176,32 +209,39 @@ export function computeRainDay(day: DayData, opts: RainDayOptions = {}): RainDay
       likelyHours.length > 0
         ? { from: likelyHours[0]!.hour, to: likelyHours.at(-1)!.hour + 1 }
         : null,
+    raining,
   };
 }
 
 /** When the rain is most likely, for showers and wetter. */
 export function timingLine(c: RainDayComputation): string {
+  const every = c.hourly.every((h) => h.chance >= RAIN.hourLikely);
+  if (c.raining) {
+    // Raining now: easing off at the first later hour judged spots or drier, as Now says.
+    const easing = c.hourly.slice(1).find((h) => rank(h.band) <= rank('spots'));
+    if (easing) return easingLine(easing.hour);
+    return every ? RAIN_COPY.restOfDay : RAIN_COPY.onAndOffRestOfDay;
+  }
   const likely = c.likely;
   if (!likely) {
     let best: RainHourChance | undefined;
     for (const h of c.hourly) if (!best || h.chance > best.chance) best = h;
     return best && best.chance >= RAIN.hourPossible ? aroundLine(best.hour) : RAIN_COPY.onAndOff;
   }
-  const firstHour = c.hourly[0]!.hour;
-  if (likely.from === firstHour && likely.to === 24) {
-    const every = c.hourly.every((h) => h.chance >= RAIN.hourLikely);
+  if (likely.from === c.hourly[0]!.hour && likely.to === 24) {
     if (c.partial) return every ? RAIN_COPY.restOfDay : RAIN_COPY.onAndOffRestOfDay;
     return every ? RAIN_COPY.allDay : RAIN_COPY.onAndOffAllDay;
   }
-  // Raining at the start of the rest of today.
-  if (c.partial && likely.from === firstHour) return easingLine(likely.to);
   if (likely.to - likely.from === 1) return aroundLine(likely.from);
   return betweenLine(likely.from, likely.to);
 }
 
-/** The detail line: how much (or how dry), when, and whether it may be snow. */
+/**
+ * The detail line: how much (or how dry), when, and whether it may be snow. An amount that rounds
+ * to nothing (the last minutes of rain today) is left out.
+ */
 export function rainDayDetail(c: RainDayComputation, unit: RainUnit): string {
-  const text = (mm: number) => rainText(toRainUnits(mm, unit), unit);
+  const shown = (mm: number) => roundRain(toRainUnits(mm, unit), unit);
   if (c.band === 'dry') {
     if (c.partial) return RAIN_COPY.dryRestOfDay;
     return c.models.every((m) => m.total < c.thresholds.spots - EPSILON)
@@ -213,9 +253,12 @@ export function rainDayDetail(c: RainDayComputation, unit: RainUnit): string {
   if (c.band === 'showers') {
     const totals = c.models.map((m) => m.total).sort((a, b) => b - a);
     const one = c.wet === 1;
-    parts.push(upToLine(text(one ? totals[0]! : totals[1]!), one));
-  } else {
-    parts.push(c.snow === 'most' ? RAIN_COPY.asSnow : rainAmountLine(text(c.amount), c.partial));
+    const upTo = shown(one ? totals[0]! : totals[1]!);
+    if (upTo > 0) parts.push(upToLine(`${upTo}${unit}`, one));
+  } else if (c.snow === 'most') {
+    parts.push(RAIN_COPY.asSnow);
+  } else if (shown(c.amount) > 0) {
+    parts.push(rainAmountLine(`${shown(c.amount)}${unit}`, c.partial));
   }
   parts.push(timingLine(c));
   if (isRain(c.band) && c.snow === 'some') parts.push(RAIN_COPY.someSnow);
@@ -233,14 +276,13 @@ export function formatRainDay(c: RainDayComputation, units: Units): ApiRainDay {
   const answer = isRain(c.band) ? 'yes' : c.band === 'showers' ? 'maybe' : 'no';
   const models = c.models.map((m) => {
     const shown = toRainUnits(m.total, unit);
-    const expectsRain = atLeast(m.total, c.thresholds.wet);
     return {
       id: m.id,
       name: m.name,
       amount: roundRain(shown, unit),
       value: round2(shown),
-      expectsRain,
-      agrees: answer === 'yes' ? expectsRain : answer === 'no' ? !expectsRain : true,
+      expectsRain: m.wet,
+      agrees: answer === 'yes' ? m.wet : answer === 'no' ? !m.wet : true,
     };
   });
   const amounts = models.map((m) => m.amount);

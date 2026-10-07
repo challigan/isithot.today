@@ -45,6 +45,7 @@ export interface ApiDay {
   date: string;
   band: Band;
   answer: string;
+  /** "It's hot." for today; "It'll be hot." for tomorrow (`days[1]`). */
   verdict: string;
   high: number;
   feelsLike: number;
@@ -229,6 +230,11 @@ export interface ApiRainPoint {
   band: RainBand;
   /** The blended temperature is at or below the snow line. */
   snow: boolean;
+  /**
+   * The hour's median amount is under RAIN.lightBelow ("Light rain now."), decided in
+   * millimetres before rounding so the words are the same in either unit.
+   */
+  light: boolean;
 }
 
 /** One row in the rain Now view's list: the chance of rain in the two hours from `time`. */
@@ -299,7 +305,10 @@ export interface ApiRainWeek {
   /** Days judged rain or wetter, and days judged showers. */
   rainDays: number;
   showerDays: number;
-  /** The day with the largest consensus amount (the earlier one on a tie). */
+  /**
+   * The wettest day (the earlier one on a tie), by the median of the same models as `total`, so
+   * its amount never exceeds the total; by each day's consensus amount when there is no total.
+   */
   wettest: { date: string; amount: number };
   days: ApiRainWeekDay[];
 }

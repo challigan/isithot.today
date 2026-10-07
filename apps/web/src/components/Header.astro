@@ -5,7 +5,7 @@ interface Props {
   placeName?: string | null;
   units?: Units;
   controls?: boolean;
-  /** The site the page belongs to: the brand is that domain, whatever the toggle shows. */
+  /** The site the page belongs to. The browser switches the brand to the topic on screen. */
   site?: Topic;
 }
 const { placeName = null, units = 'c', controls = true, site = 'hot' } = Astro.props;
@@ -16,7 +16,7 @@ const wet = site === 'wet';
 
 <header>
   <!-- prettier-ignore -->
-  <a class="brand" href="/">{brand}<span>.{tld}</span></a>
+  <a class="brand" id="brand" href="/">{brand}<span>.{tld}</span></a>
   {controls && (
     <div class="where">
       <div class="where-row">

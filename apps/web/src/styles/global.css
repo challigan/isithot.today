@@ -234,11 +234,22 @@ main {
   position: relative;
   font-family: 'Bricolage Answer', var(--font);
   margin: 0;
-  font-size: clamp(6rem, 30vw, 13rem);
+  /*
+   * Sized by the screen, and never wider than the page (cqi: the .wrap container), which only
+   * matters with enlarged text on a narrow screen.
+   */
+  font-size: min(clamp(6rem, 30vw, 13rem), 60cqi);
   line-height: 0.86;
   font-weight: 780;
   letter-spacing: -0.055em;
   font-variation-settings: 'opsz' 96;
+}
+/*
+ * The size suits "Yes." and "No."; answers longer than four characters ("Maybe.", "Partly.",
+ * "Almost.", marked data-long by the markup and scripts/app.ts) are held to the page's width.
+ */
+.answer[data-long] {
+  font-size: min(clamp(6rem, 30vw, 13rem), 32cqi);
 }
 .answer.pop {
   animation: pop 520ms cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -736,7 +747,7 @@ button.place span {
   color: var(--pill);
   opacity: 1;
 }
-/* Hot | Wet, above the tabs: which question the views answer. A pill, centred in the page. */
+/* Hot | Wet: which question the views answer. A pill centred above the tabs (phones: below). */
 .topic {
   position: relative;
   z-index: 1;
@@ -775,6 +786,66 @@ button.place span {
 @media (pointer: coarse) {
   .topic button {
     min-height: 2.75rem;
+  }
+}
+/*
+ * Phones: the toggle floats at the bottom of the screen, in thumb reach, on a solid pill with a
+ * shadow (it passes over the page as it scrolls; ink on the band's pill colour meets AA in every
+ * band, like the selected tab). The page below gets room to scroll clear of it, and the tab bar
+ * takes the toggle's place under the header. It stays first in <main>, so the reading and focus
+ * order is still the question, then the period.
+ */
+@media (max-width: 639.98px) {
+  .topic {
+    position: fixed;
+    z-index: 5;
+    left: 50%;
+    bottom: max(1rem, env(safe-area-inset-bottom, 0px) + 0.5rem);
+    translate: -50% 0;
+    max-width: calc(100% - 1rem);
+    margin: 0;
+    background: var(--pill);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    /* A hairline in the text colour (the pill can match the page behind it) and a shadow in a
+       darker shade of the band's own colour. */
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--ink) 16%, transparent),
+      0 0.35rem 1.25rem color-mix(in srgb, color-mix(in srgb, var(--g2), #000 55%) 45%, transparent);
+  }
+  .topic button {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: center;
+  }
+  .tabs {
+    margin-top: 2rem;
+  }
+  /*
+   * Room under the footer for the toggle: its height, its offset beyond the safe area (which the
+   * root's own padding covers) and the usual 2rem. Also where keyboard focus scrolls to.
+   */
+  #app {
+    padding-bottom: calc(var(--dock) + 2rem);
+  }
+  html {
+    scroll-padding-bottom: calc(var(--dock) + env(safe-area-inset-bottom, 0px) + 0.5rem);
+  }
+  :root {
+    --dock: calc(2.55rem + max(0.5rem, 1rem - env(safe-area-inset-bottom, 0px)));
+  }
+}
+@media (max-width: 639.98px) and (pointer: coarse) {
+  :root {
+    --dock: calc(3.05rem + max(0.5rem, 1rem - env(safe-area-inset-bottom, 0px)));
+  }
+}
+/* Enlarged text on a narrow phone: tighter buttons, so the pill still fits across the screen. */
+@container (max-width: 9em) {
+  .topic button {
+    font-size: 0.8rem;
+    gap: 0.25rem;
+    padding-inline: 0.5rem;
   }
 }
 /* Out of the flow so showing it after the first answer never shifts the page. */
@@ -905,25 +976,18 @@ button.place span {
   margin-top: 1.25rem;
 }
 
-/* Search sheet: a modal dialog (focus is trapped and Escape closes it natively). */
+/*
+ * The place picker (SearchSheet.astro): a modal dialog, so focus is trapped and Escape (or the
+ * back gesture) closes it natively. On phones it is a full-screen view: the header row, the
+ * input pinned under it, where an on-screen keyboard can never cover it, then a body that
+ * scrolls on its own. From 640px up it is a centred card over a dimmed page.
+ */
 dialog.sheet {
   color: var(--ink);
   border: 0;
   padding: 0;
-  width: min(36rem, 100%);
-  max-height: min(36rem, 85vh);
-  margin: auto auto 0;
-  border-radius: 1.25rem 1.25rem 0 0;
   /* The band's pill colour: the gradient colour with the most contrast against the text. */
   background: linear-gradient(168deg, var(--pill), color-mix(in srgb, var(--pill) 85%, var(--g2)));
-  box-shadow: 0 -10px 40px rgb(0 0 0 / 0.25);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-@media (min-width: 640px) {
-  dialog.sheet {
-    margin: 12vh auto auto;
-    border-radius: 1.25rem;
-  }
 }
 dialog.sheet::backdrop {
   background: rgb(10 14 20 / 0.45);
@@ -932,7 +996,6 @@ dialog.sheet::backdrop {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  padding: 1.1rem 1.1rem 1.25rem;
 }
 .sheet-head {
   display: flex;
@@ -945,8 +1008,18 @@ dialog.sheet::backdrop {
   font-size: 1.1rem;
   font-weight: 600;
 }
+.sheet-head form {
+  display: contents;
+}
+@media (pointer: coarse) {
+  #search-close {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+}
 .sheet input {
   font: inherit;
+  /* At least 16px, or iOS zooms the page in when the input is focused. */
   font-size: 1.1rem;
   color: inherit;
   width: 100%;
@@ -959,14 +1032,17 @@ dialog.sheet::backdrop {
   color: inherit;
   opacity: 0.85;
 }
+.sheet-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .results {
   list-style: none;
   margin: 0;
   padding: 0;
-  overflow-y: auto;
-  max-height: 50vh;
 }
-.results button {
+.results button,
+.use-location {
   font: inherit;
   color: inherit;
   background: none;
@@ -981,8 +1057,22 @@ dialog.sheet::backdrop {
   gap: 0.05rem;
 }
 .results button:hover,
-.results button:focus-visible {
+.results button:focus-visible,
+.use-location:hover,
+.use-location:focus-visible {
   background: color-mix(in srgb, currentColor 10%, transparent);
+}
+/* Inside the row, where the scrolling body cannot clip the ring. */
+.results button:focus-visible,
+.use-location:focus-visible {
+  outline-offset: -2px;
+  border-radius: 0.6rem;
+}
+@media (pointer: coarse) {
+  .use-location {
+    min-height: 2.75rem;
+    justify-content: center;
+  }
 }
 .results .sub {
   font-size: 0.85rem;
@@ -994,6 +1084,57 @@ dialog.sheet::backdrop {
 }
 .use-location {
   font-weight: 600;
+}
+
+@media (max-width: 639.98px) {
+  dialog.sheet {
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    margin: 0;
+    border-radius: 0;
+    overflow: hidden;
+  }
+  /*
+   * The content fills the whole dialog (safe areas included), so a tap anywhere on it lands on
+   * the content, never on the dialog itself, which app.ts would read as a backdrop click.
+   */
+  .sheet-inner {
+    height: 100%;
+    padding: max(0.75rem, env(safe-area-inset-top, 0px)) max(1rem, env(safe-area-inset-right, 0px))
+      0 max(1rem, env(safe-area-inset-left, 0px));
+  }
+  .sheet-body {
+    flex: 1;
+    min-height: 0;
+    /*
+     * iOS lays the keyboard over the page instead of shrinking it: room to scroll the last
+     * result up above it (and clear of the home indicator).
+     */
+    padding-bottom: calc(40vh + env(safe-area-inset-bottom, 0px));
+  }
+  /* The page behind cannot scroll while the picker covers it. */
+  html:has(dialog.sheet[open]) {
+    overflow: hidden;
+  }
+}
+@media (min-width: 640px) {
+  dialog.sheet {
+    width: min(36rem, 100%);
+    max-height: min(36rem, 85vh);
+    margin: 12vh auto auto;
+    border-radius: 1.25rem;
+    box-shadow: 0 10px 40px rgb(0 0 0 / 0.25);
+  }
+  .sheet-inner {
+    padding: 1.1rem 1.1rem 1.25rem;
+  }
+  .sheet-body {
+    max-height: 50vh;
+  }
 }
 
 /* Content pages (About, Privacy, Cookies, Terms). */

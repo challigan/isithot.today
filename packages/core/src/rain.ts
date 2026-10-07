@@ -94,10 +94,14 @@ export function shareAtLeast(values: readonly number[], min: number): number {
 
 /**
  * The band for the models' totals over one window: likely rain is banded by the median amount,
- * a fair chance is showers, and otherwise a quarter of the models with spots is "spots".
+ * a fair chance is showers, and otherwise a quarter of the models with spots is "spots". `p` is
+ * the share of models expecting rain, by default those with at least the wet amount.
  */
-export function rainBand(totals: readonly number[], t: RainThresholds): RainBand {
-  const p = shareAtLeast(totals, t.wet);
+export function rainBand(
+  totals: readonly number[],
+  t: RainThresholds,
+  p: number = shareAtLeast(totals, t.wet),
+): RainBand {
   if (p >= RAIN.likelyFrom) {
     const m = median(totals);
     if (atLeast(m, t.drenched)) return 'drenched';

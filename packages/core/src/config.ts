@@ -178,6 +178,12 @@ export const WEEK = {
   minDays: 5,
 } as const;
 
+/**
+ * From this local hour at the place until midnight, the middle view answers for tomorrow
+ * instead of today, and the page opens on Now.
+ */
+export const TOMORROW_FROM_HOUR = 18;
+
 export interface ModelConfig {
   /** Open-Meteo `models=` ID. */
   id: string;
