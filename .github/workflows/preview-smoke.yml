@@ -34,7 +34,7 @@ jobs:
         run: pnpm fixtures && node scripts/summarise-fixtures.mjs --print
         continue-on-error: true
 
-      - name: Commit the recorded fixtures (when synthetic or recorded with an older request)
+      - name: Commit the recorded fixtures (when synthetic or recorded with older requests)
         if: github.event.pull_request.head.repo.full_name == github.repository
         continue-on-error: true
         run: |
@@ -43,9 +43,11 @@ jobs:
           if ! grep -q Recorded <<<"$recorded"; then
             echo "Recording did not complete; nothing to commit."; exit 0
           fi
+          # Re-record when either the forecast or the climate request line has changed.
+          requests() { grep -E '^(Forecast|Climate) request:' <<<"$1" || true; }
           if ! grep -q synthetic <<<"$committed" &&
-             [ "$(grep '^Forecast request:' <<<"$committed")" = "$(grep '^Forecast request:' <<<"$recorded")" ]; then
-            echo "Committed fixtures already match the current request; leaving them alone."; exit 0
+             [ "$(requests "$committed")" = "$(requests "$recorded")" ]; then
+            echo "Committed fixtures already match the current requests; leaving them alone."; exit 0
           fi
           # Only commit recordings the provider tests accept. (A push from this workflow does not
           # start CI, so the next push to the branch is the first full run on them.)

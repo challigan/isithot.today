@@ -1,5 +1,6 @@
 import {
   FORECAST,
+  RAIN,
   isFiniteNumber,
   type DayData,
   type HourTemps,
@@ -29,18 +30,18 @@ export interface OpenMeteoConfig {
 
 /**
  * Hourly variables requested for every model. The free API charges by variables × models, so
- * daily highs are worked out here from the hourly values (Open-Meteo's own daily maximum is
- * the same 24-hour aggregation) rather than requested separately.
+ * daily highs and rain totals are worked out here from the hourly values (Open-Meteo's own daily
+ * maximum and sum are the same 24-hour aggregations) rather than requested separately.
  */
 export const FORECAST_VARIABLES = {
-  hourly: ['temperature_2m', 'apparent_temperature'],
+  hourly: ['temperature_2m', 'apparent_temperature', 'precipitation'],
 };
 
 /**
  * Bump when the request or the parsed Forecast shape changes: cached forecasts are keyed by it,
  * and recorded test fixtures are re-recorded when the signature below changes.
  */
-export const FORECAST_CACHE_VERSION = 2;
+export const FORECAST_CACHE_VERSION = 3;
 
 /** One line describing the forecast request, written next to recorded fixtures. */
 export function forecastSignature(): string {
@@ -111,6 +112,36 @@ export function dailyMax(hours: readonly HourTemps[], values: (h: HourTemps) => 
   return covered === FORECAST.coverToHour - FORECAST.coverFromHour + 1 ? max : null;
 }
 
+/** Sums hourly rain, mm, without float noise (ten hours of 0.1 mm make 1, not 0.9999…). */
+const total = (values: readonly number[]): number =>
+  Math.round(values.reduce((a, b) => a + b, 0) * 1e6) / 1e6;
+
+/**
+ * A model's rain over a local day, and the part of it that fell in hours at or below the snow
+ * line, or nulls unless the model has a value for all 24 hours. The forecast's very last hour
+ * never has one (its rain is labelled with a stamp past the end), so it is let off.
+ */
+export function dailyRain(
+  hours: readonly HourTemps[],
+  index: number,
+  last: HourTemps | undefined,
+): { rain: number | null; snow: number | null } {
+  if (hours.length < 24) return { rain: null, snow: null };
+  const rain: number[] = [];
+  const snow: number[] = [];
+  for (const h of hours) {
+    const v = h.rain?.[index] ?? null;
+    if (v === null) {
+      if (h === last) continue;
+      return { rain: null, snow: null };
+    }
+    rain.push(v);
+    const t = h.temps[index] ?? null;
+    if (t !== null && t <= RAIN.snowAtOrBelowC) snow.push(v);
+  }
+  return { rain: total(rain), snow: total(snow) };
+}
+
 /** Parses a multi-model hourly Open-Meteo forecast into per-day model values. */
 export function parseForecast(json: unknown, models: readonly ModelConfig[]): Forecast {
   const body = json as {
@@ -128,19 +159,27 @@ export function parseForecast(json: unknown, models: readonly ModelConfig[]): Fo
   const offset = isFiniteNumber(body.utc_offset_seconds) ? body.utc_offset_seconds : 0;
   const temps = models.map((m) => seriesFor(hourly, 'temperature_2m', m, models.length));
   const feels = models.map((m) => seriesFor(hourly, 'apparent_temperature', m, models.length));
+  const precipitation = models.map((m) => seriesFor(hourly, 'precipitation', m, models.length));
+  // Older recordings have no precipitation at all: leave rain out rather than call them dry.
+  const hasRain = precipitation.some((series) => series !== null);
 
   // Local timestamps ("2026-10-07T14:00") grouped by date, in order.
   const byDate = new Map<string, HourTemps[]>();
+  let last: HourTemps | undefined;
   times.forEach((time, t) => {
     const stamp = String(time);
     const date = stamp.slice(0, 10);
     const hours = byDate.get(date) ?? [];
-    hours.push({
+    last = {
       hour: Number(stamp.slice(11, 13)),
       time: Date.parse(`${stamp}Z`) - offset * 1000,
       temps: temps.map((series) => numberOrNull(series?.[t])),
       feels: feels.map((series) => numberOrNull(series?.[t])),
-    });
+    };
+    // Precipitation at a stamp fell during the hour before it, so the rain during the hour that
+    // starts at stamp t is the next stamp's value (23:00 takes the next day's 00:00).
+    if (hasRain) last.rain = precipitation.map((series) => numberOrNull(series?.[t + 1]));
+    hours.push(last);
     byDate.set(date, hours);
   });
 
@@ -151,6 +190,7 @@ export function parseForecast(json: unknown, models: readonly ModelConfig[]): Fo
       name: m.name,
       high: dailyMax(hours, (h) => h.temps[i] ?? null),
       feelsLike: dailyMax(hours, (h) => h.feels?.[i] ?? null),
+      ...(hasRain ? dailyRain(hours, i, last) : {}),
     })),
     hourly: hours,
   }));

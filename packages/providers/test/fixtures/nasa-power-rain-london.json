@@ -1,0 +1,45 @@
+{
+ "type": "Feature",
+ "geometry": {
+  "type": "Point",
+  "coordinates": [
+   0,
+   51.5,
+   50
+  ]
+ },
+ "properties": {
+  "parameter": {
+   "PRECTOTCORR": {
+    "JAN": 2.76,
+    "FEB": 2.4,
+    "MAR": 2.04,
+    "APR": 1.78,
+    "MAY": 1.68,
+    "JUN": 1.78,
+    "JUL": 2.04,
+    "AUG": 2.4,
+    "SEP": 2.76,
+    "OCT": 3.02,
+    "NOV": 3.12,
+    "DEC": 3.02,
+    "ANN": 2.4
+   }
+  }
+ },
+ "header": {
+  "title": "NASA/POWER synthetic climatology",
+  "fill_value": -999
+ },
+ "messages": [],
+ "parameters": {
+  "PRECTOTCORR": {
+   "units": "mm/day",
+   "longname": "Precipitation Corrected"
+  }
+ },
+ "times": {
+  "data": 0,
+  "process": 0
+ }
+}
