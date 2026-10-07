@@ -2,9 +2,15 @@
  * Every user-facing string. The website, the API and the future apps all read from here so
  * the words never drift apart. Sentence case everywhere.
  */
-import type { Band } from './config';
+import { SITES, type Band, type Topic } from './config';
 
-export const SITE_NAME = 'isithot.today';
+export const SITE_NAME = SITES.hot.name;
+
+/** The topic toggle's labels. */
+export const TOPIC_LABELS: Record<Topic, string> = {
+  hot: 'Hot',
+  wet: 'Wet',
+};
 
 export const MONTHS = [
   'January',
@@ -112,6 +118,9 @@ export const COPY = {
   forecastCredit: 'Forecast data: Open-Meteo.com (CC BY 4.0)',
   climateCredit: 'Climate data: NASA POWER',
   unitsLabel: 'Temperature units',
+  rainUnitsLabel: 'Rain units',
+  topicLabel: 'Forecast type',
+  nextHoursRain: 'Chance of rain, next 12 hours',
   changeLocation: 'change location',
   stale: 'Showing the last forecast we have. It will refresh shortly.',
   previewLabel: 'Preview each kind of day',
@@ -126,9 +135,10 @@ export const ERROR_MESSAGES = {
   rate_limited: 'Too many requests. Try again in a minute.',
 } as const;
 
-export function question(city?: string | null, view: View = 'today'): string {
+/** "Is it hot today?" / "Is it wet in London right now?" */
+export function question(city?: string | null, view: View = 'today', topic: Topic = 'hot'): string {
   const when = VIEW_WHEN[view];
-  return city ? `Is it hot in ${city} ${when}?` : `Is it hot ${when}?`;
+  return city ? `Is it ${topic} in ${city} ${when}?` : `Is it ${topic} ${when}?`;
 }
 
 export function monthName(date: string): string {
@@ -195,3 +205,13 @@ export function pageTitle(args: { city?: string | null; answer: string; high: nu
 export const DEFAULT_TITLE = `Is it hot today? | ${SITE_NAME}`;
 export const DEFAULT_DESCRIPTION =
   'Will today feel hot where you are? One answer from several forecast models, judged against what is normal for your place and time of year.';
+
+/** Each site's home page title and description. */
+export const DEFAULT_TITLES: Record<Topic, string> = {
+  hot: DEFAULT_TITLE,
+  wet: `Is it wet today? | ${SITES.wet.name}`,
+};
+export const DEFAULT_DESCRIPTIONS: Record<Topic, string> = {
+  hot: DEFAULT_DESCRIPTION,
+  wet: 'Will it rain today where you are? One answer from several forecast models: how likely rain is, how much and when.',
+};

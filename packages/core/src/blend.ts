@@ -9,6 +9,13 @@ export interface ModelDay {
   name: string;
   high: number | null;
   feelsLike: number | null;
+  /**
+   * Total rain (precipitation, water equivalent) over the local day, mm, or null unless the model
+   * has a value for every hour of the day. Absent for forecasts recorded without precipitation.
+   */
+  rain?: number | null;
+  /** The part of `rain` that fell in hours at or below the snow line (RAIN.snowAtOrBelowC), mm. */
+  snow?: number | null;
 }
 
 /** Hourly temperatures across all models for one local hour, °C. */
@@ -20,6 +27,12 @@ export interface HourTemps {
   temps: readonly (number | null)[];
   /** Hourly apparent (feels-like) temperature per model, in the same order as `temps`. */
   feels?: readonly (number | null)[];
+  /**
+   * Rain per model during this hour (from `time` to an hour later), mm, in the same order as
+   * `temps`. Open-Meteo labels precipitation with the end of the hour it fell in; the parser
+   * moves it to the hour's start so it lines up with everything else here.
+   */
+  rain?: readonly (number | null)[];
 }
 
 export interface BlendedModel {
