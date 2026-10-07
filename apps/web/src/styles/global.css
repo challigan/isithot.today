@@ -158,6 +158,7 @@ main {
   max-width: calc(100% - clamp(7rem, 26vw, 11rem));
 }
 .answer {
+  font-family: 'Bricolage Answer', var(--font);
   margin: 0;
   font-size: clamp(6rem, 30vw, 13rem);
   line-height: 0.86;

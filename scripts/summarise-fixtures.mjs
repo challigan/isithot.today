@@ -25,3 +25,11 @@ const search = read('open-meteo-search-newcastle.json');
 console.log(
   `search: ${search.results?.map((r) => `${r.name}/${r.country_code}/${r.id}`).join(', ')}`,
 );
+
+// Compact copies for the log, so they can be committed as test fixtures.
+if (process.argv.includes('--print')) {
+  const { readdirSync } = await import('node:fs');
+  for (const name of readdirSync(dir).filter((f) => f.endsWith('.json'))) {
+    console.log(`FIXTURE ${name} ${JSON.stringify(read(name))}`);
+  }
+}
