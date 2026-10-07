@@ -6,7 +6,13 @@ import fontLatinExt from '@fontsource-variable/bricolage-grotesque/files/bricola
 // only, inlined so the big answer paints in the right font immediately with no swap.
 // Regenerate with scripts/make-answer-font.py.
 import fontAnswer from '../fonts/bricolage-answer.woff2?inline';
-import { DEFAULT_DESCRIPTION, DEFAULT_TITLE, SITE_NAME, type Palette } from '@isithot/core';
+import {
+  DEFAULT_DESCRIPTIONS,
+  DEFAULT_TITLES,
+  SITES,
+  type Palette,
+  type Topic,
+} from '@isithot/core';
 
 interface Props {
   title?: string;
@@ -16,16 +22,22 @@ interface Props {
   ogImage?: string;
   palette: Palette;
   noindex?: boolean;
+  /** The site the page belongs to: names, icons and defaults follow it. */
+  topic?: Topic;
 }
 
+const { topic = 'hot' } = Astro.props;
 const {
-  title = DEFAULT_TITLE,
-  description = DEFAULT_DESCRIPTION,
+  title = DEFAULT_TITLES[topic],
+  description = DEFAULT_DESCRIPTIONS[topic],
   canonical = null,
-  ogImage = new URL('/og/default.png', Astro.site).toString(),
+  ogImage = `${SITES[topic].url}/og/default.png`,
   palette,
   noindex = false,
 } = Astro.props;
+// Wet pages carry their own icons; /wet paths work on isitwet.today too (the edge function
+// passes them through).
+const assets = topic === 'wet' ? '/wet' : '';
 
 const vars = `--g1:${palette.g1};--g2:${palette.g2};--g3:${palette.g3};--ink:${palette.ink};--pill:${palette.pill};--glow:${palette.glow}`;
 const beacon = import.meta.env.PUBLIC_CF_BEACON_TOKEN;
@@ -46,11 +58,11 @@ const beacon = import.meta.env.PUBLIC_CF_BEACON_TOKEN;
       is:inline
       set:html={`@font-face{font-family:'Bricolage Answer';font-style:normal;font-display:block;font-weight:100 900;src:url(${fontAnswer}) format('woff2');unicode-range:U+0020-007E,U+2019,U+2026}@font-face{font-family:'Bricolage Grotesque';font-style:normal;font-display:swap;font-weight:200 800;src:url(${fontLatinExt}) format('woff2-variations'),url(${fontLatinExt}) format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}@font-face{font-family:'Bricolage Grotesque';font-style:normal;font-display:swap;font-weight:200 800;src:url(${fontLatin}) format('woff2-variations'),url(${fontLatin}) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}@font-face{font-family:'Bricolage Fallback Arial';src:local('Arial'),local('ArialMT'),local('Liberation Sans');size-adjust:103%}@font-face{font-family:'Bricolage Fallback Roboto';src:local('Roboto'),local('Roboto-Regular');size-adjust:103.5%}@font-face{font-family:'Bricolage Fallback DejaVu';src:local('DejaVu Sans');size-adjust:90.5%}`}
     />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="icon" href="/favicon.ico" sizes="32x32" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <meta property="og:site_name" content={SITE_NAME} />
+    <link rel="icon" href={`${assets}/favicon.svg`} type="image/svg+xml" />
+    <link rel="icon" href={`${assets}/favicon.ico`} sizes="32x32" />
+    <link rel="apple-touch-icon" href={`${assets}/apple-touch-icon.png`} />
+    <link rel="manifest" href={`${assets}/manifest.webmanifest`} />
+    <meta property="og:site_name" content={SITES[topic].name} />
     <meta property="og:type" content="website" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />

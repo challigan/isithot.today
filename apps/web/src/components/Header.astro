@@ -1,17 +1,23 @@
 ---
-import { COPY, type Units } from '@isithot/core';
+import { COPY, SITES, type Topic, type Units } from '@isithot/core';
 
 interface Props {
   placeName?: string | null;
   units?: Units;
   controls?: boolean;
+  /** The site the page belongs to: the brand is that domain, whatever the toggle shows. */
+  site?: Topic;
 }
-const { placeName = null, units = 'c', controls = true } = Astro.props;
+const { placeName = null, units = 'c', controls = true, site = 'hot' } = Astro.props;
+const [brand, tld] = SITES[site].name.split('.');
+// The same setting serves both topics: °C goes with millimetres, °F with inches.
+const wet = site === 'wet';
 ---
 
 <header>
   <a class="brand" href="/">
-    isithot<span>.today</span>
+    {brand}
+    <span>.{tld}</span>
   </a>
   {controls && (
     <div class="where">
@@ -32,12 +38,16 @@ const { placeName = null, units = 'c', controls = true } = Astro.props;
           <span id="place">{placeName ?? COPY.locating}</span>
           <span class="sr-only">, {COPY.changeLocation}</span>
         </button>
-        <div class="pill units" role="group" aria-label={COPY.unitsLabel}>
+        <div
+          class="pill units"
+          role="group"
+          aria-label={wet ? COPY.rainUnitsLabel : COPY.unitsLabel}
+        >
           <button type="button" data-units="c" aria-pressed={units === 'c' ? 'true' : 'false'}>
-            °C
+            {wet ? 'mm' : '°C'}
           </button>
           <button type="button" data-units="f" aria-pressed={units === 'f' ? 'true' : 'false'}>
-            °F
+            {wet ? 'in' : '°F'}
           </button>
         </div>
       </div>
