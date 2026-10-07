@@ -47,3 +47,13 @@ jobs:
 
       - name: Smoke test the preview
         run: node scripts/smoke.mjs "$PREVIEW"
+
+      - name: Lighthouse (mobile) on the deploy preview
+        run: |
+          for path in / /in/london-gb; do
+            npx -y lighthouse@12 "$PREVIEW$path" --quiet --form-factor=mobile \
+              --only-categories=performance,accessibility,best-practices,seo \
+              --chrome-flags="--headless=new --no-sandbox" --output=json --output-path=lh.json || true
+            node scripts/lighthouse-summary.mjs lh.json "$path"
+          done
+        continue-on-error: true

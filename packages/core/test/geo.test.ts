@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cellKey,
   distanceKm,
+  snapToCell,
   geohash,
   gridKey,
   isValidLatLon,
@@ -24,6 +26,18 @@ describe('grid rounding', () => {
   it('rounds to 0.5° for climate cells', () => {
     expect(roundToGrid(54.98, 0.5)).toBe(55);
     expect(roundToGrid(-1.61, 0.5)).toBe(-1.5);
+  });
+
+  it("snaps to rectangular cells like NASA POWER's 0.5° × 0.625° grid", () => {
+    expect(snapToCell({ lat: 54.97, lon: -1.61 }, { lat: 0.5, lon: 0.625 })).toEqual({
+      lat: 55,
+      lon: -1.875,
+    });
+    expect(snapToCell({ lat: 37.39, lon: -5.98 }, { lat: 0.5, lon: 0.625 })).toEqual({
+      lat: 37.5,
+      lon: -6.25,
+    });
+    expect(cellKey({ lat: 54.97, lon: -1.61 }, { lat: 0.5, lon: 0.625 })).toBe('55.0,-1.875');
   });
 
   it('builds stable keys', () => {

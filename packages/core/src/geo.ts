@@ -19,6 +19,17 @@ export function roundPoint(point: LatLon, step: number): LatLon {
   return { lat: roundToGrid(point.lat, step), lon: roundToGrid(point.lon, step) };
 }
 
+/** Snaps a point to the centre of a rectangular grid cell (e.g. NASA POWER's 0.5° × 0.625°). */
+export function snapToCell(point: LatLon, cell: LatLon): LatLon {
+  return { lat: roundToGrid(point.lat, cell.lat), lon: roundToGrid(point.lon, cell.lon) };
+}
+
+/** Cache key for a rectangular grid cell, e.g. "55.0,-1.875". */
+export function cellKey(point: LatLon, cell: LatLon): string {
+  const r = snapToCell(point, cell);
+  return `${r.lat.toFixed(decimalsOf(cell.lat))},${r.lon.toFixed(decimalsOf(cell.lon))}`;
+}
+
 /** Cache key for a grid cell, e.g. "54.95,-1.60". */
 export function gridKey(point: LatLon, step: number): string {
   const d = decimalsOf(step);

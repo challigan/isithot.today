@@ -37,7 +37,10 @@ const jobs: Array<[string, string]> = [
   ['open-meteo-forecast-seville.json', buildForecastUrl(OPEN_METEO_FREE, SEVILLE, MODELS)],
   ['open-meteo-search-newcastle.json', buildSearchUrl(OPEN_METEO_FREE, 'Newcastle', 8)],
   ['open-meteo-search-none.json', buildSearchUrl(OPEN_METEO_FREE, 'Xqzvbnm', 8)],
-  ['nasa-power-newcastle.json', buildClimatologyUrl(NASA_POWER_URL, { lat: 55, lon: -1.5 })],
+  ['nasa-power-newcastle.json', buildClimatologyUrl(NASA_POWER_URL, { lat: 55, lon: -1.875 })],
+  ['nasa-power-seville.json', buildClimatologyUrl(NASA_POWER_URL, { lat: 37.5, lon: -6.25 })],
+  ['nasa-power-london.json', buildClimatologyUrl(NASA_POWER_URL, { lat: 51.5, lon: 0 })],
+  ['nasa-power-singapore.json', buildClimatologyUrl(NASA_POWER_URL, { lat: 1.5, lon: 103.75 })],
 ];
 
 for (const [file, url] of jobs) {

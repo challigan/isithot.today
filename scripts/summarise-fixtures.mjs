@@ -15,8 +15,12 @@ for (const name of ['open-meteo-forecast-newcastle.json', 'open-meteo-forecast-s
   const hourlyKeys = Object.keys(f.hourly ?? {}).filter((k) => k !== 'time');
   console.log(`  hourly keys: ${hourlyKeys.join(', ')}`);
 }
-const nasa = read('nasa-power-newcastle.json');
-console.log(`nasa: ${JSON.stringify(nasa.properties?.parameter)}`);
+for (const place of ['newcastle', 'seville', 'london', 'singapore']) {
+  const nasa = read(`nasa-power-${place}.json`);
+  console.log(
+    `nasa ${place} ${JSON.stringify(nasa.geometry?.coordinates)}: ${JSON.stringify(nasa.properties?.parameter)}`,
+  );
+}
 const search = read('open-meteo-search-newcastle.json');
 console.log(
   `search: ${search.results?.map((r) => `${r.name}/${r.country_code}/${r.id}`).join(', ')}`,

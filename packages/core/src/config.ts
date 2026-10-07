@@ -87,8 +87,11 @@ export const MODELS: readonly ModelConfig[] = [
 export const GRID = {
   /** Forecast cache cell, degrees (about 5 km). Coordinates are rounded to this before leaving the browser. */
   forecast: 0.05,
-  /** Climate normals cache cell, degrees (NASA POWER's native grid is about 0.5°). */
-  climate: 0.5,
+  /**
+   * Climate normals cell, degrees. NASA POWER serves MERRA-2 data on a 0.5° × 0.625° grid;
+   * snapping to its cell centres makes each request (and cache entry) one real grid cell.
+   */
+  climate: { lat: 0.5, lon: 0.625 },
 } as const;
 
 export const CACHE = {
