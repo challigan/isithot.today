@@ -1,0 +1,15 @@
+---
+import { COPY } from '@isithot/core';
+---
+
+<footer class="site-footer">
+  <nav aria-label="Site">
+    <a href="/about">About</a>
+    <a href="/privacy">Privacy</a>
+    <a href="/cookies">Cookies</a>
+    <a href="/terms">Terms</a>
+  </nav>
+  <!-- prettier-ignore -->
+  <p class="credit"><a href="https://open-meteo.com/" rel="noopener">{COPY.forecastCredit}</a>. <a href="https://power.larc.nasa.gov/" rel="noopener">{COPY.climateCredit}</a>. Place names: <a href="https://www.geonames.org/" rel="noopener">GeoNames</a>.</p>
+  <div class="preview" id="preview" hidden></div>
+</footer>

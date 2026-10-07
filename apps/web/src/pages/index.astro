@@ -1,0 +1,78 @@
+---
+import Base from '../layouts/Base.astro';
+import Header from '../components/Header.astro';
+import Today from '../components/Today.astro';
+import AdSlot from '../components/AdSlot.astro';
+import Footer from '../components/Footer.astro';
+import SearchSheet from '../components/SearchSheet.astro';
+import { LOADING_PALETTE } from '@isithot/core';
+
+const canonical = new URL('/', Astro.site).toString();
+---
+
+<Base canonical={canonical} palette={LOADING_PALETTE}>
+  <script is:inline slot="head">
+    // Start the API request before the main script has downloaded. Mirrors apiUrl() in
+    // scripts/app.ts; if they ever disagree the app simply makes its own request.
+    (() => {
+      try {
+        if (location.search) return;
+        const get = (k) => JSON.parse(localStorage.getItem(k) || 'null');
+        const t = get('isithot:place') || { kind: 'ip' };
+        const units = get('isithot:units') || (t.kind === 'ip' ? null : 'c');
+        const p = new URLSearchParams();
+        if (t.kind === 'city') p.set('place', t.slug);
+        if (t.kind === 'coords') {
+          p.set('lat', String(t.lat));
+          p.set('lon', String(t.lon));
+          if (t.name) p.set('name', t.name);
+          if (t.region) p.set('region', t.region);
+          if (t.country) p.set('country', t.country);
+          if (t.geonameId) p.set('geonameId', String(t.geonameId));
+          p.set('source', t.source);
+        }
+        if (units) p.set('units', units);
+        const qs = p.toString();
+        const url = '/api/v1/today' + (qs ? '?' + qs : '');
+        window.__isithotPrefetch = {
+          url,
+          response: fetch(url, { headers: { accept: 'application/json' } }),
+        };
+      } catch {
+        // The app will fetch normally.
+      }
+    })();
+  </script>
+  <div class="wrap" id="app" data-state="loading" data-mode="home">
+    <Header />
+    <Today data={null} state="loading" />
+    <AdSlot />
+    <Footer />
+  </div>
+  <SearchSheet />
+  <script is:inline>
+    // Paint the last answer instantly (under 3 hours old) before the main script loads.
+    (() => {
+      try {
+        if (location.search) return;
+        const c = JSON.parse(localStorage.getItem('isithot:last') || 'null');
+        if (!c || c.v !== 2 || Date.now() - c.savedAt > 10800000) return;
+        const s = document.documentElement.style;
+        for (const k in c.palette) s.setProperty('--' + k, c.palette[k]);
+        document.querySelector('meta[name=theme-color]').setAttribute('content', c.palette.g1);
+        document.getElementById('main').innerHTML = c.html;
+        document.getElementById('place').textContent = c.place;
+        const app = document.getElementById('app');
+        app.setAttribute('data-state', 'ready');
+        app.setAttribute('data-restored', '1');
+        document.title = c.title;
+      } catch {
+        // No storage or a bad entry: the normal load takes over.
+      }
+    })();
+  </script>
+  <script>
+    import { start } from '../scripts/app';
+    start();
+  </script>
+</Base>

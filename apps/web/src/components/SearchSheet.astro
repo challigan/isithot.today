@@ -1,0 +1,34 @@
+---
+import { COPY } from '@isithot/core';
+---
+
+<dialog class="sheet" id="search" aria-labelledby="search-h">
+  <form class="sheet-inner" method="dialog" role="search">
+    <div class="sheet-head">
+      <h2 id="search-h">{COPY.searchLabel}</h2>
+      <button class="button" type="submit" value="close" id="search-close">
+        {COPY.close}
+      </button>
+    </div>
+    <label class="sr-only" for="search-input">
+      {COPY.searchLabel}
+    </label>
+    <input
+      id="search-input"
+      type="search"
+      inputmode="search"
+      autocomplete="off"
+      autocapitalize="words"
+      spellcheck="false"
+      placeholder={COPY.searchPlaceholder}
+      aria-controls="search-results"
+    />
+    <ul class="results" id="search-results" aria-live="polite">
+      <li>
+        <button type="button" class="use-location" id="use-location">
+          {COPY.useMyLocation}
+        </button>
+      </li>
+    </ul>
+  </form>
+</dialog>

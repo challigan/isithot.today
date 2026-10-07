@@ -1,0 +1,9 @@
+pnpm-lock.yaml
+dist/
+.astro/
+.netlify/
+coverage/
+reference/
+data/
+functions/lib/server.mjs
+packages/providers/test/fixtures/

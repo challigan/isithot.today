@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.astro/
+.netlify/
+coverage/
+test-results/
+playwright-report/
+blob-report/
+.env
+.env.*
+!.env.example
+.dev.vars
+*.log
+.DS_Store

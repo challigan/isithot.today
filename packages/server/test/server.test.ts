@@ -1,0 +1,499 @@
+import { describe, expect, it, vi } from 'vitest';
+import type { ApiError, SearchResponse, TodayResponse } from '@isithot/core';
+import { createSyntheticFetch, type FetchLike } from '@isithot/providers';
+import {
+  CITIES,
+  MemoryKV,
+  SafeKV,
+  TieredKV,
+  cityBySlug,
+  cityForPlace,
+  getSearch,
+  getToday,
+  handleRateLimited,
+  handleSearch,
+  handleToday,
+  nearbyCities,
+  resolveServerConfig,
+  reverseGeocode,
+  todayForCity,
+  type ServerDeps,
+} from '../src';
+
+const NOW = new Date('2026-10-06T08:00:00Z');
+
+function makeDeps(overrides: Partial<ServerDeps> = {}) {
+  const calls: string[] = [];
+  const synthetic = createSyntheticFetch(CITIES, overrides.now ?? (() => NOW));
+  const fetcher: FetchLike = async (url, init) => {
+    calls.push(new URL(url).pathname);
+    return synthetic(url, init);
+  };
+  const background: Promise<unknown>[] = [];
+  const deps: ServerDeps = {
+    config: resolveServerConfig(() => undefined),
+    cache: new MemoryKV(),
+    fetch: fetcher,
+    now: () => NOW,
+    waitUntil: (p) => void background.push(p),
+    log: () => {},
+    ...overrides,
+  };
+  return { deps, calls, background };
+}
+
+const q = (params: Record<string, string>) => new URLSearchParams(params);
+const ok = (r: { body: TodayResponse | ApiError }) => r.body as TodayResponse;
+
+describe('config', () => {
+  it('uses the free hosts without a key and the customer hosts with one', () => {
+    const free = resolveServerConfig(() => undefined);
+    expect(free.openMeteo.forecastUrl).toBe('https://api.open-meteo.com/v1/forecast');
+    expect(free.dataSource).toBe('live');
+    expect(free.fallbackPlace).toBe('london-gb');
+    const env: Record<string, string> = { OPEN_METEO_API_KEY: ' k ', DATA_SOURCE: 'synthetic' };
+    const paid = resolveServerConfig((k) => env[k]);
+    expect(paid.openMeteo.forecastUrl).toBe('https://customer-api.open-meteo.com/v1/forecast');
+    expect(paid.openMeteo.geocodingUrl).toBe(
+      'https://customer-geocoding-api.open-meteo.com/v1/search',
+    );
+    expect(paid.openMeteo.apiKey).toBe('k');
+    expect(paid.dataSource).toBe('synthetic');
+  });
+});
+
+describe('GET /api/v1/today', () => {
+  it('answers for rounded device coordinates with the contract shape', async () => {
+    const { deps } = makeDeps();
+    const r = await getToday(q({ lat: '54.97', lon: '-1.61', units: 'c' }), null, deps);
+    expect(r.status).toBe(200);
+    const body = ok(r);
+    expect(body.location).toMatchObject({
+      name: 'Newcastle',
+      country: 'GB',
+      region: 'England',
+      lat: 54.95,
+      lon: -1.6,
+      timezone: 'Europe/London',
+      source: 'device',
+      slug: 'newcastle-upon-tyne-gb',
+      geonameId: 2641673,
+    });
+    expect(body.units).toBe('c');
+    expect(body.days).toHaveLength(2);
+    expect(body.days[0]!.date).toBe('2026-10-06');
+    const day = body.days[0]!;
+    expect(day).toHaveProperty('band');
+    expect(day).toHaveProperty('answer');
+    expect(day).toHaveProperty('verdict');
+    expect(day.normalHigh).not.toBeNull();
+    expect(day.consensus.total).toBe(8);
+    expect(day.models).toHaveLength(8);
+    expect(body.attribution).toEqual([
+      'Forecast data: Open-Meteo.com (CC BY 4.0)',
+      'Climate data: NASA POWER',
+    ]);
+    expect(body.updatedAt).toBe(NOW.toISOString());
+    expect(body.nearby).toHaveLength(4);
+    expect(body.nearby!.map((c) => c.slug)).not.toContain('newcastle-upon-tyne-gb');
+    expect(body.stale).toBeUndefined();
+    expect(r.headers['Cache-Control']).toBe('public, max-age=600');
+  });
+
+  it('serves the second call from cache', async () => {
+    const { deps, calls } = makeDeps();
+    await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
+    expect(calls).toEqual(['/v1/forecast', '/api/temporal/climatology/point']);
+    await getToday(q({ lat: '54.95', lon: '-1.6', units: 'f' }), null, deps);
+    await getToday(q({ lat: '54.97', lon: '-1.62', units: 'c' }), null, deps);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('uses the name passed by search and marks the source', async () => {
+    const { deps } = makeDeps();
+    const body = ok(
+      await getToday(
+        q({
+          lat: '40.7',
+          lon: '-74',
+          name: 'New York',
+          country: 'us',
+          source: 'search',
+          geonameId: '5128581',
+          units: 'f',
+        }),
+        null,
+        deps,
+      ),
+    );
+    expect(body.location).toMatchObject({
+      name: 'New York',
+      country: 'US',
+      source: 'search',
+      slug: 'new-york-city-us',
+    });
+    expect(body.units).toBe('f');
+  });
+
+  it('names places with no nearby town "Your location"', async () => {
+    const { deps } = makeDeps();
+    const body = ok(await getToday(q({ lat: '0', lon: '-30', units: 'c' }), null, deps));
+    expect(body.location.name).toBe('Your location');
+    expect(body.location.slug).toBeUndefined();
+  });
+
+  it('serves city pages by slug', async () => {
+    const { deps } = makeDeps();
+    const body = ok(await getToday(q({ place: 'seville-es', units: 'c' }), null, deps));
+    expect(body.location).toMatchObject({
+      name: 'Seville',
+      source: 'city',
+      slug: 'seville-es',
+      country: 'ES',
+    });
+  });
+
+  it('rejects bad coordinates and unknown places', async () => {
+    const { deps } = makeDeps();
+    const cases: Record<string, string>[] = [
+      { lat: '95', lon: '0' },
+      { lat: '', lon: '1' },
+      { lat: '1' },
+      { lat: 'abc', lon: '1' },
+    ];
+    for (const params of cases) {
+      const r = await getToday(q(params), null, deps);
+      expect(r.status).toBe(400);
+      expect((r.body as ApiError).error.code).toBe('bad_location');
+    }
+    const r = await getToday(q({ place: 'atlantis-xx' }), null, deps);
+    expect(r.status).toBe(404);
+    expect((r.body as ApiError).error).toEqual({
+      code: 'not_found',
+      message: 'There is no page for that place.',
+    });
+    expect(r.headers['Cache-Control']).toBe('no-store');
+  });
+
+  it('uses the approximate IP location and never shares it at the CDN', async () => {
+    const { deps } = makeDeps();
+    const r = await getToday(
+      q({}),
+      { city: 'Newcastle upon Tyne', country: 'GB', region: 'England', lat: 54.9881, lon: -1.6194 },
+      deps,
+    );
+    const body = ok(r);
+    expect(body.location).toMatchObject({
+      name: 'Newcastle upon Tyne',
+      source: 'ip',
+      lat: 55,
+      lon: -1.6,
+    });
+    expect(r.headers['Cache-Control']).toBe('private, max-age=300');
+    expect(r.headers['Netlify-CDN-Cache-Control']).toBe('no-store');
+  });
+
+  it('links the IP town to its city page when the names agree', async () => {
+    const { deps } = makeDeps();
+    const body = ok(
+      await getToday(q({}), { city: 'Newcastle', country: 'GB', lat: 54.97, lon: -1.61 }, deps),
+    );
+    expect(body.location).toMatchObject({ slug: 'newcastle-upon-tyne-gb', geonameId: 2641673 });
+  });
+
+  it('defaults to °F for US visitors and °C elsewhere', async () => {
+    const { deps } = makeDeps();
+    const us = ok(
+      await getToday(q({}), { city: 'Austin', country: 'US', lat: 30.27, lon: -97.74 }, deps),
+    );
+    expect(us.units).toBe('f');
+    const gb = ok(await getToday(q({ place: 'london-gb' }), { country: 'GB' }, deps));
+    expect(gb.units).toBe('c');
+    const fromPlace = ok(await getToday(q({ place: 'miami-us' }), null, deps));
+    expect(fromPlace.units).toBe('f');
+  });
+
+  it('falls back to the configured place when IP location is unknown', async () => {
+    const { deps } = makeDeps();
+    const body = ok(await getToday(q({}), null, deps));
+    expect(body.location).toMatchObject({ name: 'London', source: 'ip' });
+    const broken = makeDeps({
+      config: { ...resolveServerConfig(() => undefined), fallbackPlace: 'nowhere' },
+    });
+    expect((await getToday(q({}), {}, broken.deps)).status).toBe(400);
+  });
+
+  it('serves a stale result under 6 hours old when upstream fails', async () => {
+    const cache = new MemoryKV();
+    let now = NOW;
+    const first = makeDeps({ cache, now: () => now });
+    await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, first.deps);
+
+    const failing: FetchLike = async () => new Response('down', { status: 503 });
+    now = new Date(NOW.getTime() + 2 * 60 * 60 * 1000);
+    const later = makeDeps({ cache, now: () => now, fetch: failing });
+    const r = await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, later.deps);
+    expect(r.status).toBe(200);
+    expect(ok(r).stale).toBe(true);
+    expect(r.headers['Cache-Control']).toBe('public, max-age=60');
+
+    now = new Date(NOW.getTime() + 7 * 60 * 60 * 1000);
+    const tooOld = await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, later.deps);
+    expect(tooOld.status).toBe(503);
+    expect((tooOld.body as ApiError).error.code).toBe('upstream_unavailable');
+  });
+
+  it('refetches when the cached forecast no longer covers today', async () => {
+    const cache = new MemoryKV();
+    const first = makeDeps({ cache });
+    await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, first.deps);
+    // Ten minutes later but two days on (cache still "fresh" by age only if the date matched).
+    const twoDaysLater = new Date(NOW.getTime() + 48 * 60 * 60 * 1000);
+    const later = makeDeps({ cache, now: () => twoDaysLater });
+    const r = await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, later.deps);
+    expect(later.calls).toContain('/v1/forecast');
+    expect(ok(r).days[0]!.date).toBe('2026-10-08');
+  });
+
+  it('uses tomorrow from a cached forecast after midnight', async () => {
+    const cache = new MemoryKV();
+    const evening = new Date('2026-10-06T22:50:00Z'); // 23:50 in London
+    const first = makeDeps({ cache, now: () => evening });
+    await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, first.deps);
+    const afterMidnight = new Date('2026-10-06T23:10:00Z'); // 00:10 on the 7th in London
+    const later = makeDeps({ cache, now: () => afterMidnight });
+    const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, later.deps));
+    expect(later.calls).not.toContain('/v1/forecast');
+    expect(body.days.map((d) => d.date)).toEqual(['2026-10-07']);
+  });
+
+  it('answers without normals when NASA POWER is slow, and fills the cache later', async () => {
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const slowNasa: FetchLike = async (url, init) => {
+      if (url.includes('climatology')) await gate;
+      return synthetic(url, init);
+    };
+    const { deps, background } = makeDeps({ fetch: slowNasa, climateWaitMs: 10 });
+    const first = await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
+    const body = ok(first);
+    expect(body.days[0]!.normalHigh).toBeNull();
+    expect(body.days[0]!.detail).not.toContain('usual');
+    expect(first.headers['Cache-Control']).toBe('public, max-age=60');
+    release();
+    await Promise.all(background);
+    const again = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
+    expect(again.days[0]!.normalHigh).not.toBeNull();
+  });
+
+  it('remembers a NASA POWER failure for an hour', async () => {
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    let nasaCalls = 0;
+    const noNasa: FetchLike = async (url, init) => {
+      if (url.includes('climatology')) {
+        nasaCalls++;
+        return new Response('{}', { status: 500 });
+      }
+      return synthetic(url, init);
+    };
+    const { deps } = makeDeps({ fetch: noNasa });
+    const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
+    expect(body.days[0]!.anomaly).toBeNull();
+    await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
+    expect(nasaCalls).toBe(1);
+  });
+
+  it('reports upstream_unavailable when the forecast has no data for today', async () => {
+    const empty: FetchLike = async (url) =>
+      url.includes('forecast')
+        ? new Response(JSON.stringify({ timezone: 'UTC', daily: { time: ['2026-10-06'] } }))
+        : new Response('{}', { status: 500 });
+    const { deps } = makeDeps({ fetch: empty });
+    const r = await getToday(q({ lat: '10', lon: '10', units: 'c' }), null, deps);
+    expect(r.status).toBe(503);
+  });
+
+  it('wraps everything in a Response', async () => {
+    const env: Record<string, string> = { DATA_SOURCE: 'synthetic' };
+    const res = await handleToday(
+      new Request('https://x.test/api/v1/today?place=london-gb&units=c'),
+      {
+        env: (k) => env[k],
+      },
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8');
+    const body = (await res.json()) as TodayResponse;
+    expect(body.location.name).toBe('London');
+    const city = await todayForCity('london-gb', { env: (k) => env[k] });
+    expect(city.status).toBe(200);
+    const missing = await todayForCity('nope', { env: (k) => env[k] });
+    expect(missing.status).toBe(404);
+  });
+
+  it('turns unexpected errors into a 503 envelope', async () => {
+    const platform = Object.defineProperty({ env: () => undefined }, 'geo', {
+      get() {
+        throw new Error('boom');
+      },
+    });
+    const res = await handleToday(new Request('https://x.test/api/v1/today'), platform);
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as ApiError).error.code).toBe('upstream_unavailable');
+  });
+});
+
+describe('GET /api/v1/search', () => {
+  it('returns up to 8 results with city slugs', async () => {
+    const { deps } = makeDeps();
+    const r = await getSearch(q({ q: 'Newc' }), deps);
+    expect(r.status).toBe(200);
+    const body = r.body as SearchResponse;
+    expect(body.results.length).toBeGreaterThan(0);
+    expect(body.results.length).toBeLessThanOrEqual(8);
+    expect(body.results[0]).toMatchObject({
+      name: 'Newcastle',
+      country: 'GB',
+      countryName: 'United Kingdom',
+      region: 'England',
+      slug: 'newcastle-upon-tyne-gb',
+      geonameId: 2641673,
+    });
+  });
+
+  it('needs at least 2 characters', async () => {
+    const { deps, calls } = makeDeps();
+    expect((await getSearch(q({ q: ' n ' }), deps)).body).toEqual({ results: [] });
+    expect((await getSearch(q({}), deps)).body).toEqual({ results: [] });
+    expect(calls).toEqual([]);
+  });
+
+  it('caches by lower-cased query and falls back to the cache on failure', async () => {
+    const cache = new MemoryKV();
+    const first = makeDeps({ cache });
+    await getSearch(q({ q: 'Leeds' }), first.deps);
+    await Promise.all(first.background);
+    await getSearch(q({ q: 'leeds' }), first.deps);
+    expect(first.calls).toHaveLength(1);
+
+    const failing: FetchLike = async () => new Response('', { status: 500 });
+    const later = makeDeps({
+      cache,
+      fetch: failing,
+      now: () => new Date(NOW.getTime() + 8 * 86400000),
+    });
+    const r = await getSearch(q({ q: 'LEEDS' }), later.deps);
+    expect(r.status).toBe(200);
+    expect((r.body as SearchResponse).results[0]!.name).toBe('Leeds');
+
+    const none = await getSearch(q({ q: 'Paris' }), later.deps);
+    expect(none.status).toBe(503);
+  });
+
+  it('wraps search and rate limiting in Responses', async () => {
+    const env: Record<string, string> = { DATA_SOURCE: 'synthetic' };
+    const res = await handleSearch(new Request('https://x.test/api/v1/search?q=bris'), {
+      env: (k) => env[k],
+    });
+    expect(((await res.json()) as SearchResponse).results.map((r) => r.name)).toEqual([
+      'Brisbane',
+      'Bristol',
+    ]);
+    const throwing = Object.defineProperty({}, 'env', {
+      get() {
+        return () => {
+          throw new Error('boom');
+        };
+      },
+    });
+    const bad = await handleSearch(
+      new Request('https://x.test/api/v1/search?q=ab'),
+      throwing as never,
+    );
+    expect(bad.status).toBe(503);
+    expect((await todayForCity('london-gb', throwing as never)).status).toBe(503);
+    const limited = handleRateLimited();
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get('Retry-After')).toBe('60');
+    expect(((await limited.json()) as ApiError).error.code).toBe('rate_limited');
+  });
+});
+
+describe('cities and reverse geocoding', () => {
+  it('has 300 unique city pages', () => {
+    expect(CITIES).toHaveLength(300);
+    expect(new Set(CITIES.map((c) => c.slug)).size).toBe(300);
+    expect(CITIES.filter((c) => c.country === 'GB')).toHaveLength(150);
+    expect(cityBySlug('NEWCASTLE-UPON-TYNE-GB')?.name).toBe('Newcastle');
+  });
+
+  it('finds nearby city pages', () => {
+    const newcastle = cityBySlug('newcastle-upon-tyne-gb')!;
+    const near = nearbyCities(newcastle, 4, newcastle.slug).map((c) => c.name);
+    expect(near).toHaveLength(4);
+    expect(near).toContain('South Shields');
+    expect(near).not.toContain('Newcastle');
+  });
+
+  it('matches searched places to city pages', () => {
+    expect(cityForPlace({ name: 'Leeds', country: 'GB', lat: 53.8, lon: -1.55 })?.slug).toBe(
+      'leeds-gb',
+    );
+    expect(cityForPlace({ name: 'Leeds', country: 'US', lat: 33.5, lon: -86.5 })).toBeUndefined();
+    expect(
+      cityForPlace({ name: 'x', country: null, lat: 0, lon: 0, geonameId: 2643743 })?.slug,
+    ).toBe('london-gb');
+  });
+
+  it('names a point after the nearest town', async () => {
+    expect((await reverseGeocode(54.95, -1.6))?.name).toBe('Newcastle');
+    expect((await reverseGeocode(54.9, -1.4))?.name).toBe('Sunderland');
+    expect((await reverseGeocode(54.97, -2.1))?.name).toBe('Hexham');
+    expect((await reverseGeocode(51.5, -0.15))?.country).toBe('GB');
+    expect(await reverseGeocode(0, -30)).toBeNull();
+  });
+});
+
+describe('cache layers', () => {
+  it('evicts the oldest memory entries', async () => {
+    const kv = new MemoryKV(2);
+    await kv.set('a', 1);
+    await kv.set('b', 2);
+    await kv.get('a');
+    await kv.set('c', 3);
+    expect(await kv.get('b')).toBeNull();
+    expect(await kv.get('a')).toBe(1);
+    expect(kv.size).toBe(2);
+  });
+
+  it('reads through to the shared cache and back-fills', async () => {
+    const near = new MemoryKV();
+    const far = new MemoryKV();
+    await far.set('k', 'v');
+    const kv = new TieredKV(near, far);
+    expect(await kv.get('k')).toBe('v');
+    expect(await near.get('k')).toBe('v');
+    expect(await kv.get('missing')).toBeNull();
+    await kv.set('x', 1);
+    expect(await far.get('x')).toBe(1);
+  });
+
+  it('treats cache errors as misses', async () => {
+    const onError = vi.fn();
+    const broken = new SafeKV(
+      {
+        get: async () => {
+          throw new Error('boom');
+        },
+        set: async () => {
+          throw new Error('boom');
+        },
+      },
+      onError,
+    );
+    expect(await broken.get('k')).toBeNull();
+    await broken.set('k', 1);
+    expect(onError).toHaveBeenCalledTimes(2);
+  });
+});

@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Is it hot today?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&display=swap" rel="stylesheet">
+<style>
+  @property --g1 { syntax: '<color>'; inherits: true; initial-value: #2b3f5c; }
+  @property --g2 { syntax: '<color>'; inherits: true; initial-value: #5a7896; }
+  @property --g3 { syntax: '<color>'; inherits: true; initial-value: #c9d6e2; }
+  @property --ink { syntax: '<color>'; inherits: true; initial-value: #ffffff; }
+
+  :root {
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    --font: 'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --page-fallback: #2b3f5c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --page-fallback: #1b2433; }
+  }
+  :root[data-theme="dark"] { --page-fallback: #1b2433; }
+  *, *::before, *::after { box-sizing: inherit; }
+  html { height: 100%; scroll-padding-top: env(safe-area-inset-top, 0px); background: var(--page-fallback); }
+
+  body {
+    margin: 0;
+    min-height: 100%;
+    font-family: var(--font);
+    color: var(--ink);
+    background:
+      radial-gradient(circle at 88% 6%, color-mix(in srgb, var(--g3) 85%, transparent) 0%, transparent 52%),
+      linear-gradient(168deg, var(--g1) 0%, var(--g2) 100%);
+    background-color: var(--g1);
+    background-attachment: fixed;
+    transition: --g1 900ms ease, --g2 900ms ease, --g3 900ms ease, --ink 600ms ease;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: clamp(1.25rem, 4vw, 2.5rem) clamp(1.25rem, 5vw, 3rem) 2rem;
+    min-height: 100vh;
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+  .brand { font-weight: 650; font-size: 1.05rem; letter-spacing: -0.01em; text-decoration: none; color: inherit; }
+  .brand span { opacity: .6; font-weight: 400; }
+  .place { display: inline-flex; align-items: center; gap: .4rem; font-size: .95rem; font-weight: 500; opacity: .9; }
+  .place svg { width: 1rem; height: 1rem; }
+
+  main { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: clamp(2rem, 8vh, 5rem) 0 2rem; position: relative; }
+
+  .glyph {
+    position: absolute; top: clamp(.5rem, 4vh, 2.5rem); right: -.5rem;
+    width: clamp(7rem, 26vw, 11rem); height: auto; opacity: .95;
+  }
+  .glyph .spin { transform-origin: 60px 60px; animation: spin 60s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .question { margin: 0 0 .25rem; font-size: clamp(1.15rem, 3.2vw, 1.4rem); font-weight: 450; opacity: .85; }
+  .answer {
+    margin: 0; font-size: clamp(6rem, 30vw, 13rem); line-height: .86;
+    font-weight: 780; letter-spacing: -0.055em; font-variation-settings: 'opsz' 96;
+  }
+  .answer.pop { animation: pop 520ms cubic-bezier(.2,.8,.2,1); }
+  @keyframes pop { from { opacity: 0; transform: translateY(.12em); } to { opacity: 1; transform: none; } }
+
+  .verdict { margin: 1.5rem 0 .35rem; font-size: clamp(1.5rem, 5vw, 2.1rem); font-weight: 600; letter-spacing: -0.02em; }
+  .detail { margin: 0; font-size: 1.1rem; line-height: 1.5; max-width: 34ch; opacity: .9; }
+
+  .models { margin-top: 2.75rem; }
+  .models h2 { margin: 0 0 1rem; font-size: 1rem; font-weight: 600; }
+  .models h2 span { font-weight: 400; opacity: .75; }
+  .strip { position: relative; height: 2.75rem; margin-bottom: .5rem; }
+  .strip::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 2px; background: currentColor; opacity: .25; border-radius: 2px; }
+  .band { position: absolute; top: calc(50% - .75rem); height: 1.5rem; border-radius: 1rem; background: currentColor; opacity: .14; transition: left 700ms ease, width 700ms ease; }
+  .dot {
+    position: absolute; top: 50%; width: .8rem; height: .8rem; margin: -.4rem 0 0 -.4rem;
+    border-radius: 50%; background: currentColor; transition: left 700ms ease, opacity 300ms;
+  }
+  .dot.out { opacity: .4; }
+  .scale { display: flex; justify-content: space-between; font-size: .8rem; opacity: .65; font-variant-numeric: tabular-nums; }
+
+  .list { display: grid; grid-template-columns: repeat(3, 1fr); gap: .9rem 1.25rem; margin: 1.5rem 0 0; padding: 0; list-style: none; }
+  @media (min-width: 560px) { .list { grid-template-columns: repeat(6, 1fr); } }
+  .list li { display: flex; flex-direction: column; gap: .1rem; }
+  .list .t { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .list .n { font-size: .8rem; opacity: .75; }
+  .list li.out { opacity: .5; }
+
+  .more { margin-top: 2.75rem; font-size: 1rem; line-height: 1.6; }
+  .more a { color: inherit; font-weight: 600; text-underline-offset: .2em; text-decoration-thickness: 1px; }
+
+  footer { border-top: 1px solid color-mix(in srgb, currentColor 22%, transparent); padding-top: 1.25rem; }
+  .preview-label { margin: 0 0 .7rem; font-size: .85rem; opacity: .8; }
+  .chips { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .chips button {
+    font: inherit; font-size: .9rem; font-weight: 500; color: inherit; cursor: pointer;
+    padding: .45rem .9rem; border-radius: 2rem;
+    background: color-mix(in srgb, currentColor 10%, transparent);
+    border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  }
+  .chips button[aria-pressed="true"] { background: var(--ink); color: var(--g2); border-color: var(--ink); }
+  .credit { margin: 1.25rem 0 0; font-size: .78rem; opacity: .65; line-height: 1.5; }
+
+  a:focus-visible, button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; border-radius: 4px; }
+  .chips button:focus-visible { border-radius: 2rem; }
+
+  @media (prefers-reduced-motion: reduce) {
+    body { transition: none; }
+    .glyph .spin, .answer.pop { animation: none; }
+    .dot, .band { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="brand" href="#">isithot<span>.today</span></a>
+    <div class="place" aria-label="Your location">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+      <span id="place">Newcastle</span>
+    </div>
+  </header>
+
+  <main>
+    <svg class="glyph" id="glyph" viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
+    <p class="question">Is it hot today?</p>
+    <h1 class="answer" id="answer" aria-live="polite">No.</h1>
+    <p class="verdict" id="verdict">It's cold.</p>
+    <p class="detail" id="detail"></p>
+
+    <section class="models" aria-labelledby="models-h">
+      <h2 id="models-h"><span id="agree"></span></h2>
+      <div class="strip" id="strip" aria-hidden="true"></div>
+      <div class="scale" aria-hidden="true"><span id="smin"></span><span id="smax"></span></div>
+      <ul class="list" id="list"></ul>
+    </section>
+
+    <p class="more">Want the full picture? See the forecast on
+      <a href="https://www.bbc.co.uk/weather" target="_blank" rel="noopener">BBC Weather</a>,
+      <a href="https://www.metoffice.gov.uk/weather/forecast" target="_blank" rel="noopener">Met Office</a> or
+      <a href="https://www.accuweather.com" target="_blank" rel="noopener">AccuWeather</a>.
+    </p>
+  </main>
+
+  <footer>
+    <p class="preview-label">Prototype: preview each kind of day</p>
+    <div class="chips" id="chips" role="group" aria-label="Preview a day"></div>
+    <p class="credit">Sample data for design preview. Live version would blend forecast models via Open-Meteo (CC BY 4.0).</p>
+  </footer>
+</div>
+
+<script>
+const MODELS = ['ECMWF', 'GFS', 'ICON', 'UKMO', 'Météo-France', 'MET Norway'];
+
+const DAYS = {
+  freezing: { label: 'Freezing', place: 'Edinburgh', month: 'January', normal: 6, feels: -6, peak: '1pm',
+    temps: [-1, -2, -3, -2, -1, -5], answer: 'No.', verdict: "It's freezing.",
+    c: ['#12305a', '#2a5d96', '#b9dcf7', '#ffffff'], glyph: 'snow' },
+  cold: { label: 'Cold', place: 'Newcastle', month: 'October', normal: 13, feels: 6, peak: '2pm',
+    temps: [9, 10, 8, 9, 9, 13], answer: 'No.', verdict: "It's cold.",
+    c: ['#2b3f5c', '#5a7896', '#c9d6e2', '#ffffff'], glyph: 'wind' },
+  mild: { label: 'Mild', place: 'London', month: 'April', normal: 14, feels: 15, peak: '3pm',
+    temps: [15, 16, 14, 15, 16, 15], answer: 'No.', verdict: "It's mild.",
+    c: ['#dfeadf', '#a9c7b4', '#fff6d6', '#1d3328'], glyph: 'cloudsun' },
+  warm: { label: 'Warm', place: 'Manchester', month: 'June', normal: 19, feels: 23, peak: '3pm',
+    temps: [22, 23, 21, 22, 23, 19], answer: 'Almost.', verdict: "It's warm, not hot.",
+    c: ['#ffe2bd', '#f4ad66', '#fff4c8', '#40200a'], glyph: 'sun' },
+  hot: { label: 'Hot', place: 'Bristol', month: 'July', normal: 22, feels: 30, peak: '4pm',
+    temps: [28, 29, 27, 28, 29, 28], answer: 'Yes.', verdict: "It's hot.",
+    c: ['#e8571f', '#b3211b', '#ffd36b', '#ffffff'], glyph: 'hotsun' },
+  scorching: { label: 'Scorching', place: 'Seville', month: 'August', normal: 35, feels: 43, peak: '5pm',
+    temps: [41, 42, 40, 41, 37, 41], answer: 'Yes.', verdict: "It's scorching.",
+    c: ['#a3122a', '#5c0a2e', '#ff9a3c', '#ffffff'], glyph: 'blaze' }
+};
+
+const rays = (n, r1, r2) => Array.from({ length: n }, (_, i) => {
+  const a = (i / n) * Math.PI * 2;
+  const p = (r) => [60 + Math.cos(a) * r, 60 + Math.sin(a) * r].map(v => v.toFixed(1));
+  const [x1, y1] = p(r1), [x2, y2] = p(r2);
+  return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+}).join('');
+
+const CLOUD = 'M36 92h48a17 17 0 0 0 1-34 24 24 0 0 0-45-4 19 19 0 0 0-4 38z';
+
+const GLYPHS = {
+  snow: `<g>${[0, 60, 120].map(d => `<g transform="rotate(${d} 60 60)"><line x1="60" y1="18" x2="60" y2="102"/><path d="M50 26l10 10 10-10M50 94l10-10 10 10"/></g>`).join('')}</g>`,
+  wind: `<path d="${CLOUD}" /><path d="M24 104h40M70 104h14M34 112h30" opacity=".7"/>`,
+  sun: `<circle cx="60" cy="60" r="20"/><g class="spin">${rays(12, 30, 38)}</g>`,
+  hotsun: `<circle cx="60" cy="60" r="22" fill="currentColor" fill-opacity=".18"/><g class="spin">${rays(12, 31, 46)}</g>`,
+  blaze: `<circle cx="60" cy="60" r="22" fill="currentColor" fill-opacity=".3"/><circle cx="60" cy="60" r="29" opacity=".5"/><g class="spin">${rays(16, 36, 54)}</g>`
+};
+// The cloudsun rays need their own centre; rebuild them properly.
+GLYPHS.cloudsun = (() => {
+  const r = Array.from({ length: 8 }, (_, i) => {
+    const a = (i / 8) * Math.PI * 2;
+    return `<line x1="${(44 + Math.cos(a) * 23).toFixed(1)}" y1="${(44 + Math.sin(a) * 23).toFixed(1)}" x2="${(44 + Math.cos(a) * 30).toFixed(1)}" y2="${(44 + Math.sin(a) * 30).toFixed(1)}"/>`;
+  }).join('');
+  return `<g opacity=".85"><circle cx="44" cy="44" r="15"/>${r}</g><path d="${CLOUD}" transform="translate(8 6)" fill="var(--g2)"/>`;
+})();
+
+const $ = (id) => document.getElementById(id);
+const root = document.documentElement;
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function render(key) {
+  const d = DAYS[key];
+  const [g1, g2, g3, ink] = d.c;
+  root.style.setProperty('--g1', g1);
+  root.style.setProperty('--g2', g2);
+  root.style.setProperty('--g3', g3);
+  root.style.setProperty('--ink', ink);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', g1);
+
+  const mean = d.temps.reduce((a, b) => a + b, 0) / d.temps.length;
+  const high = Math.round(mean);
+  const agrees = d.temps.map(t => Math.abs(t - mean) <= 2);
+  const count = agrees.filter(Boolean).length;
+  const diff = high - d.normal;
+
+  $('place').textContent = d.place;
+  const ans = $('answer');
+  ans.textContent = d.answer;
+  if (!reduceMotion) { ans.classList.remove('pop'); void ans.offsetWidth; ans.classList.add('pop'); }
+  $('verdict').textContent = d.verdict;
+
+  const vsNormal = Math.abs(diff) <= 1
+    ? `About normal for ${d.month}.`
+    : `${Math.abs(diff)}° ${diff > 0 ? 'warmer' : 'colder'} than usual for ${d.month}.`;
+  $('detail').textContent = `High of ${high}°, feels like ${d.feels}°. Warmest around ${d.peak}. ${vsNormal}`;
+
+  $('agree').textContent = `${count} of ${d.temps.length} forecasts agree within 2°`;
+  $('glyph').innerHTML = GLYPHS[d.glyph];
+
+  const lo = Math.min(...d.temps) - 3, hi = Math.max(...d.temps) + 3;
+  const pos = (t) => ((t - lo) / (hi - lo)) * 100;
+  $('smin').textContent = `${lo}°`;
+  $('smax').textContent = `${hi}°`;
+  const bandL = pos(mean - 2), bandR = pos(mean + 2);
+  $('strip').innerHTML =
+    `<div class="band" style="left:${bandL}%;width:${bandR - bandL}%"></div>` +
+    d.temps.map((t, i) => `<div class="dot${agrees[i] ? '' : ' out'}" style="left:${pos(t)}%" title="${MODELS[i]} ${t}°"></div>`).join('');
+
+  $('list').innerHTML = d.temps.map((t, i) =>
+    `<li class="${agrees[i] ? '' : 'out'}"><span class="t">${t}°</span><span class="n">${MODELS[i]}</span></li>`).join('');
+
+  document.querySelectorAll('#chips button').forEach(b => b.setAttribute('aria-pressed', b.dataset.key === key));
+  document.title = `${d.answer} ${d.verdict} | isithot.today`;
+}
+
+const meta = document.createElement('meta');
+meta.name = 'theme-color';
+document.head.appendChild(meta);
+
+$('chips').innerHTML = Object.entries(DAYS)
+  .map(([k, d]) => `<button type="button" data-key="${k}" aria-pressed="false">${d.label}</button>`).join('');
+$('chips').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (b) render(b.dataset.key);
+});
+
+render('cold');
+</script>
+</body>
+</html>

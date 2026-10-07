@@ -1,0 +1,11 @@
+{
+  "name": "@isithot/core",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure decision logic for isithot.today: blending, climate normals, verdict and copy. No I/O.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./preview": "./src/preview.ts"
+  }
+}

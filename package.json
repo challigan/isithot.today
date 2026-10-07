@@ -1,0 +1,46 @@
+{
+  "name": "isithot-today",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @isithot/web dev",
+    "build": "pnpm --filter @isithot/web build",
+    "preview": "pnpm --filter @isithot/web preview",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "pnpm build:functions && tsc -p tsconfig.json && tsc -p functions/tsconfig.json && pnpm --filter @isithot/web check",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "cities": "node scripts/build-cities.mjs",
+    "fixtures": "tsx scripts/record-fixtures.ts",
+    "build:netlify": "pnpm build:functions && pnpm --filter @isithot/web build && node scripts/netlify-postbuild.mjs",
+    "build:functions": "node scripts/build-functions.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "@types/node": "^22.20.5",
+    "@types/pngjs": "^6.0.5",
+    "@vitest/coverage-v8": "^5.0.3",
+    "all-the-cities": "^3.1.0",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.12.0",
+    "eslint-plugin-astro": "^3.2.1",
+    "globals": "^17.13.0",
+    "pixelmatch": "^8.0.0",
+    "pngjs": "^7.0.0",
+    "prettier": "^3.9.9",
+    "prettier-plugin-astro": "^1.1.0",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.1",
+    "vitest": "^5.0.3"
+  }
+}

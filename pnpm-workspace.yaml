@@ -1,0 +1,8 @@
+packages:
+  - apps/*
+  - packages/*
+  - functions
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
+  - '@resvg/resvg-js'

@@ -1,0 +1,27 @@
+# Netlify builds and serves the site from this repo: production from `main`, a deploy
+# preview for every pull request.
+[build]
+  command = "pnpm run build:netlify"
+  publish = "apps/web/dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  # Start without ads; flip to "true" once AdSense and the paid Open-Meteo plan are live.
+  PUBLIC_ADS_ENABLED = "false"
+
+[functions]
+  directory = "functions/api"
+  node_bundler = "esbuild"
+
+# Fingerprinted build assets never change.
+[[headers]]
+  for = "/_astro/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(self), camera=(), microphone=()"

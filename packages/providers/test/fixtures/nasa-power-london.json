@@ -1,0 +1,76 @@
+{
+ "type": "Feature",
+ "geometry": {
+  "type": "Point",
+  "coordinates": [
+   0,
+   51.5,
+   73.15
+  ]
+ },
+ "properties": {
+  "parameter": {
+   "T2M": {
+    "JAN": 4.14,
+    "FEB": 4.27,
+    "MAR": 6.09,
+    "APR": 9.02,
+    "MAY": 12.27,
+    "JUN": 15.48,
+    "JUL": 17.63,
+    "AUG": 17.31,
+    "SEP": 14.65,
+    "OCT": 11.29,
+    "NOV": 7.33,
+    "DEC": 4.79,
+    "ANN": 10.39
+   },
+   "T2M_RANGE": {
+    "JAN": 5.33,
+    "FEB": 6.32,
+    "MAR": 7.92,
+    "APR": 9.53,
+    "MAY": 9.7,
+    "JUN": 9.87,
+    "JUL": 10.02,
+    "AUG": 9.8,
+    "SEP": 9.62,
+    "OCT": 7.63,
+    "NOV": 6.01,
+    "DEC": 4.97,
+    "ANN": 8.07
+   }
+  }
+ },
+ "header": {
+  "title": "NASA/POWER Source Native Resolution Climatology Climatologies",
+  "api": {
+   "version": "v2.10.0",
+   "name": "POWER Climatology API"
+  },
+  "sources": [
+   "MERRA2",
+   "POWER"
+  ],
+  "fill_value": -999,
+  "time_standard": "LST",
+  "range": "20-year Meteorological and Solar Monthly & Annual Climatologies (January 2001 - December 2020)"
+ },
+ "messages": [
+  "The requested parameters are retrieved from a pre-computed climatological period (January 2001 - December 2020)"
+ ],
+ "parameters": {
+  "T2M": {
+   "units": "C",
+   "longname": "Temperature at 2 Meters"
+  },
+  "T2M_RANGE": {
+   "units": "C",
+   "longname": "Temperature at 2 Meters Range"
+  }
+ },
+ "times": {
+  "data": 0.081,
+  "process": 0.03
+ }
+}
