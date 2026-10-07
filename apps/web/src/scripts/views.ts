@@ -53,9 +53,15 @@ export function wireViews(events: ViewsEvents): ViewsController | null {
   let idle: ReturnType<typeof setTimeout> | undefined;
   let lastWidth = scroller.clientWidth;
 
-  /** The scroller is as tall as the view on screen (taller ones are clipped mid-swipe). */
+  /**
+   * The scroller is as tall as the view on screen, and never shorter than Today: on screens
+   * taller than the page the content is centred, and a changing height would move it (and
+   * the tab bar) on every switch. Taller views are clipped mid-swipe, then fit on arrival.
+   */
   function fitHeight(): void {
-    if (revealed) scroller!.style.height = `${panelFor(active).offsetHeight}px`;
+    if (!revealed) return;
+    const height = Math.max(panelFor('today').offsetHeight, panelFor(active).offsetHeight);
+    scroller!.style.height = `${height}px`;
   }
 
   /** Bring Now and This week into the scroller, keeping the current view where it is. */

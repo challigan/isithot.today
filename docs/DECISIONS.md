@@ -96,7 +96,8 @@ a tab bar at the top on every screen, and swiping on phones.
   library): swipe on touch screens, sideways trackpad swipes on desktops, the tabs and arrow
   keys everywhere. Pages arrive with only Today in the scroller, so the first paint is the
   approved design; Now and This week join on first use, and the scroller then takes the
-  height of the view on screen. The page colours follow the view on screen, switching about
+  height of the view on screen, never less than Today's (on screens taller than the page the
+  content is centred, so a changing height would move it and the tab bar). The page colours follow the view on screen, switching about
   two thirds of the way through a swipe with a quicker fade than an arriving answer. ARIA
   tabs pattern throughout; inactive views are `inert`, and screen readers hear the answer of
   the view they move to.
@@ -137,6 +138,10 @@ today and tomorrow (never more than two); the rest of the week is summarised in 
     and Warm unchanged at 85% (their dark text is fine on it).
   - The question is no longer faded, and small secondary text (model names, agreement line,
     scale, credit) is faded less.
+  - Models outside the agreement band show a lighter figure instead of faded text, and the
+    search sheet sits on the band's `pill` colour.
+  - With text enlarged to 200% on a 360px phone nothing is cut off: the header controls
+    wrap, the tab labels shrink to fit, and the week rows drop their dot track.
   - The gradient and glow moved to a fixed layer: iOS Safari ignores
     `background-attachment: fixed` and stretched the glow over the whole page, so iPhones
     looked worse than the measurements.

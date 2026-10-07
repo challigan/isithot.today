@@ -121,6 +121,7 @@ html[data-switching] body {
 }
 
 .wrap {
+  container-type: inline-size;
   --pad-l: max(clamp(1.25rem, 5vw, 3rem), env(safe-area-inset-left, 0px));
   --pad-r: max(clamp(1.25rem, 5vw, 3rem), env(safe-area-inset-right, 0px));
   max-width: 44rem;
@@ -136,9 +137,11 @@ html[data-switching] body {
 
 header {
   display: flex;
+  /* With enlarged text the place and units controls move under the name instead of off-screen. */
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 1rem;
+  gap: 0.5rem 1rem;
 }
 .brand {
   font-weight: 650;
@@ -407,7 +410,8 @@ input:focus-visible {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* Equal columns even when enlarged text wraps a label, so the thumb always lines up. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   width: min(100%, 22rem);
   /* Leaves room for the place note under the header controls. */
   margin: 2rem auto 0;
@@ -430,6 +434,7 @@ input:focus-visible {
   border-radius: 2rem;
   min-height: 2.25rem;
   padding: 0.3rem 0.5rem;
+  line-height: 1.1;
   cursor: pointer;
   transition: color 250ms ease;
 }
@@ -461,6 +466,13 @@ input:focus-visible {
 }
 .tabs[data-dragging] .thumb {
   transition: none;
+}
+/* Enlarged text on a narrow screen: smaller labels, so each still fits its third. */
+@container (max-width: 24em) {
+  .tabs button {
+    font-size: 0.8rem;
+    padding-inline: 0.2rem;
+  }
 }
 
 .views {
@@ -526,12 +538,28 @@ input:focus-visible {
   margin: 0;
   padding: 0;
 }
+.ahead {
+  container-type: inline-size;
+}
 .days li {
   display: grid;
-  grid-template-columns: 3.25rem 1fr 2.75rem 4.75rem;
+  grid-template-columns: minmax(3.25rem, auto) minmax(0, 1fr) minmax(2.75rem, auto) minmax(
+      4.75rem,
+      auto
+    );
   align-items: center;
   gap: 0.75rem;
   min-height: 2rem;
+}
+/* Enlarged text: no room for the dot track, so give its space to the words. */
+@container (max-width: 19em) {
+  .days li {
+    grid-template-columns: auto 1fr auto;
+    gap: 0.5rem;
+  }
+  .days .track {
+    display: none;
+  }
 }
 .days .d {
   font-weight: 600;
@@ -623,6 +651,7 @@ input:focus-visible {
 .where {
   position: relative;
   z-index: 2;
+  margin-left: auto;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -630,6 +659,8 @@ input:focus-visible {
 }
 .where-row {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 0.5rem;
 }
@@ -717,9 +748,11 @@ button.place span {
     opacity: 0.45;
   }
 }
-[data-state='loading'] .hold,
-[data-state='error'] .hold {
+[data-state='loading'] .hold {
   visibility: hidden;
+}
+[data-state='error'] .hold {
+  display: none;
 }
 [data-state='error'] .answer {
   font-size: clamp(1.75rem, 6vw, 2.6rem);
@@ -737,7 +770,6 @@ button.place span {
 .limited {
   margin: 0.75rem 0 0;
   font-size: 0.9rem;
-  opacity: 0.85;
 }
 .limited[hidden] {
   display: none;
@@ -745,7 +777,6 @@ button.place span {
 .stale {
   margin: 0.75rem 0 0;
   font-size: 0.85rem;
-  opacity: 0.85;
 }
 
 .nearby {
@@ -815,7 +846,8 @@ dialog.sheet {
   max-height: min(36rem, 85vh);
   margin: auto auto 0;
   border-radius: 1.25rem 1.25rem 0 0;
-  background: linear-gradient(168deg, var(--g1), color-mix(in srgb, var(--g1) 70%, var(--g2)));
+  /* The band's pill colour: the gradient colour with the most contrast against the text. */
+  background: linear-gradient(168deg, var(--pill), color-mix(in srgb, var(--pill) 85%, var(--g2)));
   box-shadow: 0 -10px 40px rgb(0 0 0 / 0.25);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -857,7 +889,7 @@ dialog.sheet::backdrop {
 }
 .sheet input::placeholder {
   color: inherit;
-  opacity: 0.65;
+  opacity: 0.85;
 }
 .results {
   list-style: none;
@@ -886,12 +918,11 @@ dialog.sheet::backdrop {
 }
 .results .sub {
   font-size: 0.85rem;
-  opacity: 0.8;
+  opacity: 0.9;
 }
 .results .status {
   padding: 0.65rem 0.5rem;
   font-size: 0.95rem;
-  opacity: 0.85;
 }
 .use-location {
   font-weight: 600;

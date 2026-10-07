@@ -137,6 +137,10 @@ test.describe('Now | Today | This week', () => {
     await expect(page.locator('#view-live')).toHaveText(
       'This week: Forecasts are unavailable right now. Try again in a few minutes.',
     );
+    // Retry is offered whichever view is showing.
+    await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
+    await page.getByRole('button', { name: 'Retry' }).click();
+    await expect(page.locator('#week-answer')).toHaveText(/Forecasts are unavailable/);
   });
 
   test('the scroller takes the height of the view on screen', async ({ page }) => {
@@ -149,8 +153,12 @@ test.describe('Now | Today | This week', () => {
       }));
     await page.locator('#tab-week').click();
     await expectView(page, 'week');
+    // Never shorter than Today, so tall screens do not re-centre the page on every switch.
     await expect
-      .poll(async () => Math.abs((await heights()).views - (await heights()).week))
+      .poll(async () => {
+        const h = await heights();
+        return Math.abs(h.views - Math.max(h.week, h.today));
+      })
       .toBeLessThan(1);
     await page.locator('#tab-today').click();
     await expectView(page, 'today');
