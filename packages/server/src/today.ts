@@ -310,7 +310,7 @@ export async function getToday(
 
   const range = normals ? climateRange(normals) : null;
   const now = computeNow(
-    judgeSeries(hourlySeries(loaded.forecast.days), range, units),
+    judgeSeries(hourlySeries(loaded.forecast.days), range, units, loaded.forecast.timezone),
     deps.now().getTime(),
   );
   const week = computeWeek(days, normals);
@@ -323,7 +323,7 @@ export async function getToday(
     attribution: [COPY.forecastCredit, COPY.climateCredit],
     nearby: nearbyCities(point, 4, located.slug).map((c) => ({ slug: c.slug, name: c.name })),
   };
-  if (now) body.now = formatNow(now, loaded.forecast.timezone);
+  if (now) body.now = formatNow(now);
   if (week) body.week = formatWeek(week, units);
   if (loaded.stale) body.stale = true;
 

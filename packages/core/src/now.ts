@@ -39,26 +39,35 @@ export function hourlySeries(days: readonly DayData[]): SeriesPoint[] {
 
 /**
  * The series as the API sends it: each hour judged with the same verdict as the day's high
- * (so "hot" means the same thing in every view), then put in display units to one decimal.
- * Clients only interpolate between these points; they never need the verdict rules.
+ * (so "hot" means the same thing in every view), put in display units to one decimal, and
+ * labelled with its local date and hour in the place's time zone. Clients only interpolate
+ * between these points; they need neither the verdict rules nor time-zone data.
  */
 export function judgeSeries(
   series: readonly SeriesPoint[],
   climate: ClimateRange | null,
   units: Units,
+  timezone: string,
 ): ApiNowPoint[] {
-  return series.map((p) => ({
-    time: p.time,
-    temperature: round1(toUnits(p.temperature, units)),
-    feelsLike: round1(toUnits(p.feelsLike, units)),
-    band: verdict(p.feelsLike, climate).band,
-  }));
+  return series.map((p) => {
+    const local = localDateTime(timezone, new Date(p.time));
+    return {
+      time: p.time,
+      date: local.date,
+      hour: Math.floor(local.hours),
+      temperature: round1(toUnits(p.temperature, units)),
+      feelsLike: round1(toUnits(p.feelsLike, units)),
+      band: verdict(p.feelsLike, climate).band,
+    };
+  });
 }
 
 /** The "now" view in display units, before formatting. */
 export interface NowComputation {
   /** The moment the values are for, epoch milliseconds. */
   time: number;
+  /** The local date of the hour containing the moment. */
+  date: string;
   temperature: number;
   feelsLike: number;
   /** The band of the hour nearest the moment. */
@@ -73,11 +82,14 @@ export interface NowComputation {
  * is in, so the server and the browser run the same code on the same numbers.
  */
 export function computeNow(series: readonly ApiNowPoint[], time: number): NowComputation | null {
+  const first = series[0];
+  if (!first) return null;
   let i = -1;
   while (i + 1 < series.length && series[i + 1]!.time <= time) i++;
-  const a = series[i];
+  // A clock a little behind the server's lands before the first hour: use that hour.
+  const a = i >= 0 ? series[i]! : time > first.time - HOUR ? first : null;
   if (!a) return null;
-  const b = series[i + 1];
+  const b = i >= 0 ? series[i + 1] : undefined;
   let temperature: number;
   let feelsLike: number;
   let band: Band;
@@ -93,15 +105,17 @@ export function computeNow(series: readonly ApiNowPoint[], time: number): NowCom
   }
   return {
     time,
+    date: a.date,
     temperature,
     feelsLike,
     band,
-    series: series.slice(i).filter((p) => p.time <= time + NOW.seriesHours * HOUR),
+    // One hour before the current one too, so a client whose clock is behind can interpolate.
+    series: series.slice(Math.max(0, i - 1)).filter((p) => p.time <= time + NOW.seriesHours * HOUR),
   };
 }
 
 interface Shown {
-  time: number;
+  hour: number;
   temperature: number;
 }
 
@@ -112,36 +126,28 @@ function extreme(points: readonly Shown[], sign: 1 | -1): Shown | null {
   return best;
 }
 
-/** "3pm" for a moment, in the place's own time zone. */
-function hourLabel(time: number, timezone: string): string {
-  return formatHour(Math.floor(localDateTime(timezone, new Date(time)).hours));
-}
-
 /**
  * Where the temperature goes next, as shown (rounded):
  * "Rising to 24° around 3pm." / "Cooling to 12° by 9pm." / "Little change for the next few hours."
  */
-export function trendLine(now: NowComputation, timezone: string): string {
-  const show = (p: Shown): Shown => ({ time: p.time, temperature: roundTemp(p.temperature) });
+export function trendLine(now: NowComputation): string {
+  const show = (p: ApiNowPoint): Shown => ({ hour: p.hour, temperature: roundTemp(p.temperature) });
   const current = roundTemp(now.temperature);
-  const today = localDateTime(timezone, new Date(now.time)).date;
   const ahead = now.series.filter((p) => p.time > now.time);
-  const restOfToday = ahead
-    .filter((p) => localDateTime(timezone, new Date(p.time)).date === today)
-    .map(show);
+  const restOfToday = ahead.filter((p) => p.date === now.date).map(show);
   const next12 = ahead.filter((p) => p.time <= now.time + 12 * HOUR).map(show);
 
   const peak = extreme(restOfToday, 1);
   if (peak && peak.temperature >= current + 1) {
-    return `Rising to ${peak.temperature}° around ${hourLabel(peak.time, timezone)}.`;
+    return `Rising to ${peak.temperature}° around ${formatHour(peak.hour)}.`;
   }
   const low = extreme(next12, -1);
   if (low && low.temperature <= current - 1) {
-    return `Cooling to ${low.temperature}° by ${hourLabel(low.time, timezone)}.`;
+    return `Cooling to ${low.temperature}° by ${formatHour(low.hour)}.`;
   }
   const high = extreme(next12, 1);
   if (high && high.temperature >= current + 1) {
-    return `Rising to ${high.temperature}° by ${hourLabel(high.time, timezone)}.`;
+    return `Rising to ${high.temperature}° by ${formatHour(high.hour)}.`;
   }
   return 'Little change for the next few hours.';
 }
@@ -158,7 +164,7 @@ export function nextRows(now: NowComputation): ApiNowPoint[] {
   return rows;
 }
 
-export function formatNow(now: NowComputation, timezone: string): ApiNow {
+export function formatNow(now: NowComputation): ApiNow {
   const temperature = roundTemp(now.temperature);
   const feelsLike = roundTemp(now.feelsLike);
   return {
@@ -168,10 +174,10 @@ export function formatNow(now: NowComputation, timezone: string): ApiNow {
     verdict: VERDICTS[now.band],
     temperature,
     feelsLike,
-    detail: `${temperature}° now, feels like ${feelsLike}°. ${trendLine(now, timezone)}`,
+    detail: `${temperature}° now, feels like ${feelsLike}°. ${trendLine(now)}`,
     hours: nextRows(now).map((p) => ({
       time: new Date(p.time).toISOString(),
-      label: hourLabel(p.time, timezone),
+      label: formatHour(p.hour),
       temperature: roundTemp(p.temperature),
     })),
     series: now.series.map((p) => ({ ...p })),

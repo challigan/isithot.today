@@ -118,7 +118,11 @@ export function formatWeek(week: WeekComputation, units: Units): ApiWeek {
   }
 
   const parts = [
-    min === max ? `Highs around ${high}°.` : `Highs of ${min}–${max}°, averaging ${high}°.`,
+    min === max
+      ? `Highs around ${high}°.`
+      : min < 0
+        ? `Highs from ${min}° to ${max}°, averaging ${high}°.`
+        : `Highs of ${min}–${max}°, averaging ${high}°.`,
     hottestLine(week.hottest.date, today, hottestHigh),
   ];
   if (anomalyText) parts.push(anomalyText);

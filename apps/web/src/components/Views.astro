@@ -26,8 +26,8 @@ const nearbyHtml = nearby
   .join(', ');
 ---
 
-<ViewTabs />
 <main id="main" tabindex="-1">
+  <ViewTabs />
   <div class="views" id="views">
     <Today data={data} city={city} state={state} />
     <Now now={data?.now ?? null} city={city} state={state} />

@@ -109,6 +109,36 @@ test.describe('Now | Today | This week', () => {
     await expect(page.locator('#view-today')).toBeFocused();
   });
 
+  test('focus follows into the new view when the arrow keys scroll it', async ({ page }) => {
+    await ready(page);
+    // Bring the other views in, then return to Today and put focus in its panel.
+    await page.locator('#tab-week').click();
+    await expectView(page, 'week');
+    await page.locator('#tab-today').click();
+    await expectView(page, 'today');
+    await page.locator('#view-today').focus();
+    await page.keyboard.press('ArrowRight');
+    await expectView(page, 'week');
+    // Focus moved with the view instead of falling back to the page.
+    await expect(page.locator('#view-week')).toBeFocused();
+  });
+
+  test('announcements never read hidden placeholder text', async ({ page }) => {
+    await page.route('**/api/v1/today**', (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'upstream_unavailable', message: 'down' } }),
+      }),
+    );
+    await page.goto('/');
+    await expect(page.locator('#retry')).toBeVisible();
+    await page.locator('#tab-week').click();
+    await expect(page.locator('#view-live')).toHaveText(
+      'This week: Forecasts are unavailable right now. Try again in a few minutes.',
+    );
+  });
+
   test('the scroller takes the height of the view on screen', async ({ page }) => {
     await ready(page);
     const heights = () =>

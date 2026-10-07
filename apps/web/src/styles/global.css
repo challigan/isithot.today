@@ -69,6 +69,14 @@ body {
   /* Bricolage's natural line height; explicit so a late font swap cannot resize lines. */
   line-height: 1.2;
   color: var(--ink);
+  /*
+   * The gradient layer below covers this colour. The body is its own stacking context so the
+   * layer paints above it and below the content. Contrast checkers that cannot see the layer
+   * judge text against this colour: the band's `pill` colour, its darkest gradient colour for
+   * light text (e2e/contrast.spec.ts measures the real gradient).
+   */
+  background-color: var(--pill);
+  isolation: isolate;
   transition:
     --g1 900ms ease,
     --g2 900ms ease,
@@ -141,7 +149,7 @@ header {
   line-height: 2rem;
 }
 .brand span {
-  opacity: 0.6;
+  opacity: 0.75;
   font-weight: 400;
 }
 .place {
@@ -321,8 +329,9 @@ main {
   font-size: 0.8rem;
   opacity: 0.9;
 }
-.list li.out {
-  opacity: 0.7;
+/* Models outside the agreement band: a lighter figure rather than faded text (contrast). */
+.list li.out .t {
+  font-weight: 400;
 }
 
 .more {
@@ -502,7 +511,7 @@ input:focus-visible {
 .ahead {
   margin-top: 2.75rem;
 }
-.ahead h3 {
+.ahead h2 {
   margin: 0 0 0.75rem;
   font-size: 1rem;
   font-weight: 600;

@@ -73,7 +73,9 @@ export function zoneOffsetSeconds(timezone: string, now: Date): number {
       .map((p) => [p.type, Number(p.value)]),
   );
   const local = Date.UTC(parts.year!, parts.month! - 1, parts.day!, parts.hour!, parts.minute!);
-  return Math.round((local - now.getTime()) / 60000) * 60;
+  // The formatted parts stop at minutes, so compare with the moment truncated to the minute.
+  const minute = Math.floor(now.getTime() / 60000) * 60000;
+  return Math.round((local - minute) / 60000) * 60;
 }
 
 export function syntheticForecast(lat: number, lon: number, modelIds: string[], now: Date) {

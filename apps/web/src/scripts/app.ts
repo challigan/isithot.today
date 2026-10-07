@@ -14,7 +14,6 @@ import {
   VIEW_LABELS,
   computeNow,
   formatNow,
-  localDate,
   outboundLinks,
   pageTitle,
   question,
@@ -163,7 +162,12 @@ function announce(v: View): void {
     const live = $('view-live');
     if (!panel || !live) return;
     const answer = panel.querySelector('.answer')?.textContent?.trim() ?? '';
-    const verdict = panel.querySelector('.verdict')?.textContent?.trim() ?? '';
+    // Placeholder and out-of-date text stays in the page while hidden: never read it out.
+    const shown =
+      app.dataset.state === 'ready' &&
+      !panel.hasAttribute('data-empty') &&
+      !panel.hasAttribute('data-pending');
+    const verdict = shown ? (panel.querySelector('.verdict')?.textContent?.trim() ?? '') : '';
     live.textContent = `${VIEW_LABELS[v]}: ${answer} ${verdict}`.trim();
   }, 400);
 }
@@ -288,7 +292,19 @@ function render(res: TodayResponse, animate: boolean): void {
 function nowFor(res: TodayResponse): ApiNow | null {
   if (!res.now || preview) return res.now ?? null;
   const fresh = computeNow(res.now.series, Date.now());
-  return fresh ? formatNow(fresh, res.location.timezone) : null;
+  return fresh ? formatNow(fresh) : null;
+}
+
+/**
+ * Whether the answer is out of date: past local midnight (today's answer is yesterday's) or
+ * past the end of the hourly series it carries. A clock running far behind is not a reason.
+ */
+function outOfDate(res: TodayResponse): boolean {
+  if (!res.now || preview) return false;
+  const series = res.now.series;
+  const now = computeNow(series, Date.now());
+  if (!now) return Date.now() > (series.at(-1)?.time ?? Infinity);
+  return now.date > (res.days[0]?.date ?? '');
 }
 
 /** The Now view. Without data for right now it says so instead. */
@@ -303,11 +319,10 @@ function renderNow(res: TodayResponse, city: string | null): void {
   $('view-now')?.toggleAttribute('data-empty', !now);
   const glyph = $('now-glyph');
   if (glyph) glyph.innerHTML = now ? GLYPHS[now.band] : '';
-  if (!now) return;
-  setText('now-verdict', now.verdict);
-  setText('now-detail', now.detail);
+  setText('now-verdict', now?.verdict ?? '');
+  setText('now-detail', now?.detail ?? '');
   const hours = $('now-hours');
-  if (hours) hours.innerHTML = hoursHtml(now);
+  if (hours) hours.innerHTML = now ? hoursHtml(now) : '';
 }
 
 /** The This week view. */
@@ -320,11 +335,10 @@ function renderWeek(res: TodayResponse, city: string | null): void {
   $('view-week')?.toggleAttribute('data-empty', !week);
   const glyph = $('week-glyph');
   if (glyph) glyph.innerHTML = week ? GLYPHS[week.band] : '';
-  if (!week) return;
-  setText('week-verdict', week.verdict);
-  setText('week-detail', week.detail);
+  setText('week-verdict', week?.verdict ?? '');
+  setText('week-detail', week?.detail ?? '');
   const days = $('week-days');
-  if (days) days.innerHTML = weekHtml(week);
+  if (days) days.innerHTML = week ? weekHtml(week) : '';
 }
 
 /** Loading and error states show the same message in every view. */
@@ -408,8 +422,16 @@ function saveLast(res: TodayResponse): void {
     const today = panel.dataset.view === 'today';
     panel.toggleAttribute('inert', !today);
     panel.toggleAttribute('hidden', !today);
+    panel.querySelector('.answer')?.removeAttribute('aria-level');
   });
   copy.querySelector<HTMLElement>('#views')?.removeAttribute('style');
+  copy.querySelector<HTMLElement>('#tabs')?.removeAttribute('style');
+  copy.querySelector<HTMLElement>('#tabs')?.removeAttribute('data-dragging');
+  copy.querySelectorAll<HTMLElement>('[role=tab]').forEach((tab) => {
+    const today = tab.dataset.view === 'today';
+    tab.setAttribute('aria-selected', String(today));
+    tab.tabIndex = today ? 0 : -1;
+  });
   storage.set(KEYS.last, {
     v: CACHE_VERSION,
     savedAt: Date.now(),
@@ -424,12 +446,14 @@ function saveLast(res: TodayResponse): void {
 
 async function load(
   t: Target,
-  opts: { animate?: boolean; quiet?: boolean } = {},
+  opts: { animate?: boolean; quiet?: boolean; fresh?: boolean } = {},
 ): Promise<boolean> {
   const seq = ++requestSeq;
   if (!opts.quiet) renderLoading();
   const preferred = storage.get<Units>(KEYS.units);
-  const url = apiUrl(t, preferred ?? (t.kind === 'ip' ? null : units));
+  let url = apiUrl(t, preferred ?? (t.kind === 'ip' ? null : units));
+  // Past midnight a cached copy is yesterday's answer: ask past the browser and CDN caches.
+  if (opts.fresh) url += `${url.includes('?') ? '&' : '?'}t=${Math.floor(Date.now() / 600000)}`;
   const early = window.__isithotPrefetch;
   window.__isithotPrefetch = undefined;
   try {
@@ -697,11 +721,14 @@ async function showPreview(): Promise<void> {
 
 // ---- Keeping "now" current ------------------------------------------------------
 
+/** When an out-of-date answer last triggered a fetch: at most one every few minutes. */
+let lastRefetch = 0;
+
 function refreshNow(): void {
   if (!current) return;
-  // Past midnight where the place is: today's answer is yesterday's now.
-  if (!preview && (current.days[0]?.date ?? '') < localDate(current.location.timezone)) {
-    void load(target, { quiet: true, animate: false });
+  if (outOfDate(current) && Date.now() - lastRefetch > 5 * 60 * 1000) {
+    lastRefetch = Date.now();
+    void load(target, { quiet: true, animate: false, fresh: true });
     return;
   }
   renderNow(current, mode === 'city' ? current.location.name : null);
@@ -788,10 +815,10 @@ export function start(): void {
     if (data) {
       current = data;
       loadedAt = Date.now();
+      units = data.units;
       // The page may have waited in the CDN cache: show "now" for this minute.
       refreshNow();
       const preferred = storage.get<Units>(KEYS.units);
-      units = data.units;
       renderUnits();
       if (preferred && preferred !== data.units) void load(target, { quiet: true, animate: false });
     } else {

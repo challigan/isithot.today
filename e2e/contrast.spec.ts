@@ -86,7 +86,7 @@ async function locate(page: Page, targets: Target[]): Promise<Measured[]> {
     const out: Measured[] = [];
     for (const t of list) {
       document.querySelectorAll(t.selector).forEach((el, i) => {
-        if (i >= 4 || el.closest('[hidden],[inert]')) return;
+        if (i >= 12 || el.closest('[hidden],[inert]')) return;
         const range = document.createRange();
         range.selectNodeContents(el);
         const rects = [...range.getClientRects()]
@@ -103,9 +103,8 @@ async function locate(page: Page, targets: Target[]): Promise<Measured[]> {
         }
         const rgba = style.color.match(/[\d.]+/g)!.map(Number);
         const size = parseFloat(style.fontSize);
-        const bold =
-          Number(style.fontWeight) >= 700 || (Number(style.fontWeight) >= 600 && size >= 18.66);
-        const large = size >= 24 || (bold && size >= 18.66);
+        // WCAG's large text: 24px, or 18.66px at bold (700) or heavier.
+        const large = size >= 24 || (Number(style.fontWeight) >= 700 && size >= 18.66);
         const top = Math.min(...rects.map((r) => r[1]));
         const bottom = Math.max(...rects.map((r) => r[1] + r[3]));
         const scrollTo = bottom <= vh ? 0 : Math.max(0, Math.round((top + bottom) / 2 - vh / 2));

@@ -60,7 +60,7 @@ const placeholderHours = Array.from(
     {now?.detail ?? '00° right now, feels like 00°. Rising to 00° by 0pm.'}
   </p>
   <section class="ahead hold" aria-labelledby="now-h">
-    <h3 id="now-h">{COPY.nextHours}</h3>
+    <h2 id="now-h">{COPY.nextHours}</h2>
     <ul class="list" id="now-hours" set:html={now ? hoursHtml(now) : placeholderHours} />
   </section>
 </section>
