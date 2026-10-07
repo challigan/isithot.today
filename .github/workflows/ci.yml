@@ -28,6 +28,8 @@ jobs:
       - run: pnpm build:netlify
         env:
           DATA_SOURCE: synthetic
+      - name: JavaScript budget (25 KB gzipped)
+        run: node scripts/js-budget.mjs
 
   e2e:
     name: Playwright

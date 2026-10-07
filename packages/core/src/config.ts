@@ -55,6 +55,32 @@ export const BLEND = {
   stripPadding: 3,
 } as const;
 
+export const FORECAST = {
+  /** Days requested: today plus the next six, for the "this week" view. */
+  days: 7,
+  /**
+   * A model's day counts only with hourly values for every hour in this local window, so a
+   * forecast that ends mid-morning cannot pass off a morning reading as the day's high.
+   */
+  coverFromHour: 10,
+  coverToHour: 18,
+} as const;
+
+export const NOW = {
+  /** Rows in the "next hours" list, and the hours between them. */
+  rows: 6,
+  stepHours: 2,
+  /** Hours of blended forecast sent with the answer so clients can keep "now" current. */
+  seriesHours: 24,
+} as const;
+
+export const WEEK = {
+  /** Days need at least this many models to count towards the week. */
+  minModels: 3,
+  /** Without this many usable days there is no week answer. */
+  minDays: 5,
+} as const;
+
 export interface ModelConfig {
   /** Open-Meteo `models=` ID. */
   id: string;
@@ -95,8 +121,12 @@ export const GRID = {
 } as const;
 
 export const CACHE = {
-  /** Forecast data is fresh for this long, seconds. */
-  forecastFresh: 30 * 60,
+  /**
+   * Forecast data is fresh for this long, seconds. The global models update every 6 hours,
+   * and "now" is worked out from the hourly forecast at request time, so an hour costs
+   * nothing in accuracy and halves calls to Open-Meteo.
+   */
+  forecastFresh: 60 * 60,
   /** Forecast data may be served as a stale fallback for this long, seconds. */
   forecastStale: 6 * 60 * 60,
   /** Search results, seconds. */
@@ -147,19 +177,70 @@ export const FAHRENHEIT_COUNTRIES: readonly string[] = [
 ];
 
 export interface Palette {
+  /** Gradient top-left and bottom-right, and the glow at the top right. */
   g1: string;
   g2: string;
   g3: string;
+  /** Text and icons. */
   ink: string;
+  /**
+   * Backing for controls that sit on the glow (tabs, place, units), and the text colour on an
+   * ink-filled selected control: the gradient colour with the most contrast against `ink`.
+   */
+  pill: string;
+  /** Strength of the glow at its centre, as a CSS percentage. */
+  glow: string;
 }
 
 export const PALETTES: Record<Band, Palette> = {
-  freezing: { g1: '#12305a', g2: '#2a5d96', g3: '#b9dcf7', ink: '#ffffff' },
-  cold: { g1: '#2b3f5c', g2: '#5a7896', g3: '#c9d6e2', ink: '#ffffff' },
-  mild: { g1: '#dfeadf', g2: '#a9c7b4', g3: '#fff6d6', ink: '#1d3328' },
-  warm: { g1: '#ffe2bd', g2: '#f4ad66', g3: '#fff4c8', ink: '#40200a' },
-  hot: { g1: '#e8571f', g2: '#b3211b', g3: '#ffd36b', ink: '#ffffff' },
-  scorching: { g1: '#a3122a', g2: '#5c0a2e', g3: '#ff9a3c', ink: '#ffffff' },
+  freezing: {
+    g1: '#12305a',
+    g2: '#2a5d96',
+    g3: '#b9dcf7',
+    ink: '#ffffff',
+    pill: '#12305a',
+    glow: '60%',
+  },
+  cold: {
+    g1: '#2b3f5c',
+    g2: '#5a7896',
+    g3: '#c9d6e2',
+    ink: '#ffffff',
+    pill: '#2b3f5c',
+    glow: '45%',
+  },
+  mild: {
+    g1: '#dfeadf',
+    g2: '#a9c7b4',
+    g3: '#fff6d6',
+    ink: '#1d3328',
+    pill: '#dfeadf',
+    glow: '85%',
+  },
+  warm: {
+    g1: '#ffe2bd',
+    g2: '#f4ad66',
+    g3: '#fff4c8',
+    ink: '#40200a',
+    pill: '#ffe2bd',
+    glow: '85%',
+  },
+  hot: {
+    g1: '#cc3d17',
+    g2: '#a51c17',
+    g3: '#ff9a4a',
+    ink: '#ffffff',
+    pill: '#a51c17',
+    glow: '40%',
+  },
+  scorching: {
+    g1: '#a3122a',
+    g2: '#5c0a2e',
+    g3: '#ff9a3c',
+    ink: '#ffffff',
+    pill: '#5c0a2e',
+    glow: '70%',
+  },
 };
 
 /** Neutral slate shown while loading. */
@@ -168,4 +249,6 @@ export const LOADING_PALETTE: Palette = {
   g2: '#59636f',
   g3: '#aab3bd',
   ink: '#ffffff',
+  pill: '#3a4350',
+  glow: '85%',
 };

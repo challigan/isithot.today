@@ -1,0 +1,66 @@
+---
+/** The Now view: the blended forecast for the current time and the next few hours. */
+import { COPY, question, type ApiNow } from '@isithot/core';
+import { GLYPHS, hoursHtml } from '../lib/view';
+
+interface Props {
+  now: ApiNow | null;
+  city?: string | null;
+  state: 'loading' | 'ready' | 'error';
+}
+
+const { now, city = null, state } = Astro.props;
+const answer =
+  state === 'error'
+    ? COPY.unavailable
+    : state === 'loading'
+      ? COPY.checking
+      : (now?.answer ?? COPY.notAvailable);
+// Placeholders keep the layout steady while loading.
+const placeholderHours = Array.from(
+  { length: 6 },
+  () => '<li><span class="t">00°</span><span class="n">0pm</span></li>',
+).join('');
+---
+
+<section
+  class="view view-now"
+  id="view-now"
+  role="tabpanel"
+  aria-labelledby="tab-now"
+  data-view="now"
+  data-band={now?.band}
+  data-empty={state === 'ready' && !now ? '' : undefined}
+  tabindex="0"
+  inert
+  hidden
+>
+  <svg
+    class="glyph"
+    id="now-glyph"
+    viewBox="0 0 120 120"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="3"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    aria-hidden="true"
+    set:html={now ? GLYPHS[now.band] : ''}
+  />
+  <p class="question" id="now-question">
+    {question(city, 'now')}
+  </p>
+  <h2 class="answer" id="now-answer">
+    {answer}
+  </h2>
+  <p class="verdict hold" id="now-verdict">
+    {now?.verdict ?? "It's warm, not hot."}
+  </p>
+  <p class="detail hold" id="now-detail">
+    {now?.detail ?? '00° right now, feels like 00°. Rising to 00° by 0pm.'}
+  </p>
+  <section class="ahead hold" aria-labelledby="now-h">
+    <h3 id="now-h">{COPY.nextHours}</h3>
+    <ul class="list" id="now-hours" set:html={now ? hoursHtml(now) : placeholderHours} />
+  </section>
+</section>

@@ -32,13 +32,18 @@ test.describe('matches the approved prototype', () => {
       const expected = await mainShot(page);
 
       await page.goto(`/?preview=1&band=${band}`);
+      // Pages open on Today alone; Now and This week join the scroller on first use.
+      await expect(page.locator('#view-now')).toBeHidden();
+      await expect(page.locator('#view-week')).toBeHidden();
+      // The tab bar is new since the prototype: take it out of the layout for the comparison.
+      await page.addStyleTag({ content: '#tabs{display:none!important}' });
       const actual = await mainShot(page);
       const palette = PALETTES[band];
       const vars = await page.evaluate(() => {
         const s = document.documentElement.style;
-        return ['--g1', '--g2', '--g3', '--ink'].map((v) => s.getPropertyValue(v).trim());
+        return ['--g1', '--g2', '--g3', '--ink', '--glow'].map((v) => s.getPropertyValue(v).trim());
       });
-      expect(vars).toEqual([palette.g1, palette.g2, palette.g3, palette.ink]);
+      expect(vars).toEqual([palette.g1, palette.g2, palette.g3, palette.ink, palette.glow]);
       await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', palette.g1);
       // Serialise the expected icon through the browser too, so markup style does not matter.
       const icon = await page.evaluate((markup) => {

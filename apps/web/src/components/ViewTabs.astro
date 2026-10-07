@@ -1,0 +1,24 @@
+---
+/**
+ * Now | Today | This week. Today is selected on every load. Tapping a tab or swiping the
+ * views moves the thumb; scripts/views.ts keeps the two in step.
+ */
+import { COPY, VIEWS, VIEW_LABELS } from '@isithot/core';
+---
+
+<div class="tabs" id="tabs" role="tablist" aria-label={COPY.viewsLabel}>
+  <span class="thumb" aria-hidden="true"></span>
+  {VIEWS.map((view) => (
+    <button
+      type="button"
+      role="tab"
+      id={`tab-${view}`}
+      aria-controls={`view-${view}`}
+      aria-selected={view === 'today' ? 'true' : 'false'}
+      tabindex={view === 'today' ? 0 : -1}
+      data-view={view}
+    >
+      {VIEW_LABELS[view]}
+    </button>
+  ))}
+</div>

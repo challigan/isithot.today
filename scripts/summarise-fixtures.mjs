@@ -7,13 +7,18 @@ const read = (name) => JSON.parse(readFileSync(new URL(name, dir), 'utf8'));
 
 for (const name of ['open-meteo-forecast-newcastle.json', 'open-meteo-forecast-seville.json']) {
   const f = read(name);
-  console.log(`${name}: timezone=${f.timezone} dates=${f.daily.time.join(',')}`);
-  for (const [key, values] of Object.entries(f.daily)) {
+  const times = f.hourly?.time ?? [];
+  const dates = [...new Set(times.map((t) => t.slice(0, 10)))];
+  console.log(`${name}: timezone=${f.timezone} offset=${f.utc_offset_seconds} dates=${dates}`);
+  for (const [key, values] of Object.entries(f.hourly ?? {})) {
     if (key === 'time') continue;
-    console.log(`  ${key}: ${JSON.stringify(values)}`);
+    // Each day's maximum and how many hours have a value.
+    const days = dates.map((d) => {
+      const v = values.filter((_, i) => times[i].startsWith(d) && values[i] !== null);
+      return v.length ? `${Math.max(...v)}(${v.length}h)` : '-';
+    });
+    console.log(`  ${key}: ${days.join(' ')}`);
   }
-  const hourlyKeys = Object.keys(f.hourly ?? {}).filter((k) => k !== 'time');
-  console.log(`  hourly keys: ${hourlyKeys.join(', ')}`);
 }
 for (const place of ['newcastle', 'seville', 'london', 'singapore']) {
   const nasa = read(`nasa-power-${place}.json`);

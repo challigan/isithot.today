@@ -73,9 +73,9 @@ describe('blend', () => {
     const b = blend(
       [model('a', 10), model('b', 11), model('c', 12)],
       [
-        { hour: 13, temps: [10, 11, 12] },
-        { hour: 14, temps: [11, 12, null] },
-        { hour: 15, temps: [9, 9, 9] },
+        { hour: 13, time: 46800000, temps: [10, 11, 12] },
+        { hour: 14, time: 50400000, temps: [11, 12, null] },
+        { hour: 15, time: 54000000, temps: [9, 9, 9] },
       ],
     );
     expect(b!.peakHour).toBe(14);
@@ -85,14 +85,14 @@ describe('blend', () => {
 describe('peakHour', () => {
   it('returns null without usable hourly data', () => {
     expect(peakHour([])).toBeNull();
-    expect(peakHour([{ hour: 3, temps: [null, null] }])).toBeNull();
+    expect(peakHour([{ hour: 3, time: 10800000, temps: [null, null] }])).toBeNull();
   });
 
   it('prefers the earlier hour on a tie', () => {
     expect(
       peakHour([
-        { hour: 12, temps: [20] },
-        { hour: 16, temps: [20] },
+        { hour: 12, time: 43200000, temps: [20] },
+        { hour: 16, time: 57600000, temps: [20] },
       ]),
     ).toBe(12);
   });

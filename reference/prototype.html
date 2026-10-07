@@ -8,6 +8,12 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&display=swap" rel="stylesheet">
 <style>
+  /*
+   * Accessibility update, October 2026: every text now meets WCAG 2.2 AA in every band.
+   * Hot is darker with a deeper, weaker glow; the glow strength is set per band (--glow);
+   * the question is no longer faded and small secondary text is faded less.
+   */
+  @property --glow { syntax: '<percentage>'; inherits: true; initial-value: 85%; }
   @property --g1 { syntax: '<color>'; inherits: true; initial-value: #2b3f5c; }
   @property --g2 { syntax: '<color>'; inherits: true; initial-value: #5a7896; }
   @property --g3 { syntax: '<color>'; inherits: true; initial-value: #c9d6e2; }
@@ -33,11 +39,11 @@
     font-family: var(--font);
     color: var(--ink);
     background:
-      radial-gradient(circle at 88% 6%, color-mix(in srgb, var(--g3) 85%, transparent) 0%, transparent 52%),
+      radial-gradient(circle at 88% 6%, color-mix(in srgb, var(--g3) var(--glow), transparent) 0%, transparent 52%),
       linear-gradient(168deg, var(--g1) 0%, var(--g2) 100%);
     background-color: var(--g1);
     background-attachment: fixed;
-    transition: --g1 900ms ease, --g2 900ms ease, --g3 900ms ease, --ink 600ms ease;
+    transition: --g1 900ms ease, --g2 900ms ease, --g3 900ms ease, --glow 900ms ease, --ink 600ms ease;
     -webkit-font-smoothing: antialiased;
   }
 
@@ -66,7 +72,7 @@
   .glyph .spin { transform-origin: 60px 60px; animation: spin 60s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .question { margin: 0 0 .25rem; font-size: clamp(1.15rem, 3.2vw, 1.4rem); font-weight: 450; opacity: .85; }
+  .question { margin: 0 0 .25rem; font-size: clamp(1.15rem, 3.2vw, 1.4rem); font-weight: 450; }
   .answer {
     margin: 0; font-size: clamp(6rem, 30vw, 13rem); line-height: .86;
     font-weight: 780; letter-spacing: -0.055em; font-variation-settings: 'opsz' 96;
@@ -79,7 +85,7 @@
 
   .models { margin-top: 2.75rem; }
   .models h2 { margin: 0 0 1rem; font-size: 1rem; font-weight: 600; }
-  .models h2 span { font-weight: 400; opacity: .75; }
+  .models h2 span { font-weight: 400; opacity: .9; }
   .strip { position: relative; height: 2.75rem; margin-bottom: .5rem; }
   .strip::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 2px; background: currentColor; opacity: .25; border-radius: 2px; }
   .band { position: absolute; top: calc(50% - .75rem); height: 1.5rem; border-radius: 1rem; background: currentColor; opacity: .14; transition: left 700ms ease, width 700ms ease; }
@@ -88,14 +94,14 @@
     border-radius: 50%; background: currentColor; transition: left 700ms ease, opacity 300ms;
   }
   .dot.out { opacity: .4; }
-  .scale { display: flex; justify-content: space-between; font-size: .8rem; opacity: .65; font-variant-numeric: tabular-nums; }
+  .scale { display: flex; justify-content: space-between; font-size: .8rem; font-variant-numeric: tabular-nums; }
 
   .list { display: grid; grid-template-columns: repeat(3, 1fr); gap: .9rem 1.25rem; margin: 1.5rem 0 0; padding: 0; list-style: none; }
   @media (min-width: 560px) { .list { grid-template-columns: repeat(6, 1fr); } }
   .list li { display: flex; flex-direction: column; gap: .1rem; }
   .list .t { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .list .n { font-size: .8rem; opacity: .75; }
-  .list li.out { opacity: .5; }
+  .list .n { font-size: .8rem; opacity: .9; }
+  .list li.out { opacity: .7; }
 
   .more { margin-top: 2.75rem; font-size: 1rem; line-height: 1.6; }
   .more a { color: inherit; font-weight: 600; text-underline-offset: .2em; text-decoration-thickness: 1px; }
@@ -166,22 +172,22 @@ const MODELS = ['ECMWF', 'GFS', 'ICON', 'UKMO', 'Météo-France', 'MET Norway'];
 const DAYS = {
   freezing: { label: 'Freezing', place: 'Edinburgh', month: 'January', normal: 6, feels: -6, peak: '1pm',
     temps: [-1, -2, -3, -2, -1, -5], answer: 'No.', verdict: "It's freezing.",
-    c: ['#12305a', '#2a5d96', '#b9dcf7', '#ffffff'], glyph: 'snow' },
+    c: ['#12305a', '#2a5d96', '#b9dcf7', '#ffffff', '60%'], glyph: 'snow' },
   cold: { label: 'Cold', place: 'Newcastle', month: 'October', normal: 13, feels: 6, peak: '2pm',
     temps: [9, 10, 8, 9, 9, 13], answer: 'No.', verdict: "It's cold.",
-    c: ['#2b3f5c', '#5a7896', '#c9d6e2', '#ffffff'], glyph: 'wind' },
+    c: ['#2b3f5c', '#5a7896', '#c9d6e2', '#ffffff', '45%'], glyph: 'wind' },
   mild: { label: 'Mild', place: 'London', month: 'April', normal: 14, feels: 15, peak: '3pm',
     temps: [15, 16, 14, 15, 16, 15], answer: 'No.', verdict: "It's mild.",
-    c: ['#dfeadf', '#a9c7b4', '#fff6d6', '#1d3328'], glyph: 'cloudsun' },
+    c: ['#dfeadf', '#a9c7b4', '#fff6d6', '#1d3328', '85%'], glyph: 'cloudsun' },
   warm: { label: 'Warm', place: 'Manchester', month: 'June', normal: 19, feels: 23, peak: '3pm',
     temps: [22, 23, 21, 22, 23, 19], answer: 'Almost.', verdict: "It's warm, not hot.",
-    c: ['#ffe2bd', '#f4ad66', '#fff4c8', '#40200a'], glyph: 'sun' },
+    c: ['#ffe2bd', '#f4ad66', '#fff4c8', '#40200a', '85%'], glyph: 'sun' },
   hot: { label: 'Hot', place: 'Bristol', month: 'July', normal: 22, feels: 30, peak: '4pm',
     temps: [28, 29, 27, 28, 29, 28], answer: 'Yes.', verdict: "It's hot.",
-    c: ['#e8571f', '#b3211b', '#ffd36b', '#ffffff'], glyph: 'hotsun' },
+    c: ['#cc3d17', '#a51c17', '#ff9a4a', '#ffffff', '40%'], glyph: 'hotsun' },
   scorching: { label: 'Scorching', place: 'Seville', month: 'August', normal: 35, feels: 43, peak: '5pm',
     temps: [41, 42, 40, 41, 37, 41], answer: 'Yes.', verdict: "It's scorching.",
-    c: ['#a3122a', '#5c0a2e', '#ff9a3c', '#ffffff'], glyph: 'blaze' }
+    c: ['#a3122a', '#5c0a2e', '#ff9a3c', '#ffffff', '70%'], glyph: 'blaze' }
 };
 
 const rays = (n, r1, r2) => Array.from({ length: n }, (_, i) => {
@@ -215,7 +221,8 @@ const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').match
 
 function render(key) {
   const d = DAYS[key];
-  const [g1, g2, g3, ink] = d.c;
+  const [g1, g2, g3, ink, glow] = d.c;
+  root.style.setProperty('--glow', glow);
   root.style.setProperty('--g1', g1);
   root.style.setProperty('--g2', g2);
   root.style.setProperty('--g3', g3);

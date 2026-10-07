@@ -1,7 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 import Header from '../components/Header.astro';
-import Today from '../components/Today.astro';
+import Views from '../components/Views.astro';
 import AdSlot from '../components/AdSlot.astro';
 import Footer from '../components/Footer.astro';
 import SearchSheet from '../components/SearchSheet.astro';
@@ -45,7 +45,7 @@ const canonical = new URL('/', Astro.site).toString();
   </script>
   <div class="wrap" id="app" data-state="loading" data-mode="home">
     <Header />
-    <Today data={null} state="loading" />
+    <Views data={null} state="loading" />
     <AdSlot />
     <Footer />
   </div>
@@ -56,11 +56,15 @@ const canonical = new URL('/', Astro.site).toString();
       try {
         if (location.search) return;
         const c = JSON.parse(localStorage.getItem('isithot:last') || 'null');
-        if (!c || c.v !== 2 || Date.now() - c.savedAt > 10800000) return;
+        if (!c || c.v !== 3 || Date.now() - c.savedAt > 10800000) return;
         const s = document.documentElement.style;
         for (const k in c.palette) s.setProperty('--' + k, c.palette[k]);
         document.querySelector('meta[name=theme-color]').setAttribute('content', c.palette.g1);
         document.getElementById('main').innerHTML = c.html;
+        // "Now" from a saved answer is out of date; the app works it out again on load.
+        if (Date.now() - c.savedAt > 900000) {
+          document.getElementById('view-now').setAttribute('data-pending', '');
+        }
         document.getElementById('place').textContent = c.place;
         const app = document.getElementById('app');
         app.setAttribute('data-state', 'ready');

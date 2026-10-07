@@ -9,6 +9,7 @@ import {
   buildClimatologyUrl,
   buildForecastUrl,
   buildSearchUrl,
+  forecastSignature,
   fetchClimateNormals,
   fetchForecast,
   parseClimatology,
@@ -33,11 +34,18 @@ describe('Open-Meteo forecast', () => {
     expect(url.searchParams.get('latitude')).toBe('54.95');
     expect(url.searchParams.get('longitude')).toBe('-1.6');
     expect(url.searchParams.get('timezone')).toBe('auto');
-    expect(url.searchParams.get('forecast_days')).toBe('2');
-    expect(url.searchParams.get('daily')).toBe('temperature_2m_max,apparent_temperature_max');
-    expect(url.searchParams.get('hourly')).toBe('temperature_2m');
+    expect(url.searchParams.get('forecast_days')).toBe('7');
+    // Daily highs are worked out from the hourly values, which halves the quota used.
+    expect(url.searchParams.has('daily')).toBe(false);
+    expect(url.searchParams.get('hourly')).toBe('temperature_2m,apparent_temperature');
     expect(url.searchParams.get('models')!.split(',')).toEqual(MODELS.map((m) => m.id));
     expect(url.searchParams.has('apikey')).toBe(false);
+  });
+
+  it('pins the request so a change has to bump the cache version', () => {
+    expect(forecastSignature()).toBe(
+      'v2 forecast_days=7 hourly=temperature_2m,apparent_temperature',
+    );
   });
 
   it('adds the key for the paid customer host', () => {
@@ -48,28 +56,49 @@ describe('Open-Meteo forecast', () => {
     expect(url.searchParams.get('apikey')).toBe('k3y');
   });
 
-  it.each(['open-meteo-forecast-newcastle.json', 'open-meteo-forecast-seville.json'])(
-    'parses the recorded response %s',
-    (name) => {
-      const raw = fixture(name);
-      const f = parseForecast(raw, MODELS);
-      expect(f.timezone).toBe(raw.timezone);
-      expect(f.days.map((d) => d.date)).toEqual(raw.daily.time);
-      for (const [dayIndex, day] of f.days.entries()) {
-        expect(day.models).toHaveLength(MODELS.length);
+  it.each([
+    'open-meteo-forecast-newcastle.json',
+    'open-meteo-forecast-seville.json',
+    'open-meteo-forecast-newcastle-legacy.json',
+    'open-meteo-forecast-seville-legacy.json',
+  ])('parses the recorded response %s', (name) => {
+    const raw = fixture(name);
+    const f = parseForecast(raw, MODELS);
+    expect(f.timezone).toBe(raw.timezone);
+    expect(f.utcOffsetSeconds).toBe(raw.utc_offset_seconds);
+    const dates = [...new Set(raw.hourly.time.map((t: string) => t.slice(0, 10)))];
+    expect(f.days.map((d) => d.date)).toEqual(dates);
+    const hasFeels = Object.keys(raw.hourly).some((k) => k.startsWith('apparent_temperature_'));
+    for (const [dayIndex, day] of f.days.entries()) {
+      expect(day.models).toHaveLength(MODELS.length);
+      expect(day.hourly).toHaveLength(24);
+      expect(day.hourly[0]!.time).toBe(
+        Date.parse(`${day.date}T00:00Z`) - raw.utc_offset_seconds * 1000,
+      );
+      expect(day.hourly[14]!.temps).toHaveLength(MODELS.length);
+      // Older recordings also carry Open-Meteo's daily maximum: the highs worked out from
+      // the hourly values must match it.
+      if (raw.daily) {
         for (const m of day.models) {
-          const high = raw.daily[`temperature_2m_max_${m.id}`]?.[dayIndex] ?? null;
-          expect(m.high).toBe(high);
+          expect(m.high).toBe(raw.daily[`temperature_2m_max_${m.id}`]?.[dayIndex] ?? null);
         }
-        expect(day.hourly).toHaveLength(24);
-        expect(day.hourly[0]!.hour).toBe(0);
-        expect(day.hourly[23]!.hour).toBe(23);
-        expect(day.hourly[14]!.temps).toHaveLength(MODELS.length);
       }
-    },
-  );
+      const withHigh = day.models.filter((m) => m.high !== null).length;
+      const withFeels = day.models.filter((m) => m.feelsLike !== null).length;
+      if (dayIndex < 2) expect(withHigh).toBeGreaterThanOrEqual(5);
+      // The week needs enough models on every day, even as short-range ones drop away.
+      expect(withHigh).toBeGreaterThanOrEqual(3);
+      if (hasFeels && dayIndex < 2) expect(withFeels).toBeGreaterThanOrEqual(5);
+      if (!hasFeels) expect(withFeels).toBe(0);
+    }
+  });
 
-  it('reads renamed models by alias and drops nulls to null', () => {
+  /** 24 hourly stamps for a date with values from `value(hour)`. */
+  const day = (date: string) =>
+    Array.from({ length: 24 }, (_, h) => `${date}T${String(h).padStart(2, '0')}:00`);
+  const curve = (peak: number) => Array.from({ length: 24 }, (_, h) => peak - Math.abs(h - 15));
+
+  it('reads renamed models by alias and works out daily highs from hourly values', () => {
     const models: ModelConfig[] = [
       { id: 'ncep_gfs_seamless', name: 'GFS', aliases: ['gfs_seamless'] },
       { id: 'jma_seamless', name: 'JMA' },
@@ -77,29 +106,45 @@ describe('Open-Meteo forecast', () => {
     const f = parseForecast(
       {
         timezone: 'Europe/London',
+        utc_offset_seconds: 3600,
         latitude: 54.95,
         longitude: -1.6,
-        daily: {
-          time: ['2026-10-06'],
-          temperature_2m_max_gfs_seamless: [11.2],
-          apparent_temperature_max_gfs_seamless: [8.1],
-          temperature_2m_max_jma_seamless: [null],
-        },
         hourly: {
-          time: ['2026-10-06T13:00', '2026-10-06T14:00', '2026-10-07T00:00'],
-          temperature_2m_gfs_seamless: [10, 11, 6],
+          time: [...day('2026-10-06'), '2026-10-07T00:00'],
+          temperature_2m_gfs_seamless: [...curve(11.2), 6],
+          apparent_temperature_gfs_seamless: [...curve(8.1), 3],
+          temperature_2m_jma_seamless: Array.from({ length: 25 }, () => null),
         },
       },
       models,
     );
+    expect(f.utcOffsetSeconds).toBe(3600);
+    expect(f.days.map((d) => d.date)).toEqual(['2026-10-06', '2026-10-07']);
     expect(f.days[0]!.models).toEqual([
       { id: 'ncep_gfs_seamless', name: 'GFS', high: 11.2, feelsLike: 8.1 },
       { id: 'jma_seamless', name: 'JMA', high: null, feelsLike: null },
     ]);
-    expect(f.days[0]!.hourly).toEqual([
-      { hour: 13, temps: [10, null] },
-      { hour: 14, temps: [11, null] },
-    ]);
+    expect(f.days[0]!.hourly[15]).toEqual({
+      hour: 15,
+      time: Date.parse('2026-10-06T14:00:00Z'),
+      temps: [11.2, null],
+      feels: [8.1, null],
+    });
+    // One hour of the next day is not a day's high.
+    expect(f.days[1]!.models[0]).toMatchObject({ high: null, feelsLike: null });
+  });
+
+  it('only counts a day with the whole afternoon covered', () => {
+    const temps = curve(20).map((t, h) => (h <= 14 ? t : null));
+    const f = parseForecast(
+      {
+        timezone: 'UTC',
+        hourly: { time: day('2026-10-10'), temperature_2m: temps, apparent_temperature: temps },
+      },
+      [{ id: 'meteofrance_seamless', name: 'Météo-France' }],
+    );
+    expect(f.days[0]!.models[0]).toMatchObject({ high: null, feelsLike: null });
+    expect(f.days[0]!.hourly[10]!.temps).toEqual([15]);
   });
 
   it('reads unsuffixed keys when a single model is requested', () => {
@@ -107,12 +152,16 @@ describe('Open-Meteo forecast', () => {
       {
         timezone: 'UTC',
         latitude: 'x',
-        daily: { time: ['2026-10-06'], temperature_2m_max: [20], apparent_temperature_max: [21] },
+        hourly: {
+          time: day('2026-10-06'),
+          temperature_2m: curve(20),
+          apparent_temperature: curve(21),
+        },
       },
       [{ id: 'ecmwf_ifs025', name: 'ECMWF' }],
     );
     expect(f.days[0]!.models[0]).toMatchObject({ high: 20, feelsLike: 21 });
-    expect(f.days[0]!.hourly).toEqual([]);
+    expect(f.utcOffsetSeconds).toBe(0);
     expect(Number.isNaN(f.lat)).toBe(true);
   });
 

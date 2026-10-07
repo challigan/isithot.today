@@ -15,7 +15,11 @@ export interface ModelDay {
 export interface HourTemps {
   /** Local hour of day, 0–23. */
   hour: number;
+  /** Start of the hour, epoch milliseconds (UTC). */
+  time: number;
   temps: readonly (number | null)[];
+  /** Hourly apparent (feels-like) temperature per model, in the same order as `temps`. */
+  feels?: readonly (number | null)[];
 }
 
 export interface BlendedModel {

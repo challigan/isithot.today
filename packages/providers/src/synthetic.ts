@@ -3,7 +3,7 @@
  * Open-Meteo and NASA POWER response formats. Used for local development without network
  * access (`DATA_SOURCE=synthetic`) and for end-to-end tests. Never used in production.
  */
-import { MODELS, localDate, normalForDate, roundToGrid } from '@isithot/core';
+import { FORECAST, MODELS, localDate, normalForDate, roundToGrid } from '@isithot/core';
 import type { FetchLike } from './errors';
 
 export interface SyntheticPlace {
@@ -48,20 +48,41 @@ export function syntheticTimezone(lat: number, lon: number): string {
   return `Etc/GMT${offset > 0 ? '-' : '+'}${Math.abs(offset)}`;
 }
 
-function addDay(date: string): string {
+function addDays(date: string, days: number): string {
   const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + 1);
+  d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+/** Hours of forecast each synthetic model provides (Météo-France's ARPEGE stops at about 102). */
+const HORIZON_HOURS: Record<string, number> = { meteofrance_seamless: 102 };
+
+/** Offset of a time zone from UTC at a moment, seconds. */
+export function zoneOffsetSeconds(timezone: string, now: Date): number {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    })
+      .formatToParts(now)
+      .map((p) => [p.type, Number(p.value)]),
+  );
+  const local = Date.UTC(parts.year!, parts.month! - 1, parts.day!, parts.hour!, parts.minute!);
+  return Math.round((local - now.getTime()) / 60000) * 60;
 }
 
 export function syntheticForecast(lat: number, lon: number, modelIds: string[], now: Date) {
   const cell = `${roundToGrid(lat, 0.05)},${roundToGrid(lon, 0.05)}`;
   const timezone = syntheticTimezone(lat, lon);
   const today = localDate(timezone, now);
-  const dates = [today, addDay(today)];
+  const dates = Array.from({ length: FORECAST.days }, (_, i) => addDays(today, i));
   const normals = syntheticNormals(lat);
 
-  const daily: Record<string, unknown[]> = { time: dates };
   const hourly: Record<string, unknown[]> = {
     time: dates.flatMap((d) =>
       Array.from({ length: 24 }, (_, h) => `${d}T${String(h).padStart(2, '0')}:00`),
@@ -69,9 +90,8 @@ export function syntheticForecast(lat: number, lon: number, modelIds: string[], 
   };
 
   for (const id of modelIds) {
-    const highs: number[] = [];
-    const feels: number[] = [];
-    const temps: number[] = [];
+    const temps: Array<number | null> = [];
+    const apparent: Array<number | null> = [];
     for (const date of dates) {
       const base = normalForDate(normals, date) + between(`${cell}|${date}`, -4, 5);
       const outlier =
@@ -81,29 +101,31 @@ export function syntheticForecast(lat: number, lon: number, modelIds: string[], 
         high > 24
           ? between(`${cell}|${date}|hum`, 1, 4)
           : between(`${cell}|${date}|hum`, -3.5, 0.5);
-      highs.push(high);
-      feels.push(r1(high + humid));
       const peak = 13 + Math.floor(unit(`${cell}|${date}|peak`) * 3);
       for (let h = 0; h < 24; h++) {
         const shape = (Math.cos(((h - peak) / 24) * 2 * Math.PI) + 1) / 2;
-        temps.push(r1(high - 8 * (1 - shape)));
+        const temp = r1(high - 8 * (1 - shape));
+        temps.push(temp);
+        // Humidity matters most in the warmth of the day; nights feel a little cooler.
+        apparent.push(r1(temp + humid * shape - 1 * (1 - shape)));
       }
     }
-    daily[`temperature_2m_max_${id}`] = highs;
-    daily[`apparent_temperature_max_${id}`] = feels;
+    const horizon = HORIZON_HOURS[id] ?? Infinity;
+    temps.forEach((_, i) => {
+      if (i >= horizon) temps[i] = apparent[i] = null;
+    });
     hourly[`temperature_2m_${id}`] = temps;
+    hourly[`apparent_temperature_${id}`] = apparent;
   }
 
   return {
     latitude: lat,
     longitude: lon,
     generationtime_ms: 0.5,
-    utc_offset_seconds: 0,
+    utc_offset_seconds: zoneOffsetSeconds(timezone, now),
     timezone,
     timezone_abbreviation: 'GMT',
     elevation: 50,
-    daily_units: { time: 'iso8601' },
-    daily,
     hourly_units: { time: 'iso8601' },
     hourly,
   };

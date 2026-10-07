@@ -52,6 +52,29 @@ try {
     check(day.consensus.total >= 5, 'at least 5 models returned data', `${day.consensus.total}`);
     check(day.normalHigh !== null, 'climate normals present');
     check(t1.body.days.length === 2, 'two days returned');
+    const now = t1.body.now;
+    check(!!now && /^(Yes|No|Almost)\.$/.test(now.answer), 'now answered', now?.detail);
+    check(
+      now?.series?.length >= 20,
+      'now carries a day of hourly series',
+      `${now?.series?.length}`,
+    );
+    const week = t1.body.week;
+    check(!!week && week.days.length >= 5, 'week answered', `${week?.days?.length} days`);
+    if (week) {
+      console.log(`      week: ${week.answer} ${week.verdict} | ${week.detail}`);
+      console.log(
+        `      days: ${week.days.map((d) => `${d.label}=${d.high}(${d.bandLabel})`).join(' ')}`,
+      );
+    }
+    if (now) console.log(`      now: ${now.answer} ${now.verdict} | ${now.detail}`);
+    // Feels-like comes from hourly apparent temperature: if it never differs from the air
+    // temperature, the variable is not being read.
+    check(
+      t1.body.days.some((d) => d.feelsLike !== d.high) ||
+        now?.series?.some((p) => p.feelsLike !== p.temperature),
+      'feels-like read from hourly apparent temperature',
+    );
   }
   const t2 = await get(q);
   check(

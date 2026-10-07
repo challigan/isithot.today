@@ -13,8 +13,8 @@ const day = (highs: Array<number | null>, feels?: Array<number | null>): DayData
     feelsLike: feels ? (feels[i] ?? null) : high === null ? null : high - 3,
   })),
   hourly: [
-    { hour: 13, temps: [8, 9] },
-    { hour: 14, temps: [9, 10] },
+    { hour: 13, time: 46800000, temps: [8, 9] },
+    { hour: 14, time: 50400000, temps: [9, 10] },
   ],
 });
 
@@ -147,5 +147,12 @@ describe('previewResponse', () => {
     expect(previewResponse('cold').days[0]!.agreementText).toBe('5 of 6 forecasts agree within 2°');
     expect(previewResponse('scorching').location.timezone).toBe('Europe/Madrid');
     expect(previewResponse('hot', 'f').units).toBe('f');
+    for (const band of PREVIEW_BANDS) {
+      const r = previewResponse(band);
+      expect(r.now!.band).toBe(band);
+      expect(r.now!.hours).toHaveLength(6);
+      expect(r.week!.band).toBe(band);
+      expect(r.week!.days).toHaveLength(7);
+    }
   });
 });

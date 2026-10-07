@@ -22,7 +22,14 @@ Merging the pull request deploys to production at https://isithotapp.netlify.app
 
 ## 2. Open-Meteo Standard plan (before ads or public launch)
 
-The free API is for non-commercial use only and bans ads.
+The free API is for non-commercial use only and bans ads. Testing with friends, with ads off,
+is fine on it. Its limits are 600 calls a minute, 5,000 an hour, 10,000 a day and 300,000 a
+month. Each forecast fetch costs 1.6 calls (8 models × 2 hourly variables), and a fetch only
+happens when a 5 km cell's cached forecast is over an hour old: at most about 38 calls a day
+for a place checked around the clock, so it would take roughly 250 such places (or search
+engines crawling every city page every hour) to reach the daily limit. A group of friends is
+nowhere near it. If the limit is ever hit, the API serves the last forecast (up to 6
+hours old) marked stale, and the Netlify function log shows `HTTP 429`.
 
 1. Subscribe to the Standard plan at https://open-meteo.com/en/pricing ($29/month, 1M calls).
 2. In Netlify: **Project configuration → Environment variables → Add a variable**:
@@ -30,9 +37,9 @@ The free API is for non-commercial use only and bans ads.
 3. Trigger a redeploy. With a key present the code switches to the
    `customer-api.open-meteo.com` and `customer-geocoding-api.open-meteo.com` hosts by itself.
 
-Quota: each cache miss is one forecast request for 8 models × 3 variables. Forecasts are
-cached per 5 km grid cell for 30 minutes, and API responses at the CDN for 10 minutes, so calls
-scale with the number of distinct places, not page views.
+Quota: each cache miss is one forecast request for 8 models × 2 hourly variables (1.6 calls).
+Forecasts are cached per 5 km grid cell for an hour, and API responses at the CDN for 10
+minutes, so calls scale with the number of distinct places, not page views.
 
 ## 3. Custom domain
 

@@ -3,7 +3,7 @@
  * thing. Everything here is built from numbers and our own model names; place names are
  * never passed through these helpers.
  */
-import type { ApiDay, Band } from '@isithot/core';
+import { BLEND, type ApiDay, type ApiNow, type ApiWeek, type Band } from '@isithot/core';
 
 const rays = (n: number, r1: number, r2: number, cx = 60, cy = 60): string =>
   Array.from({ length: n }, (_, i) => {
@@ -75,6 +75,34 @@ export function listHtml(day: ApiDay): string {
     .map(
       (m) =>
         `<li class="${m.agrees ? '' : 'out'}"><span class="t">${m.high}°</span><span class="n">${m.name}</span></li>`,
+    )
+    .join('');
+}
+
+/** The next few hours: temperature over the time, like the model list. */
+export function hoursHtml(now: ApiNow): string {
+  return now.hours
+    .map(
+      (h) => `<li><span class="t">${h.temperature}°</span><span class="n">${h.label}</span></li>`,
+    )
+    .join('');
+}
+
+/** Dot positions (in %) for each day's high on a shared scale across the week. */
+export function weekLayout(week: ApiWeek): number[] {
+  const highs = week.days.map((d) => d.high);
+  const lo = Math.min(...highs) - BLEND.stripPadding;
+  const hi = Math.max(...highs) + BLEND.stripPadding;
+  return highs.map((h) => clamp(((h - lo) / (hi - lo)) * 100));
+}
+
+/** One row per day: name, a dot for the high on the week's scale, the high and its band. */
+export function weekHtml(week: ApiWeek): string {
+  const left = weekLayout(week);
+  return week.days
+    .map(
+      (d, i) =>
+        `<li><span class="d">${d.label}</span><span class="track" aria-hidden="true"><span class="dot" style="left:${pct(left[i]!)}"></span></span><span class="t">${d.high}°</span><span class="a">${d.bandLabel}</span></li>`,
     )
     .join('');
 }

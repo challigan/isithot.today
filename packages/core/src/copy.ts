@@ -39,6 +39,22 @@ export const ANSWERS: Record<Band, string> = {
   scorching: 'Yes.',
 };
 
+/** The three views, left to right. Today is the default and the site's main purpose. */
+export type View = 'now' | 'today' | 'week';
+export const VIEWS: readonly View[] = ['now', 'today', 'week'];
+
+export const VIEW_LABELS: Record<View, string> = {
+  now: 'Now',
+  today: 'Today',
+  week: 'This week',
+};
+
+const VIEW_WHEN: Record<View, string> = {
+  now: 'right now',
+  today: 'today',
+  week: 'this week',
+};
+
 export const VERDICTS: Record<Band, string> = {
   freezing: "It's freezing.",
   cold: "It's cold.",
@@ -48,8 +64,33 @@ export const VERDICTS: Record<Band, string> = {
   scorching: "It's scorching.",
 };
 
+/** The week view's verdict line. */
+export const WEEK_VERDICTS: Record<Band, string> = {
+  freezing: 'A freezing week.',
+  cold: 'A cold week.',
+  mild: 'A mild week.',
+  warm: 'A warm week, not hot.',
+  hot: 'A hot week.',
+  scorching: 'A scorching week.',
+};
+
+export const WEEKDAYS = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+] as const;
+
 export const COPY = {
   question: 'Is it hot today?',
+  viewsLabel: 'Forecast period',
+  today: 'Today',
+  nextHours: 'Next 12 hours',
+  nextDays: 'The week ahead',
+  notAvailable: 'Not available right now.',
   checking: 'Checking…',
   limited: 'Limited forecast data',
   unavailable: 'Forecasts are unavailable right now. Try again in a few minutes.',
@@ -85,8 +126,9 @@ export const ERROR_MESSAGES = {
   rate_limited: 'Too many requests. Try again in a minute.',
 } as const;
 
-export function question(city?: string | null): string {
-  return city ? `Is it hot in ${city} today?` : COPY.question;
+export function question(city?: string | null, view: View = 'today'): string {
+  const when = VIEW_WHEN[view];
+  return city ? `Is it hot in ${city} ${when}?` : `Is it hot ${when}?`;
 }
 
 export function monthName(date: string): string {

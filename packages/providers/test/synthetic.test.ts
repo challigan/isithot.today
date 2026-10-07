@@ -21,8 +21,19 @@ describe('synthetic data source', () => {
       MODELS,
     );
     expect(f.timezone).toBe('Europe/London');
-    expect(f.days.map((d) => d.date)).toEqual(['2026-10-06', '2026-10-07']);
+    expect(f.days.map((d) => d.date)).toEqual([
+      '2026-10-06',
+      '2026-10-07',
+      '2026-10-08',
+      '2026-10-09',
+      '2026-10-10',
+      '2026-10-11',
+      '2026-10-12',
+    ]);
     expect(f.days[0]!.models.every((m) => typeof m.high === 'number')).toBe(true);
+    const hour = f.days[0]!.hourly[14]!;
+    expect(hour.feels).toHaveLength(MODELS.length);
+    expect(hour.feels!.every((v) => typeof v === 'number')).toBe(true);
   });
 
   it('produces normals and search results', async () => {

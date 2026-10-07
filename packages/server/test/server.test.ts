@@ -255,7 +255,7 @@ describe('GET /api/v1/today', () => {
     expect(ok(r).days[0]!.date).toBe('2026-10-08');
   });
 
-  it('uses tomorrow from a cached forecast after midnight', async () => {
+  it('refetches after midnight so the week keeps seven days', async () => {
     const cache = new MemoryKV();
     const evening = new Date('2026-10-06T22:50:00Z'); // 23:50 in London
     const first = makeDeps({ cache, now: () => evening });
@@ -263,8 +263,47 @@ describe('GET /api/v1/today', () => {
     const afterMidnight = new Date('2026-10-06T23:10:00Z'); // 00:10 on the 7th in London
     const later = makeDeps({ cache, now: () => afterMidnight });
     const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, later.deps));
-    expect(later.calls).not.toContain('/v1/forecast');
-    expect(body.days.map((d) => d.date)).toEqual(['2026-10-07']);
+    expect(later.calls).toContain('/v1/forecast');
+    expect(body.days.map((d) => d.date)).toEqual(['2026-10-07', '2026-10-08']);
+    expect(body.week!.from).toBe('2026-10-07');
+    expect(body.week!.days).toHaveLength(7);
+  });
+
+  it("falls back to yesterday's forecast after midnight when upstream fails", async () => {
+    const cache = new MemoryKV();
+    const evening = new Date('2026-10-06T22:50:00Z'); // 23:50 in London
+    const first = makeDeps({ cache, now: () => evening });
+    await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, first.deps);
+    const failing: FetchLike = async () => new Response('down', { status: 503 });
+    const afterMidnight = new Date('2026-10-06T23:10:00Z');
+    const later = makeDeps({ cache, now: () => afterMidnight, fetch: failing });
+    const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, later.deps));
+    expect(body.stale).toBe(true);
+    expect(body.days.map((d) => d.date)).toEqual(['2026-10-07', '2026-10-08']);
+    // Six days from today remain in yesterday's seven.
+    expect(body.week!.days).toHaveLength(6);
+  });
+
+  it('answers now and this week alongside today', async () => {
+    const { deps } = makeDeps();
+    const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
+    const now = body.now!;
+    expect(now.time).toBe(NOW.toISOString());
+    expect(now.answer).toMatch(/^(Yes|No|Almost)\.$/);
+    expect(now.detail).toMatch(/^-?\d+° now, feels like -?\d+°\. /);
+    expect(now.hours).toHaveLength(6);
+    expect(now.series.length).toBeGreaterThan(20);
+    expect(now.series[0]!.band).toMatch(/^(freezing|cold|mild|warm|hot|scorching)$/);
+    const week = body.week!;
+    expect(week.from).toBe('2026-10-06');
+    expect(week.to).toBe('2026-10-12');
+    expect(week.days).toHaveLength(7);
+    expect(week.days[0]!.label).toBe('Today');
+    // Today's row in the week is Today's own answer.
+    expect(week.days[0]!.band).toBe(body.days[0]!.band);
+    expect(week.days[0]!.high).toBe(body.days[0]!.high);
+    // Météo-France stops after about four days, so later days have seven models.
+    expect(body.days[0]!.consensus.total).toBe(8);
   });
 
   it('answers without normals when NASA POWER is slow, and fills the cache later', async () => {
