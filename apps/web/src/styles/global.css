@@ -28,8 +28,9 @@
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
   --font:
-    'Bricolage Grotesque', 'Bricolage Fallback', ui-sans-serif, system-ui, -apple-system,
-    'Segoe UI', Roboto, sans-serif;
+    'Bricolage Grotesque', 'Bricolage Fallback Arial', 'Bricolage Fallback Roboto',
+    'Bricolage Fallback DejaVu', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    sans-serif;
   --page-fallback: #2b3f5c;
 }
 @media (prefers-color-scheme: dark) {
@@ -55,6 +56,8 @@ body {
   margin: 0;
   min-height: 100%;
   font-family: var(--font);
+  /* Bricolage's natural line height; explicit so a late font swap cannot resize lines. */
+  line-height: 1.2;
   color: var(--ink);
   background:
     radial-gradient(
@@ -186,7 +189,8 @@ main {
   margin: 0;
   font-size: 1.1rem;
   line-height: 1.5;
-  max-width: 34ch;
+  /* 34ch in Bricolage; fixed so the wrap point does not move with a fallback font. */
+  max-width: 20.2em;
   opacity: 0.9;
 }
 
@@ -375,10 +379,11 @@ input:focus-visible {
 
 /* Header controls sit on the bright glow, so they get a soft backing for contrast. */
 .where {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0.3rem;
   min-width: 0;
 }
 .where-row {
@@ -431,7 +436,12 @@ button.place span {
   color: var(--g1);
   opacity: 1;
 }
+/* Out of the flow so showing it after the first answer never shifts the page. */
 .place-note {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  right: 0;
+  white-space: nowrap;
   margin: 0;
   font-size: 0.8rem;
   text-align: right;

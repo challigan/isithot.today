@@ -91,21 +91,8 @@ const placeholderModels = Array.from(
     </p>
   </section>
 
-  <p class="more" id="more">
-    {COPY.outboundIntro}
-    <a id="out-0" href={links[0]!.url} target="_blank" rel="noopener">
-      BBC Weather
-    </a>
-    ,
-    <a id="out-1" href={links[1]!.url} target="_blank" rel="noopener">
-      Met Office
-    </a>{' '}
-    or
-    <a id="out-2" href={links[2]!.url} target="_blank" rel="noopener">
-      AccuWeather
-    </a>
-    .
-  </p>
+  <!-- prettier-ignore -->
+  <p class="more" id="more">{COPY.outboundIntro} <a id="out-0" href={links[0]!.url} target="_blank" rel="noopener">BBC Weather</a>, <a id="out-1" href={links[1]!.url} target="_blank" rel="noopener">Met Office</a> or <a id="out-2" href={links[2]!.url} target="_blank" rel="noopener">AccuWeather</a>.</p>
   <p class="nearby" id="nearby" hidden={nearby.length === 0}>
     {COPY.nearby} <span id="nearby-links" set:html={nearbyHtml} />
   </p>

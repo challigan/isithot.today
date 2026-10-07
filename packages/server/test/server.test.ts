@@ -276,9 +276,11 @@ describe('GET /api/v1/today', () => {
       return synthetic(url, init);
     };
     const { deps, background } = makeDeps({ fetch: slowNasa, climateWaitMs: 10 });
-    const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
+    const first = await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
+    const body = ok(first);
     expect(body.days[0]!.normalHigh).toBeNull();
     expect(body.days[0]!.detail).not.toContain('usual');
+    expect(first.headers['Cache-Control']).toBe('public, max-age=60');
     release();
     await Promise.all(background);
     const again = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));

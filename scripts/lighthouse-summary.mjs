@@ -17,6 +17,14 @@ console.log(`${label}: ${scores}`);
 console.log(
   `  LCP=${metric('largest-contentful-paint')} CLS=${metric('cumulative-layout-shift')} TBT=${metric('total-blocking-time')} FCP=${metric('first-contentful-paint')}`,
 );
+const shifts = a['layout-shifts']?.details?.items ?? [];
+for (const item of shifts.slice(0, 5)) {
+  console.log(
+    `  shift ${item.score?.toFixed?.(3) ?? item.score}: ${item.node?.selector ?? '?'} ${item.node?.snippet ?? ''}`,
+  );
+}
+const lcp = a['largest-contentful-paint-element']?.details?.items?.[0]?.items?.[0]?.node;
+if (lcp) console.log(`  LCP element: ${lcp.selector} ${lcp.snippet}`);
 for (const c of Object.values(r.categories)) {
   for (const ref of c.auditRefs) {
     const audit = a[ref.id];

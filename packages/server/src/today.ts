@@ -47,7 +47,7 @@ interface ClimateEntry {
 }
 
 /** How long a response waits for NASA POWER before answering without normals, ms. */
-export const CLIMATE_WAIT_MS = 3500;
+export const CLIMATE_WAIT_MS = 2000;
 
 type Located = Omit<ApiLocation, 'timezone'>;
 
@@ -200,13 +200,17 @@ async function loadForecast(
   }
 }
 
-async function loadNormals(point: LatLon, deps: ServerDeps): Promise<MonthlyNormals | null> {
+type NormalsResult = { normals: MonthlyNormals | null; pending: boolean };
+
+async function loadNormals(point: LatLon, deps: ServerDeps): Promise<NormalsResult> {
   const cell = snapToCell(point, GRID.climate);
   const key = `climate/v3/${cellKey(point, GRID.climate)}`;
   const now = deps.now().getTime();
   const entry = await deps.cache.get<ClimateEntry>(key);
-  if (entry?.normals) return entry.normals;
-  if (entry && now - entry.fetchedAt < CACHE.climateFailure * 1000) return null;
+  if (entry?.normals) return { normals: entry.normals, pending: false };
+  if (entry && now - entry.fetchedAt < CACHE.climateFailure * 1000) {
+    return { normals: null, pending: false };
+  }
 
   const pending = fetchClimateNormals(
     { url: deps.config.nasaPowerUrl, fetch: deps.fetch, timeoutMs: 9000 },
@@ -231,9 +235,9 @@ async function loadNormals(point: LatLon, deps: ServerDeps): Promise<MonthlyNorm
   if (result === 'timeout') {
     // Answer now without normals; finish filling the cache in the background.
     deps.waitUntil(pending);
-    return null;
+    return { normals: null, pending: true };
   }
-  return result;
+  return { normals: result, pending: false };
 }
 
 export async function getToday(
@@ -257,10 +261,11 @@ export async function getToday(
   const units = explicitUnits ?? defaultUnitsForCountry(geo?.country ?? located.country);
 
   const point = { lat: located.lat, lon: located.lon };
-  const [loaded, normals] = await Promise.all([
+  const [loaded, climate] = await Promise.all([
     loadForecast(point, deps),
     loadNormals(point, deps),
   ]);
+  const normals = climate.normals;
   if (!loaded) return errorResult('upstream_unavailable', ERROR_MESSAGES.upstream_unavailable);
 
   const today = localDate(loaded.forecast.timezone, deps.now());
@@ -285,7 +290,8 @@ export async function getToday(
   // Responses that depend on the visitor (IP location or country-default units) must not be
   // shared by the CDN.
   const shared = located.source !== 'ip' && explicitUnits !== null;
-  const maxAge = loaded.stale ? 60 : CACHE.edgeMaxAge;
+  // Short cache while stale, or while climate normals are still loading in the background.
+  const maxAge = loaded.stale || climate.pending ? 60 : CACHE.edgeMaxAge;
   const headers = shared ? publicCache(maxAge) : privateCache(Math.min(maxAge, 300));
   return { status: 200, body, headers };
 }
