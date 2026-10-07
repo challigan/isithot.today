@@ -7,6 +7,10 @@ models, judged against what is normal for that place and time of year.
 - **API**: `/api/v1/today` and `/api/v1/search`, shared by the website now and the apps later.
 - **Hosting**: Netlify (production from `main`, a deploy preview for every pull request).
 
+**Start here:** [docs/SETUP.md](docs/SETUP.md) (accounts, keys and launch checklist) and
+[docs/DECISIONS.md](docs/DECISIONS.md) (where the build differs from the spec, and what needs a
+decision).
+
 ## Repository layout
 
 ```
@@ -54,6 +58,8 @@ pnpm typecheck        # tsc + astro check
 pnpm test:coverage    # Vitest; packages/core must stay at 100% branch coverage
 pnpm test:e2e         # Playwright (phone + desktop), with synthetic data
 pnpm build:netlify    # The exact production build Netlify runs
+node scripts/smoke.mjs <url>             # Smoke-test a deployed site against live data
+node scripts/contrast-report.mjs <url>   # Rendered text contrast for every band
 ```
 
 GitHub Actions runs all of these on every push and pull request. A second workflow waits for
