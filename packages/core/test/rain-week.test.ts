@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MonthlyNormals } from '../src/climate';
-import {
-  computeRainDay,
-  computeRainWeek,
-  formatRainWeek,
-  rainNormal,
-  type RainDayComputation,
-} from '../src/rain';
+import { computeRainDay, type RainDayComputation } from '../src/rainDay';
+import { computeRainWeek, formatRainWeek, rainNormal } from '../src/rainWeek';
 
 const HOUR = 3_600_000;
 

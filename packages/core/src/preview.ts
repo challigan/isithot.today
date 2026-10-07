@@ -7,17 +7,10 @@ import { COPY } from './copy';
 import { formatDay, type DayComputation, type DayData } from './compute';
 import type { MonthlyNormals } from './climate';
 import { formatNow, judgeSeries, type NowComputation } from './now';
-import {
-  computeRainDay,
-  computeRainNow,
-  computeRainWeek,
-  formatRainDay,
-  formatRainNow,
-  formatRainWeek,
-  judgeRainSeries,
-  rainSeries,
-  rainUnit,
-} from './rain';
+import { rainUnit } from './rain';
+import { computeRainDay, formatRainDay } from './rainDay';
+import { computeRainNow, formatRainNow, judgeRainSeries, rainSeries } from './rainNow';
+import { computeRainWeek, formatRainWeek } from './rainWeek';
 import { formatWeek } from './week';
 import { mean } from './stats';
 import type { ApiRain, TodayResponse } from './types';

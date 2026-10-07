@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { RAIN } from '../src/config';
 import type { DayData } from '../src/compute';
 import {
-  computeRainDay,
-  formatRainDay,
   median,
   niceCeil,
   rainBand,
@@ -13,6 +11,7 @@ import {
   toRainUnits,
   windowThresholds,
 } from '../src/rain';
+import { computeRainDay, formatRainDay } from '../src/rainDay';
 
 const HOUR = 3_600_000;
 const DATE = '2026-10-15';

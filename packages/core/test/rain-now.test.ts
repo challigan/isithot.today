@@ -7,7 +7,7 @@ import {
   judgeRainSeries,
   rainSeries,
   type RainSeriesPoint,
-} from '../src/rain';
+} from '../src/rainNow';
 import type { ApiRainPoint, RainUnit } from '../src/types';
 
 const HOUR = 3_600_000;

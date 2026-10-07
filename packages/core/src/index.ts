@@ -12,5 +12,8 @@ export * from './compute';
 export * from './week';
 export * from './now';
 export * from './rain';
+export * from './rainDay';
+export * from './rainNow';
+export * from './rainWeek';
 export * from './display';
 export type * from './types';
