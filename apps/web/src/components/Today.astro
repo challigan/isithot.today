@@ -59,9 +59,6 @@ const placeholderModels = Array.from(
     {day?.detail ??
       'High of 00°, feels like 00°. Warmest around 0pm. 0° warmer than usual for September.'}
   </p>
-  <button class="button retry" id="retry" type="button" hidden={state !== 'error'}>
-    {COPY.retry}
-  </button>
 
   <section class="models hold" id="models" aria-labelledby="models-h">
     <h2 id="models-h">

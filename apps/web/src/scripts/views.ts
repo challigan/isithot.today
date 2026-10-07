@@ -47,14 +47,21 @@ export function wireViews(events: ViewsEvents): ViewsController | null {
   let shown: View = active;
   /** Set while a tab press scrolls the views, so views passed on the way are not shown. */
   let target: View | null = null;
+  let goAt = 0;
   let touching = false;
   let frame = 0;
   let idle: ReturnType<typeof setTimeout> | undefined;
   let lastWidth = scroller.clientWidth;
 
-  /** The scroller is as tall as the view on screen (taller ones are clipped mid-swipe). */
+  /**
+   * The scroller is as tall as the view on screen, and never shorter than Today, so the links,
+   * ad space and footer below it stay where they are when switching to a shorter view. Taller
+   * views are clipped mid-swipe, then fit on arrival.
+   */
   function fitHeight(): void {
-    if (revealed) scroller!.style.height = `${panelFor(active).offsetHeight}px`;
+    if (!revealed) return;
+    const height = Math.max(panelFor('today').offsetHeight, panelFor(active).offsetHeight);
+    scroller!.style.height = `${height}px`;
   }
 
   /** Bring Now and This week into the scroller, keeping the current view where it is. */
@@ -81,10 +88,15 @@ export function wireViews(events: ViewsEvents): ViewsController | null {
     events.onShow(view);
   }
 
-  /** Make `view` the active panel: the others become inert, rescuing focus first. */
+  /**
+   * Make `view` the active panel: the others become inert, rescuing focus first. The active
+   * view's answer is the page's main heading (Today's is the real h1, for search engines).
+   */
   function activate(view: View): void {
     const changed = view !== active;
     active = view;
+    // Open the new panel first, so focus can move into it before the old one closes.
+    panelFor(view).inert = false;
     const focused = document.activeElement;
     for (const v of VIEWS) {
       const panel = panelFor(v);
@@ -92,6 +104,9 @@ export function wireViews(events: ViewsEvents): ViewsController | null {
         panelFor(view).focus({ preventScroll: true });
       }
       panel.inert = v !== view;
+      const answer = panel.querySelector('.answer');
+      if (v !== 'today') answer?.toggleAttribute('aria-level', v === view);
+      if (v !== 'today' && v === view) answer?.setAttribute('aria-level', '1');
     }
     fitHeight();
     if (changed) events.onSettle(view);
@@ -105,6 +120,14 @@ export function wireViews(events: ViewsEvents): ViewsController | null {
   function settle(): void {
     clearTimeout(idle);
     if (touching || !revealed) return; // touchend schedules another settle.
+    // A tab press is still scrolling to its view: its own scrollend (or the fallback) settles.
+    // Give up waiting after a couple of seconds, in case the scroll was interrupted.
+    if (target && viewAt() !== target && Date.now() - goAt < 2000) {
+      scheduleSettle(300);
+      return;
+    }
+    cancelAnimationFrame(frame);
+    frame = 0;
     target = null;
     const view = viewAt();
     thumbAt(VIEWS.indexOf(view), false);
@@ -118,10 +141,11 @@ export function wireViews(events: ViewsEvents): ViewsController | null {
   }
 
   function go(view: View, opts: { focus?: boolean; instant?: boolean } = {}): void {
+    target = view;
+    goAt = Date.now();
     reveal();
     const index = VIEWS.indexOf(view);
     const instant = opts.instant || reduceMotion;
-    target = view;
     thumbAt(index, false);
     show(view);
     if (opts.focus) tabFor(view).focus();
@@ -155,6 +179,7 @@ export function wireViews(events: ViewsEvents): ViewsController | null {
     'touchstart',
     () => {
       touching = true;
+      target = null; // The visitor takes over from any tab press still scrolling.
       reveal();
     },
     { passive: true },
@@ -163,7 +188,9 @@ export function wireViews(events: ViewsEvents): ViewsController | null {
   scroller.addEventListener(
     'wheel',
     (e) => {
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) reveal();
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+      target = null;
+      reveal();
     },
     { passive: true },
   );

@@ -8,6 +8,7 @@ import {
   fetchForecast,
   searchPlaces,
   syntheticTimezone,
+  zoneOffsetSeconds,
 } from '../src';
 import cities from '../../../data/cities.json';
 
@@ -45,6 +46,12 @@ describe('synthetic data source', () => {
     const places = await searchPlaces({ ...OPEN_METEO_FREE, fetch: fetcher }, 'newc', 8);
     expect(places[0]!.name).toBe('Newcastle');
     expect(await searchPlaces({ ...OPEN_METEO_FREE, fetch: fetcher }, 'zzzz', 8)).toEqual([]);
+  });
+
+  it('gives whole-minute zone offsets whatever the seconds', () => {
+    expect(zoneOffsetSeconds('Europe/London', new Date('2026-10-06T08:00:45.500Z'))).toBe(3600);
+    expect(zoneOffsetSeconds('Asia/Kolkata', new Date('2026-10-06T08:00:59Z'))).toBe(19800);
+    expect(zoneOffsetSeconds('UTC', new Date('2026-10-06T08:00:31Z'))).toBe(0);
   });
 
   it('guesses a time zone from longitude', () => {

@@ -47,6 +47,11 @@ jobs:
              [ "$(grep '^Forecast request:' <<<"$committed")" = "$(grep '^Forecast request:' <<<"$recorded")" ]; then
             echo "Committed fixtures already match the current request; leaving them alone."; exit 0
           fi
+          # Only commit recordings the provider tests accept. (A push from this workflow does not
+          # start CI, so the next push to the branch is the first full run on them.)
+          if ! pnpm vitest run packages/providers; then
+            echo "Provider tests fail on the new recordings; not committing them."; exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add packages/providers/test/fixtures
@@ -72,14 +77,18 @@ jobs:
       - name: Smoke test the preview
         run: node scripts/smoke.mjs "$PREVIEW"
 
-      - name: Lighthouse (mobile) on the deploy preview
+      - name: Lighthouse (mobile) on the deploy preview, and production for comparison
         run: |
-          for path in / /in/london-gb; do
+          # Netlify adds its review toolbar to deploy previews only: leave it out so the numbers
+          # match what visitors to the live site get.
+          for url in "$PREVIEW/" "$PREVIEW/in/london-gb" "https://isithot.today/"; do
             # Warm the CDN first: production visitors mostly get cached pages.
-            curl -fsS -o /dev/null "$PREVIEW$path"; curl -fsS -o /dev/null "$PREVIEW/api/v1/today"
-            npx -y lighthouse@12 "$PREVIEW$path" --quiet --form-factor=mobile \
+            origin=$(node -e 'console.log(new URL(process.argv[1]).origin)' "$url")
+            curl -fsS -o /dev/null "$url"; curl -fsS -o /dev/null "$origin/api/v1/today"
+            npx -y lighthouse@12 "$url" --quiet --form-factor=mobile \
               --only-categories=performance,accessibility,best-practices,seo \
+              --blocked-url-patterns='*/.netlify/scripts/cdp*' \
               --chrome-flags="--headless=new --no-sandbox" --output=json --output-path=lh.json || true
-            node scripts/lighthouse-summary.mjs lh.json "$path"
+            node scripts/lighthouse-summary.mjs lh.json "$url"
           done
         continue-on-error: true

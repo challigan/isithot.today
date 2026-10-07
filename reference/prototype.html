@@ -59,11 +59,11 @@
 
   header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
   .brand { font-weight: 650; font-size: 1.05rem; letter-spacing: -0.01em; text-decoration: none; color: inherit; }
-  .brand span { opacity: .6; font-weight: 400; }
+  .brand span { opacity: .75; font-weight: 400; }
   .place { display: inline-flex; align-items: center; gap: .4rem; font-size: .95rem; font-weight: 500; opacity: .9; }
   .place svg { width: 1rem; height: 1rem; }
 
-  main { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: clamp(2rem, 8vh, 5rem) 0 2rem; position: relative; }
+  main { flex: 1; display: flex; flex-direction: column; padding: clamp(2rem, 8vh, 5rem) 0 2rem; position: relative; }
 
   .glyph {
     position: absolute; top: clamp(.5rem, 4vh, 2.5rem); right: -.5rem;
@@ -101,7 +101,7 @@
   .list li { display: flex; flex-direction: column; gap: .1rem; }
   .list .t { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; }
   .list .n { font-size: .8rem; opacity: .9; }
-  .list li.out { opacity: .7; }
+  .list li.out .t { font-weight: 400; }
 
   .more { margin-top: 2.75rem; font-size: 1rem; line-height: 1.6; }
   .more a { color: inherit; font-weight: 600; text-underline-offset: .2em; text-decoration-thickness: 1px; }

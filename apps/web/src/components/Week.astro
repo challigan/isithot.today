@@ -62,7 +62,7 @@ const placeholderDays = Array.from(
       'Highs average 00°, feels like 00°. Hottest on Wednesday, 00°. 0° warmer than usual for September.'}
   </p>
   <section class="ahead hold" aria-labelledby="week-h">
-    <h3 id="week-h">{COPY.nextDays}</h3>
+    <h2 id="week-h">{COPY.nextDays}</h2>
     <ul class="days" id="week-days" set:html={week ? weekHtml(week) : placeholderDays} />
   </section>
 </section>

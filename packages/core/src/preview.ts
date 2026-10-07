@@ -127,9 +127,10 @@ export function previewResponse(band: Band, units: Units = 'c'): TodayResponse {
       feelsLike: Math.round((temperature + s.feels - day.blend.high) * 10) / 10,
     };
   });
-  const judged = judgeSeries(series, null, units).map((p) => ({ ...p, band }));
+  const judged = judgeSeries(series, null, units, 'UTC').map((p) => ({ ...p, band }));
   const now: NowComputation = {
     time: start + 10.5 * 3_600_000,
+    date: s.date,
     temperature: judged[10]!.temperature,
     feelsLike: judged[10]!.feelsLike,
     band,
@@ -167,7 +168,7 @@ export function previewResponse(band: Band, units: Units = 'c'): TodayResponse {
     },
     units,
     days: [formatDay(day, units)],
-    now: formatNow(now, 'UTC'),
+    now: formatNow(now),
     week,
     updatedAt: `${s.date}T08:00:00Z`,
     attribution: [COPY.forecastCredit, COPY.climateCredit],

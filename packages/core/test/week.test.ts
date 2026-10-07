@@ -175,6 +175,11 @@ describe('formatWeek', () => {
     );
   });
 
+  it('writes a range below zero without a dash between minus signs', () => {
+    const w = formatWeek(weekOf([-5, -3, -1, -2, -4], null)!, 'c');
+    expect(w.detail).toBe('Highs from -5° to -1°, averaging -3°. Hottest on Saturday, -1°.');
+  });
+
   it('leaves out the comparison without normals', () => {
     const w = formatWeek(weekOf([25, 25, 25, 25, 25], null)!, 'c');
     expect(w.normalHigh).toBeNull();

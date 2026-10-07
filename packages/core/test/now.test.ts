@@ -9,9 +9,19 @@ const T0 = Date.parse('2026-10-15T00:00:00Z');
 const RANGE = { coldest: 7, warmest: 19 };
 const at = (hours: number) => T0 + hours * HOUR;
 
-/** A judged series from midnight UTC, one point per hour. */
-const series = (temps: number[], start = T0, band: Band = 'mild'): ApiNowPoint[] =>
-  temps.map((t, i) => ({ time: start + i * HOUR, temperature: t, feelsLike: t - 1, band }));
+/** A judged series from midnight UTC, one point per hour, labelled in `timezone`. */
+const series = (
+  temps: number[],
+  start = T0,
+  band: Band = 'mild',
+  timezone = 'UTC',
+): ApiNowPoint[] =>
+  judgeSeries(
+    temps.map((t, i) => ({ time: start + i * HOUR, temperature: t, feelsLike: t - 1 })),
+    null,
+    'c',
+    timezone,
+  ).map((p) => ({ ...p, band }));
 
 /** A day that peaks at 3pm UTC: 10° at night up to 18°. */
 const DAY = Array.from({ length: 24 }, (_, h) => 18 - Math.min(8, Math.abs(h - 15)));
@@ -46,12 +56,21 @@ describe('judgeSeries', () => {
   ];
 
   it('judges each hour like a day and rounds to display units', () => {
-    expect(judgeSeries(raw, RANGE, 'c')).toEqual([
-      { time: T0, temperature: 12, feelsLike: 30, band: 'scorching' },
-      { time: T0 + HOUR, temperature: 0, feelsLike: -2, band: 'freezing' },
+    expect(judgeSeries(raw, RANGE, 'c', 'UTC')).toEqual([
+      { time: T0, date: '2026-10-15', hour: 0, temperature: 12, feelsLike: 30, band: 'scorching' },
+      {
+        time: T0 + HOUR,
+        date: '2026-10-15',
+        hour: 1,
+        temperature: 0,
+        feelsLike: -2,
+        band: 'freezing',
+      },
     ]);
-    expect(judgeSeries(raw, null, 'f')[0]).toEqual({
+    expect(judgeSeries(raw, null, 'f', 'America/New_York')[0]).toEqual({
       time: T0,
+      date: '2026-10-14',
+      hour: 20,
       temperature: 53.7,
       feelsLike: 86,
       band: 'hot',
@@ -62,9 +81,11 @@ describe('judgeSeries', () => {
 describe('computeNow', () => {
   it('interpolates between the hours either side', () => {
     const now = computeNow(series(DAY), at(9.5))!;
+    expect(now.date).toBe('2026-10-15');
+    // The hour before is kept for clients whose clocks run behind.
+    expect(now.series[0]!.time).toBe(at(8));
     expect(now.temperature).toBeCloseTo(12.5, 10);
     expect(now.feelsLike).toBeCloseTo(11.5, 10);
-    expect(now.series[0]!.time).toBe(at(9));
   });
 
   it('takes the band of the nearest hour', () => {
@@ -80,8 +101,14 @@ describe('computeNow', () => {
 
   it('is null outside the series', () => {
     expect(computeNow([], at(1))).toBeNull();
-    expect(computeNow(series(DAY), at(-0.5))).toBeNull();
+    expect(computeNow(series(DAY), at(-1.5))).toBeNull();
     expect(computeNow(series(DAY), at(24.5))).toBeNull();
+  });
+
+  it('accepts a clock up to an hour behind the first point', () => {
+    const now = computeNow(series(DAY, at(9)), at(8.75))!;
+    expect(now.temperature).toBe(DAY[0]);
+    expect(now.series[0]!.time).toBe(at(9));
   });
 
   it('uses the last hour for up to an hour past the end, or across a gap', () => {
@@ -94,7 +121,7 @@ describe('computeNow', () => {
 
 describe('trendLine', () => {
   const trend = (temps: number[], hours: number, tz = 'UTC') =>
-    trendLine(computeNow(series(temps), at(hours))!, tz);
+    trendLine(computeNow(series(temps, T0, 'mild', tz), at(hours))!);
 
   it('rises to the rest of the day’s peak', () => {
     expect(trend(DAY, 9)).toBe('Rising to 18° around 3pm.');
@@ -137,7 +164,7 @@ describe('formatNow', () => {
   const now = computeNow(series([...DAY, ...DAY]), at(9.5))!;
 
   it('formats the contract', () => {
-    const n = formatNow(now, 'UTC');
+    const n = formatNow(now);
     expect(n).toMatchObject({
       time: '2026-10-15T09:30:00.000Z',
       band: 'mild',
@@ -153,16 +180,22 @@ describe('formatNow', () => {
       label: '10am',
       temperature: 13,
     });
-    expect(n.series[0]).toEqual({ time: at(9), temperature: 12, feelsLike: 11, band: 'mild' });
-    expect(n.series).toHaveLength(25);
+    expect(n.series[0]).toEqual({
+      time: at(8),
+      date: '2026-10-15',
+      hour: 8,
+      temperature: 11,
+      feelsLike: 10,
+      band: 'mild',
+    });
+    expect(n.series).toHaveLength(26);
   });
 
   it('labels hours across the end of British Summer Time', () => {
     // Clocks go back at 01:00 UTC on 25 October 2026: 00:30 UTC is 1:30am BST.
     const start = Date.parse('2026-10-25T00:00:00Z');
     const n = formatNow(
-      computeNow(series([8, 8, 8, 8, 8], start), start + HOUR / 2)!,
-      'Europe/London',
+      computeNow(series([8, 8, 8, 8, 8], start, 'mild', 'Europe/London'), start + HOUR / 2)!,
     );
     expect(n.hours.map((h) => h.label)).toEqual(['1am', '3am']);
   });

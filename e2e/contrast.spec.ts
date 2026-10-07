@@ -24,6 +24,9 @@ const SHARED: Target[] = [
   { name: 'place', selector: '#place' },
   { name: 'units', selector: '.units button' },
   { name: 'outbound links', selector: '#more' },
+  { name: 'stale notice', selector: '#stale' },
+  { name: 'place note', selector: '#place-note' },
+  { name: 'nearby', selector: '#nearby' },
   { name: 'footer links', selector: '.site-footer nav a' },
   { name: 'credit', selector: '.site-footer .credit' },
 ];
@@ -38,6 +41,7 @@ const VIEW_TARGETS: Record<'today' | 'now' | 'week', Target[]> = {
     { name: 'scale', selector: '#smin, #smax' },
     { name: 'model temperature', selector: '#list li .t' },
     { name: 'model name', selector: '#list li .n' },
+    { name: 'limited notice', selector: '#limited' },
   ],
   now: [
     { name: 'question', selector: '#now-question' },
@@ -59,6 +63,15 @@ const VIEW_TARGETS: Record<'today' | 'now' | 'week', Target[]> = {
     { name: 'day band', selector: '#week-days .a' },
   ],
 };
+
+const DIALOG: Target[] = [
+  { name: 'dialog heading', selector: '#search-h' },
+  { name: 'dialog close', selector: '#search-close' },
+  { name: 'dialog input', selector: '#search-input' },
+  { name: 'use my location', selector: '#use-location' },
+  { name: 'result name', selector: '#search-results button span:first-child' },
+  { name: 'result detail', selector: '#search-results .sub' },
+];
 
 const lum = ([r, g, b]: number[]) => {
   const f = (c: number) => ((c /= 255) <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
@@ -86,7 +99,10 @@ async function locate(page: Page, targets: Target[]): Promise<Measured[]> {
     const out: Measured[] = [];
     for (const t of list) {
       document.querySelectorAll(t.selector).forEach((el, i) => {
-        if (i >= 4 || el.closest('[hidden],[inert]')) return;
+        if (i >= 12 || el.closest('[hidden],[inert]')) return;
+        // Behind an open modal dialog only the dialog is visible.
+        const modal = document.querySelector('dialog[open]');
+        if (modal && !modal.contains(el)) return;
         const range = document.createRange();
         range.selectNodeContents(el);
         const rects = [...range.getClientRects()]
@@ -103,9 +119,8 @@ async function locate(page: Page, targets: Target[]): Promise<Measured[]> {
         }
         const rgba = style.color.match(/[\d.]+/g)!.map(Number);
         const size = parseFloat(style.fontSize);
-        const bold =
-          Number(style.fontWeight) >= 700 || (Number(style.fontWeight) >= 600 && size >= 18.66);
-        const large = size >= 24 || (bold && size >= 18.66);
+        // WCAG's large text: 24px, or 18.66px at bold (700) or heavier.
+        const large = size >= 24 || (Number(style.fontWeight) >= 700 && size >= 18.66);
         const top = Math.min(...rects.map((r) => r[1]));
         const bottom = Math.max(...rects.map((r) => r[1] + r[3]));
         const scrollTo = bottom <= vh ? 0 : Math.max(0, Math.round((top + bottom) / 2 - vh / 2));
@@ -169,6 +184,18 @@ for (const band of BANDS) {
     // Settle the colour transitions, then keep them off while switching views.
     await page.waitForTimeout(1200);
     await page.addStyleTag({ content: '*,*::before{transition:none!important}' });
+    // Text that only shows in some states (stale data, few models, location notes, nearby
+    // places): show it with sample words so it is measured too.
+    await page.evaluate(() => {
+      for (const id of ['stale', 'limited', 'place-note', 'nearby']) {
+        document.getElementById(id)!.hidden = false;
+      }
+      const note = document.getElementById('place-note')!;
+      if (!note.textContent?.trim()) note.textContent = 'Using approximate location.';
+      const nearby = document.getElementById('nearby-links')!;
+      if (!nearby.textContent?.trim())
+        nearby.innerHTML = '<a href="#">Gateshead</a>, <a href="#">Sunderland</a>';
+    });
     const failures: string[] = [];
     for (const view of ['today', 'now', 'week'] as const) {
       await page.locator(`#tab-${view}`).click();
@@ -187,6 +214,16 @@ for (const band of BANDS) {
       const found = await measure(page, [...VIEW_TARGETS[view], ...SHARED], label);
       failures.push(...found.map((f) => `${view}: ${f}`));
     }
+    // The search sheet, with results and with the "too short" status line.
+    await page.locator('#place-btn').click();
+    await page.locator('#search-input').fill('New');
+    await expect(page.locator('#search-results .sub').first()).toBeVisible();
+    const label = `${info.project.name.padEnd(7)} ${band.padEnd(9)} search`;
+    failures.push(...(await measure(page, DIALOG, label)).map((f) => `search: ${f}`));
+    await page.locator('#search-input').fill('N');
+    await expect(page.locator('#search-results .status')).toBeVisible();
+    const status = [{ name: 'search status', selector: '#search-results .status' }];
+    failures.push(...(await measure(page, status, label)).map((f) => `search: ${f}`));
     expect([...new Set(failures)]).toEqual([]);
   });
 }

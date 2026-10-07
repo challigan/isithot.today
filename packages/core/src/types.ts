@@ -79,6 +79,9 @@ export interface ApiNowHour {
 export interface ApiNowPoint {
   /** Start of the hour, epoch milliseconds. */
   time: number;
+  /** Local date (YYYY-MM-DD) and hour (0–23) in the place's time zone. */
+  date: string;
+  hour: number;
   /** Display units, one decimal. */
   temperature: number;
   feelsLike: number;

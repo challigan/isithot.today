@@ -26,13 +26,16 @@ const nearbyHtml = nearby
   .join(', ');
 ---
 
-<ViewTabs />
 <main id="main" tabindex="-1">
+  <ViewTabs />
   <div class="views" id="views">
     <Today data={data} city={city} state={state} />
     <Now now={data?.now ?? null} city={city} state={state} />
     <Week week={data?.week ?? null} city={city} state={state} />
   </div>
+  <button class="button retry" id="retry" type="button" hidden={state !== 'error'}>
+    {COPY.retry}
+  </button>
   <p class="sr-only" id="view-live" aria-live="polite"></p>
   <p class="stale" id="stale" hidden={!data?.stale}>
     {COPY.stale}

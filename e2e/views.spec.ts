@@ -109,6 +109,40 @@ test.describe('Now | Today | This week', () => {
     await expect(page.locator('#view-today')).toBeFocused();
   });
 
+  test('focus follows into the new view when the arrow keys scroll it', async ({ page }) => {
+    await ready(page);
+    // Bring the other views in, then return to Today and put focus in its panel.
+    await page.locator('#tab-week').click();
+    await expectView(page, 'week');
+    await page.locator('#tab-today').click();
+    await expectView(page, 'today');
+    await page.locator('#view-today').focus();
+    await page.keyboard.press('ArrowRight');
+    await expectView(page, 'week');
+    // Focus moved with the view instead of falling back to the page.
+    await expect(page.locator('#view-week')).toBeFocused();
+  });
+
+  test('announcements never read hidden placeholder text', async ({ page }) => {
+    await page.route('**/api/v1/today**', (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'upstream_unavailable', message: 'down' } }),
+      }),
+    );
+    await page.goto('/');
+    await expect(page.locator('#retry')).toBeVisible();
+    await page.locator('#tab-week').click();
+    await expect(page.locator('#view-live')).toHaveText(
+      'This week: Forecasts are unavailable right now. Try again in a few minutes.',
+    );
+    // Retry is offered whichever view is showing.
+    await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
+    await page.getByRole('button', { name: 'Retry' }).click();
+    await expect(page.locator('#week-answer')).toHaveText(/Forecasts are unavailable/);
+  });
+
   test('the scroller takes the height of the view on screen', async ({ page }) => {
     await ready(page);
     const heights = () =>
@@ -119,14 +153,47 @@ test.describe('Now | Today | This week', () => {
       }));
     await page.locator('#tab-week').click();
     await expectView(page, 'week');
+    // Never shorter than Today, so what is below the views does not move up on every switch.
     await expect
-      .poll(async () => Math.abs((await heights()).views - (await heights()).week))
+      .poll(async () => {
+        const h = await heights();
+        return Math.abs(h.views - Math.max(h.week, h.today));
+      })
       .toBeLessThan(1);
     await page.locator('#tab-today').click();
     await expectView(page, 'today');
     await expect
       .poll(async () => Math.abs((await heights()).views - (await heights()).today))
       .toBeLessThan(1);
+  });
+
+  test('the content stays put when switching views', async ({ page }) => {
+    // A screen taller than the page, with This week taller than Today (as it is when the
+    // week's summary runs long, or few models answer for today).
+    await page.setViewportSize({ width: page.viewportSize()!.width, height: 1600 });
+    await page.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        const style = document.createElement('style');
+        style.textContent = '#view-week .ahead { padding-bottom: 40rem }';
+        document.head.append(style);
+      });
+    });
+    await ready(page);
+    const tops = () =>
+      page.evaluate(() => {
+        const views = document.getElementById('views')!;
+        const panel = [...views.querySelectorAll<HTMLElement>('.view')].find((p) => !p.inert)!;
+        return {
+          tabs: Math.round(document.getElementById('tabs')!.getBoundingClientRect().top),
+          question: Math.round(panel.querySelector('.question')!.getBoundingClientRect().top),
+        };
+      });
+    const today = await tops();
+    for (const view of ['week', 'now', 'today'] as const) {
+      await page.locator(`#tab-${view}`).click();
+      await expectView(page, view);
+      await expect.poll(tops, `${view} lines up with Today`).toEqual(today);
+    }
   });
 
   test('swipes change the view on a phone', async ({ page }, info) => {
