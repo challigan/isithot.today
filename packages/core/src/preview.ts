@@ -2,13 +2,25 @@
  * Sample days from the approved prototype, used only by the dev preview chips
  * (`?preview=1`) and visual tests. Never shown as real data.
  */
-import { BANDS, MODELS, type Band } from './config';
+import { BANDS, MODELS, RAIN, RAIN_BANDS, type Band, type RainBand } from './config';
 import { COPY } from './copy';
-import { formatDay, type DayComputation } from './compute';
+import { formatDay, type DayComputation, type DayData } from './compute';
+import type { MonthlyNormals } from './climate';
 import { formatNow, judgeSeries, type NowComputation } from './now';
+import {
+  computeRainDay,
+  computeRainNow,
+  computeRainWeek,
+  formatRainDay,
+  formatRainNow,
+  formatRainWeek,
+  judgeRainSeries,
+  rainSeries,
+  rainUnit,
+} from './rain';
 import { formatWeek } from './week';
 import { mean } from './stats';
-import type { TodayResponse } from './types';
+import type { ApiRain, TodayResponse } from './types';
 import type { Units } from './units';
 
 interface Sample {
@@ -93,9 +105,10 @@ const SAMPLES: Record<Band, Sample> = {
 };
 
 export const PREVIEW_BANDS: readonly Band[] = BANDS;
-export { BAND_LABELS } from './copy';
+export const PREVIEW_RAIN_BANDS: readonly RainBand[] = RAIN_BANDS;
+export { BAND_LABELS, RAIN_BAND_LABELS } from './copy';
 
-export function previewResponse(band: Band, units: Units = 'c'): TodayResponse {
+function hotPreview(band: Band, units: Units): TodayResponse {
   const s = SAMPLES[band];
   const day: DayComputation = {
     date: s.date,
@@ -173,4 +186,184 @@ export function previewResponse(band: Band, units: Units = 'c'): TodayResponse {
     updatedAt: `${s.date}T08:00:00Z`,
     attribution: [COPY.forecastCredit, COPY.climateCredit],
   };
+}
+
+// ---- Is it wet? -------------------------------------------------------------------
+
+const HOUR = 3_600_000;
+
+/**
+ * Rain falling evenly from `from` to `to` (local hours, end exclusive), `mm` in all for a
+ * typical model. `models` scales each model's share (0 for a dry model) and `shifts` moves each
+ * model's timing by whole hours, so the forecasts disagree a little as real ones do.
+ */
+interface Spell {
+  from: number;
+  to: number;
+  mm: number;
+  models?: readonly number[];
+  shifts?: readonly number[];
+}
+
+const FACTORS = [1, 1.25, 0.8, 1.1, 0.9, 1.3, 0.7, 1.05];
+const SHIFTS = [0, 1, 0, -1, 0, 0, 1, 0];
+const STEADY = [0, 0, 0, -1, 0, 0, 0, 0];
+/** Two forecasts with a little rain: spots. */
+const TWO = [1, 0, 0, 1.2, 0, 0, 0, 0];
+/** Three forecasts with rain: showers. */
+const THREE = [1, 0, 1.4, 0, 0, 0.8, 0, 0];
+
+const spots = (from: number): Spell => ({ from, to: from + 2, mm: 0.4, models: TWO });
+const showers = (from: number, mm = 3): Spell => ({ from, to: from + 4, mm, models: THREE });
+const rain = (from: number, to: number, mm: number): Spell => ({ from, to, mm, shifts: STEADY });
+
+/** Seven days of spells, today first; the preview's "now" is 10:30 on the first day. */
+const RAIN_SAMPLES: Record<RainBand | 'snow', (readonly Spell[])[]> = {
+  dry: [[], [], [], [], [{ from: 15, to: 17, mm: 0.3, models: [1, 0, 0, 0, 0, 0, 0, 0] }], [], []],
+  spots: [
+    [
+      { from: 9, to: 12, mm: 0.36, models: [1, 0, 1, 0, 0, 1, 0, 0], shifts: STEADY },
+      { from: 14, to: 16, mm: 0.3, models: [1, 0, 1, 0, 0, 1, 0, 0] },
+    ],
+    [spots(13)],
+    [],
+    [spots(7)],
+    [],
+    [],
+    [spots(16)],
+  ],
+  showers: [
+    [{ from: 10, to: 11, mm: 0.4, models: [1, 0, 1, 0, 0, 0, 0, 0] }, showers(13)],
+    [spots(9)],
+    [showers(15, 4)],
+    [],
+    [],
+    [spots(12)],
+    [],
+  ],
+  rain: [
+    [rain(8, 17, 6)],
+    [rain(5, 13, 5)],
+    [showers(14)],
+    [rain(12, 22, 8)],
+    [rain(9, 15, 4)],
+    [],
+    [spots(10)],
+  ],
+  heavy: [
+    [rain(9, 13, 14), rain(13, 20, 6)],
+    [rain(10, 16, 5)],
+    [rain(4, 12, 6)],
+    [rain(11, 23, 12)],
+    [showers(14)],
+    [rain(6, 10, 3)],
+    [],
+  ],
+  drenched: [
+    [rain(9, 12, 27), rain(12, 18, 18)],
+    [rain(3, 15, 15)],
+    [rain(0, 24, 40)],
+    [rain(10, 18, 7)],
+    [rain(12, 16, 4)],
+    [showers(13)],
+    [rain(17, 23, 5)],
+  ],
+  // Freezing all week, so the rain falls as snow.
+  snow: [[rain(8, 16, 6)], [], [spots(11)], [rain(10, 20, 5)], [], [], [spots(14)]],
+};
+
+/** Monthly normal rain, mm/day, January first. */
+const RAIN_NORMALS: Record<string, MonthlyNormals> = {
+  GB: [2.9, 2.3, 2.1, 1.8, 1.7, 1.8, 1.9, 2.1, 2.1, 2.8, 3, 3],
+  ES: [2, 1.6, 1.3, 1.6, 0.9, 0.3, 0.1, 0.1, 0.8, 2.1, 2.6, 2.8],
+};
+
+/** The rain sample shown with each hot band, and the hot sample shown with each rain band. */
+const RAIN_FOR_HOT: Record<Band, RainBand | 'snow'> = {
+  freezing: 'snow',
+  cold: 'rain',
+  mild: 'showers',
+  warm: 'dry',
+  hot: 'dry',
+  scorching: 'dry',
+};
+const HOT_FOR_RAIN: Record<RainBand, Band> = {
+  dry: 'warm',
+  spots: 'mild',
+  showers: 'mild',
+  rain: 'cold',
+  heavy: 'cold',
+  drenched: 'cold',
+};
+
+/** The sample's hourly rain for each model, as the providers would give it. */
+function rainDays(sample: (readonly Spell[])[], s: Sample): DayData[] {
+  const start = Date.parse(`${s.date}T00:00:00Z`);
+  const high = mean(s.temps);
+  return sample.map((spells, d) => {
+    const dayStart = start + d * 86_400_000;
+    const hourly = Array.from({ length: 24 }, (_, h) => {
+      // The same daily curve as the hot sample's "now" series.
+      const temp = high - Math.min(8, Math.abs(h - s.peakHour) * 1.2);
+      return {
+        hour: h,
+        time: dayStart + h * HOUR,
+        temps: MODELS.map(() => temp),
+        rain: MODELS.map((_, m) => {
+          let mm = 0;
+          for (const sp of spells) {
+            const shift = (sp.shifts ?? SHIFTS)[m]!;
+            if (h >= sp.from + shift && h < sp.to + shift) {
+              mm += (sp.mm * (sp.models ?? FACTORS)[m]!) / (sp.to - sp.from);
+            }
+          }
+          return Math.round(mm * 100) / 100;
+        }),
+      };
+    });
+    return {
+      date: new Date(dayStart).toISOString().slice(0, 10),
+      models: MODELS.map((m, i) => {
+        const total = hourly.reduce((a, h) => a + h.rain[i]!, 0);
+        const snow = hourly.reduce(
+          (a, h) => a + (h.temps[i]! <= RAIN.snowAtOrBelowC ? h.rain[i]! : 0),
+          0,
+        );
+        return { id: m.id, name: m.name, high: null, feelsLike: null, rain: total, snow };
+      }),
+      hourly,
+    };
+  });
+}
+
+/** The rain block, built from sample hourly data by the same code as real forecasts. */
+function rainPreview(key: RainBand | 'snow', hot: Band, units: Units): ApiRain {
+  const s = SAMPLES[hot];
+  const days = rainDays(RAIN_SAMPLES[key], s);
+  const now = Date.parse(`${s.date}T00:00:00Z`) + 10.5 * HOUR;
+  const unit = rainUnit(units);
+  const today = computeRainDay(days[0]!, { from: now })!;
+  const later = days.slice(1).map((d) => computeRainDay(d)!);
+  const series = judgeRainSeries(rainSeries(days), units, 'UTC');
+  return {
+    unit,
+    days: [formatRainDay(today, units), formatRainDay(later[0]!, units)],
+    now: formatRainNow(computeRainNow(series, now)!, unit),
+    week: formatRainWeek(computeRainWeek([today, ...later], RAIN_NORMALS[s.country]!)!, units),
+  };
+}
+
+const isRainBand = (band: Band | RainBand): band is RainBand =>
+  (RAIN_BANDS as readonly string[]).includes(band);
+
+/**
+ * A full sample answer for a hot or a rain band: a rain band comes with a hot sample that
+ * suits it (a dry day is warm, a wet one cold), and a hot band with a rain sample that suits it.
+ */
+export function previewResponse(band: Band | RainBand, units: Units = 'c'): TodayResponse {
+  if (isRainBand(band)) {
+    const hot = HOT_FOR_RAIN[band];
+    return { ...hotPreview(hot, units), rain: rainPreview(band, hot, units) };
+  }
+  return { ...hotPreview(band, units), rain: rainPreview(RAIN_FOR_HOT[band], band, units) };
 }

@@ -2,7 +2,7 @@
  * Every user-facing string. The website, the API and the future apps all read from here so
  * the words never drift apart. Sentence case everywhere.
  */
-import { SITES, type Band, type Topic } from './config';
+import { SITES, type Band, type RainBand, type Topic } from './config';
 
 export const SITE_NAME = SITES.hot.name;
 
@@ -215,3 +215,205 @@ export const DEFAULT_DESCRIPTIONS: Record<Topic, string> = {
   hot: DEFAULT_DESCRIPTION,
   wet: 'Will it rain today where you are? One answer from several forecast models: how likely rain is, how much and when.',
 };
+
+// ---- Is it wet? -------------------------------------------------------------------
+
+export const RAIN_BAND_LABELS: Record<RainBand, string> = {
+  dry: 'Dry',
+  spots: 'Mostly dry',
+  showers: 'Showers',
+  rain: 'Rain',
+  heavy: 'Heavy rain',
+  drenched: 'Washout',
+};
+
+/** The week row label for a day of rain (or wetter) that mostly falls as snow. */
+export const SNOW_LABEL = 'Snow';
+
+export const RAIN_ANSWERS: Record<RainBand, string> = {
+  dry: 'No.',
+  spots: 'No.',
+  showers: 'Maybe.',
+  rain: 'Yes.',
+  heavy: 'Yes.',
+  drenched: 'Yes.',
+};
+
+/** Today and tomorrow. */
+export const RAIN_VERDICTS: Record<RainBand, string> = {
+  dry: "It'll be dry.",
+  spots: 'A few spots at most.',
+  showers: 'Showers possible.',
+  rain: "It'll rain.",
+  heavy: "It'll pour.",
+  drenched: "You'll get drenched.",
+};
+
+export const RAIN_NOW_VERDICTS: Record<RainBand, string> = {
+  dry: "It's dry.",
+  spots: 'Just a few spots.',
+  showers: 'Showers around.',
+  rain: "It's raining.",
+  heavy: "It's pouring.",
+  drenched: "It's torrential.",
+};
+
+/** Verdicts when most of the rain falls as snow (rain and wetter only). */
+export const SNOW_VERDICTS = {
+  day: "It'll snow.",
+  now: "It's snowing.",
+  heavy: 'Heavy snow.',
+} as const;
+
+/** The Now view's first sentence, about the current hour. */
+export const RAIN_NOW_PHRASES: Record<RainBand, string> = {
+  dry: 'Dry now.',
+  spots: 'A few spots possible now.',
+  showers: 'Showers possible now.',
+  rain: 'Rain now.',
+  heavy: 'Heavy rain now.',
+  drenched: 'Torrential rain now.',
+};
+
+export const RAIN_COPY = {
+  lightRainNow: 'Light rain now.',
+  lightSnowNow: 'Light snow now.',
+  snowNow: 'Snow now.',
+  heavySnowNow: 'Heavy snow now.',
+  dryRestOfDay: 'Dry for the rest of the day.',
+  dryEveryForecast: 'Dry in every forecast.',
+  dryMostForecasts: 'Dry in most forecasts.',
+  spots: 'Little or no rain in most forecasts.',
+  asSnow: 'Likely to fall as snow.',
+  someSnow: 'Some may fall as snow.',
+  onAndOff: 'On and off.',
+  onAndOffRestOfDay: 'On and off for the rest of the day.',
+  onAndOffAllDay: 'On and off all day.',
+  restOfDay: 'For the rest of the day.',
+  allDay: 'All day.',
+  setToLast: 'Set to last the next 12 hours.',
+  dryNext12: 'Dry for the next 12 hours.',
+  noWeekTotal: 'Not enough forecasts for a weekly total.',
+  barelyAnyRain: 'Barely any rain all week.',
+} as const;
+
+export const RAIN_WEEK_ANSWERS = {
+  yes: 'Yes.',
+  partly: 'Partly.',
+  maybe: 'Maybe.',
+  no: 'No.',
+} as const;
+
+export const RAIN_WEEK_VERDICTS = {
+  wet: 'A wet week.',
+  unsettled: 'An unsettled week.',
+  mostlyDry: 'A mostly dry week.',
+  dry: 'A dry week.',
+} as const;
+
+/** An end time: "3pm", with 0 and 24 as "midnight". */
+export function endHour(hour: number): string {
+  return hour % 24 === 0 ? 'midnight' : formatHour(hour);
+}
+
+/** "today", "on Thu and Fri", "today and on Sat". `others` names the days other than today. */
+export function whenDays(today: boolean, others: string | null): string {
+  const parts: string[] = [];
+  if (today) parts.push('today');
+  if (others) parts.push(`on ${others}`);
+  return parts.join(' and ');
+}
+
+/** "Some forecasts say up to 4mm." / "One forecast says up to 4mm." */
+export function upToLine(amount: string, one: boolean): string {
+  return one ? `One forecast says up to ${amount}.` : `Some forecasts say up to ${amount}.`;
+}
+
+/** "About 6mm still to come." for the rest of today, "About 6mm of rain." for a whole day. */
+export function rainAmountLine(amount: string, partial: boolean): string {
+  return partial ? `About ${amount} still to come.` : `About ${amount} of rain.`;
+}
+
+export function aroundLine(hour: number): string {
+  return `Most likely around ${formatHour(hour)}.`;
+}
+
+export function easingLine(hour: number): string {
+  return `Easing off by about ${endHour(hour)}.`;
+}
+
+export function betweenLine(from: number, to: number): string {
+  return `Mostly between ${formatHour(from)} and ${endHour(to)}.`;
+}
+
+export function rainFromLine(hour: number): string {
+  return `Rain likely from about ${formatHour(hour)}.`;
+}
+
+export function showersFromLine(hour: number): string {
+  return `Showers possible from about ${formatHour(hour)}.`;
+}
+
+/** "6 of 8 forecasts expect rain" / "1 of 8 forecasts expects rain". */
+export function rainAgreementLine(wet: number, total: number): string {
+  return `${wet} of ${total} forecasts ${wet === 1 ? 'expects' : 'expect'} rain`;
+}
+
+/** Accessible summary of the rain strip. `min` and `max` are amount texts ("0mm"). */
+export function rainStripSummary(args: {
+  min: string;
+  max: string;
+  wet: number;
+  total: number;
+}): string {
+  const range =
+    args.min === args.max
+      ? `All forecasts say ${args.min}`
+      : `Forecasts range from ${args.min} to ${args.max}`;
+  const wet =
+    args.wet === 0
+      ? 'none expect rain'
+      : `${args.wet} of ${args.total} ${args.wet === 1 ? 'expects' : 'expect'} rain`;
+  return `${range}; ${wet}.`;
+}
+
+/** "A wet week." / "A wet week, heaviest on Fri." / "A wet week, heaviest today." */
+export function wetWeekLine(heaviest: string | null): string {
+  return heaviest ? `A wet week, heaviest ${heaviest}.` : RAIN_WEEK_VERDICTS.wet;
+}
+
+/**
+ * "Rain on Thu and Fri." / "Rain on Thu and Fri, heavy on Fri." / "Heavy rain on Fri."
+ * `heavy` is when the heavy days fall, or null without one; `allHeavy` when every day is heavy.
+ */
+export function rainDaysLine(when: string, heavy: string | null, allHeavy: boolean): string {
+  if (allHeavy) return `Heavy rain ${when}.`;
+  return heavy ? `Rain ${when}, heavy ${heavy}.` : `Rain ${when}.`;
+}
+
+export function mostlyDryLine(when: string): string {
+  return `Mostly dry, but rain possible ${when}.`;
+}
+
+/**
+ * "About 18mm across the week, most on Friday (12mm)." `wettest` is when the wettest day
+ * falls ("on Friday", "today") and its amount, or null when no day stands out.
+ */
+export function rainWeekLine(
+  total: string,
+  wettest: { when: string; amount: string } | null,
+): string {
+  return wettest
+    ? `About ${total} across the week, most ${wettest.when} (${wettest.amount}).`
+    : `About ${total} across the week.`;
+}
+
+export type RainNormal = 'dry' | 'wetter' | 'drier' | 'normal';
+
+/** The week's rain against normal for the month (or "the time of year"). */
+export function rainNormalLine(kind: RainNormal, month: string): string {
+  if (kind === 'dry') return `Dry, as usual for ${month}.`;
+  if (kind === 'wetter') return `Wetter than usual for ${month}.`;
+  if (kind === 'drier') return `Drier than usual for ${month}.`;
+  return `About normal for ${month}.`;
+}

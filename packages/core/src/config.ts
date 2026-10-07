@@ -54,6 +54,8 @@ export const RAIN = {
   likelyFrom: 0.6,
   /** A model's 2-hour block is wet with at least this much rain, mm (the Now view's rows). */
   blockWet: 0.2,
+  /** Rain in the current hour under this much is "light rain" (or "light snow"), mm. */
+  lightBelow: 0.5,
   /** Hours where at least this share of models has rain are the "likely" hours. */
   hourLikely: 0.5,
   /** Without a likely hour, the wettest hour is named only from this share up. */
