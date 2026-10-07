@@ -105,13 +105,76 @@ a tab bar at the top on every screen, and swiping on phones.
 - **One request still.** `now` and `week` arrive with Today's answer, so switching views never
   waits on the network.
 
+## Is it wet? (isitwet.today)
+
+Carl asked for the same experience for rain, with a toggle on the page, answers from "No, dry"
+to "Yes, drenched", and later bought isitwet.today so the domain decides which question loads.
+
+- **Data.** The one forecast request gains hourly `precipitation`, so both questions come from
+  the same cached forecast and switching never waits on the network. It costs 2.4 calls per
+  fetch on the free tier (8 models × 3 variables), up from 1.6. Open-Meteo labels each hour's
+  precipitation with the end of the hour it fell in; the parser moves it to the hour's start,
+  so "rain from 2pm" means the 2pm–3pm hour. A model's day counts only with every hour (the
+  forecast's very last hour excepted), so models that stop part-way through the week drop out,
+  as they do for highs. Checked on live recordings: all 8 models have whole-day totals for the
+  first four days, 7 after that (Météo-France stops).
+- **Judging.** Each model's rain over a window is a vote: the share of models with at least the
+  window's "wet" amount is the chance, and the median total is the amount. 60% or more of the
+  models gives Yes (Rain, Heavy rain from 10 mm, Washout from 25 mm), 25% or more gives Maybe
+  (Showers), and fewer gives No (Mostly dry when a quarter of the models have spots, else Dry).
+  The day's wet amount is 1 mm (the Met Office's "wet day"); an hour's is 0.2 mm. Hourly heavy
+  and drenched are 3 and 8 mm/h rather than the textbook 4 and 10 because several models are
+  3- or 6-hourly upstream and Open-Meteo spreads their totals evenly. All in
+  `packages/core/src/config.ts` (`RAIN`).
+- **Today is the rest of the day.** "Is it wet today?" at 5pm is about what is still to come,
+  not this morning's rain, so Today judges from the moment of the request to midnight, with
+  the thresholds scaled to the hours left (so late in the evening Today and Now cannot
+  disagree). Tomorrow and the week's later days are whole days. Because the answer changes on
+  the hour, no cache keeps it past the next hour (the API, city pages and the browser all
+  refresh then).
+- **Now** is the current hour from a day of judged hourly points sent with the answer (the
+  browser picks the hour again every minute, like the hot Now). The list shows the chance of
+  rain for the next 12 hours in 2-hour blocks: the share of models with rain in each block.
+- **This week** answers the literal question without saying Yes every week: Yes for a wet week
+  (rain on 4 or more days), **Partly** for 1–3 rain days ("Rain on Thu and Fri."), Maybe for
+  showery weeks, No otherwise. The week's total is the median of each model's own total (models
+  disagree about which day it rains, so adding up daily medians would undercount), and it is
+  compared with NASA POWER's normal rainfall only where both are large enough to mean anything
+  (a dry climate's 0.3 mm is never "wetter than usual").
+- **Snow.** Rain falling at or below 1 °C (blended temperature) counts as snow: "It'll snow.",
+  "Likely to fall as snow." No extra variables are requested.
+- **The toggle** sits above the tab bar (the header is full on phones). It switches all three
+  views in place and keeps the view on screen; the units setting is shared (°C goes with mm,
+  °F with inches). Each page opens on its own site's question, and so does a return after half
+  an hour away.
+- **Two domains, one deploy.** An edge function (the only way to route by host in front of
+  Astro's catch-all server function) serves isitwet.today from `/wet` versions of every page,
+  each with its own title, canonical URL, OG image, sitemap, icons and brand, rendered on the
+  server in its own topic (no flash of the hot answer). isithot.today/wet redirects to
+  isitwet.today. Place links follow the question on screen, so choosing a city while Wet is
+  showing on isithot.today goes to isitwet.today. Each domain keeps its own saved place and
+  units (browsers keep storage per domain).
+- **Rain normals** come from their own NASA POWER request (`PRECTOTCORR`) and cache entry, so a
+  problem with them can never affect the hot answer.
+- **Hot changes.** The toggle adds about 2.75rem above the tab bar; model names are at full
+  opacity (with the page a little longer, Cold's model list sits on a lighter part of the
+  gradient); the units buttons are a little narrower so "mm" fits.
+- **Needs a decision: MET Norway matters more for rain.** Outside the Nordics it is close to a
+  second copy of ECMWF (see Data above), and for rain each model is a plain wet/dry vote, so
+  ECMWF effectively votes twice: 2 of 8 is enough for Maybe. Dropping MET Norway outside the
+  Nordics would make it 2 of 7.
+- **Needs a decision: rain thresholds** (1 mm a day, 60% and 25% of models) after real use.
+- OG images are drawn in °C and mm for every city, as before, so a US city's image shows mm
+  while its page shows inches.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,
 `limitedText`, `stripSummary`, `scale`, `models[].value` (one decimal, for the strip),
 top-level `nearby` (4 nearest city pages), `now` and `week` (the two new views; shapes in
-`packages/core/src/types.ts`). `location` may include `slug` and `geonameId`. `days` holds
-today and tomorrow (never more than two); the rest of the week is summarised in `week`.
+`packages/core/src/types.ts`), and `rain` (Is it wet?, with its own `days`, `now` and
+`week`). `location` may include `slug` and `geonameId`. `days` holds today and tomorrow (never
+more than two); the rest of the week is summarised in `week`.
 
 - **Stale fallback.** If upstream fails and a cached forecast under 6 hours old exists, the
   API answers **200** with that result and `"stale": true` (cached for 60 seconds). Only
@@ -167,8 +230,9 @@ marks them `noindex`; the live site scores 100.
 
 The workflow also measures https://isithot.today on every run, for comparison.
 
-Site JS is about 12 KB gzipped (budget 25 KB, checked in CI by `scripts/js-budget.mjs`; it
-was 8 KB before Now and This week). Cached API responses come back from the
+Site JS is about 16 KB gzipped (budget 25 KB, checked in CI by `scripts/js-budget.mjs`; it
+was 8 KB before Now and This week, and 12 KB before Is it wet?). The rain day and week judging
+runs only on the server; the browser carries the code that keeps rain's "now" current. Cached API responses come back from the
 Netlify CDN in 10–40 ms. LCP sits just above the 1.5 s target under Lighthouse's simulated
 Moto G on slow 4G. Things that got it there:
 
