@@ -1,1 +1,1 @@
-These fixtures are synthetic stand-ins in the upstream formats. Re-record with `pnpm fixtures`.
+Recorded from the live APIs on 2026-10-07T00:30:27.921Z.

@@ -5,33 +5,45 @@
   "coordinates": [
    -6.25,
    37.5,
-   50
+   187.78
   ]
  },
  "properties": {
   "parameter": {
    "T2M_MAX_AVG": {
-    "JAN": 14.5,
-    "FEB": 15.1,
-    "MAR": 16.6,
-    "APR": 18.6,
-    "MAY": 20.7,
-    "JUN": 22.2,
-    "JUL": 22.8,
-    "AUG": 22.2,
-    "SEP": 20.7,
-    "OCT": 18.6,
-    "NOV": 16.6,
-    "DEC": 15.1,
-    "ANN": 18.6
+    "JAN": 19.48,
+    "FEB": 21.36,
+    "MAR": 25.47,
+    "APR": 28.94,
+    "MAY": 34.33,
+    "JUN": 40.31,
+    "JUL": 42.25,
+    "AUG": 42.38,
+    "SEP": 38.29,
+    "OCT": 32.45,
+    "NOV": 25.21,
+    "DEC": 20.09,
+    "ANN": 43.18
    }
   }
  },
  "header": {
-  "title": "NASA/POWER synthetic climatology",
-  "fill_value": -999
+  "title": "NASA/POWER Source Native Resolution Climatology Climatologies",
+  "api": {
+   "version": "v2.10.0",
+   "name": "POWER Climatology API"
+  },
+  "sources": [
+   "MERRA2",
+   "POWER"
+  ],
+  "fill_value": -999,
+  "time_standard": "LST",
+  "range": "20-year Meteorological and Solar Monthly & Annual Climatologies (January 2001 - December 2020)"
  },
- "messages": [],
+ "messages": [
+  "The requested parameters are retrieved from a pre-computed climatological period (January 2001 - December 2020)"
+ ],
  "parameters": {
   "T2M_MAX_AVG": {
    "units": "C",
@@ -39,7 +51,7 @@
   }
  },
  "times": {
-  "data": 0,
-  "process": 0
+  "data": 0.042,
+  "process": 0.03
  }
 }
