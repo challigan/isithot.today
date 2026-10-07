@@ -83,6 +83,23 @@ describe('Open-Meteo forecast', () => {
           expect(m.high).toBe(raw.daily[`temperature_2m_max_${m.id}`]?.[dayIndex] ?? null);
         }
       }
+      // A model-day counts only with every hour from 10am to 6pm: models that stop part-way
+      // through a day (Météo-France after about four days) must not report a morning "high".
+      for (const [i, m] of MODELS.entries()) {
+        const temps = raw.hourly[`temperature_2m_${m.id}`] as Array<number | null> | undefined;
+        const hours = raw.hourly.time
+          .map((t: string, k: number) => [t, temps?.[k] ?? null] as const)
+          .filter(([t]: readonly [string]) => t.startsWith(day.date));
+        const values = hours.map(([, v]: readonly [string, number | null]) => v);
+        const covered = hours
+          .filter(
+            ([t]: readonly [string]) =>
+              Number(t.slice(11, 13)) >= 10 && Number(t.slice(11, 13)) <= 18,
+          )
+          .every(([, v]: readonly [string, number | null]) => v !== null);
+        const finite = values.filter((v: number | null): v is number => v !== null);
+        expect(day.models[i]!.high).toBe(covered && finite.length ? Math.max(...finite) : null);
+      }
       const withHigh = day.models.filter((m) => m.high !== null).length;
       const withFeels = day.models.filter((m) => m.feelsLike !== null).length;
       if (dayIndex < 2) expect(withHigh).toBeGreaterThanOrEqual(5);
@@ -177,7 +194,8 @@ describe('Open-Meteo forecast', () => {
       { lat: 54.95, lon: -1.6 },
       MODELS,
     );
-    expect(f.days).toHaveLength(2);
+    const dates = new Set(raw.hourly.time.map((t: string) => t.slice(0, 10)));
+    expect(f.days).toHaveLength(dates.size);
   });
 
   it('turns HTTP errors into ProviderError with the reason', async () => {
