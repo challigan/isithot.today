@@ -34,15 +34,18 @@ jobs:
         run: pnpm fixtures && node scripts/summarise-fixtures.mjs --print
         continue-on-error: true
 
-      - name: Commit the recorded fixtures (only while the committed ones are synthetic)
+      - name: Commit the recorded fixtures (when synthetic or recorded with an older request)
         if: github.event.pull_request.head.repo.full_name == github.repository
         continue-on-error: true
         run: |
-          if ! git show HEAD:packages/providers/test/fixtures/SOURCE.md | grep -q synthetic; then
-            echo "Committed fixtures are already real recordings; leaving them alone."; exit 0
-          fi
-          if ! grep -q Recorded packages/providers/test/fixtures/SOURCE.md; then
+          committed=$(git show HEAD:packages/providers/test/fixtures/SOURCE.md)
+          recorded=$(cat packages/providers/test/fixtures/SOURCE.md)
+          if ! grep -q Recorded <<<"$recorded"; then
             echo "Recording did not complete; nothing to commit."; exit 0
+          fi
+          if ! grep -q synthetic <<<"$committed" &&
+             [ "$(grep '^Forecast request:' <<<"$committed")" = "$(grep '^Forecast request:' <<<"$recorded")" ]; then
+            echo "Committed fixtures already match the current request; leaving them alone."; exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

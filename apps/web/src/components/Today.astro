@@ -1,16 +1,9 @@
 ---
 /**
- * The answer, verdict, model agreement and outbound links. Rendered on the server with data
- * (city pages) or in its loading state (home page); the browser script updates the same nodes.
+ * The Today view: answer, verdict and model agreement. Rendered on the server with data (city
+ * pages) or in its loading state (home page); the browser script updates the same nodes.
  */
-import {
-  COPY,
-  outboundLinks,
-  question as questionFor,
-  type ApiLocation,
-  type NearbyCity,
-  type TodayResponse,
-} from '@isithot/core';
+import { COPY, question as questionFor, type TodayResponse } from '@isithot/core';
 import { GLYPHS, listHtml, stripHtml } from '../lib/view';
 
 interface Props {
@@ -22,14 +15,6 @@ interface Props {
 
 const { data, city = null, state } = Astro.props;
 const day = data?.days[0] ?? null;
-const location: ApiLocation | null = data?.location ?? null;
-const links = outboundLinks(location);
-const nearby: NearbyCity[] = data?.nearby ?? [];
-const escape = (text: string): string =>
-  text.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-const nearbyHtml = nearby
-  .map((c) => `<a href="/in/${encodeURIComponent(c.slug)}">${escape(c.name)}</a>`)
-  .join(', ');
 const answer = state === 'error' ? COPY.unavailable : (day?.answer ?? COPY.checking);
 // Placeholders keep the layout steady while loading.
 const placeholderModels = Array.from(
@@ -38,7 +23,15 @@ const placeholderModels = Array.from(
 ).join('');
 ---
 
-<main id="main" tabindex="-1">
+<section
+  class="view"
+  id="view-today"
+  role="tabpanel"
+  aria-labelledby="tab-today"
+  data-view="today"
+  data-band={day?.band}
+  tabindex="0"
+>
   <svg
     class="glyph"
     id="glyph"
@@ -69,9 +62,6 @@ const placeholderModels = Array.from(
   <button class="button retry" id="retry" type="button" hidden={state !== 'error'}>
     {COPY.retry}
   </button>
-  <p class="stale" id="stale" hidden={!data?.stale}>
-    {COPY.stale}
-  </p>
 
   <section class="models hold" id="models" aria-labelledby="models-h">
     <h2 id="models-h">
@@ -90,10 +80,4 @@ const placeholderModels = Array.from(
       {COPY.limited}
     </p>
   </section>
-
-  <!-- prettier-ignore -->
-  <p class="more" id="more">{COPY.outboundIntro} <a id="out-0" href={links[0]!.url} target="_blank" rel="noopener">BBC Weather</a>, <a id="out-1" href={links[1]!.url} target="_blank" rel="noopener">Met Office</a> or <a id="out-2" href={links[2]!.url} target="_blank" rel="noopener">AccuWeather</a>.</p>
-  <p class="nearby" id="nearby" hidden={nearby.length === 0}>
-    {COPY.nearby} <span id="nearby-links" set:html={nearbyHtml} />
-  </p>
-</main>
+</section>

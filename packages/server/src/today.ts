@@ -5,11 +5,18 @@ import {
   GRID,
   MODELS,
   computeDay,
+  computeNow,
+  computeWeek,
   defaultUnitsForCountry,
   formatDay,
+  formatNow,
+  formatWeek,
   cellKey,
   gridKey,
   isValidLatLon,
+  climateRange,
+  hourlySeries,
+  judgeSeries,
   localDate,
   parseUnits,
   roundPoint,
@@ -20,7 +27,12 @@ import {
   type MonthlyNormals,
   type TodayResponse,
 } from '@isithot/core';
-import { fetchClimateNormals, fetchForecast, type Forecast } from '@isithot/providers';
+import {
+  FORECAST_CACHE_VERSION,
+  fetchClimateNormals,
+  fetchForecast,
+  type Forecast,
+} from '@isithot/providers';
 import { cityBySlug, cityForPlace, nearbyCities } from './cities';
 import type { ServerDeps } from './deps';
 import { errorResult, privateCache, publicCache, type HandlerResult } from './http';
@@ -154,23 +166,42 @@ async function locateFromIp(geo: VisitorGeo | null, fallback: string): Promise<L
 
 const inflight = new Map<string, Promise<Forecast>>();
 
+/** Days whose hours are kept: "now" looks a day ahead and may run past midnight. */
+const HOURLY_DAYS = 3;
+
+/**
+ * Later days only need each model's daily high, so their hours are dropped before caching
+ * (a seven-day, eight-model hourly forecast is otherwise about 2,700 numbers per entry).
+ */
+function slim(forecast: Forecast): Forecast {
+  return {
+    ...forecast,
+    days: forecast.days.map((d, i) => (i < HOURLY_DAYS ? d : { ...d, hourly: [] })),
+  };
+}
+
 function coversToday(forecast: Forecast, now: Date): boolean {
   const today = localDate(forecast.timezone, now);
   return forecast.days.some((d) => d.date === today);
+}
+
+/** A forecast fetched on an earlier local day is a day short for the week view. */
+function startsToday(forecast: Forecast, now: Date): boolean {
+  return forecast.days[0]?.date === localDate(forecast.timezone, now);
 }
 
 async function loadForecast(
   point: LatLon,
   deps: ServerDeps,
 ): Promise<(ForecastEntry & { stale: boolean }) | null> {
-  const key = `forecast/v1/${gridKey(point, GRID.forecast)}`;
+  const key = `forecast/v${FORECAST_CACHE_VERSION}/${gridKey(point, GRID.forecast)}`;
   const nowDate = deps.now();
   const now = nowDate.getTime();
   const entry = await deps.cache.get<ForecastEntry>(key);
   if (
     entry &&
     now - entry.fetchedAt < CACHE.forecastFresh * 1000 &&
-    coversToday(entry.forecast, nowDate)
+    startsToday(entry.forecast, nowDate)
   ) {
     return { ...entry, stale: false };
   }
@@ -184,7 +215,7 @@ async function loadForecast(
         () => inflight.delete(key),
       );
     }
-    const fresh: ForecastEntry = { fetchedAt: now, forecast: await pending };
+    const fresh: ForecastEntry = { fetchedAt: now, forecast: slim(await pending) };
     deps.waitUntil(deps.cache.set(key, fresh));
     return { ...fresh, stale: false };
   } catch (err) {
@@ -277,14 +308,23 @@ export async function getToday(
     return errorResult('upstream_unavailable', ERROR_MESSAGES.upstream_unavailable);
   }
 
+  const range = normals ? climateRange(normals) : null;
+  const now = computeNow(
+    judgeSeries(hourlySeries(loaded.forecast.days), range, units),
+    deps.now().getTime(),
+  );
+  const week = computeWeek(days, normals);
   const body: TodayResponse = {
     location: { ...located, timezone: loaded.forecast.timezone },
     units,
-    days: days.map((d) => formatDay(d, units)),
+    // Today and tomorrow in full; the rest of the week is summarised in `week`.
+    days: days.slice(0, 2).map((d) => formatDay(d, units)),
     updatedAt: new Date(loaded.fetchedAt).toISOString(),
     attribution: [COPY.forecastCredit, COPY.climateCredit],
     nearby: nearbyCities(point, 4, located.slug).map((c) => ({ slug: c.slug, name: c.name })),
   };
+  if (now) body.now = formatNow(now, loaded.forecast.timezone);
+  if (week) body.week = formatWeek(week, units);
   if (loaded.stale) body.stale = true;
 
   // Responses that depend on the visitor (IP location or country-default units) must not be

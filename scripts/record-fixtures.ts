@@ -17,6 +17,7 @@ import {
   buildForecastUrl,
   buildSearchUrl,
   createSyntheticFetch,
+  forecastSignature,
 } from '../packages/providers/src/index';
 import cities from '../data/cities.json' with { type: 'json' };
 
@@ -51,9 +52,13 @@ for (const [file, url] of jobs) {
   writeFileSync(join(out, file), JSON.stringify(body, null, 1) + '\n');
   console.log(`${synthetic ? 'synthetic' : 'recorded'} ${file} (${text.length} bytes)`);
 }
+// The preview workflow re-records whenever this request line differs from the committed one.
+const request = `Forecast request: ${forecastSignature()}\n`;
 writeFileSync(
   join(out, 'SOURCE.md'),
-  synthetic
+  (synthetic
     ? 'These fixtures are synthetic stand-ins in the upstream formats. Re-record with `pnpm fixtures`.\n'
-    : `Recorded from the live APIs on ${new Date().toISOString()}.\n`,
+    : `Recorded from the live APIs on ${new Date().toISOString()}.\n`) +
+    request +
+    'The `-legacy` forecasts are older two-day recordings without hourly apparent temperature.\n',
 );

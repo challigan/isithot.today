@@ -59,7 +59,7 @@ pnpm test:coverage    # Vitest; packages/core must stay at 100% branch coverage
 pnpm test:e2e         # Playwright (phone + desktop), with synthetic data
 pnpm build:netlify    # The exact production build Netlify runs
 node scripts/smoke.mjs <url>             # Smoke-test a deployed site against live data
-node scripts/contrast-report.mjs <url>   # Rendered text contrast for every band
+pnpm test:e2e -g contrast                # Rendered text contrast, every band and view (WCAG AA)
 ```
 
 GitHub Actions runs all of these on every push and pull request. A second workflow waits for
@@ -71,6 +71,10 @@ the Netlify deploy preview of each pull request and smoke-tests it against live 
 `GET /api/v1/today` with one of `lat`+`lon`, `place` (a city slug), or nothing (approximate IP
 location). Optional `units=c|f` (default: °F for US visitors, °C elsewhere). `lat`/`lon` requests
 may also pass `name`, `region`, `country`, `geonameId` and `source=search`.
+
+The answer covers three views: `days[0]` is today (with tomorrow in `days[1]`), `now` is the
+blended forecast for the current minute with a day of judged hourly points (so clients can
+keep it current between requests), and `week` averages today and the next six days.
 
 `GET /api/v1/search?q=` returns up to 8 places, with `slug` when the place has a city page.
 
@@ -102,8 +106,10 @@ Set these in Netlify under **Project configuration → Environment variables**. 
 ## Data and licensing
 
 - Forecasts: [Open-Meteo](https://open-meteo.com/) (CC BY 4.0). The free API is for
-  non-commercial use only and bans ads: switch to the paid Standard plan before ads or launch.
-- Climate normals: [NASA POWER](https://power.larc.nasa.gov/) climatology, `T2M_MAX`.
+  non-commercial use only and bans ads: fine for testing with friends, but switch to the paid
+  Standard plan before ads or a public launch.
+- Climate normals: [NASA POWER](https://power.larc.nasa.gov/) climatology, `T2M + T2M_RANGE / 2`
+  (the normal daily high; see `docs/DECISIONS.md`).
 - Place names and coordinates: [GeoNames](https://www.geonames.org/) (CC BY 4.0), via the
   `all-the-cities` package. Regenerate with `pnpm cities`.
 - BBC Weather, Met Office and AccuWeather appear only as outbound links. Never fetch from them.

@@ -27,8 +27,22 @@ production, responses carry `x-isithot-via: function` when the dedicated functio
   and `cmc_gem_seamless` where the spec had `gfs_seamless`, `icon_seamless` and
   `gem_seamless`. The live API returned data for all 8 models with the new IDs (verified on the
   deploy preview). The old IDs are kept as aliases when parsing.
-- **Hourly apparent temperature is not requested.** Nothing uses it, and every variable counts
-  against the Open-Meteo quota for each of the 8 models.
+- **One hourly request, with daily highs worked out from it.** The request asks only for hourly
+  `temperature_2m` and `apparent_temperature` for 7 days. Each model's daily high (and
+  feels-like high) is the maximum of its 24 local hours, which is how Open-Meteo builds its own
+  daily maximum: the recorded responses match it exactly for all 8 models. The free API charges
+  by variables × models, so this costs 1.6 calls per fetch, against 2.4 for the original
+  request. A model's day counts only if it has every hour from 10am to 6pm, so a forecast that
+  ends mid-morning cannot pass off a morning reading as the day's high.
+- **Forecasts stay fresh for an hour** (was 30 minutes). The global models update every 6
+  hours, and "now" is worked out from the hourly forecast at request time (and again in the
+  browser), so the longer cache costs no accuracy and halves calls to Open-Meteo. A forecast
+  fetched on an earlier local day is refetched, so the week always has 7 days.
+- **Needs a decision: MET Norway counts ECMWF twice outside Scandinavia.** Open-Meteo's
+  `metno_seamless` is MET Nordic over Norway, Sweden, Finland and Denmark, and ECMWF's 9 km
+  model everywhere else (and after 2.5 days everywhere). For UK visitors it is close to a
+  second copy of ECMWF, so "8 forecasts agree" overstates the independent forecasts by one.
+  Options: keep it (simple, as the spec lists it), drop it outside the Nordics, or label it.
 - **Normal daily highs come from NASA POWER's `T2M + T2M_RANGE / 2`, not `T2M_MAX`.**
   Checked against live responses: in the climatology endpoint `T2M_MAX` is the highest
   temperature of the period, and `T2M_MAX_AVG` is the average _hottest day_ of each month.
@@ -57,11 +71,45 @@ production, responses carry `x-isithot-via: function` when the dedicated functio
 - **Search puts our city pages first.** Open-Meteo returns Newcastle, Australia for
   "Newcastle", but not Newcastle upon Tyne.
 
+## Now and This week
+
+Carl asked for two more views either side of Today, on one page that always opens on Today:
+a tab bar at the top on every screen, and swiping on phones.
+
+- **Now** is the blended hourly forecast interpolated to the current minute, judged with the
+  same verdict as a day's high, so "hot" means the same thing in every view (at night it
+  usually says No). The detail line gives the temperature and where it goes next ("Rising to
+  24° around 3pm"); the list shows the next 12 hours in 2-hour steps, so a morning visitor
+  sees the afternoon.
+- **This week** averages the daily highs for today and the next six days, as asked, and judges
+  the average. An average can hide a short hot spell, so a week that is not hot overall names
+  its hot days ("A mild week, but hot on Thu and Fri"), and each day is labelled with its band
+  (Hot, Warm, Mild…). Days where fewer than 3 models reach that far are left out; without 5
+  usable days there is no week answer. Today's row is Today's own answer.
+- **"Now" stays current.** The API sends a day of judged hourly points with the answer, and
+  the browser works "now" out again every minute and whenever the page comes back into view,
+  so a cached response or a tab left open never shows an old temperature as current. The
+  browser only interpolates: each point carries the band the server judged, so the apps never
+  need a copy of the verdict rules. After half an hour away the page fetches afresh and
+  returns to Today.
+- **How the views work.** Native CSS scroll snapping in a horizontal scroller (no gesture
+  library): swipe on touch screens, sideways trackpad swipes on desktops, the tabs and arrow
+  keys everywhere. Pages arrive with only Today in the scroller, so the first paint is the
+  approved design; Now and This week join on first use, and the scroller then takes the
+  height of the view on screen. The page colours follow the view on screen, switching about
+  two thirds of the way through a swipe with a quicker fade than an arriving answer. ARIA
+  tabs pattern throughout; inactive views are `inert`, and screen readers hear the answer of
+  the view they move to.
+- **One request still.** `now` and `week` arrive with Today's answer, so switching views never
+  waits on the network.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,
-`limitedText`, `stripSummary`, `scale`, `models[].value` (one decimal, for the strip), and
-top-level `nearby` (4 nearest city pages). `location` may include `slug` and `geonameId`.
+`limitedText`, `stripSummary`, `scale`, `models[].value` (one decimal, for the strip),
+top-level `nearby` (4 nearest city pages), `now` and `week` (the two new views; shapes in
+`packages/core/src/types.ts`). `location` may include `slug` and `geonameId`. `days` holds
+today and tomorrow (never more than two); the rest of the week is summarised in `week`.
 
 - **Stale fallback.** If upstream fails and a cached forecast under 6 hours old exists, the
   API answers **200** with that result and `"stale": true` (cached for 60 seconds). Only
@@ -76,19 +124,22 @@ top-level `nearby` (4 nearest city pages). `location` may include `slug` and `ge
 
 ## Design
 
-- **Header controls sit on a soft pill.** The place name and °C/°F toggle sit on the bright
-  top-right glow, so they get a translucent backing. This is the one visible change to the
-  approved layout.
-- **Needs a decision: Hot-band contrast.** Measured on rendered pages (background sampled
-  behind each piece of text), white text on the Hot band falls below WCAG AA on phones:
-  about 2.3:1 for the answer and 2.7:1 for the detail line, against targets of 3:1 and 4.5:1.
-  The yellow glow sits behind the text, and `#e8571f` with white is only 3.6:1 even without
-  it. Cold and Freezing detail text also dips below 4.5:1 where the glow reaches it on phones.
-  The palette is unchanged because it is the approved design. A close option that clears 3:1
-  for the answer:
-  `hot: { g1: '#d4421a', g2: '#b3211b', g3: '#ffb44f' }`, with the glow at 55% strength
-  fading by 44%. Clearing 4.5:1 for small text on Hot needs a darker orange still.
-  `scripts/contrast-report.mjs` re-measures any palette change.
+- **Header controls and the tab bar sit on a pill.** They sit on the bright top-right glow, so
+  they get a backing in each band's `pill` colour (the gradient colour with the most contrast
+  against the text) at 85%.
+- **Every text meets WCAG 2.2 AA in every band and view** (Carl's go-ahead, October 2026).
+  `e2e/contrast.spec.ts` measures it on rendered pages for all six bands, all three views, on
+  phone and desktop, and fails CI below 4.5:1 (3:1 for large text). What changed from the
+  approved prototype (`reference/prototype.html` is updated to match):
+  - Hot is darker: `#cc3d17` to `#a51c17`, with a deeper glow (`#ff9a4a`). The old `#e8571f`
+    is only 3.6:1 against white before the glow is added.
+  - The glow strength is set per band: Freezing 60%, Cold 45%, Hot 40%, Scorching 70%, Mild
+    and Warm unchanged at 85% (their dark text is fine on it).
+  - The question is no longer faded, and small secondary text (model names, agreement line,
+    scale, credit) is faded less.
+  - The gradient and glow moved to a fixed layer: iOS Safari ignores
+    `background-attachment: fixed` and stretched the glow over the whole page, so iPhones
+    looked worse than the measurements.
 - **City list.** 150 UK places by population (London boroughs folded into London) plus a few
   added for coverage (Inverness, Fort William, Truro, Penzance, St Andrews and others). 150
   worldwide by population, capped at 8 per country, plus European capitals and popular holiday
@@ -106,7 +157,8 @@ Measured by the deploy-preview workflow (Lighthouse 12, mobile, simulated slow 4
 | `/`             | 97          | 100           | 1.7 s | 0.008 | answer fetched from the API |
 | `/in/london-gb` | 100 (local) | 100           | 1.8 s | 0     | server-rendered, CDN-cached |
 
-Site JS is about 8 KB gzipped (budget 25 KB). Cached API responses come back from the
+Site JS is about 12 KB gzipped (budget 25 KB, checked in CI by `scripts/js-budget.mjs`; it
+was 8 KB before Now and This week). Cached API responses come back from the
 Netlify CDN in 10–40 ms. LCP sits just above the 1.5 s target under Lighthouse's simulated
 Moto G on slow 4G. Things that got it there:
 
@@ -124,7 +176,7 @@ from the visitor's approximate location.
 ## Open decisions carried over from the spec
 
 - Evening behaviour after 8pm (keep today, or switch to "Tomorrow?"). The API already returns
-  tomorrow in `days[1]`.
+  tomorrow in `days[1]`, and the Now view now covers the evening.
 - NASA POWER terms for an ad-supported site.
 - Tuning α and the band edges after real use (all in `packages/core/src/config.ts`).
 - Remove-ads model. The `AdSlot` component takes an `adsDisabled` flag for it.

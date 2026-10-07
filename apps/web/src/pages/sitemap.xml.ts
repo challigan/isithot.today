@@ -6,7 +6,7 @@ export const GET: APIRoute = ({ site }) => {
   const urls = [
     { path: '/', priority: '1.0', freq: 'hourly' },
     { path: '/about', priority: '0.5', freq: 'monthly' },
-    ...CITIES.map((c) => ({ path: `/in/${c.slug}`, priority: '0.8', freq: 'hourly' })),
+    ...CITIES.map((c) => ({ path: `/in/${c.slug}`, priority: '0.8', freq: 'daily' })),
   ];
   const body =
     '<?xml version="1.0" encoding="UTF-8"?>\n' +

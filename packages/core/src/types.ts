@@ -66,9 +66,83 @@ export interface ApiDay {
   scale: { min: number; max: number };
 }
 
+/** One row in the now view's "next hours" list, in display units. */
+export interface ApiNowHour {
+  /** Start of the hour, ISO 8601 UTC. */
+  time: string;
+  /** Local time, "3pm". */
+  label: string;
+  temperature: number;
+}
+
+/** One blended forecast hour, judged by the server, for recomputing "now" later. */
+export interface ApiNowPoint {
+  /** Start of the hour, epoch milliseconds. */
+  time: number;
+  /** Display units, one decimal. */
+  temperature: number;
+  feelsLike: number;
+  /** The verdict for this hour, judged like a day's high. */
+  band: Band;
+}
+
+/** The "now" view: the blended forecast at the current moment. Display units. */
+export interface ApiNow {
+  /** The moment the values are for, ISO 8601 UTC. */
+  time: string;
+  band: Band;
+  answer: string;
+  verdict: string;
+  temperature: number;
+  feelsLike: number;
+  detail: string;
+  /** The next few hours, every couple of hours. */
+  hours: ApiNowHour[];
+  /**
+   * The judged hourly forecast from the current hour to a day ahead, so clients can keep
+   * "now" current between requests: interpolate the temperatures and take the band of the
+   * nearest hour (core `computeNow` and `formatNow`).
+   */
+  series: ApiNowPoint[];
+}
+
+/** One day in the week view, in display units. */
+export interface ApiWeekDay {
+  date: string;
+  /** "Today", then short weekday names ("Thu"). */
+  label: string;
+  high: number;
+  band: Band;
+  /** "Hot", "Mild"… */
+  bandLabel: string;
+}
+
+/** The "this week" view: today and the next six days, averaged. Display units. */
+export interface ApiWeek {
+  /** First and last dates averaged (YYYY-MM-DD). */
+  from: string;
+  to: string;
+  band: Band;
+  answer: string;
+  /** "A warm week, not hot." / "A mild week, but hot on Thu and Fri." */
+  verdict: string;
+  /** Average of the daily highs. */
+  high: number;
+  /** The lowest and highest of the daily highs. */
+  highs: { min: number; max: number };
+  /** Average of the daily feels-like highs (the verdict is judged on this). */
+  feelsLike: number;
+  normalHigh: number | null;
+  anomaly: number | null;
+  detail: string;
+  hottest: { date: string; high: number };
+  days: ApiWeekDay[];
+}
+
 export interface TodayResponse {
   location: ApiLocation;
   units: Units;
+  /** Today, then tomorrow when the forecast has it (never more than two). */
   days: ApiDay[];
   updatedAt: string;
   attribution: string[];
@@ -76,6 +150,10 @@ export interface TodayResponse {
   stale?: boolean;
   /** The nearest city pages, for "Nearby" links. */
   nearby?: NearbyCity[];
+  /** The "now" view. Absent when the forecast has no hourly data for the current time. */
+  now?: ApiNow;
+  /** The "this week" view. Absent when the forecast has no usable days. */
+  week?: ApiWeek;
 }
 
 export interface NearbyCity {

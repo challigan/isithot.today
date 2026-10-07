@@ -33,7 +33,10 @@ async function assets(origin: string) {
     get(font700),
     get(font800),
   ]);
-  await initWasm(wasm);
+  await initWasm(wasm).catch((err: unknown) => {
+    // The wasm is process-wide: a reloaded copy of this module finds it ready already.
+    if (!String(err).includes('Already initialized')) throw err;
+  });
   return [
     { name: 'Bricolage Grotesque', data: f5, weight: 500 as const },
     { name: 'Bricolage Grotesque', data: f7, weight: 700 as const },
@@ -73,7 +76,7 @@ export async function renderOg(content: OgContent, origin: string): Promise<Uint
       fontFamily: 'Bricolage Grotesque',
       position: 'relative',
       backgroundColor: p.g1,
-      backgroundImage: `radial-gradient(circle at 88% 6%, ${rgba(p.g3, 0.85)} 0%, ${rgba(p.g3, 0)} 52%), linear-gradient(168deg, ${p.g1} 0%, ${p.g2} 100%)`,
+      backgroundImage: `radial-gradient(circle at 88% 6%, ${rgba(p.g3, parseFloat(p.glow) / 100)} 0%, ${rgba(p.g3, 0)} 52%), linear-gradient(168deg, ${p.g1} 0%, ${p.g2} 100%)`,
     },
     [
       {

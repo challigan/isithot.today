@@ -22,6 +22,16 @@
   inherits: true;
   initial-value: #ffffff;
 }
+@property --pill {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #3a4350;
+}
+@property --glow {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 85%;
+}
 
 :root {
   box-sizing: border-box;
@@ -59,29 +69,57 @@ body {
   /* Bricolage's natural line height; explicit so a late font swap cannot resize lines. */
   line-height: 1.2;
   color: var(--ink);
-  background:
-    radial-gradient(
-      circle at 88% 6%,
-      color-mix(in srgb, var(--g3) 85%, transparent) 0%,
-      transparent 52%
-    ),
-    linear-gradient(168deg, var(--g1) 0%, var(--g2) 100%);
-  background-color: var(--g1);
-  background-attachment: fixed;
   transition:
     --g1 900ms ease,
     --g2 900ms ease,
     --g3 900ms ease,
+    --pill 900ms ease,
+    --glow 900ms ease,
     --ink 600ms ease;
   -webkit-font-smoothing: antialiased;
 }
+/*
+ * The gradient and glow live on a fixed layer the size of the screen. (iOS Safari ignores
+ * background-attachment: fixed and would stretch the glow over the whole page.)
+ */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100vh;
+  height: 100lvh;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      circle at 88% 6%,
+      color-mix(in srgb, var(--g3) var(--glow), transparent) 0%,
+      transparent 52%
+    ),
+    linear-gradient(168deg, var(--g1) 0%, var(--g2) 100%);
+  background-color: var(--g1);
+}
+/* Switching views: a quicker fade, with the text colour flipping halfway through. */
+html[data-switching] body {
+  transition:
+    --g1 300ms ease,
+    --g2 300ms ease,
+    --g3 300ms ease,
+    --pill 300ms ease,
+    --glow 300ms ease,
+    --ink 0s linear 150ms;
+}
 
 .wrap {
+  --pad-l: max(clamp(1.25rem, 5vw, 3rem), env(safe-area-inset-left, 0px));
+  --pad-r: max(clamp(1.25rem, 5vw, 3rem), env(safe-area-inset-right, 0px));
   max-width: 44rem;
   margin: 0 auto;
   padding: clamp(1.25rem, 4vw, 2.5rem) clamp(1.25rem, 5vw, 3rem) 2rem;
-  padding-left: max(clamp(1.25rem, 5vw, 3rem), env(safe-area-inset-left, 0px));
-  padding-right: max(clamp(1.25rem, 5vw, 3rem), env(safe-area-inset-right, 0px));
+  padding-left: var(--pad-l);
+  padding-right: var(--pad-r);
   min-height: 100vh;
   min-height: 100svh;
   display: flex;
@@ -125,14 +163,14 @@ main {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: clamp(2rem, 8vh, 5rem) 0 2rem;
+  padding: 0 0 2rem;
   position: relative;
 }
 
 .glyph {
   position: absolute;
   top: clamp(0.5rem, 4vh, 2.5rem);
-  right: -0.5rem;
+  right: calc(var(--pad-r) - 0.5rem);
   width: clamp(7rem, 26vw, 11rem);
   height: auto;
   opacity: 0.95;
@@ -151,7 +189,6 @@ main {
   margin: 0 0 0.25rem;
   font-size: clamp(1.15rem, 3.2vw, 1.4rem);
   font-weight: 450;
-  opacity: 0.85;
 }
 /* City questions are longer; keep them clear of the icon. */
 [data-mode='city'] .question {
@@ -205,7 +242,7 @@ main {
 }
 .models h2 span {
   font-weight: 400;
-  opacity: 0.75;
+  opacity: 0.9;
 }
 .strip {
   position: relative;
@@ -253,7 +290,7 @@ main {
   display: flex;
   justify-content: space-between;
   font-size: 0.8rem;
-  opacity: 0.65;
+  opacity: 1;
   font-variant-numeric: tabular-nums;
 }
 
@@ -282,10 +319,10 @@ main {
 }
 .list .n {
   font-size: 0.8rem;
-  opacity: 0.75;
+  opacity: 0.9;
 }
 .list li.out {
-  opacity: 0.5;
+  opacity: 0.7;
 }
 
 .more {
@@ -352,6 +389,201 @@ input:focus-visible {
 
 /* ---- Live site additions -------------------------------------------------- */
 
+/*
+ * Now | Today | This week. The views sit side by side in a horizontal scroller that snaps to
+ * one view at a time: swipe on touch screens, tabs everywhere. Each view spans the full width
+ * of the page (gutters included) so nothing is clipped mid-swipe.
+ */
+.tabs {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  width: min(100%, 22rem);
+  /* Leaves room for the place note under the header controls. */
+  margin: 2rem auto 0;
+  padding: 0.25rem;
+  border-radius: 2rem;
+  background: color-mix(in srgb, var(--pill) 85%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  --pos: 1;
+}
+.tabs button {
+  position: relative;
+  z-index: 1;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: 2rem;
+  min-height: 2.25rem;
+  padding: 0.3rem 0.5rem;
+  cursor: pointer;
+  transition: color 250ms ease;
+}
+.tabs button[aria-selected='true'] {
+  color: var(--pill);
+}
+/* Ink rings: a ring in the label colour would vanish against the thumb and the track. */
+.tabs button:focus-visible,
+.units button[aria-pressed='true']:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 2rem;
+}
+@media (pointer: coarse) {
+  .tabs button {
+    min-height: 2.75rem;
+  }
+}
+.tabs .thumb {
+  position: absolute;
+  top: 0.25rem;
+  bottom: 0.25rem;
+  left: 0.25rem;
+  width: calc((100% - 0.5rem) / 3);
+  border-radius: 2rem;
+  background: var(--ink);
+  transform: translateX(calc(var(--pos) * 100%));
+  transition: transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.tabs[data-dragging] .thumb {
+  transition: none;
+}
+
+.views {
+  display: flex;
+  align-items: flex-start;
+  margin: 0 calc(-1 * var(--pad-r)) 0 calc(-1 * var(--pad-l));
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.views::-webkit-scrollbar {
+  display: none;
+}
+.view {
+  position: relative;
+  flex: 0 0 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(2rem, 8vh, 5rem) var(--pad-r) 0 var(--pad-l);
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+/* Now sits to the left of Today on screen; Today stays first in the markup. */
+.view-now {
+  order: -1;
+}
+.view[hidden] {
+  display: none;
+}
+.view:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+.view[data-empty] .answer {
+  font-size: clamp(1.75rem, 6vw, 2.6rem);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.view[data-empty] .hold,
+.view[data-pending] .hold,
+.view[data-pending] .answer {
+  visibility: hidden;
+}
+
+.ahead {
+  margin-top: 2.75rem;
+}
+.ahead h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.ahead .list {
+  margin: 0;
+}
+
+/* The week: one row per day with the high as a dot on the week's scale. */
+.days {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.days li {
+  display: grid;
+  grid-template-columns: 3.25rem 1fr 2.75rem 4.75rem;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2rem;
+}
+.days .d {
+  font-weight: 600;
+}
+.days .track {
+  position: relative;
+  height: 1rem;
+}
+.days .track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  background: currentColor;
+  opacity: 0.25;
+  border-radius: 2px;
+}
+.days .t {
+  font-size: 1.15rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.days .a {
+  font-size: 0.9rem;
+}
+/* Wider screens: the week reads across, like the model list under Today. */
+@media (min-width: 560px) {
+  .days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.9rem 1rem;
+  }
+  .days li {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1rem;
+  }
+  .days .track {
+    display: none;
+  }
+  .days .d {
+    order: 2;
+    font-size: 0.8rem;
+    font-weight: 400;
+  }
+  .days .t {
+    order: 1;
+    font-size: 1.35rem;
+    text-align: left;
+  }
+  .days .a {
+    order: 3;
+    font-size: 0.8rem;
+  }
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -398,7 +630,7 @@ input:focus-visible {
   cursor: pointer;
   border: 0;
   margin: 0;
-  background: color-mix(in srgb, var(--g1) 55%, transparent);
+  background: color-mix(in srgb, var(--pill) 85%, transparent);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
   border-radius: 2rem;
@@ -430,11 +662,11 @@ button.place span {
   border-radius: 2rem;
   padding: 0.2rem 0.5rem;
   min-width: 2rem;
-  opacity: 0.7;
+  opacity: 0.85;
 }
 .units button[aria-pressed='true'] {
   background: var(--ink);
-  color: var(--g1);
+  color: var(--pill);
   opacity: 1;
 }
 /* Out of the flow so showing it after the first answer never shifts the page. */
@@ -448,7 +680,7 @@ button.place span {
   text-align: right;
   padding: 0.15rem 0.6rem;
   border-radius: 1rem;
-  background: color-mix(in srgb, var(--g1) 55%, transparent);
+  background: color-mix(in srgb, var(--pill) 85%, transparent);
 }
 .place-note button,
 .linkish {
@@ -556,7 +788,7 @@ button.place span {
   text-decoration-thickness: 1px;
 }
 .site-footer .credit {
-  opacity: 0.85;
+  opacity: 1;
 }
 .site-footer .credit a {
   color: inherit;
@@ -696,7 +928,9 @@ dialog.sheet::backdrop {
     animation: none;
   }
   .dot,
-  .band {
+  .band,
+  .tabs .thumb,
+  .tabs button {
     transition: none;
   }
 }

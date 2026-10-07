@@ -9,4 +9,6 @@ export * from './geo';
 export * from './outbound';
 export * from './dates';
 export * from './compute';
+export * from './week';
+export * from './now';
 export type * from './types';

@@ -1,0 +1,45 @@
+---
+/**
+ * The tab bar and the three views (Now | Today | This week) in one horizontal scroller, plus
+ * the place links they share. Today comes first in the markup (it is the page's purpose, its
+ * answer is the only h1 and the LCP element) and sits in the middle on screen.
+ */
+import { COPY, outboundLinks, type NearbyCity, type TodayResponse } from '@isithot/core';
+import ViewTabs from './ViewTabs.astro';
+import Today from './Today.astro';
+import Now from './Now.astro';
+import Week from './Week.astro';
+
+interface Props {
+  data: TodayResponse | null;
+  city?: string | null;
+  state: 'loading' | 'ready' | 'error';
+}
+
+const { data, city = null, state } = Astro.props;
+const links = outboundLinks(data?.location ?? null);
+const nearby: NearbyCity[] = data?.nearby ?? [];
+const escape = (text: string): string =>
+  text.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+const nearbyHtml = nearby
+  .map((c) => `<a href="/in/${encodeURIComponent(c.slug)}">${escape(c.name)}</a>`)
+  .join(', ');
+---
+
+<ViewTabs />
+<main id="main" tabindex="-1">
+  <div class="views" id="views">
+    <Today data={data} city={city} state={state} />
+    <Now now={data?.now ?? null} city={city} state={state} />
+    <Week week={data?.week ?? null} city={city} state={state} />
+  </div>
+  <p class="sr-only" id="view-live" aria-live="polite"></p>
+  <p class="stale" id="stale" hidden={!data?.stale}>
+    {COPY.stale}
+  </p>
+  <!-- prettier-ignore -->
+  <p class="more" id="more">{COPY.outboundIntro} <a id="out-0" href={links[0]!.url} target="_blank" rel="noopener">BBC Weather</a>, <a id="out-1" href={links[1]!.url} target="_blank" rel="noopener">Met Office</a> or <a id="out-2" href={links[2]!.url} target="_blank" rel="noopener">AccuWeather</a>.</p>
+  <p class="nearby" id="nearby" hidden={nearby.length === 0}>
+    {COPY.nearby} <span id="nearby-links" set:html={nearbyHtml} />
+  </p>
+</main>

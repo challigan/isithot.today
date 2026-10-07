@@ -11,20 +11,27 @@ import {
   PALETTES,
   SEARCH,
   SITE_NAME,
+  VIEW_LABELS,
+  computeNow,
+  formatNow,
+  localDate,
   outboundLinks,
   pageTitle,
   question,
   roundToGrid,
   type ApiDay,
   type ApiError,
+  type ApiNow,
   type Band,
   type Palette,
   type SearchResponse,
   type SearchResult,
   type TodayResponse,
   type Units,
+  type View,
 } from '@isithot/core';
-import { GLYPHS, listHtml, pct, stripLayout } from '../lib/view';
+import { GLYPHS, hoursHtml, listHtml, pct, stripLayout, weekHtml } from '../lib/view';
+import { wireViews, type ViewsController } from './views';
 
 declare global {
   interface Window {
@@ -54,7 +61,7 @@ const KEYS = {
   units: 'isithot:units',
   last: 'isithot:last',
 } as const;
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 const storage = {
   get<T>(key: string): T | null {
@@ -93,9 +100,18 @@ const params = new URLSearchParams(location.search);
 const preview = params.get('preview') === '1';
 
 let units: Units = 'c';
+let view: View = 'today';
+let views: ViewsController | null = null;
 let target: Target = { kind: 'ip' };
 let current: TodayResponse | null = null;
+/** The Now view as last shown, worked out for the current minute. */
+let nowShown: ApiNow | null = null;
+/** When the current answer arrived (client clock), for refreshing after a long absence. */
+let loadedAt = 0;
 let requestSeq = 0;
+
+/** Refresh the answer when the page comes back after this long. */
+const REFRESH_AFTER_MS = 30 * 60 * 1000;
 
 function setState(state: 'loading' | 'ready' | 'error'): void {
   app.dataset.state = state;
@@ -109,7 +125,47 @@ function applyPalette(p: Palette): void {
   s.setProperty('--g2', p.g2);
   s.setProperty('--g3', p.g3);
   s.setProperty('--ink', p.ink);
+  s.setProperty('--pill', p.pill);
+  s.setProperty('--glow', p.glow);
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', p.g1);
+}
+
+/** The band shown by a view, or null when that view has no data. */
+function viewBand(res: TodayResponse, v: View): Band | null {
+  if (v === 'now') return nowShown?.band ?? null;
+  if (v === 'week') return res.week?.band ?? null;
+  return res.days[0]?.band ?? null;
+}
+
+/**
+ * The page takes the colours of the view on screen. Switching views is quicker than the slow
+ * fade used when an answer arrives, and the text colour flips halfway through, so text never
+ * fades through a mid-tone on a mid-tone.
+ */
+function applyViewPalette(switching = false): void {
+  const band = current ? viewBand(current, view) : null;
+  const root = document.documentElement;
+  if (switching) {
+    root.dataset.switching = '';
+    clearTimeout(switchTimer);
+    switchTimer = setTimeout(() => delete root.dataset.switching, 450);
+  }
+  applyPalette(band ? PALETTES[band] : LOADING_PALETTE);
+}
+let switchTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Screen readers hear the answer of the view they move to (once it settles). */
+let announceTimer: ReturnType<typeof setTimeout> | undefined;
+function announce(v: View): void {
+  clearTimeout(announceTimer);
+  announceTimer = setTimeout(() => {
+    const panel = $(`view-${v}`);
+    const live = $('view-live');
+    if (!panel || !live) return;
+    const answer = panel.querySelector('.answer')?.textContent?.trim() ?? '';
+    const verdict = panel.querySelector('.verdict')?.textContent?.trim() ?? '';
+    live.textContent = `${VIEW_LABELS[v]}: ${answer} ${verdict}`.trim();
+  }, 400);
 }
 
 function setText(id: string, text: string): void {
@@ -192,11 +248,15 @@ function render(res: TodayResponse, animate: boolean): void {
   current = res;
   units = res.units;
   setState('ready');
-  applyPalette(PALETTES[day.band]);
+  const city = mode === 'city' ? res.location.name : null;
+  renderNow(res, city);
+  applyViewPalette();
   const glyph = $('glyph');
   if (glyph) glyph.innerHTML = GLYPHS[day.band];
+  const today = $('view-today');
+  if (today) today.dataset.band = day.band;
   setText('place', res.location.name);
-  setText('question', mode === 'city' ? question(res.location.name) : COPY.question);
+  setText('question', question(city));
   setText('answer', day.answer);
   if (animate && changed) popAnswer();
   setText('verdict', day.verdict);
@@ -212,6 +272,7 @@ function render(res: TodayResponse, animate: boolean): void {
   const stale = $('stale');
   if (stale) stale.hidden = !res.stale;
   renderStrip(day);
+  renderWeek(res, city);
   renderLinks(res);
   renderUnits();
   document.title =
@@ -220,20 +281,73 @@ function render(res: TodayResponse, animate: boolean): void {
       : `${day.answer} ${day.verdict} | ${SITE_NAME}`;
 }
 
+/**
+ * The Now view for this minute. The answer carries a day of blended hourly forecast, so "now"
+ * is worked out again here rather than trusting a response that may have sat in a cache.
+ */
+function nowFor(res: TodayResponse): ApiNow | null {
+  if (!res.now || preview) return res.now ?? null;
+  const fresh = computeNow(res.now.series, Date.now());
+  return fresh ? formatNow(fresh, res.location.timezone) : null;
+}
+
+/** The Now view. Without data for right now it says so instead. */
+function renderNow(res: TodayResponse, city: string | null): void {
+  const now = nowFor(res);
+  nowShown = now;
+  const panel = $('view-now');
+  panel?.removeAttribute('data-pending');
+  if (panel) panel.dataset.band = now?.band ?? '';
+  setText('now-question', question(city, 'now'));
+  setText('now-answer', now?.answer ?? COPY.notAvailable);
+  $('view-now')?.toggleAttribute('data-empty', !now);
+  const glyph = $('now-glyph');
+  if (glyph) glyph.innerHTML = now ? GLYPHS[now.band] : '';
+  if (!now) return;
+  setText('now-verdict', now.verdict);
+  setText('now-detail', now.detail);
+  const hours = $('now-hours');
+  if (hours) hours.innerHTML = hoursHtml(now);
+}
+
+/** The This week view. */
+function renderWeek(res: TodayResponse, city: string | null): void {
+  const week = res.week ?? null;
+  const panel = $('view-week');
+  if (panel) panel.dataset.band = week?.band ?? '';
+  setText('week-question', question(city, 'week'));
+  setText('week-answer', week?.answer ?? COPY.notAvailable);
+  $('view-week')?.toggleAttribute('data-empty', !week);
+  const glyph = $('week-glyph');
+  if (glyph) glyph.innerHTML = week ? GLYPHS[week.band] : '';
+  if (!week) return;
+  setText('week-verdict', week.verdict);
+  setText('week-detail', week.detail);
+  const days = $('week-days');
+  if (days) days.innerHTML = weekHtml(week);
+}
+
+/** Loading and error states show the same message in every view. */
+function setAnswers(text: string): void {
+  for (const id of ['answer', 'now-answer', 'week-answer']) setText(id, text);
+  for (const id of ['glyph', 'now-glyph', 'week-glyph']) {
+    const glyph = $(id);
+    if (glyph) glyph.innerHTML = '';
+  }
+}
+
 function renderLoading(): void {
   if (current) return; // Keep showing the previous answer while refreshing.
   setState('loading');
   applyPalette(LOADING_PALETTE);
-  setText('answer', COPY.checking);
+  setAnswers(COPY.checking);
 }
 
 function renderError(): void {
   if (current) return; // A stale answer beats an error.
   setState('error');
   applyPalette(LOADING_PALETTE);
-  const glyph = $('glyph');
-  if (glyph) glyph.innerHTML = '';
-  setText('answer', COPY.unavailable);
+  setAnswers(COPY.unavailable);
 }
 
 function setNote(kind: 'none' | 'exact' | 'approximate'): void {
@@ -288,12 +402,21 @@ function saveLast(res: TodayResponse): void {
   const main = $('main');
   const day = res.days[0];
   if (!main || !day) return;
+  // The snapshot always reopens on Today alone, as the server sends the page.
+  const copy = main.cloneNode(true) as HTMLElement;
+  copy.querySelectorAll<HTMLElement>('.view').forEach((panel) => {
+    const today = panel.dataset.view === 'today';
+    panel.toggleAttribute('inert', !today);
+    panel.toggleAttribute('hidden', !today);
+  });
+  copy.querySelector<HTMLElement>('#views')?.removeAttribute('style');
   storage.set(KEYS.last, {
     v: CACHE_VERSION,
     savedAt: Date.now(),
     key: targetKey(target),
     palette: PALETTES[day.band],
-    html: main.innerHTML,
+    html: copy.innerHTML,
+    data: res,
     place: res.location.name,
     title: document.title,
   });
@@ -318,6 +441,7 @@ async function load(
     if (!res.ok || 'error' in body)
       throw new Error('error' in body ? body.error.code : String(res.status));
     target = t;
+    loadedAt = Date.now();
     render(body, opts.animate ?? true);
     // Wait a frame so the strip has its final positions before snapshotting.
     requestAnimationFrame(() => requestAnimationFrame(() => saveLast(body)));
@@ -571,6 +695,43 @@ async function showPreview(): Promise<void> {
   render(previewResponse(previewBand, units), true);
 }
 
+// ---- Keeping "now" current ------------------------------------------------------
+
+function refreshNow(): void {
+  if (!current) return;
+  // Past midnight where the place is: today's answer is yesterday's now.
+  if (!preview && (current.days[0]?.date ?? '') < localDate(current.location.timezone)) {
+    void load(target, { quiet: true, animate: false });
+    return;
+  }
+  renderNow(current, mode === 'city' ? current.location.name : null);
+  if (view === 'now') applyViewPalette();
+}
+
+/** Work out "now" again every minute, and fetch afresh after a long time away. */
+function wireRefresh(): void {
+  setInterval(() => {
+    if (document.visibilityState === 'visible') refreshNow();
+  }, 60 * 1000);
+  let hiddenAt = 0;
+  const wake = (): void => {
+    if (document.visibilityState !== 'visible') {
+      hiddenAt = Date.now();
+      return;
+    }
+    // Back after a long time away: start again on Today, the site's main answer.
+    if (hiddenAt && Date.now() - hiddenAt > REFRESH_AFTER_MS) views?.go('today', { instant: true });
+    if (preview || !current) return;
+    if (Date.now() - loadedAt > REFRESH_AFTER_MS)
+      void load(target, { quiet: true, animate: false });
+    else refreshNow();
+  };
+  document.addEventListener('visibilitychange', wake);
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted) wake();
+  });
+}
+
 // ---- Start --------------------------------------------------------------------
 
 function initialTarget(): Target {
@@ -598,8 +759,16 @@ function initialCity(): TodayResponse | null {
 
 export function start(): void {
   units = storage.get<Units>(KEYS.units) ?? units;
+  views = wireViews({
+    onShow: (next) => {
+      view = next;
+      applyViewPalette(true);
+    },
+    onSettle: announce,
+  });
   wireSearch();
   wireUnits();
+  wireRefresh();
   $('retry')?.addEventListener('click', () => void load(target));
   window.addEventListener('popstate', () => {
     if (mode === 'home') void load(initialTarget());
@@ -618,6 +787,9 @@ export function start(): void {
     const data = initialCity();
     if (data) {
       current = data;
+      loadedAt = Date.now();
+      // The page may have waited in the CDN cache: show "now" for this minute.
+      refreshNow();
       const preferred = storage.get<Units>(KEYS.units);
       units = data.units;
       renderUnits();
@@ -631,12 +803,18 @@ export function start(): void {
   const t = initialTarget();
   target = t;
   const restored = app.dataset.restored === '1';
-  const cached = storage.get<{ key: string; savedAt: number }>(KEYS.last);
+  const cached = storage.get<{ key: string; savedAt: number; data?: TodayResponse }>(KEYS.last);
   const fresh =
     restored &&
     cached &&
     cached.key === targetKey(t) &&
     Date.now() - cached.savedAt < CACHE.localAnswerMaxAgeMs;
+  if (fresh && cached.data) {
+    // The instant paint is up to three hours old: bring "now" up to date before refreshing.
+    current = cached.data;
+    loadedAt = cached.savedAt;
+    refreshNow();
+  }
   if (!fresh && restored) {
     // The instant paint was for a different place; start clean.
     app.dataset.restored = '';
