@@ -35,8 +35,9 @@ test.describe('matches the approved prototype', () => {
       // Pages open on Today alone; Now and This week join the scroller on first use.
       await expect(page.locator('#view-now')).toBeHidden();
       await expect(page.locator('#view-week')).toBeHidden();
-      // The tab bar is new since the prototype: take it out of the layout for the comparison.
-      await page.addStyleTag({ content: '#tabs{display:none!important}' });
+      // The topic toggle and the tab bar are new since the prototype: take them out of the
+      // layout for the comparison.
+      await page.addStyleTag({ content: '#topic,#tabs{display:none!important}' });
       const actual = await mainShot(page);
       const palette = PALETTES[band];
       const vars = await page.evaluate(() => {

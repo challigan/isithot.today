@@ -196,6 +196,29 @@ main {
     transform: rotate(360deg);
   }
 }
+/*
+ * Rain and drops (lib/wetGlyphs.ts) drift down and fade, then settle back in place from just
+ * above: three times, a little out of step, ending on the complete icon.
+ */
+.glyph .fall {
+  animation: fall 1.4s ease-in-out 3;
+}
+.glyph .fall:nth-child(3n + 1) {
+  animation-delay: 0.45s;
+}
+.glyph .fall:nth-child(3n + 2) {
+  animation-delay: 0.9s;
+}
+@keyframes fall {
+  45% {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+  46% {
+    transform: translateY(-4px);
+    opacity: 0;
+  }
+}
 
 .question {
   margin: 0 0 0.25rem;
@@ -207,6 +230,8 @@ main {
   max-width: calc(100% - clamp(7rem, 26vw, 11rem));
 }
 .answer {
+  /* Positioned, so the answer paints over the icon where a long word reaches it. */
+  position: relative;
   font-family: 'Bricolage Answer', var(--font);
   margin: 0;
   font-size: clamp(6rem, 30vw, 13rem);
@@ -329,9 +354,9 @@ main {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+/* Full strength: small text, and with the Hot | Wet toggle above, lower on the gradient. */
 .list .n {
   font-size: 0.8rem;
-  opacity: 0.9;
 }
 /* Models outside the agreement band: a lighter figure rather than faded text (contrast). */
 .list li.out .t {
@@ -414,8 +439,7 @@ input:focus-visible {
   /* Equal columns even when enlarged text wraps a label, so the thumb always lines up. */
   grid-template-columns: repeat(3, minmax(0, 1fr));
   width: min(100%, 22rem);
-  /* Leaves room for the place note under the header controls. */
-  margin: 2rem auto 0;
+  margin: 0.5rem auto 0;
   padding: 0.25rem;
   border-radius: 2rem;
   background: color-mix(in srgb, var(--pill) 85%, transparent);
@@ -444,6 +468,7 @@ input:focus-visible {
 }
 /* Ink rings: a ring in the label colour would vanish against the thumb and the track. */
 .tabs button:focus-visible,
+.topic button:focus-visible,
 .units button[aria-pressed='true']:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
@@ -701,7 +726,8 @@ button.place span {
   border: 0;
   cursor: pointer;
   border-radius: 2rem;
-  padding: 0.2rem 0.5rem;
+  /* °C and °F are narrower than the minimum width; "mm" is not, so keep its pill as compact. */
+  padding: 0.2rem 0.35rem;
   min-width: 2rem;
   opacity: 0.85;
 }
@@ -709,6 +735,47 @@ button.place span {
   background: var(--ink);
   color: var(--pill);
   opacity: 1;
+}
+/* Hot | Wet, above the tabs: which question the views answer. A pill, centred in the page. */
+.topic {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: max-content;
+  /* Leaves room for the place note under the header controls. */
+  margin: 2rem auto 0;
+  padding: 0.15rem;
+  cursor: default;
+}
+.topic button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.1;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: 2rem;
+  min-height: 2.25rem;
+  padding: 0.3rem 0.8rem;
+  cursor: pointer;
+}
+.topic button[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--pill);
+}
+.topic svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+}
+@media (pointer: coarse) {
+  .topic button {
+    min-height: 2.75rem;
+  }
 }
 /* Out of the flow so showing it after the first answer never shifts the page. */
 .place-note {
@@ -964,6 +1031,7 @@ dialog.sheet::backdrop {
     transition: none;
   }
   .glyph .spin,
+  .glyph .fall,
   .answer.pop,
   [data-state='loading'] .answer {
     animation: none;

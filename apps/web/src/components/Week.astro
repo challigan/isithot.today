@@ -33,6 +33,7 @@ const { view } = Astro.props;
     stroke-linecap="round"
     stroke-linejoin="round"
     aria-hidden="true"
+    data-glyph={view.band ?? ''}
     set:html={glyphFor(view.band)}
   />
   <p class="question" id="week-question">
