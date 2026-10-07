@@ -72,6 +72,8 @@ jobs:
       - name: Lighthouse (mobile) on the deploy preview
         run: |
           for path in / /in/london-gb; do
+            # Warm the CDN first: production visitors mostly get cached pages.
+            curl -fsS -o /dev/null "$PREVIEW$path"; curl -fsS -o /dev/null "$PREVIEW/api/v1/today"
             npx -y lighthouse@12 "$PREVIEW$path" --quiet --form-factor=mobile \
               --only-categories=performance,accessibility,best-practices,seo \
               --chrome-flags="--headless=new --no-sandbox" --output=json --output-path=lh.json || true
