@@ -5,6 +5,8 @@ export interface HandlerResult<T> {
   status: number;
   body: T | ApiError;
   headers: Record<string, string>;
+  /** How long the answer may be cached, seconds (for pages that embed it). */
+  maxAge?: number;
 }
 
 export const ERROR_STATUS: Record<ErrorCode, number> = {

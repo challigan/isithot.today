@@ -10,10 +10,32 @@ import {
   formatHour,
   monthName,
   pageTitle,
+  wetPageTitle,
   question,
   stripSummary,
+  RAIN_ANSWERS,
+  RAIN_BAND_LABELS,
+  RAIN_NOW_PHRASES,
+  RAIN_NOW_VERDICTS,
+  RAIN_VERDICTS,
+  aroundLine,
+  betweenLine,
+  easingLine,
+  endHour,
+  mostlyDryLine,
+  rainAgreementLine,
+  rainAmountLine,
+  rainDaysLine,
+  rainFromLine,
+  rainNormalLine,
+  rainStripSummary,
+  rainWeekLine,
+  showersFromLine,
+  upToLine,
+  wetWeekLine,
+  whenDays,
 } from '../src/copy';
-import { BANDS } from '../src/config';
+import { BANDS, RAIN_BANDS } from '../src/config';
 
 describe('copy', () => {
   it('has an answer, verdict and label for every band', () => {
@@ -86,5 +108,83 @@ describe('copy', () => {
       'Is it hot today? Yes. 30° | isithot.today',
     );
     expect(deg(5)).toBe('5°');
+    expect(wetPageTitle({ city: 'Leeds', answer: 'Yes.', band: 'heavy' })).toBe(
+      'Is it wet in Leeds today? Yes. Heavy rain | isitwet.today',
+    );
+    expect(wetPageTitle({ answer: 'No.', band: 'dry' })).toBe(
+      'Is it wet today? No. Dry | isitwet.today',
+    );
+  });
+});
+
+describe('rain copy', () => {
+  it('has an answer, verdicts and a label for every rain band', () => {
+    for (const band of RAIN_BANDS) {
+      expect(RAIN_ANSWERS[band]).toMatch(/^(No|Maybe|Yes)\.$/);
+      expect(RAIN_VERDICTS[band]).toMatch(/\.$/);
+      expect(RAIN_NOW_VERDICTS[band]).toMatch(/\.$/);
+      expect(RAIN_NOW_PHRASES[band]).toMatch(/now\.$/);
+      expect(RAIN_BAND_LABELS[band]).toBeTruthy();
+    }
+    expect([RAIN_ANSWERS.dry, RAIN_VERDICTS.dry]).toEqual(['No.', "It'll be dry."]);
+    expect([RAIN_ANSWERS.drenched, RAIN_VERDICTS.drenched]).toEqual([
+      'Yes.',
+      "You'll get drenched.",
+    ]);
+    expect(RAIN_BAND_LABELS.drenched).toBe('Washout');
+  });
+
+  it('reads 0 and 24 as midnight at the end of a span', () => {
+    expect(endHour(24)).toBe('midnight');
+    expect(endHour(0)).toBe('midnight');
+    expect(endHour(15)).toBe('3pm');
+    expect(easingLine(24)).toBe('Easing off by about midnight.');
+    expect(betweenLine(18, 24)).toBe('Mostly between 6pm and midnight.');
+    expect(aroundLine(0)).toBe('Most likely around 12am.');
+    expect(rainFromLine(18)).toBe('Rain likely from about 6pm.');
+    expect(showersFromLine(9)).toBe('Showers possible from about 9am.');
+  });
+
+  it('names days', () => {
+    expect(whenDays(true, null)).toBe('today');
+    expect(whenDays(false, 'Thu and Fri')).toBe('on Thu and Fri');
+    expect(whenDays(true, 'Sat')).toBe('today and on Sat');
+    expect(mostlyDryLine('on Thu')).toBe('Mostly dry, but rain possible on Thu.');
+    expect(wetWeekLine(null)).toBe('A wet week.');
+    expect(wetWeekLine('today')).toBe('A wet week, heaviest today.');
+    expect(rainDaysLine('on Thu and Fri', null, false)).toBe('Rain on Thu and Fri.');
+    expect(rainDaysLine('on Thu and Fri', 'on Fri', false)).toBe(
+      'Rain on Thu and Fri, heavy on Fri.',
+    );
+    expect(rainDaysLine('on Fri', 'on Fri', true)).toBe('Heavy rain on Fri.');
+  });
+
+  it('describes amounts and agreement', () => {
+    expect(upToLine('4mm', false)).toBe('Some forecasts say up to 4mm.');
+    expect(upToLine('4mm', true)).toBe('One forecast says up to 4mm.');
+    expect(rainAmountLine('6mm', true)).toBe('About 6mm still to come.');
+    expect(rainAmountLine('0.2in', false)).toBe('About 0.2in of rain.');
+    expect(rainAgreementLine(6, 8)).toBe('6 of 8 forecasts expect rain');
+    expect(rainAgreementLine(1, 8)).toBe('1 of 8 forecasts expects rain');
+    expect(rainStripSummary({ min: '0mm', max: '12mm', wet: 6, total: 8 })).toBe(
+      'Forecasts range from 0mm to 12mm; 6 of 8 expect rain.',
+    );
+    expect(rainStripSummary({ min: '0mm', max: '0mm', wet: 0, total: 8 })).toBe(
+      'All forecasts say 0mm; none expect rain.',
+    );
+    expect(rainStripSummary({ min: '0mm', max: '2mm', wet: 1, total: 8 })).toBe(
+      'Forecasts range from 0mm to 2mm; 1 of 8 expects rain.',
+    );
+    expect(rainWeekLine('18mm', { when: 'on Friday', amount: '12mm' })).toBe(
+      'About 18mm across the week, most on Friday (12mm).',
+    );
+    expect(rainWeekLine('3mm', null)).toBe('About 3mm across the week.');
+  });
+
+  it('compares with normal rain', () => {
+    expect(rainNormalLine('dry', 'July')).toBe('Dry, as usual for July.');
+    expect(rainNormalLine('wetter', 'October')).toBe('Wetter than usual for October.');
+    expect(rainNormalLine('drier', 'October')).toBe('Drier than usual for October.');
+    expect(rainNormalLine('normal', 'the time of year')).toBe('About normal for the time of year.');
   });
 });

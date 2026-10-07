@@ -1,0 +1,56 @@
+{
+ "type": "Feature",
+ "geometry": {
+  "type": "Point",
+  "coordinates": [
+   -6.25,
+   37.5,
+   187.78
+  ]
+ },
+ "properties": {
+  "parameter": {
+   "PRECTOTCORR": {
+    "JAN": 1.56,
+    "FEB": 1.72,
+    "MAR": 1.86,
+    "APR": 1.76,
+    "MAY": 0.91,
+    "JUN": 0.18,
+    "JUL": 0.02,
+    "AUG": 0.11,
+    "SEP": 0.8,
+    "OCT": 2.28,
+    "NOV": 2.38,
+    "DEC": 1.84,
+    "ANN": 1.28
+   }
+  }
+ },
+ "header": {
+  "title": "NASA/POWER Source Native Resolution Climatology Climatologies",
+  "api": {
+   "version": "v2.10.0",
+   "name": "POWER Climatology API"
+  },
+  "sources": [
+   "MERRA2"
+  ],
+  "fill_value": -999,
+  "time_standard": "LST",
+  "range": "20-year Meteorological and Solar Monthly & Annual Climatologies (January 2001 - December 2020)"
+ },
+ "messages": [
+  "The requested parameters are retrieved from a pre-computed climatological period (January 2001 - December 2020)"
+ ],
+ "parameters": {
+  "PRECTOTCORR": {
+   "units": "mm/day",
+   "longname": "Precipitation Corrected"
+  }
+ },
+ "times": {
+  "data": 0.052,
+  "process": 0.03
+ }
+}

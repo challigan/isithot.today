@@ -3,24 +3,16 @@
  * The Today view: answer, verdict and model agreement. Rendered on the server with data (city
  * pages) or in its loading state (home page); the browser script updates the same nodes.
  */
-import { COPY, question as questionFor, type TodayResponse } from '@isithot/core';
-import { GLYPHS, listHtml, stripHtml } from '../lib/view';
+import { COPY, type TodayDisplay } from '@isithot/core';
+import { glyphFor, listHtml, stripHtml } from '../lib/view';
 
 interface Props {
-  data: TodayResponse | null;
-  /** City pages ask about the city by name. */
-  city?: string | null;
-  state: 'loading' | 'ready' | 'error';
+  /** From core `viewDisplay`. */
+  view: TodayDisplay;
 }
 
-const { data, city = null, state } = Astro.props;
-const day = data?.days[0] ?? null;
-const answer = state === 'error' ? COPY.unavailable : (day?.answer ?? COPY.checking);
-// Placeholders keep the layout steady while loading.
-const placeholderModels = Array.from(
-  { length: 8 },
-  () => '<li><span class="t">00°</span><span class="n">Model</span></li>',
-).join('');
+const { view } = Astro.props;
+const { models } = view;
 ---
 
 <section
@@ -29,7 +21,8 @@ const placeholderModels = Array.from(
   role="tabpanel"
   aria-labelledby="tab-today"
   data-view="today"
-  data-band={day?.band}
+  data-band={view.band ?? undefined}
+  data-empty={view.empty ? '' : undefined}
   tabindex="0"
 >
   <svg
@@ -42,39 +35,39 @@ const placeholderModels = Array.from(
     stroke-linecap="round"
     stroke-linejoin="round"
     aria-hidden="true"
-    set:html={day ? GLYPHS[day.band] : ''}
+    data-glyph={view.band ?? ''}
+    set:html={glyphFor(view.band)}
   />
   <p class="question" id="question">
-    {questionFor(city)}
+    {view.question}
   </p>
   <div aria-live="polite" aria-atomic="true" id="live">
     <h1 class="answer" id="answer">
-      {answer}
+      {view.answer}
     </h1>
     <p class="verdict hold" id="verdict">
-      {day?.verdict ?? "It's warm, not hot."}
+      {view.verdict}
     </p>
   </div>
   <p class="detail hold" id="detail">
-    {day?.detail ??
-      'High of 00°, feels like 00°. Warmest around 0pm. 0° warmer than usual for September.'}
+    {view.detail}
   </p>
 
   <section class="models hold" id="models" aria-labelledby="models-h">
     <h2 id="models-h">
-      <span id="agree">{day?.agreementText ?? '0 of 0 forecasts agree within 2°'}</span>
+      <span id="agree">{models.heading}</span>
     </h2>
     <p class="sr-only" id="strip-summary">
-      {day?.stripSummary ?? ''}
+      {models.summary}
     </p>
-    <div class="strip" id="strip" aria-hidden="true" set:html={day ? stripHtml(day) : ''} />
+    <div class="strip" id="strip" aria-hidden="true" set:html={stripHtml(models)} />
     <div class="scale" aria-hidden="true">
-      <span id="smin">{day ? `${day.scale.min}°` : '0°'}</span>
-      <span id="smax">{day ? `${day.scale.max}°` : '0°'}</span>
+      <span id="smin">{models.min}</span>
+      <span id="smax">{models.max}</span>
     </div>
-    <ul class="list" id="list" set:html={day ? listHtml(day) : placeholderModels} />
-    <p class="limited" id="limited" hidden={!day?.limitedText}>
-      {COPY.limited}
+    <ul class="list" id="list" set:html={listHtml(models)} />
+    <p class="limited" id="limited" hidden={!models.limited}>
+      {models.limited ?? COPY.limited}
     </p>
   </section>
 </section>

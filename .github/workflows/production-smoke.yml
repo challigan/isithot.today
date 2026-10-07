@@ -1,0 +1,53 @@
+name: Production smoke test
+
+# Waits for the production deploy of each push to main, then checks both live sites against the
+# real upstream data: isithot.today (API and pages), isitwet.today (served by the edge function
+# from the /wet pages) and the redirect from isithot.today/wet to isitwet.today.
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: production-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SITE: https://isithot.today
+      WET_SITE: https://isitwet.today
+      SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      # The smoke test uses Node's built-ins only, so there is nothing to install.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Wait for the production deploy of this commit
+        run: |
+          for i in $(seq 1 90); do
+            commit=$(curl -fsS "$SITE/version.json" 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).commit)}catch{console.log("")}})')
+            if [ "$commit" = "$SHA" ]; then echo "Production is live for $SHA"; exit 0; fi
+            echo "Waiting ($i): production has '${commit:-nothing}'"
+            sleep 10
+          done
+          echo "Timed out waiting for the production deploy"; exit 1
+
+      - name: Smoke test isithot.today and isitwet.today
+        run: node scripts/smoke.mjs "$SITE" --wet-site "$WET_SITE"
+
+      - name: isithot.today/wet redirects to isitwet.today
+        run: |
+          failed=0
+          expect() {
+            got=$(curl -sSI -o /dev/null -w '%{http_code} %{redirect_url}' "$SITE$1")
+            if [ "$got" = "301 $WET_SITE$2" ]; then echo "PASS  $SITE$1 -> $got"
+            else echo "FAIL  $SITE$1 -> '$got' (expected 301 $WET_SITE$2)"; failed=1; fi
+          }
+          expect /wet /
+          expect /wet/in/newcastle-upon-tyne-gb /in/newcastle-upon-tyne-gb
+          expect '/wet?lat=51.5&lon=-0.12' '/?lat=51.5&lon=-0.12'
+          exit $failed

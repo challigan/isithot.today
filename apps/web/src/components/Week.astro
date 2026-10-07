@@ -1,27 +1,14 @@
 ---
-/** The This week view: today and the next six days averaged, with one row per day. */
-import { COPY, question, type ApiWeek } from '@isithot/core';
-import { GLYPHS, weekHtml } from '../lib/view';
+/** The This week view: today and the next six days, with one row per day. */
+import type { WeekDisplay } from '@isithot/core';
+import { glyphFor, weekHtml } from '../lib/view';
 
 interface Props {
-  week: ApiWeek | null;
-  city?: string | null;
-  state: 'loading' | 'ready' | 'error';
+  /** From core `viewDisplay`. */
+  view: WeekDisplay;
 }
 
-const { week, city = null, state } = Astro.props;
-const answer =
-  state === 'error'
-    ? COPY.unavailable
-    : state === 'loading'
-      ? COPY.checking
-      : (week?.answer ?? COPY.notAvailable);
-// Placeholders keep the layout steady while loading.
-const placeholderDays = Array.from(
-  { length: 7 },
-  () =>
-    '<li><span class="d">Day</span><span class="track" aria-hidden="true"></span><span class="t">00°</span><span class="a">Warm</span></li>',
-).join('');
+const { view } = Astro.props;
 ---
 
 <section
@@ -30,8 +17,8 @@ const placeholderDays = Array.from(
   role="tabpanel"
   aria-labelledby="tab-week"
   data-view="week"
-  data-band={week?.band}
-  data-empty={state === 'ready' && !week ? '' : undefined}
+  data-band={view.band ?? undefined}
+  data-empty={view.empty ? '' : undefined}
   tabindex="0"
   inert
   hidden
@@ -46,23 +33,23 @@ const placeholderDays = Array.from(
     stroke-linecap="round"
     stroke-linejoin="round"
     aria-hidden="true"
-    set:html={week ? GLYPHS[week.band] : ''}
+    data-glyph={view.band ?? ''}
+    set:html={glyphFor(view.band)}
   />
   <p class="question" id="week-question">
-    {question(city, 'week')}
+    {view.question}
   </p>
   <h2 class="answer" id="week-answer">
-    {answer}
+    {view.answer}
   </h2>
   <p class="verdict hold" id="week-verdict">
-    {week?.verdict ?? 'A warm week, not hot.'}
+    {view.verdict}
   </p>
   <p class="detail hold" id="week-detail">
-    {week?.detail ??
-      'Highs average 00°, feels like 00°. Hottest on Wednesday, 00°. 0° warmer than usual for September.'}
+    {view.detail}
   </p>
   <section class="ahead hold" aria-labelledby="week-h">
-    <h2 id="week-h">{COPY.nextDays}</h2>
-    <ul class="days" id="week-days" set:html={week ? weekHtml(week) : placeholderDays} />
+    <h2 id="week-h">{view.heading}</h2>
+    <ul class="days" id="week-days" set:html={weekHtml(view.items)} />
   </section>
 </section>

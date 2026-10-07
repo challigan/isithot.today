@@ -1,0 +1,35 @@
+---
+/**
+ * Hot | Wet. Pages open on their own site's topic (isithot.today on Hot, isitwet.today on Wet);
+ * pressing the other re-renders the same views in place (scripts/app.ts).
+ */
+import { COPY, TOPICS, TOPIC_LABELS, type Topic } from '@isithot/core';
+import { TOPIC_ICONS } from '../lib/wetGlyphs';
+
+interface Props {
+  /** The topic the page opens on. */
+  topic: Topic;
+}
+
+const { topic } = Astro.props;
+---
+
+<div class="pill topic" id="topic" role="group" aria-label={COPY.topicLabel}>
+  {TOPICS.map((t) => (
+    <button type="button" data-topic={t} aria-pressed={t === topic ? 'true' : 'false'}>
+      <svg
+        viewBox="0 0 24 24"
+        width="16"
+        height="16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        set:html={TOPIC_ICONS[t]}
+      />
+      {TOPIC_LABELS[t]}
+    </button>
+  ))}
+</div>

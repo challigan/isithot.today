@@ -103,10 +103,15 @@ describe('GET /api/v1/today', () => {
   it('serves the second call from cache', async () => {
     const { deps, calls } = makeDeps();
     await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
-    expect(calls).toEqual(['/v1/forecast', '/api/temporal/climatology/point']);
+    // The forecast, then normal highs and normal rainfall (two climatology requests).
+    expect(calls).toEqual([
+      '/v1/forecast',
+      '/api/temporal/climatology/point',
+      '/api/temporal/climatology/point',
+    ]);
     await getToday(q({ lat: '54.95', lon: '-1.6', units: 'f' }), null, deps);
     await getToday(q({ lat: '54.97', lon: '-1.62', units: 'c' }), null, deps);
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(3);
   });
 
   it('uses the name passed by search and marks the source', async () => {
@@ -306,6 +311,85 @@ describe('GET /api/v1/today', () => {
     expect(body.days[0]!.consensus.total).toBe(8);
   });
 
+  it('answers "Is it wet?" alongside "Is it hot?"', async () => {
+    const { deps } = makeDeps();
+    const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
+    const rain = body.rain!;
+    expect(rain.unit).toBe('mm');
+    // Today is the rest of the day from the request; tomorrow is the whole day.
+    expect(rain.days.map((d) => [d.date, d.partial, d.from])).toEqual([
+      ['2026-10-06', true, NOW.toISOString()],
+      ['2026-10-07', false, '2026-10-06T23:00:00.000Z'],
+    ]);
+    for (const d of rain.days) {
+      expect(d.answer).toMatch(/^(Yes|No|Maybe)\.$/);
+      expect(d.total).toBe(8);
+      expect(d.models).toHaveLength(8);
+    }
+    expect(rain.now!.time).toBe(NOW.toISOString());
+    expect(rain.now!.hours).toHaveLength(6);
+    expect(rain.now!.series.length).toBeGreaterThan(20);
+    const week = rain.week!;
+    expect(week.from).toBe('2026-10-06');
+    expect(week.days).toHaveLength(7);
+    expect(week.answer).toMatch(/^(Yes|No|Maybe|Partly)\.$/);
+    // Today's row in the week is Today's own answer.
+    expect(week.days[0]!.band).toBe(rain.days[0]!.band);
+    expect(week.days[0]!.amount).toBe(rain.days[0]!.amount);
+    expect(week.normal).not.toBeNull();
+
+    const f = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'f' }), null, deps));
+    expect(f.rain!.unit).toBe('in');
+  });
+
+  it("judges today's rain from the moment of the request", async () => {
+    const evening = new Date('2026-10-06T20:30:00Z');
+    const { deps } = makeDeps({ now: () => evening });
+    const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
+    expect(body.rain!.days[0]!.from).toBe(evening.toISOString());
+    expect(body.rain!.now!.time).toBe(evening.toISOString());
+    // The week's first row is still today, judged over what is left of it.
+    expect(body.rain!.week!.days[0]!.label).toBe('Today');
+  });
+
+  it('never lets a cache keep the answer past the hour', async () => {
+    const at = (iso: string) => {
+      const now = new Date(iso);
+      return makeDeps({ now: () => now }).deps;
+    };
+    const late = await getToday(
+      q({ place: 'london-gb', units: 'c' }),
+      null,
+      at('2026-10-06T08:55:00Z'),
+    );
+    expect(late.headers['Cache-Control']).toBe('public, max-age=300');
+    expect(late.maxAge).toBe(300);
+    // Never under a minute, even in the last seconds of the hour.
+    const last = await getToday(
+      q({ place: 'london-gb', units: 'c' }),
+      null,
+      at('2026-10-06T08:59:30Z'),
+    );
+    expect(last.maxAge).toBe(60);
+    const early = await getToday(
+      q({ place: 'london-gb', units: 'c' }),
+      null,
+      at('2026-10-06T08:05:00Z'),
+    );
+    expect(early.maxAge).toBe(600);
+  });
+
+  it('keeps the hot normals when the rain normals fail', async () => {
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    const noRainNormals: FetchLike = async (url, init) =>
+      url.includes('PRECTOTCORR') ? new Response('{}', { status: 500 }) : synthetic(url, init);
+    const { deps } = makeDeps({ fetch: noRainNormals });
+    const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
+    expect(body.days[0]!.normalHigh).not.toBeNull();
+    expect(body.rain!.week!.normal).toBeNull();
+    expect(body.rain!.week!.detail).not.toMatch(/usual/);
+  });
+
   it('answers without normals when NASA POWER is slow, and fills the cache later', async () => {
     const synthetic = createSyntheticFetch(CITIES, () => NOW);
     let release: () => void = () => {};
@@ -339,8 +423,11 @@ describe('GET /api/v1/today', () => {
     const { deps } = makeDeps({ fetch: noNasa });
     const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
     expect(body.days[0]!.anomaly).toBeNull();
+    expect(body.rain!.week!.normal).toBeNull();
+    // One request each for normal highs and normal rainfall, then neither again for an hour.
+    expect(nasaCalls).toBe(2);
     await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
-    expect(nasaCalls).toBe(1);
+    expect(nasaCalls).toBe(2);
   });
 
   it('reports upstream_unavailable when the forecast has no data for today', async () => {

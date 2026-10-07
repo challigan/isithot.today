@@ -1,22 +1,37 @@
 ---
+/** "Lost." Either site's not-found page, with its own name and colours. */
+import Base from '../layouts/Base.astro';
 import Footer from './Footer.astro';
+import { PALETTES, RAIN_PALETTES, SITES, type Topic } from '@isithot/core';
+
+interface Props {
+  topic?: Topic;
+}
+const { topic = 'hot' } = Astro.props;
+const [brand, tld] = SITES[topic].name.split('.');
 ---
 
-<div class="wrap">
-  <header>
-    <a class="brand" href="/">
-      isithot<span>.today</span>
-    </a>
-  </header>
-  <main id="main">
-    <p class="question">Is it hot here?</p>
-    <h1 class="answer">Lost.</h1>
-    <p class="verdict">We can't find that page.</p>
-    <p class="detail">
-      <a href="/" style="color: inherit">
-        See today's answer for where you are.
-      </a>
-    </p>
-  </main>
-  <Footer />
-</div>
+<Base
+  title={`Not found | ${SITES[topic].name}`}
+  palette={topic === 'wet' ? RAIN_PALETTES.showers : PALETTES.cold}
+  topic={topic}
+  noindex
+>
+  <div class="wrap" data-topic={topic}>
+    <header>
+      <!-- prettier-ignore -->
+      <a class="brand" href="/">{brand}<span>.{tld}</span></a>
+    </header>
+    <main id="main">
+      <p class="question">Is it {topic} here?</p>
+      <h1 class="answer">Lost.</h1>
+      <p class="verdict">We can't find that page.</p>
+      <p class="detail">
+        <a href="/" style="color: inherit">
+          See today's answer for where you are.
+        </a>
+      </p>
+    </main>
+    <Footer />
+  </div>
+</Base>

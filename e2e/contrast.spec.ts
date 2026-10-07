@@ -1,5 +1,6 @@
 /**
- * Text contrast as rendered, for every band and view, on the phone and desktop projects. The
+ * Text contrast as rendered, for every band of both topics (Hot and Wet) and every view, on the
+ * phone and desktop projects. The
  * background is sampled behind each piece of text (gradient, glow and control backings
  * included) and the worst pixel counts. Targets are WCAG 2.2 AA: 3:1 for large text (24px, or
  * 18.66px bold), 4.5:1 for everything else.
@@ -9,7 +10,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { PNG } from 'pngjs';
-import { BANDS } from '../packages/core/src/config';
+import { BANDS, RAIN_BANDS } from '../packages/core/src/config';
 
 interface Target {
   name: string;
@@ -19,6 +20,8 @@ interface Target {
 }
 
 const SHARED: Target[] = [
+  { name: 'topic', selector: '#topic button[aria-pressed=false]' },
+  { name: 'topic (pressed)', selector: '#topic button[aria-pressed=true]' },
   { name: 'tab', selector: '[role=tab][aria-selected=false]' },
   { name: 'tab (selected)', selector: '[role=tab][aria-selected=true]' },
   { name: 'place', selector: '#place' },
@@ -177,9 +180,15 @@ async function measure(page: Page, targets: Target[], label: string): Promise<st
   return failures;
 }
 
-for (const band of BANDS) {
+// A rain band's preview opens on Wet.
+for (const band of [...BANDS, ...RAIN_BANDS]) {
   test(`text contrast meets WCAG AA: ${band}`, async ({ page }, info) => {
     await page.goto(`/?preview=1&band=${band}`);
+    const topic = (RAIN_BANDS as readonly string[]).includes(band) ? 'wet' : 'hot';
+    await expect(page.locator(`#topic [data-topic=${topic}]`)).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await page.evaluate(() => document.fonts.ready);
     // Settle the colour transitions, then keep them off while switching views.
     await page.waitForTimeout(1200);

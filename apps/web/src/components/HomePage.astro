@@ -1,0 +1,100 @@
+---
+/**
+ * The home page of either site: isithot.today (/) and isitwet.today (/wet, served at / there by
+ * the edge function). Sent in its loading state, already asking the page's own question; the
+ * browser fills in the answer for where the visitor is.
+ */
+import Base from '../layouts/Base.astro';
+import Header from './Header.astro';
+import Views from './Views.astro';
+import AdSlot from './AdSlot.astro';
+import Footer from './Footer.astro';
+import SearchSheet from './SearchSheet.astro';
+import { CACHE, LOADING_PALETTE, SITES, type Topic } from '@isithot/core';
+
+interface Props {
+  /** The site the page belongs to, and the topic it opens on. */
+  topic: Topic;
+}
+
+const { topic } = Astro.props;
+// Each topic remembers its own last answer; both are saved and read the same way.
+const key = topic === 'wet' ? 'isitwet:last' : 'isithot:last';
+const version = CACHE.snapshotVersion;
+const maxAge = CACHE.localAnswerMaxAgeMs;
+---
+
+<Base topic={topic} canonical={`${SITES[topic].url}/`} palette={LOADING_PALETTE}>
+  <script is:inline slot="head">
+    // Start the API request before the main script has downloaded. Mirrors apiUrl() in
+    // scripts/app.ts; if they ever disagree the app simply makes its own request.
+    (() => {
+      try {
+        if (location.search) return;
+        const get = (k) => JSON.parse(localStorage.getItem(k) || 'null');
+        const t = get('isithot:place') || { kind: 'ip' };
+        const units = get('isithot:units') || (t.kind === 'ip' ? null : 'c');
+        const p = new URLSearchParams();
+        if (t.kind === 'city') p.set('place', t.slug);
+        if (t.kind === 'coords') {
+          p.set('lat', String(t.lat));
+          p.set('lon', String(t.lon));
+          if (t.name) p.set('name', t.name);
+          if (t.region) p.set('region', t.region);
+          if (t.country) p.set('country', t.country);
+          if (t.geonameId) p.set('geonameId', String(t.geonameId));
+          p.set('source', t.source);
+        }
+        if (units) p.set('units', units);
+        const qs = p.toString();
+        const url = '/api/v1/today' + (qs ? '?' + qs : '');
+        window.__isithotPrefetch = {
+          url,
+          response: fetch(url, { headers: { accept: 'application/json' } }),
+        };
+      } catch {
+        // The app will fetch normally.
+      }
+    })();
+  </script>
+  <div class="wrap" id="app" data-state="loading" data-mode="home" data-topic={topic}>
+    <Header site={topic} />
+    <Views data={null} state="loading" topic={topic} />
+    <AdSlot />
+    <Footer />
+  </div>
+  <SearchSheet />
+  <script is:inline define:vars={{ key, version, maxAge }}>
+    // Paint the last answer instantly (under 3 hours old) before the main script loads. A wet
+    // answer is for the rest of the day from when it was worked out: only until the next hour.
+    try {
+      const c = location.search ? null : JSON.parse(localStorage.getItem(key) || 'null');
+      if (
+        c &&
+        c.v === version &&
+        Date.now() - c.savedAt <= maxAge &&
+        (!c.until || Date.now() < c.until)
+      ) {
+        const s = document.documentElement.style;
+        for (const k in c.palette) s.setProperty('--' + k, c.palette[k]);
+        document.querySelector('meta[name=theme-color]').setAttribute('content', c.palette.g1);
+        document.getElementById('main').innerHTML = c.html;
+        // "Now" from a saved answer is out of date; the app works it out again on load.
+        if (Date.now() - c.savedAt > 900000) {
+          document.getElementById('view-now').setAttribute('data-pending', '');
+        }
+        document.getElementById('place').textContent = c.place;
+        const app = document.getElementById('app');
+        app.setAttribute('data-state', 'ready');
+        app.setAttribute('data-restored', '1');
+        document.title = c.title;
+      }
+    } catch {
+      // No storage or a bad entry: the normal load takes over.
+    }
+  </script>
+  <script>
+    import { start } from '../scripts/app';
+    start();
+  </script>
+</Base>

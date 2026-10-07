@@ -34,7 +34,7 @@ jobs:
         run: pnpm fixtures && node scripts/summarise-fixtures.mjs --print
         continue-on-error: true
 
-      - name: Commit the recorded fixtures (when synthetic or recorded with an older request)
+      - name: Commit the recorded fixtures (when synthetic or recorded with older requests)
         if: github.event.pull_request.head.repo.full_name == github.repository
         continue-on-error: true
         run: |
@@ -43,9 +43,11 @@ jobs:
           if ! grep -q Recorded <<<"$recorded"; then
             echo "Recording did not complete; nothing to commit."; exit 0
           fi
+          # Re-record when either the forecast or the climate request line has changed.
+          requests() { grep -E '^(Forecast|Climate) request:' <<<"$1" || true; }
           if ! grep -q synthetic <<<"$committed" &&
-             [ "$(grep '^Forecast request:' <<<"$committed")" = "$(grep '^Forecast request:' <<<"$recorded")" ]; then
-            echo "Committed fixtures already match the current request; leaving them alone."; exit 0
+             [ "$(requests "$committed")" = "$(requests "$recorded")" ]; then
+            echo "Committed fixtures already match the current requests; leaving them alone."; exit 0
           fi
           # Only commit recordings the provider tests accept. (A push from this workflow does not
           # start CI, so the next push to the branch is the first full run on them.)
@@ -74,14 +76,14 @@ jobs:
           done
           echo "Timed out waiting for the deploy preview"; exit 1
 
-      - name: Smoke test the preview
-        run: node scripts/smoke.mjs "$PREVIEW"
+      - name: Smoke test the preview (both sites)
+        run: node scripts/smoke.mjs "$PREVIEW" --wet
 
       - name: Lighthouse (mobile) on the deploy preview, and production for comparison
         run: |
           # Netlify adds its review toolbar to deploy previews only: leave it out so the numbers
           # match what visitors to the live site get.
-          for url in "$PREVIEW/" "$PREVIEW/in/london-gb" "https://isithot.today/"; do
+          for url in "$PREVIEW/" "$PREVIEW/in/london-gb" "$PREVIEW/wet" "https://isithot.today/"; do
             # Warm the CDN first: production visitors mostly get cached pages.
             origin=$(node -e 'console.log(new URL(process.argv[1]).origin)' "$url")
             curl -fsS -o /dev/null "$url"; curl -fsS -o /dev/null "$origin/api/v1/today"

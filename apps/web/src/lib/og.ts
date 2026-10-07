@@ -1,6 +1,7 @@
 /**
- * Renders the 1200×630 Open Graph image: band gradient, answer and city, matching the page.
- * Fonts and the resvg wasm are fetched once per function instance from our own static assets.
+ * Renders the 1200×630 Open Graph image for either site: band gradient, icon, answer and city,
+ * matching the page. Fonts and the resvg wasm are fetched once per function instance from our
+ * own static assets.
  */
 import satori from 'satori';
 import { Resvg, initWasm } from '@resvg/resvg-wasm';
@@ -8,11 +9,14 @@ import wasmUrl from '@resvg/resvg-wasm/index_bg.wasm?url';
 import font500 from '@fontsource/bricolage-grotesque/files/bricolage-grotesque-latin-500-normal.woff?url';
 import font700 from '@fontsource/bricolage-grotesque/files/bricolage-grotesque-latin-700-normal.woff?url';
 import font800 from '@fontsource/bricolage-grotesque/files/bricolage-grotesque-latin-800-normal.woff?url';
-import { PALETTES, type Band } from '@isithot/core';
-import { GLYPHS } from './view';
+import { SITES, paletteFor, type Band, type RainBand, type Topic } from '@isithot/core';
+import { glyphFor } from './view';
 
 export interface OgContent {
-  band: Band;
+  /** The site the image is for: its name goes in the corner. */
+  topic: Topic;
+  /** A hot band, or a rain band for isitwet.today. */
+  band: Band | RainBand;
   question: string;
   answer: string;
   verdict: string;
@@ -61,8 +65,9 @@ export async function renderOg(content: OgContent, origin: string): Promise<Uint
     throw err;
   });
   const fonts = await ready;
-  const p = PALETTES[content.band];
-  const glyph = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="300" height="300" fill="none" stroke="${p.ink}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${GLYPHS[content.band].replaceAll('currentColor', p.ink).replace('var(--g2)', p.g2)}</svg>`;
+  const p = paletteFor(content.band);
+  const glyph = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="300" height="300" fill="none" stroke="${p.ink}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${glyphFor(content.band).replaceAll('currentColor', p.ink).replace('var(--g2)', p.g2)}</svg>`;
+  const [brand, tld] = SITES[content.topic].name.split('.');
   const tree = h(
     'div',
     {
@@ -89,8 +94,8 @@ export async function renderOg(content: OgContent, origin: string): Promise<Uint
         },
       },
       h('div', { display: 'flex', fontSize: 34, fontWeight: 700 }, [
-        h('span', {}, 'isithot'),
-        h('span', { opacity: 0.6, fontWeight: 500 }, '.today'),
+        h('span', {}, brand),
+        h('span', { opacity: 0.6, fontWeight: 500 }, `.${tld}`),
       ]),
       h('div', { display: 'flex', flexDirection: 'column' }, [
         h('div', { fontSize: 44, fontWeight: 500, opacity: 0.9 }, content.question),

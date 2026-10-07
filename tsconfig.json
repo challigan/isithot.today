@@ -1,12 +1,15 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+    // Deno (the Netlify edge runtime) needs the extension on relative imports.
+    "allowImportingTsExtensions": true
   },
   "include": [
     "packages/*/src/**/*.ts",
     "packages/*/test/**/*.ts",
     "scripts/**/*.ts",
+    "netlify/**/*.ts",
     "e2e/**/*.ts",
     "vitest.config.ts",
     "playwright.config.ts"

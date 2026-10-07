@@ -1,35 +1,51 @@
 /**
  * The whole client: answers from approximate IP location first, quietly upgrades to device
- * location when permission is already granted, and handles search, units and caching.
- * Vanilla TypeScript; keep it small (the budget is 25 KB gzipped for all site JS).
+ * location when permission is already granted, and handles search, units, the Hot | Wet toggle
+ * and caching. Vanilla TypeScript; keep it small (the budget is 25 KB gzipped for all site JS).
  */
 import {
+  BANDS,
   CACHE,
   COPY,
   GRID,
   LOADING_PALETTE,
-  PALETTES,
+  RAIN_BANDS,
   SEARCH,
-  SITE_NAME,
+  SITES,
   VIEW_LABELS,
   computeNow,
+  computeRainNow,
   formatNow,
+  formatRainNow,
   outboundLinks,
   pageTitle,
   question,
   roundToGrid,
-  type ApiDay,
+  sitePath,
+  viewDisplay,
+  wetPageTitle,
   type ApiError,
   type ApiNow,
+  type ApiRainNow,
   type Band,
+  type DisplayFor,
+  type NowDisplay,
   type Palette,
+  type RainBand,
   type SearchResponse,
   type SearchResult,
+  type TodayDisplay,
+  type TodayModels,
   type TodayResponse,
+  type Topic,
   type Units,
   type View,
+  type ViewDisplay,
+  type WeekDisplay,
 } from '@isithot/core';
-import { GLYPHS, hoursHtml, listHtml, pct, stripLayout, weekHtml } from '../lib/view';
+// Types only: the preview module itself loads on demand, and only with ?preview=1.
+import type * as PreviewKit from '@isithot/core/preview';
+import { glyphFor, hoursHtml, listHtml, pct, weekHtml } from '../lib/view';
 import { wireViews, type ViewsController } from './views';
 
 declare global {
@@ -55,12 +71,13 @@ type Target =
       geonameId?: number | undefined;
     };
 
+/** The place and units serve both sites (°C goes with millimetres, °F with inches). */
 const KEYS = {
   place: 'isithot:place',
   units: 'isithot:units',
-  last: 'isithot:last',
 } as const;
-const CACHE_VERSION = 3;
+/** Each site's last answer, for the instant repaint (HomePage.astro reads the same keys). */
+const LAST: Record<Topic, string> = { hot: 'isithot:last', wet: 'isitwet:last' };
 
 const storage = {
   get<T>(key: string): T | null {
@@ -97,20 +114,26 @@ const mode = app.dataset.mode === 'city' ? 'city' : 'home';
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const params = new URLSearchParams(location.search);
 const preview = params.get('preview') === '1';
+/** The page's own question (its site's), which it opens on and goes back to. */
+const pageTopic: Topic = app.dataset.topic === 'wet' ? 'wet' : 'hot';
+/** The question on screen: the Hot | Wet toggle changes it. */
+let topic: Topic = pageTopic;
 
 let units: Units = 'c';
 let view: View = 'today';
 let views: ViewsController | null = null;
 let target: Target = { kind: 'ip' };
 let current: TodayResponse | null = null;
-/** The Now view as last shown, worked out for the current minute. */
+/** The Now view as last shown, worked out for the current minute (each topic's). */
 let nowShown: ApiNow | null = null;
+let rainNowShown: ApiRainNow | null = null;
 /** When the current answer arrived (client clock), for refreshing after a long absence. */
 let loadedAt = 0;
 let requestSeq = 0;
 
 /** Refresh the answer when the page comes back after this long. */
 const REFRESH_AFTER_MS = 30 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
 
 function setState(state: 'loading' | 'ready' | 'error'): void {
   app.dataset.state = state;
@@ -129,11 +152,19 @@ function applyPalette(p: Palette): void {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', p.g1);
 }
 
-/** The band shown by a view, or null when that view has no data. */
-function viewBand(res: TodayResponse, v: View): Band | null {
-  if (v === 'now') return nowShown?.band ?? null;
-  if (v === 'week') return res.week?.band ?? null;
-  return res.days[0]?.band ?? null;
+/** What a view shows for an answer (core `viewDisplay`), with "now" for this minute. */
+function shown<V extends View>(res: TodayResponse, v: V): DisplayFor<V> {
+  return viewDisplay(res, topic, v, 'ready', {
+    city: mode === 'city' ? res.location.name : null,
+    now: nowShown,
+    rainNow: rainNowShown,
+  });
+}
+
+/** The city a city page asks about, with or without an answer. */
+function cityName(): string | null {
+  if (mode !== 'city') return null;
+  return current?.location.name ?? $('place')?.textContent?.trim() ?? null;
 }
 
 /**
@@ -142,34 +173,49 @@ function viewBand(res: TodayResponse, v: View): Band | null {
  * fades through a mid-tone on a mid-tone.
  */
 function applyViewPalette(switching = false): void {
-  const band = current ? viewBand(current, view) : null;
   const root = document.documentElement;
   if (switching) {
     root.dataset.switching = '';
     clearTimeout(switchTimer);
     switchTimer = setTimeout(() => delete root.dataset.switching, 450);
   }
-  applyPalette(band ? PALETTES[band] : LOADING_PALETTE);
+  applyPalette(current ? shown(current, view).palette : LOADING_PALETTE);
 }
 let switchTimer: ReturnType<typeof setTimeout> | undefined;
 
-/** Screen readers hear the answer of the view they move to (once it settles). */
+/**
+ * Screen readers hear the answer of the view they move to (once it settles), or after a switch
+ * between Hot and Wet, the new question and its answer.
+ */
 let announceTimer: ReturnType<typeof setTimeout> | undefined;
-function announce(v: View): void {
+function announce(v: View, lead: 'view' | 'question' = 'view'): void {
   clearTimeout(announceTimer);
   announceTimer = setTimeout(() => {
     const panel = $(`view-${v}`);
     const live = $('view-live');
     if (!panel || !live) return;
-    const answer = panel.querySelector('.answer')?.textContent?.trim() ?? '';
+    const text = (sel: string): string => panel.querySelector(sel)?.textContent?.trim() ?? '';
     // Placeholder and out-of-date text stays in the page while hidden: never read it out.
     const shown =
       app.dataset.state === 'ready' &&
       !panel.hasAttribute('data-empty') &&
       !panel.hasAttribute('data-pending');
-    const verdict = shown ? (panel.querySelector('.verdict')?.textContent?.trim() ?? '') : '';
-    live.textContent = `${VIEW_LABELS[v]}: ${answer} ${verdict}`.trim();
+    const first = lead === 'question' ? text('.question') : `${VIEW_LABELS[v]}:`;
+    live.textContent = `${first} ${text('.answer')} ${shown ? text('.verdict') : ''}`.trim();
   }, 400);
+}
+
+/**
+ * Today's answer is a live region of its own, for an answer arriving. A topic switch rewrites it
+ * and is announced once instead, so it is quiet until the switch has been rendered.
+ */
+let hushTimer: ReturnType<typeof setTimeout> | undefined;
+function hushLive(): void {
+  const live = $('live');
+  if (!live) return;
+  live.setAttribute('aria-live', 'off');
+  clearTimeout(hushTimer);
+  hushTimer = setTimeout(() => live.setAttribute('aria-live', 'polite'), 300);
 }
 
 function setText(id: string, text: string): void {
@@ -185,31 +231,59 @@ function popAnswer(): void {
   el.classList.add('pop');
 }
 
-function renderStrip(day: ApiDay): void {
+/** Each view's nodes: Today's ids are bare ("answer"), the others' prefixed ("now-answer"). */
+const viewId = (v: View, name: string): string => (v === 'today' ? name : `${v}-${name}`);
+
+/** What every view has: its band, icon, question and answer lines. */
+function renderPanel(d: ViewDisplay): void {
+  const panel = $(`view-${d.view}`);
+  if (panel) {
+    // A restored snapshot hides an out-of-date "now" until it has been worked out again.
+    panel.removeAttribute('data-pending');
+    panel.dataset.band = d.band ?? '';
+    panel.toggleAttribute('data-empty', d.empty);
+  }
+  // Only a new band redraws the icon, so its animation does not restart every minute.
+  const glyph = $(viewId(d.view, 'glyph'));
+  const band = d.band ?? '';
+  if (glyph && glyph.dataset.glyph !== band) {
+    glyph.innerHTML = glyphFor(d.band);
+    glyph.dataset.glyph = band;
+  }
+  for (const key of ['question', 'answer', 'verdict', 'detail'] as const) {
+    setText(viewId(d.view, key), d[key]);
+  }
+}
+
+/** The models strip moves to its new positions rather than being redrawn. */
+function renderStrip(m: TodayModels): void {
   const strip = $('strip');
   if (!strip) return;
-  const layout = stripLayout(day);
-  let band = strip.querySelector<HTMLElement>('.band');
-  if (!band) {
-    band = document.createElement('div');
-    band.className = 'band';
-    strip.prepend(band);
+  let zone = strip.querySelector<HTMLElement>('.band');
+  if (m.zone) {
+    if (!zone) {
+      zone = document.createElement('div');
+      zone.className = 'band';
+      strip.prepend(zone);
+    }
+    zone.style.left = pct(m.zone.left);
+    zone.style.width = pct(m.zone.width);
+  } else {
+    zone?.remove();
   }
-  band.style.left = pct(layout.band.left);
-  band.style.width = pct(layout.band.width);
   const dots = Array.from(strip.querySelectorAll<HTMLElement>('.dot'));
-  while (dots.length < layout.dots.length) {
+  while (dots.length < m.dots.length) {
     const dot = document.createElement('div');
     dot.className = 'dot';
     // Start new dots at the consensus so they slide into place.
-    dot.style.left = pct(layout.band.left + layout.band.width / 2);
+    dot.style.left = pct(m.origin);
     strip.append(dot);
     dots.push(dot);
   }
-  while (dots.length > layout.dots.length) dots.pop()!.remove();
+  while (dots.length > m.dots.length) dots.pop()!.remove();
   // Let freshly added dots get a starting position before moving them.
   requestAnimationFrame(() => {
-    layout.dots.forEach((d, i) => {
+    m.dots.forEach((d, i) => {
       const dot = dots[i]!;
       dot.style.left = pct(d.left);
       dot.classList.toggle('out', d.out);
@@ -230,7 +304,8 @@ function renderLinks(res: TodayResponse): void {
   holder.replaceChildren(
     ...list.flatMap((c, i) => {
       const a = document.createElement('a');
-      a.href = `/in/${c.slug}`;
+      // To the city's page on the site of the question on screen.
+      a.href = sitePath(topic, `/in/${c.slug}`, location.hostname);
       a.textContent = c.name;
       return i < list.length - 1 ? [a, document.createTextNode(', ')] : [a];
     }),
@@ -238,51 +313,81 @@ function renderLinks(res: TodayResponse): void {
   nearby.hidden = list.length === 0;
 }
 
+/** One units setting serves both topics: °C | °F for Hot, mm | in for Wet. */
+const UNIT_LABELS: Record<Topic, Record<Units, string>> = {
+  hot: { c: '°C', f: '°F' },
+  wet: { c: 'mm', f: 'in' },
+};
+
 function renderUnits(): void {
+  const label = topic === 'wet' ? COPY.rainUnitsLabel : COPY.unitsLabel;
+  document.querySelector('.units')?.setAttribute('aria-label', label);
   document.querySelectorAll<HTMLButtonElement>('[data-units]').forEach((b) => {
-    b.setAttribute('aria-pressed', String(b.dataset.units === units));
+    const u: Units = b.dataset.units === 'f' ? 'f' : 'c';
+    b.setAttribute('aria-pressed', String(u === units));
+    if (b.textContent?.trim() !== UNIT_LABELS[topic][u]) b.textContent = UNIT_LABELS[topic][u];
   });
 }
 
+/**
+ * The tab title answers the question on screen. City titles are the topic's own (as on its
+ * site's city pages); the home page keeps its site's name.
+ */
+function titleFor(res: TodayResponse | null): string {
+  const city = cityName();
+  const site = SITES[city ? topic : pageTopic].name;
+  const hot = res?.days[0];
+  const wet = res?.rain?.days[0];
+  if (topic === 'hot' && hot) {
+    return city
+      ? pageTitle({ city, answer: hot.answer, high: hot.high })
+      : `${hot.answer} ${hot.verdict} | ${site}`;
+  }
+  if (topic === 'wet' && wet) {
+    return city
+      ? wetPageTitle({ city, answer: wet.answer, band: wet.band })
+      : `${wet.answer} ${wet.verdict} | ${site}`;
+  }
+  return `${question(city, 'today', topic)} | ${site}`;
+}
+
+/** Today's answer to the question on screen, to tell whether a new response changes it. */
+const todayAnswer = (res: TodayResponse | null): string | undefined =>
+  topic === 'wet' ? res?.rain?.days[0]?.answer : res?.days[0]?.answer;
+
 function render(res: TodayResponse, animate: boolean): void {
-  const day = res.days[0];
-  if (!day) return renderError();
+  if (!res.days[0]) return renderError();
   const changed =
-    current?.days[0]?.answer !== day.answer || current?.location.name !== res.location.name;
+    todayAnswer(current) !== todayAnswer(res) || current?.location.name !== res.location.name;
   current = res;
   units = res.units;
   setState('ready');
-  const city = mode === 'city' ? res.location.name : null;
-  renderNow(res, city);
+  renderNow(res);
   applyViewPalette();
-  const glyph = $('glyph');
-  if (glyph) glyph.innerHTML = GLYPHS[day.band];
-  const today = $('view-today');
-  if (today) today.dataset.band = day.band;
   setText('place', res.location.name);
-  setText('question', question(city));
-  setText('answer', day.answer);
-  if (animate && changed) popAnswer();
-  setText('verdict', day.verdict);
-  setText('detail', day.detail);
-  setText('agree', day.agreementText);
-  setText('strip-summary', day.stripSummary);
-  setText('smin', `${day.scale.min}°`);
-  setText('smax', `${day.scale.max}°`);
-  const list = $('list');
-  if (list) list.innerHTML = listHtml(day);
-  const limited = $('limited');
-  if (limited) limited.hidden = !day.limitedText;
+  renderToday(shown(res, 'today'), animate && changed);
   const stale = $('stale');
   if (stale) stale.hidden = !res.stale;
-  renderStrip(day);
-  renderWeek(res, city);
+  renderWeek(shown(res, 'week'));
   renderLinks(res);
   renderUnits();
-  document.title =
-    mode === 'city'
-      ? pageTitle({ city: res.location.name, answer: day.answer, high: day.high })
-      : `${day.answer} ${day.verdict} | ${SITE_NAME}`;
+  document.title = titleFor(res);
+}
+
+/** Show the other question: the same views, re-rendered in place in the other topic. */
+function setTopic(next: Topic, opts: { announce?: boolean } = {}): void {
+  if (next === topic) return;
+  topic = next;
+  hushLive();
+  document.querySelectorAll<HTMLButtonElement>('#topic [data-topic]').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.topic === topic));
+  });
+  if (current) render(current, false);
+  else renderPending(app.dataset.state === 'error' ? 'error' : 'loading');
+  renderUnits();
+  applyViewPalette(true);
+  if (preview) renderChips();
+  if (opts.announce) announce(view, 'question');
 }
 
 /**
@@ -295,73 +400,111 @@ function nowFor(res: TodayResponse): ApiNow | null {
   return fresh ? formatNow(fresh) : null;
 }
 
-/**
- * Whether the answer is out of date: past local midnight (today's answer is yesterday's) or
- * past the end of the hourly series it carries. A clock running far behind is not a reason.
- */
-function outOfDate(res: TodayResponse): boolean {
-  if (!res.now || preview) return false;
-  const series = res.now.series;
-  const now = computeNow(series, Date.now());
-  if (!now) return Date.now() > (series.at(-1)?.time ?? Infinity);
-  return now.date > (res.days[0]?.date ?? '');
+/** The same for rain: the hour containing this minute, from the hourly series. */
+function rainNowFor(res: TodayResponse): ApiRainNow | null {
+  const rain = res.rain;
+  if (!rain?.now || preview) return rain?.now ?? null;
+  const fresh = computeRainNow(rain.now.series, Date.now());
+  return fresh ? formatRainNow(fresh, rain.unit) : null;
 }
 
-/** The Now view. Without data for right now it says so instead. */
-function renderNow(res: TodayResponse, city: string | null): void {
-  const now = nowFor(res);
-  nowShown = now;
-  const panel = $('view-now');
-  panel?.removeAttribute('data-pending');
-  if (panel) panel.dataset.band = now?.band ?? '';
-  setText('now-question', question(city, 'now'));
-  setText('now-answer', now?.answer ?? COPY.notAvailable);
-  $('view-now')?.toggleAttribute('data-empty', !now);
-  const glyph = $('now-glyph');
-  if (glyph) glyph.innerHTML = now ? GLYPHS[now.band] : '';
-  setText('now-verdict', now?.verdict ?? '');
-  setText('now-detail', now?.detail ?? '');
+/**
+ * When today's rain answer goes out of date. It covers the rest of the day from when it was
+ * worked out, counting that hour by the minutes left, so it holds until the next forecast hour.
+ */
+function rainUntil(res: TodayResponse): number | null {
+  const from = res.rain?.days[0]?.from;
+  if (!from) return null;
+  const at = Date.parse(from);
+  return (
+    res.rain?.now?.series.find((p) => p.time > at)?.time ?? Math.floor(at / HOUR) * HOUR + HOUR
+  );
+}
+
+/**
+ * Whether the answer is out of date: past local midnight (today's answer is yesterday's) or
+ * past the end of the hourly series it carries ("day"), or past the hour today's rain answer
+ * holds for ("rain"). A clock running far behind is not a reason.
+ */
+function outOfDate(res: TodayResponse): 'day' | 'rain' | null {
+  if (preview) return null;
+  if (res.now) {
+    const series = res.now.series;
+    const now = computeNow(series, Date.now());
+    const old = now
+      ? now.date > (res.days[0]?.date ?? '')
+      : Date.now() > (series.at(-1)?.time ?? Infinity);
+    if (old) return 'day';
+  }
+  const until = rainUntil(res);
+  return until !== null && Date.now() >= until ? 'rain' : null;
+}
+
+/**
+ * The Today view: answer lines, then the models strip and list. The answer pops before the
+ * strip is touched, so new dots still slide in from the consensus.
+ */
+function renderToday(d: TodayDisplay, pop: boolean): void {
+  renderPanel(d);
+  if (pop) popAnswer();
+  const m = d.models;
+  setText('agree', m.heading);
+  setText('strip-summary', m.summary);
+  setText('smin', m.min);
+  setText('smax', m.max);
+  const list = $('list');
+  if (list) list.innerHTML = listHtml(m);
+  const limited = $('limited');
+  if (limited) limited.hidden = !m.limited;
+  renderStrip(m);
+}
+
+/** The Now view, worked out again for this minute. Without data for it, it says so instead. */
+function renderNow(res: TodayResponse): void {
+  nowShown = nowFor(res);
+  rainNowShown = rainNowFor(res);
+  renderHours(shown(res, 'now'));
+}
+
+function renderHours(d: NowDisplay): void {
+  renderPanel(d);
+  setText('now-h', d.heading);
   const hours = $('now-hours');
-  if (hours) hours.innerHTML = now ? hoursHtml(now) : '';
+  if (hours) hours.innerHTML = hoursHtml(d.items);
 }
 
 /** The This week view. */
-function renderWeek(res: TodayResponse, city: string | null): void {
-  const week = res.week ?? null;
-  const panel = $('view-week');
-  if (panel) panel.dataset.band = week?.band ?? '';
-  setText('week-question', question(city, 'week'));
-  setText('week-answer', week?.answer ?? COPY.notAvailable);
-  $('view-week')?.toggleAttribute('data-empty', !week);
-  const glyph = $('week-glyph');
-  if (glyph) glyph.innerHTML = week ? GLYPHS[week.band] : '';
-  setText('week-verdict', week?.verdict ?? '');
-  setText('week-detail', week?.detail ?? '');
+function renderWeek(d: WeekDisplay): void {
+  renderPanel(d);
+  setText('week-h', d.heading);
   const days = $('week-days');
-  if (days) days.innerHTML = week ? weekHtml(week) : '';
+  if (days) days.innerHTML = weekHtml(d.items);
 }
 
-/** Loading and error states show the same message in every view. */
-function setAnswers(text: string): void {
-  for (const id of ['answer', 'now-answer', 'week-answer']) setText(id, text);
-  for (const id of ['glyph', 'now-glyph', 'week-glyph']) {
-    const glyph = $(id);
-    if (glyph) glyph.innerHTML = '';
-  }
+/**
+ * Loading and error states show the same message in every view, asking the question on screen;
+ * the rest is placeholder text that stays hidden.
+ */
+function renderPending(state: 'loading' | 'error'): void {
+  const opts = { city: cityName() };
+  renderToday(viewDisplay(null, topic, 'today', state, opts), false);
+  renderHours(viewDisplay(null, topic, 'now', state, opts));
+  renderWeek(viewDisplay(null, topic, 'week', state, opts));
+  document.title = titleFor(null);
 }
 
 function renderLoading(): void {
   if (current) return; // Keep showing the previous answer while refreshing.
   setState('loading');
   applyPalette(LOADING_PALETTE);
-  setAnswers(COPY.checking);
+  renderPending('loading');
 }
 
 function renderError(): void {
   if (current) return; // A stale answer beats an error.
   setState('error');
   applyPalette(LOADING_PALETTE);
-  setAnswers(COPY.unavailable);
+  renderPending('error');
 }
 
 function setNote(kind: 'none' | 'exact' | 'approximate'): void {
@@ -412,10 +555,11 @@ function apiUrl(t: Target, u: Units | null): string {
 }
 
 function saveLast(res: TodayResponse): void {
-  if (mode !== 'home' || preview) return;
+  // Each site's snapshot answers its own question, which the page opens on.
+  if (mode !== 'home' || preview || topic !== pageTopic) return;
   const main = $('main');
-  const day = res.days[0];
-  if (!main || !day) return;
+  const d = shown(res, 'today');
+  if (!main || d.empty) return;
   // The snapshot always reopens on Today alone, as the server sends the page.
   const copy = main.cloneNode(true) as HTMLElement;
   copy.querySelectorAll<HTMLElement>('.view').forEach((panel) => {
@@ -432,11 +576,17 @@ function saveLast(res: TodayResponse): void {
     tab.setAttribute('aria-selected', String(today));
     tab.tabIndex = today ? 0 : -1;
   });
-  storage.set(KEYS.last, {
-    v: CACHE_VERSION,
+  copy.querySelectorAll<HTMLElement>('#topic [data-topic]').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.topic === pageTopic));
+  });
+  copy.querySelector('#live')?.setAttribute('aria-live', 'polite');
+  storage.set(LAST[pageTopic], {
+    v: CACHE.snapshotVersion,
     savedAt: Date.now(),
+    // Today's rain is for the rest of the day from when it was worked out: not past the hour.
+    until: pageTopic === 'wet' ? (rainUntil(res) ?? undefined) : undefined,
     key: targetKey(target),
-    palette: PALETTES[day.band],
+    palette: d.palette,
     html: copy.innerHTML,
     data: res,
     place: res.location.name,
@@ -452,8 +602,9 @@ async function load(
   if (!opts.quiet) renderLoading();
   const preferred = storage.get<Units>(KEYS.units);
   let url = apiUrl(t, preferred ?? (t.kind === 'ip' ? null : units));
-  // Past midnight a cached copy is yesterday's answer: ask past the browser and CDN caches.
-  if (opts.fresh) url += `${url.includes('?') ? '&' : '?'}t=${Math.floor(Date.now() / 600000)}`;
+  // An out-of-date answer (past midnight, or past the hour today's rain holds for) may still be
+  // in the browser and CDN caches: ask past them, with a new address each hour.
+  if (opts.fresh) url += `${url.includes('?') ? '&' : '?'}t=${Math.floor(Date.now() / HOUR)}`;
   const early = window.__isithotPrefetch;
   window.__isithotPrefetch = undefined;
   try {
@@ -516,10 +667,12 @@ async function useDeviceLocation(prompted: boolean): Promise<void> {
     rememberPlace(t);
     setNote('none');
     if (mode === 'home') {
-      if (location.search) history.replaceState(null, '', '/');
+      if (location.search)
+        history.replaceState(null, '', sitePath(pageTopic, '/', location.hostname));
       await load(t, { quiet: !!current });
     } else {
-      location.href = '/';
+      // Home, on the site of the question on screen.
+      location.href = sitePath(topic, '/', location.hostname);
     }
   } catch {
     if (current) setText('place', current.location.name);
@@ -625,7 +778,8 @@ function choose(r: SearchResult): void {
   $<HTMLDialogElement>('search')?.close();
   if (r.slug) {
     rememberPlace({ kind: 'city', slug: r.slug, name: r.name });
-    location.href = `/in/${r.slug}`;
+    // The city's page on the site of the question on screen.
+    location.href = sitePath(topic, `/in/${r.slug}`, location.hostname);
     return;
   }
   const t: Target = {
@@ -640,12 +794,12 @@ function choose(r: SearchResult): void {
   };
   rememberPlace(t);
   setNote('none');
-  const url = `/?${new URLSearchParams({ lat: String(t.lat), lon: String(t.lon), name: r.name })}`;
+  const path = `/?${new URLSearchParams({ lat: String(t.lat), lon: String(t.lon), name: r.name })}`;
   if (mode === 'home') {
-    history.pushState(null, '', url);
+    history.pushState(null, '', sitePath(pageTopic, path, location.hostname));
     void load(t);
   } else {
-    location.href = url;
+    location.href = sitePath(topic, path, location.hostname);
   }
 }
 
@@ -668,7 +822,7 @@ function wireSearch(): void {
   });
 }
 
-// ---- Units --------------------------------------------------------------------
+// ---- Units and topic -----------------------------------------------------------
 
 function wireUnits(): void {
   document.querySelectorAll<HTMLButtonElement>('[data-units]').forEach((b) => {
@@ -684,39 +838,64 @@ function wireUnits(): void {
   });
 }
 
+/** Hot | Wet: the answer already carries both, so switching never asks the server. */
+function wireTopic(): void {
+  $('topic')?.addEventListener('click', (e) => {
+    const b = (e.target as Element).closest<HTMLElement>('[data-topic]');
+    if (b) setTopic(b.dataset.topic === 'wet' ? 'wet' : 'hot', { announce: true });
+  });
+}
+
 // ---- Preview (dev only, ?preview=1) --------------------------------------------
 
-let previewBand: Band = 'cold';
+let previewBand: Band | RainBand = 'cold';
+let previewKit: typeof PreviewKit | null = null;
 
 async function showPreview(): Promise<void> {
-  const { previewResponse, PREVIEW_BANDS, BAND_LABELS } = await import('@isithot/core/preview');
+  previewKit ??= await import('@isithot/core/preview');
+  render(previewKit.previewResponse(previewBand, units), true);
+  renderChips();
+}
+
+/** One chip per band of the question on screen; the pressed one is the band Today shows. */
+function renderChips(): void {
   const holder = $('preview');
-  if (holder && holder.hidden) {
+  if (!holder || !previewKit) return;
+  const { PREVIEW_BANDS, PREVIEW_RAIN_BANDS, BAND_LABELS, RAIN_BAND_LABELS } = previewKit;
+  let chips = holder.querySelector<HTMLElement>('.chips');
+  if (!chips) {
     holder.hidden = false;
     const label = document.createElement('p');
     label.className = 'preview-label';
     label.textContent = `${COPY.previewLabel} (${COPY.previewNote.toLowerCase()})`;
-    const chips = document.createElement('div');
+    chips = document.createElement('div');
     chips.className = 'chips';
     chips.setAttribute('role', 'group');
     chips.setAttribute('aria-label', COPY.previewLabel);
-    for (const band of PREVIEW_BANDS) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.dataset.band = band;
-      b.textContent = BAND_LABELS[band];
-      b.addEventListener('click', () => {
-        previewBand = band;
-        void showPreview();
-      });
-      chips.append(b);
-    }
     holder.append(label, chips);
   }
-  holder?.querySelectorAll<HTMLButtonElement>('[data-band]').forEach((b) => {
-    b.setAttribute('aria-pressed', String(b.dataset.band === previewBand));
+  if (chips.dataset.bands !== topic) {
+    chips.dataset.bands = topic;
+    const labels: Record<string, string> = { ...BAND_LABELS, ...RAIN_BAND_LABELS };
+    const bands = topic === 'wet' ? PREVIEW_RAIN_BANDS : PREVIEW_BANDS;
+    chips.replaceChildren(
+      ...bands.map((band) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.dataset.band = band;
+        b.textContent = labels[band] ?? band;
+        b.addEventListener('click', () => {
+          previewBand = band;
+          void showPreview();
+        });
+        return b;
+      }),
+    );
+  }
+  const band = current && shown(current, 'today').band;
+  chips.querySelectorAll<HTMLButtonElement>('[data-band]').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.band === band));
   });
-  render(previewResponse(previewBand, units), true);
 }
 
 // ---- Keeping "now" current ------------------------------------------------------
@@ -726,12 +905,14 @@ let lastRefetch = 0;
 
 function refreshNow(): void {
   if (!current) return;
-  if (outOfDate(current) && Date.now() - lastRefetch > 5 * 60 * 1000) {
+  const old = outOfDate(current);
+  if (old && Date.now() - lastRefetch > 5 * 60 * 1000) {
     lastRefetch = Date.now();
     void load(target, { quiet: true, animate: false, fresh: true });
-    return;
+    // Past midnight "now" belongs to the new day's answer; rain's hours are still good.
+    if (old === 'day') return;
   }
-  renderNow(current, mode === 'city' ? current.location.name : null);
+  renderNow(current);
   if (view === 'now') applyViewPalette();
 }
 
@@ -746,12 +927,16 @@ function wireRefresh(): void {
       hiddenAt = Date.now();
       return;
     }
-    // Back after a long time away: start again on Today, the site's main answer.
-    if (hiddenAt && Date.now() - hiddenAt > REFRESH_AFTER_MS) views?.go('today', { instant: true });
+    // Back after a long time away: start again on Today and the page's own question.
+    if (hiddenAt && Date.now() - hiddenAt > REFRESH_AFTER_MS) {
+      views?.go('today', { instant: true });
+      setTopic(pageTopic);
+    }
     if (preview || !current) return;
-    if (Date.now() - loadedAt > REFRESH_AFTER_MS)
-      void load(target, { quiet: true, animate: false });
-    else refreshNow();
+    if (Date.now() - loadedAt > REFRESH_AFTER_MS) {
+      lastRefetch = Date.now();
+      void load(target, { quiet: true, animate: false, fresh: !!outOfDate(current) });
+    } else refreshNow();
   };
   document.addEventListener('visibilitychange', wake);
   window.addEventListener('pageshow', (e) => {
@@ -795,6 +980,7 @@ export function start(): void {
   });
   wireSearch();
   wireUnits();
+  wireTopic();
   wireRefresh();
   $('retry')?.addEventListener('click', () => void load(target));
   window.addEventListener('popstate', () => {
@@ -802,8 +988,15 @@ export function start(): void {
   });
 
   if (preview) {
-    const band = params.get('band');
-    if (band && band in PALETTES) previewBand = band as Band;
+    // A hot band opens on Hot with that sample, a rain band on Wet.
+    const band = params.get('band') ?? '';
+    if ((BANDS as readonly string[]).includes(band)) {
+      previewBand = band as Band;
+      setTopic('hot');
+    } else if ((RAIN_BANDS as readonly string[]).includes(band)) {
+      previewBand = band as RainBand;
+      setTopic('wet');
+    }
     void showPreview();
     return;
   }
@@ -830,22 +1023,27 @@ export function start(): void {
   const t = initialTarget();
   target = t;
   const restored = app.dataset.restored === '1';
-  const cached = storage.get<{ key: string; savedAt: number; data?: TodayResponse }>(KEYS.last);
+  const cached = storage.get<{ key: string; savedAt: number; data?: TodayResponse }>(
+    LAST[pageTopic],
+  );
   const fresh =
     restored &&
     cached &&
     cached.key === targetKey(t) &&
     Date.now() - cached.savedAt < CACHE.localAnswerMaxAgeMs;
   if (fresh && cached.data) {
-    // The instant paint is up to three hours old: bring "now" up to date before refreshing.
+    // The instant paint is up to three hours old: bring "now" up to date while refreshing.
     current = cached.data;
     loadedAt = cached.savedAt;
-    refreshNow();
   }
   if (!fresh && restored) {
     // The instant paint was for a different place; start clean.
     app.dataset.restored = '';
     setState('loading');
   }
-  void load(t, { quiet: !!fresh, animate: !fresh }).then(() => upgradeLocation());
+  // An out-of-date paint (past midnight, or rain past its hour) asks past the caches.
+  const old = current && outOfDate(current);
+  if (current && old !== 'day') renderNow(current);
+  if (old) lastRefetch = Date.now();
+  void load(t, { quiet: !!fresh, animate: !fresh, fresh: !!old }).then(() => upgradeLocation());
 }

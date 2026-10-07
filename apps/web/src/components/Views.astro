@@ -1,10 +1,20 @@
 ---
 /**
- * The tab bar and the three views (Now | Today | This week) in one horizontal scroller, plus
- * the place links they share. Today comes first in the markup (it is the page's purpose, its
- * answer is the only h1 and the LCP element) and sits in the middle on screen.
+ * The Hot | Wet toggle, the tab bar and the three views (Now | Today | This week) in one
+ * horizontal scroller, plus the place links they share. Today comes first in the markup (it is
+ * the page's purpose, its answer is the only h1 and the LCP element) and sits in the middle on
+ * screen.
  */
-import { COPY, outboundLinks, type NearbyCity, type TodayResponse } from '@isithot/core';
+import {
+  COPY,
+  outboundLinks,
+  viewDisplay,
+  type DisplayState,
+  type NearbyCity,
+  type Topic,
+  type TodayResponse,
+} from '@isithot/core';
+import TopicToggle from './TopicToggle.astro';
 import ViewTabs from './ViewTabs.astro';
 import Today from './Today.astro';
 import Now from './Now.astro';
@@ -13,10 +23,13 @@ import Week from './Week.astro';
 interface Props {
   data: TodayResponse | null;
   city?: string | null;
-  state: 'loading' | 'ready' | 'error';
+  state: DisplayState;
+  /** The question the views answer first: the page's own topic. */
+  topic?: Topic;
 }
 
-const { data, city = null, state } = Astro.props;
+const { data, city = null, state, topic = 'hot' } = Astro.props;
+const opts = { city };
 const links = outboundLinks(data?.location ?? null);
 const nearby: NearbyCity[] = data?.nearby ?? [];
 const escape = (text: string): string =>
@@ -27,11 +40,12 @@ const nearbyHtml = nearby
 ---
 
 <main id="main" tabindex="-1">
+  <TopicToggle topic={topic} />
   <ViewTabs />
   <div class="views" id="views">
-    <Today data={data} city={city} state={state} />
-    <Now now={data?.now ?? null} city={city} state={state} />
-    <Week week={data?.week ?? null} city={city} state={state} />
+    <Today view={viewDisplay(data, topic, 'today', state, opts)} />
+    <Now view={viewDisplay(data, topic, 'now', state, opts)} />
+    <Week view={viewDisplay(data, topic, 'week', state, opts)} />
   </div>
   <button class="button retry" id="retry" type="button" hidden={state !== 'error'}>
     {COPY.retry}

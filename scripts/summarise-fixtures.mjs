@@ -19,12 +19,34 @@ for (const name of ['open-meteo-forecast-newcastle.json', 'open-meteo-forecast-s
     });
     console.log(`  ${key}: ${days.join(' ')}`);
   }
+  // Each model's rain per day as the parser works it out: the value at stamp t + 1 fell in the
+  // hour from t, and a day needs all 24 hours (the forecast's very last hour excepted).
+  const rainKeys = Object.keys(f.hourly ?? {}).filter((k) => k.startsWith('precipitation'));
+  if (!rainKeys.length) console.log('  rain: no precipitation in this recording');
+  for (const d of rainKeys.length ? dates : []) {
+    const hours = times.flatMap((t, i) => (t.startsWith(d) ? [i] : []));
+    const totals = rainKeys
+      .map((key) => hours.map((i) => f.hourly[key][i + 1] ?? (i === times.length - 1 ? 0 : null)))
+      .filter((rain) => rain.length === 24 && rain.every((v) => v !== null))
+      .map((rain) => rain.reduce((a, b) => a + b, 0))
+      .sort((a, b) => a - b);
+    const mm = (v) => (v === undefined ? '-' : `${Math.round(v * 10) / 10}mm`);
+    const mid = totals.length / 2;
+    const median =
+      totals.length % 2 ? totals[Math.floor(mid)] : (totals[mid - 1] + totals[mid]) / 2;
+    console.log(
+      `  rain ${d}: ${totals.length}/${rainKeys.length} models with a full day,` +
+        ` min ${mm(totals[0])} median ${mm(totals.length ? median : undefined)} max ${mm(totals.at(-1))}`,
+    );
+  }
 }
 for (const place of ['newcastle', 'seville', 'london', 'singapore']) {
-  const nasa = read(`nasa-power-${place}.json`);
-  console.log(
-    `nasa ${place} ${JSON.stringify(nasa.geometry?.coordinates)}: ${JSON.stringify(nasa.properties?.parameter)}`,
-  );
+  for (const name of [`nasa-power-${place}.json`, `nasa-power-rain-${place}.json`]) {
+    const nasa = read(name);
+    console.log(
+      `${name} ${JSON.stringify(nasa.geometry?.coordinates)}: ${JSON.stringify(nasa.properties?.parameter)}`,
+    );
+  }
 }
 const search = read('open-meteo-search-newcastle.json');
 console.log(

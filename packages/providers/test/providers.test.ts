@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { MODELS, type ModelConfig } from '@isithot/core';
+import { MODELS, RAIN, type ModelConfig } from '@isithot/core';
 import {
   NASA_POWER_URL,
   OPEN_METEO_CUSTOMER,
@@ -8,14 +8,18 @@ import {
   ProviderError,
   buildClimatologyUrl,
   buildForecastUrl,
+  buildRainClimatologyUrl,
   buildSearchUrl,
   forecastSignature,
   fetchClimateNormals,
   fetchForecast,
+  fetchRainNormals,
   parseClimatology,
   parseForecast,
+  parseRainClimatology,
   parseSearch,
   searchPlaces,
+  syntheticForecast,
 } from '../src';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- recorded JSON fixtures
@@ -37,14 +41,16 @@ describe('Open-Meteo forecast', () => {
     expect(url.searchParams.get('forecast_days')).toBe('7');
     // Daily highs are worked out from the hourly values, which halves the quota used.
     expect(url.searchParams.has('daily')).toBe(false);
-    expect(url.searchParams.get('hourly')).toBe('temperature_2m,apparent_temperature');
+    expect(url.searchParams.get('hourly')).toBe(
+      'temperature_2m,apparent_temperature,precipitation',
+    );
     expect(url.searchParams.get('models')!.split(',')).toEqual(MODELS.map((m) => m.id));
     expect(url.searchParams.has('apikey')).toBe(false);
   });
 
   it('pins the request so a change has to bump the cache version', () => {
     expect(forecastSignature()).toBe(
-      'v2 forecast_days=7 hourly=temperature_2m,apparent_temperature',
+      'v3 forecast_days=7 hourly=temperature_2m,apparent_temperature,precipitation',
     );
   });
 
@@ -56,19 +62,38 @@ describe('Open-Meteo forecast', () => {
     expect(url.searchParams.get('apikey')).toBe('k3y');
   });
 
+  /** A recording with hourly precipitation, as the live ones will be once CI re-records them. */
+  const synthetic = (lat: number, lon: number) => () =>
+    JSON.parse(
+      JSON.stringify(
+        syntheticForecast(
+          lat,
+          lon,
+          MODELS.map((m) => m.id),
+          new Date('2026-10-06T08:00:00Z'),
+        ),
+      ),
+    );
+
   it.each([
-    'open-meteo-forecast-newcastle.json',
-    'open-meteo-forecast-seville.json',
-    'open-meteo-forecast-newcastle-legacy.json',
-    'open-meteo-forecast-seville-legacy.json',
-  ])('parses the recorded response %s', (name) => {
-    const raw = fixture(name);
+    ...[
+      'open-meteo-forecast-newcastle.json',
+      'open-meteo-forecast-seville.json',
+      'open-meteo-forecast-newcastle-legacy.json',
+      'open-meteo-forecast-seville-legacy.json',
+    ].map((name) => [name, () => fixture(name)] as const),
+    ['synthetic Newcastle', synthetic(54.95, -1.6)] as const,
+    ['synthetic Seville', synthetic(37.4, -6)] as const,
+  ])('parses the recorded response %s', (_name, load) => {
+    const raw = load();
     const f = parseForecast(raw, MODELS);
     expect(f.timezone).toBe(raw.timezone);
     expect(f.utcOffsetSeconds).toBe(raw.utc_offset_seconds);
     const dates = [...new Set(raw.hourly.time.map((t: string) => t.slice(0, 10)))];
     expect(f.days.map((d) => d.date)).toEqual(dates);
     const hasFeels = Object.keys(raw.hourly).some((k) => k.startsWith('apparent_temperature_'));
+    const hasRain = Object.keys(raw.hourly).some((k) => k.startsWith('precipitation_'));
+    const lastStamp = raw.hourly.time.length - 1;
     for (const [dayIndex, day] of f.days.entries()) {
       expect(day.models).toHaveLength(MODELS.length);
       expect(day.hourly).toHaveLength(24);
@@ -99,14 +124,47 @@ describe('Open-Meteo forecast', () => {
           .every(([, v]: readonly [string, number | null]) => v !== null);
         const finite = values.filter((v: number | null): v is number => v !== null);
         expect(day.models[i]!.high).toBe(covered && finite.length ? Math.max(...finite) : null);
+
+        // Rain in the hour from each stamp is the next stamp's precipitation. A day needs every
+        // hour, except that the forecast's very last hour never has a value.
+        const precipitation = raw.hourly[`precipitation_${m.id}`] as
+          Array<number | null> | undefined;
+        const rain: Array<readonly [number, number | null]> = raw.hourly.time.flatMap(
+          (t: string, k: number) =>
+            t.startsWith(day.date) ? [[k, precipitation?.[k + 1] ?? null]] : [],
+        );
+        const full = rain.every(([k, v]) => v !== null || k === lastStamp);
+        const total = (keep: (k: number) => boolean) =>
+          rain.reduce((a, [k, v]) => (keep(k) ? a + (v ?? 0) : a), 0);
+        const model = day.models[i]!;
+        if (hasRain && full) {
+          expect(model.rain).toBeCloseTo(
+            total(() => true),
+            6,
+          );
+          const cold = (k: number) => (temps?.[k] ?? Infinity) <= RAIN.snowAtOrBelowC;
+          expect(model.snow).toBeCloseTo(total(cold), 6);
+        } else {
+          expect(model.rain ?? null).toBeNull();
+          expect(model.snow ?? null).toBeNull();
+        }
+      }
+      for (const h of day.hourly) {
+        if (hasRain) expect(h.rain).toHaveLength(MODELS.length);
+        else expect((h.rain ?? []).every((v) => v === null)).toBe(true);
       }
       const withHigh = day.models.filter((m) => m.high !== null).length;
       const withFeels = day.models.filter((m) => m.feelsLike !== null).length;
+      const withRain = day.models.filter((m) => typeof m.rain === 'number').length;
       if (dayIndex < 2) expect(withHigh).toBeGreaterThanOrEqual(5);
       // The week needs enough models on every day, even as short-range ones drop away.
       expect(withHigh).toBeGreaterThanOrEqual(3);
       if (hasFeels && dayIndex < 2) expect(withFeels).toBeGreaterThanOrEqual(5);
       if (!hasFeels) expect(withFeels).toBe(0);
+      // Likewise for rain, including the last day (which sums 23 hours).
+      if (hasRain && dayIndex < 2) expect(withRain).toBeGreaterThanOrEqual(5);
+      if (hasRain) expect(withRain).toBeGreaterThanOrEqual(3);
+      if (!hasRain) expect(withRain).toBe(0);
     }
   });
 
@@ -180,6 +238,124 @@ describe('Open-Meteo forecast', () => {
     expect(f.days[0]!.models[0]).toMatchObject({ high: 20, feelsLike: 21 });
     expect(f.utcOffsetSeconds).toBe(0);
     expect(Number.isNaN(f.lat)).toBe(true);
+  });
+
+  const twoDays = [...day('2026-10-06'), ...day('2026-10-07')];
+  const ecmwf: ModelConfig[] = [{ id: 'ecmwf_ifs025', name: 'ECMWF' }];
+  const tenths = twoDays.map(() => 0.1);
+
+  it('moves precipitation to the start of the hour it fell in', () => {
+    // Each stamp's precipitation (k / 10 mm at stamp k) fell in the hour before it.
+    const f = parseForecast(
+      {
+        timezone: 'UTC',
+        hourly: {
+          time: twoDays,
+          temperature_2m: twoDays.map(() => 10),
+          precipitation: twoDays.map((_, k) => k / 10),
+        },
+      },
+      ecmwf,
+    );
+    const [first, last] = f.days;
+    // The first stamp's own value fell before the forecast starts, so it is dropped.
+    expect(first!.hourly[0]!.rain).toEqual([0.1]);
+    // 23:00 takes the next day's 00:00 value.
+    expect(first!.hourly[23]!.rain).toEqual([2.4]);
+    // Nothing is labelled with the end of the forecast's last hour.
+    expect(last!.hourly[23]!.rain).toEqual([null]);
+    // Stamps 1 to 24, then 25 to 47.
+    expect(first!.models[0]).toMatchObject({ rain: 30, snow: 0 });
+    expect(last!.models[0]).toMatchObject({ rain: 82.8, snow: 0 });
+  });
+
+  it("only totals rain for a day with every hour, except the forecast's very last", () => {
+    const at = (k: number) => tenths.map((v, i) => (i === k ? null : v));
+    const f = parseForecast(
+      {
+        timezone: 'UTC',
+        hourly: {
+          time: twoDays,
+          precipitation_a: tenths,
+          // The first stamp is never used.
+          precipitation_b: at(0),
+          // Rain from 11:00 on the first day is missing.
+          precipitation_c: at(12),
+          // The last stamp is the rain in the second-to-last hour, which has to be there.
+          precipitation_d: at(47),
+        },
+      },
+      ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id, name: id.toUpperCase() })),
+    );
+    // 24 and 23 tenths without float noise; no precipitation at all for E.
+    expect(f.days.map((d) => d.models.map((m) => m.rain))).toEqual([
+      [2.4, 2.4, null, 2.4, null],
+      [2.3, 2.3, 2.3, null, null],
+    ]);
+    expect(f.days[0]!.models[2]!.snow).toBeNull();
+    // One hour of the next day is not a day's rain.
+    const short = parseForecast(
+      {
+        timezone: 'UTC',
+        hourly: { time: twoDays.slice(0, 25), precipitation: tenths.slice(0, 25) },
+      },
+      ecmwf,
+    );
+    expect(short.days.map((d) => d.models[0]!.rain)).toEqual([2.4, null]);
+  });
+
+  it('counts rain in hours at or below the snow line as snow', () => {
+    const cold = RAIN.snowAtOrBelowC;
+    const temps = twoDays.map((_, k) =>
+      k < 6 ? -2 : k === 6 ? cold : k === 7 ? cold + 0.1 : k === 8 ? null : 5,
+    );
+    const f = parseForecast(
+      {
+        timezone: 'UTC',
+        hourly: { time: twoDays, temperature_2m: temps, precipitation: twoDays.map(() => 1) },
+      },
+      ecmwf,
+    );
+    // 00:00 to 06:00 are at or below the line; 07:00 is just above; 08:00 has no temperature.
+    expect(f.days[0]!.models[0]).toMatchObject({ rain: 24, snow: 7 });
+    expect(f.days[1]!.models[0]).toMatchObject({ rain: 23, snow: 0 });
+  });
+
+  it('reads rain by alias, and unsuffixed only for a single model', () => {
+    const models: ModelConfig[] = [
+      { id: 'ncep_gfs_seamless', name: 'GFS', aliases: ['gfs_seamless'] },
+      { id: 'jma_seamless', name: 'JMA' },
+    ];
+    const f = parseForecast(
+      {
+        timezone: 'UTC',
+        hourly: { time: twoDays, precipitation_gfs_seamless: tenths, precipitation: tenths },
+      },
+      models,
+    );
+    expect(f.days[0]!.models.map((m) => m.rain)).toEqual([2.4, null]);
+    expect(f.days[0]!.hourly[3]!.rain).toEqual([0.1, null]);
+    const single = parseForecast(
+      { timezone: 'UTC', hourly: { time: twoDays, precipitation: tenths } },
+      ecmwf,
+    );
+    expect(single.days[0]!.models[0]!.rain).toBe(2.4);
+  });
+
+  it('leaves rain out of forecasts recorded without precipitation', () => {
+    const f = parseForecast(
+      { timezone: 'UTC', hourly: { time: twoDays, temperature_2m: [...curve(20), ...curve(18)] } },
+      ecmwf,
+    );
+    expect(f.days[0]!.models[0]).toEqual({
+      id: 'ecmwf_ifs025',
+      name: 'ECMWF',
+      high: 20,
+      feelsLike: null,
+    });
+    expect(f.days[0]!.models[0]).not.toHaveProperty('rain');
+    expect(f.days[0]!.models[0]).not.toHaveProperty('snow');
+    expect(f.days.flatMap((d) => d.hourly).some((h) => 'rain' in h)).toBe(false);
   });
 
   it('rejects an unexpected shape', () => {
@@ -339,6 +515,78 @@ describe('NASA POWER climatology', () => {
     expect(() => parseClimatology({ properties: {} })).toThrow(
       'unexpected climatology response shape',
     );
+  });
+
+  it('asks for normal rainfall in a separate request', () => {
+    const url = new URL(buildRainClimatologyUrl(NASA_POWER_URL, { lat: 51.5, lon: 0 }));
+    expect(url.origin + url.pathname).toBe(NASA_POWER_URL);
+    expect(url.searchParams.get('parameters')).toBe('PRECTOTCORR');
+    expect(url.searchParams.get('community')).toBe('AG');
+    expect(url.searchParams.get('latitude')).toBe('51.5');
+    expect(url.searchParams.get('longitude')).toBe('0');
+    expect(url.searchParams.get('format')).toBe('JSON');
+    // The temperature request, and every normal cached from it, stays exactly as it was.
+    expect(buildClimatologyUrl(NASA_POWER_URL, { lat: 51.5, lon: 0 })).toBe(
+      `${NASA_POWER_URL}?parameters=T2M%2CT2M_RANGE&community=AG&longitude=0&latitude=51.5&format=JSON`,
+    );
+  });
+
+  const MONTHS = [
+    'JAN',
+    'FEB',
+    'MAR',
+    'APR',
+    'MAY',
+    'JUN',
+    'JUL',
+    'AUG',
+    'SEP',
+    'OCT',
+    'NOV',
+    'DEC',
+  ];
+
+  it('parses the recorded rain climatology into 12 monthly rates', () => {
+    const raw = fixture('nasa-power-rain-london.json');
+    const rates = raw.properties.parameter.PRECTOTCORR;
+    expect(parseRainClimatology(raw)).toEqual(MONTHS.map((k) => rates[k]));
+    // A month with no rain at all is a real value.
+    rates.JUL = 0;
+    expect(parseRainClimatology(raw)[6]).toBe(0);
+  });
+
+  it('rejects rain fill values and a missing parameter', () => {
+    const raw = fixture('nasa-power-rain-london.json');
+    const rates = raw.properties.parameter.PRECTOTCORR;
+    rates.MAR = -999;
+    expect(() => parseRainClimatology(raw)).toThrow('missing monthly values');
+    rates.MAR = 'x';
+    expect(() => parseRainClimatology(raw)).toThrow('missing monthly values');
+    rates.MAR = 1.2;
+    delete rates.DEC;
+    expect(() => parseRainClimatology(raw)).toThrow('missing monthly values');
+    // The temperature response has no rain in it.
+    expect(() => parseRainClimatology(fixture('nasa-power-london.json'))).toThrow(
+      'unexpected climatology response shape',
+    );
+    expect(() => parseRainClimatology(null)).toThrow(ProviderError);
+  });
+
+  it('fetches rain normals', async () => {
+    const raw = fixture('nasa-power-rain-newcastle.json');
+    const urls: string[] = [];
+    const normals = await fetchRainNormals(
+      {
+        url: NASA_POWER_URL,
+        fetch: async (url) => {
+          urls.push(url);
+          return jsonFetch(raw)();
+        },
+      },
+      { lat: 55, lon: -1.875 },
+    );
+    expect(normals).toHaveLength(12);
+    expect(new URL(urls[0]!).searchParams.get('parameters')).toBe('PRECTOTCORR');
   });
 
   it('fetches normals', async () => {

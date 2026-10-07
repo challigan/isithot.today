@@ -2,7 +2,11 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: ['packages/*/test/**/*.test.ts', 'functions/test/**/*.test.ts'],
+    include: [
+      'packages/*/test/**/*.test.ts',
+      'functions/test/**/*.test.ts',
+      'netlify/test/**/*.test.ts',
+    ],
     environment: 'node',
     coverage: {
       provider: 'v8',

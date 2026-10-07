@@ -1,27 +1,32 @@
 ---
 import Base from './Base.astro';
 import Footer from '../components/Footer.astro';
-import { PALETTES, SITE_NAME } from '@isithot/core';
+import { PALETTES, RAIN_PALETTES, SITES, type Topic } from '@isithot/core';
 
 interface Props {
   title: string;
   description: string;
+  /** The page's path on its site, e.g. "/about". */
   path: string;
+  /** The site the page belongs to. */
+  topic?: Topic;
 }
-const { title, description, path } = Astro.props;
+const { title, description, path, topic = 'hot' } = Astro.props;
+const site = SITES[topic];
+const [brand, tld] = site.name.split('.');
 ---
 
 <Base
-  title={`${title} | ${SITE_NAME}`}
+  title={`${title} | ${site.name}`}
   description={description}
-  canonical={new URL(path, Astro.site).toString()}
-  palette={PALETTES.mild}
+  canonical={`${site.url}${path}`}
+  palette={topic === 'wet' ? RAIN_PALETTES.rain : PALETTES.mild}
+  topic={topic}
 >
-  <div class="wrap">
+  <div class="wrap" data-topic={topic}>
     <header>
-      <a class="brand" href="/">
-        isithot<span>.today</span>
-      </a>
+      <!-- prettier-ignore -->
+      <a class="brand" href="/">{brand}<span>.{tld}</span></a>
     </header>
     <main id="main" class="prose" tabindex="-1">
       <slot />

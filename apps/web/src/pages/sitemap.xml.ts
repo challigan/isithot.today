@@ -1,8 +1,9 @@
 import type { APIRoute } from 'astro';
+import { SITES } from '@isithot/core';
 import { CITIES } from '@isithot/server';
 
-export const GET: APIRoute = ({ site }) => {
-  const base = site ?? new URL('https://isithot.today');
+/** The same pages on either site, with URLs on the site's own domain (never the deploy URL). */
+export const sitemapXml = (site: string): Response => {
   const urls = [
     { path: '/', priority: '1.0', freq: 'hourly' },
     { path: '/about', priority: '0.5', freq: 'monthly' },
@@ -14,9 +15,11 @@ export const GET: APIRoute = ({ site }) => {
     urls
       .map(
         (u) =>
-          `  <url><loc>${new URL(u.path, base).toString()}</loc><changefreq>${u.freq}</changefreq><priority>${u.priority}</priority></url>`,
+          `  <url><loc>${new URL(u.path, site).toString()}</loc><changefreq>${u.freq}</changefreq><priority>${u.priority}</priority></url>`,
       )
       .join('\n') +
     '\n</urlset>\n';
   return new Response(body, { headers: { 'content-type': 'application/xml; charset=utf-8' } });
 };
+
+export const GET: APIRoute = () => sitemapXml(SITES.hot.url);

@@ -11,10 +11,13 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MODELS } from '../packages/core/src/index';
 import {
+  NASA_POWER_PARAMETERS,
+  NASA_POWER_RAIN_PARAMETERS,
   NASA_POWER_URL,
   OPEN_METEO_FREE,
   buildClimatologyUrl,
   buildForecastUrl,
+  buildRainClimatologyUrl,
   buildSearchUrl,
   createSyntheticFetch,
   forecastSignature,
@@ -32,16 +35,23 @@ const fetcher = synthetic
 
 const NEWCASTLE = { lat: 54.95, lon: -1.6 };
 const SEVILLE = { lat: 37.4, lon: -6 };
+// NASA POWER grid cell centres (GRID.climate) for the climatologies.
+const CELLS = {
+  newcastle: { lat: 55, lon: -1.875 },
+  seville: { lat: 37.5, lon: -6.25 },
+  london: { lat: 51.5, lon: 0 },
+  singapore: { lat: 1.5, lon: 103.75 },
+};
 
 const jobs: Array<[string, string]> = [
   ['open-meteo-forecast-newcastle.json', buildForecastUrl(OPEN_METEO_FREE, NEWCASTLE, MODELS)],
   ['open-meteo-forecast-seville.json', buildForecastUrl(OPEN_METEO_FREE, SEVILLE, MODELS)],
   ['open-meteo-search-newcastle.json', buildSearchUrl(OPEN_METEO_FREE, 'Newcastle', 8)],
   ['open-meteo-search-none.json', buildSearchUrl(OPEN_METEO_FREE, 'Xqzvbnm', 8)],
-  ['nasa-power-newcastle.json', buildClimatologyUrl(NASA_POWER_URL, { lat: 55, lon: -1.875 })],
-  ['nasa-power-seville.json', buildClimatologyUrl(NASA_POWER_URL, { lat: 37.5, lon: -6.25 })],
-  ['nasa-power-london.json', buildClimatologyUrl(NASA_POWER_URL, { lat: 51.5, lon: 0 })],
-  ['nasa-power-singapore.json', buildClimatologyUrl(NASA_POWER_URL, { lat: 1.5, lon: 103.75 })],
+  ...Object.entries(CELLS).flatMap(([place, cell]): Array<[string, string]> => [
+    [`nasa-power-${place}.json`, buildClimatologyUrl(NASA_POWER_URL, cell)],
+    [`nasa-power-rain-${place}.json`, buildRainClimatologyUrl(NASA_POWER_URL, cell)],
+  ]),
 ];
 
 for (const [file, url] of jobs) {
@@ -52,8 +62,10 @@ for (const [file, url] of jobs) {
   writeFileSync(join(out, file), JSON.stringify(body, null, 1) + '\n');
   console.log(`${synthetic ? 'synthetic' : 'recorded'} ${file} (${text.length} bytes)`);
 }
-// The preview workflow re-records whenever this request line differs from the committed one.
-const request = `Forecast request: ${forecastSignature()}\n`;
+// The preview workflow re-records whenever these request lines differ from the committed ones.
+const request =
+  `Forecast request: ${forecastSignature()}\n` +
+  `Climate request: parameters=${NASA_POWER_PARAMETERS.join(',')}; parameters=${NASA_POWER_RAIN_PARAMETERS.join(',')}\n`;
 writeFileSync(
   join(out, 'SOURCE.md'),
   (synthetic

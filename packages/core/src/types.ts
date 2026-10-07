@@ -2,7 +2,7 @@
  * The /api/v1 contract shared by the website and the future apps. Never change the meaning
  * of a field; add fields or create /api/v2.
  */
-import type { Band } from './config';
+import type { Band, RainBand } from './config';
 import type { Confidence } from './blend';
 import type { Units } from './units';
 
@@ -142,6 +142,179 @@ export interface ApiWeek {
   days: ApiWeekDay[];
 }
 
+/** Rain amounts follow the temperature units: millimetres with °C, inches with °F. */
+export type RainUnit = 'mm' | 'in';
+
+/**
+ * Amounts in the rain types below are in `ApiRain.unit`, rounded for display: millimetres to one
+ * decimal under 1 and whole above; inches to two decimals under 1 and one decimal above. So the
+ * text for an amount is always `${amount}${unit}`.
+ */
+export interface ApiRainModel {
+  id: string;
+  name: string;
+  /** The model's total over the window, rounded for display. */
+  amount: number;
+  /** The same total to two decimals, for positioning on the strip. */
+  value: number;
+  /** At least the window's `threshold`. */
+  expectsRain: boolean;
+  /** Agrees with the answer: wet models on a Yes day, dry ones on a No day, all on a Maybe day. */
+  agrees: boolean;
+}
+
+/** "Is it wet today?" for one window: the rest of today, or a whole day. */
+export interface ApiRainDay {
+  /** The local date (YYYY-MM-DD). */
+  date: string;
+  /**
+   * When the window judged starts, ISO 8601 UTC. Today's window is the rest of the day from the
+   * moment of the request; later days start at local midnight. The answer is out of date an hour
+   * after this (clients refetch then).
+   */
+  from: string;
+  /** True when the window is the rest of the day rather than the whole day. */
+  partial: boolean;
+  band: RainBand;
+  /** "No." / "Maybe." / "Yes." */
+  answer: string;
+  /** "It'll rain." */
+  verdict: string;
+  /** "About 6mm of rain. Mostly between 2pm and 6pm." */
+  detail: string;
+  /** The consensus amount: the median of the models' totals. */
+  amount: number;
+  /** The share of models expecting rain, 0–1, two decimals. */
+  chance: number;
+  /** Models expecting rain, and models with data for the whole window. */
+  wet: number;
+  total: number;
+  confidence: Confidence;
+  /** The window's wet amount: a model "expects rain" from here (the strip's highlighted zone). */
+  threshold: number;
+  /** How much of the rain is likely to fall as snow. */
+  snow: 'none' | 'some' | 'most';
+  /**
+   * The local hours most likely to be wet, start inclusive and end exclusive (24 is midnight),
+   * or null when no hour has rain in at least half the models.
+   */
+  likely: { from: number; to: number } | null;
+  /** The strip's range (min is always 0). */
+  scale: { min: number; max: number };
+  models: ApiRainModel[];
+  /** Month name for the date, e.g. "October". */
+  month: string;
+  /** "6 of 8 forecasts expect rain" */
+  agreementText: string;
+  /** "Limited forecast data" when fewer than 3 models cover the window, otherwise null. */
+  limitedText: string | null;
+  /** Accessible summary of the model strip. */
+  stripSummary: string;
+}
+
+/** One forecast hour of rain, judged by the server, for recomputing "now" later. */
+export interface ApiRainPoint {
+  /** Start of the hour, epoch milliseconds. */
+  time: number;
+  /** Local date (YYYY-MM-DD) and hour (0–23) in the place's time zone. */
+  date: string;
+  hour: number;
+  /** The median of the models' rain in this hour, in `ApiRain.unit`, two decimals. */
+  amount: number;
+  /** The share of models with rain in this hour, 0–1, two decimals. */
+  chance: number;
+  /** The share of models with rain in the two hours from this one (the Now view's rows). */
+  chance2h: number;
+  /** The verdict for this hour, judged with the hourly thresholds. */
+  band: RainBand;
+  /** The blended temperature is at or below the snow line. */
+  snow: boolean;
+}
+
+/** One row in the rain Now view's list: the chance of rain in the two hours from `time`. */
+export interface ApiRainHour {
+  /** Start of the two hours, ISO 8601 UTC. */
+  time: string;
+  /** Local time, "3pm". */
+  label: string;
+  /** Percent, rounded to the nearest 10. */
+  chance: number;
+}
+
+/** "Is it wet right now?": the forecast for the current hour and the next twelve. */
+export interface ApiRainNow {
+  /** The moment the values are for, ISO 8601 UTC. */
+  time: string;
+  band: RainBand;
+  answer: string;
+  verdict: string;
+  /** "Light rain now. Easing off by about 3pm." */
+  detail: string;
+  /** This hour's median amount, in `ApiRain.unit`. */
+  amount: number;
+  /** The share of models with rain this hour, 0–1. */
+  chance: number;
+  snow: boolean;
+  /** The next 12 hours in 2-hour blocks. */
+  hours: ApiRainHour[];
+  /**
+   * The judged hourly forecast from the hour before now to a day ahead, so clients can keep
+   * "now" current between requests (core `computeRainNow` and `formatRainNow`).
+   */
+  series: ApiRainPoint[];
+}
+
+/** One day in the rain week view. */
+export interface ApiRainWeekDay {
+  date: string;
+  /** "Today", then short weekday names ("Thu"). */
+  label: string;
+  /** The day's consensus amount (today: the rest of the day). */
+  amount: number;
+  band: RainBand;
+  /** "Rain", "Mostly dry"… ("Snow" for a snowy wet day). */
+  bandLabel: string;
+  snow: boolean;
+}
+
+/** "Is it wet this week?": today and the next six days. */
+export interface ApiRainWeek {
+  /** First and last dates (YYYY-MM-DD). */
+  from: string;
+  to: string;
+  band: RainBand;
+  /** "No." / "Maybe." / "Partly." / "Yes." */
+  answer: string;
+  /** "Rain on Thu and Fri." / "A wet week, heaviest on Sat." */
+  verdict: string;
+  detail: string;
+  /**
+   * The median of each model's own total across the days (models disagree on which day it rains,
+   * so adding up daily medians would undercount), or null with fewer than 3 models covering
+   * every day.
+   */
+  total: number | null;
+  /** Normal rainfall over the same days (NASA POWER), or null without rain normals. */
+  normal: number | null;
+  /** Days judged rain or wetter, and days judged showers. */
+  rainDays: number;
+  showerDays: number;
+  /** The day with the largest consensus amount (the earlier one on a tie). */
+  wettest: { date: string; amount: number };
+  days: ApiRainWeekDay[];
+}
+
+/** The "Is it wet?" answers. Present exactly when `days[0]` (today) has an answer. */
+export interface ApiRain {
+  unit: RainUnit;
+  /** Today (the rest of the day), then tomorrow (the whole day) when the forecast has it. */
+  days: ApiRainDay[];
+  /** Absent when the forecast has no hourly rain for the current time. */
+  now?: ApiRainNow;
+  /** Absent without five usable days. */
+  week?: ApiRainWeek;
+}
+
 export interface TodayResponse {
   location: ApiLocation;
   units: Units;
@@ -157,6 +330,8 @@ export interface TodayResponse {
   now?: ApiNow;
   /** The "this week" view. Absent when the forecast has no usable days. */
   week?: ApiWeek;
+  /** "Is it wet?" for the same place. Absent when the forecast has no precipitation. */
+  rain?: ApiRain;
 }
 
 export interface NearbyCity {

@@ -1,0 +1,54 @@
+---
+/** The terms of use, the same for both sites: they are one service. */
+import Content from '../layouts/Content.astro';
+import { SITES, type Topic } from '@isithot/core';
+
+interface Props {
+  topic: Topic;
+}
+const { topic } = Astro.props;
+const site = SITES[topic].name;
+const other = SITES[topic === 'hot' ? 'wet' : 'hot'].name;
+---
+
+<Content
+  title="Terms"
+  path="/terms"
+  description={`Terms of use for ${site}. Forecasts are estimates and not for safety-critical decisions.`}
+  topic={topic}
+>
+  <h1>Terms</h1>
+  <p>
+    <em>Draft for review. Last updated 7 October 2026.</em>
+  </p>
+  <p>
+    {site} and {other} are one service, and these terms cover both.
+  </p>
+
+  <h2>Forecasts are estimates</h2>
+  <p>
+    The sites summarise computer forecasts from several weather models. Forecasts can be wrong, and
+    "hot" and "wet" are judgements, not measurements. Do not rely on these sites for safety-critical
+    decisions, including heat health, flooding, outdoor work, travel or events. Follow advice from
+    your national weather service and health authorities.
+  </p>
+
+  <h2>Use of the sites</h2>
+  <p>
+    You may use the sites for personal, non-commercial purposes. Please do not scrape them or call
+    their API at volume; requests are rate-limited.
+  </p>
+
+  <h2>Data and credits</h2>
+  <p>
+    Forecast data from Open-Meteo.com (CC BY 4.0). Climate data from NASA POWER. Place names from
+    GeoNames (CC BY 4.0). Links to BBC Weather, the Met Office and AccuWeather are provided for
+    convenience; we are not affiliated with them.
+  </p>
+
+  <h2>Liability</h2>
+  <p>
+    The sites are provided as is, without warranties. To the extent the law allows, we are not
+    liable for losses arising from their use.
+  </p>
+</Content>

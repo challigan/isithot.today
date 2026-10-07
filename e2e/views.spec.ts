@@ -250,15 +250,19 @@ test.describe('Now | Today | This week', () => {
     await expect(page.locator('#week-days li')).toHaveCount(7);
   });
 
-  test('the place note never covers the tabs', async ({ page }) => {
+  test('the place note never covers the topic toggle or the tabs', async ({ page }) => {
     for (const width of [320, 390, 1280]) {
       await page.setViewportSize({ width, height: 800 });
       await ready(page);
       const note = page.locator('#place-note');
       await expect(note).toBeVisible();
       const a = (await note.boundingBox())!;
-      const b = (await page.locator('#tabs').boundingBox())!;
-      expect(a.y + a.height, `note above tabs at ${width}px`).toBeLessThanOrEqual(b.y);
+      const toggle = (await page.locator('#topic').boundingBox())!;
+      const tabs = (await page.locator('#tabs').boundingBox())!;
+      expect(a.y + a.height, `note above the toggle at ${width}px`).toBeLessThanOrEqual(toggle.y);
+      expect(toggle.y + toggle.height, `toggle above the tabs at ${width}px`).toBeLessThanOrEqual(
+        tabs.y,
+      );
     }
   });
 

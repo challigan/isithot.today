@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "description": "Pure decision logic for isithot.today: blending, climate normals, verdict and copy. No I/O.",
   "exports": {
     ".": "./src/index.ts",

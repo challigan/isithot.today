@@ -1,90 +1,11 @@
 ---
-import Base from '../../layouts/Base.astro';
-import Header from '../../components/Header.astro';
-import Views from '../../components/Views.astro';
-import AdSlot from '../../components/AdSlot.astro';
-import Footer from '../../components/Footer.astro';
-import SearchSheet from '../../components/SearchSheet.astro';
-import NotFound from '../../components/NotFound.astro';
-import {
-  CACHE,
-  LOADING_PALETTE,
-  PALETTES,
-  SITE_NAME,
-  defaultUnitsForCountry,
-  pageTitle,
-  question,
-  type TodayResponse,
-} from '@isithot/core';
-import { cityBySlug, todayForCity } from '@isithot/server';
-import { platformFrom } from '../../lib/platform';
+import CityPage from '../../components/CityPage.astro';
+import { loadCityPage } from '../../lib/cityPage';
 
 export const prerender = false;
 
-const slug = (Astro.params.slug ?? '').toLowerCase();
-const city = cityBySlug(slug);
-if (city && city.slug !== Astro.params.slug) return Astro.redirect(`/in/${city.slug}`, 301);
-if (!city) {
-  Astro.response.status = 404;
-  Astro.response.headers.set('Cache-Control', 'public, max-age=300');
-}
-
-const units = defaultUnitsForCountry(city?.country);
-const result = city ? await todayForCity(city.slug, platformFrom(Astro.locals), units) : null;
-const data = result?.status === 200 ? (result.body as TodayResponse) : null;
-const day = data?.days[0] ?? null;
-
-const cache = day ? CACHE.cityPage : 60;
-if (city) {
-  Astro.response.headers.set('Cache-Control', `public, max-age=${Math.min(cache, 300)}`);
-  Astro.response.headers.set(
-    'Netlify-CDN-Cache-Control',
-    `public, durable, max-age=${cache}, stale-while-revalidate=${cache}`,
-  );
-}
-
-const name = city?.name ?? '';
-const title = day
-  ? pageTitle({ city: name, answer: day.answer, high: day.high })
-  : city
-    ? `${question(name)} | ${SITE_NAME}`
-    : `Not found | ${SITE_NAME}`;
-const description = day
-  ? `${day.verdict} ${day.detail}`
-  : `Will today feel hot in ${name}? One answer from several forecast models, judged against what is normal there.`;
-const canonical = city ? new URL(`/in/${city.slug}`, Astro.site).toString() : null;
-const initial = JSON.stringify(data).replace(/</g, '\\u003c');
+const page = await loadCityPage(Astro, 'hot');
+if (page instanceof Response) return page;
 ---
 
-{city ? (
-  <Base
-    title={title}
-    description={description}
-    canonical={canonical}
-    ogImage={new URL(`/og/${city.slug}.png`, Astro.site).toString()}
-    palette={day ? PALETTES[day.band] : LOADING_PALETTE}
-  >
-    <div
-      class="wrap"
-      id="app"
-      data-state={day ? 'ready' : 'error'}
-      data-mode="city"
-      data-slug={city.slug}
-    >
-      <Header placeName={city.name} units={units} />
-      <Views data={data} city={city.name} state={day ? 'ready' : 'error'} />
-      <AdSlot />
-      <Footer />
-    </div>
-    <SearchSheet />
-    <script type="application/json" id="initial" set:html={initial} />
-    <script>
-      import { start } from '../../scripts/app';
-      start();
-    </script>
-  </Base>
-) : (
-  <Base title={title} palette={PALETTES.cold} noindex>
-    <NotFound />
-  </Base>
-)}
+<CityPage {...page} />

@@ -14,6 +14,17 @@ test('search for a city with a page navigates to it', async ({ page }) => {
   await expect(page.locator('#place')).toHaveText('Bristol');
 });
 
+test('a city search from a wet city page stays on the wet site', async ({ page }) => {
+  await page.goto('/wet/in/london-gb');
+  await expect(page.locator('#answer')).toHaveText(/^\s*(Yes|No|Maybe)\.\s*$/);
+  await page.locator('#place-btn').click();
+  await page.locator('#search-input').fill('Bris');
+  await page.getByRole('button', { name: /Bristol/ }).click();
+  await expect(page).toHaveURL(/\/wet\/in\/bristol-gb$/);
+  await expect(page.locator('#question')).toHaveText('Is it wet in Bristol today?');
+  await expect(page.locator('#app')).toHaveAttribute('data-topic', 'wet');
+});
+
 test('search sheet closes on Escape', async ({ page }) => {
   await page.goto('/');
   await page.locator('#place-btn').click();
