@@ -26,6 +26,13 @@ import {
 } from '@isithot/core';
 import { GLYPHS, listHtml, pct, stripLayout } from '../lib/view';
 
+declare global {
+  interface Window {
+    /** Started by an inline script in the page head; see pages/index.astro. */
+    __isithotPrefetch?: { url: string; response: Promise<Response> };
+  }
+}
+
 // ---- Types and storage ------------------------------------------------------
 
 type Target =
@@ -299,10 +306,13 @@ async function load(
   const seq = ++requestSeq;
   if (!opts.quiet) renderLoading();
   const preferred = storage.get<Units>(KEYS.units);
+  const url = apiUrl(t, preferred ?? (t.kind === 'ip' ? null : units));
+  const early = window.__isithotPrefetch;
+  window.__isithotPrefetch = undefined;
   try {
-    const res = await fetch(apiUrl(t, preferred ?? (t.kind === 'ip' ? null : units)), {
-      headers: { accept: 'application/json' },
-    });
+    const res = await (early?.url === url
+      ? early.response
+      : fetch(url, { headers: { accept: 'application/json' } }));
     const body = (await res.json()) as TodayResponse | ApiError;
     if (seq !== requestSeq) return false; // A newer request won.
     if (!res.ok || 'error' in body)

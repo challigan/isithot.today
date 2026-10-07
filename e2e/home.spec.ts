@@ -4,9 +4,15 @@ const ANSWERS = /^(Yes\.|No\.|Almost\.)$/;
 
 test.describe('home page', () => {
   test('answers from approximate location without asking for permission', async ({ page }) => {
+    const calls: string[] = [];
+    page.on('request', (r) => {
+      if (r.url().includes('/api/v1/today')) calls.push(r.url());
+    });
     await page.goto('/');
     const answer = page.locator('#answer');
     await expect(answer).toHaveText(ANSWERS);
+    // The head script starts the request early and the app reuses it.
+    expect(calls).toHaveLength(1);
     await expect(page.locator('h1')).toHaveCount(1);
     await expect(page.locator('#live')).toHaveAttribute('aria-live', 'polite');
     await expect(page.locator('#verdict')).toHaveText(/^It's /);
