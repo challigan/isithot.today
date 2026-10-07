@@ -23,6 +23,28 @@ export const SITES: Record<Topic, { name: string; url: string }> = {
   wet: { name: 'isitwet.today', url: 'https://isitwet.today' },
 };
 
+/** The topic a host serves: isitwet.today (and www) is wet; everything else opens on hot. */
+export function hostTopic(hostname: string): Topic {
+  return hostname === SITES.wet.name || hostname === `www.${SITES.wet.name}` ? 'wet' : 'hot';
+}
+
+/** Whether a host is one of the real sites (not a deploy preview or a local server). */
+export function isSiteHost(hostname: string): boolean {
+  return TOPICS.some((t) => hostname === SITES[t].name || hostname === `www.${SITES[t].name}`);
+}
+
+/**
+ * Where a link to `path` ("/", "/in/london-gb", "/?lat=…") goes for a topic. On the real sites
+ * a link for the other topic crosses to its domain; anywhere else (deploy previews, a local
+ * server) both topics live on one host and wet pages sit under /wet.
+ */
+export function sitePath(topic: Topic, path: string, hostname: string): string {
+  if (isSiteHost(hostname))
+    return hostTopic(hostname) === topic ? path : `${SITES[topic].url}${path}`;
+  if (topic === 'hot') return path;
+  return path === '/' ? '/wet' : path.startsWith('/?') ? `/wet${path.slice(1)}` : `/wet${path}`;
+}
+
 /** Rain bands from driest to wettest. */
 export type RainBand = 'dry' | 'spots' | 'showers' | 'rain' | 'heavy' | 'drenched';
 export const RAIN_BANDS: readonly RainBand[] = [
@@ -215,6 +237,11 @@ export const CACHE = {
   ogImage: 30 * 60,
   /** The browser shows the last answer from localStorage when it is younger than this, ms. */
   localAnswerMaxAgeMs: 3 * 60 * 60 * 1000,
+  /**
+   * Version of that saved answer (page markup and data). The page's inline restore script and
+   * the app both read it, so bump it here whenever the saved markup or data changes shape.
+   */
+  snapshotVersion: 4,
 } as const;
 
 export const RATE_LIMIT = {

@@ -10,6 +10,7 @@ import {
   formatHour,
   monthName,
   pageTitle,
+  wetPageTitle,
   question,
   stripSummary,
   RAIN_ANSWERS,
@@ -107,6 +108,12 @@ describe('copy', () => {
       'Is it hot today? Yes. 30° | isithot.today',
     );
     expect(deg(5)).toBe('5°');
+    expect(wetPageTitle({ city: 'Leeds', answer: 'Yes.', band: 'heavy' })).toBe(
+      'Is it wet in Leeds today? Yes. Heavy rain | isitwet.today',
+    );
+    expect(wetPageTitle({ answer: 'No.', band: 'dry' })).toBe(
+      'Is it wet today? No. Dry | isitwet.today',
+    );
   });
 });
 

@@ -202,6 +202,15 @@ export function pageTitle(args: { city?: string | null; answer: string; high: nu
   return `${question(args.city)} ${args.answer} ${args.high}° | ${SITE_NAME}`;
 }
 
+/** "Is it wet in London today? Yes. Rain | isitwet.today" */
+export function wetPageTitle(args: {
+  city?: string | null;
+  answer: string;
+  band: RainBand;
+}): string {
+  return `${question(args.city, 'today', 'wet')} ${args.answer} ${RAIN_BAND_LABELS[args.band]} | ${SITES.wet.name}`;
+}
+
 export const DEFAULT_TITLE = `Is it hot today? | ${SITE_NAME}`;
 export const DEFAULT_DESCRIPTION =
   'Will today feel hot where you are? One answer from several forecast models, judged against what is normal for your place and time of year.';
