@@ -37,3 +37,13 @@ export function cityForPlace(place: {
       distanceKm(c, { lat: place.lat, lon: place.lon }) < 15,
   );
 }
+
+/** City pages whose name (or full name in the slug) starts with the query, biggest first. */
+export function citiesMatching(query: string, limit = 3): City[] {
+  const q = fold(query.trim());
+  if (q.length === 0) return [];
+  const slugPrefix = q.replace(/[^a-z0-9]+/g, '-');
+  return CITIES.filter((c) => fold(c.name).startsWith(q) || c.slug.startsWith(slugPrefix))
+    .sort((a, b) => b.population - a.population)
+    .slice(0, limit);
+}

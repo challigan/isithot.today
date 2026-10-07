@@ -10,7 +10,7 @@
  },
  "properties": {
   "parameter": {
-   "T2M_MAX": {
+   "T2M_MAX_AVG": {
     "JAN": 6.8,
     "FEB": 7.6,
     "MAR": 9.8,
@@ -33,9 +33,9 @@
  },
  "messages": [],
  "parameters": {
-  "T2M_MAX": {
+  "T2M_MAX_AVG": {
    "units": "C",
-   "longname": "Temperature at 2 Meters Maximum"
+   "longname": "Temperature at 2 Meters Maximum Average"
   }
  },
  "times": {

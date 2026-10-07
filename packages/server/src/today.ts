@@ -200,7 +200,7 @@ async function loadForecast(
 
 async function loadNormals(point: LatLon, deps: ServerDeps): Promise<MonthlyNormals | null> {
   const cell = roundPoint(point, GRID.climate);
-  const key = `climate/v1/${gridKey(cell, GRID.climate)}`;
+  const key = `climate/v2/${gridKey(cell, GRID.climate)}`;
   const now = deps.now().getTime();
   const entry = await deps.cache.get<ClimateEntry>(key);
   if (entry?.normals) return entry.normals;

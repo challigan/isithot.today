@@ -1,11 +1,22 @@
 import { defineConfig } from 'astro/config';
 import netlify from '@astrojs/netlify';
+import { createRequire } from 'node:module';
+import { dirname, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-// Static by default; city pages and OG images opt in to on-demand rendering.
+const root = fileURLToPath(new URL('.', import.meta.url));
+const require = createRequire(import.meta.url);
+
+// satori shapes text with harfbuzzjs, which loads hb.wasm from disk at runtime. The function
+// bundler cannot see that read, so ship the file explicitly.
+const harfbuzz = dirname(createRequire(require.resolve('satori')).resolve('harfbuzzjs'));
+const includeFiles = [relative(root, join(harfbuzz, 'hb.wasm'))];
+
+// Static by default; city pages, OG images and the API fallback opt in to on-demand rendering.
 export default defineConfig({
   site: process.env.SITE_URL || process.env.URL || 'https://isithot.today',
   output: 'static',
-  adapter: netlify(),
+  adapter: netlify({ includeFiles }),
   trailingSlash: 'never',
   build: { format: 'file', inlineStylesheets: 'always' },
   compressHTML: true,

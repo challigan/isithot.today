@@ -9,6 +9,7 @@ import font500 from '@fontsource/bricolage-grotesque/files/bricolage-grotesque-l
 import font700 from '@fontsource/bricolage-grotesque/files/bricolage-grotesque-latin-700-normal.woff?url';
 import font800 from '@fontsource/bricolage-grotesque/files/bricolage-grotesque-latin-800-normal.woff?url';
 import { PALETTES, type Band } from '@isithot/core';
+import { GLYPHS } from './view';
 
 export interface OgContent {
   band: Band;
@@ -58,6 +59,7 @@ export async function renderOg(content: OgContent, origin: string): Promise<Uint
   });
   const fonts = await ready;
   const p = PALETTES[content.band];
+  const glyph = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="300" height="300" fill="none" stroke="${p.ink}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${GLYPHS[content.band].replaceAll('currentColor', p.ink).replace('var(--g2)', p.g2)}</svg>`;
   const tree = h(
     'div',
     {
@@ -69,10 +71,20 @@ export async function renderOg(content: OgContent, origin: string): Promise<Uint
       padding: '64px 80px',
       color: p.ink,
       fontFamily: 'Bricolage Grotesque',
+      position: 'relative',
       backgroundColor: p.g1,
       backgroundImage: `radial-gradient(circle at 88% 6%, ${rgba(p.g3, 0.85)} 0%, ${rgba(p.g3, 0)} 52%), linear-gradient(168deg, ${p.g1} 0%, ${p.g2} 100%)`,
     },
     [
+      {
+        type: 'img',
+        props: {
+          src: `data:image/svg+xml;base64,${btoa(glyph)}`,
+          width: 300,
+          height: 300,
+          style: { position: 'absolute', top: 48, right: 64, opacity: 0.95 },
+        },
+      },
       h('div', { display: 'flex', fontSize: 34, fontWeight: 700 }, [
         h('span', {}, 'isithot'),
         h('span', { opacity: 0.6, fontWeight: 500 }, '.today'),

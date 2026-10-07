@@ -57,7 +57,7 @@ test('city pages are server-rendered with the real answer', async ({ page, reque
   );
   expect(html).toContain('<link rel="canonical" href="');
   expect(html).toContain('/og/newcastle-upon-tyne-gb.png');
-  expect(html).toMatch(/<h1 class="answer" id="answer">(Yes|No|Almost)\.<\/h1>/);
+  expect(html).toMatch(/<h1 class="answer" id="answer">\s*(Yes|No|Almost)\.\s*<\/h1>/);
 
   await page.goto('/in/newcastle-upon-tyne-gb');
   await expect(page.locator('#question')).toHaveText('Is it hot in Newcastle today?');

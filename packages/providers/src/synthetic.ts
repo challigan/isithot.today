@@ -5,6 +5,7 @@
  */
 import { MODELS, localDate, normalForDate, roundToGrid } from '@isithot/core';
 import type { FetchLike } from './errors';
+import { NASA_POWER_PARAMETER } from './nasaPower';
 
 export interface SyntheticPlace {
   geonameId: number;
@@ -112,16 +113,18 @@ export function syntheticForecast(lat: number, lon: number, modelIds: string[], 
 export function syntheticClimatology(lat: number, lon: number) {
   const keys = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   const normals = syntheticNormals(lat);
-  const T2M_MAX: Record<string, number> = {};
-  keys.forEach((k, i) => (T2M_MAX[k] = normals[i] as number));
-  T2M_MAX.ANN = r1(normals.reduce((a, b) => a + b, 0) / 12);
+  const values: Record<string, number> = {};
+  keys.forEach((k, i) => (values[k] = normals[i] as number));
+  values.ANN = r1(normals.reduce((a, b) => a + b, 0) / 12);
   return {
     type: 'Feature',
     geometry: { type: 'Point', coordinates: [lon, lat, 50] },
-    properties: { parameter: { T2M_MAX } },
+    properties: { parameter: { [NASA_POWER_PARAMETER]: values } },
     header: { title: 'NASA/POWER synthetic climatology', fill_value: -999 },
     messages: [],
-    parameters: { T2M_MAX: { units: 'C', longname: 'Temperature at 2 Meters Maximum' } },
+    parameters: {
+      [NASA_POWER_PARAMETER]: { units: 'C', longname: 'Temperature at 2 Meters Maximum Average' },
+    },
     times: { data: 0, process: 0 },
   };
 }

@@ -3,6 +3,13 @@ import { ProviderError, fetchJson, type FetchLike } from './errors';
 
 export const NASA_POWER_URL = 'https://power.larc.nasa.gov/api/temporal/climatology/point';
 
+/**
+ * The average of daily maximum temperatures at 2 m, per month. Not `T2M_MAX`: in the
+ * climatology endpoint that is the average monthly *maximum* (the hottest day of each month),
+ * which runs 3–5°C above the normal daily high.
+ */
+export const NASA_POWER_PARAMETER = 'T2M_MAX_AVG';
+
 export interface NasaPowerConfig {
   url: string;
   fetch: FetchLike;
@@ -26,7 +33,7 @@ const MONTH_KEYS = [
 
 export function buildClimatologyUrl(url: string, point: LatLon): string {
   const params = new URLSearchParams({
-    parameters: 'T2M_MAX',
+    parameters: NASA_POWER_PARAMETER,
     community: 'AG',
     longitude: String(point.lon),
     latitude: String(point.lat),
@@ -35,10 +42,10 @@ export function buildClimatologyUrl(url: string, point: LatLon): string {
   return `${url}?${params.toString()}`;
 }
 
-/** Twelve monthly normal daily maximum temperatures (T2M_MAX), January first, °C. */
+/** Twelve monthly normal daily highs (mean of daily maxima), January first, °C. */
 export function parseClimatology(json: unknown): MonthlyNormals {
-  const values = (json as { properties?: { parameter?: { T2M_MAX?: Record<string, unknown> } } })
-    ?.properties?.parameter?.T2M_MAX;
+  const values = (json as { properties?: { parameter?: Record<string, Record<string, unknown>> } })
+    ?.properties?.parameter?.[NASA_POWER_PARAMETER];
   if (!values) throw new ProviderError('nasa-power', 'unexpected climatology response shape');
   const monthly: unknown[] = MONTH_KEYS.map((key) => values[key]);
   // NASA POWER uses -999 as its fill value.

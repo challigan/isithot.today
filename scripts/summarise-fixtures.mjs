@@ -16,7 +16,7 @@ for (const name of ['open-meteo-forecast-newcastle.json', 'open-meteo-forecast-s
   console.log(`  hourly keys: ${hourlyKeys.join(', ')}`);
 }
 const nasa = read('nasa-power-newcastle.json');
-console.log(`nasa T2M_MAX: ${JSON.stringify(nasa.properties?.parameter?.T2M_MAX)}`);
+console.log(`nasa: ${JSON.stringify(nasa.properties?.parameter)}`);
 const search = read('open-meteo-search-newcastle.json');
 console.log(
   `search: ${search.results?.map((r) => `${r.name}/${r.country_code}/${r.id}`).join(', ')}`,
