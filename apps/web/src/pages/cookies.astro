@@ -1,37 +1,5 @@
 ---
-import Content from '../layouts/Content.astro';
+import CookiesBody from '../components/CookiesBody.astro';
 ---
 
-<Content
-  title="Cookies"
-  path="/cookies"
-  description="isithot.today sets no cookies of its own. Advertising and consent cookies are set only with your choice."
->
-  <h1>Cookies</h1>
-  <p>
-    <em>Draft for review. Last updated 6 October 2026.</em>
-  </p>
-  <p>
-    isithot.today does not set any cookies of its own, and we do not use analytics cookies. Traffic
-    is counted with Cloudflare Web Analytics, which is cookieless.
-  </p>
-
-  <h2>Advertising and consent cookies</h2>
-  <p>
-    The site shows one advert from Google AdSense. In the UK and EEA, a consent banner from Google's
-    certified consent platform asks before any advertising cookies are used or personalised adverts
-    are shown. Google sets a cookie to remember your choice. If you decline, Google may still show a
-    non-personalised advert.
-  </p>
-  <p>
-    You can change your choice at any time from the "Privacy and cookie settings" link that the
-    consent banner adds to the page, or by clearing cookies for this site in your browser.
-  </p>
-
-  <h2>Local storage</h2>
-  <p>
-    We use your browser's local storage (not a cookie) to remember your last place, your °C/°F
-    choice and the last answer. It stays on your device. See our{' '}
-    <a href="/privacy">privacy notice</a>.
-  </p>
-</Content>
+<CookiesBody topic="hot" />

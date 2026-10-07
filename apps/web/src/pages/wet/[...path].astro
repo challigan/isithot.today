@@ -1,0 +1,14 @@
+---
+/**
+ * Any other path on isitwet.today (the edge function serves every path from under /wet): the
+ * wet not-found page. The site's own pages and files under /wet take precedence over this.
+ */
+import NotFound from '../../components/NotFound.astro';
+
+export const prerender = false;
+
+Astro.response.status = 404;
+Astro.response.headers.set('Cache-Control', 'public, max-age=300');
+---
+
+<NotFound topic="wet" />

@@ -9,6 +9,7 @@ import fontAnswer from '../fonts/bricolage-answer.woff2?inline';
 import {
   DEFAULT_DESCRIPTIONS,
   DEFAULT_TITLES,
+  RAIN_PALETTES,
   SITES,
   type Palette,
   type Topic,
@@ -39,8 +40,16 @@ const {
 // passes them through).
 const assets = topic === 'wet' ? '/wet' : '';
 
-const vars = `--g1:${palette.g1};--g2:${palette.g2};--g3:${palette.g3};--ink:${palette.ink};--pill:${palette.pill};--glow:${palette.glow}`;
+// Wet pages also replace the slate behind the page (overscroll, before the gradient paints).
+const fallback = topic === 'wet' ? `;--page-fallback:${RAIN_PALETTES.rain.g2}` : '';
+const vars = `--g1:${palette.g1};--g2:${palette.g2};--g3:${palette.g3};--ink:${palette.ink};--pill:${palette.pill};--glow:${palette.glow}${fallback}`;
 const beacon = import.meta.env.PUBLIC_CF_BEACON_TOKEN;
+/**
+ * Links are written for isitwet.today, where the wet pages are at the root. Where they are served
+ * from under /wet instead (deploy previews, a local server), this keeps internal links on them:
+ * "/" → "/wet", "/?q" → "/wet?q", "/about" → "/wet/about". Runs after the page's own markup.
+ */
+const wetLinks = `(()=>{const p=location.pathname;if(p!=='/wet'&&!p.startsWith('/wet/'))return;for(const a of document.querySelectorAll('a[href^="/"]:not([href^="/wet"]):not([href^="//"])')){const h=a.getAttribute('href');a.setAttribute('href','/wet'+(h==='/'||h[1]==='?'?h.slice(1):h))}})()`;
 ---
 
 <!doctype html>
@@ -86,5 +95,6 @@ const beacon = import.meta.env.PUBLIC_CF_BEACON_TOKEN;
       Skip to the answer
     </a>
     <slot />
+    {topic === 'wet' && <script is:inline set:html={wetLinks} />}
   </body>
 </html>

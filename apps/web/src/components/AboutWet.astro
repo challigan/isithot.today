@@ -1,0 +1,27 @@
+---
+/** How "Is it wet?" works, in plain words: a section of the About page on both sites. */
+import { MODELS, RAIN } from '@isithot/core';
+
+const pct = (share: number): string => `${Math.round(share * 100)}%`;
+const cold = `${RAIN.snowAtOrBelowC}°C`;
+---
+
+<h2>Is it wet?</h2>
+<p>
+  For rain, we ask {MODELS.length} forecast models how much they expect, hour by hour. A model
+  "expects rain" when it forecasts at least {RAIN.day.wet} mm for the day. For a shorter stretch,
+  like the rest of an evening, less is enough: {RAIN.hour.wet} mm for each hour that is left. The
+  share of models expecting rain is the chance. When {pct(RAIN.likelyFrom)} or more of them do, the
+  answer is Yes; from {pct(RAIN.maybeFrom)} it is Maybe. How much rain comes from the middle
+  forecast (the median), so one model's downpour cannot make the day wet on its own.
+</p>
+<p>
+  Today means the rest of today, from now until midnight. Rain that has already fallen no longer
+  counts, so the answer can change through the day. When it is cold enough ({cold} or below), the
+  answer says the rain is likely to fall as snow.
+</p>
+<p>
+  This week adds up each model's rain for the rest of today and the next six days, and compares the
+  total with the rainfall that is normal there at this time of year, from NASA POWER's long-term
+  records.
+</p>
