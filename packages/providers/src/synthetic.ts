@@ -5,7 +5,6 @@
  */
 import { MODELS, localDate, normalForDate, roundToGrid } from '@isithot/core';
 import type { FetchLike } from './errors';
-import { NASA_POWER_PARAMETER } from './nasaPower';
 
 export interface SyntheticPlace {
   geonameId: number;
@@ -113,17 +112,24 @@ export function syntheticForecast(lat: number, lon: number, modelIds: string[], 
 export function syntheticClimatology(lat: number, lon: number) {
   const keys = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   const normals = syntheticNormals(lat);
-  const values: Record<string, number> = {};
-  keys.forEach((k, i) => (values[k] = normals[i] as number));
-  values.ANN = r1(normals.reduce((a, b) => a + b, 0) / 12);
+  // Mean temperature and daily range chosen so that T2M + T2M_RANGE / 2 is the normal high.
+  const T2M: Record<string, number> = {};
+  const T2M_RANGE: Record<string, number> = {};
+  keys.forEach((k, i) => {
+    T2M[k] = r1((normals[i] as number) - 4);
+    T2M_RANGE[k] = 8;
+  });
+  T2M.ANN = r1(normals.reduce((a, b) => a + b, 0) / 12 - 4);
+  T2M_RANGE.ANN = 8;
   return {
     type: 'Feature',
     geometry: { type: 'Point', coordinates: [lon, lat, 50] },
-    properties: { parameter: { [NASA_POWER_PARAMETER]: values } },
+    properties: { parameter: { T2M, T2M_RANGE } },
     header: { title: 'NASA/POWER synthetic climatology', fill_value: -999 },
     messages: [],
     parameters: {
-      [NASA_POWER_PARAMETER]: { units: 'C', longname: 'Temperature at 2 Meters Maximum Average' },
+      T2M: { units: 'C', longname: 'Temperature at 2 Meters' },
+      T2M_RANGE: { units: 'C', longname: 'Temperature at 2 Meters Range' },
     },
     times: { data: 0, process: 0 },
   };

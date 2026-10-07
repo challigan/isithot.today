@@ -204,7 +204,7 @@ type NormalsResult = { normals: MonthlyNormals | null; pending: boolean };
 
 async function loadNormals(point: LatLon, deps: ServerDeps): Promise<NormalsResult> {
   const cell = snapToCell(point, GRID.climate);
-  const key = `climate/v3/${cellKey(point, GRID.climate)}`;
+  const key = `climate/v4/${cellKey(point, GRID.climate)}`;
   const now = deps.now().getTime();
   const entry = await deps.cache.get<ClimateEntry>(key);
   if (entry?.normals) return { normals: entry.normals, pending: false };

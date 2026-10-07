@@ -29,9 +29,12 @@ production, responses carry `x-isithot-via: function` when the dedicated functio
   deploy preview). The old IDs are kept as aliases when parsing.
 - **Hourly apparent temperature is not requested.** Nothing uses it, and every variable counts
   against the Open-Meteo quota for each of the 8 models.
-- **NASA POWER parameter is `T2M_MAX_AVG`, not `T2M_MAX`.** In the climatology endpoint,
-  `T2M_MAX` is the average _monthly maximum_ (the hottest day of each month). It put
-  Newcastle's October normal at 20°C. `T2M_MAX_AVG` is the mean daily high the verdict needs.
+- **Normal daily highs come from NASA POWER's `T2M + T2M_RANGE / 2`, not `T2M_MAX`.**
+  Checked against live responses: in the climatology endpoint `T2M_MAX` is the highest
+  temperature of the period, and `T2M_MAX_AVG` is the average _hottest day_ of each month.
+  Both put London's January normal at 11–12°C and its July normal at 29°C (the real normal
+  daily highs are about 8°C and 24°C). The monthly mean temperature plus half the average daily
+  range is the standard estimate of the mean daily high.
 - **Climate cells follow NASA's grid.** NASA POWER serves MERRA-2 data on 0.5° × 0.625°
   cells. Rounding to 0.5° both ways put Newcastle in a cell that is mostly North Sea (January
   normal 10°C), so lookups snap to the real cell centres instead.
@@ -80,6 +83,31 @@ top-level `nearby` (4 nearest city pages). `location` may include `slug` and `ge
   spots for UK visitors (Málaga, Tenerife, Palma, Faro, Dubai, Orlando and others). Edit the
   lists in `scripts/build-cities.mjs` and run `pnpm cities`. **Needs a decision**: the spec
   leaves the UK list open.
+
+## Performance
+
+Measured by the deploy-preview workflow (Lighthouse 12, mobile, simulated slow 4G) on
+`deploy-preview-1`. SEO shows 66 there only because Netlify marks deploy previews `noindex`.
+
+| Page            | Performance | Accessibility | LCP   | CLS   | Notes                       |
+| --------------- | ----------- | ------------- | ----- | ----- | --------------------------- |
+| `/`             | 97          | 100           | 1.7 s | 0.008 | answer fetched from the API |
+| `/in/london-gb` | 100 (local) | 100           | 1.8 s | 0     | server-rendered, CDN-cached |
+
+Site JS is about 8 KB gzipped (budget 25 KB). Cached API responses come back from the
+Netlify CDN in 10–40 ms. LCP sits just above the 1.5 s target under Lighthouse's simulated
+Moto G on slow 4G. Things that got it there:
+
+- A 7.6 KB static cut of Bricolage at the answer's weight is inlined in the page, so the
+  answer word paints in its final font straight away. The full variable font (77 KB) loads
+  for everything else.
+- Fallback fonts are sized to Bricolage's widths (Arial, Roboto, DejaVu), line height is
+  explicit, and the detail line has a fixed width, so the font swap does not move text.
+- The home page starts its API request from an inline script in `<head>`, before the main
+  script has loaded.
+
+Possible next step if LCP needs to drop further: render the home page's answer on the server
+from the visitor's approximate location.
 
 ## Open decisions carried over from the spec
 

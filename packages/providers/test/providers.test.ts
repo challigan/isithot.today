@@ -246,7 +246,7 @@ describe('NASA POWER climatology', () => {
   it('builds the climatology URL', () => {
     const url = new URL(buildClimatologyUrl(NASA_POWER_URL, { lat: 55, lon: -1.5 }));
     expect(url.host).toBe('power.larc.nasa.gov');
-    expect(url.searchParams.get('parameters')).toBe('T2M_MAX_AVG');
+    expect(url.searchParams.get('parameters')).toBe('T2M,T2M_RANGE');
     expect(url.searchParams.get('latitude')).toBe('55');
     expect(url.searchParams.get('longitude')).toBe('-1.5');
   });
@@ -255,13 +255,19 @@ describe('NASA POWER climatology', () => {
     const raw = fixture('nasa-power-newcastle.json');
     const normals = parseClimatology(raw);
     expect(normals).toHaveLength(12);
-    expect(normals[0]).toBe(raw.properties.parameter.T2M_MAX_AVG.JAN);
-    expect(normals[11]).toBe(raw.properties.parameter.T2M_MAX_AVG.DEC);
+    const p = raw.properties.parameter;
+    expect(normals[0]).toBeCloseTo(p.T2M.JAN + p.T2M_RANGE.JAN / 2, 2);
+    expect(normals[11]).toBeCloseTo(p.T2M.DEC + p.T2M_RANGE.DEC / 2, 2);
   });
 
   it('rejects fill values and bad shapes', () => {
     const raw = fixture('nasa-power-newcastle.json');
-    raw.properties.parameter.T2M_MAX_AVG.MAR = -999;
+    raw.properties.parameter.T2M.MAR = -999;
+    expect(() => parseClimatology(raw)).toThrow('missing monthly values');
+    raw.properties.parameter.T2M.MAR = 10;
+    raw.properties.parameter.T2M_RANGE.APR = 'x';
+    expect(() => parseClimatology(raw)).toThrow('missing monthly values');
+    raw.properties.parameter.T2M_RANGE.APR = -999;
     expect(() => parseClimatology(raw)).toThrow('missing monthly values');
     expect(() => parseClimatology({ properties: {} })).toThrow(
       'unexpected climatology response shape',

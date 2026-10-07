@@ -1,14 +1,18 @@
-import { isValidNormals, type LatLon, type MonthlyNormals } from '@isithot/core';
+import { isFiniteNumber, isValidNormals, type LatLon, type MonthlyNormals } from '@isithot/core';
 import { ProviderError, fetchJson, type FetchLike } from './errors';
 
 export const NASA_POWER_URL = 'https://power.larc.nasa.gov/api/temporal/climatology/point';
 
 /**
- * The average of daily maximum temperatures at 2 m, per month. Not `T2M_MAX`: in the
- * climatology endpoint that is the average monthly *maximum* (the hottest day of each month),
- * which runs 3–5°C above the normal daily high.
+ * The normal daily high is estimated as the monthly mean temperature plus half the average
+ * daily temperature range: T2M + T2M_RANGE / 2.
+ *
+ * Neither max-temperature parameter works here. Checked against live responses: in the
+ * climatology endpoint `T2M_MAX` is the highest temperature of the period and `T2M_MAX_AVG`
+ * the average hottest day of each month. Both put London's January normal at 11–12°C (the
+ * real normal daily high is about 8°C).
  */
-export const NASA_POWER_PARAMETER = 'T2M_MAX_AVG';
+export const NASA_POWER_PARAMETERS = ['T2M', 'T2M_RANGE'] as const;
 
 export interface NasaPowerConfig {
   url: string;
@@ -33,7 +37,7 @@ const MONTH_KEYS = [
 
 export function buildClimatologyUrl(url: string, point: LatLon): string {
   const params = new URLSearchParams({
-    parameters: NASA_POWER_PARAMETER,
+    parameters: NASA_POWER_PARAMETERS.join(','),
     community: 'AG',
     longitude: String(point.lon),
     latitude: String(point.lat),
@@ -42,16 +46,24 @@ export function buildClimatologyUrl(url: string, point: LatLon): string {
   return `${url}?${params.toString()}`;
 }
 
-/** Twelve monthly normal daily highs (mean of daily maxima), January first, °C. */
+type Monthly = Record<string, unknown>;
+
+/** Twelve monthly normal daily highs, January first, °C. */
 export function parseClimatology(json: unknown): MonthlyNormals {
-  const values = (json as { properties?: { parameter?: Record<string, Record<string, unknown>> } })
-    ?.properties?.parameter?.[NASA_POWER_PARAMETER];
-  if (!values) throw new ProviderError('nasa-power', 'unexpected climatology response shape');
-  const monthly: unknown[] = MONTH_KEYS.map((key) => values[key]);
-  // NASA POWER uses -999 as its fill value.
-  if (!isValidNormals(monthly) || monthly.some((v: number) => v <= -999)) {
-    throw new ProviderError('nasa-power', 'missing monthly values');
-  }
+  const parameter = (json as { properties?: { parameter?: Record<string, Monthly> } })?.properties
+    ?.parameter;
+  const mean = parameter?.T2M;
+  const range = parameter?.T2M_RANGE;
+  if (!mean || !range)
+    throw new ProviderError('nasa-power', 'unexpected climatology response shape');
+  const monthly: unknown[] = MONTH_KEYS.map((key) => {
+    const m = mean[key];
+    const r = range[key];
+    // NASA POWER uses -999 as its fill value.
+    if (!isFiniteNumber(m) || !isFiniteNumber(r) || m <= -999 || r <= -999) return null;
+    return Math.round((m + r / 2) * 100) / 100;
+  });
+  if (!isValidNormals(monthly)) throw new ProviderError('nasa-power', 'missing monthly values');
   return monthly;
 }
 
