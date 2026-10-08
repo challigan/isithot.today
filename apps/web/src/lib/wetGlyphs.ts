@@ -44,11 +44,11 @@ export const RAIN_GLYPHS: Record<RainBand, string> = {
   // Static: only Hot's suns turn.
   dry: `<circle cx="60" cy="60" r="20"/>${rays(EIGHT, 30, 40)}`,
   spots: `${cloud(0, -16)}${drop(47, 100)}${drop(72, 93)}`,
-  // The sun stops short of the cloud (its hidden part is not drawn). The rain falls from the
-  // cloud's right-hand side, clear of the "e." of "Maybe." (the longest answer it goes with),
-  // which sits under the icon's left and bottom at every width; a line through the letters
-  // would show in their gaps, as the answer is drawn over the icon.
-  showers: `<g opacity=".85"><path d="M31.5 47.1A14 14 0 1 1 53.7 33.1"/>${rays([135, 180, 225, 270, 315], 21, 28, 40, 36)}</g>${cloud(8, -8)}${rain(2, 92, 12, 92, -4, 14)}`,
+  // The sun stops short of the cloud (its hidden part is not drawn). The rain falls from under
+  // the cloud's right-hand end: "Maybe." and "Partly." reach under the rest of the icon at some
+  // widths and text sizes, and the answer is drawn over the icon, so a line there would show
+  // through the gaps in the letters. Checked from 320px to 1280px at 100-200% text.
+  showers: `<g opacity=".85"><path d="M35.5 45.1A14 14 0 1 1 57.7 31.1"/>${rays([135, 180, 225, 270, 315], 21, 28, 44, 34)}</g>${cloud(12, -10)}${rain(2, 106, 7, 84, -3, 12)}`,
   rain: `${cloud(0, -16)}${rain(4, 42, 14, 86, 6, 16)}`,
   heavy: `${cloud(0, -18, 0.15)}${rain(6, 37, 12, 82, 7, 20)}`,
   drenched: `${cloud(0, -24, 0.35)}${rain(7, 34, 10, 76, 6, 16)}<g opacity=".75"><ellipse cx="60" cy="108" rx="30" ry="8"/><ellipse cx="60" cy="108" rx="15" ry="3.5"/></g>`,

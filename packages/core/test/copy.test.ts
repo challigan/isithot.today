@@ -150,7 +150,9 @@ describe('copy', () => {
     const title = (band: RainBand, snow: 'none' | 'some' | 'most') =>
       wetPageTitle({ city: 'Leeds', answer: RAIN_ANSWERS[band], band, snow });
     expect(title('rain', 'most')).toBe('Is it wet in Leeds today? Yes. Snow | isitwet.today');
-    expect(title('heavy', 'most')).toBe('Is it wet in Leeds today? Yes. Heavy snow | isitwet.today');
+    expect(title('heavy', 'most')).toBe(
+      'Is it wet in Leeds today? Yes. Heavy snow | isitwet.today',
+    );
     expect(title('drenched', 'most')).toBe(
       'Is it wet in Leeds today? Yes. Heavy snow | isitwet.today',
     );

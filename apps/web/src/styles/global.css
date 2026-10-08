@@ -810,7 +810,7 @@ button.place span {
     left: 50%;
     bottom: max(1rem, env(safe-area-inset-bottom, 0px) + 0.5rem);
     translate: -50% 0;
-    max-width: calc(100% - 1rem);
+    max-width: calc(100% - 2rem);
     margin: 0;
     background: var(--pill);
     -webkit-backdrop-filter: none;
@@ -1039,6 +1039,20 @@ dialog.sheet::backdrop {
 .sheet input::placeholder {
   color: inherit;
   opacity: 0.85;
+}
+/* The clear button, drawn in the text colour (the browsers' own is blue or grey). */
+.sheet input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-right: -0.3rem;
+  cursor: pointer;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 5l14 14M19 5 5 19' stroke='%23000' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E")
+    center / 0.9rem no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 5l14 14M19 5 5 19' stroke='%23000' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E")
+    center / 0.9rem no-repeat;
 }
 .sheet-body {
   overflow-y: auto;

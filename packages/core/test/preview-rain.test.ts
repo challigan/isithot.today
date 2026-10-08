@@ -63,7 +63,7 @@ describe('previewResponse for rain', () => {
     expect(say('drenched')).toEqual([
       'Yes.',
       "You'll get drenched.",
-      'About 30mm still to come. Easing off by about 6pm.',
+      'About 34mm still to come. Easing off by about 6pm.',
       "It's torrential.",
       'A wet week, heaviest on Sat.',
     ]);
@@ -101,7 +101,7 @@ describe('previewResponse for rain', () => {
   it('follows the units', () => {
     const rain = previewResponse('heavy', 'f').rain!;
     expect(rain.unit).toBe('in');
-    expect(rain.days[0]!.detail).toBe('About 0.55in still to come. Easing off by about 8pm.');
+    expect(rain.days[0]!.detail).toBe('About 0.62in still to come. Easing off by about 8pm.');
     expect(rain.days[0]!.scale).toEqual({ min: 0, max: 1 });
   });
 });

@@ -410,7 +410,9 @@ describe('GET /api/v1/today', () => {
     expect(staleWhileRevalidate(600, 900)).toBe(300);
     expect(staleWhileRevalidate(300, 300)).toBe(0);
     expect(staleWhileRevalidate(60, 30)).toBe(0);
-    expect(cdnCacheControl(120, 200)).toBe('public, durable, max-age=120, stale-while-revalidate=80');
+    expect(cdnCacheControl(120, 200)).toBe(
+      'public, durable, max-age=120, stale-while-revalidate=80',
+    );
     expect(publicCache(600, 86400)['Netlify-CDN-Cache-Control']).toBe(
       'public, durable, max-age=86400, stale-while-revalidate=86400',
     );
