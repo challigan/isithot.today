@@ -5,6 +5,9 @@ import {
   CITIES,
   MemoryKV,
   SafeKV,
+  cdnCacheControl,
+  publicCache,
+  staleWhileRevalidate,
   TieredKV,
   cityBySlug,
   cityForPlace,
@@ -364,6 +367,11 @@ describe('GET /api/v1/today', () => {
     );
     expect(late.headers['Cache-Control']).toBe('public, max-age=300');
     expect(late.maxAge).toBe(300);
+    // Nor may the CDN serve it stale past the hour.
+    expect(late.expiresIn).toBe(300);
+    expect(late.headers['Netlify-CDN-Cache-Control']).toBe(
+      'public, durable, max-age=300, stale-while-revalidate=0',
+    );
     // Never under a minute, even in the last seconds of the hour.
     const last = await getToday(
       q({ place: 'london-gb', units: 'c' }),
@@ -371,12 +379,51 @@ describe('GET /api/v1/today', () => {
       at('2026-10-06T08:59:30Z'),
     );
     expect(last.maxAge).toBe(60);
+    expect(last.expiresIn).toBe(30);
+    expect(last.headers['Netlify-CDN-Cache-Control']).toMatch(/stale-while-revalidate=0$/);
+    // Fifteen minutes to go: ten fresh, five stale.
+    const mid = await getToday(
+      q({ place: 'london-gb', units: 'c' }),
+      null,
+      at('2026-10-06T08:45:00Z'),
+    );
+    expect(mid.maxAge).toBe(600);
+    expect(mid.headers['Netlify-CDN-Cache-Control']).toBe(
+      'public, durable, max-age=600, stale-while-revalidate=300',
+    );
     const early = await getToday(
       q({ place: 'london-gb', units: 'c' }),
       null,
       at('2026-10-06T08:05:00Z'),
     );
     expect(early.maxAge).toBe(600);
+    expect(early.expiresIn).toBe(55 * 60);
+    expect(early.headers['Netlify-CDN-Cache-Control']).toBe(
+      'public, durable, max-age=600, stale-while-revalidate=600',
+    );
+  });
+
+  it('keeps max-age plus stale-while-revalidate within the time to expiry', () => {
+    expect(staleWhileRevalidate(600)).toBe(600);
+    expect(staleWhileRevalidate(600, null)).toBe(600);
+    expect(staleWhileRevalidate(600, 3600)).toBe(600);
+    expect(staleWhileRevalidate(600, 900)).toBe(300);
+    expect(staleWhileRevalidate(300, 300)).toBe(0);
+    expect(staleWhileRevalidate(60, 30)).toBe(0);
+    expect(cdnCacheControl(120, 200)).toBe('public, durable, max-age=120, stale-while-revalidate=80');
+    expect(publicCache(600, 86400)['Netlify-CDN-Cache-Control']).toBe(
+      'public, durable, max-age=86400, stale-while-revalidate=86400',
+    );
+  });
+
+  it("words tomorrow's verdict in the future tense", async () => {
+    const { deps } = makeDeps();
+    const body = ok(await getToday(q({ place: 'london-gb', units: 'c' }), null, deps));
+    expect(body.days[0]!.verdict).toMatch(/^It's /);
+    expect(body.days[1]!.verdict).toMatch(/^It'll be /);
+    // Tomorrow's rain is a whole day, never "still to come".
+    expect(body.rain!.days[1]!.partial).toBe(false);
+    expect(body.rain!.days[1]!.detail).not.toMatch(/still to come|rest of the day|Easing off/);
   });
 
   it('keeps the hot normals when the rain normals fail', async () => {

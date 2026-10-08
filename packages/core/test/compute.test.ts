@@ -98,6 +98,14 @@ describe('formatDay', () => {
     expect(d.limitedText).toBe('Limited forecast data');
   });
 
+  it('words the verdict for tomorrow, and nothing else', () => {
+    const c = computeDay(day([9, 10, 8, 9, 9, 13]), NORMALS)!;
+    const today = formatDay(c, 'c');
+    const tomorrow = formatDay(c, 'c', true);
+    expect(tomorrow.verdict).toBe("It'll be cold.");
+    expect({ ...tomorrow, verdict: today.verdict }).toEqual(today);
+  });
+
   it('omits the peak time without hourly data', () => {
     const data = { ...day([9, 10, 11]), hourly: [] };
     expect(formatDay(computeDay(data, null)!, 'c').peakTime).toBeNull();

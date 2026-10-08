@@ -81,6 +81,25 @@ describe('computeRainWeek', () => {
     expect(patchy.total).toBeNull();
   });
 
+  it('takes the wettest day from the same models as the total, so it never exceeds it', () => {
+    // The last model has no total today, so the week adds up the other seven. On Sunday it is
+    // the fourth model of eight with rain (the median of all eight is 4mm), but only three of
+    // the seven have any.
+    const w = week([
+      [0, 0, 0, 0, 0, 0, 0, null],
+      [2, 2, 2, 2, 0, 0, 0, 0],
+      DRY,
+      [0, 0, 0, 0, 8, 8, 8, 8],
+      DRY,
+      DRY,
+      DRY,
+    ])!;
+    expect(w.days[3]!.amount).toBe(4);
+    expect(w.total).toBe(2);
+    expect(w.wettest).toEqual({ date: '2026-10-16', amount: 2 });
+    expect(formatRainWeek(w, 'c').detail).toBe('About 2mm across the week, most on Friday (2mm).');
+  });
+
   it('adds up normals, scaling today by the hours left', () => {
     const today = computeRainDay(
       {
@@ -132,6 +151,22 @@ describe('rain week verdicts', () => {
       'drenched',
       'A wet week, heaviest on Fri.',
     ]);
+  });
+
+  it('names the heaviest of the heavy days, never a showery day with more in its median', () => {
+    // Half the models with 40mm on Mon: showers, though its median (20mm) is the week's largest.
+    const DELUGE_OR_DRY = [0, 0, 0, 0, 40, 40, 40, 40];
+    const w = week([RAINY, RAINY, HEAVY, RAINY, DELUGE_OR_DRY, DRY, DRY])!;
+    expect(w.days[4]!.band).toBe('showers');
+    expect(w.wettest.date).toBe('2026-10-19');
+    expect(formatRainWeek(w, 'c').verdict).toBe('A wet week, heaviest on Sat.');
+    // A tie goes to the earlier day.
+    expect(said([RAINY, HEAVY, RAINY, HEAVY, RAINY, DRY, DRY])[2]).toBe(
+      'A wet week, heaviest on Fri.',
+    );
+    expect(said([RAINY, HEAVY, RAINY, DRENCHED, RAINY, DRY, DRY])[2]).toBe(
+      'A wet week, heaviest on Sun.',
+    );
   });
 
   it('names up to three rain days', () => {

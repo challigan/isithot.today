@@ -217,9 +217,13 @@ export function computeRainDay(day: DayData, opts: RainDayOptions = {}): RainDay
 export function timingLine(c: RainDayComputation): string {
   const every = c.hourly.every((h) => h.chance >= RAIN.hourLikely);
   if (c.raining) {
-    // Raining now: easing off at the first later hour judged spots or drier, as Now says.
-    const easing = c.hourly.slice(1).find((h) => rank(h.band) <= rank('spots'));
-    if (easing) return easingLine(easing.hour);
+    // Raining now: easing off at the first later hour judged spots or drier, as Now says, unless
+    // rain comes back later today.
+    const later = c.hourly.slice(1);
+    const easing = later.findIndex((h) => rank(h.band) <= rank('spots'));
+    if (easing >= 0 && !later.slice(easing).some((h) => isRain(h.band))) {
+      return easingLine(later[easing]!.hour);
+    }
     return every ? RAIN_COPY.restOfDay : RAIN_COPY.onAndOffRestOfDay;
   }
   const likely = c.likely;

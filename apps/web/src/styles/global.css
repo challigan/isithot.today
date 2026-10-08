@@ -122,6 +122,11 @@ html[data-switching] body {
 
 .wrap {
   container-type: inline-size;
+  /*
+   * The icon beside the answer. Enlarged text would grow it past half a phone's width (rem);
+   * 40cqi holds it to the page, and never binds at the usual text size from 320px up.
+   */
+  --glyph-size: min(clamp(7rem, 26vw, 11rem), 40cqi);
   --pad-l: max(clamp(1.25rem, 5vw, 3rem), env(safe-area-inset-left, 0px));
   --pad-r: max(clamp(1.25rem, 5vw, 3rem), env(safe-area-inset-right, 0px));
   max-width: 44rem;
@@ -183,7 +188,7 @@ main {
   position: absolute;
   top: clamp(0.5rem, 4vh, 2.5rem);
   right: calc(var(--pad-r) - 0.5rem);
-  width: clamp(7rem, 26vw, 11rem);
+  width: var(--glyph-size);
   height: auto;
   opacity: 0.95;
 }
@@ -227,7 +232,7 @@ main {
 }
 /* City questions are longer; keep them clear of the icon. */
 [data-mode='city'] .question {
-  max-width: calc(100% - clamp(7rem, 26vw, 11rem));
+  max-width: calc(100% - var(--glyph-size));
 }
 .answer {
   /* Positioned, so the answer paints over the icon where a long word reaches it. */
@@ -246,10 +251,13 @@ main {
 }
 /*
  * The size suits "Yes." and "No."; answers longer than four characters ("Maybe.", "Partly.",
- * "Almost.", marked data-long by the markup and scripts/app.ts) are held to the page's width.
+ * "Almost.", marked data-long by the markup and scripts/app.ts) are also held to the page's
+ * width, so enlarged text cannot push their last letters off the screen. 34.5cqi is the widest
+ * "Almost." can be and still end inside the gutter; with text at its usual size the screen size
+ * is always the smaller (from 320px up), so the design is unchanged there.
  */
 .answer[data-long] {
-  font-size: min(clamp(6rem, 30vw, 13rem), 32cqi);
+  font-size: min(clamp(6rem, 30vw, 13rem), 34.5cqi);
 }
 .answer.pop {
   animation: pop 520ms cubic-bezier(0.2, 0.8, 0.2, 1);

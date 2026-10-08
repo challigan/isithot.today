@@ -372,8 +372,9 @@ export async function getToday(
   const body: TodayResponse = {
     location: { ...located, timezone: loaded.forecast.timezone },
     units,
-    // Today and tomorrow in full; the rest of the week is summarised in `week`.
-    days: days.slice(0, 2).map((d) => formatDay(d, units)),
+    // Today and tomorrow in full (tomorrow's verdict in the future tense); the rest of the week
+    // is summarised in `week`.
+    days: days.slice(0, 2).map((d, i) => formatDay(d, units, i === 1)),
     updatedAt: new Date(loaded.fetchedAt).toISOString(),
     attribution: [COPY.forecastCredit, COPY.climateCredit],
     nearby: nearbyCities(point, 4, located.slug).map((c) => ({ slug: c.slug, name: c.name })),
@@ -409,10 +410,15 @@ export async function getToday(
   // shared by the CDN.
   const shared = located.source !== 'ip' && explicitUnits !== null;
   // Short cache while stale, or while climate normals are still loading in the background, and
-  // never past the next hour (today's rain answer is for the rest of the day from now).
+  // never past the next hour (today's rain answer is for the rest of the day from now), stale
+  // or not.
   let maxAge = loaded.stale || climate.pending || rainClimate.pending ? 60 : CACHE.edgeMaxAge;
   const toNextHour = secondsToNextHour(loaded.forecast, nowTime);
   if (toNextHour !== null) maxAge = Math.min(maxAge, Math.max(60, toNextHour));
-  const headers = shared ? publicCache(maxAge) : privateCache(Math.min(maxAge, 300));
-  return { status: 200, body, headers, maxAge };
+  const headers = shared
+    ? publicCache(maxAge, maxAge, toNextHour)
+    : privateCache(Math.min(maxAge, 300));
+  const result: HandlerResult<TodayResponse> = { status: 200, body, headers, maxAge };
+  if (toNextHour !== null) result.expiresIn = toNextHour;
+  return result;
 }
