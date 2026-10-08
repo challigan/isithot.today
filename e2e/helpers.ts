@@ -102,6 +102,17 @@ export const test = base.extend({
 });
 export { expect };
 
+/** One half of the Hot | Wet toggle. */
+export const toggle = (page: Page, topic: 'hot' | 'wet') =>
+  page.locator(`#topic [data-topic=${topic}]`);
+
+/** Hide or show the page as switching browser tabs does. */
+export const setVisibility = (page: Page, state: 'hidden' | 'visible') =>
+  page.evaluate((s) => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => s });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, state);
+
 interface CityRow {
   slug: string;
   name: string;

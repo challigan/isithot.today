@@ -5,14 +5,12 @@
 import type { Page } from '@playwright/test';
 import { PALETTES, RAIN_PALETTES, type Band, type RainBand } from '../packages/core/src/config';
 import { RAIN_GLYPHS } from '../apps/web/src/lib/wetGlyphs';
-import { expect, keepToday, serverNow, startClock, test } from './helpers';
+import { expect, keepToday, serverNow, setVisibility, startClock, test, toggle } from './helpers';
 
 const HOT_ANSWERS = /^(Yes\.|No\.|Almost\.)$/;
 const WET_ANSWERS = /^(Yes\.|No\.|Maybe\.)$/;
 const WET_WEEK_ANSWERS = /^(Yes\.|No\.|Maybe\.|Partly\.)$/;
 const HOUR = 60 * 60 * 1000;
-
-const toggle = (page: Page, topic: 'hot' | 'wet') => page.locator(`#topic [data-topic=${topic}]`);
 
 async function ready(page: Page, path = '/'): Promise<void> {
   await page.goto(path);
@@ -35,13 +33,6 @@ const g1 = (page: Page) =>
 
 const band = async (page: Page, view: 'now' | 'today' | 'week') =>
   (await page.locator(`#view-${view}`).getAttribute('data-band')) as string;
-
-/** Hide or show the page as switching tabs does. */
-const setVisibility = (page: Page, state: 'hidden' | 'visible') =>
-  page.evaluate((s) => {
-    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => s });
-    document.dispatchEvent(new Event('visibilitychange'));
-  }, state);
 
 test.describe('Hot | Wet', () => {
   test('each site opens on its own question', async ({ page, request }) => {

@@ -121,5 +121,6 @@ Alert on a non-200 response, or when the API body does not contain `"days"`.
 - Confirm NASA POWER's terms cover use on an ad-supported site (spec open decision).
 - Decide on the items marked **Needs a decision** in [DECISIONS.md](DECISIONS.md).
 - Try the place picker on a real iPhone and Android phone (open it, type, hide the keyboard,
-  pick a result); it was checked in emulation only.
+  pick a result), and look at the Tomorrow tab with text at 200% (the word should break with a
+  hyphen); both were checked in emulation only.
 - Run the deploy preview smoke test (it runs on every pull request) and check Lighthouse.

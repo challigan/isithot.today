@@ -106,6 +106,45 @@ test.describe('on a phone', () => {
     expect(input.y + input.height).toBeLessThan(vp.height / 5);
   });
 
+  test('a keyboard that shrinks the screen leaves the search in view', async ({ page }) => {
+    // Android Chrome makes room for its keyboard by resizing the page, as iOS does in effect.
+    await page.goto('/');
+    await expect(page.locator('meta[name="viewport"]')).toHaveAttribute(
+      'content',
+      /\binteractive-widget=resizes-content\b/,
+    );
+    await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+    // With the views brought in, so the scroller has a place to keep.
+    await page.locator('#tab-week').click();
+    await page.locator('#tab-today').click();
+    await expect(page.locator('#tab-today')).toHaveAttribute('aria-selected', 'true');
+    const resting = () =>
+      page.locator('#views').evaluate((el) => Math.round(el.scrollLeft / el.clientWidth));
+    await expect.poll(resting).toBe(1);
+    await page.locator('#place-btn').click();
+    await expect(page.locator('#search-input')).toBeFocused();
+    const vp = page.viewportSize()!;
+    const input = (await page.locator('#search-input').boundingBox())!;
+
+    const keyboard = { width: vp.width, height: Math.round(vp.height * 0.55) };
+    await page.setViewportSize(keyboard);
+    // The picker takes the space left, with the search where it was.
+    await expect
+      .poll(async () => Math.round((await page.locator('#search').boundingBox())!.height))
+      .toBe(keyboard.height);
+    expect((await page.locator('#search-input').boundingBox())!.y).toBeCloseTo(input.y, 0);
+    await page.locator('#search-input').fill('Bris');
+    await expect(page.getByRole('button', { name: /Bristol/ })).toBeInViewport();
+
+    // Keyboard down, picker closed: the page is on the view it was on.
+    await page.setViewportSize(vp);
+    await expect(page.locator('#search')).toBeVisible();
+    await page.locator('#search-close').click();
+    await expect(page.locator('#search')).toBeHidden();
+    await expect(page.locator('#tab-today')).toHaveAttribute('aria-selected', 'true');
+    await expect.poll(resting).toBe(1);
+  });
+
   test('the page behind keeps its place', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');

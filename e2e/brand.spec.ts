@@ -5,9 +5,7 @@
  * (domains.spec.ts covers the real hosts).
  */
 import type { Page } from '@playwright/test';
-import { expect, test } from './helpers';
-
-const toggle = (page: Page, topic: 'hot' | 'wet') => page.locator(`#topic [data-topic=${topic}]`);
+import { expect, test, toggle } from './helpers';
 
 /** The header, the tab's icons and (on home pages) the title's site, for one site. */
 async function expectSite(page: Page, site: 'hot' | 'wet', home: boolean): Promise<void> {

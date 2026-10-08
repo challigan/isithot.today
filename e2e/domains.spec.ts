@@ -6,7 +6,7 @@
  */
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { route } from '../netlify/edge-functions/lib/route';
-import { expect, prepare, test } from './helpers';
+import { expect, prepare, test, toggle } from './helpers';
 
 const HOT = 'https://isithot.today';
 const WET = 'https://isitwet.today';
@@ -43,8 +43,6 @@ async function bothSites(
 
 const stored = (page: Page, key: string) =>
   page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? 'null'), key);
-
-const toggle = (page: Page, topic: 'hot' | 'wet') => page.locator(`#topic [data-topic=${topic}]`);
 
 async function ready(page: Page, url: string): Promise<void> {
   await page.goto(url);

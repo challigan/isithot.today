@@ -13,8 +13,10 @@ import {
   ipPlaceAt,
   localTime,
   pinLocalTime,
+  setVisibility,
   startClock,
   test,
+  toggle,
 } from './helpers';
 
 const HOUR = 60 * 60 * 1000;
@@ -46,8 +48,6 @@ async function expectOpenOn(page: Page, view: 'now' | 'today'): Promise<void> {
     )
     .toBe(`view-${view}`);
 }
-
-const toggle = (page: Page, topic: 'hot' | 'wet') => page.locator(`#topic [data-topic=${topic}]`);
 
 for (const topic of ['hot', 'wet'] as const) {
   const site = topic === 'wet' ? '/wet' : '';
@@ -179,18 +179,9 @@ test('back after half an hour away in the evening: the page’s own question, on
   await toggle(page, 'hot').click();
   await expect(page.locator('#week-question')).toHaveText(`Is it hot in ${city.name} this week?`);
 
-  await page.evaluate(() => {
-    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
-    document.dispatchEvent(new Event('visibilitychange'));
-  });
+  await setVisibility(page, 'hidden');
   await page.clock.fastForward('31:00');
-  await page.evaluate(() => {
-    Object.defineProperty(document, 'visibilityState', {
-      configurable: true,
-      get: () => 'visible',
-    });
-    document.dispatchEvent(new Event('visibilitychange'));
-  });
+  await setVisibility(page, 'visible');
   await expect(page.locator('#tab-now')).toHaveAttribute('aria-selected', 'true');
   await expect(toggle(page, 'wet')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#brand')).toHaveText('isitwet.today');

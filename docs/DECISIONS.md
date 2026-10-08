@@ -196,9 +196,10 @@ is Today again. This settles the spec's open question about the evening.
   Today again with the usual midnight refetch. A return after half an hour away goes to the
   view for the time (Now in the evening). The preview (`?preview=1`) always shows Today.
 - **City pages** are rendered on the server in the evening state (Now open, Tomorrow in the
-  middle, Now's colours). They are never cached past the next hour, so a page made at 5pm is
-  not served after 6. If the browser's clock disagrees with the page, the browser corrects the
-  label and content, and the start view if the visitor has not moved.
+  middle, Now's colours). Their cache ends at the next hour (F7 below), so a page made at 5pm
+  is not served after 6. If the browser's clock still disagrees with the page (one made at
+  5:59, say), the browser corrects the label and content, and the start view if the visitor
+  has not moved.
 - **Titles stay about today.** The home and city tab titles, the city `<title>`, description
   and OG image keep asking today's question: it is the search-facing question, and titles did
   not change per view before either.
@@ -242,9 +243,9 @@ is Today again. This settles the spec's open question about the evening.
   (`interactive-widget=resizes-content`). The page behind does not scroll, Enter (Search on
   the keyboard) picks the first result, reopening shows the last search with its text selected
   (typing replaces it), focus returns to the place button, and Close is at least 44 × 44 px on
-  touch screens. From 640px up it stays a centred card that a click outside
-  closes. Checked in emulated phones, including a keyboard-sized resize; not yet on a real
-  iPhone or Android phone.
+  touch screens. From 640px up it stays a centred card that a click outside closes. Checked in
+  emulated phones, including a keyboard-sized resize; not yet on a real iPhone or Android
+  phone.
 - **Room for saved places.** The picker's body is in sections ("Use my location", then the
   results), so a saved list can go between them later. Nothing is built for it yet (see "Saved
   places").
@@ -379,8 +380,8 @@ Round 2 additions and clarifications (no field changes its meaning):
   total).
 - `rain.days[0]` while the current hour is wet: that hour counts in full, and `threshold` (the
   strip's wet zone) is an hour's wet amount, 0.2 mm (0.01 in).
-- `Netlify-CDN-Cache-Control`: max-age plus stale-while-revalidate never runs past the next
-  forecast hour.
+- `Netlify-CDN-Cache-Control`: stale-while-revalidate is cut (down to 0) so that max-age plus
+  it ends by the next forecast hour. Only max-age's one-minute floor can run past the hour.
 
 ## Design
 
