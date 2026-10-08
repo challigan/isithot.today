@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   ANSWERS,
+  TOMORROW_LABEL,
+  TOMORROW_VERDICTS,
   VERDICTS,
+  VIEWS,
+  VIEW_LABELS,
+  dryFromLine,
+  viewLabel,
   BAND_LABELS,
   agreementLine,
   anomalyLine,
@@ -35,7 +41,7 @@ import {
   wetWeekLine,
   whenDays,
 } from '../src/copy';
-import { BANDS, RAIN_BANDS } from '../src/config';
+import { BANDS, RAIN_BANDS, type RainBand } from '../src/config';
 
 describe('copy', () => {
   it('has an answer, verdict and label for every band', () => {
@@ -48,10 +54,34 @@ describe('copy', () => {
     expect(VERDICTS.warm).toBe("It's warm, not hot.");
   });
 
+  it('words verdicts for tomorrow in the future tense', () => {
+    for (const band of BANDS) {
+      expect(TOMORROW_VERDICTS[band]).toBe(VERDICTS[band].replace("It's", "It'll be"));
+    }
+    expect(TOMORROW_VERDICTS.warm).toBe("It'll be warm, not hot.");
+  });
+
+  it('labels the middle view Tomorrow while it shows tomorrow', () => {
+    expect(VIEWS.map((v) => viewLabel(v))).toEqual(['Now', 'Today', 'This week']);
+    expect(VIEWS.map((v) => viewLabel(v, true))).toEqual(['Now', TOMORROW_LABEL, 'This week']);
+    expect(TOMORROW_LABEL).toBe('Tomorrow');
+    expect(viewLabel('week', false)).toBe(VIEW_LABELS.week);
+  });
+
   it('asks the question with and without a city', () => {
     expect(question()).toBe('Is it hot today?');
     expect(question(null)).toBe('Is it hot today?');
     expect(question('Newcastle')).toBe('Is it hot in Newcastle today?');
+  });
+
+  it('asks about tomorrow for the middle view only', () => {
+    expect(question(null, 'today', 'hot', true)).toBe('Will it be hot tomorrow?');
+    expect(question('Leeds', 'today', 'hot', true)).toBe('Will it be hot in Leeds tomorrow?');
+    expect(question(null, 'today', 'wet', true)).toBe('Will it be wet tomorrow?');
+    expect(question('Leeds', 'today', 'wet', true)).toBe('Will it be wet in Leeds tomorrow?');
+    expect(question('Leeds', 'now', 'wet', true)).toBe('Is it wet in Leeds right now?');
+    expect(question(null, 'week', 'hot', true)).toBe('Is it hot this week?');
+    expect(question('Leeds', 'today', 'wet', false)).toBe('Is it wet in Leeds today?');
   });
 
   it('formats hours as 12-hour clock', () => {
@@ -108,11 +138,28 @@ describe('copy', () => {
       'Is it hot today? Yes. 30° | isithot.today',
     );
     expect(deg(5)).toBe('5°');
-    expect(wetPageTitle({ city: 'Leeds', answer: 'Yes.', band: 'heavy' })).toBe(
+    expect(wetPageTitle({ city: 'Leeds', answer: 'Yes.', band: 'heavy', snow: 'none' })).toBe(
       'Is it wet in Leeds today? Yes. Heavy rain | isitwet.today',
     );
-    expect(wetPageTitle({ answer: 'No.', band: 'dry' })).toBe(
+    expect(wetPageTitle({ answer: 'No.', band: 'dry', snow: 'none' })).toBe(
       'Is it wet today? No. Dry | isitwet.today',
+    );
+  });
+
+  it('titles a day that mostly falls as snow as snow, as its verdict does', () => {
+    const title = (band: RainBand, snow: 'none' | 'some' | 'most') =>
+      wetPageTitle({ city: 'Leeds', answer: RAIN_ANSWERS[band], band, snow });
+    expect(title('rain', 'most')).toBe('Is it wet in Leeds today? Yes. Snow | isitwet.today');
+    expect(title('heavy', 'most')).toBe(
+      'Is it wet in Leeds today? Yes. Heavy snow | isitwet.today',
+    );
+    expect(title('drenched', 'most')).toBe(
+      'Is it wet in Leeds today? Yes. Heavy snow | isitwet.today',
+    );
+    // Some snow, or showers and drier, keep the rain labels.
+    expect(title('rain', 'some')).toBe('Is it wet in Leeds today? Yes. Rain | isitwet.today');
+    expect(title('showers', 'most')).toBe(
+      'Is it wet in Leeds today? Maybe. Showers | isitwet.today',
     );
   });
 });
@@ -143,6 +190,7 @@ describe('rain copy', () => {
     expect(aroundLine(0)).toBe('Most likely around 12am.');
     expect(rainFromLine(18)).toBe('Rain likely from about 6pm.');
     expect(showersFromLine(9)).toBe('Showers possible from about 9am.');
+    expect(dryFromLine(13)).toBe('Dry from about 1pm.');
   });
 
   it('names days', () => {

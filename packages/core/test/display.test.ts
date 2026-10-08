@@ -9,7 +9,7 @@ import {
   type RainBand,
 } from '../src/config';
 import { ANSWERS, BAND_LABELS, COPY, VERDICTS, VIEWS, WEEK_VERDICTS } from '../src/copy';
-import { viewDisplay, type DisplayState } from '../src/display';
+import { defaultView, showsTomorrow, viewDisplay, type DisplayState } from '../src/display';
 import type {
   ApiDay,
   ApiNow,
@@ -567,5 +567,96 @@ describe('viewDisplay: wet', () => {
     expect(week.answer).toBe(answer);
     expect(week.items).toHaveLength(7);
     expect(week.items[0]).toEqual({ label: 'Day', value: '0mm', bandLabel: 'Showers', left: null });
+  });
+});
+
+// ---- Tomorrow --------------------------------------------------------------------------
+
+describe('Tomorrow after 6pm', () => {
+  /** London on 15 October 2026 is on BST (UTC+1). */
+  const london = (hhmm: string) => Date.parse(`2026-10-15T${hhmm}:00+01:00`);
+  const tomorrowHot = hotDay('hot', {
+    date: '2026-10-16',
+    verdict: "It'll be hot.",
+    detail: 'High of 27°, feels like 28°. Warmest around 3pm. 11° warmer than usual for October.',
+  });
+  const tomorrowRain = rainDay('heavy', {
+    date: '2026-10-16',
+    partial: false,
+    detail: 'About 14mm of rain. Mostly between 6am and 2pm.',
+  });
+  const evening = response({
+    days: [hotDay('mild'), tomorrowHot],
+    rain: rainOf('showers', 'mm', { days: [rainDay('showers'), tomorrowRain] }),
+  });
+
+  it('shows tomorrow from 6pm to midnight, local time at the place', () => {
+    expect(showsTomorrow(evening, london('17:59'))).toBe(false);
+    expect(showsTomorrow(evening, london('18:00'))).toBe(true);
+    expect(showsTomorrow(evening, london('23:59'))).toBe(true);
+    // Midnight: the response is for yesterday until the refetch brings the new day.
+    expect(showsTomorrow(evening, london('00:00') + 24 * 3_600_000)).toBe(false);
+    expect(showsTomorrow(evening, london('00:30'))).toBe(false);
+    // The place's own clock: 6pm in London is 1pm in New York.
+    const newYork = { ...evening, location: { ...evening.location, timezone: 'America/New_York' } };
+    expect(showsTomorrow(newYork, london('18:30'))).toBe(false);
+    expect(showsTomorrow(newYork, london('23:30'))).toBe(true);
+  });
+
+  it('never shows an empty Tomorrow', () => {
+    expect(showsTomorrow(response(), london('20:00'))).toBe(false);
+    expect(showsTomorrow(null, london('20:00'))).toBe(false);
+    expect(defaultView(response(), london('20:00'))).toBe('today');
+  });
+
+  it('opens on Now while the middle view shows tomorrow, else on Today', () => {
+    expect(defaultView(evening, london('09:00'))).toBe('today');
+    expect(defaultView(evening, london('18:00'))).toBe('now');
+    expect(defaultView(null, london('18:00'))).toBe('today');
+  });
+
+  it('answers the middle view from tomorrow, for either topic', () => {
+    const hot = viewDisplay(evening, 'hot', 'today', 'ready', { city: 'London', tomorrow: true });
+    expect(hot).toMatchObject({
+      question: 'Will it be hot in London tomorrow?',
+      band: 'hot',
+      answer: 'Yes.',
+      verdict: "It'll be hot.",
+      detail: tomorrowHot.detail,
+      palette: PALETTES.hot,
+    });
+    const wet = viewDisplay(evening, 'wet', 'today', 'ready', { tomorrow: true });
+    expect(wet).toMatchObject({
+      question: 'Will it be wet tomorrow?',
+      band: 'heavy',
+      answer: 'Yes.',
+      detail: tomorrowRain.detail,
+      palette: RAIN_PALETTES.heavy,
+    });
+    // Other views are unchanged.
+    expect(viewDisplay(evening, 'wet', 'now', 'ready', { tomorrow: true }).question).toBe(
+      'Is it wet right now?',
+    );
+    expect(viewDisplay(evening, 'hot', 'today', 'ready').verdict).toBe(VERDICTS.mild);
+  });
+
+  it('says tomorrow is not available when only the rain for it is missing', () => {
+    const noRain = response({ days: [hotDay('mild'), tomorrowHot] });
+    expect(viewDisplay(noRain, 'wet', 'today', 'ready', { tomorrow: true })).toMatchObject({
+      question: 'Will it be wet tomorrow?',
+      answer: COPY.notAvailable,
+      empty: true,
+    });
+  });
+
+  it('asks about tomorrow while it waits', () => {
+    for (const topic of ['hot', 'wet'] as const) {
+      const d = viewDisplay(null, topic, 'today', 'loading', { tomorrow: true });
+      expect(d).toMatchObject({
+        question: `Will it be ${topic} tomorrow?`,
+        answer: COPY.checking,
+        pending: true,
+      });
+    }
   });
 });

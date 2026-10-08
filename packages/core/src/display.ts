@@ -7,6 +7,7 @@
 import {
   BLEND,
   LOADING_PALETTE,
+  TOMORROW_FROM_HOUR,
   paletteFor,
   type Band,
   type Palette,
@@ -14,6 +15,7 @@ import {
   type Topic,
 } from './config';
 import { COPY, deg, question, type View } from './copy';
+import { localDateTime } from './dates';
 import type { ApiDay, ApiNow, ApiRainDay, ApiRainNow, RainUnit, TodayResponse } from './types';
 
 /** Waiting for the first answer, showing one, or unable to get one. */
@@ -22,6 +24,8 @@ export type DisplayState = 'loading' | 'ready' | 'error';
 export interface DisplayOptions {
   /** City pages ask about the city by name. */
   city?: string | null;
+  /** The middle view shows tomorrow (`showsTomorrow`): `days[1]` and `rain.days[1]`. */
+  tomorrow?: boolean;
   /** "Now" worked out again for this minute (`formatNow`), in place of the response's. */
   now?: ApiNow | null;
   /** The same for rain (`formatRainNow`). */
@@ -230,13 +234,14 @@ function rainModels(day: ApiRainDay, unit: RainUnit): TodayModels {
   };
 }
 
-function todayParts(res: TodayResponse, topic: Topic): Parts<TodayModels> | null {
+/** Today, or tomorrow (index 1) in the evening. */
+function todayParts(res: TodayResponse, topic: Topic, index: number): Parts<TodayModels> | null {
   if (topic === 'wet') {
     const rain = res.rain;
-    const day = rain?.days[0];
+    const day = rain?.days[index];
     return rain && day ? { shown: day, parts: rainModels(day, rain.unit) } : null;
   }
-  const day = res.days[0];
+  const day = res.days[index];
   return day ? { shown: day, parts: hotModels(day) } : null;
 }
 
@@ -302,7 +307,8 @@ function weekParts(res: TodayResponse, topic: Topic): Parts<WeekItem[]> | null {
 /**
  * What one view shows for a topic. `res` is used only when `state` is ready; a view without
  * data (no rain in the response, no "now" for this minute, no week) is then `empty`. Pass "now"
- * worked out for the current minute in `opts`, as the response's may have sat in a cache.
+ * worked out for the current minute in `opts`, as the response's may have sat in a cache, and
+ * `tomorrow` in the evening for the middle view.
  */
 export function viewDisplay<V extends View>(
   res: TodayResponse | null,
@@ -317,7 +323,7 @@ export function viewDisplay<V extends View>(
   let p: Parts<TodayModels | NowItem[] | WeekItem[]> | null;
   let parts: Partial<ViewDisplay>;
   if (view === 'today') {
-    const today = live && todayParts(live, topic);
+    const today = live && todayParts(live, topic, opts.tomorrow ? 1 : 0);
     p = today;
     parts = {
       models: today?.parts ?? {
@@ -359,7 +365,7 @@ export function viewDisplay<V extends View>(
     state,
     band: shown?.band ?? null,
     palette: shown ? paletteFor(shown.band) : LOADING_PALETTE,
-    question: question(opts.city ?? null, view, topic),
+    question: question(opts.city ?? null, view, topic, opts.tomorrow),
     answer:
       shown?.answer ??
       (state === 'error' ? COPY.unavailable : pending ? COPY.checking : COPY.notAvailable),
@@ -369,4 +375,19 @@ export function viewDisplay<V extends View>(
     pending,
     ...parts,
   } as DisplayFor<V>;
+}
+
+/**
+ * Whether the middle view answers for tomorrow: from TOMORROW_FROM_HOUR to midnight, local time
+ * at the place, when the response is for the place's today and has tomorrow (`days[1]`).
+ */
+export function showsTomorrow(res: TodayResponse | null, nowMs: number): boolean {
+  if (!res?.days[1]) return false;
+  const local = localDateTime(res.location.timezone, new Date(nowMs));
+  return local.hours >= TOMORROW_FROM_HOUR && local.date === res.days[0]!.date;
+}
+
+/** The view a page opens on: Now while the middle view shows tomorrow, else Today. */
+export function defaultView(res: TodayResponse | null, nowMs: number): View {
+  return showsTomorrow(res, nowMs) ? 'now' : 'today';
 }

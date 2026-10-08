@@ -51,8 +51,11 @@ export interface RainWeekComputation {
   /** Days judged rain or wetter, and days judged showers. */
   rainDays: number;
   showerDays: number;
-  /** The day with the largest consensus amount (the earlier one on a tie). */
-  wettest: RainDayComputation;
+  /**
+   * The wettest day (the earlier one on a tie) and its amount, mm: the median of the same models
+   * as `total`, so it never exceeds the total; each day's consensus amount without a total.
+   */
+  wettest: { date: string; amount: number };
 }
 
 /**
@@ -67,15 +70,18 @@ export function computeRainWeek(
   const first = days[0];
   if (!first || days.length < WEEK.minDays) return null;
 
-  const sums = first.models.flatMap((m) => {
-    let sum = 0;
+  // Each model's own amounts, day by day, for the models covering every day.
+  const full = first.models.flatMap((m) => {
+    const amounts: number[] = [];
     for (const d of days) {
       const own = d.models.find((o) => o.id === m.id);
       if (!own) return [];
-      sum += own.total;
+      amounts.push(own.total);
     }
-    return [sum];
+    return [amounts];
   });
+  const total =
+    full.length >= BLEND.minModels ? median(full.map((a) => a.reduce((x, y) => x + y, 0))) : null;
 
   let normal: number | null = null;
   if (rainNormals) {
@@ -85,12 +91,15 @@ export function computeRainWeek(
     }
   }
 
-  let wettest = first;
-  for (const d of days) if (d.amount > wettest.amount) wettest = d;
+  let wettest = { date: first.date, amount: Number.NEGATIVE_INFINITY };
+  days.forEach((d, i) => {
+    const amount = total === null ? d.amount : median(full.map((a) => a[i]!));
+    if (amount > wettest.amount) wettest = { date: d.date, amount };
+  });
   return {
     today: all[0]!.date,
     days,
-    total: sums.length >= BLEND.minModels ? median(sums) : null,
+    total,
     normal,
     rainDays: days.filter((d) => isRain(d.band)).length,
     showerDays: days.filter((d) => d.band === 'showers').length,
@@ -116,8 +125,16 @@ export function rainWeekVerdict(week: RainWeekComputation): {
   const heavy = rainy.filter((d) => rank(d.band) >= rank('heavy'));
   if (week.rainDays >= RAIN.week.wetFrom) {
     const band = RAIN_BANDS[Math.max(...rainy.map((d) => rank(d.band)))]!;
-    const heaviest = heavy.length > 0 ? when([week.wettest.date], today) : null;
-    return { band, answer: RAIN_WEEK_ANSWERS.yes, verdict: wetWeekLine(heaviest) };
+    // The heaviest of the heavy days (the earlier one on a tie), never a lighter wetter day.
+    const heaviest = heavy.reduce<RainDayComputation | null>(
+      (a, d) => (a && a.amount >= d.amount ? a : d),
+      null,
+    );
+    return {
+      band,
+      answer: RAIN_WEEK_ANSWERS.yes,
+      verdict: wetWeekLine(heaviest && when([heaviest.date], today)),
+    };
   }
   if (week.rainDays > 0) {
     const dates = rainy.map((d) => d.date);

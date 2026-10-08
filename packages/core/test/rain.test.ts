@@ -192,6 +192,7 @@ describe('computeRainDay: whole days', () => {
       likely: null,
     });
     expect(c.models[3]).toEqual({ id: 'm3', name: 'M3', total: 1, snow: 0 });
+    expect(c.raining).toBe(false);
   });
 
   it('leaves out models without a total, and needs one', () => {
@@ -222,7 +223,9 @@ describe('computeRainDay: whole days', () => {
   it('finds the likely hours from the hourly data', () => {
     const c = computeRainDay(day(during([14, 15, 16, 17], 1, (i) => i < 5)))!;
     expect(c.hourly).toHaveLength(24);
-    expect(c.hourly[14]).toEqual({ hour: 14, chance: 0.625 });
+    // Each hour judged as the Now view judges it.
+    expect(c.hourly[14]).toEqual({ hour: 14, chance: 0.625, band: 'rain' });
+    expect(c.hourly[13]).toEqual({ hour: 13, chance: 0, band: 'dry' });
     expect(c.likely).toEqual({ from: 14, to: 18 });
     // Under half the models in every hour: no likely hours.
     expect(computeRainDay(day(during([14], 1, (i) => i < 3)))!.likely).toBeNull();
@@ -239,30 +242,20 @@ describe('computeRainDay: whole days', () => {
 
 describe('computeRainDay: the rest of today', () => {
   it('weights the current hour by the minutes left', () => {
-    const c = computeRainDay(
-      day(() => 0.3),
-      { from: at(14.5) },
-    )!;
+    // A drizzle under an hour's wet amount: neither rain nor showers now.
+    const drizzle = day(() => 0.15);
+    const c = computeRainDay(drizzle, { from: at(14.5) })!;
     expect(c.partial).toBe(true);
     expect(c.from).toBe(at(14.5));
     expect(c.hours).toBe(9.5);
     expect(c.thresholds).toEqual(windowThresholds(9.5));
-    expect(c.models[0]!.total).toBeCloseTo(0.3 * 9.5, 10);
+    expect(c.models[0]!.total).toBeCloseTo(0.15 * 9.5, 10);
     expect(c.hourly.map((h) => h.hour)).toEqual(range(14, 24));
+    expect(c.raining).toBe(false);
     // Seconds do not count: 14:30:30 is still 30 minutes left.
-    expect(
-      computeRainDay(
-        day(() => 0.3),
-        { from: at(14.5) + 30_000 },
-      )!.hours,
-    ).toBe(9.5);
+    expect(computeRainDay(drizzle, { from: at(14.5) + 30_000 })!.hours).toBe(9.5);
     // On the hour, the hour is whole.
-    expect(
-      computeRainDay(
-        day(() => 0.3),
-        { from: at(14) },
-      )!.hours,
-    ).toBe(10);
+    expect(computeRainDay(drizzle, { from: at(14) })!.hours).toBe(10);
   });
 
   it('counts a model only with every hour of the window', () => {
@@ -303,6 +296,64 @@ describe('computeRainDay: the rest of today', () => {
     });
   });
 
+  it('says Yes while it rains now, however soon it eases off, as Now says it is raining', () => {
+    // 14:30: five of eight models have 0.3mm in this hour and nothing after, so Now says "Light
+    // rain now". Half of that hour is well under the 1mm the rest of a day needs; but while it
+    // rains the hour counts in full, as Now counts it, and a model expects rain from an hour's
+    // wet amount.
+    const c = computeRainDay(day(during([14], 0.3, (i) => i < 5)), { from: at(14.5) })!;
+    expect(c.raining).toBe(true);
+    expect(c.hours).toBe(10);
+    expect(c.thresholds).toEqual({ ...windowThresholds(10), wet: RAIN.hour.wet });
+    expect([c.wet, c.band]).toEqual([5, 'rain']);
+    const api = formatRainDay(c, 'c');
+    expect([api.answer, api.verdict, api.detail]).toEqual([
+      'Yes.',
+      "It'll rain.",
+      'About 0.3mm still to come. Easing off by about 3pm.',
+    ]);
+    expect(api.agreementText).toBe('5 of 8 forecasts expect rain');
+    // The strip's wet zone starts at an hour's wet amount, and holds every model expecting rain.
+    expect(api.threshold).toBe(0.2);
+    expect(api.models.map((m) => m.expectsRain)).toEqual(
+      api.models.map((m) => m.value >= api.threshold),
+    );
+    expect(formatRainDay(c, 'f')).toMatchObject({ answer: 'Yes.', threshold: 0.01 });
+  });
+
+  it('says Maybe while showers are possible now, as Now says', () => {
+    // Three of eight models wet this hour (Now: "Showers possible now"), nothing after.
+    const c = computeRainDay(day(during([14], 0.3, (i) => i < 3)), { from: at(14.5) })!;
+    expect([c.raining, c.hours, c.wet, c.band]).toEqual([false, 10, 3, 'showers']);
+    expect(formatRainDay(c, 'c').detail).toBe(
+      'Some forecasts say up to 0.3mm. Most likely around 2pm.',
+    );
+    // One model of eight is dry now (as Now judges it), and the hour counts what is left of it.
+    const spots = computeRainDay(day(during([14], 0.3, (i) => i < 1)), { from: at(14.5) })!;
+    expect([spots.hours, spots.wet, spots.band]).toEqual([9.5, 0, 'dry']);
+  });
+
+  it('never judges the last minutes of the day against less than an hour', () => {
+    // 23:52: eight minutes left of an hour with 0.3mm in one model. Judged against eight
+    // minutes' worth of rain, its 0.04mm would expect rain while every forecast says 0mm.
+    const c = computeRainDay(day(during([23], 0.3, (i) => i < 1)), { from: at(23 + 52 / 60) })!;
+    expect(c.hours).toBeCloseTo(8 / 60, 10);
+    expect(c.thresholds).toEqual(windowThresholds(1));
+    expect([c.wet, c.band]).toEqual([0, 'dry']);
+    const api = formatRainDay(c, 'f');
+    expect([api.answer, api.detail]).toEqual(['No.', 'Dry for the rest of the day.']);
+    expect(api.stripSummary).toBe('All forecasts say 0in; none expect rain.');
+    // Rain now in every model: the whole hour counts, so the amount never rounds to nothing.
+    const wet = formatRainDay(
+      computeRainDay(day(during([23], 0.3)), { from: at(23 + 58 / 60) })!,
+      'f',
+    );
+    expect([wet.answer, wet.detail]).toEqual([
+      'Yes.',
+      'About 0.01in still to come. For the rest of the day.',
+    ]);
+  });
+
   it('says Yes late in the evening while light rain is still falling', () => {
     // 22:10, every model with 0.4 mm an hour until midnight: Now says "It's raining".
     const c = computeRainDay(day(during([22, 23], 0.4)), { from: at(22 + 10 / 60) })!;
@@ -311,7 +362,7 @@ describe('computeRainDay: the rest of today', () => {
     expect([api.answer, api.verdict, api.detail]).toEqual([
       'Yes.',
       "It'll rain.",
-      'About 0.7mm still to come. For the rest of the day.',
+      'About 0.8mm still to come. For the rest of the day.',
     ]);
   });
 });
@@ -481,15 +532,37 @@ describe('formatRainDay', () => {
 
     it('covers the rest of today', () => {
       expect(timing(day(during(range(14, 24), 0.5)), at(14.5))).toBe('For the rest of the day.');
-      expect(timing(day(during([14, 15, 16, 18, 19, 20, 21, 22, 23], 0.5)), at(14.5))).toBe(
-        'On and off for the rest of the day.',
-      );
+      // Raining now, then showers that never clear.
+      const showery = (h: number, i: number) => (h < 14 ? 0 : h < 17 || i < 3 ? 0.5 : 0);
+      expect(timing(day(showery), at(14.5))).toBe('On and off for the rest of the day.');
+      // Showers now (half the models), rain later: likely from now to midnight.
+      const later = (h: number, i: number) => (h === 14 ? (i < 4 ? 1 : 0) : h > 14 ? 1 : 0);
+      expect(timing(day(later), at(14.5))).toBe('For the rest of the day.');
+      const gap = (h: number, i: number) => (h === 18 && i > 2 ? 0 : later(h, i));
+      expect(timing(day(gap), at(14.5))).toBe('On and off for the rest of the day.');
     });
 
     it('says when rain falling now eases off', () => {
       expect(timing(day(during([14, 15, 16], 1)), at(14.5))).toBe('Easing off by about 5pm.');
       expect(timing(day(during([14], 2)), at(14.5))).toBe('Easing off by about 3pm.');
       expect(timing(day(during(range(10, 18), 1)), at(14.5))).toBe('Easing off by about 6pm.');
+      // As Now says: the first later hour judged spots or drier, even with showers after it.
+      const showersLater = (h: number, i: number) =>
+        [14, 15].includes(h) || (h === 18 && i < 3) ? 1 : 0;
+      expect(timing(day(showersLater), at(14.5))).toBe('Easing off by about 4pm.');
+      // And when rain comes back later today.
+      expect(timing(day(during([14, 15, 18], 1)), at(14.5))).toBe(
+        'Easing off by about 4pm. Rain likely from about 6pm.',
+      );
+      // Showers that linger past the likely hours are not "easing off" yet.
+      const lingering = (h: number, i: number) => (h < 16 ? 1 : h < 18 && i < 3 ? 1 : 0);
+      expect(timing(day(lingering), at(14.5))).toBe('Easing off by about 6pm.');
+    });
+
+    it('never says easing off when it is not raining now', () => {
+      // Half the models wet this hour (Now: showers), most of them later.
+      const c = day((h, i) => (h === 14 ? (i < 4 ? 1 : 0) : h < 18 ? 1 : 0));
+      expect(timing(c, at(14.5))).toBe('Mostly between 2pm and 6pm.');
     });
   });
 

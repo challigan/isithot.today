@@ -12,17 +12,22 @@ import {
   RAIN_BANDS,
   SEARCH,
   SITES,
-  VIEW_LABELS,
+  VIEWS,
   computeNow,
   computeRainNow,
+  defaultView,
   formatNow,
   formatRainNow,
+  hostTopic,
+  isSiteHost,
   outboundLinks,
   pageTitle,
   question,
   roundToGrid,
+  showsTomorrow,
   sitePath,
   viewDisplay,
+  viewLabel,
   wetPageTitle,
   type ApiError,
   type ApiNow,
@@ -71,7 +76,11 @@ type Target =
       geonameId?: number | undefined;
     };
 
-/** The place and units serve both sites (°C goes with millimetres, °F with inches). */
+/**
+ * The place and units, shared by both questions (°C goes with millimetres, °F with inches). Each
+ * domain keeps its own storage, so a link or move to the other one carries the place and units
+ * in the address, and the page there stores them (`siteLink`, `start`).
+ */
 const KEYS = {
   place: 'isithot:place',
   units: 'isithot:units',
@@ -121,6 +130,11 @@ let topic: Topic = pageTopic;
 
 let units: Units = 'c';
 let view: View = 'today';
+/**
+ * The middle view answers for tomorrow (from 6pm at the place, core `showsTomorrow`). Read from
+ * the page first: a city page or a restored snapshot may already show it.
+ */
+let tomorrow = $('view-today')?.hasAttribute('data-tomorrow') ?? false;
 let views: ViewsController | null = null;
 let target: Target = { kind: 'ip' };
 let current: TodayResponse | null = null;
@@ -156,9 +170,38 @@ function applyPalette(p: Palette): void {
 function shown<V extends View>(res: TodayResponse, v: V): DisplayFor<V> {
   return viewDisplay(res, topic, v, 'ready', {
     city: mode === 'city' ? res.location.name : null,
+    tomorrow,
     now: nowShown,
     rainNow: rainNowShown,
   });
+}
+
+/**
+ * Whether the middle view shows tomorrow, worked out for this minute at the place, with its tab
+ * labelled to match. Returns true when that changed. The preview always shows today.
+ */
+function updateSlot(res: TodayResponse | null): boolean {
+  const next = !preview && showsTomorrow(res, Date.now());
+  const changed = next !== tomorrow;
+  tomorrow = next;
+  setText('tab-today', viewLabel('today', next));
+  $('view-today')?.toggleAttribute('data-tomorrow', next);
+  return changed;
+}
+
+/**
+ * Once the place is known, open on its view for the time of day (Now in the evening), unless
+ * the visitor has already moved. Only the first time: a refetch or the minute tick never moves
+ * anyone (at 6pm an open Today simply becomes Tomorrow in place).
+ */
+let started = false;
+function openOnDefault(res: TodayResponse): void {
+  if (started || preview) return;
+  started = true;
+  const next = defaultView(res, Date.now());
+  if (!views || views.moved() || views.active() === next) return;
+  view = next; // So the page takes its colours without the quick switch between views.
+  views.go(next, { instant: true });
 }
 
 /** The city a city page asks about, with or without an answer. */
@@ -200,7 +243,7 @@ function announce(v: View, lead: 'view' | 'question' = 'view'): void {
       app.dataset.state === 'ready' &&
       !panel.hasAttribute('data-empty') &&
       !panel.hasAttribute('data-pending');
-    const first = lead === 'question' ? text('.question') : `${VIEW_LABELS[v]}:`;
+    const first = lead === 'question' ? text('.question') : `${viewLabel(v, tomorrow)}:`;
     live.textContent = `${first} ${text('.answer')} ${shown ? text('.verdict') : ''}`.trim();
   }, 400);
 }
@@ -253,6 +296,8 @@ function renderPanel(d: ViewDisplay): void {
   for (const key of ['question', 'answer', 'verdict', 'detail'] as const) {
     setText(viewId(d.view, key), d[key]);
   }
+  // "Maybe.", "Partly.", "Almost." are sized to fit; "Yes." and "No." keep the full size.
+  $(viewId(d.view, 'answer'))?.toggleAttribute('data-long', d.answer.length > 4);
 }
 
 /** The models strip moves to its new positions rather than being redrawn. */
@@ -305,7 +350,7 @@ function renderLinks(res: TodayResponse): void {
     ...list.flatMap((c, i) => {
       const a = document.createElement('a');
       // To the city's page on the site of the question on screen.
-      a.href = sitePath(topic, `/in/${c.slug}`, location.hostname);
+      a.href = siteLink(topic, `/in/${c.slug}`);
       a.textContent = c.name;
       return i < list.length - 1 ? [a, document.createTextNode(', ')] : [a];
     }),
@@ -330,12 +375,13 @@ function renderUnits(): void {
 }
 
 /**
- * The tab title answers the question on screen. City titles are the topic's own (as on its
- * site's city pages); the home page keeps its site's name.
+ * The tab title answers the question on screen, about today whichever view is showing. City
+ * titles are the topic's own (as on its site's city pages); the home page's names the site of
+ * the question on screen, as the header does.
  */
 function titleFor(res: TodayResponse | null): string {
   const city = cityName();
-  const site = SITES[city ? topic : pageTopic].name;
+  const site = SITES[topic].name;
   const hot = res?.days[0];
   const wet = res?.rain?.days[0];
   if (topic === 'hot' && hot) {
@@ -345,13 +391,16 @@ function titleFor(res: TodayResponse | null): string {
   }
   if (topic === 'wet' && wet) {
     return city
-      ? wetPageTitle({ city, answer: wet.answer, band: wet.band })
+      ? wetPageTitle({ city, answer: wet.answer, band: wet.band, snow: wet.snow })
       : `${wet.answer} ${wet.verdict} | ${site}`;
   }
   return `${question(city, 'today', topic)} | ${site}`;
 }
 
-/** Today's answer to the question on screen, to tell whether a new response changes it. */
+/**
+ * Today's answer to the question on screen (even while the middle view shows tomorrow), to tell
+ * whether a new response changes it.
+ */
 const todayAnswer = (res: TodayResponse | null): string | undefined =>
   topic === 'wet' ? res?.rain?.days[0]?.answer : res?.days[0]?.answer;
 
@@ -362,6 +411,8 @@ function render(res: TodayResponse, animate: boolean): void {
   current = res;
   units = res.units;
   setState('ready');
+  updateSlot(res);
+  openOnDefault(res);
   renderNow(res);
   applyViewPalette();
   setText('place', res.location.name);
@@ -371,7 +422,32 @@ function render(res: TodayResponse, animate: boolean): void {
   renderWeek(shown(res, 'week'));
   renderLinks(res);
   renderUnits();
+  renderBrand();
   document.title = titleFor(res);
+}
+
+/**
+ * The header's site name and link follow the question on screen: on isithot.today with Wet
+ * showing it reads isitwet.today and goes there. So does the tab's icon: on the real sites each
+ * domain serves its own icons at the root, and elsewhere the wet ones are under /wet.
+ */
+function renderBrand(): void {
+  const brand = $<HTMLAnchorElement>('brand');
+  const [name, tld] = SITES[topic].name.split('.');
+  if (brand?.firstChild) {
+    brand.firstChild.nodeValue = name!;
+    const span = brand.querySelector('span');
+    if (span) span.textContent = `.${tld}`;
+    const href = siteLink(topic, '/');
+    if (brand.getAttribute('href') !== href) brand.setAttribute('href', href);
+  }
+  document.querySelectorAll<HTMLLinkElement>('link[rel="icon"]').forEach((link) => {
+    link.dataset.own ??= link.getAttribute('href') ?? '';
+    const file = link.dataset.own.split('/').pop()!;
+    const href =
+      topic === pageTopic ? link.dataset.own : sitePath(topic, `/${file}`, location.hostname);
+    if (link.getAttribute('href') !== href) link.setAttribute('href', href);
+  });
 }
 
 /** Show the other question: the same views, re-rendered in place in the other topic. */
@@ -421,12 +497,48 @@ function rainUntil(res: TodayResponse): number | null {
   );
 }
 
+/** When today's answer goes out of date: the place's midnight (the next day's first hour). */
+function dayUntil(res: TodayResponse): number | null {
+  const date = res.days[0]?.date ?? '';
+  return res.now?.series.find((p) => p.date > date)?.time ?? null;
+}
+
+type Stale = 'day' | 'rain';
+
+/**
+ * A clock running fast makes the answer look out of date before the server has a newer one:
+ * past the hour today's rain holds for, or past the place's midnight. When a fresh answer is out
+ * of date already, it is good until the server reaches that moment: at the latest, as long from
+ * now as the server had left when working it out. So a fast clock costs at most one extra
+ * request per server hour, and one at midnight.
+ */
+const holds: Partial<Record<Stale, { until: number; at: number }>> = {};
+
+function hold(res: TodayResponse): void {
+  // `made`: when the server worked that part of the answer out.
+  const set = (reason: Stale, until: number | null, made = ''): void => {
+    const from = Date.parse(made);
+    if (until !== null && Date.now() >= until && from < until) {
+      holds[reason] = { until, at: Date.now() + until - from };
+    }
+  };
+  set('day', dayUntil(res), res.now?.time);
+  set('rain', rainUntil(res), res.rain?.days[0]?.from);
+}
+
+/** Whether the clock has passed `until` for `reason` (or the hold on it). */
+function past(reason: Stale, until: number): boolean {
+  const held = holds[reason];
+  return Date.now() >= (held?.until === until ? held.at : until);
+}
+
 /**
  * Whether the answer is out of date: past local midnight (today's answer is yesterday's) or
  * past the end of the hourly series it carries ("day"), or past the hour today's rain answer
- * holds for ("rain"). A clock running far behind is not a reason.
+ * holds for ("rain"). A clock running far behind is not a reason, and one running fast waits
+ * for the server (`hold`).
  */
-function outOfDate(res: TodayResponse): 'day' | 'rain' | null {
+function outOfDate(res: TodayResponse): Stale | null {
   if (preview) return null;
   if (res.now) {
     const series = res.now.series;
@@ -434,10 +546,11 @@ function outOfDate(res: TodayResponse): 'day' | 'rain' | null {
     const old = now
       ? now.date > (res.days[0]?.date ?? '')
       : Date.now() > (series.at(-1)?.time ?? Infinity);
-    if (old) return 'day';
+    const midnight = dayUntil(res);
+    if (old && (midnight === null || past('day', midnight))) return 'day';
   }
   const until = rainUntil(res);
-  return until !== null && Date.now() >= until ? 'rain' : null;
+  return until !== null && past('rain', until) ? 'rain' : null;
 }
 
 /**
@@ -486,10 +599,13 @@ function renderWeek(d: WeekDisplay): void {
  * the rest is placeholder text that stays hidden.
  */
 function renderPending(state: 'loading' | 'error'): void {
+  // Without an answer there is no place, so no local time: the middle view is Today.
+  updateSlot(null);
   const opts = { city: cityName() };
   renderToday(viewDisplay(null, topic, 'today', state, opts), false);
   renderHours(viewDisplay(null, topic, 'now', state, opts));
   renderWeek(viewDisplay(null, topic, 'week', state, opts));
+  renderBrand();
   document.title = titleFor(null);
 }
 
@@ -558,23 +674,28 @@ function saveLast(res: TodayResponse): void {
   // Each site's snapshot answers its own question, which the page opens on.
   if (mode !== 'home' || preview || topic !== pageTopic) return;
   const main = $('main');
-  const d = shown(res, 'today');
-  if (!main || d.empty) return;
-  // The snapshot always reopens on Today alone, as the server sends the page.
+  if (!main || shown(res, 'today').empty) return;
+  // The snapshot reopens on one view alone, as the server sends the page for the time of day:
+  // Today, or in the evening Now (with the middle tab reading Tomorrow).
+  const start: View = tomorrow ? 'now' : 'today';
   const copy = main.cloneNode(true) as HTMLElement;
   copy.querySelectorAll<HTMLElement>('.view').forEach((panel) => {
-    const today = panel.dataset.view === 'today';
-    panel.toggleAttribute('inert', !today);
-    panel.toggleAttribute('hidden', !today);
-    panel.querySelector('.answer')?.removeAttribute('aria-level');
+    const open = panel.dataset.view === start;
+    panel.toggleAttribute('inert', !open);
+    panel.toggleAttribute('hidden', !open);
+    // Today's answer is the real h1; another start view's answer takes its place.
+    const answer = panel.querySelector('.answer');
+    if (open && start !== 'today') answer?.setAttribute('aria-level', '1');
+    else answer?.removeAttribute('aria-level');
   });
   copy.querySelector<HTMLElement>('#views')?.removeAttribute('style');
-  copy.querySelector<HTMLElement>('#tabs')?.removeAttribute('style');
-  copy.querySelector<HTMLElement>('#tabs')?.removeAttribute('data-dragging');
+  const tabs = copy.querySelector<HTMLElement>('#tabs');
+  tabs?.removeAttribute('data-dragging');
+  tabs?.setAttribute('style', `--pos:${VIEWS.indexOf(start)}`);
   copy.querySelectorAll<HTMLElement>('[role=tab]').forEach((tab) => {
-    const today = tab.dataset.view === 'today';
-    tab.setAttribute('aria-selected', String(today));
-    tab.tabIndex = today ? 0 : -1;
+    const open = tab.dataset.view === start;
+    tab.setAttribute('aria-selected', String(open));
+    tab.tabIndex = open ? 0 : -1;
   });
   copy.querySelectorAll<HTMLElement>('#topic [data-topic]').forEach((b) => {
     b.setAttribute('aria-pressed', String(b.dataset.topic === pageTopic));
@@ -586,7 +707,11 @@ function saveLast(res: TodayResponse): void {
     // Today's rain is for the rest of the day from when it was worked out: not past the hour.
     until: pageTopic === 'wet' ? (rainUntil(res) ?? undefined) : undefined,
     key: targetKey(target),
-    palette: d.palette,
+    // The inline restore script paints this only for the same slot on the same day at the place.
+    tz: res.location.timezone,
+    slot: tomorrow ? 'tomorrow' : 'today',
+    date: res.days[0]!.date,
+    palette: shown(res, start).palette,
     html: copy.innerHTML,
     data: res,
     place: res.location.name,
@@ -601,20 +726,27 @@ async function load(
   const seq = ++requestSeq;
   if (!opts.quiet) renderLoading();
   const preferred = storage.get<Units>(KEYS.units);
-  let url = apiUrl(t, preferred ?? (t.kind === 'ip' ? null : units));
+  const url = apiUrl(t, preferred ?? (t.kind === 'ip' ? null : units));
   // An out-of-date answer (past midnight, or past the hour today's rain holds for) may still be
   // in the browser and CDN caches: ask past them, with a new address each hour.
-  if (opts.fresh) url += `${url.includes('?') ? '&' : '?'}t=${Math.floor(Date.now() / HOUR)}`;
-  const early = window.__isithotPrefetch;
+  const freshUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Math.floor(Date.now() / HOUR)}`;
+  const early = window.__isithotPrefetch?.url === url ? window.__isithotPrefetch : undefined;
   window.__isithotPrefetch = undefined;
-  try {
-    const res = await (early?.url === url
-      ? early.response
-      : fetch(url, { headers: { accept: 'application/json' } }));
+  const get = async (r: Promise<Response>) => {
+    const res = await r;
     const body = (await res.json()) as TodayResponse | ApiError;
-    if (seq !== requestSeq) return false; // A newer request won.
     if (!res.ok || 'error' in body)
       throw new Error('error' in body ? body.error.code : String(res.status));
+    return body;
+  };
+  const ask = (u: string) => get(fetch(u, { headers: { accept: 'application/json' } }));
+  try {
+    // The page's own early request answers a fresh load too, unless it is out of date as well
+    // (a saved answer from an earlier hour usually is not: the request is new).
+    let body = await (early ? get(early.response) : ask(opts.fresh ? freshUrl : url));
+    if (early && opts.fresh && outOfDate(body)) body = await ask(freshUrl);
+    if (seq !== requestSeq) return false; // A newer request won.
+    if (opts.fresh) hold(body);
     target = t;
     loadedAt = Date.now();
     render(body, opts.animate ?? true);
@@ -632,6 +764,30 @@ async function load(
 function rememberPlace(t: Target): void {
   if (t.kind === 'ip') storage.remove(KEYS.place);
   else storage.set(KEYS.place, t);
+}
+
+/** Whether a link for `t` goes to the other domain (only on the real sites). */
+const crosses = (t: Topic): boolean =>
+  isSiteHost(location.hostname) && hostTopic(location.hostname) !== t;
+
+/**
+ * A link to `path` on the site of `t`. The other domain has storage of its own, so a link there
+ * carries the units chosen here, which the page there stores.
+ */
+function siteLink(t: Topic, path: string): string {
+  const href = sitePath(t, path, location.hostname);
+  const chosen = storage.get<Units>(KEYS.units);
+  if (!chosen || !crosses(t)) return href;
+  const url = new URL(href);
+  url.searchParams.set('units', chosen);
+  return url.href;
+}
+
+/** Take parameters out of the address once the page has what they carried. */
+function dropParams(...names: string[]): void {
+  const url = new URL(location.href);
+  for (const name of names) url.searchParams.delete(name);
+  if (url.href !== location.href) history.replaceState(history.state, '', url.href);
 }
 
 function position(prompt: boolean): Promise<{ lat: number; lon: number }> {
@@ -671,8 +827,14 @@ async function useDeviceLocation(prompted: boolean): Promise<void> {
         history.replaceState(null, '', sitePath(pageTopic, '/', location.hostname));
       await load(t, { quiet: !!current });
     } else {
-      // Home, on the site of the question on screen.
-      location.href = sitePath(topic, '/', location.hostname);
+      // Home, on the site of the question on screen. The other domain has neither this
+      // storage nor the permission, so the place goes in the address.
+      const query = new URLSearchParams({
+        lat: String(p.lat),
+        lon: String(p.lon),
+        source: 'device',
+      });
+      location.href = siteLink(topic, crosses(topic) ? `/?${query}` : '/');
     }
   } catch {
     if (current) setText('place', current.location.name);
@@ -702,6 +864,8 @@ async function upgradeLocation(): Promise<void> {
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 let searchAbort: AbortController | null = null;
 let lastResults: SearchResult[] = [];
+/** Set when a choice leaves the page, so closing the picker does not move focus. */
+let leaving = false;
 
 function openSearch(): void {
   const dialog = $<HTMLDialogElement>('search');
@@ -712,15 +876,11 @@ function openSearch(): void {
   input.select();
 }
 
-function resultsList(): HTMLElement | null {
-  return $('search-results');
-}
-
+/** The results section of the picker ("Use my location" has a section of its own above it). */
 function showResults(items: Node[]): void {
-  const list = resultsList();
-  const first = list?.firstElementChild; // The "Use my location" row stays.
-  if (!list || !first) return;
-  list.replaceChildren(first, ...items);
+  $('search-results')?.replaceChildren(...items);
+  const body = $('search-body');
+  if (body) body.scrollTop = 0;
 }
 
 function statusItem(text: string): HTMLLIElement {
@@ -775,11 +935,13 @@ function onSearchInput(): void {
 }
 
 function choose(r: SearchResult): void {
+  // To a city's own page, or from a city page to the home page.
+  leaving = !!r.slug || mode !== 'home';
   $<HTMLDialogElement>('search')?.close();
   if (r.slug) {
     rememberPlace({ kind: 'city', slug: r.slug, name: r.name });
     // The city's page on the site of the question on screen.
-    location.href = sitePath(topic, `/in/${r.slug}`, location.hostname);
+    location.href = siteLink(topic, `/in/${r.slug}`);
     return;
   }
   const t: Target = {
@@ -799,26 +961,37 @@ function choose(r: SearchResult): void {
     history.pushState(null, '', sitePath(pageTopic, path, location.hostname));
     void load(t);
   } else {
-    location.href = sitePath(topic, path, location.hostname);
+    location.href = siteLink(topic, path);
   }
 }
 
+/**
+ * The picker fills the screen on phones and is a centred card from 640px up. It closes with its
+ * Close button, Escape (or the back gesture), a choice, or "Use my location", and from 640px up
+ * also with a click on the backdrop around the card: on phones there is no backdrop to click, and
+ * a tap that only dismisses the keyboard must never close it.
+ */
 function wireSearch(): void {
+  const dialog = $<HTMLDialogElement>('search');
   $('place-btn')?.addEventListener('click', openSearch);
   $('search-input')?.addEventListener('input', onSearchInput);
   $('use-location')?.addEventListener('click', () => {
-    $<HTMLDialogElement>('search')?.close();
+    dialog?.close();
     void useDeviceLocation(true);
   });
-  const dialog = $<HTMLDialogElement>('search');
   dialog?.addEventListener('click', (e) => {
-    if (e.target === dialog) dialog.close(); // Backdrop click.
+    if (e.target === dialog && matchMedia('(min-width: 640px)').matches) dialog.close();
   });
-  dialog?.querySelector('form')?.addEventListener('submit', (e) => {
-    const submitter = (e as SubmitEvent).submitter as HTMLButtonElement | null;
-    if (submitter?.value === 'close') return;
+  // Enter (Search on a phone's keyboard) chooses the first result. The search form must not
+  // close the dialog itself (method=dialog); Close is in a form of its own and needs no script.
+  $('search-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
     if (lastResults[0]) choose(lastResults[0]);
+  });
+  // Back to the place button: a tapped button is not focused on iOS, so the browser's own return
+  // would land on the page.
+  dialog?.addEventListener('close', () => {
+    if (!leaving) $('place-btn')?.focus({ preventScroll: true });
   });
 }
 
@@ -913,7 +1086,10 @@ function refreshNow(): void {
     if (old === 'day') return;
   }
   renderNow(current);
-  if (view === 'now') applyViewPalette();
+  // At 6pm the middle view turns to tomorrow where it is, whichever view is on screen.
+  const turned = updateSlot(current);
+  if (turned) renderToday(shown(current, 'today'), false);
+  if (view === 'now' || (turned && view === 'today')) applyViewPalette();
 }
 
 /** Work out "now" again every minute, and fetch afresh after a long time away. */
@@ -927,9 +1103,10 @@ function wireRefresh(): void {
       hiddenAt = Date.now();
       return;
     }
-    // Back after a long time away: start again on Today and the page's own question.
+    // Back after a long time away: start again on the page's own question, on its view for the
+    // time of day (Today, or Now in the evening).
     if (hiddenAt && Date.now() - hiddenAt > REFRESH_AFTER_MS) {
-      views?.go('today', { instant: true });
+      views?.go(defaultView(preview ? null : current, Date.now()), { instant: true });
       setTopic(pageTopic);
     }
     if (preview || !current) return;
@@ -946,16 +1123,21 @@ function wireRefresh(): void {
 
 // ---- Start --------------------------------------------------------------------
 
+/**
+ * The place in the address (a shared or chosen place, or a device location carried over from
+ * the other domain with source=device), else the remembered one, else approximate IP location.
+ */
 function initialTarget(): Target {
-  const lat = Number(params.get('lat'));
-  const lon = Number(params.get('lon'));
-  if (params.has('lat') && params.has('lon') && Number.isFinite(lat) && Number.isFinite(lon)) {
+  const q = new URLSearchParams(location.search);
+  const lat = Number(q.get('lat'));
+  const lon = Number(q.get('lon'));
+  if (q.has('lat') && q.has('lon') && Number.isFinite(lat) && Number.isFinite(lon)) {
     return {
       kind: 'coords',
-      source: 'search',
+      source: q.get('source') === 'device' ? 'device' : 'search',
       lat: roundToGrid(lat, GRID.forecast),
       lon: roundToGrid(lon, GRID.forecast),
-      name: params.get('name') ?? undefined,
+      name: q.get('name') ?? undefined,
     };
   }
   return storage.get<Target>(KEYS.place) ?? { kind: 'ip' };
@@ -970,14 +1152,21 @@ function initialCity(): TodayResponse | null {
 }
 
 export function start(): void {
+  // Units chosen on the other domain arrive in the address (`siteLink`): keep them here too.
+  const carried = params.get('units');
+  if (carried === 'c' || carried === 'f') storage.set(KEYS.units, carried);
+  dropParams('units');
   units = storage.get<Units>(KEYS.units) ?? units;
   views = wireViews({
     onShow: (next) => {
+      const switching = next !== view;
       view = next;
-      applyViewPalette(true);
+      applyViewPalette(switching);
     },
     onSettle: announce,
   });
+  // The page may open on Now (in the evening at the place): views.ts reads it from the markup.
+  view = views?.active() ?? view;
   wireSearch();
   wireUnits();
   wireTopic();
@@ -1009,8 +1198,10 @@ export function start(): void {
       current = data;
       loadedAt = Date.now();
       units = data.units;
-      // The page may have waited in the CDN cache: show "now" for this minute.
+      // The page may have waited in the CDN cache: show "now" for this minute, and the middle
+      // view's day for it (the page may have been made before 6pm), opening on its view.
       refreshNow();
+      openOnDefault(data);
       const preferred = storage.get<Units>(KEYS.units);
       renderUnits();
       if (preferred && preferred !== data.units) void load(target, { quiet: true, animate: false });
@@ -1022,6 +1213,12 @@ export function start(): void {
 
   const t = initialTarget();
   target = t;
+  if (t.kind === 'coords' && params.has('lat')) {
+    // A place in the address is the one to remember on this domain (it may have come from the
+    // other one). A device location has no place in a shareable address.
+    rememberPlace(t);
+    if (t.source === 'device') dropParams('lat', 'lon', 'source');
+  }
   const restored = app.dataset.restored === '1';
   const cached = storage.get<{ key: string; savedAt: number; data?: TodayResponse }>(
     LAST[pageTopic],
@@ -1043,7 +1240,13 @@ export function start(): void {
   }
   // An out-of-date paint (past midnight, or rain past its hour) asks past the caches.
   const old = current && outOfDate(current);
-  if (current && old !== 'day') renderNow(current);
+  if (current && old !== 'day') {
+    renderNow(current);
+    // The paint is for this slot of the day (HomePage.astro checks), so this changes nothing
+    // unless 6pm passed in between.
+    if (updateSlot(current)) renderToday(shown(current, 'today'), false);
+    openOnDefault(current);
+  }
   if (old) lastRefetch = Date.now();
   void load(t, { quiet: !!fresh, animate: !fresh, fresh: !!old }).then(() => upgradeLocation());
 }

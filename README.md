@@ -3,10 +3,10 @@
 Will today feel hot where I am? One answer (Yes / Almost / No) blended from several forecast
 models, judged against what is normal for that place and time of year. And its sibling, **is it
 wet?** (Yes / Partly / Maybe / No): how many of the same models expect rain, how much and when.
-Both answer for right now, today and this week; a toggle switches between them, and each domain
-opens on its own question.
+Both answer for right now, today and this week (from 6pm at the place, tomorrow instead of
+today); a toggle switches between them, and each domain opens on its own question.
 
-- **Website**: Astro + TypeScript, vanilla client JS (about 16 KB gzipped). One deploy serves
+- **Website**: Astro + TypeScript, vanilla client JS (about 17 KB gzipped). One deploy serves
   both domains; an edge function routes isitwet.today to the `/wet` pages.
 - **API**: `/api/v1/today` and `/api/v1/search`, shared by the website now and the apps later.
 - **Hosting**: Netlify (production from `main`, a deploy preview for every pull request).
@@ -53,7 +53,8 @@ Useful pages while developing:
 - `/?preview=1` shows the prototype's "preview each kind of day" chips (`&band=hot` to pick one;
   a rain band such as `&band=drenched` opens on Wet).
 - `/in/newcastle-upon-tyne-gb` is a server-rendered city page; `/wet` and
-  `/wet/in/newcastle-upon-tyne-gb` are the isitwet.today versions.
+  `/wet/in/newcastle-upon-tyne-gb` are the isitwet.today versions. Pages follow the time at
+  the place: a city where it is past 6pm opens on Now, with Tomorrow in the middle tab.
 - `/api/v1/today?lat=54.95&lon=-1.6&units=c` and `/api/v1/search?q=Leeds` are the API.
 
 ## Checks
@@ -67,11 +68,19 @@ pnpm test:e2e         # Playwright (phone + desktop), with synthetic data
 pnpm build:netlify    # The exact production build Netlify runs
 node scripts/smoke.mjs <url> --wet       # Smoke-test a deployed site (and its wet pages) against live data
 pnpm test:e2e -g contrast                # Rendered text contrast, every band and view (WCAG AA)
+E2E_IP_HOUR=20 pnpm test:e2e             # Home pages as if it were 8pm at the approximate place
+E2E_CLOCK=19:30 pnpm test:e2e            # The whole suite as if it were 7:30pm in London
 ```
 
-GitHub Actions runs all of these on every push and pull request. A second workflow waits for
-the Netlify deploy preview of each pull request and smoke-tests it against live data
-(`scripts/smoke.mjs`); it also records fresh upstream responses as a downloadable artifact.
+GitHub Actions runs the checks and the e2e suite on every push and pull request. A second
+workflow waits for the Netlify deploy preview of each pull request and smoke-tests it against
+live data (`scripts/smoke.mjs`); it also records fresh upstream responses as a downloadable
+artifact.
+
+The e2e server makes synthetic forecasts on the real clock, and pages change at 6pm at the place
+(Tomorrow in the middle tab), so the suite must pass at any time of day. CI runs it at whatever
+time it is; the last two lines check the evening on demand, worth running after changing the e2e
+tests (`e2e/helpers.ts` explains how a test pins the time of day it relies on).
 
 ## API
 
@@ -79,15 +88,17 @@ the Netlify deploy preview of each pull request and smoke-tests it against live 
 location). Optional `units=c|f` (default: °F for US visitors, °C elsewhere). `lat`/`lon` requests
 may also pass `name`, `region`, `country`, `geonameId` and `source=search`.
 
-The answer covers three views: `days[0]` is today (with tomorrow in `days[1]`), `now` is the
-blended forecast for the current minute with a day of judged hourly points (so clients can
-keep it current between requests), and `week` averages today and the next six days.
+The answer covers three views: `days[0]` is today (with tomorrow in `days[1]`, its verdict in
+the future tense), `now` is the blended forecast for the current minute with a day of judged
+hourly points (so clients can keep it current between requests), and `week` averages today and
+the next six days. From 6pm at the place (`location.timezone`) the website's middle view shows
+`days[1]` (core `showsTomorrow`).
 
 `rain` answers "Is it wet?" for the same place: `rain.days[0]` is the rest of today from the
 moment of the request (`from`; refetch an hour after it), `rain.days[1]` tomorrow, `rain.now`
-the current hour with a day of judged hourly points (core `computeRainNow`/`formatRainNow`
-keep it current), and `rain.week` today and the next six days. Amounts are in `rain.unit`:
-millimetres with `units=c`, inches with `units=f`.
+the current hour with a day of judged hourly points, each with a `light` flag (core
+`computeRainNow`/`formatRainNow` keep it current), and `rain.week` today and the next six days.
+Amounts are in `rain.unit`: millimetres with `units=c`, inches with `units=f`.
 
 `GET /api/v1/search?q=` returns up to 8 places, with `slug` when the place has a city page.
 

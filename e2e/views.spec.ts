@@ -1,5 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { PALETTES, type Band } from '../packages/core/src/config';
+import { DAYTIME, expect, keepToday, startClock, test } from './helpers';
 
 const ANSWERS = /^(Yes\.|No\.|Almost\.)$/;
 const VIEWS = ['now', 'today', 'week'] as const;
@@ -57,56 +58,81 @@ async function swipe(page: Page, dx: number, dy = 0, hold = 0): Promise<void> {
 }
 
 test.describe('Now | Today | This week', () => {
-  test('opens on Today with the other views hidden, from one request', async ({ page }) => {
-    const calls: string[] = [];
-    page.on('request', (r) => {
-      if (r.url().includes('/api/v1/today')) calls.push(r.url());
+  test.describe('on a home page in its daytime', () => {
+    // These open on Today and then show Now's answer, so the browser keeps the server's clock
+    // (no `keepToday`): the approximate place is where it is late morning.
+    test.use({ ipHour: DAYTIME });
+
+    test('opens on Today with the other views hidden, from one request', async ({ page }) => {
+      const calls: string[] = [];
+      page.on('request', (r) => {
+        if (r.url().includes('/api/v1/today')) calls.push(r.url());
+      });
+      await ready(page);
+      await expect(page.getByRole('tablist', { name: 'Forecast period' })).toBeVisible();
+      await expect(page.getByRole('tab')).toHaveText(['Now', 'Today', 'This week']);
+      await expect(page.locator('#tab-today')).toHaveAttribute('aria-selected', 'true');
+      await expect(page.locator('#view-now')).toBeHidden();
+      await expect(page.locator('#view-week')).toBeHidden();
+      await expect(page.locator('h1')).toHaveCount(1);
+
+      await page.locator('#tab-week').click();
+      await expectView(page, 'week');
+      await expect(page.locator('#week-answer')).toHaveText(ANSWERS);
+      await expect(page.locator('#week-question')).toHaveText('Is it hot this week?');
+      await expect(page.locator('#week-days li')).toHaveCount(7);
+      await expect(page.locator('#week-days li').first().locator('.d')).toHaveText('Today');
+
+      await page.locator('#tab-now').click();
+      await expectView(page, 'now');
+      await expect(page.locator('#now-answer')).toHaveText(ANSWERS);
+      await expect(page.locator('#now-question')).toHaveText('Is it hot right now?');
+      await expect(page.locator('#now-detail')).toHaveText(/^-?\d+° now, feels like -?\d+°\. /);
+      await expect(page.locator('#now-hours li')).toHaveCount(6);
+      // Screen readers hear the answer of the view they moved to.
+      await expect(page.locator('#view-live')).toHaveText(/^Now: (Yes|No|Almost)\. /);
+
+      await page.locator('#tab-today').click();
+      await expectView(page, 'today');
+      // Switching views never asks the server again.
+      expect(calls).toHaveLength(1);
     });
-    await ready(page);
-    await expect(page.getByRole('tablist', { name: 'Forecast period' })).toBeVisible();
-    await expect(page.getByRole('tab')).toHaveText(['Now', 'Today', 'This week']);
-    await expect(page.locator('#tab-today')).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('#view-now')).toBeHidden();
-    await expect(page.locator('#view-week')).toBeHidden();
-    await expect(page.locator('h1')).toHaveCount(1);
 
-    await page.locator('#tab-week').click();
-    await expectView(page, 'week');
-    await expect(page.locator('#week-answer')).toHaveText(ANSWERS);
-    await expect(page.locator('#week-question')).toHaveText('Is it hot this week?');
-    await expect(page.locator('#week-days li')).toHaveCount(7);
-    await expect(page.locator('#week-days li').first().locator('.d')).toHaveText('Today');
+    test('arrow keys move between tabs, and Tab goes into the view', async ({ page }) => {
+      await ready(page);
+      await page.locator('#tab-today').focus();
+      await page.keyboard.press('ArrowRight');
+      await expectView(page, 'week');
+      await expect(page.locator('#tab-week')).toBeFocused();
+      await page.keyboard.press('Home');
+      await expectView(page, 'now');
+      await expect(page.locator('#tab-now')).toBeFocused();
+      await page.keyboard.press('End');
+      await expectView(page, 'week');
+      await page.keyboard.press('ArrowLeft');
+      await expectView(page, 'today');
+      await page.keyboard.press('Tab');
+      await expect(page.locator('#view-today')).toBeFocused();
+    });
 
-    await page.locator('#tab-now').click();
-    await expectView(page, 'now');
-    await expect(page.locator('#now-answer')).toHaveText(ANSWERS);
-    await expect(page.locator('#now-question')).toHaveText('Is it hot right now?');
-    await expect(page.locator('#now-detail')).toHaveText(/^-?\d+° now, feels like -?\d+°\. /);
-    await expect(page.locator('#now-hours li')).toHaveCount(6);
-    // Screen readers hear the answer of the view they moved to.
-    await expect(page.locator('#view-live')).toHaveText(/^Now: (Yes|No|Almost)\. /);
-
-    await page.locator('#tab-today').click();
-    await expectView(page, 'today');
-    // Switching views never asks the server again.
-    expect(calls).toHaveLength(1);
-  });
-
-  test('arrow keys move between tabs, and Tab goes into the view', async ({ page }) => {
-    await ready(page);
-    await page.locator('#tab-today').focus();
-    await page.keyboard.press('ArrowRight');
-    await expectView(page, 'week');
-    await expect(page.locator('#tab-week')).toBeFocused();
-    await page.keyboard.press('Home');
-    await expectView(page, 'now');
-    await expect(page.locator('#tab-now')).toBeFocused();
-    await page.keyboard.press('End');
-    await expectView(page, 'week');
-    await page.keyboard.press('ArrowLeft');
-    await expectView(page, 'today');
-    await page.keyboard.press('Tab');
-    await expect(page.locator('#view-today')).toBeFocused();
+    test('swipes change the view on a phone', async ({ page }, info) => {
+      test.skip(info.project.name !== 'phone', 'touch swipes need a touch screen');
+      await ready(page);
+      await swipe(page, -260);
+      await expectView(page, 'week');
+      await swipe(page, 260);
+      await expectView(page, 'today');
+      await swipe(page, 260);
+      await expectView(page, 'now');
+      // A short drag that stops before letting go springs back. (A quick short flick moves on
+      // to the next view, as native carousels do; its timing is the browser's, so not tested.)
+      await swipe(page, -60, 0, 400);
+      await expectView(page, 'now');
+      // A mostly vertical swipe scrolls the page, not the views.
+      await swipe(page, -40, -260);
+      await expectView(page, 'now');
+      expect(await page.evaluate(() => scrollY)).toBeGreaterThan(100);
+    });
   });
 
   test('focus follows into the new view when the arrow keys scroll it', async ({ page }) => {
@@ -196,27 +222,12 @@ test.describe('Now | Today | This week', () => {
     }
   });
 
-  test('swipes change the view on a phone', async ({ page }, info) => {
-    test.skip(info.project.name !== 'phone', 'touch swipes need a touch screen');
-    await ready(page);
-    await swipe(page, -260);
-    await expectView(page, 'week');
-    await swipe(page, 260);
-    await expectView(page, 'today');
-    await swipe(page, 260);
-    await expectView(page, 'now');
-    // A short drag that stops before letting go springs back. (A quick short flick moves on
-    // to the next view, as native carousels do; its timing is the browser's, so not tested.)
-    await swipe(page, -60, 0, 400);
-    await expectView(page, 'now');
-    // A mostly vertical swipe scrolls the page, not the views.
-    await swipe(page, -40, -260);
-    await expectView(page, 'now');
-    expect(await page.evaluate(() => scrollY)).toBeGreaterThan(100);
-  });
-
-  test('a sideways trackpad swipe changes the view on a desktop', async ({ page }, info) => {
+  test('a sideways trackpad swipe changes the view on a desktop', async ({
+    page,
+    ipPlace,
+  }, info) => {
     test.skip(info.project.name !== 'desktop', 'trackpad swipes are a desktop gesture');
+    await keepToday(page, ipPlace.tz);
     await ready(page);
     const box = (await page.locator('#views').boundingBox())!;
     await page.mouse.move(box.x + box.width / 2, box.y + 200);
@@ -227,7 +238,8 @@ test.describe('Now | Today | This week', () => {
     await expectView(page, 'week');
   });
 
-  test('every load opens on Today', async ({ page }) => {
+  test('every load opens on Today', async ({ page, ipPlace }) => {
+    await keepToday(page, ipPlace.tz);
     await ready(page);
     await page.locator('#tab-week').click();
     await expectView(page, 'week');
@@ -259,10 +271,18 @@ test.describe('Now | Today | This week', () => {
       const a = (await note.boundingBox())!;
       const toggle = (await page.locator('#topic').boundingBox())!;
       const tabs = (await page.locator('#tabs').boundingBox())!;
-      expect(a.y + a.height, `note above the toggle at ${width}px`).toBeLessThanOrEqual(toggle.y);
-      expect(toggle.y + toggle.height, `toggle above the tabs at ${width}px`).toBeLessThanOrEqual(
-        tabs.y,
-      );
+      if (width < 640) {
+        // Phones: the toggle floats at the foot of the screen and the tabs take its place.
+        expect(a.y + a.height, `note above the tabs at ${width}px`).toBeLessThanOrEqual(tabs.y);
+        expect(toggle.y, `toggle below the tabs at ${width}px`).toBeGreaterThan(
+          tabs.y + tabs.height,
+        );
+      } else {
+        expect(a.y + a.height, `note above the toggle at ${width}px`).toBeLessThanOrEqual(toggle.y);
+        expect(toggle.y + toggle.height, `toggle above the tabs at ${width}px`).toBeLessThanOrEqual(
+          tabs.y,
+        );
+      }
     }
   });
 
@@ -284,7 +304,7 @@ test.describe('Now | Today | This week', () => {
   });
 
   test('"now" keeps up with the clock without asking the server', async ({ page }) => {
-    await page.clock.install();
+    await startClock(page);
     const calls: string[] = [];
     page.on('request', (r) => {
       if (r.url().includes('/api/v1/today')) calls.push(r.url());

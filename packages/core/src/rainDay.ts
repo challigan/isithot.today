@@ -15,6 +15,7 @@ import {
   monthName,
   rainAgreementLine,
   rainAmountLine,
+  rainFromLine,
   rainStripSummary,
   upToLine,
 } from './copy';
@@ -33,6 +34,7 @@ import {
   type RainThresholds,
   windowThresholds,
   atLeast,
+  rank,
   isRain,
   median,
   shareAtLeast,
@@ -53,11 +55,14 @@ export interface RainModelTotal {
   snow: number;
 }
 
-/** The share of models with rain in one local hour of the window. */
+/** One local hour of the window with rain data. */
 export interface RainHourChance {
   /** Local hour of day, 0–23. */
   hour: number;
+  /** The share of models with rain in the hour. */
   chance: number;
+  /** The hour judged with the hourly thresholds, as the Now view judges it. */
+  band: RainBand;
 }
 
 /** One window's result in mm at full precision, before formatting. */
@@ -70,7 +75,10 @@ export interface RainDayComputation {
   from: number;
   /** True for the rest of the day from `from`, false for the whole day. */
   partial: boolean;
-  /** The window's length in hours, the current hour counting what is left of it (24 for a day). */
+  /**
+   * The window's length in hours, the current hour counting what is left of it, or all of it
+   * while it is wet now (24 for a day).
+   */
   hours: number;
   thresholds: RainThresholds;
   /** Models with a value for every hour of the window. */
@@ -89,6 +97,11 @@ export interface RainDayComputation {
   hourly: RainHourChance[];
   /** The likely hours, end exclusive (24 is midnight), or null. */
   likely: { from: number; to: number } | null;
+  /**
+   * The rest of today only: the current hour is judged rain or wetter, as the Now view judges
+   * it, so Now says it is raining. Today then says Yes and when it eases off, as Now does.
+   */
+  raining: boolean;
 }
 
 export interface RainDayOptions {
@@ -99,21 +112,42 @@ export interface RainDayOptions {
 const isSnow = (temp: number | null | undefined): boolean =>
   isFiniteNumber(temp) && temp <= RAIN.snowAtOrBelowC;
 
+/** One hour of rain across the models, judged as the Now view judges it; null without data. */
+function judgeHour(h: HourTemps): RainHourChance | null {
+  const values = (h.rain ?? []).filter(isFiniteNumber);
+  if (values.length === 0) return null;
+  return {
+    hour: h.hour,
+    chance: shareAtLeast(values, RAIN.hour.wet),
+    band: rainBand(values, windowThresholds(1)),
+  };
+}
+
 /**
  * The rest of today (with `opts.from`, from the hourly values; the current hour weighted by
  * the minutes left) or a whole day (from each model's daily total). Null when no model has
  * rain for the whole window.
+ *
+ * While it is wet now (the current hour judged showers or wetter, so the Now view says Maybe or
+ * Yes), the current hour counts in full, as Now counts it, and a model expects rain from an
+ * hour's wet amount. Today then never answers drier than Now: a rest of the day that starts in
+ * the rain is wet, however soon the rain eases.
  */
 export function computeRainDay(day: DayData, opts: RainDayOptions = {}): RainDayComputation | null {
   const partial = opts.from !== undefined;
   const fromTime = opts.from ?? Number.NEGATIVE_INFINITY;
   const window: { h: HourTemps; weight: number }[] = [];
+  // The current hour's band (the rest of today only), as Now judges it.
+  let now: RainBand = 'dry';
+  let wetNow = false;
   for (const h of day.hourly) {
     if (h.time >= fromTime) {
       window.push({ h, weight: 1 });
     } else if (h.time + HOUR > fromTime) {
-      // The current hour counts the minutes left in it.
-      window.push({ h, weight: (60 - Math.floor((fromTime - h.time) / 60_000)) / 60 });
+      // The hour containing the moment counts the minutes left in it, or all of it while wet.
+      now = judgeHour(h)?.band ?? 'dry';
+      wetNow = rank(now) >= rank('showers');
+      window.push({ h, weight: wetNow ? 1 : (60 - Math.floor((fromTime - h.time) / 60_000)) / 60 });
     }
   }
 
@@ -123,7 +157,10 @@ export function computeRainDay(day: DayData, opts: RainDayOptions = {}): RainDay
   if (partial) {
     if (window.length === 0) return null;
     hours = window.reduce((sum, w) => sum + w.weight, 0);
-    thresholds = windowThresholds(hours);
+    // Never less than an hour's thresholds, so the day's last minutes are not judged against
+    // next to nothing.
+    thresholds = windowThresholds(Math.max(1, hours));
+    if (wetNow) thresholds = { ...thresholds, wet: RAIN.hour.wet };
     models = day.models.flatMap((m, i) => {
       let total = 0;
       let snow = 0;
@@ -149,13 +186,7 @@ export function computeRainDay(day: DayData, opts: RainDayOptions = {}): RainDay
   const rainSum = totals.reduce((a, b) => a + b, 0);
   const snowShare = rainSum > 0 ? models.reduce((a, m) => a + m.snow, 0) / rainSum : 0;
 
-  const hourly: RainHourChance[] = [];
-  for (const { h } of window) {
-    const values = (h.rain ?? []).filter(isFiniteNumber);
-    if (values.length > 0) {
-      hourly.push({ hour: h.hour, chance: shareAtLeast(values, RAIN.hour.wet) });
-    }
-  }
+  const hourly = window.flatMap(({ h }) => judgeHour(h) ?? []);
   const likelyHours = hourly.filter((c) => c.chance >= RAIN.hourLikely);
 
   return {
@@ -176,30 +207,42 @@ export function computeRainDay(day: DayData, opts: RainDayOptions = {}): RainDay
       likelyHours.length > 0
         ? { from: likelyHours[0]!.hour, to: likelyHours.at(-1)!.hour + 1 }
         : null,
+    raining: isRain(now),
   };
 }
 
 /** When the rain is most likely, for showers and wetter. */
 export function timingLine(c: RainDayComputation): string {
+  const every = c.hourly.every((h) => h.chance >= RAIN.hourLikely);
+  if (c.raining) {
+    // Raining now: easing off at the first later hour judged spots or drier, as Now says, and
+    // when rain is back if it comes back later today.
+    const later = c.hourly.slice(1);
+    const easing = later.findIndex((h) => rank(h.band) <= rank('spots'));
+    if (easing < 0) return every ? RAIN_COPY.restOfDay : RAIN_COPY.onAndOffRestOfDay;
+    const back = later.slice(easing).find((h) => isRain(h.band));
+    const eases = easingLine(later[easing]!.hour);
+    return back ? `${eases} ${rainFromLine(back.hour)}` : eases;
+  }
   const likely = c.likely;
   if (!likely) {
     let best: RainHourChance | undefined;
     for (const h of c.hourly) if (!best || h.chance > best.chance) best = h;
     return best && best.chance >= RAIN.hourPossible ? aroundLine(best.hour) : RAIN_COPY.onAndOff;
   }
-  const firstHour = c.hourly[0]!.hour;
-  if (likely.from === firstHour && likely.to === 24) {
-    const every = c.hourly.every((h) => h.chance >= RAIN.hourLikely);
+  if (likely.from === c.hourly[0]!.hour && likely.to === 24) {
     if (c.partial) return every ? RAIN_COPY.restOfDay : RAIN_COPY.onAndOffRestOfDay;
     return every ? RAIN_COPY.allDay : RAIN_COPY.onAndOffAllDay;
   }
-  // Raining at the start of the rest of today.
-  if (c.partial && likely.from === firstHour) return easingLine(likely.to);
   if (likely.to - likely.from === 1) return aroundLine(likely.from);
   return betweenLine(likely.from, likely.to);
 }
 
-/** The detail line: how much (or how dry), when, and whether it may be snow. */
+/**
+ * The detail line: how much (or how dry), when, and whether it may be snow. A model expects rain
+ * from at least an hour's wet amount (0.2mm, shown as 0.2mm or 0.01in), so an amount named here
+ * never rounds to nothing.
+ */
 export function rainDayDetail(c: RainDayComputation, unit: RainUnit): string {
   const text = (mm: number) => rainText(toRainUnits(mm, unit), unit);
   if (c.band === 'dry') {

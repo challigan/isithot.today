@@ -1,10 +1,13 @@
 /**
  * Keeps the tab bar and the horizontal views scroller in step: tap a tab (or use the arrow
- * keys) to scroll to its view, swipe the views to move the tab. Every load opens on Today.
+ * keys) to scroll to its view, swipe the views to move the tab.
  *
- * Pages arrive with Now and This week hidden, so the first paint is Today alone. They join
- * the scroller the moment the visitor touches it or uses the tabs, and from then on the
- * scroller takes the height of the view on screen.
+ * Pages arrive with one view showing and the others hidden, so the first paint is that view
+ * alone: Today, or Now in the evening while the middle view answers for tomorrow. The start
+ * view is read from the markup (the panel that is not hidden), as the server or the saved
+ * snapshot left it. The others join the scroller the moment the visitor touches it or uses the
+ * tabs (or the app moves to another view), and from then on the scroller takes the height of
+ * the view on screen.
  *
  * While a swipe is under way only the tab thumb and (past about two thirds of the way) the
  * page colours follow it; which panel is active for keyboard and screen readers changes once
@@ -15,6 +18,8 @@ import { VIEWS, type View } from '@isithot/core';
 export interface ViewsController {
   active(): View;
   go(view: View, opts?: { focus?: boolean; instant?: boolean }): void;
+  /** Whether the visitor has moved between views themselves (tabs, keys or a swipe). */
+  moved(): boolean;
 }
 
 export interface ViewsEvents {
@@ -43,12 +48,14 @@ export function wireViews(events: ViewsEvents): ViewsController | null {
   const viewAt = (): View => VIEWS[Math.round(position())]!;
 
   let revealed = VIEWS.every((v) => !panelFor(v).hidden);
-  let active: View = revealed ? viewAt() : 'today';
+  let active: View = revealed ? viewAt() : (VIEWS.find((v) => !panelFor(v).hidden) ?? 'today');
   let shown: View = active;
   /** Set while a tab press scrolls the views, so views passed on the way are not shown. */
   let target: View | null = null;
   let goAt = 0;
   let touching = false;
+  /** Set once the visitor changes the view: the app then never moves them on its own. */
+  let moved = false;
   let frame = 0;
   let idle: ReturnType<typeof setTimeout> | undefined;
   let lastWidth = scroller.clientWidth;
@@ -128,8 +135,10 @@ export function wireViews(events: ViewsEvents): ViewsController | null {
     }
     cancelAnimationFrame(frame);
     frame = 0;
-    target = null;
     const view = viewAt();
+    // A swipe (no tab press under way) that lands on another view.
+    if (!target && view !== active) moved = true;
+    target = null;
     thumbAt(VIEWS.indexOf(view), false);
     show(view);
     activate(view);
@@ -204,7 +213,9 @@ export function wireViews(events: ViewsEvents): ViewsController | null {
   tabs.addEventListener('click', (e) => {
     const tab = (e.target as Element).closest<HTMLElement>('[data-view]');
     const view = tab?.dataset.view as View | undefined;
-    if (view && VIEWS.includes(view)) go(view);
+    if (!view || !VIEWS.includes(view)) return;
+    moved = true;
+    go(view);
   });
 
   tabs.addEventListener('keydown', (e) => {
@@ -221,6 +232,7 @@ export function wireViews(events: ViewsEvents): ViewsController | null {
               : null;
     if (next === null) return;
     e.preventDefault();
+    moved = true;
     go(VIEWS[Math.min(VIEWS.length - 1, Math.max(0, next))]!, { focus: true });
   });
 
@@ -241,5 +253,5 @@ export function wireViews(events: ViewsEvents): ViewsController | null {
   selectTab(active);
   for (const v of VIEWS) panelFor(v).inert = v !== active;
 
-  return { active: () => active, go };
+  return { active: () => active, go, moved: () => moved || touching };
 }

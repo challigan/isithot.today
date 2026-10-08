@@ -23,7 +23,10 @@ const CLOUD = 'M36 92h48a17 17 0 0 0 1-34 24 24 0 0 0-45-4 19 19 0 0 0-4 38z';
 const cloud = (dx: number, dy: number, tint = 0): string =>
   `<path d="${CLOUD}" transform="translate(${dx} ${dy})"${tint ? ` fill="currentColor" fill-opacity="${tint}"` : ''}/>`;
 
-/** `count` rain lines `step` apart from x, every other one `stagger` lower, all at one slant. */
+/**
+ * `count` rain lines `step` apart from x, every other one `stagger` lower (higher if negative),
+ * all at one slant.
+ */
 const rain = (count: number, x: number, step: number, y: number, stagger: number, length: number) =>
   Array.from({ length: count }, (_, i) => {
     const [x1, y1] = [x + i * step, y + (i % 2) * stagger];
@@ -41,8 +44,11 @@ export const RAIN_GLYPHS: Record<RainBand, string> = {
   // Static: only Hot's suns turn.
   dry: `<circle cx="60" cy="60" r="20"/>${rays(EIGHT, 30, 40)}`,
   spots: `${cloud(0, -16)}${drop(47, 100)}${drop(72, 93)}`,
-  // The sun stops short of the cloud (its hidden part is not drawn).
-  showers: `<g opacity=".85"><path d="M31.5 47.1A14 14 0 1 1 53.7 33.1"/>${rays([135, 180, 225, 270, 315], 21, 28, 40, 36)}</g>${cloud(8, -8)}${rain(2, 60, 20, 92, 0, 14)}`,
+  // The sun stops short of the cloud (its hidden part is not drawn). The rain falls from under
+  // the cloud's right-hand end: "Maybe." and "Partly." reach under the rest of the icon at some
+  // widths and text sizes, and the answer is drawn over the icon, so a line there would show
+  // through the gaps in the letters. Checked from 320px to 1280px at 100-200% text.
+  showers: `<g opacity=".85"><path d="M35.5 45.1A14 14 0 1 1 57.7 31.1"/>${rays([135, 180, 225, 270, 315], 21, 28, 44, 34)}</g>${cloud(12, -10)}${rain(2, 106, 7, 84, -3, 12)}`,
   rain: `${cloud(0, -16)}${rain(4, 42, 14, 86, 6, 16)}`,
   heavy: `${cloud(0, -18, 0.15)}${rain(6, 37, 12, 82, 7, 20)}`,
   drenched: `${cloud(0, -24, 0.35)}${rain(7, 34, 10, 76, 6, 16)}<g opacity=".75"><ellipse cx="60" cy="108" rx="30" ry="8"/><ellipse cx="60" cy="108" rx="15" ry="3.5"/></g>`,

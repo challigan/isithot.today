@@ -25,16 +25,21 @@ function points(bands: readonly RainBand[], each: Partial<ApiRainPoint> = {}): A
     chance2h: 0,
     band,
     snow: false,
+    light: band === 'dry',
     ...each,
   }));
 }
 
 const repeat = (band: RainBand, n: number): RainBand[] => Array.from({ length: n }, () => band);
 
-/** The rain Now view at 10:30, with `current` for 10am and `later` from 11am. */
+/**
+ * The rain Now view at 10:30, with `current` for 10am (light below 0.5mm unless it says) and
+ * `later` from 11am.
+ */
 function nowWith(current: Partial<ApiRainPoint>, later: RainBand[] = [], unit: RainUnit = 'mm') {
   const series = points([...repeat('dry', 10), current.band ?? 'dry', ...later]);
-  series[10] = { ...series[10]!, ...current };
+  const amount = current.amount ?? series[10]!.amount;
+  series[10] = { ...series[10]!, light: amount < 0.5, ...current };
   return formatRainNow(computeRainNow(series, at(10.5))!, unit);
 }
 
@@ -84,6 +89,7 @@ describe('judgeRainSeries', () => {
         chance2h: 0.13,
         band: 'rain',
         snow: false,
+        light: true,
       },
     ]);
     expect(judgeRainSeries(raw, 'f', 'America/New_York')[0]).toMatchObject({
@@ -91,6 +97,17 @@ describe('judgeRainSeries', () => {
       hour: 20,
       amount: 0.01,
     });
+  });
+
+  it('decides light rain in millimetres, before rounding to either unit', () => {
+    const light = (mm: number) =>
+      (['c', 'f'] as const).map(
+        (units) => judgeRainSeries([{ ...raw[0]!, amount: mm }], units, 'UTC')[0]!.light,
+      );
+    // 0.49mm is 0.02in, which once read as "Rain now" in inches.
+    expect(light(0.49)).toEqual([true, true]);
+    expect(light(0.499)).toEqual([true, true]);
+    expect(light(0.5)).toEqual([false, false]);
   });
 });
 
@@ -129,7 +146,7 @@ describe('formatRainNow', () => {
     const series = points(['dry', 'dry', 'rain', 'rain', 'dry', 'dry', 'showers', 'dry'], {
       chance2h: 0.63,
     });
-    series[2] = { ...series[2]!, amount: 0.3, chance: 0.75 };
+    series[2] = { ...series[2]!, amount: 0.3, chance: 0.75, light: true };
     const now = formatRainNow(computeRainNow(series, at(2.25))!, 'mm');
     expect(now).toEqual({
       time: '2026-10-15T02:15:00.000Z',
@@ -174,9 +191,9 @@ describe('formatRainNow', () => {
       "It's torrential.",
       'Torrential rain now',
     ]);
-    // Inches: under 0.5 mm is light.
-    expect(say({ band: 'rain', amount: 0.01 }, 'in')[2]).toBe('Light rain now');
-    expect(say({ band: 'rain', amount: 0.02 }, 'in')[2]).toBe('Rain now');
+    // Inches: the point says whether it is light, so the words never depend on the units.
+    expect(say({ band: 'rain', amount: 0.02, light: true }, 'in')[2]).toBe('Light rain now');
+    expect(say({ band: 'rain', amount: 0.02, light: false }, 'in')[2]).toBe('Rain now');
   });
 
   it('says snow when the hour is at or below the snow line', () => {
@@ -215,11 +232,44 @@ describe('formatRainNow', () => {
       expect(trend('dry', ['dry', 'dry', 'dry', 'showers', 'spots', 'rain'])).toBe(
         'Rain likely from about 4pm.',
       );
-      expect(trend('showers', ['dry', 'dry', 'dry', 'showers'])).toBe(
+      expect(trend('dry', ['dry', 'dry', 'dry', 'showers'])).toBe(
         'Showers possible from about 2pm.',
       );
       expect(trend('spots', ['spots', 'dry'])).toBe('Dry for the next 12 hours.');
       expect(trend('dry', [...repeat('dry', 12), 'drenched'])).toBe('Dry for the next 12 hours.');
+    });
+
+    it('says when showers under way now clear, never that they are possible from later', () => {
+      expect(trend('showers', ['showers', 'dry', 'dry', 'showers'])).toBe('Dry from about 12pm.');
+      expect(trend('showers', ['spots', 'showers'])).toBe('Dry from about 11am.');
+      expect(trend('showers', ['showers', 'dry', 'rain'])).toBe('Rain likely from about 1pm.');
+      expect(trend('showers', repeat('showers', 12))).toBe('On and off for the next 12 hours.');
+      expect(trend('showers', [])).toBe('On and off for the next 12 hours.');
+    });
+
+    it('is dry for the next 12 hours only when no row below shows a fair chance', () => {
+      // Two-hour rows from 11am; the 5pm row has a quarter of the models wet (30%).
+      const rows = (chance2h: (hour: number) => number, later = repeat('dry', 14)) => {
+        const series = points([...repeat('dry', 11), ...later]).map((p) => ({
+          ...p,
+          chance2h: chance2h(p.hour),
+        }));
+        return formatRainNow(computeRainNow(series, at(10.5))!, 'mm').detail;
+      };
+      expect(rows((h) => (h === 17 ? 0.25 : 0.13))).toBe(
+        'Dry now. Showers possible from about 5pm.',
+      );
+      expect(rows((h) => (h === 17 ? 0.24 : 0.13))).toBe('Dry now. Dry for the next 12 hours.');
+      // Only the rows count: 4pm is not one.
+      expect(rows((h) => (h === 16 ? 1 : 0))).toBe('Dry now. Dry for the next 12 hours.');
+      // A showery hour before the first such row is named instead.
+      const showersFirst = [...repeat('dry', 2), 'showers', ...repeat('dry', 11)] as RainBand[];
+      expect(rows((h) => (h === 17 ? 0.5 : 0), showersFirst)).toBe(
+        'Dry now. Showers possible from about 1pm.',
+      );
+      expect(rows((h) => (h === 13 ? 0.5 : 0), showersFirst)).toBe(
+        'Dry now. Showers possible from about 1pm.',
+      );
     });
   });
 

@@ -16,15 +16,17 @@ import type { CityPageProps } from '../lib/cityPage';
 
 type Props = CityPageProps;
 
-const { topic, city, units, data, state, today } = Astro.props;
+const { topic, city, units, data, state, today, start, tomorrow, palette } = Astro.props;
 const site = SITES[topic];
 const name = city?.name ?? '';
 const day = data?.days[0];
 const rainDay = data?.rain?.days[0];
 
+// The title and description are about today, whichever view the page opens on.
 const answerTitle =
   topic === 'wet'
-    ? rainDay && wetPageTitle({ city: name, answer: rainDay.answer, band: rainDay.band })
+    ? rainDay &&
+      wetPageTitle({ city: name, answer: rainDay.answer, band: rainDay.band, snow: rainDay.snow })
     : day && pageTitle({ city: name, answer: day.answer, high: day.high });
 const title = answerTitle || `${question(name, 'today', topic)} | ${site.name}`;
 const description = today.band
@@ -41,7 +43,7 @@ const initial = JSON.stringify(data).replace(/</g, '\\u003c');
     description={description}
     canonical={`${site.url}/in/${city.slug}`}
     ogImage={`${site.url}/og/${city.slug}.png`}
-    palette={today.palette}
+    palette={palette}
     topic={topic}
   >
     <div
@@ -53,7 +55,14 @@ const initial = JSON.stringify(data).replace(/</g, '\\u003c');
       data-topic={topic}
     >
       <Header placeName={city.name} units={units} site={topic} />
-      <Views data={data} city={city.name} state={state} topic={topic} />
+      <Views
+        data={data}
+        city={city.name}
+        state={state}
+        topic={topic}
+        start={start}
+        tomorrow={tomorrow}
+      />
       <AdSlot />
       <Footer />
     </div>

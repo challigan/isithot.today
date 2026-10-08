@@ -178,6 +178,12 @@ export const WEEK = {
   minDays: 5,
 } as const;
 
+/**
+ * From this local hour at the place until midnight, the middle view answers for tomorrow
+ * instead of today, and the page opens on Now.
+ */
+export const TOMORROW_FROM_HOUR = 18;
+
 export interface ModelConfig {
   /** Open-Meteo `models=` ID. */
   id: string;
@@ -241,7 +247,7 @@ export const CACHE = {
    * Version of that saved answer (page markup and data). The page's inline restore script and
    * the app both read it, so bump it here whenever the saved markup or data changes shape.
    */
-  snapshotVersion: 4,
+  snapshotVersion: 5,
 } as const;
 
 export const RATE_LIMIT = {

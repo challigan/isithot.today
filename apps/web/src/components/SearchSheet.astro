@@ -1,34 +1,49 @@
 ---
+/**
+ * The place picker: a full-screen view on phones (the input at the top, where an on-screen
+ * keyboard can never cover it) and a centred card from 640px up (styles/global.css).
+ *
+ * Close has a form of its own, so the search form has no submit button and Enter in the input
+ * submits the search (scripts/app.ts chooses the first result) rather than pressing Close. The
+ * body holds one section per kind of place, top to bottom: "Use my location", then the search
+ * results; a list of saved places will go between the two.
+ */
 import { COPY } from '@isithot/core';
 ---
 
 <dialog class="sheet" id="search" aria-labelledby="search-h">
-  <form class="sheet-inner" method="dialog" role="search">
+  <div class="sheet-inner">
     <div class="sheet-head">
       <h2 id="search-h">{COPY.searchLabel}</h2>
-      <button class="button" type="submit" value="close" id="search-close">
-        {COPY.close}
-      </button>
+      <form method="dialog">
+        <button class="button" value="close" id="search-close">
+          {COPY.close}
+        </button>
+      </form>
     </div>
-    <label class="sr-only" for="search-input">
-      {COPY.searchLabel}
-    </label>
-    <input
-      id="search-input"
-      type="search"
-      inputmode="search"
-      autocomplete="off"
-      autocapitalize="words"
-      spellcheck="false"
-      placeholder={COPY.searchPlaceholder}
-      aria-controls="search-results"
-    />
-    <ul class="results" id="search-results" aria-live="polite">
-      <li>
+    <form class="sheet-search" id="search-form" method="dialog" role="search">
+      <label class="sr-only" for="search-input">
+        {COPY.searchLabel}
+      </label>
+      <input
+        id="search-input"
+        type="search"
+        inputmode="search"
+        enterkeyhint="search"
+        autocomplete="off"
+        autocapitalize="words"
+        spellcheck="false"
+        placeholder={COPY.searchPlaceholder}
+        aria-controls="search-results"
+      />
+    </form>
+    <div class="sheet-body" id="search-body">
+      <div class="sheet-section">
         <button type="button" class="use-location" id="use-location">
           {COPY.useMyLocation}
         </button>
-      </li>
-    </ul>
-  </form>
+      </div>
+      <ul class="results" id="search-results" aria-live="polite"></ul>
+    </div>
+  </div>
 </dialog>

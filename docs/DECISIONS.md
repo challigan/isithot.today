@@ -73,8 +73,9 @@ production, responses carry `x-isithot-via: function` when the dedicated functio
 
 ## Now and This week
 
-Carl asked for two more views either side of Today, on one page that always opens on Today:
-a tab bar at the top on every screen, and swiping on phones.
+Carl asked for two more views either side of Today, on one page that opens on Today (on Now in
+the evening since round 2: see "Tomorrow after 6pm"), with a tab bar at the top on every screen
+and swiping on phones.
 
 - **Now** is the blended hourly forecast interpolated to the current minute, judged with the
   same verdict as a day's high, so "hot" means the same thing in every view (at night it
@@ -91,14 +92,15 @@ a tab bar at the top on every screen, and swiping on phones.
   so a cached response or a tab left open never shows an old temperature as current. The
   browser only interpolates: each point carries the band the server judged, so the apps never
   need a copy of the verdict rules. After half an hour away the page fetches afresh and
-  returns to Today.
+  returns to the view it opens on (Today, or Now in the evening).
 - **How the views work.** Native CSS scroll snapping in a horizontal scroller (no gesture
   library): swipe on touch screens, sideways trackpad swipes on desktops, the tabs and arrow
-  keys everywhere. Pages arrive with only Today in the scroller, so the first paint is the
-  approved design; Now and This week join on first use, and the scroller then takes the
-  height of the view on screen, never less than Today's (so the links and ad space below stay
-  put). The page sits at the top of the screen rather than centred in it: the views differ in
-  height, and centred content would move up and down, tab bar included, on every switch. The page colours follow the view on screen, switching about
+  keys everywhere. Pages arrive with only the start view in the scroller (Today, or Now in the
+  evening), so the first paint is the approved design; the other views join on first use, and
+  the scroller then takes the height of the view on screen, never less than Today's (so the
+  links and ad space below stay put). The page sits at the top of the screen rather than
+  centred in it: the views differ in height, and centred content would move up and down, tab
+  bar included, on every switch. The page colours follow the view on screen, switching about
   two thirds of the way through a swipe with a quicker fade than an arriving answer. ARIA
   tabs pattern throughout; inactive views are `inert`, and screen readers hear the answer of
   the view they move to.
@@ -128,10 +130,12 @@ to "Yes, drenched", and later bought isitwet.today so the domain decides which q
   `packages/core/src/config.ts` (`RAIN`).
 - **Today is the rest of the day.** "Is it wet today?" at 5pm is about what is still to come,
   not this morning's rain, so Today judges from the moment of the request to midnight, with
-  the thresholds scaled to the hours left (so late in the evening Today and Now cannot
-  disagree). Tomorrow and the week's later days are whole days. Because the answer changes on
-  the hour, no cache keeps it past the next hour (the API, city pages and the browser all
-  refresh then).
+  the thresholds scaled to the hours left (never less than one hour's). While the current hour
+  is wet (Now says Maybe or Yes), Today counts that hour in full and follows the same rule as
+  Now, so the two never contradict each other (see "Fixes after the round 2 review").
+  Tomorrow and the week's later days are whole days. Because the answer changes on the hour,
+  no cache keeps it past the next hour, stale copies included (the API, city pages, the wet
+  OG image and the browser all refresh then).
 - **Now** is the current hour from a day of judged hourly points sent with the answer (the
   browser picks the hour again every minute, like the hot Now). The list shows the chance of
   rain for the next 12 hours in 2-hour blocks: the share of models with rain in each block.
@@ -143,22 +147,25 @@ to "Yes, drenched", and later bought isitwet.today so the domain decides which q
   (a dry climate's 0.3 mm is never "wetter than usual").
 - **Snow.** Rain falling at or below 1 °C (blended temperature) counts as snow: "It'll snow.",
   "Likely to fall as snow." No extra variables are requested.
-- **The toggle** sits above the tab bar (the header is full on phones). It switches all three
-  views in place and keeps the view on screen; the units setting is shared (°C goes with mm,
-  °F with inches). Each page opens on its own site's question, and so does a return after half
-  an hour away.
+- **The toggle** sits above the tab bar from 640px up, and at the bottom of the screen on
+  phones (round 2, below). It switches all three views in place and keeps the view on screen;
+  the units setting is shared (°C goes with mm, °F with inches). The header's site name, the
+  home page's tab title and the tab icon follow it. Each page opens on its own site's question,
+  and so does a return after half an hour away.
 - **Two domains, one deploy.** An edge function (the only way to route by host in front of
   Astro's catch-all server function) serves isitwet.today from `/wet` versions of every page,
   each with its own title, canonical URL, OG image, sitemap, icons and brand, rendered on the
   server in its own topic (no flash of the hot answer). isithot.today/wet redirects to
   isitwet.today. Place links follow the question on screen, so choosing a city while Wet is
-  showing on isithot.today goes to isitwet.today. Each domain keeps its own saved place and
-  units (browsers keep storage per domain).
+  showing on isithot.today goes to isitwet.today. Each domain keeps its own storage (and its
+  own location permission), so links that cross domains carry the chosen units in the address,
+  "Use my location" and searched places carry the place too, and the page there stores them
+  (F8 in round 2, below).
 - **Rain normals** come from their own NASA POWER request (`PRECTOTCORR`) and cache entry, so a
   problem with them can never affect the hot answer.
-- **Hot changes.** The toggle adds about 2.75rem above the tab bar; model names are at full
-  opacity (with the page a little longer, Cold's model list sits on a lighter part of the
-  gradient); the units buttons are a little narrower so "mm" fits.
+- **Hot changes.** From 640px up the toggle adds about 2.75rem above the tab bar; model names
+  are at full opacity (with the page a little longer, Cold's model list sits on a lighter part
+  of the gradient); the units buttons are a little narrower so "mm" fits.
 - **Needs a decision: MET Norway matters more for rain.** Outside the Nordics it is close to a
   second copy of ECMWF (see Data above), and for rain each model is a plain wet/dry vote, so
   ECMWF effectively votes twice: 2 of 8 is enough for Maybe. Dropping MET Norway outside the
@@ -166,6 +173,183 @@ to "Yes, drenched", and later bought isitwet.today so the domain decides which q
 - **Needs a decision: rain thresholds** (1 mm a day, 60% and 25% of models) after real use.
 - OG images are drawn in °C and mm for every city, as before, so a US city's image shows mm
   while its page shows inches.
+
+## Tomorrow after 6pm
+
+Carl asked for the evening to look ahead: before 6pm the page opens on Today; from 6pm the
+middle tab reads Tomorrow with tomorrow's forecast and the page opens on Now; after midnight it
+is Today again. This settles the spec's open question about the evening.
+
+- **Local time at the place**, not the visitor's. Core's `showsTomorrow` compares the hour in
+  the answer's time zone with `TOMORROW_FROM_HOUR` (18, in `config.ts`). It also needs the
+  answer to be for the place's current date and to include tomorrow (`days[1]`); otherwise the
+  middle tab stays Today, so there is never an empty Tomorrow. `defaultView` gives Now while it
+  holds, else Today.
+- **Only the middle slot changes.** The view ids stay `now | today | week`; the tab label, the
+  question ("Will it be hot in Leeds tomorrow?") and the content change (hot `days[1]`, wet
+  `rain.days[1]`, a whole day). Today's answer stays the page's only `h1` in the markup; when
+  the page opens on Now, Now's answer takes the heading level, as it does when a visitor
+  switches.
+- **Nobody is moved.** The page opens on its view for the time of day once the place is known,
+  unless the visitor has already changed view. After that, refetches and the minute tick only
+  relabel: at 6pm an open Today becomes Tomorrow where it is, and at midnight Tomorrow becomes
+  Today again with the usual midnight refetch. A return after half an hour away goes to the
+  view for the time (Now in the evening). The preview (`?preview=1`) always shows Today.
+- **City pages** are rendered on the server in the evening state (Now open, Tomorrow in the
+  middle, Now's colours). Their cache ends at the next hour (F7 below), so a page made at 5pm
+  is not served after 6. If the browser's clock still disagrees with the page (one made at
+  5:59, say), the browser corrects the label and content, and the start view if the visitor
+  has not moved.
+- **Titles stay about today.** The home and city tab titles, the city `<title>`, description
+  and OG image keep asking today's question: it is the search-facing question, and titles did
+  not change per view before either.
+- **The saved answer** (the home page's instant paint) is saved as the page opens for its slot:
+  Today alone, or in the evening Now alone with the middle tab reading Tomorrow. It records the
+  place's time zone, the slot and the date it is for, and the inline restore script paints it
+  only while the place's date and slot still match. So a snapshot from 5pm never paints at 7pm.
+  Older snapshots are skipped (`CACHE.snapshotVersion` went from 4 to 5).
+- **Wording.** Tomorrow's hot verdict is in the future tense ("It'll be hot."), set by the
+  server in `days[1]`; every other string on a hot day already read correctly for tomorrow.
+  Rain's `days[1]` was already a whole-day, future-tense answer; a sweep of every synthetic
+  city found none of its lines saying "still to come", "rest of the day" or "Easing off".
+
+## Brand, toggle and place picker (round 2)
+
+- **The brand follows the toggle.** The header's site name and link show the site of the
+  question on screen: on isithot.today with Wet showing it reads isitwet.today and links there
+  (on previews and locally, to `/wet`). The home page's tab title names that site too, and so
+  do the tab icons (on the real domains each serves its own icons at the root; elsewhere the wet
+  ones are under `/wet`). The manifest and apple-touch-icon stay the page's own. The server
+  still renders the page's own site, the snapshot is only saved while the page's own question
+  is on screen, and the half-hour return switches back, so a restored page never shows the
+  wrong brand.
+- **The toggle is at the bottom on phones.** Below 640px it floats at the bottom centre of the
+  screen, in thumb reach, above the home indicator, on a solid pill (the band's `pill` colour,
+  a hairline and a shadow). Its text measures 7.6:1 or more in all 12 bands. The page has room
+  under the footer so nothing ends up behind the pill, and the tab bar moves up under the
+  header. It is still first in `<main>`, so the reading and focus order is the question, then
+  the period; there is one control, and it does not hide on scroll. At 320px with text at 200%
+  it fits without sideways scrolling. From 640px up it sits above the tab bar as before.
+- **The place picker is full screen on phones.** This fixes the keyboard bug Carl reported. The
+  picker was a sheet at the bottom of the screen. On iOS the keyboard covers the page rather
+  than shrinking it, so the sheet sat behind the keyboard and most of what showed was the
+  dimmed backdrop; the tap that hid the keyboard landed on the backdrop, which closed the
+  picker (the typed text stayed, as the picker was only closed). Android Chrome covered it the
+  same way. Now, below 640px, the picker fills the screen: a header row with Close, the search
+  box under it (at the top, where a keyboard can never cover it), then the results, which
+  scroll on their own with room at the bottom to lift the last result above the keyboard.
+  There is no backdrop to tap: only Close, Escape or the back gesture, a choice, or "Use my
+  location" close it. The viewport asks Android to resize the page for the keyboard
+  (`interactive-widget=resizes-content`). The page behind does not scroll, Enter (Search on
+  the keyboard) picks the first result, reopening shows the last search with its text selected
+  (typing replaces it), focus returns to the place button, and Close is at least 44 × 44 px on
+  touch screens. From 640px up it stays a centred card that a click outside closes. Checked in
+  emulated phones, including a keyboard-sized resize; not yet on a real iPhone or Android
+  phone.
+- **Room for saved places.** The picker's body is in sections ("Use my location", then the
+  results), so a saved list can go between them later. Nothing is built for it yet (see "Saved
+  places").
+
+## Fixes after the round 2 review
+
+**Rain wording.** A sweep over every synthetic city (3 dates, every hour at :07 and :52, both
+units: 86,400 answers) and the two live recordings (1,128) counted each problem before and
+after:
+
+| Problem                                                                 | Before | After |
+| ----------------------------------------------------------------------- | ------ | ----- |
+| Week: "most on Saturday (7mm)" above the week's total of 6mm (F1)       | 76     | 0     |
+| Day's last minutes: "All forecasts say 0mm; 2 of 8 expect rain" (F2)    | 60     | 0     |
+| Day's last minutes: "Some forecasts say up to 0mm" (F2)                 | 29     | 0     |
+| Now: "Dry for the next 12 hours" above a 30% row (F3)                   | 2,300  | 0     |
+| Now: "Showers possible now. Showers possible from about…" (F3)          | 2,580  | 0     |
+| "Light rain now" in mm but "Rain now" in inches (F5)                    | 424    | 0     |
+| Now says it is raining, Today does not say Yes (F6)                     | 2,102  | 0     |
+| Now says showers, Today says No (F6)                                    | 2,530  | 0     |
+| Now says showers or rain, Today says "Dry for the rest of the day" (F6) | 928    | 0     |
+| Today says "Easing off" while Now says it is not raining (F6)           | 1,276  | 0     |
+| Today and Now name different "Easing off by about" hours (F6)           | 7,074  | 0     |
+
+- **F1, the week's wettest day.** The week's total is the median of each model's own week,
+  from the models that cover every day, but the wettest day's amount used every model. The
+  wettest day and its amount now come from the same models as the total, so "most on …" can
+  never exceed it.
+- **F2, the day's last minutes.** Today's window counted the current hour by the minutes left,
+  so at 11:52pm its thresholds were close to nothing. Now they never go below one hour's.
+- **F3, Now's next 12 hours.** With showers now it says "Rain likely from about …" if rain
+  follows, else "Dry from about …", else "On and off for the next 12 hours"; it never announces
+  showers that are already falling. "Dry for the next 12 hours" only when no row under it has a
+  quarter of the forecasts or more (shown as 30% or more); otherwise it names the first such
+  hour.
+- **F4.** "A wet week, heaviest on …" names the heaviest of the heavy or washout days, never a
+  lighter one.
+- **F5.** Whether rain is light is decided in millimetres before rounding and sent with each
+  hourly point (`light`), so the words are the same in either unit.
+- **F6, Today and Now agree.** One rule, from the same judgement of each hour: while the
+  current hour is judged showers or wetter (Now says Maybe or Yes), Today counts that hour in
+  full, as Now does, and a forecast counts as expecting rain from an hour's wet amount
+  (0.2 mm). Today is then never drier than Now: raining now gives Yes, showers now at least
+  Maybe. While it rains, Today names the same easing hour as Now (the first later hour judged
+  spots or drier) and adds "Rain likely from about …" if rain comes back later today. Two other
+  rules were measured and dropped. Counting the hour in full only while it rains (not for
+  showers) still gave 2,582 "Now showers, Today No" and 922 "Dry for the rest of the day" under
+  "Showers possible now". Counting any forecast with rain in the current hour as expecting rain
+  put forecasts below the strip's wet zone among those expecting rain in 11,633 answers, and
+  said "All forecasts say 0mm; 1 of 8 expects rain" 607 times. All that remains in the sweep is
+  228 answers where Now says "Set to last the next 12 hours" and Today names an easing hour more
+  than 12 hours ahead, which agree. The cost: while it is wet now, "still to come" includes all
+  of the current hour (forecasts give rain by the hour, not the minute).
+
+**Other fixes.**
+
+- **F7, no stale copies past the hour.** The CDN could serve an answer for as long again as
+  its max-age while fetching a new one (stale-while-revalidate), so today's rain answer could
+  outlive its hour. Max-age plus stale-while-revalidate now ends by the next forecast hour for
+  the API, city pages and the wet OG image (which also gained the next-hour cap). Max-age keeps
+  its one-minute floor.
+- **F8, crossing domains carries the place and units in the address.** In production,
+  switching sites lost the device location, the saved place and °F/inches, because each domain
+  has its own storage and location permission. Links that cross domains now carry them: a
+  device location as `lat`, `lon` and `source=device`, a searched place as `lat`, `lon` and
+  `name`, and the visitor's chosen units as `units=c|f` (°C too: a US visitor who picked °C
+  would otherwise get the US default, °F). The page there stores them, then takes the units and
+  the device location out of the address (a searched place keeps its shareable address). The
+  brand, Nearby and city-page links carry only the units, so a place remembered on one site (a
+  city chosen there, say) is not carried to the other site's home page.
+- **F9, a fast clock.** A device clock running ahead made today's rain answer look out of date
+  before the server had a newer hour, so the page asked again every few minutes (for good if
+  an hour or more fast). When a fresh answer is already out of date by the device's clock, it
+  now counts as current for as long as the server had left of its hour. With a clock 70
+  minutes fast: 11 requests in an hour before, 3 after, then one per server hour. The same
+  rule covers midnight: a clock already past the place's midnight while the server is not used
+  to ask for the new day every few minutes until the server got there; it now waits for as long
+  as the server had left of its day.
+- **F10, the early request.** A saved answer from an earlier hour asks past the caches, and
+  that used to throw away the request the page's `<head>` had already started: two requests.
+  It now uses the early one, and asks again only if that answer is itself out of date.
+- **F11.** The smoke test's "query string kept through the rewrite" check passed whether or
+  not the query arrived (the page is static), so the claim is gone. `route()`'s unit tests and
+  the production check of the isithot.today/wet redirect cover it.
+- **F12, long answers.** "Maybe.", "Partly." and "Almost." were cut off on phones with larger
+  text. Answers longer than four characters are now also held to the page's width; "Yes.",
+  "No." and every answer at the usual text size are unchanged.
+- **F13.** The showers icon was redrawn so its rain falls from under the cloud's right-hand
+  end, clear of "Maybe." and "Partly." from 320px to 1280px at 100–200% text.
+- **F14.** A wet city page's title says "Snow" (or "Heavy snow") when the day's rain mostly
+  falls as snow, as the page does.
+
+## Saved places (planned for the apps)
+
+Carl wants to save places in the native apps. Nothing is built for it on the web.
+
+- The full-screen picker is where the saved list goes: a "Saved places" section between the
+  search box and the results (in `SearchSheet.astro`, between "Use my location" and the
+  results list).
+- The API needs nothing new: a saved place is a city slug or rounded coordinates, which
+  `/api/v1/today` already takes.
+- On the web each domain has its own storage, so places saved on isithot.today would not show
+  on isitwet.today. A web version would need the same address-carrying approach as F8 above
+  (clumsier for a list than for one place) or both sites on one shared domain.
 
 ## API contract
 
@@ -187,15 +371,30 @@ more than two); the rest of the week is summarised in `week`.
   `units`) are browser-cache only, so the CDN never serves one visitor's location or units to
   another. The website always sends explicit units after the first answer.
 
+Round 2 additions and clarifications (no field changes its meaning):
+
+- `days[1].verdict` is in the future tense ("It'll be hot."); `days[0]` keeps "It's hot.". The
+  website shows `days[1]` and `rain.days[1]` in the middle view from 6pm at the place.
+- `rain.now.series[].light` (new boolean): the hour's median amount is under 0.5 mm, decided
+  in millimetres so "Light rain now." is the same in either unit. Responses cached before it
+  lack it; treat a missing flag as false.
+- `rain.week.wettest` is picked, and its amount given, from the same models as `total`, so its
+  amount never exceeds the total (it falls back to each day's consensus amount when there is no
+  total).
+- `rain.days[0]` while the current hour is wet: that hour counts in full, and `threshold` (the
+  strip's wet zone) is an hour's wet amount, 0.2 mm (0.01 in).
+- `Netlify-CDN-Cache-Control`: stale-while-revalidate is cut (down to 0) so that max-age plus
+  it ends by the next forecast hour. Only max-age's one-minute floor can run past the hour.
+
 ## Design
 
 - **Header controls and the tab bar sit on a pill.** They sit on the bright top-right glow, so
   they get a backing in each band's `pill` colour (the gradient colour with the most contrast
   against the text) at 85%.
 - **Every text meets WCAG 2.2 AA in every band and view** (Carl's go-ahead, October 2026).
-  `e2e/contrast.spec.ts` measures it on rendered pages for all six bands, all three views, on
-  phone and desktop, and fails CI below 4.5:1 (3:1 for large text). What changed from the
-  approved prototype (`reference/prototype.html` is updated to match):
+  `e2e/contrast.spec.ts` measures it on rendered pages for all 12 bands (six hot, six wet),
+  all three views, on phone and desktop, and fails CI below 4.5:1 (3:1 for large text). What
+  changed from the approved prototype (`reference/prototype.html` is updated to match):
   - Hot is darker: `#cc3d17` to `#a51c17`, with a deeper glow (`#ff9a4a`). The old `#e8571f`
     is only 3.6:1 against white before the glow is added.
   - The glow strength is set per band: Freezing 60%, Cold 45%, Hot 40%, Scorching 70%, Mild
@@ -205,7 +404,9 @@ more than two); the rest of the week is summarised in `week`.
   - Models outside the agreement band show a lighter figure instead of faded text, and the
     search sheet sits on the band's `pill` colour.
   - With text enlarged to 200% on a 360px phone nothing is cut off: the header controls
-    wrap, the tab labels shrink to fit, and the week rows drop their dot track.
+    wrap, the tab labels shrink to fit (a word too long for its third, such as "Tomorrow",
+    breaks inside it), long answers shrink to the page's width, and the week rows drop their
+    dot track.
   - The gradient and glow moved to a fixed layer: iOS Safari ignores
     `background-attachment: fixed` and stretched the glow over the whole page, so iPhones
     looked worse than the measurements.
@@ -230,11 +431,12 @@ marks them `noindex`; the live site scores 100.
 
 The workflow also measures https://isithot.today on every run, for comparison.
 
-Site JS is about 16 KB gzipped (budget 25 KB, checked in CI by `scripts/js-budget.mjs`; it
-was 8 KB before Now and This week, and 12 KB before Is it wet?). The rain day and week judging
-runs only on the server; the browser carries the code that keeps rain's "now" current. Cached API responses come back from the
-Netlify CDN in 10–40 ms. LCP sits just above the 1.5 s target under Lighthouse's simulated
-Moto G on slow 4G. Things that got it there:
+Site JS is about 17 KB gzipped (budget 25 KB, checked in CI by `scripts/js-budget.mjs`; it
+was 8 KB before Now and This week, 12 KB before Is it wet? and 16 KB before round 2). The rain
+day and week judging runs only on the server; the browser carries the code that keeps rain's
+"now" current. Cached API responses come back from the Netlify CDN in 10–40 ms. LCP sits just
+above the 1.5 s target under Lighthouse's simulated Moto G on slow 4G. Things that got it
+there:
 
 - A 7.6 KB static cut of Bricolage at the answer's weight is inlined in the page, so the
   answer word paints in its final font straight away. The full variable font (77 KB) loads
@@ -249,8 +451,6 @@ from the visitor's approximate location.
 
 ## Open decisions carried over from the spec
 
-- Evening behaviour after 8pm (keep today, or switch to "Tomorrow?"). The API already returns
-  tomorrow in `days[1]`, and the Now view now covers the evening.
 - NASA POWER terms for an ad-supported site.
 - Tuning α and the band edges after real use (all in `packages/core/src/config.ts`).
 - Remove-ads model. The `AdSlot` component takes an `adsDisabled` flag for it.

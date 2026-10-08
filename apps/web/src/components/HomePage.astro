@@ -10,7 +10,7 @@ import Views from './Views.astro';
 import AdSlot from './AdSlot.astro';
 import Footer from './Footer.astro';
 import SearchSheet from './SearchSheet.astro';
-import { CACHE, LOADING_PALETTE, SITES, type Topic } from '@isithot/core';
+import { CACHE, LOADING_PALETTE, SITES, TOMORROW_FROM_HOUR, type Topic } from '@isithot/core';
 
 interface Props {
   /** The site the page belongs to, and the topic it opens on. */
@@ -22,6 +22,7 @@ const { topic } = Astro.props;
 const key = topic === 'wet' ? 'isitwet:last' : 'isithot:last';
 const version = CACHE.snapshotVersion;
 const maxAge = CACHE.localAnswerMaxAgeMs;
+const evening = TOMORROW_FROM_HOUR;
 ---
 
 <Base topic={topic} canonical={`${SITES[topic].url}/`} palette={LOADING_PALETTE}>
@@ -64,16 +65,32 @@ const maxAge = CACHE.localAnswerMaxAgeMs;
     <Footer />
   </div>
   <SearchSheet />
-  <script is:inline define:vars={{ key, version, maxAge }}>
+  <script is:inline define:vars={{ key, version, maxAge, evening }}>
     // Paint the last answer instantly (under 3 hours old) before the main script loads. A wet
     // answer is for the rest of the day from when it was worked out: only until the next hour.
+    // The page opens on Today, or in the evening at the place on Now with Tomorrow in the middle
+    // (scripts/app.ts saveLast): only while that is still the day and slot at the place.
     try {
       const c = location.search ? null : JSON.parse(localStorage.getItem(key) || 'null');
+      const at = {};
+      if (c && c.tz) {
+        const f = new Intl.DateTimeFormat('en-GB', {
+          timeZone: c.tz,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: 'numeric',
+          hourCycle: 'h23',
+        });
+        for (const p of f.formatToParts(Date.now())) at[p.type] = p.value;
+      }
       if (
         c &&
         c.v === version &&
         Date.now() - c.savedAt <= maxAge &&
-        (!c.until || Date.now() < c.until)
+        (!c.until || Date.now() < c.until) &&
+        c.date === at.year + '-' + at.month + '-' + at.day &&
+        c.slot === (+at.hour >= evening ? 'tomorrow' : 'today')
       ) {
         const s = document.documentElement.style;
         for (const k in c.palette) s.setProperty('--' + k, c.palette[k]);
