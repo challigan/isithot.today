@@ -141,7 +141,26 @@ async function locate(page: Page, targets: Target[]): Promise<Measured[]> {
   }, targets);
 }
 
+/**
+ * On phones the Hot | Wet toggle floats over the page, which scrolls under it: the page's text
+ * is measured without it, and the toggle on its own.
+ */
 async function measure(page: Page, targets: Target[], label: string): Promise<string[]> {
+  const floating = targets.filter((t) => t.selector.startsWith('#topic'));
+  const fixed = await page
+    .locator('#topic')
+    .evaluate((el) => getComputedStyle(el).position === 'fixed');
+  if (!fixed || floating.length === 0 || floating.length === targets.length) {
+    return measureEach(page, targets, label);
+  }
+  const hide = await page.addStyleTag({ content: '#topic{visibility:hidden!important}' });
+  const rest = targets.filter((t) => !floating.includes(t));
+  const failures = await measureEach(page, rest, label);
+  await hide.evaluate((el) => (el as HTMLElement).remove());
+  return [...failures, ...(await measureEach(page, floating, label))];
+}
+
+async function measureEach(page: Page, targets: Target[], label: string): Promise<string[]> {
   const found = await locate(page, targets);
   const failures: string[] = [];
   const worst = new Map<string, number>();

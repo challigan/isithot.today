@@ -1,5 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { PALETTES, type Band } from '../packages/core/src/config';
+import { expect, startClock, test } from './helpers';
 
 const ANSWERS = /^(Yes\.|No\.|Almost\.)$/;
 const VIEWS = ['now', 'today', 'week'] as const;
@@ -259,10 +260,18 @@ test.describe('Now | Today | This week', () => {
       const a = (await note.boundingBox())!;
       const toggle = (await page.locator('#topic').boundingBox())!;
       const tabs = (await page.locator('#tabs').boundingBox())!;
-      expect(a.y + a.height, `note above the toggle at ${width}px`).toBeLessThanOrEqual(toggle.y);
-      expect(toggle.y + toggle.height, `toggle above the tabs at ${width}px`).toBeLessThanOrEqual(
-        tabs.y,
-      );
+      if (width < 640) {
+        // Phones: the toggle floats at the foot of the screen and the tabs take its place.
+        expect(a.y + a.height, `note above the tabs at ${width}px`).toBeLessThanOrEqual(tabs.y);
+        expect(toggle.y, `toggle below the tabs at ${width}px`).toBeGreaterThan(
+          tabs.y + tabs.height,
+        );
+      } else {
+        expect(a.y + a.height, `note above the toggle at ${width}px`).toBeLessThanOrEqual(toggle.y);
+        expect(toggle.y + toggle.height, `toggle above the tabs at ${width}px`).toBeLessThanOrEqual(
+          tabs.y,
+        );
+      }
     }
   });
 
@@ -284,7 +293,7 @@ test.describe('Now | Today | This week', () => {
   });
 
   test('"now" keeps up with the clock without asking the server', async ({ page }) => {
-    await page.clock.install();
+    await startClock(page);
     const calls: string[] = [];
     page.on('request', (r) => {
       if (r.url().includes('/api/v1/today')) calls.push(r.url());

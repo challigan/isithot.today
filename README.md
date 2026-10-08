@@ -53,7 +53,8 @@ Useful pages while developing:
 - `/?preview=1` shows the prototype's "preview each kind of day" chips (`&band=hot` to pick one;
   a rain band such as `&band=drenched` opens on Wet).
 - `/in/newcastle-upon-tyne-gb` is a server-rendered city page; `/wet` and
-  `/wet/in/newcastle-upon-tyne-gb` are the isitwet.today versions.
+  `/wet/in/newcastle-upon-tyne-gb` are the isitwet.today versions. Pages follow the time at
+  the place: a city where it is past 6pm opens on Now, with Tomorrow in the middle tab.
 - `/api/v1/today?lat=54.95&lon=-1.6&units=c` and `/api/v1/search?q=Leeds` are the API.
 
 ## Checks

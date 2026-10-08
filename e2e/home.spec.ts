@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, prepare, test } from './helpers';
 
 const ANSWERS = /^(Yes\.|No\.|Almost\.)$/;
 
@@ -56,6 +56,7 @@ test.describe('home page', () => {
       permissions: ['geolocation'],
       geolocation: { latitude: 52.4862, longitude: -1.8904 },
     });
+    await prepare(context);
     const page = await context.newPage();
     const requests: string[] = [];
     page.on('request', (r) => {
@@ -115,5 +116,33 @@ test.describe('home page', () => {
     await page.reload();
     await expect(page.locator('#answer')).toHaveText(first!);
     await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+  });
+
+  test('a saved answer from an earlier hour is brought up to date with one request', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect(page.locator('#answer')).toHaveText(ANSWERS);
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem('isithot:last') !== null))
+      .toBe(true);
+    // As if saved 50 minutes ago, in the previous hour: today's rain in it is out of date.
+    await page.evaluate(() => {
+      const saved = JSON.parse(localStorage.getItem('isithot:last')!);
+      const from = Date.parse(saved.data.rain.days[0].from) - 60 * 60 * 1000;
+      saved.data.rain.days[0].from = new Date(from).toISOString();
+      saved.savedAt = Date.now() - 50 * 60 * 1000;
+      localStorage.setItem('isithot:last', JSON.stringify(saved));
+    });
+    const calls: string[] = [];
+    page.on('request', (r) => {
+      if (r.url().includes('/api/v1/today')) calls.push(r.url());
+    });
+    await page.reload();
+    await expect(page.locator('#app')).toHaveAttribute('data-restored', '1');
+    await expect(page.locator('#answer')).toHaveText(ANSWERS);
+    await page.waitForLoadState('networkidle');
+    // The page's own early request is new, so it brings the answer up to date by itself.
+    expect(calls).toHaveLength(1);
   });
 });

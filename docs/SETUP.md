@@ -77,8 +77,8 @@ domains and the isithot.today/wet redirect.
 
 Browsers keep storage and location permission per domain, so the two sites do not share a
 saved place or units. Links from one to the other carry the chosen units in the address
-(`units=c|f`), and so do "Use my location" and search results with the place (`lat`, `lon`, and
-`source=device` or `name`); the page there stores them. Nothing to set up. On previews and
+(`units=c|f`); "Use my location" and a searched place also carry the place (`lat`, `lon`, and
+`source=device` or `name`). The page there stores them. Nothing to set up. On previews and
 locally both sites are one origin, so this only shows on the real domains.
 
 ## 4. Cloudflare Web Analytics (cookieless, free)

@@ -158,8 +158,9 @@ to "Yes, drenched", and later bought isitwet.today so the domain decides which q
   server in its own topic (no flash of the hot answer). isithot.today/wet redirects to
   isitwet.today. Place links follow the question on screen, so choosing a city while Wet is
   showing on isithot.today goes to isitwet.today. Each domain keeps its own storage (and its
-  own location permission), so links that cross domains carry the place and the chosen units in
-  the address, and the page there stores them (round 2, below).
+  own location permission), so links that cross domains carry the chosen units in the address,
+  "Use my location" and searched places carry the place too, and the page there stores them
+  (F8 in round 2, below).
 - **Rain normals** come from their own NASA POWER request (`PRECTOTCORR`) and cache entry, so a
   problem with them can never affect the hot answer.
 - **Hot changes.** From 640px up the toggle adds about 2.75rem above the tab bar; model names
@@ -239,8 +240,9 @@ is Today again. This settles the spec's open question about the evening.
   There is no backdrop to tap: only Close, Escape or the back gesture, a choice, or "Use my
   location" close it. The viewport asks Android to resize the page for the keyboard
   (`interactive-widget=resizes-content`). The page behind does not scroll, Enter (Search on
-  the keyboard) picks the first result, focus returns to the place button, and Close is at
-  least 44 × 44 px on touch screens. From 640px up it stays a centred card that a click outside
+  the keyboard) picks the first result, reopening shows the last search with its text selected
+  (typing replaces it), focus returns to the place button, and Close is at least 44 × 44 px on
+  touch screens. From 640px up it stays a centred card that a click outside
   closes. Checked in emulated phones, including a keyboard-sized resize; not yet on a real
   iPhone or Android phone.
 - **Room for saved places.** The picker's body is in sections ("Use my location", then the
@@ -272,7 +274,7 @@ after:
   wettest day and its amount now come from the same models as the total, so "most on …" can
   never exceed it.
 - **F2, the day's last minutes.** Today's window counted the current hour by the minutes left,
-  so at 11:52pm its thresholds were close to nothing. They never go below one hour's now.
+  so at 11:52pm its thresholds were close to nothing. Now they never go below one hour's.
 - **F3, Now's next 12 hours.** With showers now it says "Rain likely from about …" if rain
   follows, else "Dry from about …", else "On and off for the next 12 hours"; it never announces
   showers that are already falling. "Dry for the next 12 hours" only when no row under it has a
@@ -287,14 +289,15 @@ after:
   full, as Now does, and a forecast counts as expecting rain from an hour's wet amount
   (0.2 mm). Today is then never drier than Now: raining now gives Yes, showers now at least
   Maybe. While it rains, Today names the same easing hour as Now (the first later hour judged
-  spots or drier) and adds "Rain likely from about …" if rain comes back later today. Smaller
-  rules left contradictions: counting the hour in full only while it rains (not for showers)
-  still gave 2,582 "Now showers, Today No"; counting any forecast with rain in the current hour
-  as expecting rain put 11,633 dots below the strip's wet zone and said "All forecasts say 0mm;
-  1 of 8 expects rain" 607 times. All that remains in the sweep is 228 answers where Now says
-  "Set to last the next 12 hours" and Today names an easing hour more than 12 hours ahead,
-  which agree. The cost: while it is wet now, "still to come" includes all of the current hour
-  (forecasts give rain by the hour, not the minute).
+  spots or drier) and adds "Rain likely from about …" if rain comes back later today. Two other
+  rules were measured and dropped. Counting the hour in full only while it rains (not for
+  showers) still gave 2,582 "Now showers, Today No" and 922 "Dry for the rest of the day" under
+  "Showers possible now". Counting any forecast with rain in the current hour as expecting rain
+  put forecasts below the strip's wet zone among those expecting rain in 11,633 answers, and
+  said "All forecasts say 0mm; 1 of 8 expects rain" 607 times. All that remains in the sweep is
+  228 answers where Now says "Set to last the next 12 hours" and Today names an easing hour more
+  than 12 hours ahead, which agree. The cost: while it is wet now, "still to come" includes all
+  of the current hour (forecasts give rain by the hour, not the minute).
 
 **Other fixes.**
 
@@ -310,8 +313,8 @@ after:
   `name`, and the visitor's chosen units as `units=c|f` (°C too: a US visitor who picked °C
   would otherwise get the US default, °F). The page there stores them, then takes the units and
   the device location out of the address (a searched place keeps its shareable address). The
-  brand and city links carry only the units, so a city chosen on one site is not remembered on
-  the other site's home page.
+  brand, Nearby and city-page links carry only the units, so a place remembered on one site (a
+  city chosen there, say) is not carried to the other site's home page.
 - **F9, a fast clock.** A device clock running ahead made today's rain answer look out of date
   before the server had a newer hour, so the page asked again every few minutes (for good if
   an hour or more fast). When a fresh answer is already out of date by the device's clock, it
@@ -385,9 +388,9 @@ Round 2 additions and clarifications (no field changes its meaning):
   they get a backing in each band's `pill` colour (the gradient colour with the most contrast
   against the text) at 85%.
 - **Every text meets WCAG 2.2 AA in every band and view** (Carl's go-ahead, October 2026).
-  `e2e/contrast.spec.ts` measures it on rendered pages for all six bands, all three views, on
-  phone and desktop, and fails CI below 4.5:1 (3:1 for large text). What changed from the
-  approved prototype (`reference/prototype.html` is updated to match):
+  `e2e/contrast.spec.ts` measures it on rendered pages for all 12 bands (six hot, six wet),
+  all three views, on phone and desktop, and fails CI below 4.5:1 (3:1 for large text). What
+  changed from the approved prototype (`reference/prototype.html` is updated to match):
   - Hot is darker: `#cc3d17` to `#a51c17`, with a deeper glow (`#ff9a4a`). The old `#e8571f`
     is only 3.6:1 against white before the glow is added.
   - The glow strength is set per band: Freezing 60%, Cold 45%, Hot 40%, Scorching 70%, Mild

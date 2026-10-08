@@ -2,9 +2,10 @@
  * Hot | Wet: each site opens on its own question, and the toggle answers the other one in place
  * from the same response.
  */
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { PALETTES, RAIN_PALETTES, type Band, type RainBand } from '../packages/core/src/config';
 import { RAIN_GLYPHS } from '../apps/web/src/lib/wetGlyphs';
+import { expect, keepToday, serverNow, startClock, test } from './helpers';
 
 const HOT_ANSWERS = /^(Yes\.|No\.|Almost\.)$/;
 const WET_ANSWERS = /^(Yes\.|No\.|Maybe\.)$/;
@@ -124,8 +125,8 @@ test.describe('Hot | Wet', () => {
     await expect(page.getByRole('group', { name: 'Rain units' })).toBeVisible();
     const answer = await page.locator('#answer').textContent();
     const verdict = await page.locator('#verdict').textContent();
-    // The home page keeps its own site's name.
-    await expect(page).toHaveTitle(`${answer!.trim()} ${verdict!.trim()} | isithot.today`);
+    // The home page names the site of the question on screen, as the header does.
+    await expect(page).toHaveTitle(`${answer!.trim()} ${verdict!.trim()} | isitwet.today`);
 
     await toggle(page, 'hot').click();
     await expectTopic(page, 'hot');
@@ -222,17 +223,20 @@ test.describe('Hot | Wet', () => {
   });
 
   test('back after half an hour away: the page’s own question, on Today', async ({ page }) => {
-    await page.clock.install();
+    await startClock(page);
     await ready(page, '/wet');
     await page.locator('#tab-week').click();
     await expect(page.locator('#tab-week')).toHaveAttribute('aria-selected', 'true');
     await toggle(page, 'hot').click();
     await expect(page.locator('#week-question')).toHaveText('Is it hot this week?');
+    await expect(page.locator('#brand')).toHaveText('isithot.today');
 
     await setVisibility(page, 'hidden');
     await page.clock.fastForward('31:00');
     await setVisibility(page, 'visible');
     await expectTopic(page, 'wet');
+    // The header goes back to the page's own site too.
+    await expect(page.locator('#brand')).toHaveText('isitwet.today');
     await expect(page.locator('#tab-today')).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('#question')).toHaveText('Is it wet today?');
     await expect(page.locator('#answer')).toHaveText(WET_ANSWERS);
@@ -242,7 +246,7 @@ test.describe('Hot | Wet', () => {
   });
 
   test('rain "now" keeps up with the clock without asking the server', async ({ page }) => {
-    await page.clock.install();
+    await startClock(page);
     await ready(page, '/wet');
     await page.locator('#tab-now').click();
     await expect(page.locator('#now-answer')).toHaveText(WET_ANSWERS);
@@ -260,7 +264,7 @@ test.describe('Hot | Wet', () => {
   });
 
   test('asks again once today’s rain is an hour old', async ({ page }) => {
-    await page.clock.install();
+    await startClock(page);
     const calls: string[] = [];
     page.on('request', (r) => {
       if (r.url().includes('/api/v1/today')) calls.push(r.url());
@@ -287,6 +291,57 @@ test.describe('Hot | Wet', () => {
     // At most one quiet refetch every few minutes.
     await page.clock.runFor(2 * 60 * 1000);
     expect(calls).toHaveLength(2);
+  });
+
+  test('a clock running fast waits for the server’s next hour to ask again', async ({ page }) => {
+    // Routing turns off the browser's cache, whose entries would otherwise expire in real time.
+    await page.route('**/api/v1/today**', (route) => route.continue());
+    // Each request for a fresh answer: the minute on the page's clock it was made in, and how
+    // long the server had left of its hour when it answered.
+    const fresh: Array<{ minute: number; left: number }> = [];
+    let minute = 0;
+    let pending = 0;
+    page.on('request', (r) => {
+      if (!r.url().includes('/api/v1/today')) return;
+      pending++;
+      if (!r.url().includes('t=')) return;
+      const entry = { minute, left: -1 };
+      fresh.push(entry);
+      // (A request still on its way when the test ends is not waited for.)
+      r.response()
+        .then(async (response) => {
+          const body = (await response!.json()) as { rain: { days: Array<{ from: string }> } };
+          const from = Date.parse(body.rain.days[0]!.from);
+          entry.left = Math.ceil(from / HOUR) * HOUR - from;
+        })
+        .catch(() => {});
+    });
+    const done = (r: { url(): string }) => {
+      if (r.url().includes('/api/v1/today')) pending--;
+    };
+    page.on('requestfinished', done);
+    page.on('requestfailed', done);
+    // A device clock 70 minutes fast: today's rain always looks an hour old to it.
+    await startClock(page, serverNow() + 70 * 60 * 1000);
+    await ready(page, '/wet');
+    // An hour on the page's clock, a minute at a time, each answer in before the next minute.
+    // (The server's clock hardly moves meanwhile, so its hour is the same throughout.)
+    for (minute = 1; minute <= 60; minute++) {
+      await page.clock.runFor(60 * 1000);
+      await expect.poll(() => pending).toBe(0);
+    }
+    // The page's clock runs on by itself from here: look at the hour just run.
+    const asked = fresh.slice();
+    await expect.poll(() => asked.every((f) => f.left >= 0)).toBe(true);
+    // The out-of-date rain is asked for again, past the caches.
+    expect(asked.length).toBeGreaterThanOrEqual(1);
+    // But never sooner than the server could have a newer hour: once it was out of date when it
+    // arrived, an answer is kept for as long as the server had left of its hour. (Asking every
+    // few minutes would make a clock an hour fast ask forever.)
+    for (let i = 1; i < asked.length; i++) {
+      const gap = (asked[i]!.minute - asked[i - 1]!.minute + 1) * 60 * 1000;
+      expect(gap, `request ${i + 1} of ${asked.length}`).toBeGreaterThanOrEqual(asked[i - 1]!.left);
+    }
   });
 
   test('place links go to the site of the question on screen', async ({ page }) => {
@@ -333,6 +388,8 @@ test.describe('Hot | Wet', () => {
         }),
       }),
     );
+    // Bristol's page opens on Today until 6pm there.
+    await keepToday(page);
     await page.goto('/in/bristol-gb');
     await expect(page.locator('#answer')).toHaveText(/^\s*(Yes|No|Almost)\.\s*$/);
     await toggle(page, 'wet').click();
@@ -386,9 +443,10 @@ test.describe('Hot | Wet', () => {
     await ready(page, '/wet');
     await page.waitForTimeout(300);
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('isitwet:last')!));
-    // Saved until the next hour after today's rain was worked out.
-    expect(saved.until).toBeGreaterThan(Date.now());
-    expect(saved.until - Date.now()).toBeLessThanOrEqual(HOUR);
+    // Saved until the next hour after today's rain was worked out (on the page's clock).
+    const now = await page.evaluate(() => Date.now());
+    expect(saved.until).toBeGreaterThan(now);
+    expect(saved.until - now).toBeLessThanOrEqual(HOUR);
     // An hour on, the snapshot is out of date.
     await page.evaluate(
       (s) => localStorage.setItem('isitwet:last', JSON.stringify({ ...s, until: Date.now() - 1 })),

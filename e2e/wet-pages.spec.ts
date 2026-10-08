@@ -1,7 +1,9 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { RAIN_BANDS, RAIN_PALETTES, type RainBand } from '../packages/core/src/config';
 import { RAIN_ANSWERS, wetPageTitle } from '../packages/core/src/copy';
+import type { TodayResponse } from '../packages/core/src/types';
 import { RAIN_GLYPHS } from '../apps/web/src/lib/wetGlyphs';
+import { cityAt, expect, keepToday, test } from './helpers';
 
 // The wet pages as a deploy preview or a local server serves them: under /wet. On isitwet.today
 // the edge function serves the same pages at the root (smoke.mjs checks that on the preview).
@@ -14,6 +16,12 @@ function bandOf(html: string): RainBand {
   const band = /id="view-today"[^>]*data-band="([a-z]+)"/.exec(html)?.[1] as RainBand;
   expect(RAIN_BANDS).toContain(band);
   return band;
+}
+
+/** The answer the page was rendered from, which it carries for the browser. */
+function dataOf(html: string): TodayResponse {
+  const json = /<script type="application\/json" id="initial">(.*?)<\/script>/s.exec(html)?.[1];
+  return JSON.parse(json!) as TodayResponse;
 }
 
 /** The page shows the rain band's answer, colours and icon. */
@@ -45,32 +53,46 @@ const brandText = async (page: Page) =>
 
 test.describe('isitwet.today pages', () => {
   test('city pages are rendered wet on the server', async ({ request }) => {
-    const res = await request.get(CITY);
+    // A city in its daytime, so the page opens on Today (evening pages: tomorrow.spec.ts).
+    const city = await cityAt(request, '08:00', '16:00');
+    const res = await request.get(`/wet/in/${city.slug}`);
     expect(res.status()).toBe(200);
     const html = await res.text();
     const band = bandOf(html);
+    const today = dataOf(html).rain!.days[0]!;
+    expect(today.band).toBe(band);
     const p = RAIN_PALETTES[band];
     expect(html).toContain(
       `<html lang="en-GB" style="--g1:${p.g1};--g2:${p.g2};--g3:${p.g3};--ink:${p.ink};--pill:${p.pill};--glow:${p.glow};`,
     );
-    const title = wetPageTitle({ city: 'London', answer: RAIN_ANSWERS[band], band });
+    const title = wetPageTitle({
+      city: city.name,
+      answer: RAIN_ANSWERS[band],
+      band,
+      snow: today.snow,
+    });
     expect(html).toContain(`<title>${title}</title>`);
-    expect(html).toContain('<link rel="canonical" href="https://isitwet.today/in/london-gb">');
-    expect(html).toContain('<meta property="og:url" content="https://isitwet.today/in/london-gb">');
+    const url = `https://isitwet.today/in/${city.slug}`;
+    expect(html).toContain(`<link rel="canonical" href="${url}">`);
+    expect(html).toContain(`<meta property="og:url" content="${url}">`);
     expect(html).toContain(
-      '<meta property="og:image" content="https://isitwet.today/og/london-gb.png">',
+      `<meta property="og:image" content="https://isitwet.today/og/${city.slug}.png">`,
     );
     expect(html).toContain('<meta property="og:site_name" content="isitwet.today">');
     expect(html).toContain('<link rel="icon" href="/wet/favicon.svg" type="image/svg+xml">');
     expect(html).toContain('<link rel="manifest" href="/wet/manifest.webmanifest">');
-    expect(html).toMatch(/<h1 class="answer" id="answer">\s*(Yes|No|Maybe)\.\s*<\/h1>/);
-    expect(html).toMatch(/id="question">\s*Is it wet in London today\?\s*</);
+    // "Maybe." is marked long, to be sized to fit.
+    expect(html).toMatch(
+      /<h1 class="answer" id="answer"( data-long)?>\s*(Yes|No|Maybe)\.\s*<\/h1>/,
+    );
+    expect(html).toMatch(new RegExp(`id="question">\\s*Is it wet in ${city.name} today\\?\\s*<`));
     expect(html).toMatch(/<div class="wrap" id="app"[^>]* data-topic="wet"/);
     // Links are written for isitwet.today, where the wet pages are at the root.
-    expect(html).toContain('<a class="brand" href="/">');
+    expect(html).toContain('<a class="brand" id="brand" href="/">');
   });
 
   test('city pages open on the rain answer', async ({ page }) => {
+    await keepToday(page);
     await page.goto(CITY);
     await expect(page.locator('#question')).toHaveText('Is it wet in London today?');
     await expectRainBand(page);
@@ -81,9 +103,11 @@ test.describe('isitwet.today pages', () => {
   test.describe('without JavaScript', () => {
     test.use({ javaScriptEnabled: false });
 
-    test('city pages still show the rain answer', async ({ page }) => {
-      await page.goto(CITY);
-      await expect(page.locator('#question')).toHaveText('Is it wet in London today?');
+    test('city pages still show the rain answer', async ({ page, request }) => {
+      // The server's page as it is: a city in its daytime opens on Today.
+      const city = await cityAt(request, '08:00', '16:00');
+      await page.goto(`/wet/in/${city.slug}`);
+      await expect(page.locator('#question')).toHaveText(`Is it wet in ${city.name} today?`);
       await expect(page.locator('#answer')).toBeVisible();
       await expectRainBand(page);
     });
@@ -173,6 +197,7 @@ test.describe('isithot.today pages are unchanged', () => {
     expect(html).toMatch(/<title>Is it hot in London today\? /);
     expect(html).toMatch(/<div class="wrap" id="app"[^>]* data-topic="hot"/);
 
+    await keepToday(page);
     await page.goto('/in/london-gb');
     await expect(page.locator('#question')).toHaveText('Is it hot in London today?');
     await expect(page.locator('.brand')).toHaveAttribute('href', '/');
