@@ -4,18 +4,25 @@
  *
  * The e2e server makes synthetic forecasts on the real clock, and from 6pm at a place its pages
  * open on Now with Tomorrow in the middle (core `showsTomorrow`). So a test written for a page
- * that opens on Today would change behaviour whenever CI runs in that place's evening. Each kind
- * of test is kept on its slot a different way:
- * - Home pages (`test` below): the approximate (IP) place is moved to wherever it is late morning
- *   now, with the x-nf-geo header the Netlify adapter reads in development. Browser and server
- *   stay on the same clock, so "now" and the rest of the page are as a visitor sees them.
- * - City pages of fixed places (London, Bristol): `keepToday` starts the browser clock at 5pm
- *   there from 5:30pm on, and the client then shows Today whatever the server rendered.
+ * that opens on Today would change behaviour whenever CI runs in that place's evening. Each test
+ * that relies on the time of day says so:
+ * - A test that relies on a page opening on Today calls `keepToday` with the place's time zone
+ *   (London for city pages, `ipPlace.tz` for home pages). In the place's evening it starts the
+ *   browser's clock earlier that day, and the client then shows Today whatever the server
+ *   rendered. A clock behind the server's has no answer for Now, so such tests leave Now alone.
+ * - Home pages answer for the approximate (IP) place, which `test` moves with the x-nf-geo
+ *   header the Netlify adapter reads in development: to where it is `ipHour` o'clock now (late
+ *   morning, or E2E_IP_HOUR). A test that needs a home page in its daytime with Now answering
+ *   (browser and server on one clock) sets `test.use({ ipHour: DAYTIME })`; one about the
+ *   evening sets an evening hour.
  * - Checks of the server's own markup, and the Tomorrow tests: `cityAt` picks a city in the
  *   right part of its day.
  *
- * E2E_CLOCK=HH:MM runs the whole suite as if it were that time in London (playwright.config.ts):
- * the server's clock moves (clock-shift.mjs), and `test` starts every page's clock with it.
+ * Two switches check that the suite passes at any time of day (playwright.config.ts):
+ * E2E_IP_HOUR=HH puts the approximate place where it is HH o'clock (e.g. 20, its evening) for
+ * every test that does not choose, and E2E_CLOCK=HH:MM runs the whole suite as if it were that
+ * time in London: the server's clock moves (clock-shift.mjs), and `test` starts every page's
+ * clock with it.
  */
 import { readFileSync } from 'node:fs';
 import {
@@ -54,15 +61,31 @@ export async function pinLocalTime(
 }
 
 /**
- * For a test of a city page that expects it to open on Today: from 5:30pm at the place (on the
- * server's clock), start the browser at 5pm there, and the client shows Today whatever the
- * server rendered. Earlier in the day the browser keeps the server's clock. Pinned back like
- * this the browser may be too far behind the server for Now to have an answer: tests using this
- * do not look at Now.
+ * A time for the browser's clock at which a page for `tz` opens on Today and stays there for a
+ * while (a test may move the clock on half an hour): the server's now, or from 5pm at the place
+ * (on the server's clock) 4pm there that day.
+ */
+export function todayTime(tz = LONDON, ms = serverNow()): number {
+  const { date, hour } = localTime(tz, ms);
+  return hour >= 17 ? atLocal(tz, '16:00', date) : ms;
+}
+
+/**
+ * For a test that relies on a page opening on Today: in the place's evening, start the browser's
+ * clock at `todayTime`, and the client shows Today whatever the server rendered. Earlier in the
+ * day the browser keeps the server's clock. Pinned back like this the browser may be too far
+ * behind the server for Now to have an answer: tests using this leave Now alone.
  */
 export async function keepToday(page: Page, tz = LONDON): Promise<void> {
-  const { hour, minute } = localTime(tz);
-  if (hour * 60 + minute >= minutes('17:30')) await pinLocalTime(page, tz, '17:00');
+  const now = serverNow();
+  const time = todayTime(tz, now);
+  if (time !== now) await startClock(page, time);
+}
+
+/** The approximate (IP) place: the x-nf-geo header that puts it there, and its time zone. */
+export interface IpPlace {
+  geo: string;
+  tz: string;
 }
 
 /**
@@ -70,7 +93,7 @@ export async function keepToday(page: Page, tz = LONDON): Promise<void> {
  * moved to the longitude where the local time is `hour` o'clock now. It is on the equator, so
  * its time zone is a whole number of hours from UTC (synthetic data: Etc/GMT±n by longitude).
  */
-export function ipPlaceAt(hour: number, ms = serverNow()): string {
+export function ipPlaceAt(hour: number, ms = serverNow()): IpPlace {
   let offset = hour - new Date(ms).getUTCHours();
   if (offset > 12) offset -= 24;
   if (offset < -12) offset += 24;
@@ -81,22 +104,37 @@ export function ipPlaceAt(hour: number, ms = serverNow()): string {
     latitude: 0,
     longitude: offset * 15,
   };
-  return Buffer.from(JSON.stringify(geo)).toString('base64');
+  return {
+    geo: Buffer.from(JSON.stringify(geo)).toString('base64'),
+    tz: syntheticTimezone(0, offset * 15),
+  };
 }
 
+/** Late morning: a home page opens on Today, with Now answering. */
+export const DAYTIME = 11;
+/** The approximate place's hour for tests that do not choose one: E2E_IP_HOUR, or `DAYTIME`. */
+export const IP_HOUR = Number(process.env.E2E_IP_HOUR || DAYTIME);
+
 /**
- * Gets a browser context ready for a test: home pages find their approximate place where it is
- * late morning, and with E2E_CLOCK the pages' clocks follow the server's.
+ * Gets a browser context ready for a test: home pages find their approximate place at `place`,
+ * and with E2E_CLOCK the pages' clocks follow the server's.
  */
-export async function prepare(context: BrowserContext): Promise<void> {
-  await context.setExtraHTTPHeaders({ 'x-nf-geo': ipPlaceAt(11) });
+export async function prepare(context: BrowserContext, place = ipPlaceAt(IP_HOUR)): Promise<void> {
+  await context.setExtraHTTPHeaders({ 'x-nf-geo': place.geo });
   if (CLOCK_SHIFT) await startClock(context);
 }
 
-/** `test` from Playwright, with every context `prepare`d. */
-export const test = base.extend({
-  context: async ({ context }, use) => {
-    await prepare(context);
+/**
+ * `test` from Playwright, with every context `prepare`d. A test chooses the approximate place's
+ * hour with `test.use({ ipHour })`, and reads where it is from `ipPlace`.
+ */
+export const test = base.extend<{ ipHour: number; ipPlace: IpPlace }>({
+  ipHour: [IP_HOUR, { option: true }],
+  ipPlace: async ({ ipHour }, use) => {
+    await use(ipPlaceAt(ipHour));
+  },
+  context: async ({ context, ipPlace }, use) => {
+    await prepare(context, ipPlace);
     await use(context);
   },
 });

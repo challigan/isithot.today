@@ -5,7 +5,7 @@
  * (domains.spec.ts covers the real hosts).
  */
 import type { Page } from '@playwright/test';
-import { expect, test, toggle } from './helpers';
+import { expect, keepToday, test, toggle } from './helpers';
 
 /** The header, the tab's icons and (on home pages) the title's site, for one site. */
 async function expectSite(page: Page, site: 'hot' | 'wet', home: boolean): Promise<void> {
@@ -32,9 +32,11 @@ for (const [path, own] of [
   ['/in/london-gb', 'hot'],
   ['/wet/in/london-gb', 'wet'],
 ] as const) {
-  test(`the header follows the toggle on ${path}`, async ({ page }) => {
+  test(`the header follows the toggle on ${path}`, async ({ page, ipPlace }) => {
     const home = !path.includes('/in/');
     const other = own === 'hot' ? 'wet' : 'hot';
+    // A home page's title answers for today, as the page does until 6pm.
+    if (home) await keepToday(page, ipPlace.tz);
     await page.goto(path);
     await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
     await expectSite(page, own, home);
@@ -59,12 +61,16 @@ for (const [path, own] of [
   });
 }
 
-test('the brand opens the other site’s home page', async ({ page }) => {
+test('the brand opens the other site’s home page', async ({ page, ipPlace }) => {
+  // That home page opens on Today until 6pm at the approximate place.
+  await keepToday(page, ipPlace.tz);
   await page.goto('/in/london-gb');
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
   await toggle(page, 'wet').click();
   await page.locator('#brand').click();
   await expect(page).toHaveURL(/\/wet$/);
+  // Answered, not just the question the page arrives with.
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
   await expect(page.locator('#question')).toHaveText('Is it wet today?');
   await expect(page.locator('#brand')).toHaveText('isitwet.today');
 });

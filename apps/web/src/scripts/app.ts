@@ -497,29 +497,48 @@ function rainUntil(res: TodayResponse): number | null {
   );
 }
 
-/**
- * A clock running fast makes today's rain look out of date before the server has a newer hour.
- * When a fresh answer is out of date already, it is good until the server reaches its hour: at
- * the latest, as long from now as the server had left of that hour when working it out. So a
- * fast clock costs at most one extra request per hour.
- */
-let rainHold: { until: number; at: number } | null = null;
+/** When today's answer goes out of date: the place's midnight (the next day's first hour). */
+function dayUntil(res: TodayResponse): number | null {
+  const date = res.days[0]?.date ?? '';
+  return res.now?.series.find((p) => p.date > date)?.time ?? null;
+}
 
-function holdRain(res: TodayResponse): void {
-  const until = rainUntil(res);
-  const from = Date.parse(res.rain?.days[0]?.from ?? '');
-  if (until !== null && Date.now() >= until && from < until) {
-    rainHold = { until, at: Date.now() + until - from };
-  }
+type Stale = 'day' | 'rain';
+
+/**
+ * A clock running fast makes the answer look out of date before the server has a newer one:
+ * past the hour today's rain holds for, or past the place's midnight. When a fresh answer is out
+ * of date already, it is good until the server reaches that moment: at the latest, as long from
+ * now as the server had left when working it out. So a fast clock costs at most one extra
+ * request per server hour, and one at midnight.
+ */
+const holds: Partial<Record<Stale, { until: number; at: number }>> = {};
+
+function hold(res: TodayResponse): void {
+  // `made`: when the server worked that part of the answer out.
+  const set = (reason: Stale, until: number | null, made = ''): void => {
+    const from = Date.parse(made);
+    if (until !== null && Date.now() >= until && from < until) {
+      holds[reason] = { until, at: Date.now() + until - from };
+    }
+  };
+  set('day', dayUntil(res), res.now?.time);
+  set('rain', rainUntil(res), res.rain?.days[0]?.from);
+}
+
+/** Whether the clock has passed `until` for `reason` (or the hold on it). */
+function past(reason: Stale, until: number): boolean {
+  const held = holds[reason];
+  return Date.now() >= (held?.until === until ? held.at : until);
 }
 
 /**
  * Whether the answer is out of date: past local midnight (today's answer is yesterday's) or
  * past the end of the hourly series it carries ("day"), or past the hour today's rain answer
  * holds for ("rain"). A clock running far behind is not a reason, and one running fast waits
- * for the server's hour (`holdRain`).
+ * for the server (`hold`).
  */
-function outOfDate(res: TodayResponse): 'day' | 'rain' | null {
+function outOfDate(res: TodayResponse): Stale | null {
   if (preview) return null;
   if (res.now) {
     const series = res.now.series;
@@ -527,11 +546,11 @@ function outOfDate(res: TodayResponse): 'day' | 'rain' | null {
     const old = now
       ? now.date > (res.days[0]?.date ?? '')
       : Date.now() > (series.at(-1)?.time ?? Infinity);
-    if (old) return 'day';
+    const midnight = dayUntil(res);
+    if (old && (midnight === null || past('day', midnight))) return 'day';
   }
   const until = rainUntil(res);
-  if (until === null) return null;
-  return Date.now() >= (rainHold?.until === until ? rainHold.at : until) ? 'rain' : null;
+  return until !== null && past('rain', until) ? 'rain' : null;
 }
 
 /**
@@ -727,7 +746,7 @@ async function load(
     let body = await (early ? get(early.response) : ask(opts.fresh ? freshUrl : url));
     if (early && opts.fresh && outOfDate(body)) body = await ask(freshUrl);
     if (seq !== requestSeq) return false; // A newer request won.
-    if (opts.fresh) holdRain(body);
+    if (opts.fresh) hold(body);
     target = t;
     loadedAt = Date.now();
     render(body, opts.animate ?? true);

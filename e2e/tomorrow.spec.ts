@@ -10,7 +10,6 @@ import {
   atLocal,
   cityAt,
   expect,
-  ipPlaceAt,
   localTime,
   pinLocalTime,
   setVisibility,
@@ -190,9 +189,10 @@ test('back after half an hour away in the evening: the page’s own question, on
 });
 
 test.describe('the home page in the evening', () => {
+  // The approximate place, where it is 8pm.
+  test.use({ ipHour: 20 });
+
   test('opens on Now, and its snapshot reopens there', async ({ page }) => {
-    // The approximate place, where it is 8pm.
-    await page.context().setExtraHTTPHeaders({ 'x-nf-geo': ipPlaceAt(20) });
     await page.goto('/');
     await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
     await expect(page.getByRole('tab')).toHaveText(['Now', 'Tomorrow', 'This week']);
@@ -215,36 +215,7 @@ test.describe('the home page in the evening', () => {
     await expectOpenOn(page, 'now');
   });
 
-  test('a snapshot from before 6pm is not painted after it', async ({ page }) => {
-    // The approximate place is where it is late morning: its time zone, from a first visit.
-    const response = page.waitForResponse((r) => r.url().includes('/api/v1/today'));
-    await page.goto('/');
-    const { location } = (await (await response).json()) as { location: { timezone: string } };
-    await page.evaluate(() => localStorage.clear());
-    await page.close();
-    // Then a visit at 5:58pm there, which saves the page as it opens before 6pm.
-    const next = await page.context().newPage();
-    const at = await pinLocalTime(next, location.timezone, '17:58');
-    await next.goto('/');
-    await expect(next.locator('#app')).toHaveAttribute('data-state', 'ready');
-    await expectOpenOn(next, 'today');
-    await expect
-      .poll(() => next.evaluate(() => JSON.parse(localStorage.getItem('isithot:last') ?? '{}')))
-      .toMatchObject({ slot: 'today', tz: location.timezone, savedAt: expect.any(Number) });
-    const saved = await next.evaluate(() => JSON.parse(localStorage.getItem('isithot:last')!));
-    expect(saved.savedAt).toBeGreaterThanOrEqual(at);
-
-    // From here the server never answers, so nothing is saved after 6pm.
-    await next.route('**/api/v1/today**', () => {});
-    await next.clock.runFor('03:00');
-    await next.reload();
-    await expect(next.locator('#app')).toHaveAttribute('data-state', 'loading');
-    await expect(next.locator('#app')).not.toHaveAttribute('data-restored', '1');
-    await expect(next.locator('#answer')).toHaveText('Checking…');
-  });
-
   test('without a forecast for tomorrow the middle stays Today', async ({ page }) => {
-    await page.context().setExtraHTTPHeaders({ 'x-nf-geo': ipPlaceAt(20) });
     let tz = '';
     await page.route('**/api/v1/today**', async (route) => {
       const response = await route.fetch();
@@ -262,4 +233,25 @@ test.describe('the home page in the evening', () => {
     await expectOpenOn(page, 'today');
     await expect(page.locator('#question')).toHaveText('Is it hot today?');
   });
+});
+
+test('a home page snapshot from before 6pm is not painted after it', async ({ page, ipPlace }) => {
+  // A visit at 5:58pm at the approximate place, which saves the page as it opens before 6pm.
+  const at = await pinLocalTime(page, ipPlace.tz, '17:58');
+  await page.goto('/');
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+  await expectOpenOn(page, 'today');
+  await expect
+    .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('isithot:last') ?? '{}')))
+    .toMatchObject({ slot: 'today', tz: ipPlace.tz, savedAt: expect.any(Number) });
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('isithot:last')!));
+  expect(saved.savedAt).toBeGreaterThanOrEqual(at);
+
+  // From here the server never answers, so nothing is saved after 6pm.
+  await page.route('**/api/v1/today**', () => {});
+  await page.clock.runFor('03:00');
+  await page.reload();
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'loading');
+  await expect(page.locator('#app')).not.toHaveAttribute('data-restored', '1');
+  await expect(page.locator('#answer')).toHaveText('Checking…');
 });

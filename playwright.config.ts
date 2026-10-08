@@ -7,9 +7,11 @@ const local = '/opt/pw-browsers/chromium';
 const executablePath = process.env.PW_CHROMIUM_PATH ?? (existsSync(local) ? local : undefined);
 const port = Number(process.env.E2E_PORT ?? 4322);
 
-// E2E_CLOCK=HH:MM runs the suite as if it were that time in London today, to check that it
-// passes at any time of day: the server's clock is moved (e2e/clock-shift.mjs) and the test
-// pages' clocks with it (e2e/helpers.ts). Worked out once here; the test workers inherit it.
+// Two switches check that the suite passes at any time of day (e2e/helpers.ts):
+// E2E_IP_HOUR=HH puts the approximate (IP) place of home pages where it is HH o'clock now (the
+// test workers read it), and E2E_CLOCK=HH:MM runs the suite as if it were that time in London
+// today: the server's clock is moved (e2e/clock-shift.mjs) and the test pages' clocks with it.
+// The shift is worked out once here; the test workers inherit it.
 const clock = process.env.E2E_CLOCK;
 if (clock && !process.env.E2E_CLOCK_SHIFT_MS) {
   process.env.E2E_CLOCK_SHIFT_MS = String(

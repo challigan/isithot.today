@@ -196,6 +196,23 @@ test('reopening keeps the search, ready to type over', async ({ page }) => {
   await expect(page.getByRole('button', { name: /Bristol/ })).toBeVisible();
 });
 
+test('Escape clears the search first, then closes the picker', async ({ page }) => {
+  await open(page);
+  await page.locator('#search-input').fill('Bris');
+  await expect(page.getByRole('button', { name: /Bristol/ })).toBeVisible();
+  // The first Escape only empties the field (the browser's own for a search field), so the
+  // visitor can start again without losing the picker.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#search-input')).toHaveValue('');
+  await expect(page.locator('#search')).toBeVisible();
+  await expect(page.locator('#search-input')).toBeFocused();
+  await expect(page.getByRole('button', { name: /Bristol/ })).toHaveCount(0);
+  // The next one closes it.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#search')).toBeHidden();
+  await expect(page.locator('#place-btn')).toBeFocused();
+});
+
 test('Enter chooses the first place', async ({ page }) => {
   await open(page);
   await page.locator('#search-input').fill('Bris');

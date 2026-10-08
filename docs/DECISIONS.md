@@ -206,8 +206,8 @@ is Today again. This settles the spec's open question about the evening.
 - **The saved answer** (the home page's instant paint) is saved as the page opens for its slot:
   Today alone, or in the evening Now alone with the middle tab reading Tomorrow. It records the
   place's time zone, the slot and the date it is for, and the inline restore script paints it
-  only while the place's date and slot still match. So a snapshot from 5pm never paints at 7pm,
-  and older snapshots without these fields are skipped.
+  only while the place's date and slot still match. So a snapshot from 5pm never paints at 7pm.
+  Older snapshots are skipped (`CACHE.snapshotVersion` went from 4 to 5).
 - **Wording.** Tomorrow's hot verdict is in the future tense ("It'll be hot."), set by the
   server in `days[1]`; every other string on a hot day already read correctly for tomorrow.
   Rain's `days[1]` was already a whole-day, future-tense answer; a sweep of every synthetic
@@ -320,7 +320,10 @@ after:
   before the server had a newer hour, so the page asked again every few minutes (for good if
   an hour or more fast). When a fresh answer is already out of date by the device's clock, it
   now counts as current for as long as the server had left of its hour. With a clock 70
-  minutes fast: 11 requests in an hour before, 3 after, then one per server hour.
+  minutes fast: 11 requests in an hour before, 3 after, then one per server hour. The same
+  rule covers midnight: a clock already past the place's midnight while the server is not used
+  to ask for the new day every few minutes until the server got there; it now waits for as long
+  as the server had left of its day.
 - **F10, the early request.** A saved answer from an earlier hour asks past the caches, and
   that used to throw away the request the page's `<head>` had already started: two requests.
   It now uses the early one, and asks again only if that answer is itself out of date.

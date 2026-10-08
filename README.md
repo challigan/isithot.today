@@ -68,11 +68,19 @@ pnpm test:e2e         # Playwright (phone + desktop), with synthetic data
 pnpm build:netlify    # The exact production build Netlify runs
 node scripts/smoke.mjs <url> --wet       # Smoke-test a deployed site (and its wet pages) against live data
 pnpm test:e2e -g contrast                # Rendered text contrast, every band and view (WCAG AA)
+E2E_IP_HOUR=20 pnpm test:e2e             # Home pages as if it were 8pm at the approximate place
+E2E_CLOCK=19:30 pnpm test:e2e            # The whole suite as if it were 7:30pm in London
 ```
 
-GitHub Actions runs all of these on every push and pull request. A second workflow waits for
-the Netlify deploy preview of each pull request and smoke-tests it against live data
-(`scripts/smoke.mjs`); it also records fresh upstream responses as a downloadable artifact.
+GitHub Actions runs the checks and the e2e suite on every push and pull request. A second
+workflow waits for the Netlify deploy preview of each pull request and smoke-tests it against
+live data (`scripts/smoke.mjs`); it also records fresh upstream responses as a downloadable
+artifact.
+
+The e2e server makes synthetic forecasts on the real clock, and pages change at 6pm at the place
+(Tomorrow in the middle tab), so the suite must pass at any time of day. CI runs it at whatever
+time it is; the last two lines check the evening on demand, worth running after changing the e2e
+tests (`e2e/helpers.ts` explains how a test pins the time of day it relies on).
 
 ## API
 

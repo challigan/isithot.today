@@ -1,9 +1,14 @@
-import { expect, prepare, test } from './helpers';
+import { expect, keepToday, prepare, test } from './helpers';
 
 const ANSWERS = /^(Yes\.|No\.|Almost\.)$/;
 
 test.describe('home page', () => {
-  test('answers from approximate location without asking for permission', async ({ page }) => {
+  test('answers from approximate location without asking for permission', async ({
+    page,
+    ipPlace,
+  }) => {
+    // Today's answer: in the place's evening the page would open on Now, with tomorrow's.
+    await keepToday(page, ipPlace.tz);
     const calls: string[] = [];
     page.on('request', (r) => {
       if (r.url().includes('/api/v1/today')) calls.push(r.url());
