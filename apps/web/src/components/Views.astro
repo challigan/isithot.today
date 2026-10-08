@@ -3,7 +3,8 @@
  * The Hot | Wet toggle, the tab bar and the three views (Now | Today | This week) in one
  * horizontal scroller, plus the place links they share. Today comes first in the markup (it is
  * the page's purpose, its answer is the only h1 and the LCP element) and sits in the middle on
- * screen.
+ * screen. In the evening at the place the middle view answers for tomorrow and the page opens
+ * on Now (core `showsTomorrow`, `defaultView`).
  */
 import {
   COPY,
@@ -13,6 +14,7 @@ import {
   type NearbyCity,
   type Topic,
   type TodayResponse,
+  type View,
 } from '@isithot/core';
 import TopicToggle from './TopicToggle.astro';
 import ViewTabs from './ViewTabs.astro';
@@ -26,9 +28,13 @@ interface Props {
   state: DisplayState;
   /** The question the views answer first: the page's own topic. */
   topic?: Topic;
+  /** The view the page opens on. */
+  start?: View;
+  /** The middle view answers for tomorrow. */
+  tomorrow?: boolean;
 }
 
-const { data, city = null, state, topic = 'hot' } = Astro.props;
+const { data, city = null, state, topic = 'hot', start = 'today', tomorrow = false } = Astro.props;
 const opts = { city };
 const links = outboundLinks(data?.location ?? null);
 const nearby: NearbyCity[] = data?.nearby ?? [];
@@ -41,11 +47,15 @@ const nearbyHtml = nearby
 
 <main id="main" tabindex="-1">
   <TopicToggle topic={topic} />
-  <ViewTabs />
+  <ViewTabs start={start} tomorrow={tomorrow} />
   <div class="views" id="views">
-    <Today view={viewDisplay(data, topic, 'today', state, opts)} />
-    <Now view={viewDisplay(data, topic, 'now', state, opts)} />
-    <Week view={viewDisplay(data, topic, 'week', state, opts)} />
+    <Today
+      view={viewDisplay(data, topic, 'today', state, { ...opts, tomorrow })}
+      start={start === 'today'}
+      tomorrow={tomorrow}
+    />
+    <Now view={viewDisplay(data, topic, 'now', state, opts)} start={start === 'now'} />
+    <Week view={viewDisplay(data, topic, 'week', state, opts)} start={start === 'week'} />
   </div>
   <button class="button retry" id="retry" type="button" hidden={state !== 'error'}>
     {COPY.retry}

@@ -1,12 +1,24 @@
 ---
 /**
- * Now | Today | This week. Today is selected on every load. Tapping a tab or swiping the
- * views moves the thumb; scripts/views.ts keeps the two in step.
+ * Now | Today | This week. The tab of the start view is selected on load: Today, or Now in the
+ * evening, when the middle tab reads "Tomorrow" (core `defaultView`, `viewLabel`). Tapping a tab
+ * or swiping the views moves the thumb; scripts/views.ts keeps the two in step.
  */
-import { COPY, VIEWS, VIEW_LABELS } from '@isithot/core';
+import { COPY, VIEWS, viewLabel, type View } from '@isithot/core';
+
+interface Props {
+  /** The view the page opens on. */
+  start?: View;
+  /** The middle view answers for tomorrow. */
+  tomorrow?: boolean;
+}
+
+const { start = 'today', tomorrow = false } = Astro.props;
+// The thumb sits under Today unless told otherwise (styles/global.css).
+const pos = start === 'today' ? undefined : `--pos:${VIEWS.indexOf(start)}`;
 ---
 
-<div class="tabs" id="tabs" role="tablist" aria-label={COPY.viewsLabel}>
+<div class="tabs" id="tabs" role="tablist" aria-label={COPY.viewsLabel} style={pos}>
   <span class="thumb" aria-hidden="true"></span>
   {VIEWS.map((view) => (
     <button
@@ -14,11 +26,11 @@ import { COPY, VIEWS, VIEW_LABELS } from '@isithot/core';
       role="tab"
       id={`tab-${view}`}
       aria-controls={`view-${view}`}
-      aria-selected={view === 'today' ? 'true' : 'false'}
-      tabindex={view === 'today' ? 0 : -1}
+      aria-selected={view === start ? 'true' : 'false'}
+      tabindex={view === start ? 0 : -1}
       data-view={view}
     >
-      {VIEW_LABELS[view]}
+      {viewLabel(view, tomorrow)}
     </button>
   ))}
 </div>

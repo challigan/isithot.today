@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { CACHE, question, type Topic, type TodayResponse } from '@isithot/core';
-import { cityBySlug, todayForCity } from '@isithot/server';
+import { cdnCacheControl, cityBySlug, todayForCity } from '@isithot/server';
 import { renderOg, type OgContent } from '../../lib/og';
 import { platformFrom } from '../../lib/platform';
 
@@ -16,6 +16,8 @@ export const ogImage =
     const slug = params.slug ?? '';
     let content: OgContent;
     let maxAge = CACHE.ogImage;
+    /** Seconds until the image is out of date, when it has such a limit (see below). */
+    let expiresIn: number | null = null;
 
     if (slug === 'default') {
       content = {
@@ -45,6 +47,10 @@ export const ogImage =
           detail: `High of ${day.high}°, feels like ${day.feelsLike}°.`,
         };
       } else if (topic === 'wet' && rainDay) {
+        // Today's rain is for the rest of the day from when it was worked out: like the city
+        // page, never cached past the next hour, stale or not.
+        maxAge = Math.min(maxAge, result.maxAge ?? maxAge);
+        expiresIn = result.expiresIn ?? null;
         content = {
           topic,
           band: rainDay.band,
@@ -71,7 +77,7 @@ export const ogImage =
       headers: {
         'content-type': 'image/png',
         'Cache-Control': `public, max-age=${Math.min(maxAge, 600)}`,
-        'Netlify-CDN-Cache-Control': `public, durable, max-age=${maxAge}, stale-while-revalidate=${maxAge}`,
+        'Netlify-CDN-Cache-Control': cdnCacheControl(maxAge, expiresIn),
       },
     });
   };

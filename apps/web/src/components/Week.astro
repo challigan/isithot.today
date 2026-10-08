@@ -6,9 +6,11 @@ import { glyphFor, weekHtml } from '../lib/view';
 interface Props {
   /** From core `viewDisplay`. */
   view: WeekDisplay;
+  /** The page opens on this view (else it starts hidden, until the views join the scroller). */
+  start?: boolean;
 }
 
-const { view } = Astro.props;
+const { view, start = false } = Astro.props;
 ---
 
 <section
@@ -20,8 +22,8 @@ const { view } = Astro.props;
   data-band={view.band ?? undefined}
   data-empty={view.empty ? '' : undefined}
   tabindex="0"
-  inert
-  hidden
+  inert={!start}
+  hidden={!start}
 >
   <svg
     class="glyph"
@@ -39,7 +41,7 @@ const { view } = Astro.props;
   <p class="question" id="week-question">
     {view.question}
   </p>
-  <h2 class="answer" id="week-answer">
+  <h2 class="answer" id="week-answer" data-long={view.answer.length > 4 ? '' : undefined}>
     {view.answer}
   </h2>
   <p class="verdict hold" id="week-verdict">

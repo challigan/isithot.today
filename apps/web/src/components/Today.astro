@@ -1,7 +1,9 @@
 ---
 /**
- * The Today view: answer, verdict and model agreement. Rendered on the server with data (city
- * pages) or in its loading state (home page); the browser script updates the same nodes.
+ * The Today view (Tomorrow in the evening, from the forecast's next day): answer, verdict and
+ * model agreement. Rendered on the server with data (city pages) or in its loading state (home
+ * page); the browser script updates the same nodes. Its answer is the page's only h1 whichever
+ * view is on screen.
  */
 import { COPY, type TodayDisplay } from '@isithot/core';
 import { glyphFor, listHtml, stripHtml } from '../lib/view';
@@ -9,9 +11,13 @@ import { glyphFor, listHtml, stripHtml } from '../lib/view';
 interface Props {
   /** From core `viewDisplay`. */
   view: TodayDisplay;
+  /** The page opens on this view (else it starts hidden, until the views join the scroller). */
+  start?: boolean;
+  /** It answers for tomorrow. */
+  tomorrow?: boolean;
 }
 
-const { view } = Astro.props;
+const { view, start = true, tomorrow = false } = Astro.props;
 const { models } = view;
 ---
 
@@ -23,7 +29,10 @@ const { models } = view;
   data-view="today"
   data-band={view.band ?? undefined}
   data-empty={view.empty ? '' : undefined}
+  data-tomorrow={tomorrow ? '' : undefined}
   tabindex="0"
+  inert={!start}
+  hidden={!start}
 >
   <svg
     class="glyph"
@@ -42,7 +51,7 @@ const { models } = view;
     {view.question}
   </p>
   <div aria-live="polite" aria-atomic="true" id="live">
-    <h1 class="answer" id="answer">
+    <h1 class="answer" id="answer" data-long={view.answer.length > 4 ? '' : undefined}>
       {view.answer}
     </h1>
     <p class="verdict hold" id="verdict">

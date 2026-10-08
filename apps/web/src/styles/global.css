@@ -512,11 +512,23 @@ input:focus-visible {
 .tabs[data-dragging] .thumb {
   transition: none;
 }
-/* Enlarged text on a narrow screen: smaller labels, so each still fits its third. */
+/*
+ * Enlarged text on a narrow screen: smaller labels, so each still fits its third. A word too
+ * long for it ("Tomorrow" at twice the text size) breaks rather than spilling out of the thumb,
+ * hyphenated where the browser can.
+ */
 @container (max-width: 24em) {
   .tabs button {
     font-size: 0.8rem;
-    padding-inline: 0.2rem;
+    padding-inline: 0.1rem;
+    -webkit-hyphens: auto;
+    hyphens: auto;
+    overflow-wrap: anywhere;
+  }
+}
+@container (max-width: 9em) {
+  .tabs button {
+    font-size: 0.7rem;
   }
 }
 

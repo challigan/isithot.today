@@ -78,7 +78,10 @@ async function checkWetSite(label, { origin = base, prefix = '', headers = {} } 
     `${home.res.status} ${home.ms}ms "${titleOf(home.body)}"`,
   );
 
-  // The query string must survive the rewrite (the page reads it in the browser).
+  // A shared place's address is served. Only the browser reads the query string (the page is
+  // static), so whether it survives the rewrite is not visible here: route()'s unit tests
+  // (netlify/test/route.test.ts) cover the rewrite, and production-smoke.yml checks that
+  // isithot.today/wet?lat=… redirects to isitwet.today/?lat=… with it.
   const query = '/?lat=51.5&lon=-0.12&name=X';
   const located = await at(query);
   check(
