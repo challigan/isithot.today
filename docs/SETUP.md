@@ -40,8 +40,9 @@ hours old) marked stale, and the Netlify function log shows `HTTP 429`.
 
 Quota: each cache miss is one forecast request for 8 models × 3 hourly variables (2.4 calls).
 Forecasts are cached per 5 km grid cell for an hour, and API responses at the CDN for up to 10
-minutes (never past the next hour, since today's rain answer covers the rest of the day), so
-calls scale with the number of distinct places, not page views. Both sites share the cache.
+minutes (never past the next hour, stale copies included, since today's rain answer covers the
+rest of the day), so calls scale with the number of distinct places, not page views. Both sites
+share the cache.
 
 ## 3. Custom domain
 
@@ -73,6 +74,12 @@ Deploy previews cannot use the isitwet.today host, so the wet site is at
 `x-isitwet-host: 1` to a preview behaves as if the request came to isitwet.today (previews
 only). After each production deploy, `.github/workflows/production-smoke.yml` checks both live
 domains and the isithot.today/wet redirect.
+
+Browsers keep storage and location permission per domain, so the two sites do not share a
+saved place or units. Links from one to the other carry the chosen units in the address
+(`units=c|f`), and so do "Use my location" and search results with the place (`lat`, `lon`, and
+`source=device` or `name`); the page there stores them. Nothing to set up. On previews and
+locally both sites are one origin, so this only shows on the real domains.
 
 ## 4. Cloudflare Web Analytics (cookieless, free)
 
@@ -112,6 +119,7 @@ Alert on a non-200 response, or when the API body does not contain `"days"`.
 
 - Review the Privacy, Cookies and Terms drafts and add a contact email (Privacy page).
 - Confirm NASA POWER's terms cover use on an ad-supported site (spec open decision).
-- Decide on the open design items in [DECISIONS.md](DECISIONS.md), especially Hot-band
-  contrast.
+- Decide on the items marked **Needs a decision** in [DECISIONS.md](DECISIONS.md).
+- Try the place picker on a real iPhone and Android phone (open it, type, hide the keyboard,
+  pick a result); it was checked in emulation only.
 - Run the deploy preview smoke test (it runs on every pull request) and check Lighthouse.

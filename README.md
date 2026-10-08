@@ -3,10 +3,10 @@
 Will today feel hot where I am? One answer (Yes / Almost / No) blended from several forecast
 models, judged against what is normal for that place and time of year. And its sibling, **is it
 wet?** (Yes / Partly / Maybe / No): how many of the same models expect rain, how much and when.
-Both answer for right now, today and this week; a toggle switches between them, and each domain
-opens on its own question.
+Both answer for right now, today and this week (from 6pm at the place, tomorrow instead of
+today); a toggle switches between them, and each domain opens on its own question.
 
-- **Website**: Astro + TypeScript, vanilla client JS (about 16 KB gzipped). One deploy serves
+- **Website**: Astro + TypeScript, vanilla client JS (about 17 KB gzipped). One deploy serves
   both domains; an edge function routes isitwet.today to the `/wet` pages.
 - **API**: `/api/v1/today` and `/api/v1/search`, shared by the website now and the apps later.
 - **Hosting**: Netlify (production from `main`, a deploy preview for every pull request).
@@ -79,15 +79,17 @@ the Netlify deploy preview of each pull request and smoke-tests it against live 
 location). Optional `units=c|f` (default: °F for US visitors, °C elsewhere). `lat`/`lon` requests
 may also pass `name`, `region`, `country`, `geonameId` and `source=search`.
 
-The answer covers three views: `days[0]` is today (with tomorrow in `days[1]`), `now` is the
-blended forecast for the current minute with a day of judged hourly points (so clients can
-keep it current between requests), and `week` averages today and the next six days.
+The answer covers three views: `days[0]` is today (with tomorrow in `days[1]`, its verdict in
+the future tense), `now` is the blended forecast for the current minute with a day of judged
+hourly points (so clients can keep it current between requests), and `week` averages today and
+the next six days. From 6pm at the place (`location.timezone`) the website's middle view shows
+`days[1]` (core `showsTomorrow`).
 
 `rain` answers "Is it wet?" for the same place: `rain.days[0]` is the rest of today from the
 moment of the request (`from`; refetch an hour after it), `rain.days[1]` tomorrow, `rain.now`
-the current hour with a day of judged hourly points (core `computeRainNow`/`formatRainNow`
-keep it current), and `rain.week` today and the next six days. Amounts are in `rain.unit`:
-millimetres with `units=c`, inches with `units=f`.
+the current hour with a day of judged hourly points, each with a `light` flag (core
+`computeRainNow`/`formatRainNow` keep it current), and `rain.week` today and the next six days.
+Amounts are in `rain.unit`: millimetres with `units=c`, inches with `units=f`.
 
 `GET /api/v1/search?q=` returns up to 8 places, with `slug` when the place has a city page.
 
