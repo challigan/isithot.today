@@ -53,6 +53,17 @@ async function get(path, { origin = base, headers = {} } = {}) {
 }
 
 const head = (res, names) => names.map((n) => `${n}=${res.headers.get(n) ?? '-'}`).join(' ');
+/**
+ * Why an API call failed: the error body's code and `detail` (what went wrong upstream, e.g.
+ * "open-meteo: timed out after 6000ms (2 attempts)"), or the start of a body that is not JSON
+ * (a platform error page).
+ */
+function why({ res, body }) {
+  if (res.ok) return '';
+  const error = body?.error;
+  if (error) return ` | ${error.code}: ${error.detail ?? error.message}`;
+  return ` | ${String(body).replace(/\s+/g, ' ').slice(0, 200)}`;
+}
 const titleOf = (html) => /<title>([^<]*)<\/title>/.exec(String(html))?.[1];
 const canonicalOf = (html) =>
   /<link rel="canonical" href="([^"]*)"/.exec(String(html))?.[1] ?? '(none)';
@@ -149,7 +160,7 @@ try {
   check(
     t1.res.status === 200 && !!day,
     `GET ${q}`,
-    `${t1.res.status} ${t1.ms}ms ${head(t1.res, ['x-isithot-via', 'cache-control', 'netlify-cdn-cache-control'])}`,
+    `${t1.res.status} ${t1.ms}ms ${head(t1.res, ['x-isithot-via', 'cache-control', 'netlify-cdn-cache-control'])}${why(t1)}`,
   );
   if (day) {
     console.log(`      location: ${JSON.stringify(t1.body.location)}`);
@@ -244,14 +255,14 @@ try {
   check(
     t2.res.status === 200,
     'second call',
-    `${t2.ms}ms ${head(t2.res, ['age', 'cache-status', 'x-nf-request-id'])}`,
+    `${t2.ms}ms ${head(t2.res, ['age', 'cache-status', 'x-nf-request-id'])}${why(t2)}`,
   );
 
   const ip = await get('/api/v1/today');
   check(
     ip.res.status === 200,
     'GET /api/v1/today (IP location)',
-    `${ip.ms}ms ${ip.body?.location?.name} ${ip.body?.location?.source} units=${ip.body?.units} ${head(ip.res, ['x-isithot-via', 'cache-control'])}`,
+    `${ip.ms}ms ${ip.body?.location?.name} ${ip.body?.location?.source} units=${ip.body?.units} ${head(ip.res, ['x-isithot-via', 'cache-control'])}${why(ip)}`,
   );
   check(
     ip.body?.rain?.unit === (ip.body?.units === 'f' ? 'in' : 'mm'),
@@ -263,7 +274,7 @@ try {
   check(
     city.res.status === 200 && city.body.location.slug === 'seville-es',
     'GET today?place=seville-es',
-    `${city.body?.days?.[0]?.answer} ${city.body?.days?.[0]?.detail} | rain: ${city.body?.rain?.days?.[0]?.answer} ${city.body?.rain?.days?.[0]?.detail}`,
+    `${city.res.status} ${city.ms}ms ${city.body?.days?.[0]?.answer} ${city.body?.days?.[0]?.detail} | rain: ${city.body?.rain?.days?.[0]?.answer} ${city.body?.rain?.days?.[0]?.detail}${why(city)}`,
   );
 
   const search = await get('/api/v1/search?q=Newcastle');

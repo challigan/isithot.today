@@ -39,6 +39,8 @@ import {
 } from '@isithot/core';
 import {
   FORECAST_CACHE_VERSION,
+  FORECAST_TIMING,
+  errorMessage,
   fetchClimateNormals,
   fetchForecast,
   fetchRainNormals,
@@ -201,11 +203,14 @@ function startsToday(forecast: Forecast, now: Date): boolean {
   return forecast.days[0]?.date === localDate(forecast.timezone, now);
 }
 
+/** A forecast to answer with, or why there is none. */
+type LoadedForecast = (ForecastEntry & { stale: boolean }) | { failure: string };
+
 async function loadForecast(
   point: LatLon,
   deps: ServerDeps,
   nowDate: Date,
-): Promise<(ForecastEntry & { stale: boolean }) | null> {
+): Promise<LoadedForecast> {
   const key = `forecast/v${FORECAST_CACHE_VERSION}/${gridKey(point, GRID.forecast)}`;
   const now = nowDate.getTime();
   const entry = await deps.cache.get<ForecastEntry>(key);
@@ -216,10 +221,17 @@ async function loadForecast(
   ) {
     return { ...entry, stale: false };
   }
+  const timing = deps.forecastTiming ?? FORECAST_TIMING;
+  // Wall-clock time taken, for the logs (deps.now is the answer's clock and may be fixed).
+  const started = Date.now();
   try {
     let pending = inflight.get(key);
     if (!pending) {
-      pending = fetchForecast({ ...deps.config.openMeteo, fetch: deps.fetch }, point, MODELS);
+      pending = fetchForecast(
+        { ...deps.config.openMeteo, fetch: deps.fetch, ...timing },
+        point,
+        MODELS,
+      );
       inflight.set(key, pending);
       pending.then(
         () => inflight.delete(key),
@@ -227,18 +239,24 @@ async function loadForecast(
       );
     }
     const fresh: ForecastEntry = { fetchedAt: now, forecast: slim(await pending) };
+    const took = Date.now() - started;
+    // Slow enough for the second request to have started: worth seeing when tuning the timing.
+    if (took >= timing.hedgeAfterMs) deps.log(`forecast for ${key} took ${took}ms`);
     deps.waitUntil(deps.cache.set(key, fresh));
     return { ...fresh, stale: false };
   } catch (err) {
-    deps.log(`forecast unavailable for ${key}: ${String(err)}`);
-    if (
+    const failure = errorMessage(err);
+    const usable =
       entry &&
       now - entry.fetchedAt < CACHE.forecastStale * 1000 &&
-      coversToday(entry.forecast, nowDate)
-    ) {
-      return { ...entry, stale: true };
-    }
-    return null;
+      coversToday(entry.forecast, nowDate);
+    deps.log(
+      `forecast unavailable for ${key} after ${Date.now() - started}ms: ${failure}; ` +
+        (usable
+          ? `answering with the copy from ${new Date(entry.fetchedAt).toISOString()}`
+          : 'no usable cached copy, answering 503'),
+    );
+    return usable ? { ...entry, stale: true } : { failure };
   }
 }
 
@@ -352,7 +370,9 @@ export async function getToday(
     loadRainNormals(point, deps),
   ]);
   const normals = climate.normals;
-  if (!loaded) return errorResult('upstream_unavailable', ERROR_MESSAGES.upstream_unavailable);
+  if ('failure' in loaded) {
+    return errorResult('upstream_unavailable', ERROR_MESSAGES.upstream_unavailable, loaded.failure);
+  }
 
   const today = localDate(loaded.forecast.timezone, nowDate);
   const days = loaded.forecast.days
@@ -360,7 +380,11 @@ export async function getToday(
     .map((d) => computeDay(d, normals))
     .filter((d): d is DayComputation => d !== null);
   if (days[0]?.date !== today) {
-    return errorResult('upstream_unavailable', ERROR_MESSAGES.upstream_unavailable);
+    return errorResult(
+      'upstream_unavailable',
+      ERROR_MESSAGES.upstream_unavailable,
+      `open-meteo: the forecast has no data for ${today} (${loaded.forecast.timezone})`,
+    );
   }
 
   const range = normals ? climateRange(normals) : null;

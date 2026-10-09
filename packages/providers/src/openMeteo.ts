@@ -26,7 +26,18 @@ export interface OpenMeteoConfig {
   apiKey?: string | undefined;
   fetch: FetchLike;
   timeoutMs?: number;
+  /** Forecasts only: when to send a second, identical request, ms (see FORECAST_TIMING). */
+  hedgeAfterMs?: number;
 }
+
+/**
+ * How long a forecast request may take, ms. A normal answer takes well under 2 seconds. If the
+ * first request has not answered (or has failed) after `hedgeAfterMs`, an identical second one
+ * starts and the first to succeed wins; both stop at `timeoutMs`, which covers reading the body
+ * too. The total stays what one request had before, so a response falls back to a stale
+ * forecast (or a 503) no later than it used to. Reasons in docs/DECISIONS.md.
+ */
+export const FORECAST_TIMING = { timeoutMs: 6000, hedgeAfterMs: 2000 };
 
 /**
  * Hourly variables requested for every model. The free API charges by variables × models, so
@@ -213,7 +224,8 @@ export async function fetchForecast(
     'open-meteo',
     config.fetch,
     buildForecastUrl(config, point, models),
-    config.timeoutMs ?? 6000,
+    config.timeoutMs ?? FORECAST_TIMING.timeoutMs,
+    config.hedgeAfterMs ?? FORECAST_TIMING.hedgeAfterMs,
   );
   return parseForecast(json, models);
 }

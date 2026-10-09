@@ -15,6 +15,8 @@ export interface ServerDeps {
   log: (message: string) => void;
   /** How long to wait for NASA POWER before answering without normals, ms. */
   climateWaitMs?: number;
+  /** Forecast request timing, ms (FORECAST_TIMING unless a test shortens it). */
+  forecastTiming?: { timeoutMs: number; hedgeAfterMs: number };
 }
 
 /** What the hosting platform provides for a request. */

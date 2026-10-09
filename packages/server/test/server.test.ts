@@ -1,7 +1,9 @@
+import { createServer, type AddressInfo } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
 import type { ApiError, SearchResponse, TodayResponse } from '@isithot/core';
 import { createSyntheticFetch, type FetchLike } from '@isithot/providers';
 import {
+  CACHE_READ_TIMEOUT_MS,
   CITIES,
   MemoryKV,
   SafeKV,
@@ -11,6 +13,7 @@ import {
   TieredKV,
   cityBySlug,
   cityForPlace,
+  errorResult,
   getSearch,
   getToday,
   handleRateLimited,
@@ -239,11 +242,16 @@ describe('GET /api/v1/today', () => {
 
     const failing: FetchLike = async () => new Response('down', { status: 503 });
     now = new Date(NOW.getTime() + 2 * 60 * 60 * 1000);
-    const later = makeDeps({ cache, now: () => now, fetch: failing });
+    const logs: string[] = [];
+    const later = makeDeps({ cache, now: () => now, fetch: failing, log: (m) => logs.push(m) });
     const r = await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, later.deps);
     expect(r.status).toBe(200);
     expect(ok(r).stale).toBe(true);
     expect(r.headers['Cache-Control']).toBe('public, max-age=60');
+    // The log says why, and what was served instead (a 503 is retried at once).
+    expect(logs.find((l) => l.startsWith('forecast unavailable'))).toMatch(
+      /^forecast unavailable for forecast\/v3\/\S+ after \d+ms: open-meteo: HTTP 503 \(2 attempts\); answering with the copy from 2026-10-06T08:00:00.000Z$/,
+    );
 
     now = new Date(NOW.getTime() + 7 * 60 * 60 * 1000);
     const tooOld = await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, later.deps);
@@ -487,6 +495,116 @@ describe('GET /api/v1/today', () => {
     const { deps } = makeDeps({ fetch: empty });
     const r = await getToday(q({ lat: '10', lon: '10', units: 'c' }), null, deps);
     expect(r.status).toBe(503);
+    expect((r.body as ApiError).error).toEqual({
+      code: 'upstream_unavailable',
+      message: 'Forecasts are unavailable right now. Try again in a few minutes.',
+      detail: 'open-meteo: unexpected forecast response shape',
+    });
+
+    const pastOnly: FetchLike = async (url) =>
+      url.includes('forecast')
+        ? new Response(JSON.stringify({ timezone: 'UTC', hourly: { time: ['2026-10-01T00:00'] } }))
+        : new Response('{}', { status: 500 });
+    const past = makeDeps({ fetch: pastOnly });
+    const old = await getToday(q({ lat: '10.5', lon: '10', units: 'c' }), null, past.deps);
+    expect(old.status).toBe(503);
+    expect((old.body as ApiError).error).toMatchObject({
+      detail: 'open-meteo: the forecast has no data for 2026-10-06 (UTC)',
+    });
+  });
+
+  it('says why the forecast failed, in the 503 body and the log', async () => {
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    const stalled: FetchLike = (url, init) =>
+      url.includes('/v1/forecast') ? new Promise(() => {}) : synthetic(url, init);
+    const logs: string[] = [];
+    const { deps } = makeDeps({
+      fetch: stalled,
+      log: (m) => logs.push(m),
+      forecastTiming: { timeoutMs: 60, hedgeAfterMs: 20 },
+    });
+    const r = await getToday(q({ lat: '11', lon: '11', units: 'c' }), null, deps);
+    expect(r.status).toBe(503);
+    expect(r.headers['Cache-Control']).toBe('no-store');
+    expect((r.body as ApiError).error).toMatchObject({
+      code: 'upstream_unavailable',
+      detail: 'open-meteo: timed out after 60ms (2 attempts)',
+    });
+    expect(logs).toContainEqual(
+      expect.stringMatching(
+        /^forecast unavailable for forecast\/v3\/\S+ after \d+ms: open-meteo: timed out after 60ms \(2 attempts\); no usable cached copy, answering 503$/,
+      ),
+    );
+  });
+
+  it('answers from a second forecast request when the first is slow, and logs the time', async () => {
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    let forecasts = 0;
+    const firstStalls: FetchLike = (url, init) =>
+      url.includes('/v1/forecast') && ++forecasts === 1
+        ? new Promise(() => {})
+        : synthetic(url, init);
+    const logs: string[] = [];
+    const { deps } = makeDeps({
+      fetch: firstStalls,
+      log: (m) => logs.push(m),
+      forecastTiming: { timeoutMs: 1000, hedgeAfterMs: 20 },
+    });
+    const r = await getToday(q({ lat: '12', lon: '12', units: 'c' }), null, deps);
+    expect(r.status).toBe(200);
+    expect(forecasts).toBe(2);
+    expect(logs).toContainEqual(
+      expect.stringMatching(/^forecast for forecast\/v3\/\S+ took \d+ms$/),
+    );
+  });
+
+  it('gives error bodies a detail only when there is one', () => {
+    expect(errorResult('not_found', 'No such place.').body).toEqual({
+      error: { code: 'not_found', message: 'No such place.' },
+    });
+    expect(errorResult('upstream_unavailable', 'Down.', 'open-meteo: HTTP 502').body).toEqual({
+      error: { code: 'upstream_unavailable', message: 'Down.', detail: 'open-meteo: HTTP 502' },
+    });
+  });
+
+  it('serves the reason from the function without the API key', async () => {
+    // A port that was free a moment ago: the connection is refused at once.
+    const port = await new Promise<number>((resolve) => {
+      const server = createServer().listen(0, '127.0.0.1', () => {
+        const { port } = server.address() as AddressInfo;
+        server.close(() => resolve(port));
+      });
+    });
+    const env: Record<string, string> = {
+      OPEN_METEO_API_KEY: 's3cret',
+      OPEN_METEO_FORECAST_URL: `http://127.0.0.1:${port}/v1/forecast`,
+      NASA_POWER_URL: `http://127.0.0.1:${port}/climatology`,
+    };
+    const console_ = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const res = await handleToday(
+        new Request('https://x.test/api/v1/today?lat=13&lon=13&units=c'),
+        { env: (k) => env[k] },
+      );
+      expect(res.status).toBe(503);
+      const text = await res.text();
+      expect(text).not.toContain('s3cret');
+      expect((JSON.parse(text) as ApiError).error).toMatchObject({
+        code: 'upstream_unavailable',
+        detail: expect.stringMatching(
+          /^open-meteo: network error: TypeError: fetch failed \(ECONNREFUSED\) \(2 attempts\)$/,
+        ),
+      });
+      const logged = console_.mock.calls.map((c) => String(c[0]));
+      expect(logged).toContainEqual(
+        expect.stringMatching(
+          /^\[isithot\] forecast unavailable for .*ECONNREFUSED.*answering 503$/,
+        ),
+      );
+      expect(logged.join('\n')).not.toContain('s3cret');
+    } finally {
+      console_.mockRestore();
+    }
   });
 
   it('wraps everything in a Response', async () => {
@@ -670,5 +788,19 @@ describe('cache layers', () => {
     expect(await broken.get('k')).toBeNull();
     await broken.set('k', 1);
     expect(onError).toHaveBeenCalledTimes(2);
+  });
+
+  it('treats a slow read as a miss', async () => {
+    const onError = vi.fn();
+    const stuck = new SafeKV(
+      { get: () => new Promise(() => {}), set: async () => {} },
+      onError,
+      20,
+    );
+    expect(await stuck.get('forecast/x')).toBeNull();
+    expect(String(onError.mock.calls[0]![0])).toBe(
+      'Error: read of forecast/x timed out after 20ms',
+    );
+    expect(CACHE_READ_TIMEOUT_MS).toBe(1500);
   });
 });

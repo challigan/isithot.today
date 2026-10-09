@@ -38,6 +38,46 @@ production, responses carry `x-isithot-via: function` when the dedicated functio
   hours, and "now" is worked out from the hourly forecast at request time (and again in the
   browser), so the longer cache costs no accuracy and halves calls to Open-Meteo. A forecast
   fetched on an earlier local day is refetched, so the week always has 7 days.
+- **A slow forecast gets a second request after 2 seconds, inside the same 6-second budget.**
+  The deploy-preview smoke test failed twice on 8 October (06:34 and 21:34 UTC) with 503s after
+  6.2 s: the forecast request had timed out at 6 s. Open-Meteo itself was failing at the time,
+  not the route from Netlify. In the same jobs the fixture recorder's identical request from the
+  GitHub runner hung for 32 s and then 49 s, and got HTTP 200 with the plain text
+  `Unexpected error while streaming data: timeoutReached` (Open-Meteo's servers read model data
+  from their own storage with a 30-second deadline and, once the 200 has gone out, write any
+  error into the body). Each episode lasted one to two minutes (in the morning one, a city page
+  fetched seconds after the last failure answered in 2 s). Normal answers take 0.2–1.5 s. Previews meet this more than production
+  because every new preview starts with an empty cache (a deploy-scoped Blobs store), so its
+  first requests always go to Open-Meteo.
+  - The budget: Netlify stops a synchronous function after 30 s (10 s on older accounts). That
+    covers the API functions and Astro's SSR function (city pages and OG images); none
+    overrides it. The forecast keeps its 6 s, so a stale answer or a 503 comes no later than
+    before. The cache read before it now counts as a miss after 1.5 s (the Netlify Blobs
+    client retries a failed read up to five times, 5 s apart), so an answer takes at most
+    about 7.5 s, inside even the old limit. NASA POWER runs alongside and is waited for 2 s.
+  - Within it, if the first request has not answered after 2 s, or fails sooner with anything
+    but a 4xx, an identical second request starts and the first success wins (the other is
+    cancelled). A 4xx (bad request, bad key, rate limited) is not retried. The 6 s now covers
+    reading the body too: before, a server that sent its headers and then stalled held the
+    function until it gave up (32 s in the simulation below). The second request costs another
+    2.4 calls, only when the first is slow or broken.
+  - Simulated with a fake fetch (old code, then new): one stuck request then normal ones, 503
+    at 6.0 s, now 200 at 2.35 s; Open-Meteo's text error after 1 s then normal, 503 at 1.0 s,
+    now 200 at 1.35 s; headers at once and the body stalled for 32 s, 503 at 32 s, now 200 at
+    2.35 s; every request stalled, 503 at 6.0 s either way.
+  - Not chosen: a longer timeout (Open-Meteo's stalls run 30 s or more, so waiting longer only
+    delays the stale answer or the 503); two parallel requests of 4 models (the same quota, but
+    both halves read the same storage, so a stall would usually hit both, and half a forecast
+    would need rules for partial answers, a new cache version and re-recorded fixtures);
+    answering from a stale copy sooner (faster, but no fewer 503s).
+  - What it cannot fix: an Open-Meteo outage longer than 6 s with nothing usable cached (a new
+    preview, or a place nobody has asked about for 6 hours) still answers 503. It now says why,
+    so it can be told apart from a fault of ours: the function log reads
+    `forecast unavailable for forecast/v3/54.95,-1.60 after 6002ms: open-meteo: timed out after 6000ms (2 attempts); no usable cached copy, answering 503`
+    (or `answering with the copy from <time>`), a slow success logs
+    `forecast for … took 2030ms`, the 503 body carries the reason in `error.detail` (timeout,
+    `HTTP <status>` with Open-Meteo's reason, a network error and its cause, or the start of a
+    body that is not JSON, with any API key masked), and `scripts/smoke.mjs` prints it.
 - **Needs a decision: MET Norway counts ECMWF twice outside Scandinavia.** Open-Meteo's
   `metno_seamless` is MET Nordic over Norway, Sweden, Finland and Denmark, and ECMWF's 9 km
   model everywhere else (and after 2.5 days everywhere). For UK visitors it is close to a
@@ -363,7 +403,10 @@ more than two); the rest of the week is summarised in `week`.
 - **Stale fallback.** If upstream fails and a cached forecast under 6 hours old exists, the
   API answers **200** with that result and `"stale": true` (cached for 60 seconds). Only
   without a usable cache does it return `503 upstream_unavailable`. A 503 carrying data tends
-  to be treated as a failure by generic HTTP clients, which the apps would rather avoid.
+  to be treated as a failure by generic HTTP clients, which the apps would rather avoid. The
+  503 says what went wrong upstream in `error.detail` (e.g.
+  `open-meteo: timed out after 6000ms (2 attempts)`), for logs and debugging; clients show
+  `message`.
 - **Units default.** °F for US visitors (and US territories plus the few other countries that
   use °F day to day; the list is in `config.ts`). City pages render in the city's country's
   default, and the visitor's own °C/°F choice then applies in the browser.

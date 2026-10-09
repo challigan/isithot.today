@@ -30,7 +30,8 @@ cell's cached forecast is over an hour old: at most about 58 calls a day for a p
 around the clock, so it would take roughly 170 such places (or search engines crawling every
 city page of both sites every hour) to reach the daily limit. A group of friends is nowhere
 near it. If the limit is ever hit, the API serves the last forecast (up to 6
-hours old) marked stale, and the Netlify function log shows `HTTP 429`.
+hours old) marked stale, and the Netlify function log shows
+`forecast unavailable for … open-meteo: HTTP 429 …` (a 503 says the same in `error.detail`).
 
 1. Subscribe to the Standard plan at https://open-meteo.com/en/pricing ($29/month, 1M calls).
 2. In Netlify: **Project configuration → Environment variables → Add a variable**:
@@ -38,7 +39,8 @@ hours old) marked stale, and the Netlify function log shows `HTTP 429`.
 3. Trigger a redeploy. With a key present the code switches to the
    `customer-api.open-meteo.com` and `customer-geocoding-api.open-meteo.com` hosts by itself.
 
-Quota: each cache miss is one forecast request for 8 models × 3 hourly variables (2.4 calls).
+Quota: each cache miss is one forecast request for 8 models × 3 hourly variables (2.4 calls),
+and a second one when Open-Meteo has not answered within 2 seconds.
 Forecasts are cached per 5 km grid cell for an hour, and API responses at the CDN for up to 10
 minutes (never past the next hour, stale copies included, since today's rain answer covers the
 rest of the day), so calls scale with the number of distinct places, not page views. Both sites

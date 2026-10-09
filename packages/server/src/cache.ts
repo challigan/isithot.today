@@ -56,19 +56,36 @@ export class TieredKV implements KV {
   }
 }
 
-/** Wraps a KV so errors are logged and treated as misses. */
+/**
+ * How long a read from the shared cache may take before it counts as a miss, ms. Reads come
+ * before any upstream request, and the Netlify Blobs client retries a failed read up to five
+ * times, 5 s apart, which on its own could outlast the function's time limit.
+ */
+export const CACHE_READ_TIMEOUT_MS = 1500;
+
+/** Wraps a KV so errors and slow reads are logged and treated as misses. */
 export class SafeKV implements KV {
   constructor(
     private readonly inner: KV,
     private readonly onError: (err: unknown) => void = () => {},
+    private readonly readTimeoutMs = CACHE_READ_TIMEOUT_MS,
   ) {}
 
   async get<T>(key: string): Promise<T | null> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const slow = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`read of ${key} timed out after ${this.readTimeoutMs}ms`)),
+        this.readTimeoutMs,
+      );
+    });
     try {
-      return await this.inner.get<T>(key);
+      return await Promise.race([this.inner.get<T>(key), slow]);
     } catch (err) {
       this.onError(err);
       return null;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
