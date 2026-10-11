@@ -5,14 +5,14 @@
   "coordinates": [
    -6.25,
    37.5,
-   50
+   187.78
   ]
  },
  "properties": {
   "parameter": {
    "PRECSNOLAND": {
-    "JAN": 0,
-    "FEB": 0,
+    "JAN": 0.01,
+    "FEB": 0.01,
     "MAR": 0,
     "APR": 0,
     "MAY": 0,
@@ -28,10 +28,21 @@
   }
  },
  "header": {
-  "title": "NASA/POWER synthetic climatology",
-  "fill_value": -999
+  "title": "NASA/POWER Source Native Resolution Climatology Climatologies",
+  "api": {
+   "version": "v2.10.1",
+   "name": "POWER Climatology API"
+  },
+  "sources": [
+   "MERRA2"
+  ],
+  "fill_value": -999,
+  "time_standard": "LST",
+  "range": "25-year Meteorological and Solar Monthly & Annual Climatologies (January 2001 - December 2025)"
  },
- "messages": [],
+ "messages": [
+  "The requested parameters are retrieved from a pre-computed climatological period (January 2001 - December 2025)"
+ ],
  "parameters": {
   "PRECSNOLAND": {
    "units": "mm/day",
@@ -39,7 +50,7 @@
   }
  },
  "times": {
-  "data": 0,
-  "process": 0
+  "data": 0.055,
+  "process": 0.03
  }
 }
