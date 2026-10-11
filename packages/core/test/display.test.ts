@@ -311,6 +311,61 @@ describe('viewDisplay: hot', () => {
     expect(none).toMatchObject({ band: null, empty: true, answer: COPY.notAvailable });
   });
 
+  it('gives Today and Now a UV line with words for screen readers, and none at UV 0', () => {
+    const uvDay = hotDay('hot', { uv: { max: 7, level: 'high', peak: '1pm' } });
+    const uvNow = { ...hotNow('hot'), uv: { value: 5, level: 'medium' as const } };
+    const res = response({ days: [uvDay], now: uvNow });
+    expect(viewDisplay(res, 'hot', 'today', 'ready').uv).toEqual({
+      level: 'high',
+      text: 'UV 7 · High, highest around 1pm',
+      sr: 'UV index 7, high, highest around 1pm',
+    });
+    expect(viewDisplay(res, 'hot', 'now', 'ready').uv).toEqual({
+      level: 'medium',
+      text: 'UV 5 · Medium now',
+      sr: 'UV index 5, medium',
+    });
+    // Nothing to say at night or on a polar winter's day, nor without UV data.
+    const dark = response({
+      days: [hotDay('cold', { uv: { max: 0, level: 'low', peak: null } })],
+      now: { ...hotNow('cold'), uv: { value: 0, level: 'low' } },
+    });
+    expect(viewDisplay(dark, 'hot', 'today', 'ready').uv).toBeNull();
+    expect(viewDisplay(dark, 'hot', 'now', 'ready').uv).toBeNull();
+    expect(viewDisplay(response(), 'hot', 'today', 'ready').uv).toBeNull();
+    expect(viewDisplay(response(), 'hot', 'now', 'ready').uv).toBeNull();
+    // Now for this minute brings its own UV.
+    const fresh = { ...hotNow('hot'), uv: { value: 9, level: 'veryhigh' as const } };
+    expect(viewDisplay(res, 'hot', 'now', 'ready', { now: fresh }).uv!.text).toBe(
+      'UV 9 · Very high now',
+    );
+    // Tomorrow's line is tomorrow's.
+    const tomorrow = hotDay('hot', { uv: { max: 11, level: 'extreme', peak: '12pm' } });
+    expect(
+      viewDisplay(response({ days: [uvDay, tomorrow] }), 'hot', 'today', 'ready', {
+        tomorrow: true,
+      }).uv!.text,
+    ).toBe('UV 11 · Extreme, highest around 12pm');
+  });
+
+  it('shows UV on the hot views only, and holds its place on Today while loading', () => {
+    const res = response({
+      days: [hotDay('hot', { uv: { max: 7, level: 'high', peak: '1pm' } })],
+      now: { ...hotNow('hot'), uv: { value: 5, level: 'medium' } },
+      snow: snowOf('snow'),
+    });
+    for (const topic of ['wet', 'snow'] as const) {
+      expect(viewDisplay(res, topic, 'today', 'ready').uv).toBeNull();
+      expect(viewDisplay(res, topic, 'now', 'ready').uv).toBeNull();
+      expect(viewDisplay(null, topic, 'today', 'loading').uv).toBeNull();
+    }
+    expect(viewDisplay(null, 'hot', 'today', 'loading').uv).toMatchObject({ level: 'medium' });
+    // Now opens at night as often as by day, so it holds no place.
+    expect(viewDisplay(null, 'hot', 'now', 'loading').uv).toBeNull();
+    expect(viewDisplay(null, 'hot', 'today', 'error').uv).toMatchObject({ level: 'medium' });
+    expect(viewDisplay(res, 'hot', 'week', 'ready')).not.toHaveProperty('uv');
+  });
+
   it('places each day of the week on a scale a little wider than its highs', () => {
     const week = hotWeek('warm');
     const d = viewDisplay(response({ week }), 'hot', 'week', 'ready');

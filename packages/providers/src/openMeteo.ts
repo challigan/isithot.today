@@ -2,6 +2,7 @@ import {
   FORECAST,
   SNOW,
   isFiniteNumber,
+  parseElevation,
   snowWater,
   type DayData,
   type HourTemps,
@@ -41,31 +42,38 @@ export interface OpenMeteoConfig {
 export const FORECAST_TIMING = { timeoutMs: 6000, hedgeAfterMs: 2000 };
 
 /**
- * Hourly variables requested for every model. The free API charges by variables × models (four
- * variables and eight models: 3.2 calls a fetch), so daily highs and rain and snow totals are
+ * Hourly variables requested for every model. The free API charges by variables × models (five
+ * variables and eight models: 4.0 calls a fetch), so daily highs and rain and snow totals are
  * worked out here from the hourly values (Open-Meteo's own daily maximum and sum are the same
  * 24-hour aggregations) rather than requested separately. `snowfall` is each model's own split
- * of its precipitation into snow, as depth (cm, at 7cm for every 10mm of water).
+ * of its precipitation into snow, as depth (cm, at 7cm for every 10mm of water). Only two of the
+ * models give `uv_index` (the others answer nulls), but a request of its own would cost a whole
+ * call (Open-Meteo charges at least one per request) against 0.8 here.
  */
 export const FORECAST_VARIABLES = {
-  hourly: ['temperature_2m', 'apparent_temperature', 'precipitation', 'snowfall'],
+  hourly: ['temperature_2m', 'apparent_temperature', 'precipitation', 'snowfall', 'uv_index'],
 };
 
 /**
  * Bump when the request or the parsed Forecast shape changes: cached forecasts are keyed by it,
  * and recorded test fixtures are re-recorded when the signature below changes.
  */
-export const FORECAST_CACHE_VERSION = 4;
+export const FORECAST_CACHE_VERSION = 5;
 
 /** One line describing the forecast request, written next to recorded fixtures. */
 export function forecastSignature(): string {
   return `v${FORECAST_CACHE_VERSION} forecast_days=${FORECAST.days} hourly=${FORECAST_VARIABLES.hourly.join(',')}`;
 }
 
+/**
+ * The forecast request. With `elevation` (m) the forecast is for that height; without it
+ * Open-Meteo uses the terrain height at the point.
+ */
 export function buildForecastUrl(
   config: Pick<OpenMeteoConfig, 'forecastUrl' | 'apiKey'>,
   point: LatLon,
   models: readonly ModelConfig[],
+  elevation: number | null = null,
 ): string {
   const params = new URLSearchParams({
     latitude: String(point.lat),
@@ -75,6 +83,7 @@ export function buildForecastUrl(
     hourly: FORECAST_VARIABLES.hourly.join(','),
     models: models.map((m) => m.id).join(','),
   });
+  if (elevation !== null) params.set('elevation', String(elevation));
   if (config.apiKey) params.set('apikey', config.apiKey);
   return `${config.forecastUrl}?${params.toString()}`;
 }
@@ -87,7 +96,10 @@ export interface Forecast {
   /** Grid point Open-Meteo actually used. */
   lat: number;
   lon: number;
-  /** Height the forecast is for, m (the terrain at the point), or null when not given. */
+  /**
+   * Height the forecast is for, m: the one requested, else the terrain at the point; null when
+   * not given.
+   */
   elevation: number | null;
   days: DayData[];
 }
@@ -186,10 +198,13 @@ export function parseForecast(json: unknown, models: readonly ModelConfig[]): Fo
   const feels = models.map((m) => seriesFor(hourly, 'apparent_temperature', m, models.length));
   const precipitation = models.map((m) => seriesFor(hourly, 'precipitation', m, models.length));
   const snowfall = models.map((m) => seriesFor(hourly, 'snowfall', m, models.length));
+  const uv = models.map((m) => seriesFor(hourly, 'uv_index', m, models.length));
   // Older recordings have no precipitation at all: leave rain out rather than call them dry.
   const hasRain = precipitation.some((series) => series !== null);
   // Nor snowfall: snow is then judged by each model's temperature (snowWater in core).
   const hasSnow = snowfall.some((series) => series !== null);
+  // Nor the UV index: the hot views then show none.
+  const hasUv = uv.some((series) => series !== null);
 
   // Local timestamps ("2026-10-07T14:00") grouped by date, in order.
   const byDate = new Map<string, HourTemps[]>();
@@ -207,8 +222,9 @@ export function parseForecast(json: unknown, models: readonly ModelConfig[]): Fo
     // Precipitation at a stamp fell during the hour before it, so the rain during the hour that
     // starts at stamp t is the next stamp's value (23:00 takes the next day's 00:00).
     if (hasRain) last.rain = precipitation.map((series) => numberOrNull(series?.[t + 1]));
-    // Snowfall is labelled the same way.
+    // Snowfall is labelled the same way, and so is the UV index (the hour's average).
     if (hasSnow) last.snow = snowfall.map((series) => numberOrNull(series?.[t + 1]));
+    if (hasUv) last.uv = uv.map((series) => numberOrNull(series?.[t + 1]));
     hours.push(last);
     byDate.set(date, hours);
   });
@@ -239,11 +255,12 @@ export async function fetchForecast(
   config: OpenMeteoConfig,
   point: LatLon,
   models: readonly ModelConfig[],
+  elevation: number | null = null,
 ): Promise<Forecast> {
   const json = await fetchJson(
     'open-meteo',
     config.fetch,
-    buildForecastUrl(config, point, models),
+    buildForecastUrl(config, point, models, elevation),
     config.timeoutMs ?? FORECAST_TIMING.timeoutMs,
     config.hedgeAfterMs ?? FORECAST_TIMING.hedgeAfterMs,
   );
@@ -261,6 +278,8 @@ export interface GeoPlace {
   admin1: string | null;
   timezone: string | null;
   population: number | null;
+  /** Height, whole metres, or null when missing or implausible. */
+  elevation: number | null;
 }
 
 export function buildSearchUrl(
@@ -302,6 +321,7 @@ export function parseSearch(json: unknown): GeoPlace[] {
       admin1: stringOrNull(r.admin1),
       timezone: stringOrNull(r.timezone),
       population: isFiniteNumber(r.population) ? r.population : null,
+      elevation: parseElevation(r.elevation),
     });
   }
   return places;

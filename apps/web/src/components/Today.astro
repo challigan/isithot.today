@@ -1,12 +1,13 @@
 ---
 /**
- * The Today view (Tomorrow in the evening, from the forecast's next day): answer, verdict and
- * model agreement. Rendered on the server with data (city pages) or in its loading state (home
+ * The Today view (Tomorrow in the evening, from the forecast's next day): answer, verdict, on Hot
+ * the UV index, and model agreement. Rendered on the server with data (city pages) or in its loading state (home
  * page); the browser script updates the same nodes. Its answer is the page's only h1 whichever
  * view is on screen.
  */
 import { COPY, type TodayDisplay } from '@isithot/core';
 import { glyphFor, listHtml, stripHtml } from '../lib/view';
+import UvLine from './UvLine.astro';
 
 interface Props {
   /** From core `viewDisplay`. */
@@ -61,6 +62,7 @@ const { models } = view;
   <p class="detail hold" id="detail">
     {view.detail}
   </p>
+  <UvLine id="uv" uv={view.uv} />
 
   <section class="models hold" id="models" aria-labelledby="models-h">
     <h2 id="models-h">

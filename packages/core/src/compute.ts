@@ -15,6 +15,7 @@ import {
 } from './copy';
 import { verdict, type Verdict } from './verdict';
 import { deltaToUnits, round1, roundTemp, toUnits, type Units } from './units';
+import { dayUv, formatUvDay, type UvDay } from './uv';
 import type { ApiDay } from './types';
 
 /** Everything the providers return for one local day. */
@@ -31,17 +32,21 @@ export interface DayComputation {
   verdict: Verdict;
   /** Normal high for the date, °C, or null without climate normals. */
   normalHigh: number | null;
+  /** The day's UV index, when the forecast has one for the day. */
+  uv?: UvDay;
 }
 
 export function computeDay(day: DayData, normals: MonthlyNormals | null): DayComputation | null {
   const b = blend(day.models, day.hourly);
   if (!b) return null;
   const climate = normals ? climateRange(normals) : null;
+  const uv = dayUv(day.hourly);
   return {
     date: day.date,
     blend: b,
     verdict: verdict(b.feelsLike, climate),
     normalHigh: normals ? normalForDate(normals, day.date) : null,
+    ...(uv ? { uv } : {}),
   };
 }
 
@@ -80,7 +85,7 @@ export function formatDay(day: DayComputation, units: Units, tomorrow = false): 
   const min = Math.min(...shown);
   const max = Math.max(...shown);
 
-  return {
+  const out: ApiDay = {
     date: day.date,
     band: day.verdict.band,
     answer: ANSWERS[day.verdict.band],
@@ -118,4 +123,6 @@ export function formatDay(day: DayComputation, units: Units, tomorrow = false): 
     }),
     scale: { min: min - BLEND.stripPadding, max: max + BLEND.stripPadding },
   };
+  if (day.uv) out.uv = formatUvDay(day.uv);
+  return out;
 }

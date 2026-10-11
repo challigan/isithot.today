@@ -602,6 +602,35 @@ input:focus-visible {
   visibility: hidden;
 }
 
+/*
+ * The hot views' UV line under the detail (UvLine.astro): a small sun, then the index with its
+ * level in bold. The level's word carries the meaning, never a colour.
+ */
+.uv {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+  font-size: 1rem;
+  line-height: 1.4;
+  opacity: 0.9;
+}
+.uv[hidden] {
+  display: none;
+}
+/* Centred on the first line. */
+.uv-icon {
+  flex: none;
+  width: 1.25em;
+  height: 1.25em;
+  margin-top: 0.075em;
+}
+/* "Very high" stays on one line when large text wraps the line. */
+.uv b {
+  font-weight: 650;
+  white-space: nowrap;
+}
+
 .ahead {
   margin-top: 2.75rem;
 }

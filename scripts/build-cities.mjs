@@ -8,7 +8,7 @@
  * Run with `pnpm cities`. Edit the lists below to change which cities get pages.
  */
 import { createRequire } from 'node:module';
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -239,6 +239,19 @@ function km(a, b) {
   return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
+/**
+ * Heights already recorded by scripts/city-heights.mjs (all-the-cities has none), kept for the
+ * cities picked again. Run that script after this one when the list changes.
+ */
+const heights = new Map(
+  (existsSync(join(root, 'data/cities.json'))
+    ? JSON.parse(readFileSync(join(root, 'data/cities.json'), 'utf8'))
+    : []
+  )
+    .filter((c) => c.elevation !== undefined)
+    .map((c) => [c.geonameId, c.elevation]),
+);
+
 const round = (v, d) => Number(v.toFixed(d));
 const point = (c) => ({ lat: c.loc.coordinates[1], lon: c.loc.coordinates[0] });
 
@@ -256,6 +269,7 @@ function toCity(c) {
     lon: round(p.lon, 4),
     population: c.population,
     geonameId: c.cityId,
+    ...(heights.has(c.cityId) && { elevation: heights.get(c.cityId) }),
   };
 }
 

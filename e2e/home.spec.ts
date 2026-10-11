@@ -70,6 +70,8 @@ test.describe('home page', () => {
     await page.goto('/');
     await expect(page.locator('#place')).toHaveText('Birmingham');
     expect(requests.some((u) => u.includes('lat=52.5') && u.includes('lon=-1.9'))).toBe(true);
+    // A device location has no known height: the forecast keeps Open-Meteo's.
+    expect(requests.filter((u) => u.includes('elevation='))).toEqual([]);
     await expect(page.locator('#place-note')).toBeHidden();
     await context.close();
   });

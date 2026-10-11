@@ -1,7 +1,7 @@
 /**
  * Phone layout: the Hot | Wet | Snow toggle floats at the foot of the screen in thumb reach (from
  * 640px up it sits above the tabs), nothing scrolls sideways with large text on a narrow phone,
- * and long answers ("Maybe.", "Almost.") are sized to fit.
+ * long answers ("Maybe.", "Almost.") are sized to fit, and so is the hot views' UV line.
  */
 import type { Page } from '@playwright/test';
 import { TOPICS } from '../packages/core/src/config';
@@ -124,6 +124,47 @@ test.describe('long answers', () => {
           expect(fit.over, `${answer} at ${width}px, ${size} text`).toBeLessThanOrEqual(0.5);
         }
       }
+    }
+  });
+});
+
+test.describe('the UV line', () => {
+  test('fits a narrow phone with large text, on Today and Now', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    // The longest lines: "UV 8 · Very high, highest around 1pm", "UV 11 · Extreme, …".
+    for (const band of ['hot', 'scorching']) {
+      await page.goto(`/?preview=1&band=${band}`);
+      await expect(page.locator('#uv')).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      await page.evaluate(() => {
+        document.documentElement.style.fontSize = '200%';
+      });
+      for (const [view, id] of [
+        ['today', 'uv'],
+        ['now', 'now-uv'],
+      ] as const) {
+        await page.locator(`#tab-${view}`).click();
+        await expect(page.locator(`#${id}`)).toBeVisible();
+        // The line's words and its icon lie within the view's gutters.
+        const over = () =>
+          page.evaluate((lineId) => {
+            const line = document.getElementById(lineId)!;
+            const view = line.closest<HTMLElement>('.view')!;
+            const box = view.getBoundingClientRect();
+            const style = getComputedStyle(view);
+            const left = box.left + parseFloat(style.paddingLeft);
+            const right = box.right - parseFloat(style.paddingRight);
+            const range = document.createRange();
+            range.selectNodeContents(line.querySelector('[aria-hidden=true]:not(svg)')!);
+            const text = range.getBoundingClientRect();
+            const icon = line.querySelector('svg')!.getBoundingClientRect();
+            return Math.max(left - icon.left, left - text.left, text.right - right);
+          }, id);
+        await expect.poll(over, `${band} ${view}`).toBeLessThanOrEqual(0.5);
+      }
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth), band)
+        .toBeLessThanOrEqual(0);
     }
   });
 });

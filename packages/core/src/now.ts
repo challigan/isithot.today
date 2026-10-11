@@ -6,6 +6,7 @@ import { localDateTime } from './dates';
 import { isFiniteNumber, trimmedMean } from './stats';
 import { round1, roundTemp, toUnits, type Units } from './units';
 import { verdict } from './verdict';
+import { hourUv, uvLevel } from './uv';
 import type { ApiNow, ApiNowPoint } from './types';
 
 const HOUR = 3_600_000;
@@ -16,11 +17,14 @@ export interface SeriesPoint {
   time: number;
   temperature: number;
   feelsLike: number;
+  /** The median UV index of the models that give one, when any does. */
+  uv?: number;
 }
 
 /**
  * Every forecast hour in order, each blended across the models with the same trimmed mean as
- * the daily highs. Hours where no model has a temperature are left out.
+ * the daily highs, with the hour's UV index when there is one. Hours where no model has a
+ * temperature are left out.
  */
 export function hourlySeries(days: readonly DayData[]): SeriesPoint[] {
   const points: SeriesPoint[] = [];
@@ -31,7 +35,8 @@ export function hourlySeries(days: readonly DayData[]): SeriesPoint[] {
       const temperature = trimmedMean(temps, BLEND.trimFrom);
       const feels = (h.feels ?? []).filter(isFiniteNumber);
       const feelsLike = feels.length > 0 ? trimmedMean(feels, BLEND.trimFrom) : temperature;
-      points.push({ time: h.time, temperature, feelsLike });
+      const uv = hourUv(h);
+      points.push({ time: h.time, temperature, feelsLike, ...(uv === null ? {} : { uv }) });
     }
   }
   return points;
@@ -58,6 +63,7 @@ export function judgeSeries(
       temperature: round1(toUnits(p.temperature, units)),
       feelsLike: round1(toUnits(p.feelsLike, units)),
       band: verdict(p.feelsLike, climate).band,
+      ...(p.uv === undefined ? {} : { uv: Math.round(p.uv) }),
     };
   });
 }
@@ -72,6 +78,8 @@ export interface NowComputation {
   feelsLike: number;
   /** The band of the hour nearest the moment. */
   band: Band;
+  /** The UV index of the hour containing the moment, when the series has one. */
+  uv?: number;
   /** Judged hours from the one containing `time` to a day after it. */
   series: ApiNowPoint[];
 }
@@ -109,6 +117,8 @@ export function computeNow(series: readonly ApiNowPoint[], time: number): NowCom
     temperature,
     feelsLike,
     band,
+    // UV is the hour's average, so the hour containing the moment gives it.
+    ...(a.uv === undefined ? {} : { uv: a.uv }),
     // One hour before the current one too, so a client whose clock is behind can interpolate.
     series: series.slice(Math.max(0, i - 1)).filter((p) => p.time <= time + NOW.seriesHours * HOUR),
   };
@@ -167,7 +177,7 @@ export function nextRows(now: NowComputation): ApiNowPoint[] {
 export function formatNow(now: NowComputation): ApiNow {
   const temperature = roundTemp(now.temperature);
   const feelsLike = roundTemp(now.feelsLike);
-  return {
+  const out: ApiNow = {
     time: new Date(now.time).toISOString(),
     band: now.band,
     answer: ANSWERS[now.band],
@@ -182,4 +192,6 @@ export function formatNow(now: NowComputation): ApiNow {
     })),
     series: now.series.map((p) => ({ ...p })),
   };
+  if (now.uv !== undefined) out.uv = { value: now.uv, level: uvLevel(now.uv) };
+  return out;
 }

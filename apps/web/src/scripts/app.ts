@@ -47,6 +47,7 @@ import {
   type TodayResponse,
   type Topic,
   type Units,
+  type UvDisplay,
   type View,
   type ViewDisplay,
   type WeekDisplay,
@@ -54,7 +55,7 @@ import {
 // Types only: the preview module itself loads on demand, and only with ?preview=1.
 import type * as PreviewKit from '@isithot/core/preview';
 import { CITY_TITLES, HOURLY, TOPIC_DAYS, lastKey } from '../lib/topics';
-import { glyphFor, hoursHtml, listHtml, pct, weekHtml } from '../lib/view';
+import { glyphFor, hoursHtml, listHtml, pct, uvHtml, weekHtml } from '../lib/view';
 import { wireViews, type ViewsController } from './views';
 
 declare global {
@@ -78,6 +79,8 @@ type Target =
       region?: string | null | undefined;
       country?: string | null | undefined;
       geonameId?: number | undefined;
+      /** A searched place's height, whole metres, when the search knew it. */
+      elevation?: number | undefined;
     };
 
 /**
@@ -563,6 +566,7 @@ function outOfDate(res: TodayResponse): Stale | null {
 function renderToday(d: TodayDisplay, pop: boolean): void {
   renderPanel(d);
   if (pop) popAnswer();
+  renderUv(d.view, d.uv);
   const m = d.models;
   setText('agree', m.heading);
   setText('strip-summary', m.summary);
@@ -585,9 +589,18 @@ function renderNow(res: TodayResponse): void {
 
 function renderHours(d: NowDisplay): void {
   renderPanel(d);
+  renderUv(d.view, d.uv);
   setText('now-h', d.heading);
   const hours = $('now-hours');
   if (hours) hours.innerHTML = hoursHtml(d.items);
+}
+
+/** Today's and Now's UV line (components/UvLine.astro), hidden without one. */
+function renderUv(v: View, uv: UvDisplay | null): void {
+  const el = $(viewId(v, 'uv'));
+  if (el) el.hidden = !uv;
+  const line = $(viewId(v, 'uv-line'));
+  if (line) line.innerHTML = uvHtml(uv);
 }
 
 /** The This week view. */
@@ -667,6 +680,8 @@ function apiUrl(t: Target, u: Units | null): string {
     if (t.region) p.set('region', t.region);
     if (t.country) p.set('country', t.country);
     if (t.geonameId) p.set('geonameId', String(t.geonameId));
+    // The forecast is then for the place's own height (only a searched place has one).
+    if (t.elevation !== undefined) p.set('elevation', String(t.elevation));
     p.set('source', t.source);
   }
   if (u) p.set('units', u);
@@ -958,10 +973,14 @@ function choose(r: SearchResult): void {
     region: r.region,
     country: r.country,
     geonameId: r.geonameId,
+    elevation: r.elevation,
   };
   rememberPlace(t);
   setNote('none');
-  const path = `/?${new URLSearchParams({ lat: String(t.lat), lon: String(t.lon), name: r.name })}`;
+  // The address carries the height too, so a reload or a shared link has the same forecast.
+  const query = new URLSearchParams({ lat: String(t.lat), lon: String(t.lon), name: r.name });
+  if (r.elevation !== undefined) query.set('elevation', String(r.elevation));
+  const path = `/?${query}`;
   if (mode === 'home') {
     history.pushState(null, '', sitePath(pageTopic, path, location.hostname));
     void load(t);
@@ -1145,12 +1164,16 @@ function initialTarget(): Target {
   const lat = Number(q.get('lat'));
   const lon = Number(q.get('lon'));
   if (q.has('lat') && q.has('lon') && Number.isFinite(lat) && Number.isFinite(lon)) {
+    const source = q.get('source') === 'device' ? 'device' : 'search';
+    // Only a searched place has a height (the server checks it).
+    const height = source === 'search' ? q.get('elevation') : null;
     return {
       kind: 'coords',
-      source: q.get('source') === 'device' ? 'device' : 'search',
+      source,
       lat: roundToGrid(lat, GRID.forecast),
       lon: roundToGrid(lon, GRID.forecast),
       name: q.get('name') ?? undefined,
+      elevation: height && Number.isFinite(+height) ? +height : undefined,
     };
   }
   return storage.get<Target>(KEYS.place) ?? { kind: 'ip' };

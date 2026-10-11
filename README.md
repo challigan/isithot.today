@@ -92,13 +92,21 @@ tests (`e2e/helpers.ts` explains how a test pins the time of day it relies on).
 
 `GET /api/v1/today` with one of `lat`+`lon`, `place` (a city slug), or nothing (approximate IP
 location). Optional `units=c|f` (default: °F for US visitors, °C elsewhere). `lat`/`lon` requests
-may also pass `name`, `region`, `country`, `geonameId` and `source=search`.
+may also pass `name`, `region`, `country`, `geonameId` and `source=search`, and with
+`source=search` the place's `elevation` (whole metres, from the search result): the forecast is
+then for that height (to the nearest 50 m), and `location.elevation` echoes it. City pages are
+forecast for the city's height when `data/cities.json` has it.
 
 The answer covers three views: `days[0]` is today (with tomorrow in `days[1]`, its verdict in
 the future tense), `now` is the blended forecast for the current minute with a day of judged
 hourly points (so clients can keep it current between requests), and `week` averages today and
 the next six days. From 6pm at the place (`location.timezone`) the website's middle view shows
 `days[1]` (core `showsTomorrow`).
+
+The UV index (hot only): `days[i].uv` is `{ max, level, peak }`, the day's highest hourly index
+(whole number), its level (`low`, `medium`, `high`, `veryhigh`, `extreme`) and the hour it
+starts ("1pm"); `now.uv` is `{ value, level }` for the current hour, and each `now.series` point
+has its hour's `uv`. Each is absent when the forecast has no UV index for it.
 
 `rain` answers "Is it wet?" for the same place: `rain.days[0]` is the rest of today from the
 moment of the request (`from`; refetch an hour after it), `rain.days[1]` tomorrow, `rain.now`
@@ -111,7 +119,8 @@ Amounts are in `rain.unit`: millimetres with `units=c`, inches with `units=f`.
 snow says why in `reason` (`warm`, `rain` or `dry`). Amounts are fresh snowfall in `snow.unit`:
 centimetres with `units=c`, inches with `units=f`.
 
-`GET /api/v1/search?q=` returns up to 8 places, with `slug` when the place has a city page.
+`GET /api/v1/search?q=` returns up to 8 places, with `slug` when the place has a city page and
+`elevation` (whole metres) when its height is known.
 
 Errors use `{ "error": { "code", "message" } }` with `bad_location` (400), `not_found` (404),
 `rate_limited` (429) and `upstream_unavailable` (503). When upstream is down but a cached
@@ -148,5 +157,6 @@ Set these in Netlify under **Project configuration → Environment variables**. 
   week's "wetter than usual") and `PRECSNOLAND` (normal snowfall, for "Snow is rare here in
   October." and the week's "more snow than usual").
 - Place names and coordinates: [GeoNames](https://www.geonames.org/) (CC BY 4.0), via the
-  `all-the-cities` package. Regenerate with `pnpm cities`.
+  `all-the-cities` package. Regenerate with `pnpm cities`, then add the cities' heights from a
+  GeoNames dump with `node scripts/city-heights.mjs <cities1000.txt>`.
 - BBC Weather, Met Office and AccuWeather appear only as outbound links. Never fetch from them.

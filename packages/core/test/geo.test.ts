@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import { ELEVATION } from '../src/config';
 import {
   cellKey,
   distanceKm,
+  forecastHeight,
   snapToCell,
   geohash,
   gridKey,
   isValidLatLon,
   nearest,
+  parseElevation,
   roundPoint,
   roundToGrid,
   slugify,
@@ -44,6 +47,30 @@ describe('grid rounding', () => {
     expect(gridKey({ lat: 54.97, lon: -1.6178 }, 0.05)).toBe('54.95,-1.60');
     expect(gridKey({ lat: 54.98, lon: -1.61 }, 0.5)).toBe('55.0,-1.5');
     expect(roundPoint({ lat: 51.507, lon: -0.128 }, 0.05)).toEqual({ lat: 51.5, lon: -0.15 });
+  });
+});
+
+describe('place heights', () => {
+  it('keeps plausible heights in whole metres', () => {
+    expect(parseElevation(48)).toBe(48);
+    expect(parseElevation(1234.5)).toBe(1235);
+    expect(parseElevation(-430)).toBe(-430);
+    expect(Object.is(parseElevation(-0.3), 0)).toBe(true);
+    expect(parseElevation(ELEVATION.min)).toBe(-500);
+    expect(parseElevation(ELEVATION.max)).toBe(9000);
+    for (const bad of [-500.5, 9000.5, Number.NaN, Infinity, '300', null, undefined, {}]) {
+      expect(parseElevation(bad)).toBeNull();
+    }
+  });
+
+  it('fetches and caches a forecast for the height in 50 m bands, or none without one', () => {
+    expect(forecastHeight(1034)).toBe(1050);
+    expect(forecastHeight(1024)).toBe(1000);
+    expect(forecastHeight(1025)).toBe(1050);
+    expect(forecastHeight(-430)).toBe(-450);
+    expect(Object.is(forecastHeight(-20), 0)).toBe(true);
+    expect(forecastHeight(null)).toBeNull();
+    expect(forecastHeight(undefined)).toBeNull();
   });
 });
 

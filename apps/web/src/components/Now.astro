@@ -2,6 +2,7 @@
 /** The Now view: the blended forecast for the current time and the next few hours. */
 import type { NowDisplay } from '@isithot/core';
 import { glyphFor, hoursHtml } from '../lib/view';
+import UvLine from './UvLine.astro';
 
 interface Props {
   /** From core `viewDisplay`. */
@@ -56,6 +57,7 @@ const { view, start = false } = Astro.props;
   <p class="detail hold" id="now-detail">
     {view.detail}
   </p>
+  <UvLine id="now-uv" uv={view.uv} />
   <section class="ahead hold" aria-labelledby="now-h">
     <h2 id="now-h">{view.heading}</h2>
     <ul class="list" id="now-hours" set:html={hoursHtml(view.items)} />

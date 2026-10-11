@@ -213,6 +213,44 @@ function syntheticRain(cell: string, lat: number, date: string, id: string): num
   return hours.map(r1);
 }
 
+/**
+ * Only two models give a UV index; the other models' series are all nulls, as Open-Meteo's are.
+ * The second stops after its 54-hour regional domain.
+ */
+const UV_HORIZON_HOURS: Record<string, number> = { ncep_gfs_seamless: Infinity, ukmo_seamless: 54 };
+
+/** How much of the clear-sky UV gets through each day's sky. */
+const UV_THROUGH: Record<Sky, number> = {
+  dry: 1,
+  spots: 0.9,
+  showers: 0.75,
+  rain: 0.5,
+  wet: 0.35,
+  heavy: 0.3,
+};
+
+/**
+ * The UV index averaged over the hour before a moment (as Open-Meteo labels it): clear-sky UV
+ * from the sun's height (about 12.5 overhead, falling off steeply as it drops), taken off by
+ * cloud. Worked out at the middle of the hour.
+ */
+function syntheticUv(cell: string, lat: number, lon: number, end: number, id: string): number {
+  const mid = new Date(end - 1_800_000);
+  const start = Date.UTC(mid.getUTCFullYear(), 0, 1);
+  const dayOfYear = (mid.getTime() - start) / 86_400_000;
+  const rad = Math.PI / 180;
+  const declination = 23.44 * Math.sin((2 * Math.PI * (dayOfYear - 80)) / 365) * rad;
+  const solarHour = mid.getUTCHours() + mid.getUTCMinutes() / 60 + lon / 15;
+  const hourAngle = (solarHour - 12) * 15 * rad;
+  const sunHeight =
+    Math.sin(lat * rad) * Math.sin(declination) +
+    Math.cos(lat * rad) * Math.cos(declination) * Math.cos(hourAngle);
+  if (sunHeight <= 0) return 0;
+  const date = mid.toISOString().slice(0, 10);
+  const through = UV_THROUGH[syntheticSky(cell, date)];
+  return r2(12.5 * sunHeight ** 2.4 * through * between(`${cell}|${date}|${id}|uv`, 0.9, 1.1));
+}
+
 /** Offset of a time zone from UTC at a moment, seconds. */
 export function zoneOffsetSeconds(timezone: string, now: Date): number {
   const parts = Object.fromEntries(
@@ -234,12 +272,23 @@ export function zoneOffsetSeconds(timezone: string, now: Date): number {
   return Math.round((local - minute) / 60000) * 60;
 }
 
-export function syntheticForecast(lat: number, lon: number, modelIds: string[], now: Date) {
+/**
+ * A forecast in Open-Meteo's format. With `elevation` it is said to be for that height (the
+ * temperatures are the same either way); without, for a terrain height of 50 m.
+ */
+export function syntheticForecast(
+  lat: number,
+  lon: number,
+  modelIds: string[],
+  now: Date,
+  elevation: number | null = null,
+) {
   const cell = `${roundToGrid(lat, 0.05)},${roundToGrid(lon, 0.05)}`;
   const timezone = syntheticTimezone(lat, lon);
   const today = localDate(timezone, now);
   const dates = Array.from({ length: FORECAST.days }, (_, i) => addDays(today, i));
   const normals = syntheticNormals(lat);
+  const offset = zoneOffsetSeconds(timezone, now);
 
   const hourly: Record<string, unknown[]> = {
     time: dates.flatMap((d) =>
@@ -289,16 +338,22 @@ export function syntheticForecast(lat: number, lon: number, modelIds: string[], 
     hourly[`apparent_temperature_${id}`] = apparent;
     hourly[`precipitation_${id}`] = precipitation;
     hourly[`snowfall_${id}`] = snowfall;
+    const uvHorizon = UV_HORIZON_HOURS[id] ?? -1;
+    hourly[`uv_index_${id}`] = (hourly.time as string[]).map((stamp, i) =>
+      i < uvHorizon
+        ? syntheticUv(cell, lat, lon, Date.parse(`${stamp}Z`) - offset * 1000, id)
+        : null,
+    );
   }
 
   return {
     latitude: lat,
     longitude: lon,
     generationtime_ms: 0.5,
-    utc_offset_seconds: zoneOffsetSeconds(timezone, now),
+    utc_offset_seconds: offset,
     timezone,
     timezone_abbreviation: 'GMT',
-    elevation: 50,
+    elevation: elevation ?? 50,
     hourly_units: { time: 'iso8601' },
     hourly,
   };
@@ -403,8 +458,15 @@ export function createSyntheticFetch(
     const p = url.searchParams;
     if (url.pathname.endsWith('/forecast')) {
       const ids = (p.get('models') ?? MODELS.map((m) => m.id).join(',')).split(',');
+      const elevation = p.get('elevation');
       return json(
-        syntheticForecast(Number(p.get('latitude')), Number(p.get('longitude')), ids, now()),
+        syntheticForecast(
+          Number(p.get('latitude')),
+          Number(p.get('longitude')),
+          ids,
+          now(),
+          elevation === null ? null : Number(elevation),
+        ),
       );
     }
     if (url.pathname.endsWith('/search')) {

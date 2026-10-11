@@ -2,7 +2,7 @@
  * The /api/v1 contract shared by the website and the future apps. Never change the meaning
  * of a field; add fields or create /api/v2.
  */
-import type { Band, RainBand, SnowBand, SnowReason } from './config';
+import type { Band, RainBand, SnowBand, SnowReason, UvLevel } from './config';
 import type { Confidence } from './blend';
 import type { Units } from './units';
 
@@ -20,6 +20,12 @@ export interface ApiLocation {
   slug?: string;
   /** GeoNames ID when known (used for BBC Weather deep links). */
   geonameId?: number;
+  /**
+   * The place's height, whole metres, when known (a searched place or a city page): the forecast
+   * is for it, to the nearest 50 m. Absent for device and IP locations, whose forecast is for the
+   * terrain height at the rounded point.
+   */
+  elevation?: number;
 }
 
 export interface ApiModel {
@@ -65,6 +71,28 @@ export interface ApiDay {
   stripSummary: string;
   /** Data range for the strip labels (min and max model ±3°), display units. */
   scale: { min: number; max: number };
+  /** The day's UV index. Absent when the forecast has none for the day. */
+  uv?: ApiUvDay;
+}
+
+/**
+ * A day's UV index: the highest hour of the day (a whole day, today too), each hour being the
+ * median of the forecast models that give a UV index (most give none).
+ */
+export interface ApiUvDay {
+  /** The highest hourly UV index, rounded to a whole number as WHO reports it. */
+  max: number;
+  /** From `max`: low (0–2), medium (3–5), high (6–7), veryhigh (8–10) or extreme (11 and up). */
+  level: UvLevel;
+  /** When it is highest, the start of that hour ("1pm"), or null when `max` is 0. */
+  peak: string | null;
+}
+
+/** The UV index for the current hour. */
+export interface ApiUvNow {
+  /** Rounded to a whole number. */
+  value: number;
+  level: UvLevel;
 }
 
 /** One row in the now view's "next hours" list, in display units. */
@@ -88,6 +116,11 @@ export interface ApiNowPoint {
   feelsLike: number;
   /** The verdict for this hour, judged like a day's high. */
   band: Band;
+  /**
+   * The UV index for the hour from `time`, rounded (the median of the models that give one).
+   * Absent when no model gives one, and in responses cached before it was added.
+   */
+  uv?: number;
 }
 
 /** The "now" view: the blended forecast at the current moment. Display units. */
@@ -100,6 +133,11 @@ export interface ApiNow {
   temperature: number;
   feelsLike: number;
   detail: string;
+  /**
+   * The UV index for the hour containing the moment (core `computeNow` takes it from `series`).
+   * Absent without UV data for that hour.
+   */
+  uv?: ApiUvNow;
   /** The next few hours, every couple of hours. */
   hours: ApiNowHour[];
   /**
@@ -521,6 +559,11 @@ export interface SearchResult {
   lon: number;
   slug?: string;
   geonameId?: number;
+  /**
+   * The place's height, whole metres, when known (from the geocoder, or the city list). Pass it
+   * to /api/v1/today as `elevation` with `source=search`, so the forecast is for that height.
+   */
+  elevation?: number;
 }
 
 export interface SearchResponse {
@@ -544,4 +587,6 @@ export interface City {
   lon: number;
   population: number;
   geonameId: number;
+  /** Height, whole metres (GeoNames), when known: city pages are forecast for it. */
+  elevation?: number;
 }

@@ -12,8 +12,9 @@ import {
   type AnyBand,
   type Palette,
   type Topic,
+  type UvLevel,
 } from './config';
-import { COPY, deg, question, type View } from './copy';
+import { COPY, deg, question, uvDayLine, uvNowLine, uvSpoken, type View } from './copy';
 import { localDateTime } from './dates';
 import type {
   ApiDay,
@@ -92,9 +93,22 @@ export interface TodayModels {
   limited: string | null;
 }
 
+/**
+ * The hot Today (or Tomorrow) and Now views' UV line. Absent (null) for wet and snow, without UV
+ * data, and when the UV index is 0 (at night, or a polar winter's day), so it never says "UV 0".
+ */
+export interface UvDisplay {
+  level: UvLevel;
+  /** "UV 7 · High, highest around 1pm" / "UV 5 · Medium now". */
+  text: string;
+  /** What a screen reader hears instead: "UV index 7, high, highest around 1pm". */
+  sr: string;
+}
+
 export interface TodayDisplay extends DisplayBase {
   view: 'today';
   models: TodayModels;
+  uv: UvDisplay | null;
 }
 
 export interface NowItem {
@@ -110,6 +124,7 @@ export interface NowDisplay extends DisplayBase {
   view: 'now';
   heading: string;
   items: NowItem[];
+  uv: UvDisplay | null;
 }
 
 export interface WeekItem {
@@ -131,10 +146,11 @@ export interface WeekDisplay extends DisplayBase {
 export type ViewDisplay = TodayDisplay | NowDisplay | WeekDisplay;
 export type DisplayFor<V extends View> = Extract<ViewDisplay, { view: V }>;
 
-/** A view's answer lines, and what it shows below them. */
+/** A view's answer lines, what it shows below them, and on the hot views the UV line. */
 interface Parts<T> {
   shown: { band: AnyBand; answer: string; verdict: string; detail: string };
   parts: T;
+  uv?: UvDisplay | null;
 }
 
 /**
@@ -187,6 +203,8 @@ const PLACEHOLDERS: Record<
     hour: string;
     day: string;
     bandLabel: string;
+    /** Today's UV line (hot only: the other topics have none). */
+    uv: UvDisplay | null;
   }
 > = {
   hot: {
@@ -206,6 +224,7 @@ const PLACEHOLDERS: Record<
     hour: '00°',
     day: '00°',
     bandLabel: 'Warm',
+    uv: { level: 'medium', text: 'UV 0 · Medium, highest around 0pm', sr: '' },
   },
   wet: {
     verdict: { today: 'Showers possible.', now: 'Showers around.', week: 'Rain on Thu and Fri.' },
@@ -220,6 +239,7 @@ const PLACEHOLDERS: Record<
     hour: '00%',
     day: '0mm',
     bandLabel: 'Showers',
+    uv: null,
   },
   snow: {
     verdict: { today: 'It might snow.', now: 'Snow showers around.', week: 'Snow on Thu and Fri.' },
@@ -234,6 +254,7 @@ const PLACEHOLDERS: Record<
     hour: '00%',
     day: '0cm',
     bandLabel: 'Snow possible',
+    uv: null,
   },
 };
 
@@ -300,7 +321,20 @@ function todayParts(res: TodayResponse, topic: Topic, index: number): Parts<Toda
     return block && day ? { shown: day, parts: precipModels(day, block.unit) } : null;
   }
   const day = res.days[index];
-  return day ? { shown: day, parts: hotModels(day) } : null;
+  if (!day) return null;
+  const uv = day.uv;
+  return {
+    shown: day,
+    parts: hotModels(day),
+    uv:
+      uv && uv.max > 0
+        ? {
+            level: uv.level,
+            text: uvDayLine(uv.max, uv.level, uv.peak),
+            sr: uvSpoken(uv.max, uv.level, uv.peak),
+          }
+        : null,
+  };
 }
 
 function nowParts(res: TodayResponse, topic: Topic, opts: DisplayOptions): Parts<NowItem[]> | null {
@@ -319,12 +353,20 @@ function nowParts(res: TodayResponse, topic: Topic, opts: DisplayOptions): Parts
       : null;
   }
   const now = opts.now !== undefined ? opts.now : res.now;
-  return now
-    ? {
-        shown: now,
-        parts: now.hours.map((h) => ({ value: deg(h.temperature), label: h.label, sr: null })),
-      }
-    : null;
+  if (!now) return null;
+  const uv = now.uv;
+  return {
+    shown: now,
+    parts: now.hours.map((h) => ({ value: deg(h.temperature), label: h.label, sr: null })),
+    uv:
+      uv && uv.value > 0
+        ? {
+            level: uv.level,
+            text: uvNowLine(uv.value, uv.level),
+            sr: uvSpoken(uv.value, uv.level),
+          }
+        : null,
+  };
 }
 
 function weekParts(res: TodayResponse, topic: Topic): Parts<WeekItem[]> | null {
@@ -396,6 +438,7 @@ export function viewDisplay<V extends View>(
         items: pending ? times(8, () => ({ value: ph.model, name: 'Model', out: false })) : [],
         limited: null,
       },
+      uv: today ? (today.uv ?? null) : pending ? ph.uv : null,
     };
   } else if (view === 'now') {
     const now = live && nowParts(live, topic, opts);
@@ -404,6 +447,8 @@ export function viewDisplay<V extends View>(
       heading: NOW_HEADINGS[topic],
       items:
         now?.parts ?? (pending ? times(6, () => ({ value: ph.hour, label: '0pm', sr: null })) : []),
+      // No placeholder: at night, when the page opens on Now, there is no UV line to hold.
+      uv: now?.uv ?? null,
     };
   } else {
     const week = live && weekParts(live, topic);

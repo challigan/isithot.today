@@ -24,12 +24,14 @@ Merging the pull request deploys to production at https://isithotapp.netlify.app
 
 The free API is for non-commercial use only and bans ads. Testing with friends, with ads off,
 is fine on it. Its limits are 600 calls a minute, 5,000 an hour, 10,000 a day and 300,000 a
-month. Each forecast fetch costs 3.2 calls (8 models × 4 hourly variables: temperature,
-feels-like, precipitation and snowfall, one request serving all three sites; it was 2.4 before
-Will it snow?), and a fetch only happens when a 5 km cell's cached forecast is over an hour old:
-at most about 77 calls a day for a place checked around the clock, so it would take roughly 130
-such places (or search engines crawling every city page of the three sites every hour) to reach
-the daily limit. A group of friends is nowhere
+month. Each forecast fetch costs 4.0 calls (8 models × 5 hourly variables: temperature,
+feels-like, precipitation, snowfall and UV index, one request serving all three sites; it was
+2.4 before Will it snow? and 3.2 before the UV index), and a fetch only happens when a 5 km
+cell's cached forecast is over an hour old: at most 96 calls a day for a place checked around
+the clock, so it would take roughly 100 such places (or search engines crawling every city page
+of the three sites every hour) to reach the daily limit. Searched places and city pages are
+forecast for their own height, so in hills and mountains places in one cell at different
+heights (50 m bands) are separate forecasts. A group of friends is nowhere
 near it. If the limit is ever hit, the API serves the last forecast (up to 6
 hours old) marked stale, and the Netlify function log shows
 `forecast unavailable for … open-meteo: HTTP 429 …` (a 503 says the same in `error.detail`).
@@ -40,9 +42,10 @@ hours old) marked stale, and the Netlify function log shows
 3. Trigger a redeploy. With a key present the code switches to the
    `customer-api.open-meteo.com` and `customer-geocoding-api.open-meteo.com` hosts by itself.
 
-Quota: each cache miss is one forecast request for 8 models × 4 hourly variables (3.2 calls),
+Quota: each cache miss is one forecast request for 8 models × 5 hourly variables (4.0 calls),
 and a second one when Open-Meteo has not answered within 2 seconds.
-Forecasts are cached per 5 km grid cell for an hour, and API responses at the CDN for up to 10
+Forecasts are cached per 5 km grid cell (and 50 m height band, where the place's height is
+known) for an hour, and API responses at the CDN for up to 10
 minutes (never past the next hour, stale copies included, since today's rain and snow answers
 cover the rest of the day), so calls scale with the number of distinct places, not page views.
 All three sites share the cache. NASA POWER needs no key and has no quota to plan for: each
