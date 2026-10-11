@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MODELS } from '@isithot/core';
 import {
+  BUSY_RETRY_MS,
   FORECAST_TIMING,
   OPEN_METEO_FREE,
   ProviderError,
@@ -190,6 +191,21 @@ describe('fetchJson', () => {
     expect(err?.message).toBe('p: HTTP 429 Daily limit exceeded (2 attempts)');
     expect(err?.status).toBe(429);
     expect(Date.now() - started).toBeLessThan(500);
+  });
+
+  it('tries once more after "too many concurrent requests", once the pause has passed', async () => {
+    const busy = async () => json({ error: true, reason: 'Too many concurrent requests' }, 429);
+    const { fetcher, signals } = scripted(busy, async () => json({ ok: 2 }));
+    const started = Date.now();
+    expect(await fetchJson('p', fetcher, URL_, 3000, 20)).toEqual({ ok: 2 });
+    // Not at the 20 ms hedge: after the pause.
+    expect(Date.now() - started).toBeGreaterThanOrEqual(BUSY_RETRY_MS - 50);
+    expect(signals).toHaveLength(2);
+
+    const twice = scripted(busy, busy);
+    const err = await failure(fetchJson('p', twice.fetcher, URL_, 3000, 20));
+    expect(err?.message).toBe('p: HTTP 429 Too many concurrent requests (2 attempts)');
+    expect(err?.status).toBe(429);
   });
 
   it('lists every failure when both requests fail', async () => {

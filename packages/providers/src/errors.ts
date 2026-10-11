@@ -117,6 +117,17 @@ async function attempt(
 const isClientError = (err: unknown): boolean =>
   err instanceof ProviderError && err.status !== null && err.status >= 400 && err.status < 500;
 
+/**
+ * Open-Meteo's free API also answers 429 "Too many concurrent requests" when too many requests
+ * from one address are in flight at once, which a shared serverless address can hit. Unlike a
+ * quota, that clears in moments: worth one more try after a short pause.
+ */
+const isBusy = (err: unknown): boolean =>
+  err instanceof ProviderError && err.status === 429 && /concurrent/i.test(err.reason);
+
+/** How long to wait before trying again after a "too many concurrent requests" answer, ms. */
+export const BUSY_RETRY_MS = 1000;
+
 interface Failed {
   /** What each finished attempt failed with, in order. */
   failures: unknown[];
@@ -133,6 +144,7 @@ function hedged<T>(
   run: () => Promise<T>,
   hedgeAfterMs: number | undefined,
   retryable: (err: unknown) => boolean,
+  pauseAfter: (err: unknown) => number,
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const failures: unknown[] = [];
@@ -152,7 +164,13 @@ function hedged<T>(
           running--;
           failures.push(err);
           const again = retryable(err);
-          if (again && started < 2 && hedgeAfterMs !== undefined) return start();
+          if (again && started < 2 && hedgeAfterMs !== undefined) {
+            const pause = pauseAfter(err);
+            if (pause === 0) return start();
+            clearTimeout(timer);
+            timer = setTimeout(start, pause);
+            return;
+          }
           if (!again || running === 0) {
             // Settled: the hedge must not start now.
             clearTimeout(timer);
@@ -172,8 +190,8 @@ function hedged<T>(
  *
  * `timeoutMs` covers everything, the body included. With `hedgeAfterMs`, a second identical
  * request starts if the first has not answered by then (or has already failed with anything but
- * a 4xx), and whichever succeeds first wins: one slow or broken response no longer decides the
- * outcome on its own.
+ * a 4xx; after "too many concurrent requests", once BUSY_RETRY_MS has passed), and whichever
+ * succeeds first wins: one slow or broken response no longer decides the outcome on its own.
  */
 export async function fetchJson(
   provider: string,
@@ -194,7 +212,12 @@ export async function fetchJson(
     return attempt(provider, fetcher, url, controller.signal);
   };
   try {
-    return await hedged(run, hedgeAfterMs, (err) => !timedOut && !isClientError(err));
+    return await hedged(
+      run,
+      hedgeAfterMs,
+      (err) => !timedOut && (!isClientError(err) || isBusy(err)),
+      (err) => (isBusy(err) ? BUSY_RETRY_MS : 0),
+    );
   } catch (failed) {
     const { failures, attempts } = failed as Failed;
     const errors = failures.filter((e): e is ProviderError => e instanceof ProviderError);

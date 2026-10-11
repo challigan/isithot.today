@@ -57,7 +57,11 @@ production, responses carry `x-isithot-via: function` when the dedicated functio
     about 7.5 s, inside even the old limit. NASA POWER runs alongside and is waited for 2 s.
   - Within it, if the first request has not answered after 2 s, or fails sooner with anything
     but a 4xx, an identical second request starts and the first success wins (the other is
-    cancelled). A 4xx (bad request, bad key, rate limited) is not retried. The 6 s now covers
+    cancelled). A 4xx (bad request, bad key, rate limited) is not retried, with one exception:
+    Open-Meteo's free API answers 429 "Too many concurrent requests" when too many requests
+    from one address are in flight, which Netlify's shared function addresses can hit (seen on
+    the #6 preview). That clears in moments, so it gets one more try after 1 s. A paid
+    Open-Meteo key would avoid sharing those limits (see SETUP.md). The 6 s now covers
     reading the body too: before, a server that sent its headers and then stalled held the
     function until it gave up (32 s in the simulation below). The second request costs another
     fetch's calls (2.4 then, 3.2 since Will it snow?), only when the first is slow or broken.
