@@ -515,10 +515,11 @@ little bit saying whether its high medium or low", then "Include very high and e
   much the same height share it; one 300 m up the valley does not. `FORECAST_CACHE_VERSION` went
   from 4 to 5 (also for the UV index). Search results are cached under `search/v3/` so cached
   results gain heights at once.
-- **Quota.** Only more distinct forecasts where searched places or city pages share a cell at
-  different heights, which in practice means hills and mountains. In flat country the band is
-  the same for every place in a cell, and device locations all share `/dem`. The worst case is
-  one extra forecast per extra band asked for in a cell, each cached for an hour as before.
+- **Quota.** A cell now holds one forecast per height asked for in it, each cached for an hour
+  as before. Device and IP locations all share `/dem`, while a city page or searched place uses
+  its 50 m band, so a cell visited both ways holds two forecasts even on flat ground (London's
+  city page is `/50`, a device in the same cell `/dem`): up to twice the calls such a cell cost
+  before. In hills, places in one cell at different heights add a forecast per extra band.
 - **Snow normals' height guard** now compares the climate cell's height with the place's own
   height when known, else with the height the forecast is for.
 - **Response.** `location.elevation` (whole metres) when the height is known.
@@ -526,10 +527,15 @@ little bit saying whether its high medium or low", then "Include very high and e
 ### UV index (hot topic)
 
 - **Source.** Of the eight models, only GFS (worldwide, for the whole forecast) and UKMO (its UK
-  2 km domain only, about the first 54 hours, so near the UK only) give an hourly `uv_index`; the
-  other six answer nulls (Open-Meteo's source, `Sources/App`: `GfsVariable`, `UkmoVariable`; the
-  global UKMO model has none). Both are the average over the hour before each stamp, as
-  radiation is, so the parser moves them to the hour's start as it does precipitation.
+  2 km domain only, about the first 54 hours, so near the UK only) give their own hourly
+  `uv_index` (Open-Meteo's source, `Sources/App`: `GfsVariable`, `UkmoVariable`; the global UKMO
+  model has none). Five answer nulls, but MET Norway's seamless model answers GFS's values,
+  hour for hour (seen in the live recordings: Open-Meteo fills a variable a model lacks from
+  another), so the parser drops any series that is an exact copy of an earlier model's
+  (`withoutCopies`); counted twice, GFS would always outvote UKMO in the median. Both are the
+  average over the hour before each stamp, as radiation is (the recorded peaks sit about half
+  an hour after solar noon), so the parser moves them to the hour's start as it does
+  precipitation.
 - **Request.** `uv_index` is added to the one forecast request: 8 models × 5 variables, 4.0 calls
   a fetch, up from 3.2. Open-Meteo charges `max(1, variables × models / 10)` calls per request
   (`calculateQueryWeight` in its source), so a separate UV request for one or two models would
@@ -559,7 +565,8 @@ little bit saying whether its high medium or low", then "Include very high and e
   show all five levels (Edinburgh in January 1, Newcastle in October 2, London in April 4,
   Manchester in June 6, Bristol in July 8, Seville in August 11).
 - **Synthetic data** gives GFS and UKMO an hourly UV index from the sun's height at the place
-  and time, cut by each day's cloud (UKMO for 54 hours), and nulls for the other models; it
+  and time, cut by each day's cloud (UKMO for 54 hours), MET Norway a copy of GFS's (as the
+  live API answers, so the tests cover dropping it), and nulls for the other models; it
   echoes a requested height without changing its temperatures, so the end-to-end tests' answers
   stay put.
 

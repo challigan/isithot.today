@@ -24,6 +24,7 @@ import {
   parseSearch,
   searchPlaces,
   syntheticForecast,
+  withoutCopies,
 } from '../src';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- recorded JSON fixtures
@@ -113,6 +114,7 @@ describe('Open-Meteo forecast', () => {
     const hasRain = Object.keys(raw.hourly).some((k) => k.startsWith('precipitation_'));
     const hasSnow = Object.keys(raw.hourly).some((k) => k.startsWith('snowfall_'));
     const hasUv = Object.keys(raw.hourly).some((k) => k.startsWith('uv_index_'));
+    const uvSeries = withoutCopies(MODELS.map((m) => raw.hourly[`uv_index_${m.id}`] ?? null));
     const lastStamp = raw.hourly.time.length - 1;
     let stamp = 0;
     /** The blended temperature at a stamp, as core blends it. */
@@ -203,12 +205,9 @@ describe('Open-Meteo forecast', () => {
         if (hasSnow) expect(h.snow).toHaveLength(MODELS.length);
         else expect(h).not.toHaveProperty('snow');
         // The UV index is the average over the hour before each stamp, so the hour from a stamp
-        // takes the next stamp's value.
-        if (hasUv) {
-          expect(h.uv).toEqual(
-            MODELS.map((m) => raw.hourly[`uv_index_${m.id}`]?.[stamp + 1] ?? null),
-          );
-        } else expect(h).not.toHaveProperty('uv');
+        // takes the next stamp's value; a model's copy of another's counts once.
+        if (hasUv) expect(h.uv).toEqual(uvSeries.map((series) => series?.[stamp + 1] ?? null));
+        else expect(h).not.toHaveProperty('uv');
         stamp++;
       }
       const withHigh = day.models.filter((m) => m.high !== null).length;
@@ -351,6 +350,37 @@ describe('Open-Meteo forecast', () => {
     expect(first!.hourly[0]!.uv).toEqual([0.1, 1, null]);
     expect(first!.hourly[23]!.uv).toEqual([2.4, null, null]);
     expect(last!.hourly[23]!.uv).toEqual([null, null, null]);
+  });
+
+  it("counts a model's copy of another's UV index once", () => {
+    const models: ModelConfig[] = [
+      { id: 'ncep_gfs_seamless', name: 'GFS' },
+      { id: 'ukmo_seamless', name: 'UKMO' },
+      { id: 'metno_seamless', name: 'MET Norway' },
+    ];
+    const gfs = twoDays.map((_, k) => k / 10);
+    const f = parseForecast(
+      {
+        timezone: 'UTC',
+        hourly: {
+          time: twoDays,
+          temperature_2m_ncep_gfs_seamless: twoDays.map(() => 20),
+          uv_index_ncep_gfs_seamless: gfs,
+          uv_index_ukmo_seamless: twoDays.map(() => 1),
+          uv_index_metno_seamless: [...gfs],
+        },
+      },
+      models,
+    );
+    expect(f.days[0]!.hourly[4]!.uv).toEqual([0.5, 1, null]);
+    // Only a whole series alike is a copy; sharing an hour or two is chance.
+    expect(withoutCopies([[1, 2], [1, 3], null, [1, 2, 3], [1, 3]])).toEqual([
+      [1, 2],
+      [1, 3],
+      null,
+      [1, 2, 3],
+      null,
+    ]);
   });
 
   it("only totals rain for a day with every hour, except the forecast's very last", () => {

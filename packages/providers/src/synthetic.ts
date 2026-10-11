@@ -214,10 +214,11 @@ function syntheticRain(cell: string, lat: number, date: string, id: string): num
 }
 
 /**
- * Only two models give a UV index; the other models' series are all nulls, as Open-Meteo's are.
- * The second stops after its 54-hour regional domain.
+ * Only two models give their own UV index; the second stops after its 54-hour regional domain.
+ * MET Norway's is GFS's copied in, as Open-Meteo answers; the other models' are all nulls.
  */
 const UV_HORIZON_HOURS: Record<string, number> = { ncep_gfs_seamless: Infinity, ukmo_seamless: 54 };
+const UV_COPIED_FROM: Record<string, string> = { metno_seamless: 'ncep_gfs_seamless' };
 
 /** How much of the clear-sky UV gets through each day's sky. */
 const UV_THROUGH: Record<Sky, number> = {
@@ -338,10 +339,11 @@ export function syntheticForecast(
     hourly[`apparent_temperature_${id}`] = apparent;
     hourly[`precipitation_${id}`] = precipitation;
     hourly[`snowfall_${id}`] = snowfall;
-    const uvHorizon = UV_HORIZON_HOURS[id] ?? -1;
+    const uvId = UV_COPIED_FROM[id] ?? id;
+    const uvHorizon = UV_HORIZON_HOURS[uvId] ?? -1;
     hourly[`uv_index_${id}`] = (hourly.time as string[]).map((stamp, i) =>
       i < uvHorizon
-        ? syntheticUv(cell, lat, lon, Date.parse(`${stamp}Z`) - offset * 1000, id)
+        ? syntheticUv(cell, lat, lon, Date.parse(`${stamp}Z`) - offset * 1000, uvId)
         : null,
     );
   }

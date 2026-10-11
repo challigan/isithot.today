@@ -30,9 +30,9 @@ feels-like, precipitation, snowfall and UV index, one request serving all three 
 cell's cached forecast is over an hour old: at most 96 calls a day for a place checked around
 the clock, so it would take roughly 100 such places (or search engines crawling every city page
 of the three sites every hour) to reach the daily limit. Searched places and city pages are
-forecast for their own height, so in hills and mountains places in one cell at different
-heights (50 m bands) are separate forecasts. A group of friends is nowhere
-near it. If the limit is ever hit, the API serves the last forecast (up to 6
+forecast for their own height (50 m bands) while device and IP locations are not, so a cell
+visited both ways is two forecasts (about 50 such places reach the limit), and in hills places
+in one cell at different heights are more. A group of friends is nowhere near it. If the limit is ever hit, the API serves the last forecast (up to 6
 hours old) marked stale, and the Netlify function log shows
 `forecast unavailable for … open-meteo: HTTP 429 …` (a 503 says the same in `error.detail`).
 

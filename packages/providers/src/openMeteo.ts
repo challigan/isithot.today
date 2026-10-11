@@ -47,8 +47,9 @@ export const FORECAST_TIMING = { timeoutMs: 6000, hedgeAfterMs: 2000 };
  * worked out here from the hourly values (Open-Meteo's own daily maximum and sum are the same
  * 24-hour aggregations) rather than requested separately. `snowfall` is each model's own split
  * of its precipitation into snow, as depth (cm, at 7cm for every 10mm of water). Only two of the
- * models give `uv_index` (the others answer nulls), but a request of its own would cost a whole
- * call (Open-Meteo charges at least one per request) against 0.8 here.
+ * models give their own `uv_index` (GFS, and UKMO in its UK domain); the others answer nulls or,
+ * like MET Norway, GFS's copied in (see withoutCopies). A request of its own would still cost a
+ * whole call (Open-Meteo charges at least one per request) against 0.8 here.
  */
 export const FORECAST_VARIABLES = {
   hourly: ['temperature_2m', 'apparent_temperature', 'precipitation', 'snowfall', 'uv_index'],
@@ -178,6 +179,24 @@ export function dailyMin(hours: readonly HourTemps[], index: number): number | n
   return hours.length >= 24 && temps.every(isFiniteNumber) ? Math.min(...temps) : null;
 }
 
+/**
+ * The series with any exact copy of an earlier one replaced by null. Open-Meteo fills a variable
+ * a model lacks from another model (MET Norway's UV index is GFS's, hour for hour), and a copy
+ * counted as a second model would outvote the others in the median.
+ */
+export function withoutCopies(
+  series: readonly (readonly unknown[] | null)[],
+): (readonly unknown[] | null)[] {
+  return series.map((s, i) =>
+    s !== null &&
+    series
+      .slice(0, i)
+      .some((o) => o !== null && o.length === s.length && o.every((v, k) => v === s[k]))
+      ? null
+      : s,
+  );
+}
+
 /** Parses a multi-model hourly Open-Meteo forecast into per-day model values. */
 export function parseForecast(json: unknown, models: readonly ModelConfig[]): Forecast {
   const body = json as {
@@ -198,7 +217,7 @@ export function parseForecast(json: unknown, models: readonly ModelConfig[]): Fo
   const feels = models.map((m) => seriesFor(hourly, 'apparent_temperature', m, models.length));
   const precipitation = models.map((m) => seriesFor(hourly, 'precipitation', m, models.length));
   const snowfall = models.map((m) => seriesFor(hourly, 'snowfall', m, models.length));
-  const uv = models.map((m) => seriesFor(hourly, 'uv_index', m, models.length));
+  const uv = withoutCopies(models.map((m) => seriesFor(hourly, 'uv_index', m, models.length)));
   // Older recordings have no precipitation at all: leave rain out rather than call them dry.
   const hasRain = precipitation.some((series) => series !== null);
   // Nor snowfall: snow is then judged by each model's temperature (snowWater in core).
