@@ -76,14 +76,14 @@ jobs:
           done
           echo "Timed out waiting for the deploy preview"; exit 1
 
-      - name: Smoke test the preview (both sites)
-        run: node scripts/smoke.mjs "$PREVIEW" --wet
+      - name: Smoke test the preview (all three sites)
+        run: node scripts/smoke.mjs "$PREVIEW" --wet --snow
 
       - name: Lighthouse (mobile) on the deploy preview, and production for comparison
         run: |
           # Netlify adds its review toolbar to deploy previews only: leave it out so the numbers
           # match what visitors to the live site get.
-          for url in "$PREVIEW/" "$PREVIEW/in/london-gb" "$PREVIEW/wet" "https://isithot.today/"; do
+          for url in "$PREVIEW/" "$PREVIEW/in/london-gb" "$PREVIEW/wet" "$PREVIEW/snow" "https://isithot.today/"; do
             # Warm the CDN first: production visitors mostly get cached pages.
             origin=$(node -e 'console.log(new URL(process.argv[1]).origin)' "$url")
             curl -fsS -o /dev/null "$url"; curl -fsS -o /dev/null "$origin/api/v1/today"

@@ -109,15 +109,16 @@ describe('GET /api/v1/today', () => {
   it('serves the second call from cache', async () => {
     const { deps, calls } = makeDeps();
     await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
-    // The forecast, then normal highs and normal rainfall (two climatology requests).
+    // The forecast, then normal highs, rainfall and snowfall (three climatology requests).
     expect(calls).toEqual([
       '/v1/forecast',
+      '/api/temporal/climatology/point',
       '/api/temporal/climatology/point',
       '/api/temporal/climatology/point',
     ]);
     await getToday(q({ lat: '54.95', lon: '-1.6', units: 'f' }), null, deps);
     await getToday(q({ lat: '54.97', lon: '-1.62', units: 'c' }), null, deps);
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(4);
   });
 
   it('uses the name passed by search and marks the source', async () => {
@@ -250,7 +251,7 @@ describe('GET /api/v1/today', () => {
     expect(r.headers['Cache-Control']).toBe('public, max-age=60');
     // The log says why, and what was served instead (a 503 is retried at once).
     expect(logs.find((l) => l.startsWith('forecast unavailable'))).toMatch(
-      /^forecast unavailable for forecast\/v3\/\S+ after \d+ms: open-meteo: HTTP 503 \(2 attempts\); answering with the copy from 2026-10-06T08:00:00.000Z$/,
+      /^forecast unavailable for forecast\/v4\/\S+ after \d+ms: open-meteo: HTTP 503 \(2 attempts\); answering with the copy from 2026-10-06T08:00:00.000Z$/,
     );
 
     now = new Date(NOW.getTime() + 7 * 60 * 60 * 1000);
@@ -351,6 +352,109 @@ describe('GET /api/v1/today', () => {
 
     const f = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'f' }), null, deps));
     expect(f.rain!.unit).toBe('in');
+  });
+
+  it('answers "Will it snow?" from the same forecast', async () => {
+    const { deps } = makeDeps();
+    const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
+    const snow = body.snow!;
+    expect(snow.unit).toBe('cm');
+    // The same windows as rain: the rest of today from the request, then tomorrow.
+    expect(snow.days.map((d) => [d.date, d.partial, d.from])).toEqual(
+      body.rain!.days.map((d) => [d.date, d.partial, d.from]),
+    );
+    for (const d of snow.days) {
+      expect(d.answer).toMatch(/^(Yes|No|Maybe)\.$/);
+      expect(d.total).toBe(8);
+    }
+    // Newcastle in October is too mild for snow, and says why.
+    expect(snow.days[0]!.band).toBe('nosnow');
+    expect(snow.days[0]!.reason).not.toBeNull();
+    expect(snow.now!.time).toBe(NOW.toISOString());
+    expect(snow.now!.hours).toHaveLength(6);
+    expect(snow.now!.series.length).toBeGreaterThan(20);
+    const week = snow.week!;
+    expect(week.days).toHaveLength(7);
+    expect(week.days[0]!.band).toBe(snow.days[0]!.band);
+    expect(week.normal).not.toBeNull();
+    const f = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'f' }), null, deps));
+    expect(f.snow!.unit).toBe('in');
+  });
+
+  it('says snow where it is always freezing, and Wet agrees', async () => {
+    const { deps } = makeDeps();
+    const body = ok(await getToday(q({ place: 'reykjavik-is', units: 'c' }), null, deps));
+    const snow = body.snow!.week!;
+    expect(snow.answer).toBe('Yes.');
+    const rain = body.rain!.week!;
+    expect(rain.days.map((d) => d.date)).toEqual(snow.days.map((d) => d.date));
+    // A day Wet calls snow is a Yes for snow.
+    const wetSnow = rain.days.filter((d) => d.snow);
+    expect(wetSnow.length).toBeGreaterThan(0);
+    for (const d of wetSnow) {
+      const day = snow.days.find((s) => s.date === d.date)!;
+      expect(['snow', 'heavysnow', 'deepsnow']).toContain(day.band);
+    }
+  });
+
+  it('keeps the other normals when the snow normals fail', async () => {
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    const noSnowNormals: FetchLike = async (url, init) =>
+      url.includes('PRECSNOLAND') ? new Response('{}', { status: 500 }) : synthetic(url, init);
+    const { deps } = makeDeps({ fetch: noSnowNormals });
+    const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
+    expect(body.days[0]!.normalHigh).not.toBeNull();
+    expect(body.rain!.week!.normal).not.toBeNull();
+    expect(body.snow!.week!.normal).toBeNull();
+    expect(body.snow!.week!.detail).not.toMatch(/usual|rare|common/);
+  });
+
+  it('uses snow normals only where the climate cell is near the place in height', async () => {
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    const answer = async (change: (url: string, json: Record<string, unknown>) => void) => {
+      const changed: FetchLike = async (url, init) => {
+        const json = (await (await synthetic(url, init)).json()) as Record<string, unknown>;
+        change(url, json);
+        return new Response(JSON.stringify(json));
+      };
+      const { deps } = makeDeps({ fetch: changed });
+      return ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
+    };
+    // A town 1km above its climate cell: the cell's normal snow says little about it.
+    const high = await answer((url, json) => {
+      if (url.includes('forecast')) json.elevation = 1050;
+    });
+    expect(high.snow!.week!.normal).toBeNull();
+    expect(high.rain!.week!.normal).not.toBeNull();
+    const near = await answer((url, json) => {
+      if (url.includes('forecast')) json.elevation = 340;
+    });
+    expect(near.snow!.week!.normal).not.toBeNull();
+    // Without the cell's height there is nothing to compare: the normals are used.
+    const unknown = await answer((url, json) => {
+      if (url.includes('forecast')) json.elevation = 1050;
+      if (url.includes('PRECSNOLAND')) json.geometry = { type: 'Point', coordinates: [0, 55] };
+    });
+    expect(unknown.snow!.week!.normal).not.toBeNull();
+  });
+
+  it('caches briefly while only the snow normals are loading', async () => {
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const slowSnow: FetchLike = async (url, init) => {
+      if (url.includes('PRECSNOLAND')) await gate;
+      return synthetic(url, init);
+    };
+    const { deps, background } = makeDeps({ fetch: slowSnow, climateWaitMs: 10 });
+    const first = await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
+    expect(first.headers['Cache-Control']).toBe('public, max-age=60');
+    expect(ok(first).snow!.week!.normal).toBeNull();
+    release();
+    await Promise.all(background);
+    const again = await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
+    expect(again.headers['Cache-Control']).toBe('public, max-age=600');
+    expect(ok(again).snow!.week!.normal).not.toBeNull();
   });
 
   it("judges today's rain from the moment of the request", async () => {
@@ -481,10 +585,10 @@ describe('GET /api/v1/today', () => {
     const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
     expect(body.days[0]!.anomaly).toBeNull();
     expect(body.rain!.week!.normal).toBeNull();
-    // One request each for normal highs and normal rainfall, then neither again for an hour.
-    expect(nasaCalls).toBe(2);
+    // One request each for normal highs, rainfall and snowfall, then none again for an hour.
+    expect(nasaCalls).toBe(3);
     await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
-    expect(nasaCalls).toBe(2);
+    expect(nasaCalls).toBe(3);
   });
 
   it('reports upstream_unavailable when the forecast has no data for today', async () => {
@@ -532,7 +636,7 @@ describe('GET /api/v1/today', () => {
     });
     expect(logs).toContainEqual(
       expect.stringMatching(
-        /^forecast unavailable for forecast\/v3\/\S+ after \d+ms: open-meteo: timed out after 60ms \(2 attempts\); no usable cached copy, answering 503$/,
+        /^forecast unavailable for forecast\/v4\/\S+ after \d+ms: open-meteo: timed out after 60ms \(2 attempts\); no usable cached copy, answering 503$/,
       ),
     );
   });
@@ -554,7 +658,7 @@ describe('GET /api/v1/today', () => {
     expect(r.status).toBe(200);
     expect(forecasts).toBe(2);
     expect(logs).toContainEqual(
-      expect.stringMatching(/^forecast for forecast\/v3\/\S+ took \d+ms$/),
+      expect.stringMatching(/^forecast for forecast\/v4\/\S+ took \d+ms$/),
     );
   });
 

@@ -1,8 +1,10 @@
 /**
- * The real sites: isithot.today and isitwet.today are two domains, each with its own storage and
- * its own location permission, so whatever crosses between them goes in the address. Both hosts
- * are served here from the e2e server, with the edge function's routing applied to pages
- * (netlify/edge-functions/lib/route.ts: isitwet.today pages come from /wet).
+ * The real sites: isithot.today, isitwet.today and willitsnow.today are three domains, each with
+ * its own storage and its own location permission, so whatever crosses between them goes in the
+ * address. All three hosts are served here from the e2e server, with the edge function's routing
+ * applied to pages (netlify/edge-functions/lib/route.ts: isitwet.today pages come from /wet,
+ * willitsnow.today pages from /snow). Its redirects (www, another site's prefix) are covered by
+ * netlify/test/route.test.ts.
  */
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { route } from '../netlify/edge-functions/lib/route';
@@ -10,16 +12,17 @@ import { expect, prepare, test, toggle } from './helpers';
 
 const HOT = 'https://isithot.today';
 const WET = 'https://isitwet.today';
+const SNOW = 'https://willitsnow.today';
 
-/** A browser where both sites are served by the e2e server at `local`. */
-async function bothSites(
+/** A browser where every site is served by the e2e server at `local`. */
+async function allSites(
   browser: Browser,
   local: string,
   options: Parameters<Browser['newContext']>[0] = {},
 ): Promise<BrowserContext> {
   const context = await browser.newContext(options);
   await prepare(context);
-  await context.route(/^https:\/\/isit(hot|wet)\.today\//, async (r) => {
+  await context.route(/^https:\/\/(isithot|isitwet|willitsnow)\.today\//, async (r) => {
     const request = r.request();
     const url = new URL(request.url());
     let path = `${url.pathname}${url.search}`;
@@ -29,7 +32,7 @@ async function bothSites(
         pathname: url.pathname,
         search: url.search,
         preview: false,
-        header: null,
+        headers: new Headers(),
       });
       if (to.kind === 'redirect') {
         return r.fulfill({ status: to.status, headers: { location: to.to } });
@@ -54,7 +57,7 @@ test('the device location crosses to the other site in the address', async ({
   baseURL,
 }) => {
   // Edinburgh, with permission given on isithot.today only, as after its prompt.
-  const context = await bothSites(browser, baseURL!, {
+  const context = await allSites(browser, baseURL!, {
     geolocation: { latitude: 55.95, longitude: -3.19 },
   });
   await context.grantPermissions(['geolocation'], { origin: HOT });
@@ -80,7 +83,7 @@ test('the device location crosses to the other site in the address', async ({
 });
 
 test('units cross with links to the other site', async ({ browser, baseURL }) => {
-  const context = await bothSites(browser, baseURL!);
+  const context = await allSites(browser, baseURL!);
   const page = await context.newPage();
   await ready(page, `${HOT}/`);
   await page.locator('[data-units="f"]').click();
@@ -118,12 +121,80 @@ test('units cross with links to the other site', async ({ browser, baseURL }) =>
 });
 
 test('links within one site stay as they are', async ({ browser, baseURL }) => {
-  const context = await bothSites(browser, baseURL!);
+  const context = await allSites(browser, baseURL!);
   const page = await context.newPage();
   await ready(page, `${WET}/in/london-gb`);
   await page.locator('[data-units="f"]').click();
   await expect(page.locator('[data-units="f"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#brand')).toHaveAttribute('href', '/');
   await expect(page.locator('#nearby-links a').first()).toHaveAttribute('href', /^\/in\/[a-z-]+$/);
+  await context.close();
+});
+
+test('the device location crosses to willitsnow.today in the address', async ({
+  browser,
+  baseURL,
+}) => {
+  // Edinburgh, with permission given on isitwet.today only.
+  const context = await allSites(browser, baseURL!, {
+    geolocation: { latitude: 55.95, longitude: -3.19 },
+  });
+  await context.grantPermissions(['geolocation'], { origin: WET });
+  const page = await context.newPage();
+  await ready(page, `${WET}/in/london-gb`);
+  await toggle(page, 'snow').click();
+  await page.locator('#place-btn').click();
+  await page.locator('#use-location').click();
+  await expect(page).toHaveURL(`${SNOW}/`);
+  await expect(page.locator('#place')).toHaveText('Edinburgh');
+  await expect(page.locator('#app')).toHaveAttribute('data-topic', 'snow');
+  expect(await stored(page, 'isithot:place')).toMatchObject({
+    kind: 'coords',
+    source: 'device',
+    lat: 55.95,
+    lon: -3.2,
+  });
+  await ready(page, `${SNOW}/`);
+  await expect(page.locator('#place')).toHaveText('Edinburgh');
+  await context.close();
+});
+
+test('units cross with links to and from willitsnow.today', async ({ browser, baseURL }) => {
+  const context = await allSites(browser, baseURL!);
+  const page = await context.newPage();
+  await ready(page, `${HOT}/`);
+  await page.locator('[data-units="f"]').click();
+  await expect(page.locator('[data-units="f"]')).toHaveAttribute('aria-pressed', 'true');
+  await toggle(page, 'snow').click();
+  // With Snow showing, the header and the places nearby go to willitsnow.today, with the units.
+  await expect(page.locator('#brand')).toHaveAttribute('href', `${SNOW}/?units=f`);
+  await expect(page.locator('link[rel="icon"]').first()).toHaveAttribute(
+    'href',
+    `${SNOW}/favicon.svg`,
+  );
+  const nearby = page.locator('#nearby-links a').first();
+  await expect(nearby).toHaveAttribute(
+    'href',
+    /^https:\/\/willitsnow\.today\/in\/[a-z-]+\?units=f$/,
+  );
+  await nearby.click();
+  await expect(page).toHaveURL(/^https:\/\/willitsnow\.today\/in\/[a-z-]+$/);
+  await expect(page.locator('[data-units="f"]')).toHaveText('in');
+  await expect(page.locator('[data-units="f"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#week-days li .t').first()).toHaveText(/^[\d.]+in$/);
+  expect(await stored(page, 'isithot:units')).toBe('f');
+  await expect(page.locator('#brand')).toHaveAttribute('href', '/');
+
+  // On to the third site: a city chosen with Wet showing goes to isitwet.today.
+  await toggle(page, 'wet').click();
+  await expect(page.locator('#brand')).toHaveAttribute('href', `${WET}/?units=f`);
+  await page.locator('#place-btn').click();
+  await page.locator('#search-input').fill('Bris');
+  await page
+    .locator('#search-results')
+    .getByRole('button', { name: /Bristol/ })
+    .click();
+  await expect(page).toHaveURL(`${WET}/in/bristol-gb`);
+  await expect(page.locator('[data-units="f"]')).toHaveAttribute('aria-pressed', 'true');
   await context.close();
 });

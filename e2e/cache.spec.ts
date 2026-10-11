@@ -1,7 +1,7 @@
 /**
- * Today's rain answer is for the rest of the day from the hour it was worked out, and from 6pm a
- * page shows tomorrow: nothing that carries them may be served from the CDN past the next
- * forecast hour, whether fresh (max-age) or stale while it revalidates.
+ * Today's rain and snow answers are for the rest of the day from the hour they were worked out,
+ * and from 6pm a page shows tomorrow: nothing that carries them may be served from the CDN past
+ * the next forecast hour, whether fresh (max-age) or stale while it revalidates.
  */
 import { expect, serverNow, test } from './helpers';
 
@@ -15,6 +15,8 @@ for (const path of [
   '/in/london-gb',
   '/wet/in/london-gb',
   '/wet/og/london-gb.png',
+  '/snow/in/london-gb',
+  '/snow/og/london-gb.png',
 ]) {
   test(`${path} is not served from the CDN past the forecast hour`, async ({ request }) => {
     // Worked out before asking, so the server's own count can only be smaller.

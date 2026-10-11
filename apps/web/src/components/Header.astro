@@ -1,5 +1,5 @@
 ---
-import { COPY, SITES, type Topic, type Units } from '@isithot/core';
+import { COPY, SITES, UNITS_LABELS, UNIT_NAMES, type Topic, type Units } from '@isithot/core';
 
 interface Props {
   placeName?: string | null;
@@ -10,8 +10,8 @@ interface Props {
 }
 const { placeName = null, units = 'c', controls = true, site = 'hot' } = Astro.props;
 const [brand, tld] = SITES[site].name.split('.');
-// The same setting serves both topics: °C goes with millimetres, °F with inches.
-const wet = site === 'wet';
+// One setting serves every topic: °C goes with millimetres and centimetres, °F with inches.
+const names = UNIT_NAMES[site];
 ---
 
 <header>
@@ -36,16 +36,12 @@ const wet = site === 'wet';
           <span id="place">{placeName ?? COPY.locating}</span>
           <span class="sr-only">, {COPY.changeLocation}</span>
         </button>
-        <div
-          class="pill units"
-          role="group"
-          aria-label={wet ? COPY.rainUnitsLabel : COPY.unitsLabel}
-        >
+        <div class="pill units" role="group" aria-label={UNITS_LABELS[site]}>
           <button type="button" data-units="c" aria-pressed={units === 'c' ? 'true' : 'false'}>
-            {wet ? 'mm' : '°C'}
+            {names.c}
           </button>
           <button type="button" data-units="f" aria-pressed={units === 'f' ? 'true' : 'false'}>
-            {wet ? 'in' : '°F'}
+            {names.f}
           </button>
         </div>
       </div>

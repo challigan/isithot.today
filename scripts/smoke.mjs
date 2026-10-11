@@ -7,7 +7,9 @@
  *                      the root with the x-isitwet-host: 1 header. The header works on deploy
  *                      previews only (the edge function ignores it in production and does not run
  *                      under astro dev).
+ *   --snow             The same for willitsnow.today: under /snow, and with x-willitsnow-host: 1.
  *   --wet-site <url>   Also check the isitwet.today pages on their own domain (production).
+ *   --snow-site <url>  The same for willitsnow.today.
  */
 const args = process.argv.slice(2);
 /** The value of `--name value` or `--name=value`, taken out of the arguments. */
@@ -17,19 +19,41 @@ function option(name) {
   const [arg] = args.splice(i, 1);
   return arg === name ? (args.splice(i, 1)[0] ?? '') : arg.slice(name.length + 1);
 }
-const wetSite = option('--wet-site')?.replace(/\/$/, '');
-if (wetSite === '') {
-  console.error('--wet-site needs a URL, e.g. --wet-site https://isitwet.today');
-  process.exit(2);
-}
-const wet = args.includes('--wet');
-const base = (args.find((a) => !a.startsWith('--')) ?? 'http://127.0.0.1:4321').replace(/\/$/, '');
 
 // The sites' own addresses (SITES in packages/core/src/config.ts): canonical URLs, robots.txt
-// and sitemaps always name these, whichever deploy served them.
+// and sitemaps always name these, whichever deploy served them. The other sites are served from
+// under their prefix on any deploy, and at the root on a preview sent their header (the edge
+// function, netlify/edge-functions/lib/route.ts); their pages ask their own question.
 const HOT = 'https://isithot.today';
-const WET = 'https://isitwet.today';
+const SITES = {
+  wet: {
+    url: 'https://isitwet.today',
+    prefix: '/wet',
+    header: 'x-isitwet-host',
+    home: 'Is it wet today?',
+    city: 'Is it wet in Newcastle today?',
+  },
+  snow: {
+    url: 'https://willitsnow.today',
+    prefix: '/snow',
+    header: 'x-willitsnow-host',
+    home: 'Will it snow today?',
+    city: 'Will it snow in Newcastle today?',
+  },
+};
 const CITY = 'newcastle-upon-tyne-gb';
+
+/** Each site's own domain to check, from --wet-site and --snow-site. */
+const siteUrls = {};
+for (const [t, site] of Object.entries(SITES)) {
+  const url = option(`--${t}-site`)?.replace(/\/$/, '');
+  if (url === '') {
+    console.error(`--${t}-site needs a URL, e.g. --${t}-site ${site.url}`);
+    process.exit(2);
+  }
+  siteUrls[t] = url;
+}
+const base = (args.find((a) => !a.startsWith('--')) ?? 'http://127.0.0.1:4321').replace(/\/$/, '');
 
 let failures = 0;
 
@@ -72,11 +96,13 @@ const ogImageOf = (html) =>
 const locs = (xml) => [...String(xml).matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1]);
 
 /**
- * The isitwet.today pages, wherever they are served from: `origin` is the deploy, `prefix` is
- * "/wet" when requesting the pages directly, and `headers` can ask a deploy preview to act as
- * isitwet.today. Whatever the route, the pages must name isitwet.today.
+ * A site's pages (isitwet.today, willitsnow.today), wherever they are served from: `origin` is
+ * the deploy, `prefix` is the site's ("/wet") when requesting the pages directly, and `headers`
+ * can ask a deploy preview to act as the site. Whatever the route, the pages must name the site.
  */
-async function checkWetSite(label, { origin = base, prefix = '', headers = {} } = {}) {
+async function checkSite(t, label, { origin = base, prefix = '', headers = {} } = {}) {
+  const { url: own, home: asked, city: cityAsked } = SITES[t];
+  const host = new URL(own).host;
   // "/" is "/wet" and "/?q" is "/wet?q" under the prefix.
   const path = (p) => (prefix ? prefix + p.replace(/^\/(?=\?|$)/, '') : p);
   const at = (p) => get(path(p), { origin, headers });
@@ -84,7 +110,7 @@ async function checkWetSite(label, { origin = base, prefix = '', headers = {} } 
 
   const home = await at('/');
   check(
-    home.res.status === 200 && String(home.body).includes('Is it wet today?'),
+    home.res.status === 200 && !!titleOf(home.body)?.startsWith(asked),
     name('/'),
     `${home.res.status} ${home.ms}ms "${titleOf(home.body)}"`,
   );
@@ -96,7 +122,7 @@ async function checkWetSite(label, { origin = base, prefix = '', headers = {} } 
   const query = '/?lat=51.5&lon=-0.12&name=X';
   const located = await at(query);
   check(
-    located.res.status === 200 && String(located.body).includes('Is it wet today?'),
+    located.res.status === 200 && !!titleOf(located.body)?.startsWith(asked),
     name(query),
     `${located.res.status} ${located.ms}ms`,
   );
@@ -105,13 +131,13 @@ async function checkWetSite(label, { origin = base, prefix = '', headers = {} } 
   const title = titleOf(page.body);
   const canonical = canonicalOf(page.body);
   check(
-    page.res.status === 200 && !!title?.startsWith('Is it wet in Newcastle today?'),
+    page.res.status === 200 && !!title?.startsWith(cityAsked),
     name(`/in/${CITY}`),
     `${page.res.status} ${page.ms}ms "${title}"`,
   );
-  check(canonical === `${WET}/in/${CITY}`, `${label}: canonical is on isitwet.today`, canonical);
+  check(canonical === `${own}/in/${CITY}`, `${label}: canonical is on ${host}`, canonical);
   const ogImage = ogImageOf(page.body);
-  check(ogImage === `${WET}/og/${CITY}.png`, `${label}: og:image is on isitwet.today`, ogImage);
+  check(ogImage === `${own}/og/${CITY}.png`, `${label}: og:image is on ${host}`, ogImage);
 
   const og = await at(`/og/${CITY}.png`);
   check(
@@ -122,7 +148,7 @@ async function checkWetSite(label, { origin = base, prefix = '', headers = {} } 
 
   const robots = await at('/robots.txt');
   check(
-    robots.res.status === 200 && String(robots.body).includes(`Sitemap: ${WET}/sitemap.xml`),
+    robots.res.status === 200 && String(robots.body).includes(`Sitemap: ${own}/sitemap.xml`),
     name('/robots.txt'),
     String(robots.body).match(/^Sitemap:.*$/m)?.[0] ?? `${robots.res.status}`,
   );
@@ -132,8 +158,8 @@ async function checkWetSite(label, { origin = base, prefix = '', headers = {} } 
   check(
     sitemap.res.status === 200 &&
       urls.length >= 302 &&
-      urls.every((u) => u.startsWith(`${WET}/`)) &&
-      urls.includes(`${WET}/in/${CITY}`),
+      urls.every((u) => u.startsWith(`${own}/`)) &&
+      urls.includes(`${own}/in/${CITY}`),
     name('/sitemap.xml'),
     `${urls.length} urls, first ${urls[0]}`,
   );
@@ -251,6 +277,63 @@ try {
     }
   }
 
+  // "Will it snow?" too, worked out from the same forecast at the same moment. Structure only.
+  const snow = t1.body?.snow;
+  const snowDay = snow?.days?.[0];
+  check(
+    snow?.unit === 'cm' && !!snowDay && /^(Yes|No|Maybe)\.$/.test(snowDay.answer),
+    'snow answered',
+    snow ? `unit=${snow.unit} ${snowDay?.answer}` : 'no snow in the response',
+  );
+  if (snowDay) {
+    console.log(
+      `      snow: ${snowDay.date} ${snowDay.band} | ${snowDay.answer} ${snowDay.verdict} | ${snowDay.detail}`,
+    );
+    console.log(
+      `      ${snowDay.agreementText} | confidence=${snowDay.confidence} | amount=${snowDay.amount}${snow.unit} threshold=${snowDay.threshold}${snow.unit} reason=${snowDay.reason} likely=${JSON.stringify(snowDay.likely)}`,
+    );
+    console.log(
+      `      models: ${snowDay.models.map((m) => `${m.name}=${m.amount}${snow.unit}`).join(', ')}`,
+    );
+    check(
+      snowDay.models.length >= 5 &&
+        snowDay.models.every((m) => Number.isFinite(m.amount) && Number.isFinite(m.value)),
+      'at least 5 models have snow totals',
+      `${snowDay.models.length}`,
+    );
+    check(snow.days.length === 2, 'two snow days returned', `${snow.days.length}`);
+    check(
+      snowDay.from === rainDay?.from,
+      'snow and rain worked out from the same moment',
+      `${snowDay.from} ${rainDay?.from}`,
+    );
+    const snowNow = snow.now;
+    check(
+      !!snowNow && /^(Yes|No|Maybe)\.$/.test(snowNow.answer),
+      'snow now answered',
+      snowNow?.detail,
+    );
+    check(
+      snowNow?.series?.length >= 20,
+      'snow now carries a day of hourly series',
+      `${snowNow?.series?.length}`,
+    );
+    const snowWeek = snow.week;
+    check(
+      !!snowWeek && snowWeek.days.length >= 5 && /^(Yes|No|Maybe)\.$/.test(snowWeek.answer),
+      'snow week answered',
+      `${snowWeek?.days?.length} days`,
+    );
+    if (snowWeek) {
+      console.log(`      snow week: ${snowWeek.answer} ${snowWeek.verdict} | ${snowWeek.detail}`);
+      console.log(
+        `      days: ${snowWeek.days.map((d) => `${d.label}=${d.amount}${snow.unit}(${d.bandLabel})`).join(' ')}`,
+      );
+    }
+    if (snowNow)
+      console.log(`      snow now: ${snowNow.answer} ${snowNow.verdict} | ${snowNow.detail}`);
+  }
+
   const t2 = await get(q);
   check(
     t2.res.status === 200,
@@ -269,12 +352,17 @@ try {
     'rain unit follows the temperature units',
     `units=${ip.body?.units} rain=${ip.body?.rain?.unit}`,
   );
+  check(
+    ip.body?.snow?.unit === (ip.body?.units === 'f' ? 'in' : 'cm'),
+    'snow unit follows the temperature units',
+    `units=${ip.body?.units} snow=${ip.body?.snow?.unit}`,
+  );
 
   const city = await get('/api/v1/today?place=seville-es&units=c');
   check(
     city.res.status === 200 && city.body.location.slug === 'seville-es',
     'GET today?place=seville-es',
-    `${city.res.status} ${city.ms}ms ${city.body?.days?.[0]?.answer} ${city.body?.days?.[0]?.detail} | rain: ${city.body?.rain?.days?.[0]?.answer} ${city.body?.rain?.days?.[0]?.detail}${why(city)}`,
+    `${city.res.status} ${city.ms}ms ${city.body?.days?.[0]?.answer} ${city.body?.days?.[0]?.detail} | rain: ${city.body?.rain?.days?.[0]?.answer} ${city.body?.rain?.days?.[0]?.detail} | snow: ${city.body?.snow?.days?.[0]?.answer} ${city.body?.snow?.days?.[0]?.detail}${why(city)}`,
   );
 
   const search = await get('/api/v1/search?q=Newcastle');
@@ -325,11 +413,13 @@ try {
   const missing = await get('/in/atlantis-xx');
   check(missing.res.status === 404, 'unknown city page gives 404', `${missing.res.status}`);
 
-  if (wet) {
-    await checkWetSite('wet under /wet', { prefix: '/wet' });
-    await checkWetSite('wet via x-isitwet-host', { headers: { 'x-isitwet-host': '1' } });
+  for (const [t, { prefix, header }] of Object.entries(SITES)) {
+    if (args.includes(`--${t}`)) {
+      await checkSite(t, `${t} under ${prefix}`, { prefix });
+      await checkSite(t, `${t} via ${header}`, { headers: { [header]: '1' } });
+    }
+    if (siteUrls[t]) await checkSite(t, `${t} at ${siteUrls[t]}`, { origin: siteUrls[t] });
   }
-  if (wetSite) await checkWetSite(`wet at ${wetSite}`, { origin: wetSite });
 } catch (err) {
   check(false, 'smoke test crashed', String(err));
 }

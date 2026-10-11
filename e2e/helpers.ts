@@ -32,7 +32,7 @@ import {
   type BrowserContext,
   type Page,
 } from '@playwright/test';
-import { GRID } from '../packages/core/src/config';
+import { GRID, type Topic } from '../packages/core/src/config';
 import { roundToGrid } from '../packages/core/src/geo';
 import { syntheticTimezone } from '../packages/providers/src/synthetic';
 import type { TodayResponse } from '../packages/core/src/types';
@@ -140,9 +140,11 @@ export const test = base.extend<{ ipHour: number; ipPlace: IpPlace }>({
 });
 export { expect };
 
-/** One half of the Hot | Wet toggle. */
-export const toggle = (page: Page, topic: 'hot' | 'wet') =>
-  page.locator(`#topic [data-topic=${topic}]`);
+/** One button of the Hot | Wet | Snow toggle. */
+export const toggle = (page: Page, topic: Topic) => page.locator(`#topic [data-topic=${topic}]`);
+
+/** A regular expression's source that matches `text` as it is ("Is it hot today?"). */
+export const literal = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** Hide or show the page as switching browser tabs does. */
 export const setVisibility = (page: Page, state: 'hidden' | 'visible') =>

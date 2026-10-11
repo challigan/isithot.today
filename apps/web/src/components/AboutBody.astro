@@ -1,76 +1,47 @@
 ---
-/** The About page of either site: how both questions are answered, the site's own first. */
+/** The About page of each site: how all three questions are answered, the site's own first. */
 import Content from '../layouts/Content.astro';
+import AboutHot from './AboutHot.astro';
+import AboutSnow from './AboutSnow.astro';
 import AboutWet from './AboutWet.astro';
-import { BLEND, MODELS, SITES, VERDICT, type Topic } from '@isithot/core';
+import { SITES, TOPICS, type Topic } from '@isithot/core';
+import { siteNames } from '../lib/topics';
 
 interface Props {
   topic: Topic;
 }
 const { topic } = Astro.props;
-const names = MODELS.map((m) => m.name);
-const modelList = `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
-const agreeExample = `"5 of 6 forecasts agree within ${BLEND.agreeWithinC}°"`;
 const site = SITES[topic].name;
-const other = SITES[topic === 'hot' ? 'wet' : 'hot'].name;
-const intro = {
+const intro: Record<Topic, string> = {
   hot: 'will today feel hot where you are? Here is how we get from a pile of forecasts to a single Yes, Almost or No.',
   wet: 'will it rain where you are today? Here is how we get from a pile of forecasts to a single Yes, Maybe or No.',
-}[topic];
-const description = {
+  snow: 'will it snow where you are today? Here is how we get from a pile of forecasts to a single Yes, Maybe or No.',
+};
+const description: Record<Topic, string> = {
   hot: `How ${site} blends several forecast models and judges hot against what is normal for your place and time of year.`,
   wet: `How ${site} blends several forecast models into one answer about rain: how likely it is, how much and when.`,
-}[topic];
+  snow: `How ${site} blends several forecast models into one answer about snow: how likely it is, how much and when.`,
+};
+/** How each question is answered, the page's own first. */
+const SECTIONS = { hot: AboutHot, wet: AboutWet, snow: AboutSnow };
+const order = [topic, ...TOPICS.filter((t) => t !== topic)];
 ---
 
-<Content title="How it works" path="/about" description={description} topic={topic}>
+<Content title="How it works" path="/about" description={description[topic]} topic={topic}>
   <h1>How it works</h1>
   <p>
-    {site} answers one question: {intro}
+    {site} answers one question: {intro[topic]}
   </p>
   <p>
-    {site} and {other} are one service with two questions: will today feel hot, and will it rain?
-    Each site opens on its own question, and the Hot and Wet switch at the top of the page swaps
-    between them.
+    {siteNames(topic)} are one service with three questions: will today feel hot, will it rain, and
+    will it snow? Each site opens on its own question, and the Hot, Wet and Snow switch at the top
+    of the page swaps between them.
   </p>
 
-  {topic === 'wet' && <AboutWet />}
-
-  <h2>Several forecasts, one answer</h2>
-  <p>
-    Weather services run their own computer models, and they rarely agree to the degree. We ask
-    {MODELS.length} of them for today's high: {modelList}. Some models do not cover every place, so
-    we use whichever ones answer.
-  </p>
-  <p>
-    With five or more forecasts we drop the single highest and lowest, then average the rest. That
-    keeps one wild forecast from dragging the answer around. We do the same for the "feels like"
-    temperature, which accounts for humidity and wind.
-  </p>
-
-  <h2>How much the forecasts agree</h2>
-  <p>
-    Under the answer you will see something like {agreeExample}. Each dot on the strip is one
-    forecast; the shaded band covers {BLEND.agreeWithinC}° either side of the blended high. When
-    most dots sit inside the band, you can trust the answer. When they are scattered, the weather is
-    genuinely uncertain, and it is worth checking a detailed forecast.
-  </p>
-
-  <h2>Hot for where you are</h2>
-  <p>
-    24°C feels hot in Newcastle and mild in Seville. So we compare today's feels-like high with the
-    long-term climate where you are: how warm your coldest and warmest months normally get. Half of
-    the verdict comes from that local comparison and half from the temperature itself, because
-    people feel both. A few common-sense limits apply: below {VERDICT.guards.notHotBelow}°C it is
-    never "hot", and above {VERDICT.guards.notColdAbove}°C it is never "cold".
-  </p>
-  <p>
-    The "warmer than usual" line compares today's high with the normal high for this date. Normals
-    come from NASA's long-term records on a grid about 50 km across, so they describe the regional
-    average; coasts, hills and city centres can run a degree or two either side.
-  </p>
-
-  {topic === 'hot' && <AboutWet />}
+  {order.map((t) => {
+    const Section = SECTIONS[t];
+    return <Section />;
+  })}
 
   <h2>Your location</h2>
   <p>
@@ -84,7 +55,7 @@ const description = {
     <!-- prettier-ignore -->
     <li>Forecasts: <a href="https://open-meteo.com/" rel="noopener">Open-Meteo.com</a>, licensed under <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a>.</li>
     <!-- prettier-ignore -->
-    <li>Climate normals: <a href="https://power.larc.nasa.gov/" rel="noopener">NASA POWER</a> (Prediction Of Worldwide Energy Resources), long-term monthly averages of daily highs and of rainfall.</li>
+    <li>Climate normals: <a href="https://power.larc.nasa.gov/" rel="noopener">NASA POWER</a> (Prediction Of Worldwide Energy Resources), long-term monthly averages of daily highs, rainfall and snowfall.</li>
     <!-- prettier-ignore -->
     <li>Place names: <a href="https://www.geonames.org/" rel="noopener">GeoNames</a>, licensed under CC BY 4.0.</li>
   </ul>

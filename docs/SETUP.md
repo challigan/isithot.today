@@ -24,11 +24,12 @@ Merging the pull request deploys to production at https://isithotapp.netlify.app
 
 The free API is for non-commercial use only and bans ads. Testing with friends, with ads off,
 is fine on it. Its limits are 600 calls a minute, 5,000 an hour, 10,000 a day and 300,000 a
-month. Each forecast fetch costs 2.4 calls (8 models × 3 hourly variables: temperature,
-feels-like and precipitation, which serves both sites), and a fetch only happens when a 5 km
-cell's cached forecast is over an hour old: at most about 58 calls a day for a place checked
-around the clock, so it would take roughly 170 such places (or search engines crawling every
-city page of both sites every hour) to reach the daily limit. A group of friends is nowhere
+month. Each forecast fetch costs 3.2 calls (8 models × 4 hourly variables: temperature,
+feels-like, precipitation and snowfall, one request serving all three sites; it was 2.4 before
+Will it snow?), and a fetch only happens when a 5 km cell's cached forecast is over an hour old:
+at most about 77 calls a day for a place checked around the clock, so it would take roughly 130
+such places (or search engines crawling every city page of the three sites every hour) to reach
+the daily limit. A group of friends is nowhere
 near it. If the limit is ever hit, the API serves the last forecast (up to 6
 hours old) marked stale, and the Netlify function log shows
 `forecast unavailable for … open-meteo: HTTP 429 …` (a 503 says the same in `error.detail`).
@@ -39,12 +40,14 @@ hours old) marked stale, and the Netlify function log shows
 3. Trigger a redeploy. With a key present the code switches to the
    `customer-api.open-meteo.com` and `customer-geocoding-api.open-meteo.com` hosts by itself.
 
-Quota: each cache miss is one forecast request for 8 models × 3 hourly variables (2.4 calls),
+Quota: each cache miss is one forecast request for 8 models × 4 hourly variables (3.2 calls),
 and a second one when Open-Meteo has not answered within 2 seconds.
 Forecasts are cached per 5 km grid cell for an hour, and API responses at the CDN for up to 10
-minutes (never past the next hour, stale copies included, since today's rain answer covers the
-rest of the day), so calls scale with the number of distinct places, not page views. Both sites
-share the cache.
+minutes (never past the next hour, stale copies included, since today's rain and snow answers
+cover the rest of the day), so calls scale with the number of distinct places, not page views.
+All three sites share the cache. NASA POWER needs no key and has no quota to plan for: each
+50 km climate cell is fetched once (three small requests: highs, rainfall and snowfall) and
+cached for good.
 
 ## 3. Custom domain
 
@@ -53,7 +56,7 @@ share the cache.
 3. Netlify issues the HTTPS certificate automatically. Make `isithot.today` the primary
    domain; `www` redirects to it.
 
-Canonical URLs, sitemaps, robots.txt and OG image links use the two site addresses in
+Canonical URLs, sitemaps, robots.txt and OG image links use the three site addresses in
 `packages/core/src/config.ts` (`SITES`), not the deploy URL.
 
 ### isitwet.today (the second site)
@@ -74,14 +77,39 @@ wet?"; isithot.today/wet redirects to isitwet.today. Nothing else to deploy. In 
 Deploy previews cannot use the isitwet.today host, so the wet site is at
 `https://deploy-preview-<n>--isithotapp.netlify.app/wet` there; sending the header
 `x-isitwet-host: 1` to a preview behaves as if the request came to isitwet.today (previews
-only). After each production deploy, `.github/workflows/production-smoke.yml` checks both live
-domains and the isithot.today/wet redirect.
+only). After each production deploy, `.github/workflows/production-smoke.yml` checks the live
+domains and the redirects between them.
 
-Browsers keep storage and location permission per domain, so the two sites do not share a
-saved place or units. Links from one to the other carry the chosen units in the address
+Browsers keep storage and location permission per domain, so the sites do not share a saved
+place or units. Links from one to another carry the chosen units in the address
 (`units=c|f`); "Use my location" and a searched place also carry the place (`lat`, `lon`, and
 `source=device` or `name`). The page there stores them. Nothing to set up. On previews and
-locally both sites are one origin, so this only shows on the real domains.
+locally all the sites are one origin, so this only shows on the real domains.
+
+### willitsnow.today (the third site)
+
+The same deploy serves it too: the edge function sends requests for willitsnow.today to the
+`/snow` pages, which open on "Will it snow?". On any of the real domains, a path under another
+site's prefix goes to that site (isithot.today/snow and isitwet.today/snow to willitsnow.today,
+willitsnow.today/wet to isitwet.today). In the Netlify UI, **before the snow branch is merged**
+(the production smoke test after that deploy checks the domain, its www and the redirects
+between the sites):
+
+1. **Domain management**: add `willitsnow.today` as a **domain alias** of the project (Carl has
+   added it; check it is listed). `isithot.today` stays the **primary** domain.
+2. Add `www.willitsnow.today` as another alias; the edge function sends it to the apex.
+3. DNS: if the domain's DNS is not on Netlify, add the records Netlify shows for both names at
+   the registrar.
+4. **HTTPS**: the certificate must list `willitsnow.today` and `www.willitsnow.today` as well as
+   the other sites' names. Use **Renew certificate** if they are missing, and check that
+   https://willitsnow.today/ answers before merging.
+5. Google Search Console: add the willitsnow.today property and submit
+   `https://willitsnow.today/sitemap.xml`. Before ads go on, add willitsnow.today to AdSense's
+   sites.
+
+On deploy previews the snow site is at `https://deploy-preview-<n>--isithotapp.netlify.app/snow`,
+and the header `x-willitsnow-host: 1` makes a preview act as willitsnow.today (previews only).
+The preview smoke test checks both (`scripts/smoke.mjs --wet --snow`).
 
 ## 4. Cloudflare Web Analytics (cookieless, free)
 
@@ -113,6 +141,7 @@ Any free monitor (UptimeRobot, Better Stack) on:
 ```
 https://isithot.today/api/v1/today?place=london-gb&units=c
 https://isitwet.today/in/london-gb
+https://willitsnow.today/in/london-gb
 ```
 
 Alert on a non-200 response, or when the API body does not contain `"days"`.

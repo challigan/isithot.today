@@ -5,10 +5,21 @@ import {
   PALETTES,
   RAIN_BANDS,
   RAIN_PALETTES,
+  SNOW_BANDS,
+  SNOW_PALETTES,
   type Band,
   type RainBand,
+  type SnowBand,
 } from '../src/config';
-import { ANSWERS, BAND_LABELS, COPY, VERDICTS, VIEWS, WEEK_VERDICTS } from '../src/copy';
+import {
+  ANSWERS,
+  BAND_LABELS,
+  COPY,
+  SNOW_ANSWERS,
+  VERDICTS,
+  VIEWS,
+  WEEK_VERDICTS,
+} from '../src/copy';
 import { defaultView, showsTomorrow, viewDisplay, type DisplayState } from '../src/display';
 import type {
   ApiDay,
@@ -17,8 +28,13 @@ import type {
   ApiRainDay,
   ApiRainNow,
   ApiRainWeek,
+  ApiSnow,
+  ApiSnowDay,
+  ApiSnowNow,
+  ApiSnowWeek,
   ApiWeek,
   RainUnit,
+  SnowUnit,
   TodayResponse,
 } from '../src/types';
 
@@ -567,6 +583,210 @@ describe('viewDisplay: wet', () => {
     expect(week.answer).toBe(answer);
     expect(week.items).toHaveLength(7);
     expect(week.items[0]).toEqual({ label: 'Day', value: '0mm', bandLabel: 'Showers', left: null });
+  });
+});
+
+// ---- Snow --------------------------------------------------------------------------
+
+const snowDay = (band: SnowBand, extra: Partial<ApiSnowDay> = {}): ApiSnowDay => ({
+  date: '2026-10-15',
+  from: '2026-10-15T12:20:00.000Z',
+  partial: true,
+  band,
+  answer: SNOW_ANSWERS[band],
+  verdict: `Verdict for ${band}.`,
+  detail: '2 to 5cm still to come. Mostly between 2pm and 6pm.',
+  reason: null,
+  amount: 3,
+  chance: 0.67,
+  snowy: 2,
+  total: 3,
+  confidence: 'good',
+  threshold: 0.5,
+  likely: { from: 14, to: 18 },
+  scale: { min: 0, max: 10 },
+  models: [
+    { id: 'a', name: 'ECMWF', amount: 3, value: 3.2, expectsSnow: true, agrees: true },
+    { id: 'b', name: 'GFS', amount: 0.3, value: 0.34, expectsSnow: false, agrees: false },
+    { id: 'c', name: 'ICON', amount: 12, value: 12.1, expectsSnow: true, agrees: true },
+  ],
+  month: 'October',
+  agreementText: '2 of 3 forecasts expect snow',
+  limitedText: null,
+  stripSummary: 'Forecasts range from 0.3cm to 12cm; 2 of 3 expect snow.',
+  ...extra,
+});
+
+const snowNow = (band: SnowBand): ApiSnowNow => ({
+  time: '2026-10-15T12:20:00.000Z',
+  band,
+  answer: SNOW_ANSWERS[band],
+  verdict: `Now verdict for ${band}.`,
+  detail: 'Light snow now. Easing off by about 3pm.',
+  amount: 0.1,
+  chance: 0.75,
+  hours: [
+    { time: '2026-10-15T13:00:00.000Z', label: '2pm', chance: 60 },
+    { time: '2026-10-15T15:00:00.000Z', label: '4pm', chance: 0 },
+  ],
+  series: [],
+});
+
+const snowWeek = (band: SnowBand, amounts = [4, 0, 8]): ApiSnowWeek => ({
+  from: '2026-10-15',
+  to: '2026-10-21',
+  band,
+  answer: SNOW_ANSWERS[band],
+  verdict: `Week verdict for ${band}.`,
+  detail: 'About 12cm across the week, most on Saturday (8cm).',
+  total: 12,
+  normal: 1,
+  snowDays: 2,
+  maybeDays: 0,
+  snowiest: { date: '2026-10-17', amount: 8 },
+  days: amounts.map((amount, i) => ({
+    date: `2026-10-${15 + i}`,
+    label: ['Today', 'Fri', 'Sat'][i]!,
+    amount,
+    band,
+    bandLabel: `Label ${band}`,
+  })),
+});
+
+const snowOf = (band: SnowBand, unit: SnowUnit = 'cm', extra: Partial<ApiSnow> = {}): ApiSnow => ({
+  unit,
+  days: [snowDay(band)],
+  now: snowNow(band),
+  week: snowWeek(band),
+  ...extra,
+});
+
+describe('viewDisplay: snow', () => {
+  it.each(SNOW_BANDS.flatMap((band) => VIEWS.map((view) => [band, view] as const)))(
+    'shows %s for %s in its colours',
+    (band, view) => {
+      const snow = snowOf(band);
+      const source = { today: snow.days[0]!, now: snow.now!, week: snow.week! }[view];
+      const d = viewDisplay(response({ snow }), 'snow', view, 'ready');
+      expect(d).toMatchObject({
+        view,
+        topic: 'snow',
+        state: 'ready',
+        band,
+        answer: SNOW_ANSWERS[band],
+        verdict: source.verdict,
+        detail: source.detail,
+        empty: false,
+        pending: false,
+      });
+      expect(d.palette).toBe(SNOW_PALETTES[band]);
+    },
+  );
+
+  it('asks whether it will snow, and whether it is snowing', () => {
+    const res = response({ snow: snowOf('snow') });
+    expect(viewDisplay(res, 'snow', 'today', 'ready').question).toBe('Will it snow today?');
+    expect(viewDisplay(res, 'snow', 'now', 'ready', { city: 'Oslo' }).question).toBe(
+      'Is it snowing in Oslo right now?',
+    );
+    expect(viewDisplay(res, 'snow', 'week', 'ready').question).toBe('Will it snow this week?');
+  });
+
+  it('highlights the snowy amounts on the Today strip, in cm or inches', () => {
+    const day = snowDay('snow');
+    const d = viewDisplay(response({ snow: snowOf('snow') }), 'snow', 'today', 'ready');
+    const left = at(0.5, 0, 10);
+    expect(d.models).toEqual({
+      heading: '2 of 3 forecasts expect snow',
+      summary: day.stripSummary,
+      min: '0cm',
+      max: '10cm',
+      zone: { left, width: 100 - left },
+      origin: at(3, 0, 10),
+      dots: [
+        { left: at(3.2, 0, 10), out: false, title: 'ECMWF 3cm' },
+        { left: at(0.34, 0, 10), out: true, title: 'GFS 0.3cm' },
+        { left: 100, out: false, title: 'ICON 12cm' },
+      ],
+      items: [
+        { value: '3cm', name: 'ECMWF', out: false },
+        { value: '0.3cm', name: 'GFS', out: true },
+        { value: '12cm', name: 'ICON', out: false },
+      ],
+      limited: null,
+    });
+    const inches = response({ units: 'f', snow: snowOf('snow', 'in') });
+    expect(viewDisplay(inches, 'snow', 'today', 'ready').models.max).toBe('10in');
+    expect(viewDisplay(inches, 'snow', 'week', 'ready').items.map((i) => i.value)).toEqual([
+      '4in',
+      '0in',
+      '8in',
+    ]);
+  });
+
+  it('gives the chance of snow for the next hours, or "now" for this minute', () => {
+    const res = response({ snow: snowOf('maybesnow') });
+    const d = viewDisplay(res, 'snow', 'now', 'ready');
+    expect(d.heading).toBe(COPY.nextHoursSnow);
+    expect(d.items).toEqual([
+      { value: '60%', label: '2pm', sr: '60% chance at 2pm' },
+      { value: '0%', label: '4pm', sr: '0% chance at 4pm' },
+    ]);
+    const fresh = { ...snowNow('deepsnow'), hours: [] };
+    expect(viewDisplay(res, 'snow', 'now', 'ready', { snowNow: fresh })).toMatchObject({
+      band: 'deepsnow',
+      items: [],
+    });
+    expect(viewDisplay(res, 'snow', 'now', 'ready', { snowNow: null })).toMatchObject({
+      band: null,
+      empty: true,
+    });
+    // Rain's "now" is no use for snow.
+    expect(viewDisplay(res, 'snow', 'now', 'ready', { rainNow: null }).band).toBe('maybesnow');
+  });
+
+  it('places each day of the week from none to the snowiest', () => {
+    const res = response({ snow: snowOf('heavysnow') });
+    expect(viewDisplay(res, 'snow', 'week', 'ready')).toMatchObject({
+      heading: COPY.nextDays,
+      items: [
+        { label: 'Today', value: '4cm', bandLabel: 'Label heavysnow', left: 50 },
+        { label: 'Fri', value: '0cm', bandLabel: 'Label heavysnow', left: 0 },
+        { label: 'Sat', value: '8cm', bandLabel: 'Label heavysnow', left: 100 },
+      ],
+    });
+  });
+
+  it('answers the middle view from tomorrow after 6pm', () => {
+    const tomorrow = snowDay('deepsnow', { date: '2026-10-16', partial: false });
+    const res = response({ snow: snowOf('snow', 'cm', { days: [snowDay('snow'), tomorrow] }) });
+    expect(viewDisplay(res, 'snow', 'today', 'ready', { tomorrow: true })).toMatchObject({
+      question: 'Will it snow tomorrow?',
+      band: 'deepsnow',
+    });
+  });
+
+  it('says every view is not available when the answer has no snow', () => {
+    for (const view of VIEWS) {
+      expect(viewDisplay(response(), 'snow', view, 'ready')).toMatchObject({
+        band: null,
+        answer: COPY.notAvailable,
+        empty: true,
+      });
+    }
+  });
+
+  it('holds the layout with placeholders while loading', () => {
+    const today = viewDisplay(null, 'snow', 'today', 'loading');
+    expect(today.models).toMatchObject({ heading: '0 of 0 forecasts expect snow', min: '0cm' });
+    expect(viewDisplay(null, 'snow', 'now', 'loading').heading).toBe(COPY.nextHoursSnow);
+    expect(viewDisplay(null, 'snow', 'week', 'loading').items[0]).toEqual({
+      label: 'Day',
+      value: '0cm',
+      bandLabel: 'Snow possible',
+      left: null,
+    });
+    expect(viewDisplay(null, 'snow', 'week', 'loading').verdict).toBe('Snow on Thu and Fri.');
   });
 });
 

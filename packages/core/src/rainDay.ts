@@ -43,6 +43,7 @@ import {
   snowAmount,
   snowy,
 } from './rain';
+import { snowWater } from './snow';
 
 // ---- Today and tomorrow ----------------------------------------------------------
 
@@ -51,7 +52,7 @@ export interface RainModelTotal {
   id: string;
   name: string;
   total: number;
-  /** The part of `total` that falls at or below the snow line. */
+  /** The part of `total` that falls as snow (snowWater in snow.ts). */
   snow: number;
 }
 
@@ -109,9 +110,6 @@ export interface RainDayOptions {
   from?: number;
 }
 
-const isSnow = (temp: number | null | undefined): boolean =>
-  isFiniteNumber(temp) && temp <= RAIN.snowAtOrBelowC;
-
 /** One hour of rain across the models, judged as the Now view judges it; null without data. */
 function judgeHour(h: HourTemps): RainHourChance | null {
   const values = (h.rain ?? []).filter(isFiniteNumber);
@@ -161,14 +159,16 @@ export function computeRainDay(day: DayData, opts: RainDayOptions = {}): RainDay
     // next to nothing.
     thresholds = windowThresholds(Math.max(1, hours));
     if (wetNow) thresholds = { ...thresholds, wet: RAIN.hour.wet };
+    // The part of each hour that falls as snow: the rule the snow topic judges by too.
+    const water = window.map(({ h }) => snowWater(h));
     models = day.models.flatMap((m, i) => {
       let total = 0;
       let snow = 0;
-      for (const { h, weight } of window) {
+      for (const [k, { h, weight }] of window.entries()) {
         const rain = h.rain?.[i];
         if (!isFiniteNumber(rain)) return [];
         total += rain * weight;
-        if (isSnow(h.temps[i])) snow += rain * weight;
+        snow += water[k]![i]! * weight;
       }
       return [{ id: m.id, name: m.name, total, snow }];
     });

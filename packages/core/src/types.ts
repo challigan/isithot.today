@@ -2,7 +2,7 @@
  * The /api/v1 contract shared by the website and the future apps. Never change the meaning
  * of a field; add fields or create /api/v2.
  */
-import type { Band, RainBand } from './config';
+import type { Band, RainBand, SnowBand, SnowReason } from './config';
 import type { Confidence } from './blend';
 import type { Units } from './units';
 
@@ -231,6 +231,11 @@ export interface ApiRainPoint {
   /** The blended temperature is at or below the snow line. */
   snow: boolean;
   /**
+   * Most of the hour's precipitation falls as snow, by the rule the snow topic judges by, so the
+   * two agree. Present for forecasts with snowfall data; without it the words go by `snow`.
+   */
+  asSnow?: boolean;
+  /**
    * The hour's median amount is under RAIN.lightBelow ("Light rain now."), decided in
    * millimetres before rounding so the words are the same in either unit.
    */
@@ -324,6 +329,163 @@ export interface ApiRain {
   week?: ApiRainWeek;
 }
 
+/** Snow depths follow the temperature units: centimetres with °C, inches with °F. */
+export type SnowUnit = 'cm' | 'in';
+
+/**
+ * Amounts in the snow types below are depths in `ApiSnow.unit`, rounded for display: centimetres
+ * to one decimal under 1 and whole above; inches to one decimal under 3 and whole above. So the
+ * text for an amount is always `${amount}${unit}`. The day, Now and week types carry the same
+ * fields as the rain ones where they mean the same thing, so the two draw alike.
+ */
+export interface ApiSnowModel {
+  id: string;
+  name: string;
+  /** The model's snow over the window, rounded for display. */
+  amount: number;
+  /** The same to two decimals, for positioning on the strip. */
+  value: number;
+  /** At least the window's `threshold`. */
+  expectsSnow: boolean;
+  /** Agrees with the answer: snowy models on a Yes day, others on a No day, all on a Maybe day. */
+  agrees: boolean;
+}
+
+/** "Will it snow today?" for one window: the rest of today, or a whole day. */
+export interface ApiSnowDay {
+  /** The local date (YYYY-MM-DD). */
+  date: string;
+  /** When the window judged starts, ISO 8601 UTC, as for rain (the same moment as `rain`'s). */
+  from: string;
+  /** True when the window is the rest of the day rather than the whole day. */
+  partial: boolean;
+  band: SnowBand;
+  /** "No." / "Maybe." / "Yes." */
+  answer: string;
+  /** "It'll snow." / "Too warm for snow." */
+  verdict: string;
+  /** "2 to 5cm of snow. Mostly between 2pm and 8pm." */
+  detail: string;
+  /** Why a day without snow has none (`nosnow` only), otherwise null. */
+  reason: SnowReason | null;
+  /** The consensus amount: the median of the models' snow. */
+  amount: number;
+  /** The share of models expecting snow, 0–1, two decimals. */
+  chance: number;
+  /** Models expecting snow, and models with data for the whole window. */
+  snowy: number;
+  total: number;
+  confidence: Confidence;
+  /** The window's snow amount: a model "expects snow" from here (the strip's highlighted zone). */
+  threshold: number;
+  /** The local hours most likely to have snow, as rain's `likely`, or null. */
+  likely: { from: number; to: number } | null;
+  /** The strip's range (min is always 0). */
+  scale: { min: number; max: number };
+  models: ApiSnowModel[];
+  /** Month name for the date, e.g. "January". */
+  month: string;
+  /** "6 of 8 forecasts expect snow" */
+  agreementText: string;
+  /** "Limited forecast data" when fewer than 3 models cover the window, otherwise null. */
+  limitedText: string | null;
+  /** Accessible summary of the model strip. */
+  stripSummary: string;
+}
+
+/** One forecast hour of snow, judged by the server, for recomputing "now" later. */
+export interface ApiSnowPoint {
+  /** Start of the hour, epoch milliseconds. */
+  time: number;
+  /** Local date (YYYY-MM-DD) and hour (0–23) in the place's time zone. */
+  date: string;
+  hour: number;
+  /** The median of the models' snow in this hour, in `ApiSnow.unit`, two decimals. */
+  amount: number;
+  /** The share of models with snow in this hour, 0–1, two decimals. */
+  chance: number;
+  /** The share of models with snow in the two hours from this one (the Now view's rows). */
+  chance2h: number;
+  /** The verdict for this hour, judged with the hourly thresholds. */
+  band: SnowBand;
+  /** Why an hour without snow has none (`nosnow` only), otherwise null. */
+  reason: SnowReason | null;
+  /** The hour's median is under SNOW.lightBelow ("Light snow now."), decided in centimetres. */
+  light: boolean;
+}
+
+/** One row in the snow Now view's list: the chance of snow in the two hours from `time`. */
+export type ApiSnowHour = ApiRainHour;
+
+/** "Is it snowing right now?": the forecast for the current hour and the next twelve. */
+export interface ApiSnowNow {
+  /** The moment the values are for, ISO 8601 UTC. */
+  time: string;
+  band: SnowBand;
+  answer: string;
+  verdict: string;
+  /** "Snow now, about 1cm an hour. Easing off by about 3pm." */
+  detail: string;
+  /** This hour's median amount, in `ApiSnow.unit`. */
+  amount: number;
+  /** The share of models with snow this hour, 0–1. */
+  chance: number;
+  /** The next 12 hours in 2-hour blocks. */
+  hours: ApiSnowHour[];
+  /**
+   * The judged hourly forecast from the hour before now to a day ahead, so clients can keep
+   * "now" current between requests (core `computeSnowNow` and `formatSnowNow`).
+   */
+  series: ApiSnowPoint[];
+}
+
+/** One day in the snow week view. */
+export interface ApiSnowWeekDay {
+  date: string;
+  /** "Today", then short weekday names ("Thu"). */
+  label: string;
+  /** The day's consensus amount (today: the rest of the day). */
+  amount: number;
+  band: SnowBand;
+  /** "Heavy snow", "A few flakes", or for a day without snow why: "Too warm", "Rain", "Dry". */
+  bandLabel: string;
+}
+
+/** "Will it snow this week?": today and the next six days. */
+export interface ApiSnowWeek {
+  /** First and last dates (YYYY-MM-DD). */
+  from: string;
+  to: string;
+  /** The snowiest day's band on a Yes week, `maybesnow`, `flakes` or `nosnow`. */
+  band: SnowBand;
+  /** "No." / "Maybe." / "Yes." (one day of snow makes the week a Yes). */
+  answer: string;
+  /** "Snow on Thu and Fri, heavy on Fri." / "A snowy week." / "Too warm for snow all week." */
+  verdict: string;
+  detail: string;
+  /** The median of each model's own total across the days, as rain's, or null. */
+  total: number | null;
+  /** Normal snowfall over the same days (NASA POWER), or null without snow normals. */
+  normal: number | null;
+  /** Days judged snow or more, and days judged snow possible. */
+  snowDays: number;
+  maybeDays: number;
+  /** The snowiest day (the earlier one on a tie), by the same models as `total`, as rain's. */
+  snowiest: { date: string; amount: number };
+  days: ApiSnowWeekDay[];
+}
+
+/** The "Will it snow?" answers. Present exactly when `rain` is (the same forecast). */
+export interface ApiSnow {
+  unit: SnowUnit;
+  /** Today (the rest of the day), then tomorrow (the whole day) when the forecast has it. */
+  days: ApiSnowDay[];
+  /** Absent when the forecast has no hourly precipitation for the current time. */
+  now?: ApiSnowNow;
+  /** Absent without five usable days. */
+  week?: ApiSnowWeek;
+}
+
 export interface TodayResponse {
   location: ApiLocation;
   units: Units;
@@ -341,6 +503,8 @@ export interface TodayResponse {
   week?: ApiWeek;
   /** "Is it wet?" for the same place. Absent when the forecast has no precipitation. */
   rain?: ApiRain;
+  /** "Will it snow?" for the same place. Present exactly when `rain` is. */
+  snow?: ApiSnow;
 }
 
 export interface NearbyCity {

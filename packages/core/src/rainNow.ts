@@ -34,6 +34,7 @@ import {
   rainBand,
   snowy,
 } from './rain';
+import { snowWater } from './snow';
 
 // ---- Now ------------------------------------------------------------------------
 
@@ -50,6 +51,11 @@ export interface RainSeriesPoint {
   band: RainBand;
   /** The blended temperature is at or below the snow line. */
   snow: boolean;
+  /**
+   * Most of the hour's precipitation falls as snow, by the rule the snow topic judges by
+   * (snowWater in snow.ts). Only for forecasts with snowfall; the words go by `snow` without it.
+   */
+  asSnow?: boolean;
 }
 
 /**
@@ -72,14 +78,20 @@ export function rainSeries(days: readonly DayData[]): RainSeriesPoint[] {
     });
     if (values.length === 0) return;
     const temps = h.temps.filter(isFiniteNumber);
-    points.push({
+    const point: RainSeriesPoint = {
       time: h.time,
       amount: median(values),
       chance: shareAtLeast(values, RAIN.hour.wet),
       chance2h: shareAtLeast(blocks, RAIN.blockWet),
       band: rainBand(values, thresholds),
       snow: temps.length > 0 && trimmedMean(temps, BLEND.trimFrom) <= RAIN.snowAtOrBelowC,
-    });
+    };
+    if (h.snow) {
+      const rain = values.reduce((a, b) => a + b, 0);
+      const snow = snowWater(h).reduce<number>((a, w) => a + (w ?? 0), 0);
+      point.asSnow = rain > 0 && snow >= RAIN.snowFrom * rain;
+    }
+    points.push(point);
   });
   return points;
 }
@@ -102,31 +114,32 @@ export function judgeRainSeries(
       chance2h: round2(p.chance2h),
       band: p.band,
       snow: p.snow,
+      ...(p.asSnow === undefined ? {} : { asSnow: p.asSnow }),
       // Decided in mm, so the words never depend on the units.
       light: p.amount < RAIN.lightBelow,
     };
   });
 }
 
-/** The rain "now" view, before formatting. */
-export interface RainNowComputation {
+/** The rain "now" view, before formatting (the snow topic's points share it). */
+export interface RainNowComputation<P extends { time: number } = ApiRainPoint> {
   /** The moment the values are for, epoch milliseconds. */
   time: number;
   /** The hour containing the moment. */
-  current: ApiRainPoint;
+  current: P;
   /** Judged hours from the one before the current hour to a day after the moment. */
-  series: ApiRainPoint[];
+  series: P[];
 }
 
 /**
  * The hour containing a moment, from the judged series (rain is per hour, so nothing is
  * interpolated). Null when the series does not cover the moment. The server and the browser
- * run this on the same numbers.
+ * run this on the same numbers, for rain and for snow.
  */
-export function computeRainNow(
-  series: readonly ApiRainPoint[],
+export function computeRainNow<P extends { time: number }>(
+  series: readonly P[],
   time: number,
-): RainNowComputation | null {
+): RainNowComputation<P> | null {
   const first = series[0];
   if (!first) return null;
   let i = -1;
@@ -141,9 +154,12 @@ export function computeRainNow(
   };
 }
 
+/** Whether the hour's rain is snow: by the shared rule, or by temperature for older answers. */
+const asSnow = (p: ApiRainPoint): boolean => p.asSnow ?? p.snow;
+
 /** "Light rain now.", "Snow now."… */
 function nowPhrase(p: ApiRainPoint): string {
-  if (snowy(p.band, p.snow)) {
+  if (snowy(p.band, asSnow(p))) {
     if (p.band !== 'rain') return RAIN_COPY.heavySnowNow;
     return p.light ? RAIN_COPY.lightSnowNow : RAIN_COPY.snowNow;
   }
@@ -152,9 +168,9 @@ function nowPhrase(p: ApiRainPoint): string {
 }
 
 /** The hours that start the Now view's rows: two-hour blocks from the next full hour. */
-export function rainRows(now: RainNowComputation): ApiRainPoint[] {
+export function rainRows<P extends { time: number }>(now: RainNowComputation<P>): P[] {
   const next = now.series.find((q) => q.time > now.time);
-  const rows: ApiRainPoint[] = [];
+  const rows: P[] = [];
   for (let k = 0; next && k < NOW.rows; k++) {
     const q = now.series.find((s) => s.time === next.time + k * NOW.stepHours * HOUR);
     if (q) rows.push(q);
@@ -186,7 +202,8 @@ export function rainTrendLine(now: RainNowComputation): string {
 export function formatRainNow(now: RainNowComputation, unit: RainUnit): ApiRainNow {
   const p = now.current;
   let verdict = RAIN_NOW_VERDICTS[p.band];
-  if (snowy(p.band, p.snow)) verdict = p.band === 'rain' ? SNOW_VERDICTS.now : SNOW_VERDICTS.heavy;
+  if (snowy(p.band, asSnow(p)))
+    verdict = p.band === 'rain' ? SNOW_VERDICTS.now : SNOW_VERDICTS.heavy;
   return {
     time: new Date(now.time).toISOString(),
     band: p.band,

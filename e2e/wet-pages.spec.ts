@@ -161,8 +161,8 @@ test.describe('isitwet.today pages', () => {
       expect(html).toMatch(/<title>[^<]+ \| isitwet\.today<\/title>/);
       expect(html).toContain(WET_BRAND);
       expect(html).toContain('<link rel="icon" href="/wet/favicon.svg" type="image/svg+xml">');
-      // One service on two domains.
-      expect(html).toContain('isitwet.today and isithot.today are one service');
+      // One service on three domains, the page's own first.
+      expect(html).toContain('isitwet.today, isithot.today and willitsnow.today are one service');
     }
     const about = await (await request.get('/wet/about')).text();
     expect(about).toContain('<h2>Is it wet?</h2>');

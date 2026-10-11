@@ -3,11 +3,19 @@ import { CACHE, question, type Topic, type TodayResponse } from '@isithot/core';
 import { cdnCacheControl, cityBySlug, todayForCity } from '@isithot/server';
 import { renderOg, type OgContent } from '../../lib/og';
 import { platformFrom } from '../../lib/platform';
+import { HOURLY, LOOKS, TOPIC_DAYS, type TopicDay } from '../../lib/topics';
 
 export const prerender = false;
 
 /** "About 6mm still to come. Mostly between 2pm and 6pm." → "About 6mm still to come." */
 const firstSentence = (text: string): string => text.split(/(?<=\.)\s+/)[0]!;
+
+/** The line under the verdict: hot's high, and the first sentence of rain's or snow's detail. */
+const DETAILS: Record<Topic, (res: TodayResponse, day: TopicDay) => string> = {
+  hot: ({ days: [day] }) => `High of ${day!.high}°, feels like ${day!.feelsLike}°.`,
+  wet: (_, day) => firstSentence(day.detail),
+  snow: (_, day) => firstSentence(day.detail),
+};
 
 /** A city's answer to the site's question as an image; "default" is the site's own image. */
 export const ogImage =
@@ -22,7 +30,7 @@ export const ogImage =
     if (slug === 'default') {
       content = {
         topic,
-        band: topic === 'wet' ? 'rain' : 'hot',
+        band: LOOKS[topic].og,
         question: question(null, 'today', topic),
         answer: 'Yes?',
         verdict: 'One answer from several forecasts.',
@@ -34,35 +42,27 @@ export const ogImage =
       if (!city) return new Response('Not found', { status: 404 });
       const result = await todayForCity(city.slug, platformFrom(locals));
       const body = result.status === 200 ? (result.body as TodayResponse) : undefined;
-      const day = body?.days[0];
-      const rainDay = body?.rain?.days[0];
+      const day = body && TOPIC_DAYS[topic](body)?.[0];
       const asked = question(city.name, 'today', topic);
-      if (topic === 'hot' && day) {
+      if (body && day) {
+        if (HOURLY[topic]) {
+          // Today's rain and snow are for the rest of the day from when they were worked out:
+          // like the city page, never cached past the next hour, stale or not.
+          maxAge = Math.min(maxAge, result.maxAge ?? maxAge);
+          expiresIn = result.expiresIn ?? null;
+        }
         content = {
           topic,
           band: day.band,
           question: asked,
           answer: day.answer,
           verdict: day.verdict,
-          detail: `High of ${day.high}°, feels like ${day.feelsLike}°.`,
-        };
-      } else if (topic === 'wet' && rainDay) {
-        // Today's rain is for the rest of the day from when it was worked out: like the city
-        // page, never cached past the next hour, stale or not.
-        maxAge = Math.min(maxAge, result.maxAge ?? maxAge);
-        expiresIn = result.expiresIn ?? null;
-        content = {
-          topic,
-          band: rainDay.band,
-          question: asked,
-          answer: rainDay.answer,
-          verdict: rainDay.verdict,
-          detail: firstSentence(rainDay.detail),
+          detail: DETAILS[topic](body, day),
         };
       } else {
         content = {
           topic,
-          band: topic === 'wet' ? 'spots' : 'mild',
+          band: LOOKS[topic].ogPending,
           question: asked,
           answer: '…',
           verdict: '',

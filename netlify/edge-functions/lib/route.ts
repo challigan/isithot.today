@@ -1,13 +1,22 @@
 /**
- * Which site a request is for. One deploy serves both: isithot.today as it is, and isitwet.today
- * from the pages under /wet. Pure and import-free so it runs in the Deno edge runtime and in
- * vitest alike. The hostnames mirror SITES in packages/core/src/config.ts (a test checks).
+ * Which site a request is for. One deploy serves all three: isithot.today as it is, and
+ * isitwet.today and willitsnow.today from the pages under their prefixes (/wet, /snow). Pure and
+ * import-free so it runs in the Deno edge runtime and in vitest alike. The hosts and prefixes
+ * mirror SITES in packages/core/src/config.ts (a test checks).
  */
 
-export const HOSTS = { hot: 'isithot.today', wet: 'isitwet.today' } as const;
+/**
+ * Each site's host, the prefix its pages live under in this deploy, and the header that makes a
+ * deploy preview (or local dev) act as that site. isithot.today's pages are at the root.
+ */
+export const SITES = {
+  hot: { host: 'isithot.today', prefix: '', header: null },
+  wet: { host: 'isitwet.today', prefix: '/wet', header: 'x-isitwet-host' },
+  snow: { host: 'willitsnow.today', prefix: '/snow', header: 'x-willitsnow-host' },
+} as const;
 
-/** Deploy previews (and local dev) treat requests with this header as if made to isitwet.today. */
-export const WET_HOST_HEADER = 'x-isitwet-host';
+type Site = keyof typeof SITES;
+const IDS = Object.keys(SITES) as Site[];
 
 export interface RouteRequest {
   /** The request's hostname, e.g. "isitwet.today". */
@@ -16,10 +25,10 @@ export interface RouteRequest {
   pathname: string;
   /** The query string with its "?", or "" (as `URL.search`). */
   search: string;
-  /** True on any deploy but production: only then is the header honoured. */
+  /** True on any deploy but production: only then are the sites' headers honoured. */
   preview: boolean;
-  /** The value of the x-isitwet-host header, if sent. */
-  header: string | null;
+  /** The request's headers (only the sites' own, such as x-isitwet-host, are read). */
+  headers: { get(name: string): string | null };
 }
 
 /**
@@ -32,30 +41,41 @@ export type Route =
   | { kind: 'redirect'; to: string; status: 301 };
 
 const PASS: Route = { kind: 'pass' };
-const WET_PREFIX = '/wet';
+const redirect = (to: string): Route => ({ kind: 'redirect', to, status: 301 });
 
-const isWetPath = (pathname: string) =>
-  pathname === WET_PREFIX || pathname.startsWith(`${WET_PREFIX}/`);
+/** Whether a path is under a prefix: the prefix itself or below it ("/wetter" is not). */
+const under = (pathname: string, prefix: string) =>
+  !!prefix && (pathname === prefix || pathname.startsWith(`${prefix}/`));
 
-export function route({ host, pathname, search, preview, header }: RouteRequest): Route {
+export function route({ host, pathname, search, preview, headers }: RouteRequest): Route {
   // URL.hostname is lower case already; a fully qualified "isitwet.today." is the same host.
   const name = host.toLowerCase().replace(/\.$/, '');
 
-  if (name === `www.${HOSTS.wet}`) {
-    return { kind: 'redirect', to: `https://${HOSTS.wet}${pathname}${search}`, status: 301 };
+  // www of a prefixed site goes to its own domain (Netlify does this for isithot.today itself).
+  const www = IDS.find((s) => SITES[s].prefix && name === `www.${SITES[s].host}`);
+  if (www) return redirect(`https://${SITES[www].host}${pathname}${search}`);
+
+  const real = IDS.find((s) => name === SITES[s].host || name === `www.${SITES[s].host}`);
+  // Off production a header can make any host act as a site (the first, if several are sent).
+  const asked = (s: Site) => {
+    const { header } = SITES[s];
+    return !!header && headers.get(header) === '1';
+  };
+  const site = real ?? (preview ? IDS.find(asked) : undefined);
+  if (!site) return PASS;
+
+  const other = IDS.find((s) => s !== site && under(pathname, SITES[s].prefix));
+  if (other) {
+    // A path that belongs to another site: on a real host, go there. A preview serves it as it
+    // is (every site lives under its prefix there).
+    const rest = pathname.slice(SITES[other].prefix.length) || '/';
+    return real ? redirect(`https://${SITES[other].host}${rest}${search}`) : PASS;
   }
 
-  if (name === HOSTS.wet || (preview && header === '1')) {
-    // The function runs again on its own rewrite, so /wet paths must pass, never redirect: that
-    // would loop. Requested directly they serve the same pages, whose canonical URLs omit /wet.
-    if (isWetPath(pathname)) return PASS;
-    return { kind: 'rewrite', to: `${WET_PREFIX}${pathname === '/' ? '' : pathname}${search}` };
-  }
-
-  if ((name === HOSTS.hot || name === `www.${HOSTS.hot}`) && isWetPath(pathname)) {
-    const rest = pathname.slice(WET_PREFIX.length) || '/';
-    return { kind: 'redirect', to: `https://${HOSTS.wet}${rest}${search}`, status: 301 };
-  }
-
-  return PASS;
+  // The function runs again on its own rewrite, so paths under the site's prefix must pass, never
+  // redirect: that would loop. Requested directly they serve the same pages, whose canonical
+  // URLs omit the prefix.
+  const { prefix } = SITES[site];
+  if (!prefix || under(pathname, prefix)) return PASS;
+  return { kind: 'rewrite', to: `${prefix}${pathname === '/' ? '' : pathname}${search}` };
 }

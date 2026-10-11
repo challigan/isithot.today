@@ -20,6 +20,20 @@ export const NASA_POWER_PARAMETERS = ['T2M', 'T2M_RANGE'] as const;
  */
 export const NASA_POWER_RAIN_PARAMETERS = ['PRECTOTCORR'] as const;
 
+/**
+ * Normal snowfall over land: monthly mean snow water, mm/day. Its own request too, so the
+ * temperature and rain normals (and their cache entries) stay exactly as they were.
+ */
+export const NASA_POWER_SNOW_PARAMETERS = ['PRECSNOLAND'] as const;
+
+/** Normal snowfall, and the climate cell's mean height (snow depends so much on height). */
+export interface SnowNormals {
+  /** Twelve monthly rates, January first, mm/day of water. */
+  normals: MonthlyNormals;
+  /** The cell's mean height, m, or null when the response does not give it. */
+  height: number | null;
+}
+
 export interface NasaPowerConfig {
   url: string;
   fetch: FetchLike;
@@ -60,6 +74,10 @@ export function buildRainClimatologyUrl(url: string, point: LatLon): string {
   return climatologyUrl(url, point, NASA_POWER_RAIN_PARAMETERS);
 }
 
+export function buildSnowClimatologyUrl(url: string, point: LatLon): string {
+  return climatologyUrl(url, point, NASA_POWER_SNOW_PARAMETERS);
+}
+
 type Monthly = Record<string, unknown>;
 
 const parametersOf = (json: unknown): Record<string, Monthly> | undefined =>
@@ -83,17 +101,33 @@ export function parseClimatology(json: unknown): MonthlyNormals {
   return monthly;
 }
 
-/** Twelve monthly normal rainfall rates, January first, mm/day. */
-export function parseRainClimatology(json: unknown): MonthlyNormals {
-  const rate = parametersOf(json)?.PRECTOTCORR;
+/** Twelve monthly rates of an amount that is never negative, January first. */
+function parseRates(json: unknown, parameter: string): MonthlyNormals {
+  const rate = parametersOf(json)?.[parameter];
   if (!rate) throw new ProviderError('nasa-power', 'unexpected climatology response shape');
-  // -999 is the fill value; rain is never negative, so anything below zero is missing.
+  // -999 is the fill value; rain and snow are never negative, so anything below zero is missing.
   const monthly: unknown[] = MONTH_KEYS.map((key) => {
     const r = rate[key];
     return isFiniteNumber(r) && r >= 0 ? r : null;
   });
   if (!isValidNormals(monthly)) throw new ProviderError('nasa-power', 'missing monthly values');
   return monthly;
+}
+
+/** Twelve monthly normal rainfall rates, January first, mm/day. */
+export function parseRainClimatology(json: unknown): MonthlyNormals {
+  return parseRates(json, 'PRECTOTCORR');
+}
+
+/**
+ * Twelve monthly normal snowfall rates (water), January first, mm/day, and the cell's mean
+ * height (the point's third coordinate). Cells of sea or glacier may have no land values: they
+ * are missing, as for rain, and the site then says nothing about normal snow.
+ */
+export function parseSnowClimatology(json: unknown): SnowNormals {
+  const normals = parseRates(json, 'PRECSNOLAND');
+  const height = (json as { geometry?: { coordinates?: unknown[] } }).geometry?.coordinates?.[2];
+  return { normals, height: isFiniteNumber(height) ? height : null };
 }
 
 export async function fetchClimateNormals(
@@ -120,4 +154,17 @@ export async function fetchRainNormals(
     config.timeoutMs ?? 8000,
   );
   return parseRainClimatology(json);
+}
+
+export async function fetchSnowNormals(
+  config: NasaPowerConfig,
+  point: LatLon,
+): Promise<SnowNormals> {
+  const json = await fetchJson(
+    'nasa-power',
+    config.fetch,
+    buildSnowClimatologyUrl(config.url, point),
+    config.timeoutMs ?? 8000,
+  );
+  return parseSnowClimatology(json);
 }

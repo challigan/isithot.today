@@ -1,14 +1,14 @@
 ---
-/** The cookie notice, the same for both sites: they are one service. */
+/** The cookie notice, the same for every site: they are one service. */
 import Content from '../layouts/Content.astro';
 import { SITES, type Topic } from '@isithot/core';
+import { siteNames } from '../lib/topics';
 
 interface Props {
   topic: Topic;
 }
 const { topic } = Astro.props;
 const site = SITES[topic].name;
-const other = SITES[topic === 'hot' ? 'wet' : 'hot'].name;
 ---
 
 <Content
@@ -22,7 +22,7 @@ const other = SITES[topic === 'hot' ? 'wet' : 'hot'].name;
     <em>Draft for review. Last updated 7 October 2026.</em>
   </p>
   <p>
-    {site} and {other} are one service. Neither sets any cookies of its own, and we do not use
+    {siteNames(topic)} are one service. None of them sets any cookies of its own, and we do not use
     analytics cookies. Traffic is counted with Cloudflare Web Analytics, which is cookieless.
   </p>
 

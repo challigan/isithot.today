@@ -1,12 +1,13 @@
 /**
- * Phone layout: the Hot | Wet toggle floats at the foot of the screen in thumb reach (from 640px
- * up it sits above the tabs), nothing scrolls sideways with large text on a narrow phone, and
- * long answers ("Maybe.", "Almost.") are sized to fit.
+ * Phone layout: the Hot | Wet | Snow toggle floats at the foot of the screen in thumb reach (from
+ * 640px up it sits above the tabs), nothing scrolls sideways with large text on a narrow phone,
+ * and long answers ("Maybe.", "Almost.") are sized to fit.
  */
 import type { Page } from '@playwright/test';
+import { TOPICS } from '../packages/core/src/config';
 import { expect, test } from './helpers';
 
-const PAGES = ['/', '/wet', '/in/london-gb'];
+const PAGES = ['/', '/wet', '/snow', '/in/london-gb'];
 
 async function ready(page: Page, path: string): Promise<void> {
   await page.goto(path);
@@ -22,7 +23,7 @@ const footerTextBottom = (page: Page) =>
     return Math.max(...[...range.getClientRects()].map((r) => r.bottom));
   });
 
-test.describe('the Hot | Wet toggle', () => {
+test.describe('the Hot | Wet | Snow toggle', () => {
   test('floats at the foot of a phone screen, clear of the footer', async ({ page }, info) => {
     test.skip(info.project.name !== 'phone', 'phone layout');
     const vp = page.viewportSize()!;
@@ -79,8 +80,8 @@ test.describe('the Hot | Wet toggle', () => {
       const box = (await page.locator('#topic').boundingBox())!;
       expect(box.x, path).toBeGreaterThanOrEqual(0);
       expect(box.x + box.width, path).toBeLessThanOrEqual(320);
-      // Both halves of the toggle are still there to press.
-      for (const t of ['hot', 'wet']) {
+      // Every button of the toggle is still there to press (the icons give way at this size).
+      for (const t of TOPICS) {
         const button = (await page.locator(`#topic [data-topic=${t}]`).boundingBox())!;
         expect(button.width, `${path} ${t}`).toBeGreaterThan(40);
         expect(button.x + button.width, `${path} ${t}`).toBeLessThanOrEqual(320);

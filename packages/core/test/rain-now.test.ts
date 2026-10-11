@@ -344,3 +344,46 @@ describe('rain Now on the server and in the browser', () => {
     expect(behind.hours[0]!.label).toBe('9am');
   });
 });
+
+describe('rain Now and the snow topic agree', () => {
+  it('says whether an hour falls as snow by the shared rule when there is snowfall', () => {
+    const days: DayData[] = [
+      {
+        date: '2026-10-15',
+        models: [],
+        hourly: [
+          // Above the old snow line, but most of it falls as snow in the models' own snowfall.
+          { hour: 0, time: at(0), temps: [2, 2, 2], rain: [1, 1, null], snow: [0.7, 0.35, 0.7] },
+          // Below it, but the models' snowfall says mostly rain.
+          { hour: 1, time: at(1), temps: [0, 0, 0], rain: [1, 1, 1], snow: [0, 0, 0.7] },
+          // No precipitation at all.
+          { hour: 2, time: at(2), temps: [0], rain: [0], snow: [0] },
+        ],
+      },
+    ];
+    const series = rainSeries(days);
+    expect(series.map((p) => [p.snow, p.asSnow])).toEqual([
+      [false, true],
+      [true, false],
+      [true, false],
+    ]);
+    expect(judgeRainSeries(series, 'c', 'UTC')[0]).toMatchObject({ snow: false, asSnow: true });
+  });
+
+  it('words the hour by the shared rule where the series has it', () => {
+    const say = (current: Partial<ApiRainPoint>) => {
+      const n = nowWith(current, ['dry']);
+      return [n.verdict, n.detail.split('. ')[0], n.snow];
+    };
+    expect(say({ band: 'rain', amount: 1, snow: false, asSnow: true })).toEqual([
+      "It's snowing.",
+      'Snow now',
+      false,
+    ]);
+    expect(say({ band: 'rain', amount: 1, snow: true, asSnow: false })).toEqual([
+      "It's raining.",
+      'Rain now',
+      true,
+    ]);
+  });
+});

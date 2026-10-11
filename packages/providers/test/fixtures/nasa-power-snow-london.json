@@ -1,0 +1,45 @@
+{
+ "type": "Feature",
+ "geometry": {
+  "type": "Point",
+  "coordinates": [
+   0,
+   51.5,
+   50
+  ]
+ },
+ "properties": {
+  "parameter": {
+   "PRECSNOLAND": {
+    "JAN": 1.38,
+    "FEB": 1.2,
+    "MAR": 0,
+    "APR": 0,
+    "MAY": 0,
+    "JUN": 0,
+    "JUL": 0,
+    "AUG": 0,
+    "SEP": 0,
+    "OCT": 0,
+    "NOV": 0,
+    "DEC": 1.51,
+    "ANN": 0.34
+   }
+  }
+ },
+ "header": {
+  "title": "NASA/POWER synthetic climatology",
+  "fill_value": -999
+ },
+ "messages": [],
+ "parameters": {
+  "PRECSNOLAND": {
+   "units": "mm/day",
+   "longname": "Snow Precipitation Land"
+  }
+ },
+ "times": {
+  "data": 0,
+  "process": 0
+ }
+}

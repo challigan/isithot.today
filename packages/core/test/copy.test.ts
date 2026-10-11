@@ -40,8 +40,37 @@ import {
   upToLine,
   wetWeekLine,
   whenDays,
+  COPY,
+  DEFAULT_DESCRIPTIONS,
+  DEFAULT_TITLES,
+  HERE_QUESTIONS,
+  SNOW_ANSWERS,
+  SNOW_BAND_LABELS,
+  SNOW_DAY_VERDICTS,
+  SNOW_NOW_VERDICTS,
+  TOPIC_LABELS,
+  UNITS_LABELS,
+  UNIT_NAMES,
+  clearingLine,
+  coldestLine,
+  flakesDaysLine,
+  likelyFromLine,
+  noLowerLine,
+  possibleDaysLine,
+  snowAgreementLine,
+  snowAmountLine,
+  snowDaysLine,
+  snowFromLine,
+  snowLabel,
+  snowNormalLine,
+  snowPageTitle,
+  snowPossibleFromLine,
+  snowRateLine,
+  snowStripSummary,
+  snowUpToLine,
+  snowyWeekLine,
 } from '../src/copy';
-import { BANDS, RAIN_BANDS, type RainBand } from '../src/config';
+import { BANDS, RAIN_BANDS, SNOW_BANDS, type RainBand } from '../src/config';
 
 describe('copy', () => {
   it('has an answer, verdict and label for every band', () => {
@@ -234,5 +263,127 @@ describe('rain copy', () => {
     expect(rainNormalLine('wetter', 'October')).toBe('Wetter than usual for October.');
     expect(rainNormalLine('drier', 'October')).toBe('Drier than usual for October.');
     expect(rainNormalLine('normal', 'the time of year')).toBe('About normal for the time of year.');
+  });
+});
+
+describe('snow copy', () => {
+  it('asks the snow questions, with "snowing" for now', () => {
+    expect(question(null, 'today', 'snow')).toBe('Will it snow today?');
+    expect(question('Oslo', 'today', 'snow')).toBe('Will it snow in Oslo today?');
+    expect(question(null, 'today', 'snow', true)).toBe('Will it snow tomorrow?');
+    expect(question('Oslo', 'today', 'snow', true)).toBe('Will it snow in Oslo tomorrow?');
+    expect(question(null, 'now', 'snow')).toBe('Is it snowing right now?');
+    expect(question('Oslo', 'now', 'snow', true)).toBe('Is it snowing in Oslo right now?');
+    expect(question('Oslo', 'week', 'snow')).toBe('Will it snow in Oslo this week?');
+    // A place name is used as it is.
+    expect(question('$& $1', 'today', 'snow')).toBe('Will it snow in $& $1 today?');
+    expect(HERE_QUESTIONS).toEqual({
+      hot: 'Is it hot here?',
+      wet: 'Is it wet here?',
+      snow: 'Will it snow here?',
+    });
+  });
+
+  it('has an answer, verdicts and labels for every snow band', () => {
+    for (const band of SNOW_BANDS) {
+      expect(SNOW_ANSWERS[band]).toMatch(/^(No|Maybe|Yes)\.$/);
+      expect(SNOW_DAY_VERDICTS[band]).toMatch(/\.$/);
+      expect(SNOW_NOW_VERDICTS[band]).toMatch(/\.$/);
+      expect(SNOW_BAND_LABELS[band]).toBeTruthy();
+    }
+    expect(TOPIC_LABELS.snow).toBe('Snow');
+    expect(SNOW_BAND_LABELS.nosnow).toBe('No snow');
+    expect(snowLabel('heavysnow', null)).toBe('Heavy snow');
+    expect(snowLabel('nosnow', 'warm')).toBe('Too warm');
+    expect(snowLabel('nosnow', 'rain')).toBe('Rain');
+    expect(snowLabel('nosnow', 'dry')).toBe('Dry');
+  });
+
+  it('labels the units for each topic', () => {
+    expect(UNITS_LABELS).toEqual({
+      hot: 'Temperature units',
+      wet: 'Rain units',
+      snow: 'Snow units',
+    });
+    expect(UNIT_NAMES.snow).toEqual({ c: 'cm', f: 'in' });
+    expect(UNIT_NAMES.wet).toEqual({ c: 'mm', f: 'in' });
+    expect(UNIT_NAMES.hot).toEqual({ c: '°C', f: '°F' });
+    expect(COPY.nextHoursSnow).toBe('Chance of snow, next 12 hours');
+    expect(DEFAULT_TITLES.snow).toBe('Will it snow today? | willitsnow.today');
+    expect(DEFAULT_DESCRIPTIONS.snow).toMatch(/^Will it snow today where you are\?/);
+  });
+
+  it('titles snow city pages, with why for a day without snow', () => {
+    expect(snowPageTitle({ city: 'Oslo', answer: 'Yes.', band: 'heavysnow', reason: null })).toBe(
+      'Will it snow in Oslo today? Yes. Heavy snow | willitsnow.today',
+    );
+    expect(snowPageTitle({ city: 'London', answer: 'No.', band: 'nosnow', reason: 'warm' })).toBe(
+      'Will it snow in London today? No. Too warm | willitsnow.today',
+    );
+    expect(snowPageTitle({ answer: 'Maybe.', band: 'maybesnow', reason: null })).toBe(
+      'Will it snow today? Maybe. Snow possible | willitsnow.today',
+    );
+  });
+
+  it('words amounts, ranges and dustings', () => {
+    expect(snowAmountLine({ low: 2, high: 5 }, 'cm', true)).toBe('2 to 5cm still to come.');
+    expect(snowAmountLine({ low: 3, high: 3 }, 'cm', false)).toBe('About 3cm of snow.');
+    expect(snowAmountLine({ low: 1, high: 1.5 }, 'in', false)).toBe('1 to 1.5in of snow.');
+    expect(snowAmountLine(null, 'cm', true)).toBe('A dusting still to come.');
+    expect(snowAmountLine(null, 'in', false)).toBe('A dusting of snow.');
+    expect(snowUpToLine('2cm', false)).toBe('Some forecasts say up to 2cm.');
+    expect(snowUpToLine('2cm', true)).toBe('One forecast says up to 2cm.');
+    expect(snowUpToLine(null, false)).toBe('Some forecasts say a dusting.');
+    expect(snowUpToLine(null, true)).toBe('One forecast says a dusting.');
+    expect(snowRateLine('Heavy snow now', '2cm')).toBe('Heavy snow now, about 2cm an hour.');
+  });
+
+  it('words the lowest temperature', () => {
+    expect(noLowerLine(9, 'rest')).toBe('No lower than 9° for the rest of the day.');
+    expect(noLowerLine(9, 'day')).toBe('No lower than 9° all day.');
+    expect(noLowerLine(6, 'week')).toBe('No lower than 6° all week.');
+    expect(coldestLine(-4)).toBe('Down to -4° at the coldest.');
+  });
+
+  it('says when snow comes and goes', () => {
+    expect(snowFromLine(21)).toBe('Snow likely from about 9pm.');
+    expect(snowPossibleFromLine(21)).toBe('Snow possible from about 9pm.');
+    expect(likelyFromLine(21)).toBe('Likely from about 9pm.');
+    expect(clearingLine(24)).toBe('Clearing by about midnight.');
+  });
+
+  it('describes agreement', () => {
+    expect(snowAgreementLine(7, 8)).toBe('7 of 8 forecasts expect snow');
+    expect(snowAgreementLine(1, 8)).toBe('1 of 8 forecasts expects snow');
+    expect(snowStripSummary({ min: '0cm', max: '6cm', snowy: 7, total: 8 })).toBe(
+      'Forecasts range from 0cm to 6cm; 7 of 8 expect snow.',
+    );
+    expect(snowStripSummary({ min: '0cm', max: '0cm', snowy: 0, total: 8 })).toBe(
+      'All forecasts say 0cm; none expect snow.',
+    );
+    expect(snowStripSummary({ min: '0cm', max: '1cm', snowy: 1, total: 8 })).toBe(
+      'Forecasts range from 0cm to 1cm; 1 of 8 expects snow.',
+    );
+  });
+
+  it('words the week', () => {
+    expect(snowyWeekLine(null)).toBe('A snowy week.');
+    expect(snowyWeekLine('on Fri')).toBe('A snowy week, heaviest on Fri.');
+    expect(snowDaysLine('on Thu and Fri', null, false)).toBe('Snow on Thu and Fri.');
+    expect(snowDaysLine('on Thu and Fri', 'on Fri', false)).toBe(
+      'Snow on Thu and Fri, heavy on Fri.',
+    );
+    expect(snowDaysLine('on Fri', 'on Fri', true)).toBe('Heavy snow on Fri.');
+    expect(possibleDaysLine('on Sat')).toBe('Snow possible on Sat.');
+    expect(flakesDaysLine('on Thu')).toBe('A few flakes on Thu, nothing more.');
+  });
+
+  it('compares with normal snow', () => {
+    expect(snowNormalLine('rare', 'October')).toBe('Snow is rare here in October.');
+    expect(snowNormalLine('rare', null)).toBe('Snow is rare here at this time of year.');
+    expect(snowNormalLine('common', 'January')).toBe('Snow is common here in January.');
+    expect(snowNormalLine('more', 'January')).toBe('More snow than usual for January.');
+    expect(snowNormalLine('less', null)).toBe('Less snow than usual for the time of year.');
+    expect(snowNormalLine('usual', 'January')).toBe('About usual for January.');
   });
 });

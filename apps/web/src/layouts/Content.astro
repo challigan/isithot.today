@@ -1,7 +1,8 @@
 ---
 import Base from './Base.astro';
 import Footer from '../components/Footer.astro';
-import { PALETTES, RAIN_PALETTES, SITES, type Topic } from '@isithot/core';
+import { SITES, type Topic } from '@isithot/core';
+import { LOOKS } from '../lib/topics';
 
 interface Props {
   title: string;
@@ -20,7 +21,7 @@ const [brand, tld] = site.name.split('.');
   title={`${title} | ${site.name}`}
   description={description}
   canonical={`${site.url}${path}`}
-  palette={topic === 'wet' ? RAIN_PALETTES.rain : PALETTES.mild}
+  palette={LOOKS[topic].content}
   topic={topic}
 >
   <div class="wrap" data-topic={topic}>

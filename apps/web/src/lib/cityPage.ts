@@ -1,6 +1,7 @@
 /**
- * The request side of a city page, shared by isithot.today/in/<slug> and isitwet.today/in/<slug>:
- * the canonical address, the answer and the cache headers. CityPage.astro renders the result.
+ * The request side of a city page, shared by the sites' /in/<slug> pages (isithot.today,
+ * isitwet.today, willitsnow.today): the canonical address, the answer and the cache headers.
+ * CityPage.astro renders the result.
  */
 import type { AstroGlobal } from 'astro';
 import {
@@ -47,8 +48,8 @@ export async function loadCityPage(
 ): Promise<CityPageProps | Response> {
   const slug = (Astro.params.slug ?? '').toLowerCase();
   const city = cityBySlug(slug) ?? null;
-  // Wet pages sit under /wet only where they are served from there (deploy previews, a local
-  // server); on isitwet.today the same page is at /in/<slug>.
+  // Wet and snow pages sit under /wet and /snow only where they are served from there (deploy
+  // previews, a local server); on isitwet.today the same page is at /in/<slug>.
   if (city && city.slug !== Astro.params.slug) {
     return Astro.redirect(sitePath(topic, `/in/${city.slug}`, Astro.url.hostname), 301);
   }
@@ -83,8 +84,8 @@ export async function loadCityPage(
   const start = defaultView(data, now);
   const palette = viewDisplay(data, topic, start, state, { ...opts, tomorrow }).palette;
 
-  // Never past the next hour, stale or not: the page carries today's rain answer for the rest of
-  // the day, and the evening's Tomorrow from 6pm.
+  // Never past the next hour, stale or not: the page carries today's rain and snow answers for
+  // the rest of the day, and the evening's Tomorrow from 6pm.
   const cache = today.band ? Math.min(CACHE.cityPage, result.maxAge ?? CACHE.cityPage) : 60;
   Astro.response.headers.set('Cache-Control', `public, max-age=${Math.min(cache, 300)}`);
   Astro.response.headers.set(

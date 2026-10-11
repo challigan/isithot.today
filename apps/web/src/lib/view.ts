@@ -4,7 +4,8 @@
  * numbers, our own model names and our own copy. Place names are never passed through these
  * helpers.
  */
-import type { Band, NowItem, RainBand, TodayModels, WeekItem } from '@isithot/core';
+import type { AnyBand, Band, NowItem, TodayModels, WeekItem } from '@isithot/core';
+import { SNOW_GLYPHS } from './snowGlyphs';
 import { RAIN_GLYPHS } from './wetGlyphs';
 
 const rays = (n: number, r1: number, r2: number, cx = 60, cy = 60): string =>
@@ -33,10 +34,11 @@ export const GLYPHS: Record<Band, string> = {
   scorching: `<circle cx="60" cy="60" r="22" fill="currentColor" fill-opacity=".3"/><circle cx="60" cy="60" r="29" opacity=".5"/><g class="spin">${rays(16, 36, 54)}</g>`,
 };
 
-const ALL_GLYPHS: Record<string, string> = { ...GLYPHS, ...RAIN_GLYPHS };
+/** Every topic's icons, by band: band keys are unique across topics. */
+const ALL_GLYPHS: Record<AnyBand, string> = { ...GLYPHS, ...RAIN_GLYPHS, ...SNOW_GLYPHS };
 
-/** The icon for a band of either topic, or nothing without one. */
-export function glyphFor(band: Band | RainBand | null): string {
+/** The icon for any topic's band, or nothing without one. */
+export function glyphFor(band: AnyBand | null): string {
   return (band && ALL_GLYPHS[band]) || '';
 }
 

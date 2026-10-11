@@ -1,0 +1,30 @@
+---
+/** How "Will it snow?" works, in plain words: a section of the About page on every site. */
+import { MODELS, SNOW } from '@isithot/core';
+
+const pct = (share: number): string => `${Math.round(share * 100)}%`;
+// Depth of fresh snow from 10 mm of water.
+const depth = `${Math.round(10 * SNOW.cmPerMm)} cm`;
+---
+
+<h2>Will it snow?</h2>
+<p>
+  For snow, we ask {MODELS.length} forecast models how much they expect, hour by hour, as a depth of
+  fresh snow: {depth} for every 10 mm of water, the usual ratio. A model "expects snow" when it
+  forecasts at least {SNOW.day.snow} cm for the day. For a shorter stretch, like the rest of an
+  evening, less is enough: {SNOW.hour.snow} cm for each hour that is left. The share of models
+  expecting snow is the chance. When {pct(SNOW.likelyFrom)} or more of them do, the answer is Yes;
+  from {pct(SNOW.maybeFrom)} it is Maybe. How much snow comes from the middle forecast (the median).
+</p>
+<p>
+  Rain and snow are told apart by one rule, so Wet and Snow always agree: in an hour warmer than
+  {SNOW.warmAboveC}°C nothing counts as snow, whatever a model says. When the answer is No, it says
+  why: too warm, rain rather than snow, or simply dry, with the lowest temperature expected.
+</p>
+<p>
+  This week is Yes when any day brings snow. Where NASA POWER's long-term records cover it, we also
+  say whether snow is rare or common there at this time of year, and compare the week with normal.
+  Snow depends so much on height that we only do this where the records' 50 km grid cell is within
+  {SNOW.normals.maxHeightDifference} m of the place's height. Amounts are fresh snowfall, not what
+  will be lying on the ground: some of it may melt as it lands.
+</p>

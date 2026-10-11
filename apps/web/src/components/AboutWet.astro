@@ -1,9 +1,8 @@
 ---
-/** How "Is it wet?" works, in plain words: a section of the About page on both sites. */
+/** How "Is it wet?" works, in plain words: a section of the About page on every site. */
 import { MODELS, RAIN } from '@isithot/core';
 
 const pct = (share: number): string => `${Math.round(share * 100)}%`;
-const cold = `${RAIN.snowAtOrBelowC}°C`;
 ---
 
 <h2>Is it wet?</h2>
@@ -17,8 +16,8 @@ const cold = `${RAIN.snowAtOrBelowC}°C`;
 </p>
 <p>
   Today means the rest of today, from now until midnight. Rain that has already fallen no longer
-  counts, so the answer can change through the day. When it is cold enough ({cold} or below), the
-  answer says the rain is likely to fall as snow.
+  counts, so the answer can change through the day. When most of it is forecast to fall as snow,
+  judged by the same rule as "Will it snow?", the answer says so.
 </p>
 <p>
   This week adds up each model's rain for the rest of today and the next six days, and compares the

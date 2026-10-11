@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { SITES } from '@isithot/core';
 import { CITIES } from '@isithot/server';
 
-/** The same pages on either site, with URLs on the site's own domain (never the deploy URL). */
+/** The same pages on every site, with URLs on the site's own domain (never the deploy URL). */
 export const sitemapXml = (site: string): Response => {
   const urls = [
     { path: '/', priority: '1.0', freq: 'hourly' },

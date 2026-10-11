@@ -1,8 +1,9 @@
 ---
-/** "Lost." Either site's not-found page, with its own name and colours. */
+/** "Lost." Each site's not-found page, with its own name, question and colours. */
 import Base from '../layouts/Base.astro';
 import Footer from './Footer.astro';
-import { PALETTES, RAIN_PALETTES, SITES, type Topic } from '@isithot/core';
+import { HERE_QUESTIONS, SITES, type Topic } from '@isithot/core';
+import { LOOKS } from '../lib/topics';
 
 interface Props {
   topic?: Topic;
@@ -13,7 +14,7 @@ const [brand, tld] = SITES[topic].name.split('.');
 
 <Base
   title={`Not found | ${SITES[topic].name}`}
-  palette={topic === 'wet' ? RAIN_PALETTES.showers : PALETTES.cold}
+  palette={LOOKS[topic].notFound}
   topic={topic}
   noindex
 >
@@ -23,7 +24,7 @@ const [brand, tld] = SITES[topic].name.split('.');
       <a class="brand" href="/">{brand}<span>.{tld}</span></a>
     </header>
     <main id="main">
-      <p class="question">Is it {topic} here?</p>
+      <p class="question">{HERE_QUESTIONS[topic]}</p>
       <h1 class="answer">Lost.</h1>
       <p class="verdict">We can't find that page.</p>
       <p class="detail">

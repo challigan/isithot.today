@@ -1,16 +1,15 @@
 /**
- * Text contrast as rendered, for every band of both topics (Hot and Wet) and every view, on the
- * phone and desktop projects. The
- * background is sampled behind each piece of text (gradient, glow and control backings
- * included) and the worst pixel counts. Targets are WCAG 2.2 AA: 3:1 for large text (24px, or
- * 18.66px bold), 4.5:1 for everything else.
+ * Text contrast as rendered, for every band of every topic (Hot, Wet and Snow) and every view, on
+ * the phone and desktop projects. The background is sampled behind each piece of text (gradient,
+ * glow and control backings included) and the worst pixel counts. Targets are WCAG 2.2 AA: 3:1
+ * for large text (24px, or 18.66px bold), 4.5:1 for everything else.
  *
  * The glow is fixed to the screen, so each element is measured where it is read: text in the
  * first screen at the top of the page, anything lower when scrolled to the middle.
  */
 import { expect, test, type Page } from '@playwright/test';
 import { PNG } from 'pngjs';
-import { BANDS, RAIN_BANDS } from '../packages/core/src/config';
+import { BANDS_BY_TOPIC, TOPICS, topicOfBand } from '../packages/core/src/config';
 
 interface Target {
   name: string;
@@ -142,8 +141,8 @@ async function locate(page: Page, targets: Target[]): Promise<Measured[]> {
 }
 
 /**
- * On phones the Hot | Wet toggle floats over the page, which scrolls under it: the page's text
- * is measured without it, and the toggle on its own.
+ * On phones the Hot | Wet | Snow toggle floats over the page, which scrolls under it: the page's
+ * text is measured without it, and the toggle on its own.
  */
 async function measure(page: Page, targets: Target[], label: string): Promise<string[]> {
   const floating = targets.filter((t) => t.selector.startsWith('#topic'));
@@ -199,11 +198,11 @@ async function measureEach(page: Page, targets: Target[], label: string): Promis
   return failures;
 }
 
-// A rain band's preview opens on Wet.
-for (const band of [...BANDS, ...RAIN_BANDS]) {
+// A band's preview opens on its topic: a rain band on Wet, a snow band on Snow.
+for (const band of TOPICS.flatMap((t) => BANDS_BY_TOPIC[t])) {
   test(`text contrast meets WCAG AA: ${band}`, async ({ page }, info) => {
     await page.goto(`/?preview=1&band=${band}`);
-    const topic = (RAIN_BANDS as readonly string[]).includes(band) ? 'wet' : 'hot';
+    const topic = topicOfBand(band);
     await expect(page.locator(`#topic [data-topic=${topic}]`)).toHaveAttribute(
       'aria-pressed',
       'true',

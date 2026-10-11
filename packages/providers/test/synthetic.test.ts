@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MODELS, RAIN, type ModelDay } from '@isithot/core';
+import { MODELS, RAIN, SNOW, type ModelDay } from '@isithot/core';
 import {
   OPEN_METEO_FREE,
   NASA_POWER_URL,
@@ -7,7 +7,10 @@ import {
   fetchClimateNormals,
   fetchForecast,
   fetchRainNormals,
+  fetchSnowNormals,
   searchPlaces,
+  syntheticForecast,
+  syntheticSnowNormals,
   syntheticTimezone,
   zoneOffsetSeconds,
 } from '../src';
@@ -139,6 +142,45 @@ describe('synthetic data source', () => {
     expect(tropics.days.every((d) => d.models.every((m) => (m.snow ?? 0) === 0))).toBe(true);
   });
 
+  it('gives snowfall as depth, never more than the precipitation as water', () => {
+    const raw = syntheticForecast(64.15, -21.95, ['ecmwf_ifs025'], new Date('2026-07-10T08:00Z'));
+    const precipitation = raw.hourly.precipitation_ecmwf_ifs025 as (number | null)[];
+    const snowfall = raw.hourly.snowfall_ecmwf_ifs025 as (number | null)[];
+    expect(snowfall).toHaveLength(precipitation.length);
+    snowfall.forEach((cm, i) => {
+      expect(cm).toBeCloseTo(precipitation[i]! * SNOW.cmPerMm, 2);
+    });
+  });
+
+  it('snows in Reykjavik in any month, for the end-to-end tests', async () => {
+    for (const iso of ['2026-07-10T08:00:00Z', '2026-10-10T08:00:00Z', '2027-01-10T08:00:00Z']) {
+      const f = await week(64.15, -21.95, iso);
+      expect(f.days.every((d) => d.models.every((m) => m.high === null || m.high <= -2))).toBe(
+        true,
+      );
+      const snowy = f.days.filter(
+        (d) =>
+          d.models.filter((m) => (m.snowfall ?? 0) >= SNOW.day.snow).length >=
+          SNOW.likelyFrom * MODELS.length,
+      );
+      expect(snowy.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('brings cold spells, and snow, to winters beyond 45°', async () => {
+    const snowIn = async (iso: string) => {
+      let total = 0;
+      for (let d = 0; d < 28; d += 7) {
+        const date = new Date(Date.parse(iso) + d * 86_400_000).toISOString();
+        const f = await week(55.75, 37.6, date);
+        for (const day of f.days) for (const m of day.models) total += m.snowfall ?? 0;
+      }
+      return total;
+    };
+    expect(await snowIn('2027-01-04T08:00:00Z')).toBeGreaterThan(10);
+    expect(await snowIn('2026-07-06T08:00:00Z')).toBe(0);
+  });
+
   it('produces normals and search results', async () => {
     const normals = await fetchClimateNormals(
       { url: NASA_POWER_URL, fetch: fetcher },
@@ -157,6 +199,18 @@ describe('synthetic data source', () => {
       { lat: -33.9, lon: 151.2 },
     );
     expect(sydney[4]!).toBeGreaterThan(sydney[10]!);
+    // Normal snowfall: all of it where it is always freezing, none in the tropics.
+    const snow = await fetchSnowNormals(
+      { url: NASA_POWER_URL, fetch: fetcher },
+      { lat: 64, lon: -21.875 },
+    );
+    expect(snow.height).toBe(50);
+    expect(snow.normals.every((v) => v > 0)).toBe(true);
+    expect(syntheticSnowNormals(1.3).every((v) => v === 0)).toBe(true);
+    const moscow = syntheticSnowNormals(55.75);
+    expect(moscow[0]!).toBeGreaterThan(0);
+    expect(moscow[6]!).toBe(0);
+    expect(syntheticSnowNormals(-55)[6]!).toBeGreaterThan(0);
     const places = await searchPlaces({ ...OPEN_METEO_FREE, fetch: fetcher }, 'newc', 8);
     expect(places[0]!.name).toBe('Newcastle');
     expect(await searchPlaces({ ...OPEN_METEO_FREE, fetch: fetcher }, 'zzzz', 8)).toEqual([]);

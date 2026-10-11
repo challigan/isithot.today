@@ -1,8 +1,9 @@
 ---
 /**
- * The home page of either site: isithot.today (/) and isitwet.today (/wet, served at / there by
- * the edge function). Sent in its loading state, already asking the page's own question; the
- * browser fills in the answer for where the visitor is.
+ * The home page of each site: isithot.today (/), isitwet.today (/wet) and willitsnow.today
+ * (/snow), each served at / on its own domain by the edge function. Sent in its loading state,
+ * already asking the page's own question; the browser fills in the answer for where the visitor
+ * is.
  */
 import Base from '../layouts/Base.astro';
 import Header from './Header.astro';
@@ -11,6 +12,7 @@ import AdSlot from './AdSlot.astro';
 import Footer from './Footer.astro';
 import SearchSheet from './SearchSheet.astro';
 import { CACHE, LOADING_PALETTE, SITES, TOMORROW_FROM_HOUR, type Topic } from '@isithot/core';
+import { lastKey } from '../lib/topics';
 
 interface Props {
   /** The site the page belongs to, and the topic it opens on. */
@@ -18,8 +20,8 @@ interface Props {
 }
 
 const { topic } = Astro.props;
-// Each topic remembers its own last answer; both are saved and read the same way.
-const key = topic === 'wet' ? 'isitwet:last' : 'isithot:last';
+// Each site remembers its own last answer; all are saved and read the same way.
+const key = lastKey(topic);
 const version = CACHE.snapshotVersion;
 const maxAge = CACHE.localAnswerMaxAgeMs;
 const evening = TOMORROW_FROM_HOUR;
@@ -66,8 +68,9 @@ const evening = TOMORROW_FROM_HOUR;
   </div>
   <SearchSheet />
   <script is:inline define:vars={{ key, version, maxAge, evening }}>
-    // Paint the last answer instantly (under 3 hours old) before the main script loads. A wet
-    // answer is for the rest of the day from when it was worked out: only until the next hour.
+    // Paint the last answer instantly (under 3 hours old) before the main script loads. A wet or
+    // snow answer is for the rest of the day from when it was worked out: only until the next
+    // hour.
     // The page opens on Today, or in the evening at the place on Now with Tomorrow in the middle
     // (scripts/app.ts saveLast): only while that is still the day and slot at the place.
     try {

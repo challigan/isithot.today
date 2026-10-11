@@ -224,14 +224,39 @@ main {
     opacity: 0;
   }
 }
+/*
+ * Snowflakes (lib/snowGlyphs.ts) drift down and a little sideways in the same way: twice, a
+ * little out of step, ending on the complete icon within 4 seconds.
+ */
+.glyph .drift {
+  animation: drift 1.6s ease-in-out 2;
+}
+.glyph .drift:nth-child(3n + 1) {
+  animation-delay: 0.4s;
+}
+.glyph .drift:nth-child(3n + 2) {
+  animation-delay: 0.8s;
+}
+@keyframes drift {
+  45% {
+    transform: translate(3px, 6px);
+    opacity: 0;
+  }
+  46% {
+    transform: translate(-2px, -4px);
+    opacity: 0;
+  }
+}
 
 .question {
   margin: 0 0 0.25rem;
   font-size: clamp(1.15rem, 3.2vw, 1.4rem);
   font-weight: 450;
 }
-/* City questions are longer; keep them clear of the icon. */
-[data-mode='city'] .question {
+/* City questions are longer, and so are snow's ("Will it snow today?"): keep them clear of the
+   icon. */
+[data-mode='city'] .question,
+main[data-topic='snow'] .question {
   max-width: calc(100% - var(--glyph-size));
 }
 .answer {
@@ -373,7 +398,7 @@ main {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-/* Full strength: small text, and with the Hot | Wet toggle above, lower on the gradient. */
+/* Full strength: small text, and with the Hot | Wet | Snow toggle above, lower on the gradient. */
 .list .n {
   font-size: 0.8rem;
 }
@@ -767,7 +792,8 @@ button.place span {
   color: var(--pill);
   opacity: 1;
 }
-/* Hot | Wet: which question the views answer. A pill centred above the tabs (phones: below). */
+/* Hot | Wet | Snow: which question the views answer. A pill centred above the tabs (phones:
+   below). */
 .topic {
   position: relative;
   z-index: 1;
@@ -860,7 +886,19 @@ button.place span {
     --dock: calc(3.05rem + max(0.5rem, 1rem - env(safe-area-inset-bottom, 0px)));
   }
 }
-/* Enlarged text on a narrow phone: tighter buttons, so the pill still fits across the screen. */
+/*
+ * Enlarged text on a phone: the icons go (they are hidden from screen readers; the words carry
+ * the meaning), so all three buttons fit across the screen with nothing clipped. Narrower still,
+ * tighter buttons.
+ */
+@container (max-width: 11em) {
+  .topic svg {
+    display: none;
+  }
+  .topic button {
+    padding-inline: 0.6rem;
+  }
+}
 @container (max-width: 9em) {
   .topic button {
     font-size: 0.8rem;
@@ -1207,6 +1245,7 @@ dialog.sheet::backdrop {
   }
   .glyph .spin,
   .glyph .fall,
+  .glyph .drift,
   .answer.pop,
   [data-state='loading'] .answer {
     animation: none;
