@@ -39,6 +39,7 @@ const VIEW_TARGETS: Record<'today' | 'now' | 'week', Target[]> = {
     { name: 'answer', selector: '#answer' },
     { name: 'verdict', selector: '#verdict' },
     { name: 'detail', selector: '#detail' },
+    { name: 'UV line', selector: '#uv-line > [aria-hidden]' },
     { name: 'agreement', selector: '#agree' },
     { name: 'scale', selector: '#smin, #smax' },
     { name: 'model temperature', selector: '#list li .t' },
@@ -50,6 +51,7 @@ const VIEW_TARGETS: Record<'today' | 'now' | 'week', Target[]> = {
     { name: 'answer', selector: '#now-answer' },
     { name: 'verdict', selector: '#now-verdict' },
     { name: 'detail', selector: '#now-detail' },
+    { name: 'UV line', selector: '#now-uv-line > [aria-hidden]' },
     { name: 'heading', selector: '#now-h' },
     { name: 'hour temperature', selector: '#now-hours .t' },
     { name: 'hour', selector: '#now-hours .n' },
@@ -237,6 +239,10 @@ for (const band of TOPICS.flatMap((t) => BANDS_BY_TOPIC[t])) {
         )
         .toBe(true);
       await page.waitForTimeout(150);
+      // Every hot sample has a UV line on Today and Now (hidden lines are not measured).
+      if (topic === 'hot' && view !== 'week') {
+        await expect(page.locator(view === 'today' ? '#uv' : '#now-uv')).toBeVisible();
+      }
       const label = `${info.project.name.padEnd(7)} ${band.padEnd(9)} ${view.padEnd(5)}`;
       const found = await measure(page, [...VIEW_TARGETS[view], ...SHARED], label);
       failures.push(...found.map((f) => `${view}: ${f}`));

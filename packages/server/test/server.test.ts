@@ -51,6 +51,21 @@ function makeDeps(overrides: Partial<ServerDeps> = {}) {
 const q = (params: Record<string, string>) => new URLSearchParams(params);
 const ok = (r: { body: TodayResponse | ApiError }) => r.body as TodayResponse;
 
+/** Gives a city page a height for the length of a test (cities.json may not have one). */
+/** Runs `run` with the city's height set to `metres`, or without one (undefined). */
+async function withCityHeight<T>(slug: string, metres: number | undefined, run: () => Promise<T>) {
+  const city = cityBySlug(slug)!;
+  const before = city.elevation;
+  if (metres === undefined) delete city.elevation;
+  else city.elevation = metres;
+  try {
+    return await run();
+  } finally {
+    if (before === undefined) delete city.elevation;
+    else city.elevation = before;
+  }
+}
+
 describe('config', () => {
   it('uses the free hosts without a key and the customer hosts with one', () => {
     const free = resolveServerConfig(() => undefined);
@@ -251,7 +266,7 @@ describe('GET /api/v1/today', () => {
     expect(r.headers['Cache-Control']).toBe('public, max-age=60');
     // The log says why, and what was served instead (a 503 is retried at once).
     expect(logs.find((l) => l.startsWith('forecast unavailable'))).toMatch(
-      /^forecast unavailable for forecast\/v4\/\S+ after \d+ms: open-meteo: HTTP 503 \(2 attempts\); answering with the copy from 2026-10-06T08:00:00.000Z$/,
+      /^forecast unavailable for forecast\/v5\/54\.95,-1\.60\/dem after \d+ms: open-meteo: HTTP 503 \(2 attempts\); answering with the copy from 2026-10-06T08:00:00.000Z$/,
     );
 
     now = new Date(NOW.getTime() + 7 * 60 * 60 * 1000);
@@ -436,6 +451,137 @@ describe('GET /api/v1/today', () => {
       if (url.includes('PRECSNOLAND')) json.geometry = { type: 'Point', coordinates: [0, 55] };
     });
     expect(unknown.snow!.week!.normal).not.toBeNull();
+  });
+
+  /** Deps whose forecast requests are recorded: the height each asked for, or null. */
+  function recordingHeights(overrides: Partial<ServerDeps> = {}) {
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    const heights: Array<string | null> = [];
+    const made = makeDeps({
+      fetch: async (url, init) => {
+        const u = new URL(url);
+        if (u.pathname.endsWith('/forecast')) heights.push(u.searchParams.get('elevation'));
+        return synthetic(url, init);
+      },
+      ...overrides,
+    });
+    return { ...made, heights };
+  }
+
+  const searched = (extra: Record<string, string>) =>
+    q({ lat: '46.62', lon: '8.04', name: 'Grindelwald', country: 'CH', units: 'c', ...extra });
+
+  it('forecasts a searched place for its height, cached in 50 m bands per grid cell', async () => {
+    const { deps, heights, background } = recordingHeights();
+    const at = async (params: Record<string, string>) => {
+      const body = ok(await getToday(searched(params), null, deps));
+      await Promise.all(background);
+      return body;
+    };
+    const first = await at({ source: 'search', elevation: '1034' });
+    expect(first.location).toMatchObject({ source: 'search', elevation: 1034 });
+    expect(heights).toEqual(['1050']);
+    expect(await deps.cache.get('forecast/v5/46.60,8.05/1050')).not.toBeNull();
+    // Another place in the band shares the forecast; one 300 m lower in the same cell does not.
+    await at({ source: 'search', elevation: '1060.4' });
+    expect(heights).toEqual(['1050']);
+    const lower = await at({ source: 'search', elevation: '740' });
+    expect(lower.location.elevation).toBe(740);
+    expect(heights).toEqual(['1050', '750']);
+    // A device location's height is unknown, whatever the query says: the terrain's is used.
+    const device = await at({ elevation: '1034' });
+    expect(device.location.source).toBe('device');
+    expect(device.location).not.toHaveProperty('elevation');
+    expect(heights).toEqual(['1050', '750', null]);
+    expect(await deps.cache.get('forecast/v5/46.60,8.05/dem')).not.toBeNull();
+  });
+
+  it('ignores a height that is not a plausible number of metres', async () => {
+    const { deps, heights } = recordingHeights();
+    for (const elevation of ['9001', '-501', '12000', 'abc', '1e3', '', ' ', '0x10']) {
+      const body = ok(await getToday(searched({ source: 'search', elevation }), null, deps));
+      expect(body.location).not.toHaveProperty('elevation');
+    }
+    expect(heights).toEqual([null]);
+    // The Dead Sea shore and the top of the range are fine.
+    const low = ok(await getToday(searched({ source: 'search', elevation: '-430' }), null, deps));
+    expect(low.location.elevation).toBe(-430);
+    const high = ok(
+      await getToday(searched({ source: 'search', elevation: ' 9000 ' }), null, deps),
+    );
+    expect(high.location.elevation).toBe(9000);
+    expect(heights).toEqual([null, '-450', '9000']);
+  });
+
+  it("forecasts city pages for the city's height when it is known", async () => {
+    const { deps, heights } = recordingHeights();
+    // Every city in data/cities.json has a height: take one away for a city without.
+    const plain = await withCityHeight('leeds-gb', undefined, async () =>
+      ok(await getToday(q({ place: 'leeds-gb', units: 'c' }), null, deps)),
+    );
+    expect(plain.location).not.toHaveProperty('elevation');
+    expect(heights).toEqual([null]);
+    await withCityHeight('zurich-ch', 408, async () => {
+      const page = ok(await getToday(q({ place: 'zurich-ch', units: 'c' }), null, deps));
+      expect(page.location).toMatchObject({ slug: 'zurich-ch', source: 'city', elevation: 408 });
+      // A searched place that is the city, without a height of its own, takes the city's.
+      const found = ok(
+        await getToday(
+          q({ lat: '47.37', lon: '8.55', name: 'Zürich', country: 'CH', source: 'search' }),
+          null,
+          deps,
+        ),
+      );
+      expect(found.location).toMatchObject({ slug: 'zurich-ch', elevation: 408 });
+    });
+    // Same cell, same band: the searched place shares the city page's forecast.
+    expect(heights).toEqual([null, '400']);
+    // The IP fallback answers for its city, so takes its height too.
+    await withCityHeight('london-gb', 11, async () => {
+      const ip = ok(await getToday(q({}), null, deps));
+      expect(ip.location).toMatchObject({ slug: 'london-gb', source: 'ip', elevation: 11 });
+    });
+    expect(heights).toEqual([null, '400', '0']);
+  });
+
+  it("judges the snow normals' height against the place's own height", async () => {
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    // The forecast claims the terrain's 50 m: the place's 1,050 m is what counts.
+    const lowGrid: FetchLike = async (url, init) => {
+      const json = (await (await synthetic(url, init)).json()) as Record<string, unknown>;
+      if (url.includes('forecast')) json.elevation = 50;
+      return new Response(JSON.stringify(json));
+    };
+    const { deps } = makeDeps({ fetch: lowGrid });
+    const params = { lat: '54.95', lon: '-1.6', name: 'Tow Law', country: 'GB', units: 'c' };
+    const high = ok(
+      await getToday(q({ ...params, source: 'search', elevation: '1050' }), null, deps),
+    );
+    expect(high.snow!.week!.normal).toBeNull();
+    const device = ok(await getToday(q(params), null, deps));
+    expect(device.snow!.week!.normal).not.toBeNull();
+  });
+
+  it('gives the UV index for today, tomorrow and now', async () => {
+    const { deps } = makeDeps({ now: () => new Date('2026-10-06T12:00:00Z') });
+    const body = ok(await getToday(q({ place: 'seville-es', units: 'c' }), null, deps));
+    for (const day of body.days) {
+      expect(day.uv!.max).toBeGreaterThan(0);
+      expect(Number.isInteger(day.uv!.max)).toBe(true);
+      expect(day.uv!.level).toMatch(/^(low|medium|high|veryhigh|extreme)$/);
+      expect(day.uv!.peak).toMatch(/^\d{1,2}(am|pm)$/);
+    }
+    const now = body.now!;
+    // Now is the hour containing the moment, from the series the browser recomputes it with.
+    const hour = now.series.find(
+      (p) => p.time <= Date.parse(now.time) && Date.parse(now.time) < p.time + 3_600_000,
+    )!;
+    expect(now.uv).toEqual({ value: hour.uv, level: expect.any(String) });
+    expect(now.uv!.value).toBeGreaterThan(0);
+    expect(now.series.every((p) => Number.isInteger(p.uv))).toBe(true);
+    // Wet and snow answers have none.
+    expect(body.rain!.days[0]).not.toHaveProperty('uv');
+    expect(body.snow!.days[0]).not.toHaveProperty('uv');
   });
 
   it('caches briefly while only the snow normals are loading', async () => {
@@ -636,7 +782,7 @@ describe('GET /api/v1/today', () => {
     });
     expect(logs).toContainEqual(
       expect.stringMatching(
-        /^forecast unavailable for forecast\/v4\/\S+ after \d+ms: open-meteo: timed out after 60ms \(2 attempts\); no usable cached copy, answering 503$/,
+        /^forecast unavailable for forecast\/v5\/11\.00,11\.00\/dem after \d+ms: open-meteo: timed out after 60ms \(2 attempts\); no usable cached copy, answering 503$/,
       ),
     );
   });
@@ -658,7 +804,7 @@ describe('GET /api/v1/today', () => {
     expect(r.status).toBe(200);
     expect(forecasts).toBe(2);
     expect(logs).toContainEqual(
-      expect.stringMatching(/^forecast for forecast\/v4\/\S+ took \d+ms$/),
+      expect.stringMatching(/^forecast for forecast\/v5\/12\.00,12\.00\/dem took \d+ms$/),
     );
   });
 
@@ -756,6 +902,28 @@ describe('GET /api/v1/search', () => {
       region: 'England',
       slug: 'newcastle-upon-tyne-gb',
       geonameId: 2641673,
+    });
+  });
+
+  it("gives each result its height, the geocoder's or the city page's", async () => {
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    const geocoder: FetchLike = async (url, init) => {
+      if (!url.includes('/search')) return synthetic(url, init);
+      return new Response(
+        JSON.stringify({
+          results: [
+            { id: 1, name: 'Grindelwald', latitude: 46.62, longitude: 8.04, elevation: 1034 },
+            { id: 2, name: 'Grindelwald Grund', latitude: 46.62, longitude: 8.03, elevation: 'x' },
+          ],
+        }),
+      );
+    };
+    const { deps } = makeDeps({ fetch: geocoder });
+    const remote = (await getSearch(q({ q: 'Grindelwald' }), deps)).body as SearchResponse;
+    expect(remote.results.map((r) => r.elevation)).toEqual([1034, undefined]);
+    await withCityHeight('leeds-gb', 63, async () => {
+      const local = (await getSearch(q({ q: 'Leeds' }), deps)).body as SearchResponse;
+      expect(local.results[0]).toMatchObject({ slug: 'leeds-gb', elevation: 63 });
     });
   });
 

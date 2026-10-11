@@ -46,6 +46,7 @@ const evening = TOMORROW_FROM_HOUR;
           if (t.region) p.set('region', t.region);
           if (t.country) p.set('country', t.country);
           if (t.geonameId) p.set('geonameId', String(t.geonameId));
+          if (t.elevation !== undefined) p.set('elevation', String(t.elevation));
           p.set('source', t.source);
         }
         if (units) p.set('units', units);

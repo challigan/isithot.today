@@ -42,6 +42,8 @@ interface Sample {
   feels: number;
   peakHour: number;
   temps: number[];
+  /** The day's highest UV index and the hour it peaks: every UV level appears in one sample. */
+  uv: { max: number; peakHour: number };
 }
 
 const SAMPLES: Record<Band, Sample> = {
@@ -55,6 +57,7 @@ const SAMPLES: Record<Band, Sample> = {
     feels: -6,
     peakHour: 13,
     temps: [-1, -2, -3, -2, -1, -5],
+    uv: { max: 1, peakHour: 12 },
   },
   cold: {
     place: 'Newcastle',
@@ -66,6 +69,7 @@ const SAMPLES: Record<Band, Sample> = {
     feels: 6,
     peakHour: 14,
     temps: [9, 10, 8, 9, 9, 13],
+    uv: { max: 2, peakHour: 13 },
   },
   mild: {
     place: 'London',
@@ -77,6 +81,7 @@ const SAMPLES: Record<Band, Sample> = {
     feels: 15,
     peakHour: 15,
     temps: [15, 16, 14, 15, 16, 15],
+    uv: { max: 4, peakHour: 13 },
   },
   warm: {
     place: 'Manchester',
@@ -88,6 +93,7 @@ const SAMPLES: Record<Band, Sample> = {
     feels: 23,
     peakHour: 15,
     temps: [22, 23, 21, 22, 23, 19],
+    uv: { max: 6, peakHour: 13 },
   },
   hot: {
     place: 'Bristol',
@@ -99,6 +105,7 @@ const SAMPLES: Record<Band, Sample> = {
     feels: 30,
     peakHour: 16,
     temps: [28, 29, 27, 28, 29, 28],
+    uv: { max: 8, peakHour: 13 },
   },
   scorching: {
     place: 'Seville',
@@ -110,6 +117,7 @@ const SAMPLES: Record<Band, Sample> = {
     feels: 43,
     peakHour: 17,
     temps: [41, 42, 40, 41, 37, 41],
+    uv: { max: 11, peakHour: 14 },
   },
 };
 
@@ -136,6 +144,7 @@ function hotPreview(band: Band, units: Units): TodayResponse {
     },
     verdict: { band, effective: s.feels, climateAdjusted: true },
     normalHigh: s.normal,
+    uv: s.uv,
   };
   const timezone = s.country === 'ES' ? 'Europe/Madrid' : 'Europe/London';
   const verdict = { band, effective: s.feels, climateAdjusted: true };
@@ -144,10 +153,13 @@ function hotPreview(band: Band, units: Units): TodayResponse {
   const start = Date.parse(`${s.date}T00:00:00Z`);
   const series = Array.from({ length: 36 }, (_, h) => {
     const temperature = day.blend.high - Math.min(8, Math.abs((h % 24) - s.peakHour) * 1.2);
+    // UV rises and falls over six hours either side of its peak.
+    const fromPeak = ((h % 24) - s.uv.peakHour) / 6;
     return {
       time: start + h * 3_600_000,
       temperature: Math.round(temperature * 10) / 10,
       feelsLike: Math.round((temperature + s.feels - day.blend.high) * 10) / 10,
+      uv: s.uv.max * Math.max(0, 1 - fromPeak * fromPeak),
     };
   });
   const judged = judgeSeries(series, null, units, 'UTC').map((p) => ({ ...p, band }));
@@ -157,6 +169,7 @@ function hotPreview(band: Band, units: Units): TodayResponse {
     temperature: judged[10]!.temperature,
     feelsLike: judged[10]!.feelsLike,
     band,
+    uv: judged[10]!.uv!,
     series: judged.slice(10),
   };
 

@@ -262,6 +262,33 @@ export const FORECAST = {
   coverToHour: 18,
 } as const;
 
+/**
+ * The UV index on the hot views, on WHO's five steps, with "Medium" for WHO's "Moderate". WHO
+ * reports the index as a whole number, so a level is decided on the rounded index.
+ */
+export type UvLevel = 'low' | 'medium' | 'high' | 'veryhigh' | 'extreme';
+/** Levels from lowest to highest. */
+export const UV_LEVELS: readonly UvLevel[] = ['low', 'medium', 'high', 'veryhigh', 'extreme'];
+export const UV = {
+  /** The rounded UV index from which each level after Low starts. */
+  from: { medium: 3, high: 6, veryhigh: 8, extreme: 11 },
+} as const;
+
+/**
+ * A place's height, passed to Open-Meteo when the app knows it (searched places and city pages),
+ * so the forecast is for the place rather than for the terrain at the rounded point.
+ */
+export const ELEVATION = {
+  /** Heights outside this range, m, are ignored (the Dead Sea shore is about -430, Everest 8,849). */
+  min: -500,
+  max: 9000,
+  /**
+   * The forecast is fetched and cached for the height to the nearest this many metres (about
+   * 0.3°C), so places in one grid cell at much the same height share a forecast.
+   */
+  step: 50,
+} as const;
+
 export const NOW = {
   /** Rows in the "next hours" list, and the hours between them. */
   rows: 6,
@@ -346,7 +373,7 @@ export const CACHE = {
    * Version of that saved answer (page markup and data). The page's inline restore script and
    * the app both read it, so bump it here whenever the saved markup or data changes shape.
    */
-  snapshotVersion: 6,
+  snapshotVersion: 7,
 } as const;
 
 export const RATE_LIMIT = {

@@ -1,3 +1,4 @@
+import type { TodayResponse } from '../packages/core/src/types';
 import { expect, keepToday, test } from './helpers';
 
 test('search for a city with a page navigates to it', async ({ page }) => {
@@ -72,6 +73,61 @@ test('a searched place without a page gets a shareable URL', async ({ page }) =>
   await page.getByRole('button', { name: /Hexham/ }).click();
   await expect(page).toHaveURL(/\/\?lat=54\.95&lon=-2\.1&name=Hexham$/);
   await expect(page.locator('#place')).toHaveText('Hexham');
+});
+
+test('a searched place is forecast for its height, after a reload too', async ({ page }) => {
+  await page.route('**/api/v1/search**', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        results: [
+          {
+            name: 'Hexham',
+            region: 'England',
+            country: 'GB',
+            countryName: 'United Kingdom',
+            lat: 54.97,
+            lon: -2.1,
+            elevation: 50,
+          },
+        ],
+      }),
+    }),
+  );
+  const calls: URL[] = [];
+  page.on('request', (r) => {
+    if (r.url().includes('/api/v1/today')) calls.push(new URL(r.url()));
+  });
+  await page.goto('/');
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+  // Approximate (IP) locations never send a height.
+  expect(calls.map((u) => u.searchParams.get('elevation'))).toEqual([null]);
+  await page.locator('#place-btn').click();
+  await page.locator('#search-input').fill('Hex');
+  const answer = page.waitForResponse((r) => r.url().includes('elevation=50'));
+  await page.getByRole('button', { name: /Hexham/ }).click();
+  const body = (await (await answer).json()) as TodayResponse;
+  expect(body.location.elevation).toBe(50);
+  const asked = calls.at(-1)!;
+  expect(asked.searchParams.get('source')).toBe('search');
+  expect(asked.searchParams.get('elevation')).toBe('50');
+  await expect(page.locator('#place')).toHaveText('Hexham');
+  // The address carries the height, so a reload or a shared link asks for the same forecast.
+  await expect(page).toHaveURL(/\/\?lat=54\.95&lon=-2\.1&name=Hexham&elevation=50$/);
+  calls.length = 0;
+  await page.reload();
+  await expect(page.locator('#place')).toHaveText('Hexham');
+  await page.waitForLoadState('networkidle');
+  expect(calls.map((u) => u.searchParams.get('elevation'))).toEqual(['50']);
+
+  // The remembered place has it too: the head script's early request asks for it, and the app
+  // takes that answer rather than asking again.
+  calls.length = 0;
+  await page.goto('/');
+  await expect(page.locator('#place')).toHaveText('Hexham');
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+  await page.waitForLoadState('networkidle');
+  expect(calls.map((u) => u.searchParams.get('elevation'))).toEqual(['50']);
 });
 
 test('city pages are server-rendered with the real answer', async ({ page, request }) => {

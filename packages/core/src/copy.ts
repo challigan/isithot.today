@@ -10,6 +10,7 @@ import {
   type SnowBand,
   type SnowReason,
   type Topic,
+  type UvLevel,
 } from './config';
 import type { Units } from './units';
 
@@ -256,6 +257,37 @@ export function detailLine(args: {
   if (args.peakTime) parts.push(`Warmest around ${args.peakTime}.`);
   if (args.anomalyText) parts.push(args.anomalyText);
   return parts.join(' ');
+}
+
+// ---- UV index (the hot views) ---------------------------------------------------
+
+/** WHO's five steps, with "Medium" for WHO's "Moderate" (UV in config.ts). */
+export const UV_LEVEL_LABELS: Record<UvLevel, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  veryhigh: 'Very high',
+  extreme: 'Extreme',
+};
+
+/** Today and tomorrow: "UV 7 · High, highest around 1pm" ("UV 0 · Low" without a peak). */
+export function uvDayLine(max: number, level: UvLevel, peak: string | null): string {
+  const line = `UV ${max} · ${UV_LEVEL_LABELS[level]}`;
+  return peak ? `${line}, highest around ${peak}` : line;
+}
+
+/** Now: "UV 5 · Medium now". */
+export function uvNowLine(value: number, level: UvLevel): string {
+  return `UV ${value} · ${UV_LEVEL_LABELS[level]} now`;
+}
+
+/**
+ * What a screen reader hears for either line, without the dot: "UV index 9, very high, highest
+ * around 1pm" / "UV index 5, medium".
+ */
+export function uvSpoken(value: number, level: UvLevel, peak: string | null = null): string {
+  const spoken = `UV index ${value}, ${UV_LEVEL_LABELS[level].toLowerCase()}`;
+  return peak ? `${spoken}, highest around ${peak}` : spoken;
 }
 
 export function agreementLine(agree: number, total: number, tolerance: number): string {

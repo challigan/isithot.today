@@ -25,6 +25,7 @@ import {
   formatSnowWeek,
   formatWeek,
   cellKey,
+  forecastHeight,
   gridKey,
   isValidLatLon,
   climateRange,
@@ -34,6 +35,7 @@ import {
   judgeSeries,
   judgeSnowSeries,
   localDate,
+  parseElevation,
   parseUnits,
   rainSeries,
   rainUnit,
@@ -92,6 +94,7 @@ export const CLIMATE_WAIT_MS = 2000;
 type Located = Omit<ApiLocation, 'timezone'>;
 
 const COORD = /^-?\d{1,3}(\.\d+)?$/;
+const HEIGHT = /^-?\d{1,4}(\.\d+)?$/;
 const COUNTRY = /^[A-Za-z]{2}$/;
 
 function clean(value: string | null, max = 80): string | null {
@@ -114,12 +117,23 @@ function parseGeonameId(value: string | null): number | undefined {
   return value && /^\d{1,10}$/.test(value) ? Number(value) : undefined;
 }
 
+/** A searched place's height from the query, whole metres, or null when absent or implausible. */
+function parseHeight(value: string | null): number | null {
+  return value !== null && HEIGHT.test(value.trim()) ? parseElevation(Number(value)) : null;
+}
+
 const fold = (s: string): string => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-function withOptional(loc: Located, slug?: string, geonameId?: number): Located {
+function withOptional(
+  loc: Located,
+  slug?: string,
+  geonameId?: number,
+  elevation: number | null = null,
+): Located {
   const out: Located = { ...loc };
   if (slug) out.slug = slug;
   if (geonameId) out.geonameId = geonameId;
+  if (elevation !== null) out.elevation = elevation;
   return out;
 }
 
@@ -149,10 +163,17 @@ async function locateFromCoords(params: URLSearchParams): Promise<Located | null
   const city = name
     ? cityForPlace({ name, country, ...point, geonameId: geonameId ?? null })
     : undefined;
+  // Only a searched place has a known height (the geocoder's, else its city page's): a device
+  // location keeps the terrain height at the rounded point.
+  const elevation =
+    source === 'search'
+      ? (parseHeight(params.get('elevation')) ?? parseElevation(city?.elevation))
+      : null;
   return withOptional(
     { name: name ?? COPY.yourLocation, region, country, ...point, source },
     city?.slug,
     geonameId,
+    elevation,
   );
 }
 
@@ -169,6 +190,7 @@ function locateCity(slug: string): Located | null {
     },
     city.slug,
     city.geonameId,
+    parseElevation(city.elevation),
   );
 }
 
@@ -188,6 +210,7 @@ async function locateFromIp(geo: VisitorGeo | null, fallback: string): Promise<L
       sameTown ? place.geonameId : undefined,
     );
   }
+  // The answer is for the fallback city, so its height (when known) goes with it.
   const city = locateCity(fallback);
   return city ? { ...city, source: 'ip' } : null;
 }
@@ -221,12 +244,17 @@ function startsToday(forecast: Forecast, now: Date): boolean {
 /** A forecast to answer with, or why there is none. */
 type LoadedForecast = (ForecastEntry & { stale: boolean }) | { failure: string };
 
+/**
+ * The cached forecast for a grid cell and height (ELEVATION.step bands, or "dem" for Open-Meteo's
+ * terrain height), fetched when missing or old.
+ */
 async function loadForecast(
   point: LatLon,
+  height: number | null,
   deps: ServerDeps,
   nowDate: Date,
 ): Promise<LoadedForecast> {
-  const key = `forecast/v${FORECAST_CACHE_VERSION}/${gridKey(point, GRID.forecast)}`;
+  const key = `forecast/v${FORECAST_CACHE_VERSION}/${gridKey(point, GRID.forecast)}/${height ?? 'dem'}`;
   const now = nowDate.getTime();
   const entry = await deps.cache.get<ForecastEntry>(key);
   if (
@@ -246,6 +274,7 @@ async function loadForecast(
         { ...deps.config.openMeteo, fetch: deps.fetch, ...timing },
         point,
         MODELS,
+        height,
       );
       inflight.set(key, pending);
       pending.then(
@@ -417,7 +446,7 @@ export async function getToday(
 
   const point = { lat: located.lat, lon: located.lon };
   const [loaded, climate, rainClimate, snowClimate] = await Promise.all([
-    loadForecast(point, deps, nowDate),
+    loadForecast(point, forecastHeight(located.elevation), deps, nowDate),
     loadNormals(point, deps),
     loadRainNormals(point, deps),
     loadSnowNormals(point, deps),
@@ -484,7 +513,8 @@ export async function getToday(
   }
 
   // Will it snow? The same windows as rain, from the same forecast.
-  const snowNormals = nearbyHeight(snowClimate, loaded.forecast.elevation);
+  // The place's own height where known, else the one the forecast is for.
+  const snowNormals = nearbyHeight(snowClimate, located.elevation ?? loaded.forecast.elevation);
   const snowToday =
     forecastDays[0]?.date === today
       ? computeSnowDay(forecastDays[0], { from: nowTime, normals: snowNormals })

@@ -24,6 +24,7 @@ import {
   parseSearch,
   searchPlaces,
   syntheticForecast,
+  withoutCopies,
 } from '../src';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- recorded JSON fixtures
@@ -46,15 +47,26 @@ describe('Open-Meteo forecast', () => {
     // Daily highs are worked out from the hourly values, which halves the quota used.
     expect(url.searchParams.has('daily')).toBe(false);
     expect(url.searchParams.get('hourly')).toBe(
-      'temperature_2m,apparent_temperature,precipitation,snowfall',
+      'temperature_2m,apparent_temperature,precipitation,snowfall,uv_index',
     );
     expect(url.searchParams.get('models')!.split(',')).toEqual(MODELS.map((m) => m.id));
     expect(url.searchParams.has('apikey')).toBe(false);
+    // Without a known height Open-Meteo uses the terrain's at the point.
+    expect(url.searchParams.has('elevation')).toBe(false);
+  });
+
+  it("asks for the place's height when it is known", () => {
+    const at = (elevation: number) =>
+      new URL(buildForecastUrl(OPEN_METEO_FREE, { lat: 46.6, lon: 8.05 }, MODELS, elevation))
+        .searchParams;
+    expect(at(1050).get('elevation')).toBe('1050');
+    expect(at(0).get('elevation')).toBe('0');
+    expect(at(-400).get('elevation')).toBe('-400');
   });
 
   it('pins the request so a change has to bump the cache version', () => {
     expect(forecastSignature()).toBe(
-      'v4 forecast_days=7 hourly=temperature_2m,apparent_temperature,precipitation,snowfall',
+      'v5 forecast_days=7 hourly=temperature_2m,apparent_temperature,precipitation,snowfall,uv_index',
     );
   });
 
@@ -101,7 +113,10 @@ describe('Open-Meteo forecast', () => {
     const hasFeels = Object.keys(raw.hourly).some((k) => k.startsWith('apparent_temperature_'));
     const hasRain = Object.keys(raw.hourly).some((k) => k.startsWith('precipitation_'));
     const hasSnow = Object.keys(raw.hourly).some((k) => k.startsWith('snowfall_'));
+    const hasUv = Object.keys(raw.hourly).some((k) => k.startsWith('uv_index_'));
+    const uvSeries = withoutCopies(MODELS.map((m) => raw.hourly[`uv_index_${m.id}`] ?? null));
     const lastStamp = raw.hourly.time.length - 1;
+    let stamp = 0;
     /** The blended temperature at a stamp, as core blends it. */
     const blended = (k: number) => {
       const temps = MODELS.map((m) => raw.hourly[`temperature_2m_${m.id}`]?.[k]).filter(
@@ -189,6 +204,11 @@ describe('Open-Meteo forecast', () => {
         else expect((h.rain ?? []).every((v) => v === null)).toBe(true);
         if (hasSnow) expect(h.snow).toHaveLength(MODELS.length);
         else expect(h).not.toHaveProperty('snow');
+        // The UV index is the average over the hour before each stamp, so the hour from a stamp
+        // takes the next stamp's value; a model's copy of another's counts once.
+        if (hasUv) expect(h.uv).toEqual(uvSeries.map((series) => series?.[stamp + 1] ?? null));
+        else expect(h).not.toHaveProperty('uv');
+        stamp++;
       }
       const withHigh = day.models.filter((m) => m.high !== null).length;
       const withFeels = day.models.filter((m) => m.feelsLike !== null).length;
@@ -304,6 +324,63 @@ describe('Open-Meteo forecast', () => {
     // Stamps 1 to 24, then 25 to 47.
     expect(first!.models[0]).toMatchObject({ rain: 30, snow: 0 });
     expect(last!.models[0]).toMatchObject({ rain: 82.8, snow: 0 });
+  });
+
+  it('moves the UV index to the start of the hour it averages, for the models that give one', () => {
+    const models: ModelConfig[] = [
+      { id: 'ncep_gfs_seamless', name: 'GFS' },
+      { id: 'ukmo_seamless', name: 'UKMO' },
+      { id: 'jma_seamless', name: 'JMA' },
+    ];
+    const f = parseForecast(
+      {
+        timezone: 'UTC',
+        hourly: {
+          time: twoDays,
+          temperature_2m_ncep_gfs_seamless: twoDays.map(() => 20),
+          uv_index_ncep_gfs_seamless: twoDays.map((_, k) => k / 10),
+          // The regional model stops after the first day; the third answers nulls.
+          uv_index_ukmo_seamless: twoDays.map((_, k) => (k < 24 ? 1 : null)),
+          uv_index_jma_seamless: twoDays.map(() => null),
+        },
+      },
+      models,
+    );
+    const [first, last] = f.days;
+    expect(first!.hourly[0]!.uv).toEqual([0.1, 1, null]);
+    expect(first!.hourly[23]!.uv).toEqual([2.4, null, null]);
+    expect(last!.hourly[23]!.uv).toEqual([null, null, null]);
+  });
+
+  it("counts a model's copy of another's UV index once", () => {
+    const models: ModelConfig[] = [
+      { id: 'ncep_gfs_seamless', name: 'GFS' },
+      { id: 'ukmo_seamless', name: 'UKMO' },
+      { id: 'metno_seamless', name: 'MET Norway' },
+    ];
+    const gfs = twoDays.map((_, k) => k / 10);
+    const f = parseForecast(
+      {
+        timezone: 'UTC',
+        hourly: {
+          time: twoDays,
+          temperature_2m_ncep_gfs_seamless: twoDays.map(() => 20),
+          uv_index_ncep_gfs_seamless: gfs,
+          uv_index_ukmo_seamless: twoDays.map(() => 1),
+          uv_index_metno_seamless: [...gfs],
+        },
+      },
+      models,
+    );
+    expect(f.days[0]!.hourly[4]!.uv).toEqual([0.5, 1, null]);
+    // Only a whole series alike is a copy; sharing an hour or two is chance.
+    expect(withoutCopies([[1, 2], [1, 3], null, [1, 2, 3], [1, 3]])).toEqual([
+      [1, 2],
+      [1, 3],
+      null,
+      [1, 2, 3],
+      null,
+    ]);
   });
 
   it("only totals rain for a day with every hour, except the forecast's very last", () => {
@@ -491,6 +568,28 @@ describe('Open-Meteo forecast', () => {
     expect(f.days).toHaveLength(dates.size);
   });
 
+  it('passes the height through, and reads back the one the forecast is for', async () => {
+    const urls: string[] = [];
+    const f = await fetchForecast(
+      {
+        ...OPEN_METEO_FREE,
+        fetch: async (url) => {
+          urls.push(url);
+          return jsonFetch({
+            timezone: 'UTC',
+            elevation: 1250,
+            hourly: { time: day('2026-10-06') },
+          })();
+        },
+      },
+      { lat: 46.6, lon: 8.05 },
+      MODELS,
+      1250,
+    );
+    expect(new URL(urls[0]!).searchParams.get('elevation')).toBe('1250');
+    expect(f.elevation).toBe(1250);
+  });
+
   it('turns HTTP errors into ProviderError with the reason', async () => {
     const err = await fetchForecast(
       { ...OPEN_METEO_FREE, fetch: jsonFetch({ error: true, reason: 'Invalid model' }, 400) },
@@ -553,6 +652,33 @@ describe('Open-Meteo geocoding', () => {
       lon: raw.results[0].longitude,
       countryCode: raw.results[0].country_code,
     });
+    // Every place keeps its height, in whole metres.
+    places.forEach((p, i) => expect(p.elevation).toBe(Math.round(raw.results[i].elevation)));
+  });
+
+  it("keeps a place's height only when it is plausible", () => {
+    const heights = [48, 1234.6, -430, -0.2, 9000, 9001, -501, '300', null, Number.NaN];
+    const places = parseSearch({
+      results: heights.map((elevation, i) => ({
+        id: i + 1,
+        name: `Place ${i}`,
+        latitude: 1,
+        longitude: 2,
+        elevation,
+      })),
+    });
+    expect(places.map((p) => p.elevation)).toEqual([
+      48,
+      1235,
+      -430,
+      0,
+      9000,
+      null,
+      null,
+      null,
+      null,
+      null,
+    ]);
   });
 
   it('returns nothing when there are no results', () => {
@@ -586,6 +712,7 @@ describe('Open-Meteo geocoding', () => {
         admin1: null,
         timezone: null,
         population: null,
+        elevation: null,
       },
     ]);
     expect(() => parseSearch({ results: 'nope' })).toThrow(ProviderError);

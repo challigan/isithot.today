@@ -8,7 +8,8 @@
   "lat": 51.5085,
   "lon": -0.1257,
   "population": 7556900,
-  "geonameId": 2643743
+  "geonameId": 2643743,
+  "elevation": 25
  },
  {
   "slug": "birmingham-gb",
@@ -19,7 +20,8 @@
   "lat": 52.4814,
   "lon": -1.8998,
   "population": 984333,
-  "geonameId": 2655603
+  "geonameId": 2655603,
+  "elevation": 149
  },
  {
   "slug": "liverpool-gb",
@@ -30,7 +32,8 @@
   "lat": 53.4106,
   "lon": -2.9779,
   "population": 864122,
-  "geonameId": 2644210
+  "geonameId": 2644210,
+  "elevation": 30
  },
  {
   "slug": "nottingham-gb",
@@ -41,7 +44,8 @@
   "lat": 52.9536,
   "lon": -1.1505,
   "population": 729977,
-  "geonameId": 2641170
+  "geonameId": 2641170,
+  "elevation": 46
  },
  {
   "slug": "sheffield-gb",
@@ -52,7 +56,8 @@
   "lat": 53.383,
   "lon": -1.4659,
   "population": 685368,
-  "geonameId": 2638077
+  "geonameId": 2638077,
+  "elevation": 75
  },
  {
   "slug": "bristol-gb",
@@ -63,7 +68,8 @@
   "lat": 51.4552,
   "lon": -2.5966,
   "population": 617280,
-  "geonameId": 2654675
+  "geonameId": 2654675,
+  "elevation": 21
  },
  {
   "slug": "glasgow-gb",
@@ -74,7 +80,8 @@
   "lat": 55.8651,
   "lon": -4.2576,
   "population": 591620,
-  "geonameId": 2648579
+  "geonameId": 2648579,
+  "elevation": 40
  },
  {
   "slug": "leicester-gb",
@@ -85,7 +92,8 @@
   "lat": 52.6386,
   "lon": -1.1317,
   "population": 508916,
-  "geonameId": 2644668
+  "geonameId": 2644668,
+  "elevation": 65
  },
  {
   "slug": "edinburgh-gb",
@@ -96,7 +104,8 @@
   "lat": 55.9521,
   "lon": -3.1965,
   "population": 464990,
-  "geonameId": 2650225
+  "geonameId": 2650225,
+  "elevation": 66
  },
  {
   "slug": "leeds-gb",
@@ -107,7 +116,8 @@
   "lat": 53.7965,
   "lon": -1.5478,
   "population": 455123,
-  "geonameId": 2644688
+  "geonameId": 2644688,
+  "elevation": 50
  },
  {
   "slug": "cardiff-gb",
@@ -118,7 +128,8 @@
   "lat": 51.48,
   "lon": -3.18,
   "population": 447287,
-  "geonameId": 2653822
+  "geonameId": 2653822,
+  "elevation": 17
  },
  {
   "slug": "manchester-gb",
@@ -129,7 +140,8 @@
   "lat": 53.4809,
   "lon": -2.2374,
   "population": 395515,
-  "geonameId": 2643123
+  "geonameId": 2643123,
+  "elevation": 51
  },
  {
   "slug": "stoke-on-trent-gb",
@@ -140,7 +152,8 @@
   "lat": 53.0042,
   "lon": -2.1854,
   "population": 372775,
-  "geonameId": 2636841
+  "geonameId": 2636841,
+  "elevation": 114
  },
  {
   "slug": "coventry-gb",
@@ -151,7 +164,8 @@
   "lat": 52.4066,
   "lon": -1.5122,
   "population": 359262,
-  "geonameId": 2652221
+  "geonameId": 2652221,
+  "elevation": 89
  },
  {
   "slug": "sunderland-gb",
@@ -162,7 +176,8 @@
   "lat": 54.9046,
   "lon": -1.3822,
   "population": 335415,
-  "geonameId": 2636531
+  "geonameId": 2636531,
+  "elevation": 36
  },
  {
   "slug": "birkenhead-gb",
@@ -173,7 +188,8 @@
   "lat": 53.3934,
   "lon": -3.0148,
   "population": 325264,
-  "geonameId": 2655613
+  "geonameId": 2655613,
+  "elevation": 22
  },
  {
   "slug": "reading-gb",
@@ -184,7 +200,8 @@
   "lat": 51.4562,
   "lon": -0.9711,
   "population": 318014,
-  "geonameId": 2639577
+  "geonameId": 2639577,
+  "elevation": 51
  },
  {
   "slug": "kingston-upon-hull-gb",
@@ -195,7 +212,8 @@
   "lat": 53.7446,
   "lon": -0.3352,
   "population": 314018,
-  "geonameId": 2645425
+  "geonameId": 2645425,
+  "elevation": 8
  },
  {
   "slug": "preston-gb",
@@ -206,7 +224,8 @@
   "lat": 53.7628,
   "lon": -2.7045,
   "population": 313332,
-  "geonameId": 2639912
+  "geonameId": 2639912,
+  "elevation": 34
  },
  {
   "slug": "newport-gb",
@@ -217,7 +236,8 @@
   "lat": 51.5877,
   "lon": -2.9983,
   "population": 306844,
-  "geonameId": 2641598
+  "geonameId": 2641598,
+  "elevation": 16
  },
  {
   "slug": "swansea-gb",
@@ -228,7 +248,8 @@
   "lat": 51.6208,
   "lon": -3.9432,
   "population": 300352,
-  "geonameId": 2636432
+  "geonameId": 2636432,
+  "elevation": 18
  },
  {
   "slug": "bradford-gb",
@@ -239,7 +260,8 @@
   "lat": 53.7939,
   "lon": -1.7521,
   "population": 299310,
-  "geonameId": 2654993
+  "geonameId": 2654993,
+  "elevation": 110
  },
  {
   "slug": "southend-on-sea-gb",
@@ -250,7 +272,8 @@
   "lat": 51.5378,
   "lon": 0.7143,
   "population": 295310,
-  "geonameId": 2637433
+  "geonameId": 2637433,
+  "elevation": 31
  },
  {
   "slug": "belfast-gb",
@@ -261,7 +284,8 @@
   "lat": 54.5968,
   "lon": -5.9254,
   "population": 274770,
-  "geonameId": 2655984
+  "geonameId": 2655984,
+  "elevation": 7
  },
  {
   "slug": "derby-gb",
@@ -272,7 +296,8 @@
   "lat": 52.9228,
   "lon": -1.4766,
   "population": 270468,
-  "geonameId": 2651347
+  "geonameId": 2651347,
+  "elevation": 55
  },
  {
   "slug": "plymouth-gb",
@@ -283,7 +308,8 @@
   "lat": 50.3715,
   "lon": -4.143,
   "population": 260203,
-  "geonameId": 2640194
+  "geonameId": 2640194,
+  "elevation": 14
  },
  {
   "slug": "luton-gb",
@@ -294,7 +320,8 @@
   "lat": 51.8797,
   "lon": -0.4175,
   "population": 258018,
-  "geonameId": 2643339
+  "geonameId": 2643339,
+  "elevation": 117
  },
  {
   "slug": "wolverhampton-gb",
@@ -305,7 +332,8 @@
   "lat": 52.5855,
   "lon": -2.123,
   "population": 252791,
-  "geonameId": 2633691
+  "geonameId": 2633691,
+  "elevation": 160
  },
  {
   "slug": "southampton-gb",
@@ -316,7 +344,8 @@
   "lat": 50.904,
   "lon": -1.4043,
   "population": 246201,
-  "geonameId": 2637487
+  "geonameId": 2637487,
+  "elevation": 19
  },
  {
   "slug": "blackpool-gb",
@@ -327,7 +356,8 @@
   "lat": 53.8167,
   "lon": -3.05,
   "population": 239409,
-  "geonameId": 2655459
+  "geonameId": 2655459,
+  "elevation": 21
  },
  {
   "slug": "milton-keynes-gb",
@@ -338,7 +368,8 @@
   "lat": 52.0417,
   "lon": -0.7558,
   "population": 229941,
-  "geonameId": 2642465
+  "geonameId": 2642465,
+  "elevation": 114
  },
  {
   "slug": "northampton-gb",
@@ -349,7 +380,8 @@
   "lat": 52.25,
   "lon": -0.8833,
   "population": 215963,
-  "geonameId": 2641430
+  "geonameId": 2641430,
+  "elevation": 97
  },
  {
   "slug": "norwich-gb",
@@ -360,7 +392,8 @@
   "lat": 52.6278,
   "lon": 1.2983,
   "population": 213166,
-  "geonameId": 2641181
+  "geonameId": 2641181,
+  "elevation": 19
  },
  {
   "slug": "dudley-gb",
@@ -371,7 +404,8 @@
   "lat": 52.5,
   "lon": -2.0833,
   "population": 199059,
-  "geonameId": 2650839
+  "geonameId": 2650839,
+  "elevation": 161
  },
  {
   "slug": "aberdeen-gb",
@@ -382,7 +416,8 @@
   "lat": 57.1437,
   "lon": -2.0981,
   "population": 196670,
-  "geonameId": 2657832
+  "geonameId": 2657832,
+  "elevation": 13
  },
  {
   "slug": "portsmouth-gb",
@@ -393,7 +428,8 @@
   "lat": 50.799,
   "lon": -1.0913,
   "population": 194150,
-  "geonameId": 2639996
+  "geonameId": 2639996,
+  "elevation": 6
  },
  {
   "slug": "newcastle-upon-tyne-gb",
@@ -404,7 +440,8 @@
   "lat": 54.9733,
   "lon": -1.614,
   "population": 192382,
-  "geonameId": 2641673
+  "geonameId": 2641673,
+  "elevation": 54
  },
  {
   "slug": "swindon-gb",
@@ -415,7 +452,8 @@
   "lat": 51.558,
   "lon": -1.7812,
   "population": 185609,
-  "geonameId": 2636389
+  "geonameId": 2636389,
+  "elevation": 113
  },
  {
   "slug": "crawley-gb",
@@ -426,7 +464,8 @@
   "lat": 51.113,
   "lon": -0.1831,
   "population": 180508,
-  "geonameId": 2652053
+  "geonameId": 2652053,
+  "elevation": 84
  },
  {
   "slug": "ipswich-gb",
@@ -437,7 +476,8 @@
   "lat": 52.0592,
   "lon": 1.1555,
   "population": 178835,
-  "geonameId": 2646057
+  "geonameId": 2646057,
+  "elevation": 18
  },
  {
   "slug": "wigan-gb",
@@ -448,7 +488,8 @@
   "lat": 53.543,
   "lon": -2.6371,
   "population": 175405,
-  "geonameId": 2633948
+  "geonameId": 2633948,
+  "elevation": 32
  },
  {
   "slug": "walsall-gb",
@@ -459,7 +500,8 @@
   "lat": 52.5853,
   "lon": -1.984,
   "population": 172141,
-  "geonameId": 2634853
+  "geonameId": 2634853,
+  "elevation": 129
  },
  {
   "slug": "mansfield-gb",
@@ -470,7 +512,8 @@
   "lat": 53.1333,
   "lon": -1.2,
   "population": 171958,
-  "geonameId": 2643097
+  "geonameId": 2643097,
+  "elevation": 122
  },
  {
   "slug": "oxford-gb",
@@ -481,7 +524,8 @@
   "lat": 51.7522,
   "lon": -1.256,
   "population": 171380,
-  "geonameId": 2640729
+  "geonameId": 2640729,
+  "elevation": 72
  },
  {
   "slug": "warrington-gb",
@@ -492,7 +536,8 @@
   "lat": 53.3925,
   "lon": -2.5802,
   "population": 165456,
-  "geonameId": 2634739
+  "geonameId": 2634739,
+  "elevation": 15
  },
  {
   "slug": "slough-gb",
@@ -503,7 +548,8 @@
   "lat": 51.5095,
   "lon": -0.5954,
   "population": 163777,
-  "geonameId": 2637627
+  "geonameId": 2637627,
+  "elevation": 33
  },
  {
   "slug": "bournemouth-gb",
@@ -514,7 +560,8 @@
   "lat": 50.7205,
   "lon": -1.8795,
   "population": 163600,
-  "geonameId": 2655095
+  "geonameId": 2655095,
+  "elevation": 19
  },
  {
   "slug": "peterborough-gb",
@@ -525,7 +572,8 @@
   "lat": 52.5736,
   "lon": -0.2478,
   "population": 163379,
-  "geonameId": 2640354
+  "geonameId": 2640354,
+  "elevation": 12
  },
  {
   "slug": "cambridge-gb",
@@ -536,7 +584,8 @@
   "lat": 52.2,
   "lon": 0.1167,
   "population": 158434,
-  "geonameId": 2653941
+  "geonameId": 2653941,
+  "elevation": 12
  },
  {
   "slug": "doncaster-gb",
@@ -547,7 +596,8 @@
   "lat": 53.5228,
   "lon": -1.1312,
   "population": 158141,
-  "geonameId": 2651123
+  "geonameId": 2651123,
+  "elevation": 19
  },
  {
   "slug": "york-gb",
@@ -558,7 +608,8 @@
   "lat": 53.9576,
   "lon": -1.0827,
   "population": 153717,
-  "geonameId": 2633352
+  "geonameId": 2633352,
+  "elevation": 17
  },
  {
   "slug": "poole-gb",
@@ -569,7 +620,8 @@
   "lat": 50.7143,
   "lon": -1.9846,
   "population": 150092,
-  "geonameId": 2640101
+  "geonameId": 2640101,
+  "elevation": 6
  },
  {
   "slug": "gloucester-gb",
@@ -580,7 +632,8 @@
   "lat": 51.8657,
   "lon": -2.2431,
   "population": 150053,
-  "geonameId": 2648404
+  "geonameId": 2648404,
+  "elevation": 24
  },
  {
   "slug": "huddersfield-gb",
@@ -591,7 +644,8 @@
   "lat": 53.649,
   "lon": -1.7842,
   "population": 149017,
-  "geonameId": 2646458
+  "geonameId": 2646458,
+  "elevation": 90
  },
  {
   "slug": "telford-gb",
@@ -602,7 +656,8 @@
   "lat": 52.6766,
   "lon": -2.4493,
   "population": 147980,
-  "geonameId": 3345439
+  "geonameId": 3345439,
+  "elevation": 163
  },
  {
   "slug": "dundee-gb",
@@ -613,7 +668,8 @@
   "lat": 56.4691,
   "lon": -2.9749,
   "population": 147710,
-  "geonameId": 2650752
+  "geonameId": 2650752,
+  "elevation": 77
  },
  {
   "slug": "blackburn-gb",
@@ -624,7 +680,8 @@
   "lat": 53.75,
   "lon": -2.4833,
   "population": 146521,
-  "geonameId": 2655524
+  "geonameId": 2655524,
+  "elevation": 121
  },
  {
   "slug": "basildon-gb",
@@ -635,7 +692,8 @@
   "lat": 51.5684,
   "lon": 0.4578,
   "population": 144859,
-  "geonameId": 2656194
+  "geonameId": 2656194,
+  "elevation": 31
  },
  {
   "slug": "middlesbrough-gb",
@@ -646,7 +704,8 @@
   "lat": 54.5762,
   "lon": -1.2348,
   "population": 142707,
-  "geonameId": 2642607
+  "geonameId": 2642607,
+  "elevation": 15
  },
  {
   "slug": "bolton-gb",
@@ -657,7 +716,8 @@
   "lat": 53.5833,
   "lon": -2.4333,
   "population": 141331,
-  "geonameId": 2655237
+  "geonameId": 2655237,
+  "elevation": 105
  },
  {
   "slug": "stockport-gb",
@@ -668,7 +728,8 @@
   "lat": 53.4098,
   "lon": -2.1576,
   "population": 139052,
-  "geonameId": 2636882
+  "geonameId": 2636882,
+  "elevation": 59
  },
  {
   "slug": "brighton-gb",
@@ -679,7 +740,8 @@
   "lat": 50.8284,
   "lon": -0.1395,
   "population": 139001,
-  "geonameId": 2654710
+  "geonameId": 2654710,
+  "elevation": 29
  },
  {
   "slug": "west-bromwich-gb",
@@ -690,7 +752,8 @@
   "lat": 52.5187,
   "lon": -1.9945,
   "population": 135618,
-  "geonameId": 2634491
+  "geonameId": 2634491,
+  "elevation": 165
  },
  {
   "slug": "grimsby-gb",
@@ -701,7 +764,8 @@
   "lat": 53.5654,
   "lon": -0.0755,
   "population": 134160,
-  "geonameId": 2647878
+  "geonameId": 2647878,
+  "elevation": 4
  },
  {
   "slug": "hastings-gb",
@@ -712,7 +776,8 @@
   "lat": 50.8552,
   "lon": 0.5729,
   "population": 133422,
-  "geonameId": 2647356
+  "geonameId": 2647356,
+  "elevation": 29
  },
  {
   "slug": "high-wycombe-gb",
@@ -723,7 +788,8 @@
   "lat": 51.6291,
   "lon": -0.7493,
   "population": 133204,
-  "geonameId": 2646914
+  "geonameId": 2646914,
+  "elevation": 76
  },
  {
   "slug": "watford-gb",
@@ -734,7 +800,8 @@
   "lat": 51.6553,
   "lon": -0.396,
   "population": 125707,
-  "geonameId": 2634677
+  "geonameId": 2634677,
+  "elevation": 77
  },
  {
   "slug": "burton-upon-trent-gb",
@@ -745,7 +812,8 @@
   "lat": 52.8073,
   "lon": -1.6426,
   "population": 122199,
-  "geonameId": 2654200
+  "geonameId": 2654200,
+  "elevation": 49
  },
  {
   "slug": "colchester-gb",
@@ -756,7 +824,8 @@
   "lat": 51.8892,
   "lon": 0.9042,
   "population": 121859,
-  "geonameId": 2652618
+  "geonameId": 2652618,
+  "elevation": 29
  },
  {
   "slug": "eastbourne-gb",
@@ -767,7 +836,8 @@
   "lat": 50.7687,
   "lon": 0.2845,
   "population": 118219,
-  "geonameId": 2650497
+  "geonameId": 2650497,
+  "elevation": 8
  },
  {
   "slug": "exeter-gb",
@@ -778,7 +848,8 @@
   "lat": 50.7236,
   "lon": -3.5275,
   "population": 117763,
-  "geonameId": 2649808
+  "geonameId": 2649808,
+  "elevation": 46
  },
  {
   "slug": "rotherham-gb",
@@ -789,7 +860,8 @@
   "lat": 53.4301,
   "lon": -1.3568,
   "population": 117618,
-  "geonameId": 2639093
+  "geonameId": 2639093,
+  "elevation": 41
  },
  {
   "slug": "cheltenham-gb",
@@ -800,7 +872,8 @@
   "lat": 51.9001,
   "lon": -2.0797,
   "population": 116447,
-  "geonameId": 2653261
+  "geonameId": 2653261,
+  "elevation": 60
  },
  {
   "slug": "lincoln-gb",
@@ -811,7 +884,8 @@
   "lat": 53.2268,
   "lon": -0.5379,
   "population": 114879,
-  "geonameId": 2644487
+  "geonameId": 2644487,
+  "elevation": 9
  },
  {
   "slug": "chesterfield-gb",
@@ -822,7 +896,8 @@
   "lat": 53.25,
   "lon": -1.4167,
   "population": 113057,
-  "geonameId": 2653225
+  "geonameId": 2653225,
+  "elevation": 89
  },
  {
   "slug": "chelmsford-gb",
@@ -833,7 +908,8 @@
   "lat": 51.7358,
   "lon": 0.4696,
   "population": 111511,
-  "geonameId": 2653266
+  "geonameId": 2653266,
+  "elevation": 33
  },
  {
   "slug": "dagenham-gb",
@@ -844,7 +920,8 @@
   "lat": 51.55,
   "lon": 0.1667,
   "population": 108368,
-  "geonameId": 2651621
+  "geonameId": 2651621,
+  "elevation": 13
  },
  {
   "slug": "basingstoke-gb",
@@ -855,7 +932,8 @@
   "lat": 51.2625,
   "lon": -1.0871,
   "population": 107642,
-  "geonameId": 2656192
+  "geonameId": 2656192,
+  "elevation": 96
  },
  {
   "slug": "maidstone-gb",
@@ -866,7 +944,8 @@
   "lat": 51.2667,
   "lon": 0.5167,
   "population": 107627,
-  "geonameId": 2643179
+  "geonameId": 2643179,
+  "elevation": 9
  },
  {
   "slug": "sutton-coldfield-gb",
@@ -877,7 +956,8 @@
   "lat": 52.5667,
   "lon": -1.8167,
   "population": 107030,
-  "geonameId": 2636486
+  "geonameId": 2636486,
+  "elevation": 119
  },
  {
   "slug": "bedford-gb",
@@ -888,7 +968,8 @@
   "lat": 52.1346,
   "lon": -0.4663,
   "population": 106940,
-  "geonameId": 2656046
+  "geonameId": 2656046,
+  "elevation": 30
  },
  {
   "slug": "oldham-gb",
@@ -899,7 +980,8 @@
   "lat": 53.5405,
   "lon": -2.1183,
   "population": 104782,
-  "geonameId": 2641022
+  "geonameId": 2641022,
+  "elevation": 204
  },
  {
   "slug": "woking-gb",
@@ -910,7 +992,8 @@
   "lat": 51.319,
   "lon": -0.5589,
   "population": 103932,
-  "geonameId": 2633709
+  "geonameId": 2633709,
+  "elevation": 39
  },
  {
   "slug": "st-helens-gb",
@@ -921,7 +1004,8 @@
   "lat": 53.45,
   "lon": -2.7333,
   "population": 102555,
-  "geonameId": 2638785
+  "geonameId": 2638785,
+  "elevation": 31
  },
  {
   "slug": "worcester-gb",
@@ -932,7 +1016,8 @@
   "lat": 52.1893,
   "lon": -2.22,
   "population": 101659,
-  "geonameId": 2633563
+  "geonameId": 2633563,
+  "elevation": 29
  },
  {
   "slug": "gillingham-gb",
@@ -943,7 +1028,8 @@
   "lat": 51.3891,
   "lon": 0.5486,
   "population": 101187,
-  "geonameId": 2648657
+  "geonameId": 2648657,
+  "elevation": 31
  },
  {
   "slug": "worthing-gb",
@@ -954,7 +1040,8 @@
   "lat": 50.818,
   "lon": -0.3754,
   "population": 99110,
-  "geonameId": 2633521
+  "geonameId": 2633521,
+  "elevation": 7
  },
  {
   "slug": "rochdale-gb",
@@ -965,7 +1052,8 @@
   "lat": 53.6177,
   "lon": -2.1552,
   "population": 97550,
-  "geonameId": 2639272
+  "geonameId": 2639272,
+  "elevation": 127
  },
  {
   "slug": "solihull-gb",
@@ -976,7 +1064,8 @@
   "lat": 52.4143,
   "lon": -1.7809,
   "population": 96267,
-  "geonameId": 2637546
+  "geonameId": 2637546,
+  "elevation": 132
  },
  {
   "slug": "royal-leamington-spa-gb",
@@ -987,7 +1076,8 @@
   "lat": 52.2852,
   "lon": -1.52,
   "population": 95172,
-  "geonameId": 2644737
+  "geonameId": 2644737,
+  "elevation": 57
  },
  {
   "slug": "romford-gb",
@@ -998,7 +1088,8 @@
   "lat": 51.5752,
   "lon": 0.1858,
   "population": 95000,
-  "geonameId": 2639192
+  "geonameId": 2639192,
+  "elevation": 20
  },
  {
   "slug": "bath-gb",
@@ -1009,7 +1100,8 @@
   "lat": 51.3751,
   "lon": -2.3617,
   "population": 94782,
-  "geonameId": 2656173
+  "geonameId": 2656173,
+  "elevation": 96
  },
  {
   "slug": "harlow-gb",
@@ -1020,7 +1112,8 @@
   "lat": 51.7766,
   "lon": 0.1116,
   "population": 94365,
-  "geonameId": 2647461
+  "geonameId": 2647461,
+  "elevation": 68
  },
  {
   "slug": "nuneaton-gb",
@@ -1031,7 +1124,8 @@
   "lat": 52.5232,
   "lon": -1.4652,
   "population": 92698,
-  "geonameId": 2641157
+  "geonameId": 2641157,
+  "elevation": 85
  },
  {
   "slug": "darlington-gb",
@@ -1042,7 +1136,8 @@
   "lat": 54.5243,
   "lon": -1.5504,
   "population": 92363,
-  "geonameId": 2651513
+  "geonameId": 2651513,
+  "elevation": 40
  },
  {
   "slug": "southport-gb",
@@ -1053,7 +1148,8 @@
   "lat": 53.6458,
   "lon": -3.0101,
   "population": 91703,
-  "geonameId": 2637343
+  "geonameId": 2637343,
+  "elevation": 9
  },
  {
   "slug": "chester-gb",
@@ -1064,7 +1160,8 @@
   "lat": 53.1905,
   "lon": -2.8919,
   "population": 90524,
-  "geonameId": 2653228
+  "geonameId": 2653228,
+  "elevation": 34
  },
  {
   "slug": "stevenage-gb",
@@ -1075,7 +1172,8 @@
   "lat": 51.9022,
   "lon": -0.2026,
   "population": 90232,
-  "geonameId": 2636940
+  "geonameId": 2636940,
+  "elevation": 94
  },
  {
   "slug": "grays-gb",
@@ -1086,7 +1184,8 @@
   "lat": 51.4757,
   "lon": 0.3252,
   "population": 89755,
-  "geonameId": 2648182
+  "geonameId": 2648182,
+  "elevation": 13
  },
  {
   "slug": "harrogate-gb",
@@ -1097,7 +1196,8 @@
   "lat": 53.9908,
   "lon": -1.5373,
   "population": 89060,
-  "geonameId": 2647428
+  "geonameId": 2647428,
+  "elevation": 127
  },
  {
   "slug": "hartlepool-gb",
@@ -1108,7 +1208,8 @@
   "lat": 54.6855,
   "lon": -1.2103,
   "population": 88855,
-  "geonameId": 2647400
+  "geonameId": 2647400,
+  "elevation": 11
  },
  {
   "slug": "cannock-gb",
@@ -1119,7 +1220,8 @@
   "lat": 52.6904,
   "lon": -2.0309,
   "population": 86121,
-  "geonameId": 2653883
+  "geonameId": 2653883,
+  "elevation": 154
  },
  {
   "slug": "hemel-hempstead-gb",
@@ -1130,7 +1232,8 @@
   "lat": 51.7537,
   "lon": -0.4497,
   "population": 85629,
-  "geonameId": 2647138
+  "geonameId": 2647138,
+  "elevation": 138
  },
  {
   "slug": "st-albans-gb",
@@ -1141,7 +1244,8 @@
   "lat": 51.75,
   "lon": -0.3333,
   "population": 84561,
-  "geonameId": 2638867
+  "geonameId": 2638867,
+  "elevation": 98
  },
  {
   "slug": "redditch-gb",
@@ -1152,7 +1256,8 @@
   "lat": 52.3065,
   "lon": -1.9457,
   "population": 84300,
-  "geonameId": 2639557
+  "geonameId": 2639557,
+  "elevation": 131
  },
  {
   "slug": "south-shields-gb",
@@ -1163,7 +1268,8 @@
   "lat": 54.9986,
   "lon": -1.4323,
   "population": 83655,
-  "geonameId": 2637329
+  "geonameId": 2637329,
+  "elevation": 12
  },
  {
   "slug": "derry-gb",
@@ -1174,7 +1280,8 @@
   "lat": 54.9981,
   "lon": -7.3093,
   "population": 83652,
-  "geonameId": 2643736
+  "geonameId": 2643736,
+  "elevation": 24
  },
  {
   "slug": "weston-super-mare-gb",
@@ -1185,7 +1292,8 @@
   "lat": 51.346,
   "lon": -2.9766,
   "population": 82903,
-  "geonameId": 2634308
+  "geonameId": 2634308,
+  "elevation": 13
  },
  {
   "slug": "halifax-gb",
@@ -1196,7 +1304,8 @@
   "lat": 53.7167,
   "lon": -1.85,
   "population": 82624,
-  "geonameId": 2647632
+  "geonameId": 2647632,
+  "elevation": 150
  },
  {
   "slug": "tamworth-gb",
@@ -1207,7 +1316,8 @@
   "lat": 52.634,
   "lon": -1.6959,
   "population": 81964,
-  "geonameId": 2636276
+  "geonameId": 2636276,
+  "elevation": 73
  },
  {
   "slug": "scunthorpe-gb",
@@ -1218,7 +1328,8 @@
   "lat": 53.5791,
   "lon": -0.6544,
   "population": 79977,
-  "geonameId": 2638324
+  "geonameId": 2638324,
+  "elevation": 46
  },
  {
   "slug": "stockton-on-tees-gb",
@@ -1229,7 +1340,8 @@
   "lat": 54.5685,
   "lon": -1.3187,
   "population": 79957,
-  "geonameId": 2636876
+  "geonameId": 2636876,
+  "elevation": 15
  },
  {
   "slug": "wakefield-gb",
@@ -1240,7 +1352,8 @@
   "lat": 53.6833,
   "lon": -1.4977,
   "population": 78978,
-  "geonameId": 2634910
+  "geonameId": 2634910,
+  "elevation": 50
  },
  {
   "slug": "carlisle-gb",
@@ -1251,7 +1364,8 @@
   "lat": 54.8951,
   "lon": -2.9382,
   "population": 78470,
-  "geonameId": 2653775
+  "geonameId": 2653775,
+  "elevation": 29
  },
  {
   "slug": "lisburn-gb",
@@ -1262,7 +1376,8 @@
   "lat": 54.5234,
   "lon": -6.0353,
   "population": 77506,
-  "geonameId": 2644411
+  "geonameId": 2644411,
+  "elevation": 53
  },
  {
   "slug": "paisley-gb",
@@ -1273,7 +1388,8 @@
   "lat": 55.8317,
   "lon": -4.4325,
   "population": 76220,
-  "geonameId": 2640677
+  "geonameId": 2640677,
+  "elevation": 50
  },
  {
   "slug": "bracknell-gb",
@@ -1284,7 +1400,8 @@
   "lat": 51.4136,
   "lon": -0.7505,
   "population": 76103,
-  "geonameId": 2655009
+  "geonameId": 2655009,
+  "elevation": 81
  },
  {
   "slug": "newcastle-under-lyme-gb",
@@ -1295,7 +1412,8 @@
   "lat": 53,
   "lon": -2.2333,
   "population": 75794,
-  "geonameId": 2641674
+  "geonameId": 2641674,
+  "elevation": 160
  },
  {
   "slug": "crewe-gb",
@@ -1306,7 +1424,8 @@
   "lat": 53.0979,
   "lon": -2.4416,
   "population": 75556,
-  "geonameId": 2652002
+  "geonameId": 2652002,
+  "elevation": 60
  },
  {
   "slug": "aylesbury-gb",
@@ -1317,7 +1436,8 @@
   "lat": 51.8167,
   "lon": -0.8146,
   "population": 74748,
-  "geonameId": 2656719
+  "geonameId": 2656719,
+  "elevation": 93
  },
  {
   "slug": "east-kilbride-gb",
@@ -1328,7 +1448,8 @@
   "lat": 55.7641,
   "lon": -4.1767,
   "population": 74740,
-  "geonameId": 2650405
+  "geonameId": 2650405,
+  "elevation": 161
  },
  {
   "slug": "rugby-gb",
@@ -1339,7 +1460,8 @@
   "lat": 52.3709,
   "lon": -1.2642,
   "population": 73150,
-  "geonameId": 2638978
+  "geonameId": 2638978,
+  "elevation": 120
  },
  {
   "slug": "salford-gb",
@@ -1350,7 +1472,8 @@
   "lat": 53.4877,
   "lon": -2.2904,
   "population": 72750,
-  "geonameId": 2638671
+  "geonameId": 2638671,
+  "elevation": 44
  },
  {
   "slug": "guildford-gb",
@@ -1361,7 +1484,8 @@
   "lat": 51.2354,
   "lon": -0.5743,
   "population": 71873,
-  "geonameId": 2647793
+  "geonameId": 2647793,
+  "elevation": 45
  },
  {
   "slug": "shrewsbury-gb",
@@ -1372,7 +1496,8 @@
   "lat": 52.7101,
   "lon": -2.7521,
   "population": 71715,
-  "geonameId": 2637891
+  "geonameId": 2637891,
+  "elevation": 75
  },
  {
   "slug": "barnsley-gb",
@@ -1383,7 +1508,8 @@
   "lat": 53.55,
   "lon": -1.4833,
   "population": 71447,
-  "geonameId": 2656284
+  "geonameId": 2656284,
+  "elevation": 112
  },
  {
   "slug": "lowestoft-gb",
@@ -1394,7 +1520,8 @@
   "lat": 52.4752,
   "lon": 1.7517,
   "population": 70945,
-  "geonameId": 2643490
+  "geonameId": 2643490,
+  "elevation": 7
  },
  {
   "slug": "stafford-gb",
@@ -1405,7 +1532,8 @@
   "lat": 52.8052,
   "lon": -2.1164,
   "population": 69217,
-  "geonameId": 2637142
+  "geonameId": 2637142,
+  "elevation": 77
  },
  {
   "slug": "royal-tunbridge-wells-gb",
@@ -1416,7 +1544,8 @@
   "lat": 51.1332,
   "lon": 0.2626,
   "population": 68910,
-  "geonameId": 2639022
+  "geonameId": 2639022,
+  "elevation": 118
  },
  {
   "slug": "ellesmere-port-gb",
@@ -1427,7 +1556,8 @@
   "lat": 53.2788,
   "lon": -2.9013,
   "population": 67768,
-  "geonameId": 2650096
+  "geonameId": 2650096,
+  "elevation": 26
  },
  {
   "slug": "folkestone-gb",
@@ -1438,7 +1568,8 @@
   "lat": 51.0817,
   "lon": 1.1673,
   "population": 66429,
-  "geonameId": 2649258
+  "geonameId": 2649258,
+  "elevation": 46
  },
  {
   "slug": "wrexham-gb",
@@ -1449,7 +1580,8 @@
   "lat": 53.0466,
   "lon": -2.9913,
   "population": 65692,
-  "geonameId": 2633485
+  "geonameId": 2633485,
+  "elevation": 87
  },
  {
   "slug": "canterbury-gb",
@@ -1460,7 +1592,8 @@
   "lat": 51.279,
   "lon": 1.0799,
   "population": 55240,
-  "geonameId": 2653877
+  "geonameId": 2653877,
+  "elevation": 19
  },
  {
   "slug": "durham-gb",
@@ -1471,7 +1604,8 @@
   "lat": 54.7768,
   "lon": -1.5757,
   "population": 47785,
-  "geonameId": 2650628
+  "geonameId": 2650628,
+  "elevation": 52
  },
  {
   "slug": "perth-gb",
@@ -1482,7 +1616,8 @@
   "lat": 56.3952,
   "lon": -3.4314,
   "population": 47180,
-  "geonameId": 2640358
+  "geonameId": 2640358,
+  "elevation": 10
  },
  {
   "slug": "lancaster-gb",
@@ -1493,7 +1628,8 @@
   "lat": 54.0465,
   "lon": -2.7999,
   "population": 47162,
-  "geonameId": 2644972
+  "geonameId": 2644972,
+  "elevation": 23
  },
  {
   "slug": "inverness-gb",
@@ -1504,7 +1640,8 @@
   "lat": 57.4791,
   "lon": -4.224,
   "population": 46870,
-  "geonameId": 2646088
+  "geonameId": 2646088,
+  "elevation": 15
  },
  {
   "slug": "winchester-gb",
@@ -1515,7 +1652,8 @@
   "lat": 51.0651,
   "lon": -1.3187,
   "population": 46074,
-  "geonameId": 2633858
+  "geonameId": 2633858,
+  "elevation": 61
  },
  {
   "slug": "salisbury-gb",
@@ -1526,7 +1664,8 @@
   "lat": 51.0693,
   "lon": -1.7957,
   "population": 44748,
-  "geonameId": 2638664
+  "geonameId": 2638664,
+  "elevation": 50
  },
  {
   "slug": "stirling-gb",
@@ -1537,7 +1676,8 @@
   "lat": 56.119,
   "lon": -3.9368,
   "population": 36440,
-  "geonameId": 2636910
+  "geonameId": 2636910,
+  "elevation": 24
  },
  {
   "slug": "chichester-gb",
@@ -1548,7 +1688,8 @@
   "lat": 50.8367,
   "lon": -0.78,
   "population": 31654,
-  "geonameId": 2653192
+  "geonameId": 2653192,
+  "elevation": 20
  },
  {
   "slug": "kendal-gb",
@@ -1559,7 +1700,8 @@
   "lat": 54.3268,
   "lon": -2.7476,
   "population": 29147,
-  "geonameId": 2645826
+  "geonameId": 2645826,
+  "elevation": 55
  },
  {
   "slug": "newry-gb",
@@ -1570,7 +1712,8 @@
   "lat": 54.1784,
   "lon": -6.3374,
   "population": 27757,
-  "geonameId": 2641581
+  "geonameId": 2641581,
+  "elevation": 6
  },
  {
   "slug": "truro-gb",
@@ -1581,7 +1724,8 @@
   "lat": 50.2653,
   "lon": -5.0544,
   "population": 23041,
-  "geonameId": 2635412
+  "geonameId": 2635412,
+  "elevation": 15
  },
  {
   "slug": "penzance-gb",
@@ -1592,7 +1736,8 @@
   "lat": 50.1186,
   "lon": -5.5371,
   "population": 19872,
-  "geonameId": 2640377
+  "geonameId": 2640377,
+  "elevation": 32
  },
  {
   "slug": "aberystwyth-gb",
@@ -1603,7 +1748,8 @@
   "lat": 52.4155,
   "lon": -4.0829,
   "population": 18749,
-  "geonameId": 2657782
+  "geonameId": 2657782,
+  "elevation": 10
  },
  {
   "slug": "st-andrews-gb",
@@ -1614,7 +1760,8 @@
   "lat": 56.3387,
   "lon": -2.799,
   "population": 16800,
-  "geonameId": 2638864
+  "geonameId": 2638864,
+  "elevation": 22
  },
  {
   "slug": "armagh-gb",
@@ -1625,7 +1772,8 @@
   "lat": 54.35,
   "lon": -6.6667,
   "population": 14801,
-  "geonameId": 2657060
+  "geonameId": 2657060,
+  "elevation": 37
  },
  {
   "slug": "oban-gb",
@@ -1636,7 +1784,8 @@
   "lat": 56.4153,
   "lon": -5.4718,
   "population": 8540,
-  "geonameId": 2641108
+  "geonameId": 2641108,
+  "elevation": 17
  },
  {
   "slug": "fort-william-gb",
@@ -1647,7 +1796,8 @@
   "lat": 56.8165,
   "lon": -5.1121,
   "population": 5830,
-  "geonameId": 2649169
+  "geonameId": 2649169,
+  "elevation": 24
  },
  {
   "slug": "shanghai-cn",
@@ -1658,7 +1808,8 @@
   "lat": 31.2222,
   "lon": 121.4581,
   "population": 22315474,
-  "geonameId": 1796236
+  "geonameId": 1796236,
+  "elevation": 12
  },
  {
   "slug": "istanbul-tr",
@@ -1669,7 +1820,8 @@
   "lat": 41.0138,
   "lon": 28.9497,
   "population": 14804116,
-  "geonameId": 745044
+  "geonameId": 745044,
+  "elevation": 39
  },
  {
   "slug": "buenos-aires-ar",
@@ -1680,7 +1832,8 @@
   "lat": -34.6131,
   "lon": -58.3772,
   "population": 13076300,
-  "geonameId": 3435910
+  "geonameId": 3435910,
+  "elevation": 31
  },
  {
   "slug": "mumbai-in",
@@ -1691,7 +1844,8 @@
   "lat": 19.0728,
   "lon": 72.8826,
   "population": 12691836,
-  "geonameId": 1275339
+  "geonameId": 1275339,
+  "elevation": 8
  },
  {
   "slug": "mexico-city-mx",
@@ -1702,7 +1856,8 @@
   "lat": 19.4285,
   "lon": -99.1277,
   "population": 12294193,
-  "geonameId": 3530597
+  "geonameId": 3530597,
+  "elevation": 2240
  },
  {
   "slug": "beijing-cn",
@@ -1713,7 +1868,8 @@
   "lat": 39.9075,
   "lon": 116.3972,
   "population": 11716620,
-  "geonameId": 1816670
+  "geonameId": 1816670,
+  "elevation": 49
  },
  {
   "slug": "karachi-pk",
@@ -1724,7 +1880,8 @@
   "lat": 24.8608,
   "lon": 67.0104,
   "population": 11624219,
-  "geonameId": 1174872
+  "geonameId": 1174872,
+  "elevation": 8
  },
  {
   "slug": "tianjin-cn",
@@ -1735,7 +1892,8 @@
   "lat": 39.1422,
   "lon": 117.1767,
   "population": 11090314,
-  "geonameId": 1792947
+  "geonameId": 1792947,
+  "elevation": 11
  },
  {
   "slug": "guangzhou-cn",
@@ -1746,7 +1904,8 @@
   "lat": 23.1167,
   "lon": 113.25,
   "population": 11071424,
-  "geonameId": 1809858
+  "geonameId": 1809858,
+  "elevation": 15
  },
  {
   "slug": "delhi-in",
@@ -1757,7 +1916,8 @@
   "lat": 28.6519,
   "lon": 77.2315,
   "population": 10927986,
-  "geonameId": 1273294
+  "geonameId": 1273294,
+  "elevation": 227
  },
  {
   "slug": "moscow-ru",
@@ -1768,7 +1928,8 @@
   "lat": 55.7522,
   "lon": 37.6156,
   "population": 10381222,
-  "geonameId": 524901
+  "geonameId": 524901,
+  "elevation": 144
  },
  {
   "slug": "shenzhen-cn",
@@ -1779,7 +1940,8 @@
   "lat": 22.5455,
   "lon": 114.0683,
   "population": 10358381,
-  "geonameId": 1795565
+  "geonameId": 1795565,
+  "elevation": 4
  },
  {
   "slug": "dhaka-bd",
@@ -1790,7 +1952,8 @@
   "lat": 23.7104,
   "lon": 90.4074,
   "population": 10356500,
-  "geonameId": 1185241
+  "geonameId": 1185241,
+  "elevation": 23
  },
  {
   "slug": "seoul-kr",
@@ -1801,7 +1964,8 @@
   "lat": 37.566,
   "lon": 126.9784,
   "population": 10349312,
-  "geonameId": 1835848
+  "geonameId": 1835848,
+  "elevation": 38
  },
  {
   "slug": "sao-paulo-br",
@@ -1812,7 +1976,8 @@
   "lat": -23.5475,
   "lon": -46.6361,
   "population": 10021295,
-  "geonameId": 3448439
+  "geonameId": 3448439,
+  "elevation": 769
  },
  {
   "slug": "wuhan-cn",
@@ -1823,7 +1988,8 @@
   "lat": 30.5833,
   "lon": 114.2667,
   "population": 9785388,
-  "geonameId": 1791247
+  "geonameId": 1791247,
+  "elevation": 20
  },
  {
   "slug": "lagos-ng",
@@ -1834,7 +2000,8 @@
   "lat": 6.4541,
   "lon": 3.3947,
   "population": 9000000,
-  "geonameId": 2332459
+  "geonameId": 2332459,
+  "elevation": 11
  },
  {
   "slug": "jakarta-id",
@@ -1845,7 +2012,8 @@
   "lat": -6.2146,
   "lon": 106.8451,
   "population": 8540121,
-  "geonameId": 1642911
+  "geonameId": 1642911,
+  "elevation": 16
  },
  {
   "slug": "tokyo-jp",
@@ -1856,7 +2024,8 @@
   "lat": 35.6895,
   "lon": 139.6917,
   "population": 8336599,
-  "geonameId": 1850147
+  "geonameId": 1850147,
+  "elevation": 44
  },
  {
   "slug": "new-york-city-us",
@@ -1867,7 +2036,8 @@
   "lat": 40.7143,
   "lon": -74.006,
   "population": 8175133,
-  "geonameId": 5128581
+  "geonameId": 5128581,
+  "elevation": 10
  },
  {
   "slug": "dongguan-cn",
@@ -1878,7 +2048,8 @@
   "lat": 23.018,
   "lon": 113.7487,
   "population": 8000000,
-  "geonameId": 1812545
+  "geonameId": 1812545,
+  "elevation": 1
  },
  {
   "slug": "taipei-tw",
@@ -1889,7 +2060,8 @@
   "lat": 25.0478,
   "lon": 121.5319,
   "population": 7871900,
-  "geonameId": 1668341
+  "geonameId": 1668341,
+  "elevation": 10
  },
  {
   "slug": "kinshasa-cd",
@@ -1900,7 +2072,8 @@
   "lat": -4.3276,
   "lon": 15.3136,
   "population": 7785965,
-  "geonameId": 2314302
+  "geonameId": 2314302,
+  "elevation": 281
  },
  {
   "slug": "lima-pe",
@@ -1911,7 +2084,8 @@
   "lat": -12.0432,
   "lon": -77.0282,
   "population": 7737002,
-  "geonameId": 3936456
+  "geonameId": 3936456,
+  "elevation": 152
  },
  {
   "slug": "cairo-eg",
@@ -1922,7 +2096,8 @@
   "lat": 30.0626,
   "lon": 31.2497,
   "population": 7734614,
-  "geonameId": 360630
+  "geonameId": 360630,
+  "elevation": 23
  },
  {
   "slug": "bogota-co",
@@ -1933,7 +2108,8 @@
   "lat": 4.6097,
   "lon": -74.0817,
   "population": 7674366,
-  "geonameId": 3688689
+  "geonameId": 3688689,
+  "elevation": 2582
  },
  {
   "slug": "chongqing-cn",
@@ -1944,7 +2120,8 @@
   "lat": 29.5628,
   "lon": 106.5528,
   "population": 7457600,
-  "geonameId": 1814906
+  "geonameId": 1814906,
+  "elevation": 289
  },
  {
   "slug": "baghdad-iq",
@@ -1955,7 +2132,8 @@
   "lat": 33.3406,
   "lon": 44.4009,
   "population": 7216000,
-  "geonameId": 98182
+  "geonameId": 98182,
+  "elevation": 41
  },
  {
   "slug": "tehran-ir",
@@ -1966,7 +2144,8 @@
   "lat": 35.6944,
   "lon": 51.4215,
   "population": 7153309,
-  "geonameId": 112931
+  "geonameId": 112931,
+  "elevation": 1178
  },
  {
   "slug": "hong-kong-hk",
@@ -1977,7 +2156,8 @@
   "lat": 22.2783,
   "lon": 114.1747,
   "population": 7012738,
-  "geonameId": 1819729
+  "geonameId": 1819729,
+  "elevation": 60
  },
  {
   "slug": "lahore-pk",
@@ -1988,7 +2168,8 @@
   "lat": 31.558,
   "lon": 74.3507,
   "population": 6310888,
-  "geonameId": 1172451
+  "geonameId": 1172451,
+  "elevation": 216
  },
  {
   "slug": "rio-de-janeiro-br",
@@ -1999,7 +2180,8 @@
   "lat": -22.9064,
   "lon": -43.1822,
   "population": 6023699,
-  "geonameId": 3451190
+  "geonameId": 3451190,
+  "elevation": 12
  },
  {
   "slug": "bangkok-th",
@@ -2010,7 +2192,8 @@
   "lat": 13.754,
   "lon": 100.5014,
   "population": 5104476,
-  "geonameId": 1609350
+  "geonameId": 1609350,
+  "elevation": 12
  },
  {
   "slug": "bengaluru-in",
@@ -2021,7 +2204,8 @@
   "lat": 12.9719,
   "lon": 77.5937,
   "population": 5104047,
-  "geonameId": 1277333
+  "geonameId": 1277333,
+  "elevation": 920
  },
  {
   "slug": "saint-petersburg-ru",
@@ -2032,7 +2216,8 @@
   "lat": 59.9386,
   "lon": 30.3141,
   "population": 5028000,
-  "geonameId": 498817
+  "geonameId": 498817,
+  "elevation": 11
  },
  {
   "slug": "santiago-cl",
@@ -2043,7 +2228,8 @@
   "lat": -33.4569,
   "lon": -70.6483,
   "population": 4837295,
-  "geonameId": 3871336
+  "geonameId": 3871336,
+  "elevation": 556
  },
  {
   "slug": "kolkata-in",
@@ -2054,7 +2240,8 @@
   "lat": 22.5626,
   "lon": 88.363,
   "population": 4631392,
-  "geonameId": 1275004
+  "geonameId": 1275004,
+  "elevation": 11
  },
  {
   "slug": "sydney-au",
@@ -2065,7 +2252,8 @@
   "lat": -33.8678,
   "lon": 151.2073,
   "population": 4627345,
-  "geonameId": 2147714
+  "geonameId": 2147714,
+  "elevation": 58
  },
  {
   "slug": "yangon-mm",
@@ -2076,7 +2264,8 @@
   "lat": 16.8053,
   "lon": 96.1561,
   "population": 4477638,
-  "geonameId": 1298824
+  "geonameId": 1298824,
+  "elevation": 30
  },
  {
   "slug": "chennai-in",
@@ -2087,7 +2276,8 @@
   "lat": 13.0878,
   "lon": 80.2785,
   "population": 4328063,
-  "geonameId": 1264527
+  "geonameId": 1264527,
+  "elevation": 14
  },
  {
   "slug": "melbourne-au",
@@ -2098,7 +2288,8 @@
   "lat": -37.814,
   "lon": 144.9633,
   "population": 4246375,
-  "geonameId": 2158177
+  "geonameId": 2158177,
+  "elevation": 25
  },
  {
   "slug": "riyadh-sa",
@@ -2109,7 +2300,8 @@
   "lat": 24.6877,
   "lon": 46.7219,
   "population": 4205961,
-  "geonameId": 108410
+  "geonameId": 108410,
+  "elevation": 612
  },
  {
   "slug": "los-angeles-us",
@@ -2120,7 +2312,8 @@
   "lat": 34.0522,
   "lon": -118.2437,
   "population": 3971883,
-  "geonameId": 5368361
+  "geonameId": 5368361,
+  "elevation": 89
  },
  {
   "slug": "chittagong-bd",
@@ -2131,7 +2324,8 @@
   "lat": 22.3384,
   "lon": 91.8317,
   "population": 3920222,
-  "geonameId": 1205733
+  "geonameId": 1205733,
+  "elevation": 15
  },
  {
   "slug": "alexandria-eg",
@@ -2142,7 +2336,8 @@
   "lat": 31.2018,
   "lon": 29.9158,
   "population": 3811516,
-  "geonameId": 361058
+  "geonameId": 361058,
+  "elevation": 9
  },
  {
   "slug": "ahmedabad-in",
@@ -2153,7 +2348,8 @@
   "lat": 23.0258,
   "lon": 72.5873,
   "population": 3719710,
-  "geonameId": 1279233
+  "geonameId": 1279233,
+  "elevation": 56
  },
  {
   "slug": "busan-kr",
@@ -2164,7 +2360,8 @@
   "lat": 35.1017,
   "lon": 129.03,
   "population": 3678555,
-  "geonameId": 1838524
+  "geonameId": 1838524,
+  "elevation": 15
  },
  {
   "slug": "abidjan-ci",
@@ -2175,7 +2372,8 @@
   "lat": 5.3544,
   "lon": -4.0017,
   "population": 3677115,
-  "geonameId": 2293538
+  "geonameId": 2293538,
+  "elevation": 50
  },
  {
   "slug": "kano-ng",
@@ -2186,7 +2384,8 @@
   "lat": 12.0001,
   "lon": 8.5167,
   "population": 3626068,
-  "geonameId": 2335204
+  "geonameId": 2335204,
+  "elevation": 484
  },
  {
   "slug": "hyderabad-in",
@@ -2197,7 +2396,8 @@
   "lat": 17.384,
   "lon": 78.4564,
   "population": 3597816,
-  "geonameId": 1269843
+  "geonameId": 1269843,
+  "elevation": 515
  },
  {
   "slug": "yokohama-jp",
@@ -2208,7 +2408,8 @@
   "lat": 35.4333,
   "lon": 139.65,
   "population": 3574443,
-  "geonameId": 1848354
+  "geonameId": 1848354,
+  "elevation": 21
  },
  {
   "slug": "ibadan-ng",
@@ -2219,7 +2420,8 @@
   "lat": 7.3776,
   "lon": 3.9059,
   "population": 3565108,
-  "geonameId": 2339354
+  "geonameId": 2339354,
+  "elevation": 181
  },
  {
   "slug": "singapore-sg",
@@ -2230,7 +2432,8 @@
   "lat": 1.2897,
   "lon": 103.8501,
   "population": 3547809,
-  "geonameId": 1880252
+  "geonameId": 1880252,
+  "elevation": 23
  },
  {
   "slug": "ankara-tr",
@@ -2241,7 +2444,8 @@
   "lat": 39.9199,
   "lon": 32.8543,
   "population": 3517182,
-  "geonameId": 323786
+  "geonameId": 323786,
+  "elevation": 850
  },
  {
   "slug": "ho-chi-minh-city-vn",
@@ -2252,7 +2456,8 @@
   "lat": 10.823,
   "lon": 106.6296,
   "population": 3467331,
-  "geonameId": 1566083
+  "geonameId": 1566083,
+  "elevation": 7
  },
  {
   "slug": "cape-town-za",
@@ -2263,7 +2468,8 @@
   "lat": -33.9258,
   "lon": 18.4232,
   "population": 3433441,
-  "geonameId": 3369157
+  "geonameId": 3369157,
+  "elevation": 25
  },
  {
   "slug": "berlin-de",
@@ -2274,7 +2480,8 @@
   "lat": 52.5244,
   "lon": 13.4105,
   "population": 3426354,
-  "geonameId": 2950159
+  "geonameId": 2950159,
+  "elevation": 74
  },
  {
   "slug": "madrid-es",
@@ -2285,7 +2492,8 @@
   "lat": 40.4165,
   "lon": -3.7026,
   "population": 3255944,
-  "geonameId": 3117735
+  "geonameId": 3117735,
+  "elevation": 665
  },
  {
   "slug": "pyongyang-kp",
@@ -2296,7 +2504,8 @@
   "lat": 39.0339,
   "lon": 125.7543,
   "population": 3222000,
-  "geonameId": 1871859
+  "geonameId": 1871859,
+  "elevation": 43
  },
  {
   "slug": "casablanca-ma",
@@ -2307,7 +2516,8 @@
   "lat": 33.5883,
   "lon": -7.6114,
   "population": 3144909,
-  "geonameId": 2553604
+  "geonameId": 2553604,
+  "elevation": 27
  },
  {
   "slug": "durban-za",
@@ -2318,7 +2528,8 @@
   "lat": -29.8579,
   "lon": 31.0292,
   "population": 3120282,
-  "geonameId": 1007311
+  "geonameId": 1007311,
+  "elevation": 21
  },
  {
   "slug": "kabul-af",
@@ -2329,7 +2540,8 @@
   "lat": 34.5281,
   "lon": 69.1723,
   "population": 3043532,
-  "geonameId": 1138958
+  "geonameId": 1138958,
+  "elevation": 1798
  },
  {
   "slug": "caracas-ve",
@@ -2340,7 +2552,8 @@
   "lat": 10.488,
   "lon": -66.8792,
   "population": 3000000,
-  "geonameId": 3646738
+  "geonameId": 3646738,
+  "elevation": 887
  },
  {
   "slug": "dubai-ae",
@@ -2351,7 +2564,8 @@
   "lat": 25.0772,
   "lon": 55.3093,
   "population": 2956587,
-  "geonameId": 292223
+  "geonameId": 292223,
+  "elevation": 24
  },
  {
   "slug": "pune-in",
@@ -2362,7 +2576,8 @@
   "lat": 18.5196,
   "lon": 73.8554,
   "population": 2935744,
-  "geonameId": 1259229
+  "geonameId": 1259229,
+  "elevation": 554
  },
  {
   "slug": "jeddah-sa",
@@ -2373,7 +2588,8 @@
   "lat": 21.4901,
   "lon": 39.1862,
   "population": 2867446,
-  "geonameId": 105343
+  "geonameId": 105343,
+  "elevation": 7
  },
  {
   "slug": "kyiv-ua",
@@ -2384,7 +2600,8 @@
   "lat": 50.4547,
   "lon": 30.5238,
   "population": 2797553,
-  "geonameId": 703448
+  "geonameId": 703448,
+  "elevation": 187
  },
  {
   "slug": "luanda-ao",
@@ -2395,7 +2612,8 @@
   "lat": -8.8368,
   "lon": 13.2343,
   "population": 2776168,
-  "geonameId": 2240449
+  "geonameId": 2240449,
+  "elevation": 73
  },
  {
   "slug": "quezon-city-ph",
@@ -2406,7 +2624,8 @@
   "lat": 14.6488,
   "lon": 121.0509,
   "population": 2761720,
-  "geonameId": 1692192
+  "geonameId": 1692192,
+  "elevation": 49
  },
  {
   "slug": "addis-ababa-et",
@@ -2417,7 +2636,8 @@
   "lat": 9.025,
   "lon": 38.7469,
   "population": 2757729,
-  "geonameId": 344979
+  "geonameId": 344979,
+  "elevation": 2405
  },
  {
   "slug": "nairobi-ke",
@@ -2428,7 +2648,8 @@
   "lat": -1.2833,
   "lon": 36.8167,
   "population": 2750547,
-  "geonameId": 184745
+  "geonameId": 184745,
+  "elevation": 1684
  },
  {
   "slug": "chicago-us",
@@ -2439,7 +2660,8 @@
   "lat": 41.85,
   "lon": -87.65,
   "population": 2720546,
-  "geonameId": 4887398
+  "geonameId": 4887398,
+  "elevation": 179
  },
  {
   "slug": "salvador-br",
@@ -2450,7 +2672,8 @@
   "lat": -12.9711,
   "lon": -38.5108,
   "population": 2711840,
-  "geonameId": 3450554
+  "geonameId": 3450554,
+  "elevation": 4
  },
  {
   "slug": "dar-es-salaam-tz",
@@ -2461,7 +2684,8 @@
   "lat": -6.8235,
   "lon": 39.2695,
   "population": 2698652,
-  "geonameId": 160263
+  "geonameId": 160263,
+  "elevation": 24
  },
  {
   "slug": "incheon-kr",
@@ -2472,7 +2696,8 @@
   "lat": 37.4565,
   "lon": 126.7052,
   "population": 2628000,
-  "geonameId": 1843564
+  "geonameId": 1843564,
+  "elevation": 43
  },
  {
   "slug": "toronto-ca",
@@ -2483,7 +2708,8 @@
   "lat": 43.7001,
   "lon": -79.4163,
   "population": 2600000,
-  "geonameId": 6167865
+  "geonameId": 6167865,
+  "elevation": 175
  },
  {
   "slug": "basrah-iq",
@@ -2494,7 +2720,8 @@
   "lat": 30.5085,
   "lon": 47.7804,
   "population": 2600000,
-  "geonameId": 99532
+  "geonameId": 99532,
+  "elevation": 4
  },
  {
   "slug": "osaka-jp",
@@ -2505,7 +2732,8 @@
   "lat": 34.6937,
   "lon": 135.5022,
   "population": 2592413,
-  "geonameId": 1853909
+  "geonameId": 1853909,
+  "elevation": 24
  },
  {
   "slug": "mogadishu-so",
@@ -2516,7 +2744,8 @@
   "lat": 2.0371,
   "lon": 45.3438,
   "population": 2587183,
-  "geonameId": 53654
+  "geonameId": 53654,
+  "elevation": 12
  },
  {
   "slug": "daegu-kr",
@@ -2527,7 +2756,8 @@
   "lat": 35.8703,
   "lon": 128.5911,
   "population": 2566540,
-  "geonameId": 1835329
+  "geonameId": 1835329,
+  "elevation": 45
  },
  {
   "slug": "faisalabad-pk",
@@ -2538,7 +2768,8 @@
   "lat": 31.4155,
   "lon": 73.0897,
   "population": 2506595,
-  "geonameId": 1179400
+  "geonameId": 1179400,
+  "elevation": 186
  },
  {
   "slug": "izmir-tr",
@@ -2549,7 +2780,8 @@
   "lat": 38.4127,
   "lon": 27.1384,
   "population": 2500603,
-  "geonameId": 311046
+  "geonameId": 311046,
+  "elevation": 122
  },
  {
   "slug": "dakar-sn",
@@ -2560,7 +2792,8 @@
   "lat": 14.6937,
   "lon": -17.4441,
   "population": 2476400,
-  "geonameId": 2253354
+  "geonameId": 2253354,
+  "elevation": 12
  },
  {
   "slug": "fortaleza-br",
@@ -2571,7 +2804,8 @@
   "lat": -3.7172,
   "lon": -38.5431,
   "population": 2400000,
-  "geonameId": 3399415
+  "geonameId": 3399415,
+  "elevation": 18
  },
  {
   "slug": "cali-co",
@@ -2582,7 +2816,8 @@
   "lat": 3.4372,
   "lon": -76.5225,
   "population": 2392877,
-  "geonameId": 3687925
+  "geonameId": 3687925,
+  "elevation": 967
  },
  {
   "slug": "surabaya-id",
@@ -2593,7 +2828,8 @@
   "lat": -7.2492,
   "lon": 112.7508,
   "population": 2374658,
-  "geonameId": 1625822
+  "geonameId": 1625822,
+  "elevation": 8
  },
  {
   "slug": "belo-horizonte-br",
@@ -2604,7 +2840,8 @@
   "lat": -19.9208,
   "lon": -43.9378,
   "population": 2373224,
-  "geonameId": 3470127
+  "geonameId": 3470127,
+  "elevation": 888
  },
  {
   "slug": "rome-it",
@@ -2615,7 +2852,8 @@
   "lat": 41.8919,
   "lon": 12.5113,
   "population": 2318895,
-  "geonameId": 3169070
+  "geonameId": 3169070,
+  "elevation": 20
  },
  {
   "slug": "mashhad-ir",
@@ -2626,7 +2864,8 @@
   "lat": 36.3156,
   "lon": 59.568,
   "population": 2307177,
-  "geonameId": 124665
+  "geonameId": 124665,
+  "elevation": 980
  },
  {
   "slug": "houston-us",
@@ -2637,7 +2876,8 @@
   "lat": 29.7633,
   "lon": -95.3633,
   "population": 2296224,
-  "geonameId": 4699066
+  "geonameId": 4699066,
+  "elevation": 12
  },
  {
   "slug": "maracaibo-ve",
@@ -2648,7 +2888,8 @@
   "lat": 10.6666,
   "lon": -71.6124,
   "population": 2225000,
-  "geonameId": 3633009
+  "geonameId": 3633009,
+  "elevation": 40
  },
  {
   "slug": "brasilia-br",
@@ -2659,7 +2900,8 @@
   "lat": -15.7797,
   "lon": -47.9297,
   "population": 2207718,
-  "geonameId": 3469058
+  "geonameId": 3469058,
+  "elevation": 1136
  },
  {
   "slug": "santo-domingo-do",
@@ -2670,7 +2912,8 @@
   "lat": 18.4719,
   "lon": -69.8923,
   "population": 2201941,
-  "geonameId": 3492908
+  "geonameId": 3492908,
+  "elevation": 24
  },
  {
   "slug": "nagoya-jp",
@@ -2681,7 +2924,8 @@
   "lat": 35.1815,
   "lon": 136.9064,
   "population": 2191279,
-  "geonameId": 1856057
+  "geonameId": 1856057,
+  "elevation": 23
  },
  {
   "slug": "brisbane-au",
@@ -2692,7 +2936,8 @@
   "lat": -27.4679,
   "lon": 153.0281,
   "population": 2189878,
-  "geonameId": 2174003
+  "geonameId": 2174003,
+  "elevation": 27
  },
  {
   "slug": "havana-cu",
@@ -2703,7 +2948,8 @@
   "lat": 23.133,
   "lon": -82.383,
   "population": 2163824,
-  "geonameId": 3553478
+  "geonameId": 3553478,
+  "elevation": 41
  },
  {
   "slug": "paris-fr",
@@ -2714,7 +2960,8 @@
   "lat": 48.8534,
   "lon": 2.3488,
   "population": 2138551,
-  "geonameId": 2988507
+  "geonameId": 2988507,
+  "elevation": 42
  },
  {
   "slug": "johannesburg-za",
@@ -2725,7 +2972,8 @@
   "lat": -26.2023,
   "lon": 28.0436,
   "population": 2026469,
-  "geonameId": 993800
+  "geonameId": 993800,
+  "elevation": 1767
  },
  {
   "slug": "almaty-kz",
@@ -2736,7 +2984,8 @@
   "lat": 43.2567,
   "lon": 76.9286,
   "population": 2000900,
-  "geonameId": 1526384
+  "geonameId": 1526384,
+  "elevation": 805
  },
  {
   "slug": "budapest-hu",
@@ -2747,7 +2996,8 @@
   "lat": 47.4984,
   "lon": 19.0404,
   "population": 1741041,
-  "geonameId": 3054643
+  "geonameId": 3054643,
+  "elevation": 104
  },
  {
   "slug": "warsaw-pl",
@@ -2758,7 +3008,8 @@
   "lat": 52.2298,
   "lon": 21.0118,
   "population": 1702139,
-  "geonameId": 756135
+  "geonameId": 756135,
+  "elevation": 113
  },
  {
   "slug": "vienna-at",
@@ -2769,7 +3020,8 @@
   "lat": 48.2085,
   "lon": 16.3721,
   "population": 1691468,
-  "geonameId": 2761369
+  "geonameId": 2761369,
+  "elevation": 171
  },
  {
   "slug": "barcelona-es",
@@ -2780,7 +3032,8 @@
   "lat": 41.3888,
   "lon": 2.159,
   "population": 1621537,
-  "geonameId": 3128760
+  "geonameId": 3128760,
+  "elevation": 15
  },
  {
   "slug": "stockholm-se",
@@ -2791,7 +3044,8 @@
   "lat": 59.3294,
   "lon": 18.0687,
   "population": 1515017,
-  "geonameId": 2673730
+  "geonameId": 2673730,
+  "elevation": 17
  },
  {
   "slug": "milan-it",
@@ -2802,7 +3056,8 @@
   "lat": 45.4643,
   "lon": 9.1895,
   "population": 1236837,
-  "geonameId": 3173435
+  "geonameId": 3173435,
+  "elevation": 122
  },
  {
   "slug": "prague-cz",
@@ -2813,7 +3068,8 @@
   "lat": 50.088,
   "lon": 14.4208,
   "population": 1165581,
-  "geonameId": 3067696
+  "geonameId": 3067696,
+  "elevation": 202
  },
  {
   "slug": "copenhagen-dk",
@@ -2824,7 +3080,8 @@
   "lat": 55.6759,
   "lon": 12.5655,
   "population": 1153615,
-  "geonameId": 2618425
+  "geonameId": 2618425,
+  "elevation": 14
  },
  {
   "slug": "dublin-ie",
@@ -2835,7 +3092,8 @@
   "lat": 53.3331,
   "lon": -6.2489,
   "population": 1024027,
-  "geonameId": 2964574
+  "geonameId": 2964574,
+  "elevation": 17
  },
  {
   "slug": "brussels-be",
@@ -2846,7 +3104,8 @@
   "lat": 50.8505,
   "lon": 4.3488,
   "population": 1019022,
-  "geonameId": 2800866
+  "geonameId": 2800866,
+  "elevation": 28
  },
  {
   "slug": "naples-it",
@@ -2857,7 +3116,8 @@
   "lat": 40.8522,
   "lon": 14.2681,
   "population": 959470,
-  "geonameId": 3172394
+  "geonameId": 3172394,
+  "elevation": 17
  },
  {
   "slug": "san-francisco-us",
@@ -2868,7 +3128,8 @@
   "lat": 37.7749,
   "lon": -122.4194,
   "population": 864816,
-  "geonameId": 5391959
+  "geonameId": 5391959,
+  "elevation": 16
  },
  {
   "slug": "marrakesh-ma",
@@ -2879,7 +3140,8 @@
   "lat": 31.6342,
   "lon": -7.9999,
   "population": 839296,
-  "geonameId": 2542997
+  "geonameId": 2542997,
+  "elevation": 457
  },
  {
   "slug": "denpasar-id",
@@ -2890,7 +3152,8 @@
   "lat": -8.65,
   "lon": 115.2167,
   "population": 834881,
-  "geonameId": 1645528
+  "geonameId": 1645528,
+  "elevation": 33
  },
  {
   "slug": "valencia-es",
@@ -2901,7 +3164,8 @@
   "lat": 39.4697,
   "lon": -0.3774,
   "population": 814208,
-  "geonameId": 2509954
+  "geonameId": 2509954,
+  "elevation": 15
  },
  {
   "slug": "marseille-fr",
@@ -2912,7 +3176,8 @@
   "lat": 43.297,
   "lon": 5.3811,
   "population": 794811,
-  "geonameId": 2995469
+  "geonameId": 2995469,
+  "elevation": 28
  },
  {
   "slug": "antalya-tr",
@@ -2923,7 +3188,8 @@
   "lat": 36.9081,
   "lon": 30.6956,
   "population": 758188,
-  "geonameId": 323777
+  "geonameId": 323777,
+  "elevation": 61
  },
  {
   "slug": "amsterdam-nl",
@@ -2934,7 +3200,8 @@
   "lat": 52.374,
   "lon": 4.8897,
   "population": 741636,
-  "geonameId": 2759794
+  "geonameId": 2759794,
+  "elevation": 13
  },
  {
   "slug": "seville-es",
@@ -2945,7 +3212,8 @@
   "lat": 37.3828,
   "lon": -5.9732,
   "population": 703206,
-  "geonameId": 2510911
+  "geonameId": 2510911,
+  "elevation": 16
  },
  {
   "slug": "athens-gr",
@@ -2956,7 +3224,8 @@
   "lat": 37.9838,
   "lon": 23.7278,
   "population": 664046,
-  "geonameId": 264371
+  "geonameId": 264371,
+  "elevation": 70
  },
  {
   "slug": "cancun-mx",
@@ -2967,7 +3236,8 @@
   "lat": 21.1743,
   "lon": -86.8466,
   "population": 628306,
-  "geonameId": 3531673
+  "geonameId": 3531673,
+  "elevation": 11
  },
  {
   "slug": "las-vegas-us",
@@ -2978,7 +3248,8 @@
   "lat": 36.175,
   "lon": -115.1372,
   "population": 623747,
-  "geonameId": 5506956
+  "geonameId": 5506956,
+  "elevation": 610
  },
  {
   "slug": "vancouver-ca",
@@ -2989,7 +3260,8 @@
   "lat": 49.2497,
   "lon": -123.1193,
   "population": 600000,
-  "geonameId": 6173331
+  "geonameId": 6173331,
+  "elevation": 70
  },
  {
   "slug": "oslo-no",
@@ -3000,7 +3272,8 @@
   "lat": 59.9127,
   "lon": 10.7461,
   "population": 580000,
-  "geonameId": 3143244
+  "geonameId": 3143244,
+  "elevation": 26
  },
  {
   "slug": "malaga-es",
@@ -3011,7 +3284,8 @@
   "lat": 36.7202,
   "lon": -4.4203,
   "population": 568305,
-  "geonameId": 2514256
+  "geonameId": 2514256,
+  "elevation": 22
  },
  {
   "slug": "helsinki-fi",
@@ -3022,7 +3296,8 @@
   "lat": 60.1695,
   "lon": 24.9354,
   "population": 558457,
-  "geonameId": 658225
+  "geonameId": 658225,
+  "elevation": 26
  },
  {
   "slug": "lisbon-pt",
@@ -3033,7 +3308,8 @@
   "lat": 38.7167,
   "lon": -9.1333,
   "population": 517802,
-  "geonameId": 2267057
+  "geonameId": 2267057,
+  "elevation": 45
  },
  {
   "slug": "miami-us",
@@ -3044,7 +3320,8 @@
   "lat": 25.7743,
   "lon": -80.1937,
   "population": 441003,
-  "geonameId": 4164138
+  "geonameId": 4164138,
+  "elevation": 2
  },
  {
   "slug": "auckland-nz",
@@ -3055,7 +3332,8 @@
   "lat": -36.8485,
   "lon": 174.7635,
   "population": 417910,
-  "geonameId": 2193733
+  "geonameId": 2193733,
+  "elevation": 43
  },
  {
   "slug": "palma-es",
@@ -3066,7 +3344,8 @@
   "lat": 39.5694,
   "lon": 2.6502,
   "population": 401270,
-  "geonameId": 2512989
+  "geonameId": 2512989,
+  "elevation": 34
  },
  {
   "slug": "las-palmas-de-gran-canaria-es",
@@ -3077,7 +3356,8 @@
   "lat": 28.0997,
   "lon": -15.4134,
   "population": 381847,
-  "geonameId": 2515270
+  "geonameId": 2515270,
+  "elevation": 23
  },
  {
   "slug": "florence-it",
@@ -3088,7 +3368,8 @@
   "lat": 43.7792,
   "lon": 11.2463,
   "population": 349296,
-  "geonameId": 3176959
+  "geonameId": 3176959,
+  "elevation": 50
  },
  {
   "slug": "zurich-ch",
@@ -3099,7 +3380,8 @@
   "lat": 47.3667,
   "lon": 8.55,
   "population": 341730,
-  "geonameId": 2657896
+  "geonameId": 2657896,
+  "elevation": 429
  },
  {
   "slug": "nice-fr",
@@ -3110,7 +3392,8 @@
   "lat": 43.7031,
   "lon": 7.2661,
   "population": 338620,
-  "geonameId": 2990440
+  "geonameId": 2990440,
+  "elevation": 25
  },
  {
   "slug": "alicante-es",
@@ -3121,7 +3404,8 @@
   "lat": 38.3452,
   "lon": -0.4815,
   "population": 334757,
-  "geonameId": 2521978
+  "geonameId": 2521978,
+  "elevation": 18
  },
  {
   "slug": "orlando-us",
@@ -3132,7 +3416,8 @@
   "lat": 28.5383,
   "lon": -81.3792,
   "population": 270934,
-  "geonameId": 4167147
+  "geonameId": 4167147,
+  "elevation": 30
  },
  {
   "slug": "porto-pt",
@@ -3143,7 +3428,8 @@
   "lat": 41.1496,
   "lon": -8.611,
   "population": 249633,
-  "geonameId": 2735943
+  "geonameId": 2735943,
+  "elevation": 97
  },
  {
   "slug": "santa-cruz-de-tenerife-es",
@@ -3154,7 +3440,8 @@
   "lat": 28.4682,
   "lon": -16.2546,
   "population": 222417,
-  "geonameId": 2511174
+  "geonameId": 2511174,
+  "elevation": 10
  },
  {
   "slug": "geneva-ch",
@@ -3165,7 +3452,8 @@
   "lat": 46.2022,
   "lon": 6.1457,
   "population": 183981,
-  "geonameId": 2660646
+  "geonameId": 2660646,
+  "elevation": 400
  },
  {
   "slug": "split-hr",
@@ -3176,7 +3464,8 @@
   "lat": 43.5089,
   "lon": 16.4392,
   "population": 176314,
-  "geonameId": 3190261
+  "geonameId": 3190261,
+  "elevation": 12
  },
  {
   "slug": "heraklion-gr",
@@ -3187,7 +3476,8 @@
   "lat": 35.3279,
   "lon": 25.1434,
   "population": 137154,
-  "geonameId": 261745
+  "geonameId": 261745,
+  "elevation": 60
  },
  {
   "slug": "reykjavik-is",
@@ -3198,7 +3488,8 @@
   "lat": 64.1355,
   "lon": -21.8954,
   "population": 118918,
-  "geonameId": 3413829
+  "geonameId": 3413829,
+  "elevation": 37
  },
  {
   "slug": "funchal-pt",
@@ -3209,7 +3500,8 @@
   "lat": 32.6657,
   "lon": -16.9255,
   "population": 100847,
-  "geonameId": 2267827
+  "geonameId": 2267827,
+  "elevation": 280
  },
  {
   "slug": "phuket-th",
@@ -3220,7 +3512,8 @@
   "lat": 7.8906,
   "lon": 98.3981,
   "population": 89072,
-  "geonameId": 1151254
+  "geonameId": 1151254,
+  "elevation": 28
  },
  {
   "slug": "larnaca-cy",
@@ -3231,7 +3524,8 @@
   "lat": 34.9229,
   "lon": 33.6233,
   "population": 72000,
-  "geonameId": 146400
+  "geonameId": 146400,
+  "elevation": 9
  },
  {
   "slug": "benidorm-es",
@@ -3242,7 +3536,8 @@
   "lat": 38.5382,
   "lon": -0.131,
   "population": 71034,
-  "geonameId": 2521088
+  "geonameId": 2521088,
+  "elevation": 30
  },
  {
   "slug": "venice-it",
@@ -3253,7 +3548,8 @@
   "lat": 45.4371,
   "lon": 12.3326,
   "population": 51298,
-  "geonameId": 3164603
+  "geonameId": 3164603,
+  "elevation": 2
  },
  {
   "slug": "faro-pt",
@@ -3264,7 +3560,8 @@
   "lat": 37.0187,
   "lon": -7.9272,
   "population": 41355,
-  "geonameId": 2268339
+  "geonameId": 2268339,
+  "elevation": 24
  },
  {
   "slug": "paphos-cy",
@@ -3275,7 +3572,8 @@
   "lat": 34.7768,
   "lon": 32.4245,
   "population": 35961,
-  "geonameId": 146214
+  "geonameId": 146214,
+  "elevation": 81
  },
  {
   "slug": "dubrovnik-hr",
@@ -3286,7 +3584,8 @@
   "lat": 42.6412,
   "lon": 18.1091,
   "population": 28428,
-  "geonameId": 3201047
+  "geonameId": 3201047,
+  "elevation": 9
  },
  {
   "slug": "valletta-mt",
@@ -3297,6 +3596,7 @@
   "lat": 35.8997,
   "lon": 14.5148,
   "population": 6794,
-  "geonameId": 2562305
+  "geonameId": 2562305,
+  "elevation": 44
  }
 ]

@@ -45,6 +45,12 @@ export interface HourTemps {
    * Absent for forecasts recorded without it (judged by temperature instead).
    */
   snow?: readonly (number | null)[];
+  /**
+   * The UV index per model during this hour, null for the models that give none (most). Open-Meteo
+   * labels it with the end of the hour it averages, so the parser moves it to the hour's start as
+   * it does `rain`. Absent for forecasts recorded without it.
+   */
+  uv?: readonly (number | null)[];
 }
 
 export interface BlendedModel {

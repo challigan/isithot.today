@@ -1,3 +1,6 @@
+import { ELEVATION } from './config';
+import { isFiniteNumber } from './stats';
+
 export interface LatLon {
   lat: number;
   lon: number;
@@ -35,6 +38,24 @@ export function gridKey(point: LatLon, step: number): string {
   const d = decimalsOf(step);
   const r = roundPoint(point, step);
   return `${r.lat.toFixed(d)},${r.lon.toFixed(d)}`;
+}
+
+/**
+ * A place's height in whole metres, or null for anything that is not a plausible height: not a
+ * finite number, or outside ELEVATION.min to ELEVATION.max.
+ */
+export function parseElevation(value: unknown): number | null {
+  if (!isFiniteNumber(value) || value < ELEVATION.min || value > ELEVATION.max) return null;
+  const metres = Math.round(value);
+  return metres === 0 ? 0 : metres;
+}
+
+/**
+ * The height a forecast is fetched and cached for: the place's, to the nearest ELEVATION.step
+ * metres, or null without one (Open-Meteo then uses the terrain height at the point).
+ */
+export function forecastHeight(elevation: number | null | undefined): number | null {
+  return isFiniteNumber(elevation) ? roundToGrid(elevation, ELEVATION.step) : null;
 }
 
 export function isValidLatLon(lat: unknown, lon: unknown): boolean {

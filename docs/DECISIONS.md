@@ -448,12 +448,8 @@ the toggle reads Hot | Wet | Snow on all three sites.
   across. Both heights were already in the responses (the forecast echoes the place's
   `elevation`; POWER gives the cell's mean height), so the normals are used only when the two
   are within 300 m, and when either is unknown.
-- **Next data improvement: pass the place's height.** Not in this version. Points are rounded
-  to 0.05°, and Open-Meteo uses the terrain height at the rounded point, which in mountains can
-  be several hundred metres from the town (2–6 °C, enough to turn rain into snow). Passing
-  `elevation=` for searched places (the geocoder returns it) and city pages (GeoNames heights
-  through `pnpm cities`), with the height rounded to 50 m in the forecast cache key, would fix
-  it, but it changes hot and wet answers in the mountains too, so it waits for a decision.
+- **Next data improvement: pass the place's height.** Done since; see "UV index and place
+  height" below.
 - **Three domains, one deploy.** The edge function's routing (`netlify/edge-functions/lib/route.ts`)
   is now one table of host, prefix and test header per site:
   - willitsnow.today is served from `/snow`, and www.willitsnow.today redirects to it (as
@@ -485,6 +481,94 @@ the toggle reads Hot | Wet | Snow on all three sites.
   client, and snow's day and week strings, which reach it through the preview's imports as
   rain's already do (about 0.5 KB). If the budget gets tight, those strings can move to a
   module only the server and the preview import.
+
+## UV index and place height
+
+Carl: "Do the elevation thing. I would also like to include the UV index on the hot page with a
+little bit saying whether its high medium or low", then "Include very high and extreme".
+
+### Place height
+
+- **Why.** Points are rounded to 0.05°, and Open-Meteo forecasts for the terrain height at the
+  rounded point, which in hills and mountains can be hundreds of metres from the town's (about
+  0.65 °C per 100 m, and for most models enough to remove snow from a valley town or rain from a
+  hill town). Passing the place's own height makes Open-Meteo correct the temperature for it.
+- **When the height is known.** A searched place: the geocoder's `elevation` goes through
+  `SearchResult.elevation` and back as `elevation=` on `/api/v1/today` with `source=search`; a
+  searched place without one that is a city page takes the city's. A city page: `City.elevation`
+  in `data/cities.json`, and the IP fallback (an answer for that city) takes it too. Device and
+  IP locations have no known height and keep Open-Meteo's default (no parameter); a device
+  request's `elevation` is ignored.
+- **City heights** come from GeoNames (`elevation`, else `dem`, the terrain model's height; CC
+  BY 4.0), recorded in `data/cities.json` by `scripts/city-heights.mjs` and never fetched at
+  runtime. Run it again after `pnpm cities` changes the list (which keeps recorded heights).
+- **In the browser** a searched place's height stays with it: in the remembered place, and in
+  the page's address (`/?lat=…&lon=…&name=…&elevation=…`), so a reload, a shared link and the
+  head script's early request all ask for the same forecast. Places remembered before this have
+  no height and work as before.
+- **Validation.** Whole metres from -500 to 9,000 (the Dead Sea shore is about -430, Everest
+  8,849); anything else, or anything that is not a plain number, is ignored as if absent
+  (`parseElevation` in core).
+- **Cache.** The forecast is fetched and cached for the height to the nearest 50 m (about
+  0.3 °C), so the key is `forecast/v5/<cell>/<height>`, or `/dem` without one; the request
+  sends the rounded height, so everyone in a band shares one forecast. Places in one cell at
+  much the same height share it; one 300 m up the valley does not. `FORECAST_CACHE_VERSION` went
+  from 4 to 5 (also for the UV index). Search results are cached under `search/v3/` so cached
+  results gain heights at once.
+- **Quota.** A cell now holds one forecast per height asked for in it, each cached for an hour
+  as before. Device and IP locations all share `/dem`, while a city page or searched place uses
+  its 50 m band, so a cell visited both ways holds two forecasts even on flat ground (London's
+  city page is `/50`, a device in the same cell `/dem`): up to twice the calls such a cell cost
+  before. In hills, places in one cell at different heights add a forecast per extra band.
+- **Snow normals' height guard** now compares the climate cell's height with the place's own
+  height when known, else with the height the forecast is for.
+- **Response.** `location.elevation` (whole metres) when the height is known.
+
+### UV index (hot topic)
+
+- **Source.** Of the eight models, only GFS (worldwide, for the whole forecast) and UKMO (its UK
+  2 km domain only, about the first 54 hours, so near the UK only) give their own hourly
+  `uv_index` (Open-Meteo's source, `Sources/App`: `GfsVariable`, `UkmoVariable`; the global UKMO
+  model has none). Five answer nulls, but MET Norway's seamless model answers GFS's values,
+  hour for hour (seen in the live recordings: Open-Meteo fills a variable a model lacks from
+  another), so the parser drops any series that is an exact copy of an earlier model's
+  (`withoutCopies`); counted twice, GFS would always outvote UKMO in the median. Both are the
+  average over the hour before each stamp, as radiation is (the recorded peaks sit about half
+  an hour after solar noon), so the parser moves them to the hour's start as it does
+  precipitation.
+- **Request.** `uv_index` is added to the one forecast request: 8 models × 5 variables, 4.0 calls
+  a fetch, up from 3.2. Open-Meteo charges `max(1, variables × models / 10)` calls per request
+  (`calculateQueryWeight` in its source), so a separate UV request for one or two models would
+  cost a whole call against 0.8 here, and add a second request, cache entry and failure mode.
+  The free API's 10,000 calls a day still allow about 100 places checked around the clock.
+- **Judging.** Each hour's UV index is the median of the models that give one. A day's is its
+  highest hour, with the hour it starts (the earlier on a tie), over the whole day (today too,
+  as the day's high is), and only when every hour from 10am to 6pm has one, as for highs. Now
+  is the hour containing the moment; each point of `now.series` carries its hour's `uv`, so the
+  browser keeps it current. Values are rounded to whole numbers, as WHO reports the index.
+- **Levels.** WHO's five steps on the rounded index, with Carl's "Medium" for WHO's
+  "Moderate": Low (0-2), Medium (3-5), High (6-7), Very high (8-10), Extreme (11+). Keys `low`,
+  `medium`, `high`, `veryhigh`, `extreme` (`UV` and `UV_LEVELS` in `config.ts`).
+- **Words.** Today and Tomorrow: "UV 7 · High, highest around 1pm". Now: "UV 5 · Medium now".
+  Screen readers hear "UV index 7, high, highest around 1pm" (`viewDisplay(...).uv.sr`).
+- **Nothing at UV 0.** At night, and on a polar winter's day, there is no line at all rather
+  than "UV 0 · Low", on Today and Now alike, so the views never show a line with nothing to say.
+  Today holds the line's place with a placeholder while loading; Now does not (it opens at night
+  as often as by day).
+- **On the page.** A line under the detail (`UvLine.astro`), after a small sun, at the
+  detail's strength; the level's word is in bold, and no colour stands for a level (the line
+  must read on all six hot palettes). Hidden, leaving no gap, when there is none.
+  `CACHE.snapshotVersion` went from 6 to 7: a page saved without the line would otherwise keep
+  being restored, and saved again, without it.
+- **Hot only.** Wet and snow views are unchanged; `viewDisplay(...).uv` is null for them.
+- **Previews** (`?preview=1`): every hot band has a UV index, and the six samples between them
+  show all five levels (Edinburgh in January 1, Newcastle in October 2, London in April 4,
+  Manchester in June 6, Bristol in July 8, Seville in August 11).
+- **Synthetic data** gives GFS and UKMO an hourly UV index from the sun's height at the place
+  and time, cut by each day's cloud (UKMO for 54 hours), MET Norway a copy of GFS's (as the
+  live API answers, so the tests cover dropping it), and nulls for the other models; it
+  echoes a requested height without changing its temperatures, so the end-to-end tests' answers
+  stay put.
 
 ## Saved places (planned for the apps)
 
@@ -548,6 +632,17 @@ Will it snow? additions (no field changes its meaning):
   with `units=f`.
 - `rain.now.series[].asSnow` (new, optional): most of the hour's precipitation falls as snow by
   the shared rule. Sent only when the forecast has snowfall; `snow` keeps its meaning.
+
+UV index and place height additions (no field changes its meaning):
+
+- `days[i].uv` (optional): `{ max, level, peak }`, the day's highest hourly UV index (whole
+  number), its level (`low`, `medium`, `high`, `veryhigh` or `extreme`) and the hour it starts
+  ("1pm", null when `max` is 0). Absent when the forecast has no UV index for the day.
+- `now.uv` (optional): `{ value, level }` for the hour containing the moment, and
+  `now.series[].uv` (optional) the hour's rounded UV index, for recomputing it in the browser.
+  Responses cached before these lack them.
+- `location.elevation` and `SearchResult.elevation` (optional): the place's height, whole
+  metres, when known. `/api/v1/today` takes `elevation` with `source=search`.
 
 ## Design
 

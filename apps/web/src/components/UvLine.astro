@@ -1,0 +1,34 @@
+---
+/**
+ * The hot views' UV line, under the detail: "UV 7 · High, highest around 1pm" on Today (or
+ * Tomorrow) and "UV 5 · Medium now" on Now, with the level in bold; screen readers hear "UV
+ * index 7, high, highest around 1pm". Hidden without one: on Wet and Snow, without UV data, and
+ * at UV 0 (core `viewDisplay`). scripts/app.ts updates the same nodes.
+ */
+import type { UvDisplay } from '@isithot/core';
+import { uvHtml } from '../lib/view';
+
+interface Props {
+  /** "uv" on Today, "now-uv" on Now; the words go in `<id>-line`. */
+  id: string;
+  uv: UvDisplay | null;
+}
+
+const { id, uv } = Astro.props;
+---
+
+<p class="uv hold" id={id} hidden={!uv}>
+  <svg
+    class="uv-icon"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="12" r="4"></circle>
+    <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"></path>
+  </svg>
+  <span id={`${id}-line`} set:html={uvHtml(uv)} />
+</p>

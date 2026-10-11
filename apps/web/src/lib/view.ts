@@ -4,7 +4,15 @@
  * numbers, our own model names and our own copy. Place names are never passed through these
  * helpers.
  */
-import type { AnyBand, Band, NowItem, TodayModels, WeekItem } from '@isithot/core';
+import {
+  UV_LEVEL_LABELS,
+  type AnyBand,
+  type Band,
+  type NowItem,
+  type TodayModels,
+  type UvDisplay,
+  type WeekItem,
+} from '@isithot/core';
 import { SNOW_GLYPHS } from './snowGlyphs';
 import { RAIN_GLYPHS } from './wetGlyphs';
 
@@ -81,6 +89,16 @@ export function hoursHtml(items: readonly NowItem[]): string {
         : `<li><span class="t">${h.value}</span><span class="n">${h.label}</span></li>`,
     )
     .join('');
+}
+
+/**
+ * The hot views' UV line: "UV 7 · High, highest around 1pm" with the level in bold, read out as
+ * "UV index 7, high, highest around 1pm". Empty without one.
+ */
+export function uvHtml(uv: UvDisplay | null): string {
+  if (!uv) return '';
+  const level = UV_LEVEL_LABELS[uv.level];
+  return `<span aria-hidden="true">${uv.text.replace(level, `<b>${level}</b>`)}</span><span class="sr-only">${uv.sr}</span>`;
 }
 
 /** One row per day: name, a dot on the week's scale, the value and its band. */

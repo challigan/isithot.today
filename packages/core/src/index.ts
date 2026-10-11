@@ -19,5 +19,6 @@ export * from './snow';
 export * from './snowDay';
 export * from './snowNow';
 export * from './snowWeek';
+export * from './uv';
 export * from './display';
 export type * from './types';

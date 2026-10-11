@@ -181,6 +181,49 @@ describe('synthetic data source', () => {
     expect(await snowIn('2026-07-06T08:00:00Z')).toBe(0);
   });
 
+  it('gives a UV index from the two models that have one, highest around midday', async () => {
+    const f = await week(37.4, -6, '2027-06-20T08:00:00Z');
+    const gfs = MODELS.findIndex((m) => m.id === 'ncep_gfs_seamless');
+    const ukmo = MODELS.findIndex((m) => m.id === 'ukmo_seamless');
+    const hours = f.days.flatMap((d) => d.hourly);
+    for (const [k, h] of hours.entries()) {
+      for (const [i, v] of h.uv!.entries()) {
+        // The regional model's 54 hours, less the first stamp's (the hour before the forecast).
+        if (i === gfs && k < hours.length - 1) expect(v).toBeTypeOf('number');
+        else if (i === ukmo && k < 53) expect(v).toBeTypeOf('number');
+        else expect(v).toBeNull();
+      }
+    }
+    const day = f.days[0]!.hourly;
+    // Nothing at night; a Seville summer midday is high or more.
+    expect(day[2]!.uv![gfs]).toBe(0);
+    expect(day[22]!.uv![gfs]).toBe(0);
+    const peak = Math.max(...day.map((h) => h.uv![gfs]!));
+    expect(peak).toBeGreaterThanOrEqual(6);
+    expect(day.findIndex((h) => h.uv![gfs] === peak)).toBeGreaterThanOrEqual(11);
+    expect(day.findIndex((h) => h.uv![gfs] === peak)).toBeLessThanOrEqual(13);
+    // A Newcastle winter's day barely gets going; Reykjavik's rounds to nothing.
+    const winter = await week(54.95, -1.6, '2026-12-21T08:00:00Z');
+    expect(Math.max(...winter.days[0]!.hourly.map((h) => h.uv![gfs]!))).toBeLessThan(1);
+    const arctic = await week(64.15, -21.95, '2026-12-21T08:00:00Z');
+    expect(Math.max(...arctic.days[0]!.hourly.map((h) => h.uv![gfs]!))).toBeLessThan(0.5);
+  });
+
+  it('says the forecast is for the height asked for, with the same temperatures', async () => {
+    const at = (elevation: number | null) =>
+      fetchForecast(
+        { ...OPEN_METEO_FREE, fetch: fetcher },
+        { lat: 46.6, lon: 8.05 },
+        MODELS,
+        elevation,
+      );
+    const [terrain, high] = await Promise.all([at(null), at(1050)]);
+    expect(terrain.elevation).toBe(50);
+    expect(high.elevation).toBe(1050);
+    expect(high.days[0]!.models).toEqual(terrain.days[0]!.models);
+    expect(syntheticForecast(46.6, 8.05, ['a'], new Date(), -400).elevation).toBe(-400);
+  });
+
   it('produces normals and search results', async () => {
     const normals = await fetchClimateNormals(
       { url: NASA_POWER_URL, fetch: fetcher },

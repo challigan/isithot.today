@@ -2,6 +2,7 @@ import {
   CACHE,
   ERROR_MESSAGES,
   SEARCH,
+  parseElevation,
   type SearchResponse,
   type SearchResult,
 } from '@isithot/core';
@@ -24,7 +25,8 @@ export async function getSearch(
     return { status: 200, body: { results: [] }, headers: publicCache() };
   }
 
-  const key = `search/v2/${encodeURIComponent(query.toLowerCase())}`;
+  // v3: results carry the place's height.
+  const key = `search/v3/${encodeURIComponent(query.toLowerCase())}`;
   const now = deps.now().getTime();
   const entry = await deps.cache.get<SearchEntry>(key);
   const headers = publicCache(CACHE.edgeMaxAge, 24 * 60 * 60);
@@ -36,16 +38,21 @@ export async function getSearch(
     const places = await searchPlaces({ ...deps.config.openMeteo, fetch: deps.fetch }, query, 10);
     // Our own city pages first: Open-Meteo matches "Newcastle" to Newcastle, Australia, but
     // not to Newcastle upon Tyne.
-    const local: SearchResult[] = citiesMatching(query).map((c) => ({
-      name: c.name,
-      region: c.region,
-      country: c.country,
-      countryName: c.countryName,
-      lat: c.lat,
-      lon: c.lon,
-      geonameId: c.geonameId,
-      slug: c.slug,
-    }));
+    const local: SearchResult[] = citiesMatching(query).map((c) => {
+      const result: SearchResult = {
+        name: c.name,
+        region: c.region,
+        country: c.country,
+        countryName: c.countryName,
+        lat: c.lat,
+        lon: c.lon,
+        geonameId: c.geonameId,
+        slug: c.slug,
+      };
+      const elevation = parseElevation(c.elevation);
+      if (elevation !== null) result.elevation = elevation;
+      return result;
+    });
     const seen = new Set(local.map((r) => r.geonameId));
     const remote: SearchResult[] = places.map((p) => {
       const result: SearchResult = {
@@ -59,6 +66,7 @@ export async function getSearch(
       if (p.geonameId) result.geonameId = p.geonameId;
       const city = cityForPlace({ ...p, country: p.countryCode });
       if (city) result.slug = city.slug;
+      if (p.elevation !== null) result.elevation = p.elevation;
       return result;
     });
     const results = [
