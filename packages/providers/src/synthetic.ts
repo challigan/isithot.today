@@ -3,7 +3,15 @@
  * Open-Meteo and NASA POWER response formats. Used for local development without network
  * access (`DATA_SOURCE=synthetic`) and for end-to-end tests. Never used in production.
  */
-import { FORECAST, MODELS, localDate, normalForDate, parseDate, roundToGrid } from '@isithot/core';
+import {
+  FORECAST,
+  MODELS,
+  SNOW,
+  localDate,
+  normalForDate,
+  parseDate,
+  roundToGrid,
+} from '@isithot/core';
 import type { FetchLike } from './errors';
 
 export interface SyntheticPlace {
@@ -54,6 +62,46 @@ export function syntheticRainNormals(lat: number): number[] {
   return Array.from({ length: 12 }, (_, m) =>
     r2(base * (1 + 0.3 * Math.cos((2 * Math.PI * (m - wettest)) / 12))),
   );
+}
+
+/**
+ * Snow. The normals above are too mild for real snow climates, so places from SNOWY_FROM_LAT
+ * (Reykjavik is the one city page there) stay below freezing all year, which lets end-to-end tests
+ * show snow in any month, and beyond COLD_SPELL.fromLat about half the winter days are a cold
+ * spell, so Moscow, Oslo or Edinburgh see snow from December to February.
+ */
+const SNOWY_FROM_LAT = 64;
+const COLD_SPELL = { fromLat: 45, chance: 0.5, degrees: 7 };
+
+/** December to February in the north, June to August in the south (month 0 is January). */
+const isWinter = (lat: number, month: number): boolean =>
+  (lat >= 0 ? [11, 0, 1] : [5, 6, 7]).includes(month);
+
+/** The share of precipitation falling as snow: all of it at -1°C or below, none from 3°C. */
+const snowShare = (temp: number): number => Math.min(1, Math.max(0, (3 - temp) / 4));
+
+/** Degrees taken off a day's temperatures by a cold spell. */
+function chill(cell: string, lat: number, date: string): number {
+  const winter = Math.abs(lat) > COLD_SPELL.fromLat && isWinter(lat, Number(date.slice(5, 7)) - 1);
+  return winter && unit(`${cell}|${date}|cold spell`) < COLD_SPELL.chance ? COLD_SPELL.degrees : 0;
+}
+
+/**
+ * Normal snowfall, mm/day of water by month: the normal rain in the share that falls as snow at
+ * the month's mean temperature (a day's is 4° below its high), on cold-spell days and others,
+ * and all of it where it is always freezing.
+ */
+export function syntheticSnowNormals(lat: number): number[] {
+  const highs = syntheticNormals(lat);
+  return syntheticRainNormals(lat).map((rain, m) => {
+    const mean = highs[m]! - 4;
+    const cold = Math.abs(lat) > COLD_SPELL.fromLat && isWinter(lat, m) ? COLD_SPELL.chance : 0;
+    const share =
+      Math.abs(lat) >= SNOWY_FROM_LAT
+        ? 1
+        : cold * snowShare(mean - COLD_SPELL.degrees) + (1 - cold) * snowShare(mean);
+    return r2(rain * share);
+  });
 }
 
 export function syntheticTimezone(lat: number, lon: number): string {
@@ -203,10 +251,14 @@ export function syntheticForecast(lat: number, lon: number, modelIds: string[], 
     const temps: Array<number | null> = [];
     const apparent: Array<number | null> = [];
     for (const date of dates) {
-      const base = normalForDate(normals, date) + between(`${cell}|${date}`, -4, 5);
+      const base =
+        normalForDate(normals, date) + between(`${cell}|${date}`, -4, 5) - chill(cell, lat, date);
       const outlier =
         unit(`${cell}|${date}|${id}|outlier`) < 0.12 ? between(`${id}${date}`, 3, 4.5) : 0;
-      const high = r1(base + between(`${cell}|${date}|${id}`, -1.5, 1.5) + outlier);
+      let high = r1(base + between(`${cell}|${date}|${id}`, -1.5, 1.5) + outlier);
+      if (Math.abs(lat) >= SNOWY_FROM_LAT) {
+        high = Math.min(high, r1(between(`${cell}|${date}|${id}|freezing`, -6, -2)));
+      }
       const humid =
         high > 24
           ? between(`${cell}|${date}|hum`, 1, 4)
@@ -229,9 +281,14 @@ export function syntheticForecast(lat: number, lon: number, modelIds: string[], 
     temps.forEach((_, i) => {
       if (i >= horizon) temps[i] = apparent[i] = precipitation[i] = null;
     });
+    // Snowfall as depth, with the temperature at the end of the hour, as Open-Meteo labels both.
+    const snowfall = precipitation.map((mm, i) =>
+      mm === null ? null : r2(mm * snowShare(temps[i]!) * SNOW.cmPerMm),
+    );
     hourly[`temperature_2m_${id}`] = temps;
     hourly[`apparent_temperature_${id}`] = apparent;
     hourly[`precipitation_${id}`] = precipitation;
+    hourly[`snowfall_${id}`] = snowfall;
   }
 
   return {
@@ -291,6 +348,25 @@ export function syntheticRainClimatology(lat: number, lon: number) {
   };
 }
 
+/** Normal snowfall in NASA POWER's format: PRECSNOLAND, mm/day, with the cell's height. */
+export function syntheticSnowClimatology(lat: number, lon: number) {
+  const normals = syntheticSnowNormals(lat);
+  const PRECSNOLAND: Record<string, number> = {};
+  MONTHS.forEach((k, i) => {
+    PRECSNOLAND[k] = normals[i] as number;
+  });
+  PRECSNOLAND.ANN = r2(normals.reduce((a, b) => a + b, 0) / 12);
+  return {
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [lon, lat, 50] },
+    properties: { parameter: { PRECSNOLAND } },
+    header: { title: 'NASA/POWER synthetic climatology', fill_value: -999 },
+    messages: [],
+    parameters: { PRECSNOLAND: { units: 'mm/day', longname: 'Snow Precipitation Land' } },
+    times: { data: 0, process: 0 },
+  };
+}
+
 const fold = (s: string): string => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 export function syntheticSearch(query: string, count: number, places: readonly SyntheticPlace[]) {
@@ -335,9 +411,12 @@ export function createSyntheticFetch(
       return json(syntheticSearch(p.get('name') ?? '', Number(p.get('count') ?? 8), places));
     }
     if (url.pathname.includes('/climatology/')) {
-      const climatology = p.get('parameters')?.split(',').includes('PRECTOTCORR')
+      const parameters = p.get('parameters')?.split(',') ?? [];
+      const climatology = parameters.includes('PRECTOTCORR')
         ? syntheticRainClimatology
-        : syntheticClimatology;
+        : parameters.includes('PRECSNOLAND')
+          ? syntheticSnowClimatology
+          : syntheticClimatology;
       return json(climatology(Number(p.get('latitude')), Number(p.get('longitude'))));
     }
     return new Response('Not found', { status: 404 });

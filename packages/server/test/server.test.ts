@@ -1,7 +1,9 @@
+import { createServer, type AddressInfo } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
 import type { ApiError, SearchResponse, TodayResponse } from '@isithot/core';
 import { createSyntheticFetch, type FetchLike } from '@isithot/providers';
 import {
+  CACHE_READ_TIMEOUT_MS,
   CITIES,
   MemoryKV,
   SafeKV,
@@ -11,6 +13,7 @@ import {
   TieredKV,
   cityBySlug,
   cityForPlace,
+  errorResult,
   getSearch,
   getToday,
   handleRateLimited,
@@ -106,15 +109,16 @@ describe('GET /api/v1/today', () => {
   it('serves the second call from cache', async () => {
     const { deps, calls } = makeDeps();
     await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
-    // The forecast, then normal highs and normal rainfall (two climatology requests).
+    // The forecast, then normal highs, rainfall and snowfall (three climatology requests).
     expect(calls).toEqual([
       '/v1/forecast',
+      '/api/temporal/climatology/point',
       '/api/temporal/climatology/point',
       '/api/temporal/climatology/point',
     ]);
     await getToday(q({ lat: '54.95', lon: '-1.6', units: 'f' }), null, deps);
     await getToday(q({ lat: '54.97', lon: '-1.62', units: 'c' }), null, deps);
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(4);
   });
 
   it('uses the name passed by search and marks the source', async () => {
@@ -239,11 +243,16 @@ describe('GET /api/v1/today', () => {
 
     const failing: FetchLike = async () => new Response('down', { status: 503 });
     now = new Date(NOW.getTime() + 2 * 60 * 60 * 1000);
-    const later = makeDeps({ cache, now: () => now, fetch: failing });
+    const logs: string[] = [];
+    const later = makeDeps({ cache, now: () => now, fetch: failing, log: (m) => logs.push(m) });
     const r = await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, later.deps);
     expect(r.status).toBe(200);
     expect(ok(r).stale).toBe(true);
     expect(r.headers['Cache-Control']).toBe('public, max-age=60');
+    // The log says why, and what was served instead (a 503 is retried at once).
+    expect(logs.find((l) => l.startsWith('forecast unavailable'))).toMatch(
+      /^forecast unavailable for forecast\/v4\/\S+ after \d+ms: open-meteo: HTTP 503 \(2 attempts\); answering with the copy from 2026-10-06T08:00:00.000Z$/,
+    );
 
     now = new Date(NOW.getTime() + 7 * 60 * 60 * 1000);
     const tooOld = await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, later.deps);
@@ -343,6 +352,109 @@ describe('GET /api/v1/today', () => {
 
     const f = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'f' }), null, deps));
     expect(f.rain!.unit).toBe('in');
+  });
+
+  it('answers "Will it snow?" from the same forecast', async () => {
+    const { deps } = makeDeps();
+    const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
+    const snow = body.snow!;
+    expect(snow.unit).toBe('cm');
+    // The same windows as rain: the rest of today from the request, then tomorrow.
+    expect(snow.days.map((d) => [d.date, d.partial, d.from])).toEqual(
+      body.rain!.days.map((d) => [d.date, d.partial, d.from]),
+    );
+    for (const d of snow.days) {
+      expect(d.answer).toMatch(/^(Yes|No|Maybe)\.$/);
+      expect(d.total).toBe(8);
+    }
+    // Newcastle in October is too mild for snow, and says why.
+    expect(snow.days[0]!.band).toBe('nosnow');
+    expect(snow.days[0]!.reason).not.toBeNull();
+    expect(snow.now!.time).toBe(NOW.toISOString());
+    expect(snow.now!.hours).toHaveLength(6);
+    expect(snow.now!.series.length).toBeGreaterThan(20);
+    const week = snow.week!;
+    expect(week.days).toHaveLength(7);
+    expect(week.days[0]!.band).toBe(snow.days[0]!.band);
+    expect(week.normal).not.toBeNull();
+    const f = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'f' }), null, deps));
+    expect(f.snow!.unit).toBe('in');
+  });
+
+  it('says snow where it is always freezing, and Wet agrees', async () => {
+    const { deps } = makeDeps();
+    const body = ok(await getToday(q({ place: 'reykjavik-is', units: 'c' }), null, deps));
+    const snow = body.snow!.week!;
+    expect(snow.answer).toBe('Yes.');
+    const rain = body.rain!.week!;
+    expect(rain.days.map((d) => d.date)).toEqual(snow.days.map((d) => d.date));
+    // A day Wet calls snow is a Yes for snow.
+    const wetSnow = rain.days.filter((d) => d.snow);
+    expect(wetSnow.length).toBeGreaterThan(0);
+    for (const d of wetSnow) {
+      const day = snow.days.find((s) => s.date === d.date)!;
+      expect(['snow', 'heavysnow', 'deepsnow']).toContain(day.band);
+    }
+  });
+
+  it('keeps the other normals when the snow normals fail', async () => {
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    const noSnowNormals: FetchLike = async (url, init) =>
+      url.includes('PRECSNOLAND') ? new Response('{}', { status: 500 }) : synthetic(url, init);
+    const { deps } = makeDeps({ fetch: noSnowNormals });
+    const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
+    expect(body.days[0]!.normalHigh).not.toBeNull();
+    expect(body.rain!.week!.normal).not.toBeNull();
+    expect(body.snow!.week!.normal).toBeNull();
+    expect(body.snow!.week!.detail).not.toMatch(/usual|rare|common/);
+  });
+
+  it('uses snow normals only where the climate cell is near the place in height', async () => {
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    const answer = async (change: (url: string, json: Record<string, unknown>) => void) => {
+      const changed: FetchLike = async (url, init) => {
+        const json = (await (await synthetic(url, init)).json()) as Record<string, unknown>;
+        change(url, json);
+        return new Response(JSON.stringify(json));
+      };
+      const { deps } = makeDeps({ fetch: changed });
+      return ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
+    };
+    // A town 1km above its climate cell: the cell's normal snow says little about it.
+    const high = await answer((url, json) => {
+      if (url.includes('forecast')) json.elevation = 1050;
+    });
+    expect(high.snow!.week!.normal).toBeNull();
+    expect(high.rain!.week!.normal).not.toBeNull();
+    const near = await answer((url, json) => {
+      if (url.includes('forecast')) json.elevation = 340;
+    });
+    expect(near.snow!.week!.normal).not.toBeNull();
+    // Without the cell's height there is nothing to compare: the normals are used.
+    const unknown = await answer((url, json) => {
+      if (url.includes('forecast')) json.elevation = 1050;
+      if (url.includes('PRECSNOLAND')) json.geometry = { type: 'Point', coordinates: [0, 55] };
+    });
+    expect(unknown.snow!.week!.normal).not.toBeNull();
+  });
+
+  it('caches briefly while only the snow normals are loading', async () => {
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const slowSnow: FetchLike = async (url, init) => {
+      if (url.includes('PRECSNOLAND')) await gate;
+      return synthetic(url, init);
+    };
+    const { deps, background } = makeDeps({ fetch: slowSnow, climateWaitMs: 10 });
+    const first = await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
+    expect(first.headers['Cache-Control']).toBe('public, max-age=60');
+    expect(ok(first).snow!.week!.normal).toBeNull();
+    release();
+    await Promise.all(background);
+    const again = await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
+    expect(again.headers['Cache-Control']).toBe('public, max-age=600');
+    expect(ok(again).snow!.week!.normal).not.toBeNull();
   });
 
   it("judges today's rain from the moment of the request", async () => {
@@ -473,10 +585,10 @@ describe('GET /api/v1/today', () => {
     const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
     expect(body.days[0]!.anomaly).toBeNull();
     expect(body.rain!.week!.normal).toBeNull();
-    // One request each for normal highs and normal rainfall, then neither again for an hour.
-    expect(nasaCalls).toBe(2);
+    // One request each for normal highs, rainfall and snowfall, then none again for an hour.
+    expect(nasaCalls).toBe(3);
     await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
-    expect(nasaCalls).toBe(2);
+    expect(nasaCalls).toBe(3);
   });
 
   it('reports upstream_unavailable when the forecast has no data for today', async () => {
@@ -487,6 +599,116 @@ describe('GET /api/v1/today', () => {
     const { deps } = makeDeps({ fetch: empty });
     const r = await getToday(q({ lat: '10', lon: '10', units: 'c' }), null, deps);
     expect(r.status).toBe(503);
+    expect((r.body as ApiError).error).toEqual({
+      code: 'upstream_unavailable',
+      message: 'Forecasts are unavailable right now. Try again in a few minutes.',
+      detail: 'open-meteo: unexpected forecast response shape',
+    });
+
+    const pastOnly: FetchLike = async (url) =>
+      url.includes('forecast')
+        ? new Response(JSON.stringify({ timezone: 'UTC', hourly: { time: ['2026-10-01T00:00'] } }))
+        : new Response('{}', { status: 500 });
+    const past = makeDeps({ fetch: pastOnly });
+    const old = await getToday(q({ lat: '10.5', lon: '10', units: 'c' }), null, past.deps);
+    expect(old.status).toBe(503);
+    expect((old.body as ApiError).error).toMatchObject({
+      detail: 'open-meteo: the forecast has no data for 2026-10-06 (UTC)',
+    });
+  });
+
+  it('says why the forecast failed, in the 503 body and the log', async () => {
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    const stalled: FetchLike = (url, init) =>
+      url.includes('/v1/forecast') ? new Promise(() => {}) : synthetic(url, init);
+    const logs: string[] = [];
+    const { deps } = makeDeps({
+      fetch: stalled,
+      log: (m) => logs.push(m),
+      forecastTiming: { timeoutMs: 60, hedgeAfterMs: 20 },
+    });
+    const r = await getToday(q({ lat: '11', lon: '11', units: 'c' }), null, deps);
+    expect(r.status).toBe(503);
+    expect(r.headers['Cache-Control']).toBe('no-store');
+    expect((r.body as ApiError).error).toMatchObject({
+      code: 'upstream_unavailable',
+      detail: 'open-meteo: timed out after 60ms (2 attempts)',
+    });
+    expect(logs).toContainEqual(
+      expect.stringMatching(
+        /^forecast unavailable for forecast\/v4\/\S+ after \d+ms: open-meteo: timed out after 60ms \(2 attempts\); no usable cached copy, answering 503$/,
+      ),
+    );
+  });
+
+  it('answers from a second forecast request when the first is slow, and logs the time', async () => {
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    let forecasts = 0;
+    const firstStalls: FetchLike = (url, init) =>
+      url.includes('/v1/forecast') && ++forecasts === 1
+        ? new Promise(() => {})
+        : synthetic(url, init);
+    const logs: string[] = [];
+    const { deps } = makeDeps({
+      fetch: firstStalls,
+      log: (m) => logs.push(m),
+      forecastTiming: { timeoutMs: 1000, hedgeAfterMs: 20 },
+    });
+    const r = await getToday(q({ lat: '12', lon: '12', units: 'c' }), null, deps);
+    expect(r.status).toBe(200);
+    expect(forecasts).toBe(2);
+    expect(logs).toContainEqual(
+      expect.stringMatching(/^forecast for forecast\/v4\/\S+ took \d+ms$/),
+    );
+  });
+
+  it('gives error bodies a detail only when there is one', () => {
+    expect(errorResult('not_found', 'No such place.').body).toEqual({
+      error: { code: 'not_found', message: 'No such place.' },
+    });
+    expect(errorResult('upstream_unavailable', 'Down.', 'open-meteo: HTTP 502').body).toEqual({
+      error: { code: 'upstream_unavailable', message: 'Down.', detail: 'open-meteo: HTTP 502' },
+    });
+  });
+
+  it('serves the reason from the function without the API key', async () => {
+    // A port that was free a moment ago: the connection is refused at once.
+    const port = await new Promise<number>((resolve) => {
+      const server = createServer().listen(0, '127.0.0.1', () => {
+        const { port } = server.address() as AddressInfo;
+        server.close(() => resolve(port));
+      });
+    });
+    const env: Record<string, string> = {
+      OPEN_METEO_API_KEY: 's3cret',
+      OPEN_METEO_FORECAST_URL: `http://127.0.0.1:${port}/v1/forecast`,
+      NASA_POWER_URL: `http://127.0.0.1:${port}/climatology`,
+    };
+    const console_ = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const res = await handleToday(
+        new Request('https://x.test/api/v1/today?lat=13&lon=13&units=c'),
+        { env: (k) => env[k] },
+      );
+      expect(res.status).toBe(503);
+      const text = await res.text();
+      expect(text).not.toContain('s3cret');
+      expect((JSON.parse(text) as ApiError).error).toMatchObject({
+        code: 'upstream_unavailable',
+        detail: expect.stringMatching(
+          /^open-meteo: network error: TypeError: fetch failed \(ECONNREFUSED\) \(2 attempts\)$/,
+        ),
+      });
+      const logged = console_.mock.calls.map((c) => String(c[0]));
+      expect(logged).toContainEqual(
+        expect.stringMatching(
+          /^\[isithot\] forecast unavailable for .*ECONNREFUSED.*answering 503$/,
+        ),
+      );
+      expect(logged.join('\n')).not.toContain('s3cret');
+    } finally {
+      console_.mockRestore();
+    }
   });
 
   it('wraps everything in a Response', async () => {
@@ -670,5 +892,19 @@ describe('cache layers', () => {
     expect(await broken.get('k')).toBeNull();
     await broken.set('k', 1);
     expect(onError).toHaveBeenCalledTimes(2);
+  });
+
+  it('treats a slow read as a miss', async () => {
+    const onError = vi.fn();
+    const stuck = new SafeKV(
+      { get: () => new Promise(() => {}), set: async () => {} },
+      onError,
+      20,
+    );
+    expect(await stuck.get('forecast/x')).toBeNull();
+    expect(String(onError.mock.calls[0]![0])).toBe(
+      'Error: read of forecast/x timed out after 20ms',
+    );
+    expect(CACHE_READ_TIMEOUT_MS).toBe(1500);
   });
 });

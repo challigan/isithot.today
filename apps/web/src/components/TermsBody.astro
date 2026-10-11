@@ -1,14 +1,14 @@
 ---
-/** The terms of use, the same for both sites: they are one service. */
+/** The terms of use, the same for every site: they are one service. */
 import Content from '../layouts/Content.astro';
 import { SITES, type Topic } from '@isithot/core';
+import { siteNames } from '../lib/topics';
 
 interface Props {
   topic: Topic;
 }
 const { topic } = Astro.props;
 const site = SITES[topic].name;
-const other = SITES[topic === 'hot' ? 'wet' : 'hot'].name;
 ---
 
 <Content
@@ -21,16 +21,14 @@ const other = SITES[topic === 'hot' ? 'wet' : 'hot'].name;
   <p>
     <em>Draft for review. Last updated 7 October 2026.</em>
   </p>
-  <p>
-    {site} and {other} are one service, and these terms cover both.
-  </p>
+  <p>{siteNames(topic)} are one service, and these terms cover all three.</p>
 
   <h2>Forecasts are estimates</h2>
   <p>
     The sites summarise computer forecasts from several weather models. Forecasts can be wrong, and
-    "hot" and "wet" are judgements, not measurements. Do not rely on these sites for safety-critical
-    decisions, including heat health, flooding, outdoor work, travel or events. Follow advice from
-    your national weather service and health authorities.
+    "hot", "wet" and "snow" are judgements, not measurements. Do not rely on these sites for
+    safety-critical decisions, including heat health, flooding, outdoor work, travel or events.
+    Follow advice from your national weather service and health authorities.
   </p>
 
   <h2>Use of the sites</h2>

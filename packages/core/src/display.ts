@@ -1,5 +1,5 @@
 /**
- * What each view shows, for both topics, as plain data: the server renders the page from it and
+ * What each view shows, for every topic, as plain data: the server renders the page from it and
  * the browser updates the same nodes from it, so the two always paint the same thing. Every
  * string is already worded and every position already worked out (in % of its track); the web
  * app only turns this into markup and picks the icon for the band.
@@ -9,14 +9,22 @@ import {
   LOADING_PALETTE,
   TOMORROW_FROM_HOUR,
   paletteFor,
-  type Band,
+  type AnyBand,
   type Palette,
-  type RainBand,
   type Topic,
 } from './config';
 import { COPY, deg, question, type View } from './copy';
 import { localDateTime } from './dates';
-import type { ApiDay, ApiNow, ApiRainDay, ApiRainNow, RainUnit, TodayResponse } from './types';
+import type {
+  ApiDay,
+  ApiNow,
+  ApiRain,
+  ApiRainDay,
+  ApiRainNow,
+  ApiSnow,
+  ApiSnowNow,
+  TodayResponse,
+} from './types';
 
 /** Waiting for the first answer, showing one, or unable to get one. */
 export type DisplayState = 'loading' | 'ready' | 'error';
@@ -24,19 +32,24 @@ export type DisplayState = 'loading' | 'ready' | 'error';
 export interface DisplayOptions {
   /** City pages ask about the city by name. */
   city?: string | null;
-  /** The middle view shows tomorrow (`showsTomorrow`): `days[1]` and `rain.days[1]`. */
+  /**
+   * The middle view shows tomorrow (`showsTomorrow`): `days[1]`, `rain.days[1]` and
+   * `snow.days[1]`.
+   */
   tomorrow?: boolean;
   /** "Now" worked out again for this minute (`formatNow`), in place of the response's. */
   now?: ApiNow | null;
   /** The same for rain (`formatRainNow`). */
   rainNow?: ApiRainNow | null;
+  /** The same for snow (`formatSnowNow`). */
+  snowNow?: ApiSnowNow | null;
 }
 
 interface DisplayBase {
   topic: Topic;
   state: DisplayState;
   /** The band shown, or null without an answer for this view. */
-  band: Band | RainBand | null;
+  band: AnyBand | null;
   palette: Palette;
   question: string;
   answer: string;
@@ -57,20 +70,20 @@ export interface StripDot {
 export interface ModelItem {
   value: string;
   name: string;
-  /** Outside the agreement band (hot), or not agreeing with the answer (wet). */
+  /** Outside the agreement band (hot), or not agreeing with the answer (wet and snow). */
   out: boolean;
 }
 
 /** The Today view's models section. Positions are in % of the strip. */
 export interface TodayModels {
-  /** "6 of 8 forecasts agree within 2°" / "6 of 8 forecasts expect rain". */
+  /** "6 of 8 forecasts agree within 2°" / "6 of 8 forecasts expect rain" (or snow). */
   heading: string;
   /** The strip's accessible summary. */
   summary: string;
-  /** The strip's end labels: "12°" / "0mm". */
+  /** The strip's end labels: "12°" / "0mm" / "0cm". */
   min: string;
   max: string;
-  /** The highlighted zone: the agreement band (hot) or the wet amounts (wet). */
+  /** The highlighted zone: the agreement band (hot) or the wet or snowy amounts. */
   zone: { left: number; width: number } | null;
   /** Where dots added later slide in from: the consensus. */
   origin: number;
@@ -102,7 +115,7 @@ export interface NowDisplay extends DisplayBase {
 export interface WeekItem {
   /** "Today", "Thu". */
   label: string;
-  /** "21°" / "4mm". */
+  /** "21°" / "4mm" / "4cm". */
   value: string;
   bandLabel: string;
   /** The dot's position on the week's track in %, or null for a placeholder row. */
@@ -120,9 +133,34 @@ export type DisplayFor<V extends View> = Extract<ViewDisplay, { view: V }>;
 
 /** A view's answer lines, and what it shows below them. */
 interface Parts<T> {
-  shown: { band: Band | RainBand; answer: string; verdict: string; detail: string };
+  shown: { band: AnyBand; answer: string; verdict: string; detail: string };
   parts: T;
 }
+
+/**
+ * The wet and snow answers share their shape (a strip of amounts for a day, chances for Now,
+ * amounts for the week), so one path draws both. A topic's block in the response, and its "now"
+ * worked out for this minute.
+ */
+type Precip = ApiRain | ApiSnow;
+const PRECIP: Record<Exclude<Topic, 'hot'>, (res: TodayResponse) => Precip | undefined> = {
+  wet: (res) => res.rain,
+  snow: (res) => res.snow,
+};
+const PRECIP_NOW: Record<
+  Exclude<Topic, 'hot'>,
+  (opts: DisplayOptions) => ApiRainNow | ApiSnowNow | null | undefined
+> = {
+  wet: (opts) => opts.rainNow,
+  snow: (opts) => opts.snowNow,
+};
+
+/** The Now view's list heading for each topic. */
+const NOW_HEADINGS: Record<Topic, string> = {
+  hot: COPY.nextHours,
+  wet: COPY.nextHoursRain,
+  snow: COPY.nextHoursSnow,
+};
 
 const clamp = (v: number): number => Math.min(100, Math.max(0, v));
 
@@ -132,7 +170,7 @@ const track =
   (v: number): number =>
     clamp(((v - lo) / (hi - lo || 1)) * 100);
 
-const amountText = (amount: number, unit: RainUnit): string => `${amount}${unit}`;
+const amountText = (amount: number, unit: string): string => `${amount}${unit}`;
 
 /**
  * Text of a typical length that holds each view's layout while there is no answer yet. It is
@@ -183,6 +221,20 @@ const PLACEHOLDERS: Record<
     day: '0mm',
     bandLabel: 'Showers',
   },
+  snow: {
+    verdict: { today: 'It might snow.', now: 'Snow showers around.', week: 'Snow on Thu and Fri.' },
+    detail: {
+      today: 'About 0cm of snow. Mostly between 0pm and 0pm.',
+      now: 'Snow possible now. Snow likely from about 0pm.',
+      week: 'About 00cm across the week, most on Friday (0cm). About usual for September.',
+    },
+    agreement: '0 of 0 forecasts expect snow',
+    scale: '0cm',
+    model: '0cm',
+    hour: '00%',
+    day: '0cm',
+    bandLabel: 'Snow possible',
+  },
 };
 
 const times = <T>(n: number, item: () => T): T[] => Array.from({ length: n }, item);
@@ -209,8 +261,14 @@ function hotModels(day: ApiDay): TodayModels {
   };
 }
 
-/** The wet zone (from the window's wet amount up), and each model's total, from none. */
-function rainModels(day: ApiRainDay, unit: RainUnit): TodayModels {
+/** What a wet or snow day's strip needs (ApiSnowDay has the same fields as ApiRainDay). */
+type StripDay = Pick<
+  ApiRainDay,
+  'scale' | 'threshold' | 'amount' | 'agreementText' | 'stripSummary' | 'limitedText'
+> & { models: readonly { name: string; amount: number; value: number; agrees: boolean }[] };
+
+/** The wet or snowy zone (from the window's amount up), and each model's total, from none. */
+function precipModels(day: StripDay, unit: string): TodayModels {
   const pos = track(day.scale.min, day.scale.max);
   const left = pos(day.threshold);
   return {
@@ -236,18 +294,19 @@ function rainModels(day: ApiRainDay, unit: RainUnit): TodayModels {
 
 /** Today, or tomorrow (index 1) in the evening. */
 function todayParts(res: TodayResponse, topic: Topic, index: number): Parts<TodayModels> | null {
-  if (topic === 'wet') {
-    const rain = res.rain;
-    const day = rain?.days[index];
-    return rain && day ? { shown: day, parts: rainModels(day, rain.unit) } : null;
+  if (topic !== 'hot') {
+    const block = PRECIP[topic](res);
+    const day = block?.days[index];
+    return block && day ? { shown: day, parts: precipModels(day, block.unit) } : null;
   }
   const day = res.days[index];
   return day ? { shown: day, parts: hotModels(day) } : null;
 }
 
 function nowParts(res: TodayResponse, topic: Topic, opts: DisplayOptions): Parts<NowItem[]> | null {
-  if (topic === 'wet') {
-    const now = opts.rainNow !== undefined ? opts.rainNow : res.rain?.now;
+  if (topic !== 'hot') {
+    const fresh = PRECIP_NOW[topic](opts);
+    const now = fresh !== undefined ? fresh : PRECIP[topic](res)?.now;
     return now
       ? {
           shown: now,
@@ -269,17 +328,17 @@ function nowParts(res: TodayResponse, topic: Topic, opts: DisplayOptions): Parts
 }
 
 function weekParts(res: TodayResponse, topic: Topic): Parts<WeekItem[]> | null {
-  if (topic === 'wet') {
-    const rain = res.rain;
-    const week = rain?.week;
-    if (!rain || !week) return null;
-    // From none to the wettest day.
+  if (topic !== 'hot') {
+    const block = PRECIP[topic](res);
+    const week = block?.week;
+    if (!block || !week) return null;
+    // From none to the wettest (or snowiest) day.
     const pos = track(0, Math.max(...week.days.map((d) => d.amount)));
     return {
       shown: week,
       parts: week.days.map((d) => ({
         label: d.label,
-        value: amountText(d.amount, rain.unit),
+        value: amountText(d.amount, block.unit),
         bandLabel: d.bandLabel,
         left: pos(d.amount),
       })),
@@ -306,9 +365,9 @@ function weekParts(res: TodayResponse, topic: Topic): Parts<WeekItem[]> | null {
 
 /**
  * What one view shows for a topic. `res` is used only when `state` is ready; a view without
- * data (no rain in the response, no "now" for this minute, no week) is then `empty`. Pass "now"
- * worked out for the current minute in `opts`, as the response's may have sat in a cache, and
- * `tomorrow` in the evening for the middle view.
+ * data (no rain or snow in the response, no "now" for this minute, no week) is then `empty`.
+ * Pass "now" worked out for the current minute in `opts`, as the response's may have sat in a
+ * cache, and `tomorrow` in the evening for the middle view.
  */
 export function viewDisplay<V extends View>(
   res: TodayResponse | null,
@@ -342,7 +401,7 @@ export function viewDisplay<V extends View>(
     const now = live && nowParts(live, topic, opts);
     p = now;
     parts = {
-      heading: topic === 'wet' ? COPY.nextHoursRain : COPY.nextHours,
+      heading: NOW_HEADINGS[topic],
       items:
         now?.parts ?? (pending ? times(6, () => ({ value: ph.hour, label: '0pm', sr: null })) : []),
     };

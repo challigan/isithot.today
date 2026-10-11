@@ -1,42 +1,45 @@
 /**
  * The whole client: answers from approximate IP location first, quietly upgrades to device
- * location when permission is already granted, and handles search, units, the Hot | Wet toggle
- * and caching. Vanilla TypeScript; keep it small (the budget is 25 KB gzipped for all site JS).
+ * location when permission is already granted, and handles search, units, the Hot | Wet | Snow
+ * toggle and caching. Vanilla TypeScript; keep it small (the budget is 25 KB gzipped for all site
+ * JS).
  */
 import {
-  BANDS,
   CACHE,
   COPY,
   GRID,
   LOADING_PALETTE,
-  RAIN_BANDS,
   SEARCH,
   SITES,
+  UNITS_LABELS,
+  UNIT_NAMES,
   VIEWS,
   computeNow,
   computeRainNow,
+  computeSnowNow,
   defaultView,
   formatNow,
   formatRainNow,
+  formatSnowNow,
   hostTopic,
   isSiteHost,
   outboundLinks,
-  pageTitle,
+  parseTopic,
   question,
   roundToGrid,
   showsTomorrow,
   sitePath,
+  topicOfBand,
   viewDisplay,
   viewLabel,
-  wetPageTitle,
+  type AnyBand,
   type ApiError,
   type ApiNow,
   type ApiRainNow,
-  type Band,
+  type ApiSnowNow,
   type DisplayFor,
   type NowDisplay,
   type Palette,
-  type RainBand,
   type SearchResponse,
   type SearchResult,
   type TodayDisplay,
@@ -50,6 +53,7 @@ import {
 } from '@isithot/core';
 // Types only: the preview module itself loads on demand, and only with ?preview=1.
 import type * as PreviewKit from '@isithot/core/preview';
+import { CITY_TITLES, HOURLY, TOPIC_DAYS, lastKey } from '../lib/topics';
 import { glyphFor, hoursHtml, listHtml, pct, weekHtml } from '../lib/view';
 import { wireViews, type ViewsController } from './views';
 
@@ -77,16 +81,16 @@ type Target =
     };
 
 /**
- * The place and units, shared by both questions (°C goes with millimetres, °F with inches). Each
- * domain keeps its own storage, so a link or move to the other one carries the place and units
- * in the address, and the page there stores them (`siteLink`, `start`).
+ * The place and units, shared by every question (°C goes with millimetres and centimetres, °F
+ * with inches). Each domain keeps its own storage, so a link or move to another one carries the
+ * place and units in the address, and the page there stores them (`siteLink`, `start`). Each
+ * site's last answer, for the instant repaint, is under `lastKey` (HomePage.astro reads the same
+ * keys).
  */
 const KEYS = {
   place: 'isithot:place',
   units: 'isithot:units',
 } as const;
-/** Each site's last answer, for the instant repaint (HomePage.astro reads the same keys). */
-const LAST: Record<Topic, string> = { hot: 'isithot:last', wet: 'isitwet:last' };
 
 const storage = {
   get<T>(key: string): T | null {
@@ -124,8 +128,8 @@ const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').match
 const params = new URLSearchParams(location.search);
 const preview = params.get('preview') === '1';
 /** The page's own question (its site's), which it opens on and goes back to. */
-const pageTopic: Topic = app.dataset.topic === 'wet' ? 'wet' : 'hot';
-/** The question on screen: the Hot | Wet toggle changes it. */
+const pageTopic: Topic = parseTopic(app.dataset.topic);
+/** The question on screen: the Hot | Wet | Snow toggle changes it. */
 let topic: Topic = pageTopic;
 
 let units: Units = 'c';
@@ -141,6 +145,7 @@ let current: TodayResponse | null = null;
 /** The Now view as last shown, worked out for the current minute (each topic's). */
 let nowShown: ApiNow | null = null;
 let rainNowShown: ApiRainNow | null = null;
+let snowNowShown: ApiSnowNow | null = null;
 /** When the current answer arrived (client clock), for refreshing after a long absence. */
 let loadedAt = 0;
 let requestSeq = 0;
@@ -173,6 +178,7 @@ function shown<V extends View>(res: TodayResponse, v: V): DisplayFor<V> {
     tomorrow,
     now: nowShown,
     rainNow: rainNowShown,
+    snowNow: snowNowShown,
   });
 }
 
@@ -228,7 +234,7 @@ let switchTimer: ReturnType<typeof setTimeout> | undefined;
 
 /**
  * Screen readers hear the answer of the view they move to (once it settles), or after a switch
- * between Hot and Wet, the new question and its answer.
+ * between Hot, Wet and Snow, the new question and its answer.
  */
 let announceTimer: ReturnType<typeof setTimeout> | undefined;
 function announce(v: View, lead: 'view' | 'question' = 'view'): void {
@@ -358,19 +364,13 @@ function renderLinks(res: TodayResponse): void {
   nearby.hidden = list.length === 0;
 }
 
-/** One units setting serves both topics: °C | °F for Hot, mm | in for Wet. */
-const UNIT_LABELS: Record<Topic, Record<Units, string>> = {
-  hot: { c: '°C', f: '°F' },
-  wet: { c: 'mm', f: 'in' },
-};
-
+/** One units setting serves every topic: °C | °F for Hot, mm | in for Wet, cm | in for Snow. */
 function renderUnits(): void {
-  const label = topic === 'wet' ? COPY.rainUnitsLabel : COPY.unitsLabel;
-  document.querySelector('.units')?.setAttribute('aria-label', label);
+  document.querySelector('.units')?.setAttribute('aria-label', UNITS_LABELS[topic]);
   document.querySelectorAll<HTMLButtonElement>('[data-units]').forEach((b) => {
     const u: Units = b.dataset.units === 'f' ? 'f' : 'c';
     b.setAttribute('aria-pressed', String(u === units));
-    if (b.textContent?.trim() !== UNIT_LABELS[topic][u]) b.textContent = UNIT_LABELS[topic][u];
+    if (b.textContent?.trim() !== UNIT_NAMES[topic][u]) b.textContent = UNIT_NAMES[topic][u];
   });
 }
 
@@ -382,17 +382,9 @@ function renderUnits(): void {
 function titleFor(res: TodayResponse | null): string {
   const city = cityName();
   const site = SITES[topic].name;
-  const hot = res?.days[0];
-  const wet = res?.rain?.days[0];
-  if (topic === 'hot' && hot) {
-    return city
-      ? pageTitle({ city, answer: hot.answer, high: hot.high })
-      : `${hot.answer} ${hot.verdict} | ${site}`;
-  }
-  if (topic === 'wet' && wet) {
-    return city
-      ? wetPageTitle({ city, answer: wet.answer, band: wet.band, snow: wet.snow })
-      : `${wet.answer} ${wet.verdict} | ${site}`;
+  const day = res && TOPIC_DAYS[topic](res)?.[0];
+  if (res && day) {
+    return (city && CITY_TITLES[topic](city, res)) || `${day.answer} ${day.verdict} | ${site}`;
   }
   return `${question(city, 'today', topic)} | ${site}`;
 }
@@ -402,7 +394,7 @@ function titleFor(res: TodayResponse | null): string {
  * whether a new response changes it.
  */
 const todayAnswer = (res: TodayResponse | null): string | undefined =>
-  topic === 'wet' ? res?.rain?.days[0]?.answer : res?.days[0]?.answer;
+  res ? TOPIC_DAYS[topic](res)?.[0]?.answer : undefined;
 
 function render(res: TodayResponse, animate: boolean): void {
   if (!res.days[0]) return renderError();
@@ -429,7 +421,8 @@ function render(res: TodayResponse, animate: boolean): void {
 /**
  * The header's site name and link follow the question on screen: on isithot.today with Wet
  * showing it reads isitwet.today and goes there. So does the tab's icon: on the real sites each
- * domain serves its own icons at the root, and elsewhere the wet ones are under /wet.
+ * domain serves its own icons at the root, and elsewhere each site's are under its prefix (/wet,
+ * /snow).
  */
 function renderBrand(): void {
   const brand = $<HTMLAnchorElement>('brand');
@@ -450,10 +443,11 @@ function renderBrand(): void {
   });
 }
 
-/** Show the other question: the same views, re-rendered in place in the other topic. */
+/** Show another question: the same views, re-rendered in place in that topic. */
 function setTopic(next: Topic, opts: { announce?: boolean } = {}): void {
   if (next === topic) return;
   topic = next;
+  $('main')?.setAttribute('data-topic', topic);
   hushLive();
   document.querySelectorAll<HTMLButtonElement>('#topic [data-topic]').forEach((b) => {
     b.setAttribute('aria-pressed', String(b.dataset.topic === topic));
@@ -484,11 +478,20 @@ function rainNowFor(res: TodayResponse): ApiRainNow | null {
   return fresh ? formatRainNow(fresh, rain.unit) : null;
 }
 
+/** And for snow. */
+function snowNowFor(res: TodayResponse): ApiSnowNow | null {
+  const snow = res.snow;
+  if (!snow?.now || preview) return snow?.now ?? null;
+  const fresh = computeSnowNow(snow.now.series, Date.now());
+  return fresh ? formatSnowNow(fresh, snow.unit) : null;
+}
+
 /**
- * When today's rain answer goes out of date. It covers the rest of the day from when it was
- * worked out, counting that hour by the minutes left, so it holds until the next forecast hour.
+ * When today's rain and snow answers go out of date. Both cover the rest of the day from when
+ * they were worked out (the same moment), counting that hour by the minutes left, so they hold
+ * until the next forecast hour.
  */
-function rainUntil(res: TodayResponse): number | null {
+function hourUntil(res: TodayResponse): number | null {
   const from = res.rain?.days[0]?.from;
   if (!from) return null;
   const at = Date.parse(from);
@@ -503,13 +506,13 @@ function dayUntil(res: TodayResponse): number | null {
   return res.now?.series.find((p) => p.date > date)?.time ?? null;
 }
 
-type Stale = 'day' | 'rain';
+type Stale = 'day' | 'hour';
 
 /**
  * A clock running fast makes the answer look out of date before the server has a newer one:
- * past the hour today's rain holds for, or past the place's midnight. When a fresh answer is out
- * of date already, it is good until the server reaches that moment: at the latest, as long from
- * now as the server had left when working it out. So a fast clock costs at most one extra
+ * past the hour today's rain and snow hold for, or past the place's midnight. When a fresh answer
+ * is out of date already, it is good until the server reaches that moment: at the latest, as long
+ * from now as the server had left when working it out. So a fast clock costs at most one extra
  * request per server hour, and one at midnight.
  */
 const holds: Partial<Record<Stale, { until: number; at: number }>> = {};
@@ -523,7 +526,7 @@ function hold(res: TodayResponse): void {
     }
   };
   set('day', dayUntil(res), res.now?.time);
-  set('rain', rainUntil(res), res.rain?.days[0]?.from);
+  set('hour', hourUntil(res), res.rain?.days[0]?.from);
 }
 
 /** Whether the clock has passed `until` for `reason` (or the hold on it). */
@@ -534,9 +537,9 @@ function past(reason: Stale, until: number): boolean {
 
 /**
  * Whether the answer is out of date: past local midnight (today's answer is yesterday's) or
- * past the end of the hourly series it carries ("day"), or past the hour today's rain answer
- * holds for ("rain"). A clock running far behind is not a reason, and one running fast waits
- * for the server (`hold`).
+ * past the end of the hourly series it carries ("day"), or past the hour today's rain and snow
+ * answers hold for ("hour"). A clock running far behind is not a reason, and one running fast
+ * waits for the server (`hold`).
  */
 function outOfDate(res: TodayResponse): Stale | null {
   if (preview) return null;
@@ -549,8 +552,8 @@ function outOfDate(res: TodayResponse): Stale | null {
     const midnight = dayUntil(res);
     if (old && (midnight === null || past('day', midnight))) return 'day';
   }
-  const until = rainUntil(res);
-  return until !== null && past('rain', until) ? 'rain' : null;
+  const until = hourUntil(res);
+  return until !== null && past('hour', until) ? 'hour' : null;
 }
 
 /**
@@ -576,6 +579,7 @@ function renderToday(d: TodayDisplay, pop: boolean): void {
 function renderNow(res: TodayResponse): void {
   nowShown = nowFor(res);
   rainNowShown = rainNowFor(res);
+  snowNowShown = snowNowFor(res);
   renderHours(shown(res, 'now'));
 }
 
@@ -701,11 +705,12 @@ function saveLast(res: TodayResponse): void {
     b.setAttribute('aria-pressed', String(b.dataset.topic === pageTopic));
   });
   copy.querySelector('#live')?.setAttribute('aria-live', 'polite');
-  storage.set(LAST[pageTopic], {
+  storage.set(lastKey(pageTopic), {
     v: CACHE.snapshotVersion,
     savedAt: Date.now(),
-    // Today's rain is for the rest of the day from when it was worked out: not past the hour.
-    until: pageTopic === 'wet' ? (rainUntil(res) ?? undefined) : undefined,
+    // Today's rain and snow are for the rest of the day from when they were worked out: not past
+    // the hour.
+    until: HOURLY[pageTopic] ? (hourUntil(res) ?? undefined) : undefined,
     key: targetKey(target),
     // The inline restore script paints this only for the same slot on the same day at the place.
     tz: res.location.timezone,
@@ -727,8 +732,8 @@ async function load(
   if (!opts.quiet) renderLoading();
   const preferred = storage.get<Units>(KEYS.units);
   const url = apiUrl(t, preferred ?? (t.kind === 'ip' ? null : units));
-  // An out-of-date answer (past midnight, or past the hour today's rain holds for) may still be
-  // in the browser and CDN caches: ask past them, with a new address each hour.
+  // An out-of-date answer (past midnight, or past the hour today's rain and snow hold for) may
+  // still be in the browser and CDN caches: ask past them, with a new address each hour.
   const freshUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Math.floor(Date.now() / HOUR)}`;
   const early = window.__isithotPrefetch?.url === url ? window.__isithotPrefetch : undefined;
   window.__isithotPrefetch = undefined;
@@ -766,12 +771,12 @@ function rememberPlace(t: Target): void {
   else storage.set(KEYS.place, t);
 }
 
-/** Whether a link for `t` goes to the other domain (only on the real sites). */
+/** Whether a link for `t` goes to another domain (only on the real sites). */
 const crosses = (t: Topic): boolean =>
   isSiteHost(location.hostname) && hostTopic(location.hostname) !== t;
 
 /**
- * A link to `path` on the site of `t`. The other domain has storage of its own, so a link there
+ * A link to `path` on the site of `t`. Another domain has storage of its own, so a link there
  * carries the units chosen here, which the page there stores.
  */
 function siteLink(t: Topic, path: string): string {
@@ -827,8 +832,8 @@ async function useDeviceLocation(prompted: boolean): Promise<void> {
         history.replaceState(null, '', sitePath(pageTopic, '/', location.hostname));
       await load(t, { quiet: !!current });
     } else {
-      // Home, on the site of the question on screen. The other domain has neither this
-      // storage nor the permission, so the place goes in the address.
+      // Home, on the site of the question on screen. Another domain has neither this storage
+      // nor the permission, so the place goes in the address.
       const query = new URLSearchParams({
         lat: String(p.lat),
         lon: String(p.lon),
@@ -1011,17 +1016,17 @@ function wireUnits(): void {
   });
 }
 
-/** Hot | Wet: the answer already carries both, so switching never asks the server. */
+/** Hot | Wet | Snow: the answer already carries all three, so switching never asks the server. */
 function wireTopic(): void {
   $('topic')?.addEventListener('click', (e) => {
     const b = (e.target as Element).closest<HTMLElement>('[data-topic]');
-    if (b) setTopic(b.dataset.topic === 'wet' ? 'wet' : 'hot', { announce: true });
+    if (b) setTopic(parseTopic(b.dataset.topic), { announce: true });
   });
 }
 
 // ---- Preview (dev only, ?preview=1) --------------------------------------------
 
-let previewBand: Band | RainBand = 'cold';
+let previewBand: AnyBand = 'cold';
 let previewKit: typeof PreviewKit | null = null;
 
 async function showPreview(): Promise<void> {
@@ -1034,7 +1039,7 @@ async function showPreview(): Promise<void> {
 function renderChips(): void {
   const holder = $('preview');
   if (!holder || !previewKit) return;
-  const { PREVIEW_BANDS, PREVIEW_RAIN_BANDS, BAND_LABELS, RAIN_BAND_LABELS } = previewKit;
+  const kit = previewKit;
   let chips = holder.querySelector<HTMLElement>('.chips');
   if (!chips) {
     holder.hidden = false;
@@ -1049,14 +1054,22 @@ function renderChips(): void {
   }
   if (chips.dataset.bands !== topic) {
     chips.dataset.bands = topic;
-    const labels: Record<string, string> = { ...BAND_LABELS, ...RAIN_BAND_LABELS };
-    const bands = topic === 'wet' ? PREVIEW_RAIN_BANDS : PREVIEW_BANDS;
+    const labels: Record<AnyBand, string> = {
+      ...kit.BAND_LABELS,
+      ...kit.RAIN_BAND_LABELS,
+      ...kit.SNOW_BAND_LABELS,
+    };
+    const bands: Record<Topic, readonly AnyBand[]> = {
+      hot: kit.PREVIEW_BANDS,
+      wet: kit.PREVIEW_RAIN_BANDS,
+      snow: kit.PREVIEW_SNOW_BANDS,
+    };
     chips.replaceChildren(
-      ...bands.map((band) => {
+      ...bands[topic].map((band) => {
         const b = document.createElement('button');
         b.type = 'button';
         b.dataset.band = band;
-        b.textContent = labels[band] ?? band;
+        b.textContent = labels[band];
         b.addEventListener('click', () => {
           previewBand = band;
           void showPreview();
@@ -1082,7 +1095,7 @@ function refreshNow(): void {
   if (old && Date.now() - lastRefetch > 5 * 60 * 1000) {
     lastRefetch = Date.now();
     void load(target, { quiet: true, animate: false, fresh: true });
-    // Past midnight "now" belongs to the new day's answer; rain's hours are still good.
+    // Past midnight "now" belongs to the new day's answer; rain's and snow's hours are still good.
     if (old === 'day') return;
   }
   renderNow(current);
@@ -1177,14 +1190,12 @@ export function start(): void {
   });
 
   if (preview) {
-    // A hot band opens on Hot with that sample, a rain band on Wet.
+    // A band opens on its topic with that sample: a hot band on Hot, a rain band on Wet…
     const band = params.get('band') ?? '';
-    if ((BANDS as readonly string[]).includes(band)) {
-      previewBand = band as Band;
-      setTopic('hot');
-    } else if ((RAIN_BANDS as readonly string[]).includes(band)) {
-      previewBand = band as RainBand;
-      setTopic('wet');
+    const bandTopic = topicOfBand(band);
+    if (bandTopic) {
+      previewBand = band as AnyBand;
+      setTopic(bandTopic);
     }
     void showPreview();
     return;
@@ -1221,7 +1232,7 @@ export function start(): void {
   }
   const restored = app.dataset.restored === '1';
   const cached = storage.get<{ key: string; savedAt: number; data?: TodayResponse }>(
-    LAST[pageTopic],
+    lastKey(pageTopic),
   );
   const fresh =
     restored &&
@@ -1238,7 +1249,7 @@ export function start(): void {
     app.dataset.restored = '';
     setState('loading');
   }
-  // An out-of-date paint (past midnight, or rain past its hour) asks past the caches.
+  // An out-of-date paint (past midnight, or rain and snow past their hour) asks past the caches.
   const old = current && outOfDate(current);
   if (current && old !== 'day') {
     renderNow(current);

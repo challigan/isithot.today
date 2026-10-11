@@ -14,8 +14,15 @@ export interface ModelDay {
    * has a value for every hour of the day. Absent for forecasts recorded without precipitation.
    */
   rain?: number | null;
-  /** The part of `rain` that fell in hours at or below the snow line (RAIN.snowAtOrBelowC), mm. */
+  /** The part of `rain` that falls as snow (water equivalent, by snowWater in snow.ts), mm. */
   snow?: number | null;
+  /** The same snow as depth, cm (SNOW.cmPerMm). */
+  snowfall?: number | null;
+  /**
+   * The lowest temperature over the local day, °C, or null unless the model has every hour.
+   * Present with precipitation, for the snow topic ("Too warm for snow.").
+   */
+  low?: number | null;
 }
 
 /** Hourly temperatures across all models for one local hour, °C. */
@@ -33,6 +40,11 @@ export interface HourTemps {
    * moves it to the hour's start so it lines up with everything else here.
    */
   rain?: readonly (number | null)[];
+  /**
+   * Open-Meteo's snowfall per model during this hour, cm, moved to the hour's start as `rain` is.
+   * Absent for forecasts recorded without it (judged by temperature instead).
+   */
+  snow?: readonly (number | null)[];
 }
 
 export interface BlendedModel {

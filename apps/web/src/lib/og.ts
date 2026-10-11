@@ -1,7 +1,7 @@
 /**
- * Renders the 1200×630 Open Graph image for either site: band gradient, icon, answer and city,
- * matching the page. Fonts and the resvg wasm are fetched once per function instance from our
- * own static assets.
+ * Renders the 1200×630 Open Graph image for any of the sites: band gradient, icon, answer and
+ * city, matching the page. Fonts and the resvg wasm are fetched once per function instance from
+ * our own static assets.
  */
 import satori from 'satori';
 import { Resvg, initWasm } from '@resvg/resvg-wasm';
@@ -9,14 +9,14 @@ import wasmUrl from '@resvg/resvg-wasm/index_bg.wasm?url';
 import font500 from '@fontsource/bricolage-grotesque/files/bricolage-grotesque-latin-500-normal.woff?url';
 import font700 from '@fontsource/bricolage-grotesque/files/bricolage-grotesque-latin-700-normal.woff?url';
 import font800 from '@fontsource/bricolage-grotesque/files/bricolage-grotesque-latin-800-normal.woff?url';
-import { SITES, paletteFor, type Band, type RainBand, type Topic } from '@isithot/core';
+import { SITES, paletteFor, type AnyBand, type Topic } from '@isithot/core';
 import { glyphFor } from './view';
 
 export interface OgContent {
   /** The site the image is for: its name goes in the corner. */
   topic: Topic;
-  /** A hot band, or a rain band for isitwet.today. */
-  band: Band | RainBand;
+  /** A band of the site's topic. */
+  band: AnyBand;
   question: string;
   answer: string;
   verdict: string;

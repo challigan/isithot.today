@@ -38,6 +38,50 @@ production, responses carry `x-isithot-via: function` when the dedicated functio
   hours, and "now" is worked out from the hourly forecast at request time (and again in the
   browser), so the longer cache costs no accuracy and halves calls to Open-Meteo. A forecast
   fetched on an earlier local day is refetched, so the week always has 7 days.
+- **A slow forecast gets a second request after 2 seconds, inside the same 6-second budget.**
+  The deploy-preview smoke test failed twice on 8 October (06:34 and 21:34 UTC) with 503s after
+  6.2 s: the forecast request had timed out at 6 s. Open-Meteo itself was failing at the time,
+  not the route from Netlify. In the same jobs the fixture recorder's identical request from the
+  GitHub runner hung for 32 s and then 49 s, and got HTTP 200 with the plain text
+  `Unexpected error while streaming data: timeoutReached` (Open-Meteo's servers read model data
+  from their own storage with a 30-second deadline and, once the 200 has gone out, write any
+  error into the body). Each episode lasted one to two minutes (in the morning one, a city page
+  fetched seconds after the last failure answered in 2 s). Normal answers take 0.2–1.5 s. Previews meet this more than production
+  because every new preview starts with an empty cache (a deploy-scoped Blobs store), so its
+  first requests always go to Open-Meteo.
+  - The budget: Netlify stops a synchronous function after 30 s (10 s on older accounts). That
+    covers the API functions and Astro's SSR function (city pages and OG images); none
+    overrides it. The forecast keeps its 6 s, so a stale answer or a 503 comes no later than
+    before. The cache read before it now counts as a miss after 1.5 s (the Netlify Blobs
+    client retries a failed read up to five times, 5 s apart), so an answer takes at most
+    about 7.5 s, inside even the old limit. NASA POWER runs alongside and is waited for 2 s.
+  - Within it, if the first request has not answered after 2 s, or fails sooner with anything
+    but a 4xx, an identical second request starts and the first success wins (the other is
+    cancelled). A 4xx (bad request, bad key, rate limited) is not retried, with one exception:
+    Open-Meteo's free API answers 429 "Too many concurrent requests" when too many requests
+    from one address are in flight, which Netlify's shared function addresses can hit (seen on
+    the #6 preview). That clears in moments, so it gets one more try after 1 s. A paid
+    Open-Meteo key would avoid sharing those limits (see SETUP.md). The 6 s now covers
+    reading the body too: before, a server that sent its headers and then stalled held the
+    function until it gave up (32 s in the simulation below). The second request costs another
+    fetch's calls (2.4 then, 3.2 since Will it snow?), only when the first is slow or broken.
+  - Simulated with a fake fetch (old code, then new): one stuck request then normal ones, 503
+    at 6.0 s, now 200 at 2.35 s; Open-Meteo's text error after 1 s then normal, 503 at 1.0 s,
+    now 200 at 1.35 s; headers at once and the body stalled for 32 s, 503 at 32 s, now 200 at
+    2.35 s; every request stalled, 503 at 6.0 s either way.
+  - Not chosen: a longer timeout (Open-Meteo's stalls run 30 s or more, so waiting longer only
+    delays the stale answer or the 503); two parallel requests of 4 models (the same quota, but
+    both halves read the same storage, so a stall would usually hit both, and half a forecast
+    would need rules for partial answers, a new cache version and re-recorded fixtures);
+    answering from a stale copy sooner (faster, but no fewer 503s).
+  - What it cannot fix: an Open-Meteo outage longer than 6 s with nothing usable cached (a new
+    preview, or a place nobody has asked about for 6 hours) still answers 503. It now says why,
+    so it can be told apart from a fault of ours: the function log reads
+    `forecast unavailable for forecast/v3/54.95,-1.60 after 6002ms: open-meteo: timed out after 6000ms (2 attempts); no usable cached copy, answering 503`
+    (or `answering with the copy from <time>`), a slow success logs
+    `forecast for … took 2030ms`, the 503 body carries the reason in `error.detail` (timeout,
+    `HTTP <status>` with Open-Meteo's reason, a network error and its cause, or the start of a
+    body that is not JSON, with any API key masked), and `scripts/smoke.mjs` prints it.
 - **Needs a decision: MET Norway counts ECMWF twice outside Scandinavia.** Open-Meteo's
   `metno_seamless` is MET Nordic over Norway, Sweden, Finland and Denmark, and ECMWF's 9 km
   model everywhere else (and after 2.5 days everywhere). For UK visitors it is close to a
@@ -145,8 +189,9 @@ to "Yes, drenched", and later bought isitwet.today so the domain decides which q
   disagree about which day it rains, so adding up daily medians would undercount), and it is
   compared with NASA POWER's normal rainfall only where both are large enough to mean anything
   (a dry climate's 0.3 mm is never "wetter than usual").
-- **Snow.** Rain falling at or below 1 °C (blended temperature) counts as snow: "It'll snow.",
-  "Likely to fall as snow." No extra variables are requested.
+- **Snow.** Rain falling at or below 1 °C (blended temperature) counted as snow: "It'll snow.",
+  "Likely to fall as snow." Since Will it snow?, the share that falls as snow comes from the rule
+  both topics share (below), and 1 °C is only the fallback for a model without snowfall.
 - **The toggle** sits above the tab bar from 640px up, and at the bottom of the screen on
   phones (round 2, below). It switches all three views in place and keeps the view on screen;
   the units setting is shared (°C goes with mm, °F with inches). The header's site name, the
@@ -338,6 +383,109 @@ after:
 - **F14.** A wet city page's title says "Snow" (or "Heavy snow") when the day's rain mostly
   falls as snow, as the page does.
 
+## Will it snow? (willitsnow.today)
+
+Carl bought willitsnow.today to make the app worth opening in winter: the same one-pager for
+snow (Now, Today or Tomorrow, This week), with its own palettes, gradients and icons, and
+answers from "No." to "Yes." across six bands. willitsnow.today opens on the snow question, and
+the toggle reads Hot | Wet | Snow on all three sites.
+
+- **Data.** The one forecast request gains hourly `snowfall` (cm in the hour before the time
+  given, at Open-Meteo's 7 cm of snow for 10 mm of water). That is 8 models × 4 variables, so
+  3.2 calls per fetch, up from 2.4; three topics still share one cached forecast, and switching
+  never waits on the network. `FORECAST_CACHE_VERSION` went from 3 to 4 and the request line
+  changed, so CI's preview smoke re-records the fixtures. Snowfall is moved to the hour's start
+  as precipitation is, and a model's day counts only with every hour, as rain's does. Older
+  recordings without `snowfall` still parse (the fallback below).
+- **One rule for Wet and Snow** (`snowWater`, `packages/core/src/snow.ts`) decides how much of
+  each model's hour falls as snow:
+  - None when the blended temperature is above +2.5 °C, whatever the model says (several
+    models judge snow for a grid cell higher than the place).
+  - Otherwise the model's snowfall, as water, never more than its precipitation (no snow out of
+    a dry hour).
+  - A model without `snowfall`: all its precipitation at or below 1 °C (`RAIN.snowAtOrBelowC`).
+    The spec's data section said 0 °C here and its wet section kept `RAIN.snowAtOrBelowC`; 1 °C
+    matches the research and leaves wet's answers unchanged where snowfall is missing. There is
+    no cold floor (rain at -1 °C counted as snow); the spec left it out.
+  - Wet's "It'll snow." now comes from this rule, so a snowy day reads the same on both sites.
+    `rain.now.series[].snow` keeps its meaning (blended temperature at or below 1 °C); the new
+    `asSnow` flag carries the shared rule and the Now view reads it when present.
+- **Bands and thresholds** (`SNOW` in `config.ts`, in cm). The keys `nosnow`, `flakes`,
+  `maybesnow`, `snow`, `heavysnow` and `deepsnow` differ from every hot and rain key, since
+  palettes, icons and preview chips are looked up by band alone (a test checks all 18). A whole
+  day: a few flakes from 0.1 cm, snow from 0.5 cm (0.2 in), heavy from 5 cm (2 in), deep from
+  15 cm (6 in). An hour: 0.1, 0.8 and 2 cm for snow, heavy and deep; the spec gave no hourly
+  "few flakes", so it is 0.07 cm (0.1 mm of water, Open-Meteo's smallest step). Votes work as
+  rain's: 60% of models or more gives Yes (banded by the median), 25% Maybe (Snow possible),
+  some flakes in a few models "A few flakes", else No snow. The rest of today scales like
+  rain's, with the same one-hour floor and the same rule that Today is never less snowy than
+  Now.
+- **A No says why.** "Too warm for snow." when every model's lowest temperature stays above
+  +2.5 °C (so it is never said while any model shows snow), "Rain, not snow." when the wet
+  answer for the same window is Showers or wetter, otherwise "It won't snow.". The detail gives
+  the low ("No lower than 9° all day." above +2.5 °C, "Down to -4° at the coldest." below) and
+  the climate line. Titles and week rows name the reason ("No. Too warm"), never "No. No
+  snow"; "No snow" is only the preview chip.
+- **This week** is Yes when any day has snow ("Snow on Thu and Fri, heavy on Fri."), "A snowy
+  week." from 4 such days, Maybe when snow is possible on any day, otherwise No. As for rain,
+  the total is the median of each model's own sum.
+- **Words.** "Will it snow today?", "Will it snow tomorrow?", "Is it snowing right now?", "Will
+  it snow this week?", "Will it snow in Oslo today?". No "blizzard" (that needs wind, which
+  would cost another 0.8 calls per fetch) and no "sleet" or freezing rain (the request cannot
+  tell them apart from rain or snow). Amounts in sentences:
+  under 0.5 cm is "a dusting"; whole centimetres up to 10, then the nearest 5; inches to the
+  nearest half up to 3, then whole; a range comes from the middle forecasts ("2 to 5cm"). One
+  units setting serves all topics: °C goes with cm, °F with inches, labelled "Snow units".
+- **Snow normals** come from NASA POWER's `PRECSNOLAND` (snowfall as water, mm a day, by month)
+  in a request and cache entry of their own (`climate-snow/v1/<cell>`, through the same
+  `loadMonthly` as the others), so they never hold up the hot or wet answer; while any normal is
+  still loading the answer is cached only briefly. A month with under 0.01 cm of snow a day is
+  "Snow is rare here in October.", from 0.2 cm "Snow is common here in January.". The week is
+  compared with normal only when the forecast or the normal is at least 1 cm ("more" at 1.5×
+  and 1 cm more, "less" at half and 1 cm less), so a place where snow is rare never gets "More
+  snow than usual" for a dusting.
+- **Height guard.** Snow depends on height far more than rain, and POWER's cell is about 50 km
+  across. Both heights were already in the responses (the forecast echoes the place's
+  `elevation`; POWER gives the cell's mean height), so the normals are used only when the two
+  are within 300 m, and when either is unknown.
+- **Next data improvement: pass the place's height.** Not in this version. Points are rounded
+  to 0.05°, and Open-Meteo uses the terrain height at the rounded point, which in mountains can
+  be several hundred metres from the town (2–6 °C, enough to turn rain into snow). Passing
+  `elevation=` for searched places (the geocoder returns it) and city pages (GeoNames heights
+  through `pnpm cities`), with the height rounded to 50 m in the forecast cache key, would fix
+  it, but it changes hot and wet answers in the mountains too, so it waits for a decision.
+- **Three domains, one deploy.** The edge function's routing (`netlify/edge-functions/lib/route.ts`)
+  is now one table of host, prefix and test header per site:
+  - willitsnow.today is served from `/snow`, and www.willitsnow.today redirects to it (as
+    www.isitwet.today does to isitwet.today).
+  - On any real host, a path under another site's prefix redirects to that site, without the
+    prefix and with the query: isithot.today/snow and isitwet.today/snow go to willitsnow.today,
+    willitsnow.today/wet to isitwet.today. One behaviour changed: isitwet.today/snow/x used to
+    be a wet 404 and now goes to willitsnow.today/x.
+  - `x-willitsnow-host: 1` makes a deploy preview act as willitsnow.today, like
+    `x-isitwet-host`, never in production. A real host wins over either header; with both sent
+    to a preview, the first in table order (wet) wins.
+  - Place links, units and "Use my location" cross to and from willitsnow.today in the address,
+    as between the first two sites.
+- **Pages and the toggle.** `/snow` mirrors `/wet`: home, city pages, About, Privacy, Cookies,
+  Terms, 404, OG images, sitemap, robots and icons (`public/snow`, from `scripts/make-icons.mjs`),
+  each server-rendered in Snow. About explains how snow is judged. The toggle's icons give way
+  at narrow container widths so three labelled buttons fit the phone pill at 320px with 200%
+  text (Hot 73, Wet 77, Snow 96 px). Snowflakes drift down twice (4 s at most), and not at all
+  with reduced motion. The snow site keeps its last answer under `willitsnow:last`, which, like
+  wet's, holds only until the next forecast hour; `CACHE.snapshotVersion` went from 5 to 6 for
+  the three-button markup.
+- **Synthetic data** (offline development and e2e): places at 64° or more (Reykjavík is the
+  only city page there) stay below freezing all year, so the tests can show snow in any month,
+  and beyond 45° about half the days of local winter are 7 °C colder. The committed
+  `nasa-power-snow-*.json` fixtures are synthetic stand-ins until CI's next recording.
+- **Size.** The browser keeps snow's "now" current with rain's own code (made generic over the
+  point type); snow's day and week judging runs only on the server and in the on-demand
+  preview. The app chunk went from 17.3 to 20.0 KB gzipped (budget 25.6 KB): the three-topic
+  client, and snow's day and week strings, which reach it through the preview's imports as
+  rain's already do (about 0.5 KB). If the budget gets tight, those strings can move to a
+  module only the server and the preview import.
+
 ## Saved places (planned for the apps)
 
 Carl wants to save places in the native apps. Nothing is built for it on the web.
@@ -348,22 +496,27 @@ Carl wants to save places in the native apps. Nothing is built for it on the web
 - The API needs nothing new: a saved place is a city slug or rounded coordinates, which
   `/api/v1/today` already takes.
 - On the web each domain has its own storage, so places saved on isithot.today would not show
-  on isitwet.today. A web version would need the same address-carrying approach as F8 above
-  (clumsier for a list than for one place) or both sites on one shared domain.
+  on isitwet.today or willitsnow.today. A web version would need the same address-carrying
+  approach as F8 above (clumsier for a list than for one place) or the sites on one shared
+  domain.
 
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,
 `limitedText`, `stripSummary`, `scale`, `models[].value` (one decimal, for the strip),
 top-level `nearby` (4 nearest city pages), `now` and `week` (the two new views; shapes in
-`packages/core/src/types.ts`), and `rain` (Is it wet?, with its own `days`, `now` and
-`week`). `location` may include `slug` and `geonameId`. `days` holds today and tomorrow (never
-more than two); the rest of the week is summarised in `week`.
+`packages/core/src/types.ts`), `rain` (Is it wet?, with its own `days`, `now` and `week`)
+and `snow` (Will it snow?, the same shape as `rain`, with amounts in cm or in). `location` may
+include `slug` and `geonameId`. `days` holds today and tomorrow (never more than two); the rest
+of the week is summarised in `week`.
 
 - **Stale fallback.** If upstream fails and a cached forecast under 6 hours old exists, the
   API answers **200** with that result and `"stale": true` (cached for 60 seconds). Only
   without a usable cache does it return `503 upstream_unavailable`. A 503 carrying data tends
-  to be treated as a failure by generic HTTP clients, which the apps would rather avoid.
+  to be treated as a failure by generic HTTP clients, which the apps would rather avoid. The
+  503 says what went wrong upstream in `error.detail` (e.g.
+  `open-meteo: timed out after 6000ms (2 attempts)`), for logs and debugging; clients show
+  `message`.
 - **Units default.** °F for US visitors (and US territories plus the few other countries that
   use °F day to day; the list is in `config.ts`). City pages render in the city's country's
   default, and the visitor's own °C/°F choice then applies in the browser.
@@ -386,15 +539,26 @@ Round 2 additions and clarifications (no field changes its meaning):
 - `Netlify-CDN-Cache-Control`: stale-while-revalidate is cut (down to 0) so that max-age plus
   it ends by the next forecast hour. Only max-age's one-minute floor can run past the hour.
 
+Will it snow? additions (no field changes its meaning):
+
+- `snow` is present exactly when `rain` is: `snow.days` (the rest of today, then tomorrow),
+  `snow.now` (the current hour with a day of judged hourly points, kept current in the browser
+  by core `computeSnowNow`/`formatSnowNow`) and `snow.week`. A day without snow carries
+  `reason` (`warm`, `rain` or `dry`). Amounts are in `snow.unit`: `cm` with `units=c`, `in`
+  with `units=f`.
+- `rain.now.series[].asSnow` (new, optional): most of the hour's precipitation falls as snow by
+  the shared rule. Sent only when the forecast has snowfall; `snow` keeps its meaning.
+
 ## Design
 
 - **Header controls and the tab bar sit on a pill.** They sit on the bright top-right glow, so
   they get a backing in each band's `pill` colour (the gradient colour with the most contrast
   against the text) at 85%.
 - **Every text meets WCAG 2.2 AA in every band and view** (Carl's go-ahead, October 2026).
-  `e2e/contrast.spec.ts` measures it on rendered pages for all 12 bands (six hot, six wet),
-  all three views, on phone and desktop, and fails CI below 4.5:1 (3:1 for large text). What
-  changed from the approved prototype (`reference/prototype.html` is updated to match):
+  `e2e/contrast.spec.ts` measures it on rendered pages for all 18 bands (six each for hot, wet
+  and snow), all three views, on phone and desktop, and fails CI below 4.5:1 (3:1 for large
+  text). What changed from the approved prototype (`reference/prototype.html` is updated to
+  match):
   - Hot is darker: `#cc3d17` to `#a51c17`, with a deeper glow (`#ff9a4a`). The old `#e8571f`
     is only 3.6:1 against white before the glow is added.
   - The glow strength is set per band: Freezing 60%, Cold 45%, Hot 40%, Scorching 70%, Mild
@@ -431,12 +595,12 @@ marks them `noindex`; the live site scores 100.
 
 The workflow also measures https://isithot.today on every run, for comparison.
 
-Site JS is about 17 KB gzipped (budget 25 KB, checked in CI by `scripts/js-budget.mjs`; it
-was 8 KB before Now and This week, 12 KB before Is it wet? and 16 KB before round 2). The rain
-day and week judging runs only on the server; the browser carries the code that keeps rain's
-"now" current. Cached API responses come back from the Netlify CDN in 10–40 ms. LCP sits just
-above the 1.5 s target under Lighthouse's simulated Moto G on slow 4G. Things that got it
-there:
+Site JS is about 20 KB gzipped (budget 25 KB, checked in CI by `scripts/js-budget.mjs`; it
+was 8 KB before Now and This week, 12 KB before Is it wet?, 16 KB before round 2 and 17 KB
+before Will it snow?). The rain and snow day and week judging runs only on the server; the
+browser carries the code that keeps rain's and snow's "now" current. Cached API responses come
+back from the Netlify CDN in 10–40 ms. LCP sits just above the 1.5 s target under Lighthouse's
+simulated Moto G on slow 4G. Things that got it there:
 
 - A 7.6 KB static cut of Bricolage at the answer's weight is inlined in the page, so the
   answer word paints in its final font straight away. The full variable font (77 KB) loads

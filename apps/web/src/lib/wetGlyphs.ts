@@ -5,7 +5,8 @@
  * They are drawn in place, never with a transform attribute, which the animation would replace.
  * Nothing is filled with a background colour, so an icon never hides the answer it overlaps.
  */
-import type { RainBand } from '@isithot/core';
+import type { RainBand, Topic } from '@isithot/core';
+import { SNOW_TOPIC_ICON } from './snowGlyphs';
 
 const n = (v: number): number => Number(v.toFixed(1));
 
@@ -54,8 +55,9 @@ export const RAIN_GLYPHS: Record<RainBand, string> = {
   drenched: `${cloud(0, -24, 0.35)}${rain(7, 34, 10, 76, 6, 16)}<g opacity=".75"><ellipse cx="60" cy="108" rx="30" ry="8"/><ellipse cx="60" cy="108" rx="15" ry="3.5"/></g>`,
 };
 
-/** 16px icons for the Hot | Wet toggle: 24×24 viewBox, stroke currentColor at width 2. */
-export const TOPIC_ICONS = {
+/** 16px icons for the Hot | Wet | Snow toggle: 24×24 viewBox, stroke currentColor at width 2. */
+export const TOPIC_ICONS: Record<Topic, string> = {
   hot: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
   wet: '<path d="M12 3c3.6 4.4 6 7.6 6 10.7a6 6 0 0 1-12 0C6 10.6 8.4 7.4 12 3z"/>',
-} as const;
+  snow: SNOW_TOPIC_ICON,
+};

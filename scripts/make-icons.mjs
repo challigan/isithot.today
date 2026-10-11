@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Renders the PWA icons, apple-touch-icon and favicon.ico from each site's favicon.svg:
- * public/ for isithot.today and public/wet/ for isitwet.today.
+ * public/ for isithot.today, public/wet/ for isitwet.today and public/snow/ for willitsnow.today.
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { Resvg } from '@resvg/resvg-js';
@@ -27,7 +27,7 @@ function ico(png) {
 }
 
 const pub = new URL('../apps/web/public/', import.meta.url);
-for (const dir of [pub, new URL('wet/', pub)]) {
+for (const dir of [pub, new URL('wet/', pub), new URL('snow/', pub)]) {
   const svg = readFileSync(new URL('favicon.svg', dir), 'utf8');
   // Maskable icons need the artwork inside the central 80% safe zone, on a full-bleed background.
   const maskable = svg

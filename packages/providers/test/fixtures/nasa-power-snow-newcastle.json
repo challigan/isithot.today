@@ -1,0 +1,56 @@
+{
+ "type": "Feature",
+ "geometry": {
+  "type": "Point",
+  "coordinates": [
+   -1.875,
+   55,
+   144.05
+  ]
+ },
+ "properties": {
+  "parameter": {
+   "PRECSNOLAND": {
+    "JAN": 0.23,
+    "FEB": 0.25,
+    "MAR": 0.13,
+    "APR": 0.04,
+    "MAY": 0,
+    "JUN": 0,
+    "JUL": 0,
+    "AUG": 0,
+    "SEP": 0,
+    "OCT": 0,
+    "NOV": 0.04,
+    "DEC": 0.17,
+    "ANN": 0.07
+   }
+  }
+ },
+ "header": {
+  "title": "NASA/POWER Source Native Resolution Climatology Climatologies",
+  "api": {
+   "version": "v2.10.1",
+   "name": "POWER Climatology API"
+  },
+  "sources": [
+   "MERRA2"
+  ],
+  "fill_value": -999,
+  "time_standard": "LST",
+  "range": "25-year Meteorological and Solar Monthly & Annual Climatologies (January 2001 - December 2025)"
+ },
+ "messages": [
+  "The requested parameters are retrieved from a pre-computed climatological period (January 2001 - December 2025)"
+ ],
+ "parameters": {
+  "PRECSNOLAND": {
+   "units": "mm/day",
+   "longname": "Snow Precipitation Land"
+  }
+ },
+ "times": {
+  "data": 0.048,
+  "process": 0.03
+ }
+}

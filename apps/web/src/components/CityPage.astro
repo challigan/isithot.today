@@ -1,8 +1,9 @@
 ---
 /**
- * A city's page on either site, isithot.today/in/<slug> or isitwet.today/in/<slug>, rendered on
- * the server with the answer to that site's question: the question, answer, colours and icon
- * are right before any script runs. lib/cityPage.ts handles the request.
+ * A city's page on any of the sites (isithot.today/in/<slug>, isitwet.today/in/<slug>,
+ * willitsnow.today/in/<slug>), rendered on the server with the answer to that site's question: the
+ * question, answer, colours and icon are right before any script runs. lib/cityPage.ts handles
+ * the request.
  */
 import Base from '../layouts/Base.astro';
 import Header from './Header.astro';
@@ -11,29 +12,27 @@ import AdSlot from './AdSlot.astro';
 import Footer from './Footer.astro';
 import SearchSheet from './SearchSheet.astro';
 import NotFound from './NotFound.astro';
-import { SITES, pageTitle, question, wetPageTitle } from '@isithot/core';
+import { SITES, question, type Topic } from '@isithot/core';
 import type { CityPageProps } from '../lib/cityPage';
+import { CITY_TITLES } from '../lib/topics';
 
 type Props = CityPageProps;
 
 const { topic, city, units, data, state, today, start, tomorrow, palette } = Astro.props;
 const site = SITES[topic];
 const name = city?.name ?? '';
-const day = data?.days[0];
-const rainDay = data?.rain?.days[0];
+
+/** Without an answer, what the page is for. */
+const ABOUT: Record<Topic, string> = {
+  hot: `Will today feel hot in ${name}? One answer from several forecast models, judged against what is normal there.`,
+  wet: `Will it rain in ${name} today? One answer from several forecast models: how likely rain is, how much and when.`,
+  snow: `Will it snow in ${name} today? One answer from several forecast models: how likely snow is, how much and when.`,
+};
 
 // The title and description are about today, whichever view the page opens on.
-const answerTitle =
-  topic === 'wet'
-    ? rainDay &&
-      wetPageTitle({ city: name, answer: rainDay.answer, band: rainDay.band, snow: rainDay.snow })
-    : day && pageTitle({ city: name, answer: day.answer, high: day.high });
+const answerTitle = data && CITY_TITLES[topic](name, data);
 const title = answerTitle || `${question(name, 'today', topic)} | ${site.name}`;
-const description = today.band
-  ? `${today.verdict} ${today.detail}`
-  : topic === 'wet'
-    ? `Will it rain in ${name} today? One answer from several forecast models: how likely rain is, how much and when.`
-    : `Will today feel hot in ${name}? One answer from several forecast models, judged against what is normal there.`;
+const description = today.band ? `${today.verdict} ${today.detail}` : ABOUT[topic];
 const initial = JSON.stringify(data).replace(/</g, '\\u003c');
 ---
 

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { MODELS, RAIN, type ModelConfig } from '@isithot/core';
+import { BLEND, MODELS, RAIN, SNOW, trimmedMean, type ModelConfig } from '@isithot/core';
 import {
   NASA_POWER_URL,
   OPEN_METEO_CUSTOMER,
@@ -10,13 +10,17 @@ import {
   buildForecastUrl,
   buildRainClimatologyUrl,
   buildSearchUrl,
+  buildSnowClimatologyUrl,
+  dailyMin,
   forecastSignature,
   fetchClimateNormals,
   fetchForecast,
   fetchRainNormals,
+  fetchSnowNormals,
   parseClimatology,
   parseForecast,
   parseRainClimatology,
+  parseSnowClimatology,
   parseSearch,
   searchPlaces,
   syntheticForecast,
@@ -42,7 +46,7 @@ describe('Open-Meteo forecast', () => {
     // Daily highs are worked out from the hourly values, which halves the quota used.
     expect(url.searchParams.has('daily')).toBe(false);
     expect(url.searchParams.get('hourly')).toBe(
-      'temperature_2m,apparent_temperature,precipitation',
+      'temperature_2m,apparent_temperature,precipitation,snowfall',
     );
     expect(url.searchParams.get('models')!.split(',')).toEqual(MODELS.map((m) => m.id));
     expect(url.searchParams.has('apikey')).toBe(false);
@@ -50,7 +54,7 @@ describe('Open-Meteo forecast', () => {
 
   it('pins the request so a change has to bump the cache version', () => {
     expect(forecastSignature()).toBe(
-      'v3 forecast_days=7 hourly=temperature_2m,apparent_temperature,precipitation',
+      'v4 forecast_days=7 hourly=temperature_2m,apparent_temperature,precipitation,snowfall',
     );
   });
 
@@ -84,16 +88,27 @@ describe('Open-Meteo forecast', () => {
     ].map((name) => [name, () => fixture(name)] as const),
     ['synthetic Newcastle', synthetic(54.95, -1.6)] as const,
     ['synthetic Seville', synthetic(37.4, -6)] as const,
+    // Below freezing all year: every model snows.
+    ['synthetic Reykjavik', synthetic(64.15, -21.95)] as const,
   ])('parses the recorded response %s', (_name, load) => {
     const raw = load();
     const f = parseForecast(raw, MODELS);
     expect(f.timezone).toBe(raw.timezone);
     expect(f.utcOffsetSeconds).toBe(raw.utc_offset_seconds);
+    expect(f.elevation).toBe(raw.elevation ?? null);
     const dates = [...new Set(raw.hourly.time.map((t: string) => t.slice(0, 10)))];
     expect(f.days.map((d) => d.date)).toEqual(dates);
     const hasFeels = Object.keys(raw.hourly).some((k) => k.startsWith('apparent_temperature_'));
     const hasRain = Object.keys(raw.hourly).some((k) => k.startsWith('precipitation_'));
+    const hasSnow = Object.keys(raw.hourly).some((k) => k.startsWith('snowfall_'));
     const lastStamp = raw.hourly.time.length - 1;
+    /** The blended temperature at a stamp, as core blends it. */
+    const blended = (k: number) => {
+      const temps = MODELS.map((m) => raw.hourly[`temperature_2m_${m.id}`]?.[k]).filter(
+        (t): t is number => typeof t === 'number',
+      );
+      return temps.length > 0 ? trimmedMean(temps, BLEND.trimFrom) : -Infinity;
+    };
     for (const [dayIndex, day] of f.days.entries()) {
       expect(day.models).toHaveLength(MODELS.length);
       expect(day.hourly).toHaveLength(24);
@@ -142,16 +157,38 @@ describe('Open-Meteo forecast', () => {
             total(() => true),
             6,
           );
-          const cold = (k: number) => (temps?.[k] ?? Infinity) <= RAIN.snowAtOrBelowC;
-          expect(model.snow).toBeCloseTo(total(cold), 6);
+          // The part that falls as snow, by the rule both topics share: none while the blended
+          // temperature is above the warm guard; the model's snowfall (labelled as precipitation
+          // is) as water, at most the precipitation; without snowfall, all of it at or below the
+          // snow line by the model's own temperature.
+          const snowfall = raw.hourly[`snowfall_${m.id}`] as Array<number | null> | undefined;
+          const snow = rain.reduce((a, [k, v]) => {
+            if (v === null || blended(k) > SNOW.warmAboveC) return a;
+            const fall = snowfall?.[k + 1];
+            if (typeof fall === 'number') return a + Math.min(v, fall / SNOW.cmPerMm);
+            return (temps?.[k] ?? Infinity) <= RAIN.snowAtOrBelowC ? a + v : a;
+          }, 0);
+          expect(model.snow).toBeCloseTo(snow, 6);
+          expect(model.snowfall).toBeCloseTo(snow * SNOW.cmPerMm, 6);
+          expect(model.snow!).toBeLessThanOrEqual(model.rain! + 1e-9);
         } else {
           expect(model.rain ?? null).toBeNull();
           expect(model.snow ?? null).toBeNull();
+          expect(model.snowfall ?? null).toBeNull();
+        }
+        // The day's lowest temperature, with precipitation (for the snow topic).
+        if (hasRain) {
+          const whole = values.length >= 24 && values.every((v: number | null) => v !== null);
+          expect(model.low).toBe(whole ? Math.min(...finite) : null);
+        } else {
+          expect(model).not.toHaveProperty('low');
         }
       }
       for (const h of day.hourly) {
         if (hasRain) expect(h.rain).toHaveLength(MODELS.length);
         else expect((h.rain ?? []).every((v) => v === null)).toBe(true);
+        if (hasSnow) expect(h.snow).toHaveLength(MODELS.length);
+        else expect(h).not.toHaveProperty('snow');
       }
       const withHigh = day.models.filter((m) => m.high !== null).length;
       const withFeels = day.models.filter((m) => m.feelsLike !== null).length;
@@ -319,6 +356,86 @@ describe('Open-Meteo forecast', () => {
     // 00:00 to 06:00 are at or below the line; 07:00 is just above; 08:00 has no temperature.
     expect(f.days[0]!.models[0]).toMatchObject({ rain: 24, snow: 7 });
     expect(f.days[1]!.models[0]).toMatchObject({ rain: 23, snow: 0 });
+  });
+
+  it('takes snowfall as water, moved to the start of the hour it fell in', () => {
+    // Half of each stamp's precipitation fell as snow (cm at 7cm for every 10mm).
+    const f = parseForecast(
+      {
+        timezone: 'UTC',
+        elevation: 12,
+        hourly: {
+          time: twoDays,
+          temperature_2m: twoDays.map(() => -5),
+          precipitation: twoDays.map((_, k) => k / 10),
+          snowfall: twoDays.map((_, k) => (k / 10) * 0.35),
+        },
+      },
+      ecmwf,
+    );
+    const [first, last] = f.days;
+    expect(first!.hourly[0]!.snow![0]).toBeCloseTo(0.035, 10);
+    expect(first!.hourly[23]!.snow![0]).toBeCloseTo(0.84, 10);
+    expect(last!.hourly[23]!.snow).toEqual([null]);
+    expect(first!.models[0]).toMatchObject({ rain: 30, snow: 15, snowfall: 10.5, low: -5 });
+    expect(f.elevation).toBe(12);
+  });
+
+  it('falls back to the snow line for a model without snowfall, and caps snow at the rain', () => {
+    const models: ModelConfig[] = [
+      { id: 'a', name: 'A' },
+      { id: 'b', name: 'B' },
+    ];
+    const f = parseForecast(
+      {
+        timezone: 'UTC',
+        hourly: {
+          time: twoDays,
+          temperature_2m_a: twoDays.map(() => 0),
+          temperature_2m_b: twoDays.map(() => 0),
+          precipitation_a: tenths,
+          precipitation_b: tenths,
+          // More snow than precipitation: capped.
+          snowfall_a: twoDays.map(() => 1),
+        },
+      },
+      models,
+    );
+    expect(f.days[0]!.models.map((m) => [m.rain, m.snow])).toEqual([
+      [2.4, 2.4],
+      [2.4, 2.4],
+    ]);
+    expect(f.days[0]!.hourly[0]!.snow).toEqual([1, null]);
+  });
+
+  it('has no snow while the blended temperature is above the warm guard', () => {
+    const f = parseForecast(
+      {
+        timezone: 'UTC',
+        hourly: {
+          time: twoDays,
+          temperature_2m: twoDays.map((_, k) => (k < 12 ? SNOW.warmAboveC : SNOW.warmAboveC + 0.1)),
+          precipitation: tenths,
+          snowfall: twoDays.map(() => 0.07),
+        },
+      },
+      ecmwf,
+    );
+    // The hours from 00:00 to 11:00 are cold enough (each hour is judged at its start).
+    expect(f.days[0]!.models[0]!.snow).toBeCloseTo(1.2, 10);
+    expect(f.days[1]!.models[0]!.snow).toBe(0);
+  });
+
+  it("finds each model's lowest temperature only with every hour", () => {
+    const hours = twoDays.slice(0, 24).map((_, h) => ({
+      hour: h,
+      time: h,
+      temps: [h === 5 ? null : 10 - h, 10 - h],
+    }));
+    expect(dailyMin(hours, 0)).toBeNull();
+    expect(dailyMin(hours, 1)).toBe(-13);
+    expect(dailyMin(hours.slice(1), 1)).toBeNull();
+    expect(dailyMin(hours, 2)).toBeNull();
   });
 
   it('reads rain by alias, and unsuffixed only for a single model', () => {
@@ -596,5 +713,61 @@ describe('NASA POWER climatology', () => {
       { lat: 55, lon: -1.5 },
     );
     expect(normals).toHaveLength(12);
+  });
+
+  it('asks for normal snowfall in a request of its own', () => {
+    const url = new URL(buildSnowClimatologyUrl(NASA_POWER_URL, { lat: 51.5, lon: 0 }));
+    expect(url.origin + url.pathname).toBe(NASA_POWER_URL);
+    expect(url.searchParams.get('parameters')).toBe('PRECSNOLAND');
+    expect(url.searchParams.get('community')).toBe('AG');
+  });
+
+  it.each(['newcastle', 'seville', 'london', 'singapore'])(
+    'parses the recorded snow climatology for %s, or finds it missing over sea and ice',
+    (place) => {
+      const raw = fixture(`nasa-power-snow-${place}.json`);
+      const rates = raw.properties.parameter.PRECSNOLAND;
+      // Land-only snowfall may be filled in for a cell that is mostly sea.
+      if (MONTHS.some((k) => !(rates[k] >= 0))) {
+        expect(() => parseSnowClimatology(raw)).toThrow('missing monthly values');
+        return;
+      }
+      expect(parseSnowClimatology(raw)).toEqual({
+        normals: MONTHS.map((k) => rates[k]),
+        height: raw.geometry.coordinates[2],
+      });
+    },
+  );
+
+  it('rejects snow fill values, and copes without the cell height', () => {
+    const raw = fixture('nasa-power-snow-london.json');
+    raw.properties.parameter.PRECSNOLAND.JAN = -999;
+    expect(() => parseSnowClimatology(raw)).toThrow('missing monthly values');
+    raw.properties.parameter.PRECSNOLAND.JAN = 0;
+    raw.geometry.coordinates = [0, 51.5];
+    expect(parseSnowClimatology(raw).height).toBeNull();
+    delete raw.geometry;
+    expect(parseSnowClimatology(raw).height).toBeNull();
+    expect(() => parseSnowClimatology(fixture('nasa-power-rain-london.json'))).toThrow(
+      'unexpected climatology response shape',
+    );
+  });
+
+  it('fetches snow normals', async () => {
+    const raw = fixture('nasa-power-snow-newcastle.json');
+    const urls: string[] = [];
+    const snow = await fetchSnowNormals(
+      {
+        url: NASA_POWER_URL,
+        fetch: async (url) => {
+          urls.push(url);
+          return jsonFetch(raw)();
+        },
+      },
+      { lat: 55, lon: -1.875 },
+    );
+    expect(snow.normals).toHaveLength(12);
+    expect(snow.height).toBe(raw.geometry.coordinates[2]);
+    expect(new URL(urls[0]!).searchParams.get('parameters')).toBe('PRECSNOLAND');
   });
 });

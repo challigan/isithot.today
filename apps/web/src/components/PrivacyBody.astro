@@ -1,14 +1,14 @@
 ---
-/** The privacy notice, the same for both sites: they are one service. */
+/** The privacy notice, the same for every site: they are one service. */
 import Content from '../layouts/Content.astro';
 import { SITES, type Topic } from '@isithot/core';
+import { siteNames } from '../lib/topics';
 
 interface Props {
   topic: Topic;
 }
 const { topic } = Astro.props;
 const site = SITES[topic].name;
-const other = SITES[topic === 'hot' ? 'wet' : 'hot'].name;
 ---
 
 <Content
@@ -22,8 +22,8 @@ const other = SITES[topic === 'hot' ? 'wet' : 'hot'].name;
     <em>Draft for review. Last updated 7 October 2026.</em>
   </p>
   <p>
-    {site} and {other} are one service, built to need as little about you as possible. This notice
-    covers both. There are no accounts and we do not sell personal data.
+    {siteNames(topic)} are one service, built to need as little about you as possible. This notice
+    covers all three. There are no accounts and we do not sell personal data.
   </p>
 
   <h2>Location</h2>
@@ -48,9 +48,9 @@ const other = SITES[topic === 'hot' ? 'wet' : 'hot'].name;
   <h2>What stays on your device</h2>
   <p>
     Your browser's local storage keeps your last chosen place, your units (°C or °F, which also sets
-    millimetres or inches) and the last answer so the page appears instantly next time. This never
-    leaves your device, and you can clear it at any time in your browser settings. Each site keeps
-    its own copy.
+    millimetres or inches of rain, and centimetres or inches of snow) and the last answer so the
+    page appears instantly next time. This never leaves your device, and you can clear it at any
+    time in your browser settings. Each site keeps its own copy.
   </p>
 
   <h2>Who else processes data</h2>

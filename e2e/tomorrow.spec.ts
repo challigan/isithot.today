@@ -5,11 +5,21 @@
  * tests that cross 6pm or midnight start the browser's clock just before it.
  */
 import type { Page } from '@playwright/test';
-import { PALETTES, RAIN_PALETTES, type Band, type RainBand } from '../packages/core/src/config';
+import {
+  RAIN_PALETTES,
+  SITES,
+  TOPICS,
+  paletteFor,
+  type RainBand,
+  type Topic,
+} from '../packages/core/src/config';
+import { question } from '../packages/core/src/copy';
+import type { TodayResponse } from '../packages/core/src/types';
 import {
   atLocal,
   cityAt,
   expect,
+  literal,
   localTime,
   pinLocalTime,
   setVisibility,
@@ -21,7 +31,13 @@ import {
 const HOUR = 60 * 60 * 1000;
 const EVENING = ['18:15', '22:15'] as const;
 const DAYTIME = ['10:00', '15:30'] as const;
-const QUESTION = { hot: 'hot', wet: 'wet' } as const;
+
+/** Each topic's days in a response: today (or the rest of it), then tomorrow. */
+const DAYS = {
+  hot: (res) => res.days,
+  wet: (res) => res.rain!.days,
+  snow: (res) => res.snow!.days,
+} satisfies Record<Topic, (res: TodayResponse) => unknown>;
 
 /**
  * The page shows `view`, with its tab selected: alone as the page arrives, or (once the views
@@ -48,8 +64,8 @@ async function expectOpenOn(page: Page, view: 'now' | 'today'): Promise<void> {
     .toBe(`view-${view}`);
 }
 
-for (const topic of ['hot', 'wet'] as const) {
-  const site = topic === 'wet' ? '/wet' : '';
+for (const topic of TOPICS) {
+  const site = SITES[topic].prefix;
 
   test(`${topic}: in the evening a city page opens on Now, with tomorrow in the middle`, async ({
     page,
@@ -62,18 +78,14 @@ for (const topic of ['hot', 'wet'] as const) {
     await expectOpenOn(page, 'now');
     // Now's answer is the page's main heading while it is the one on screen.
     await expect(page.locator('#now-answer')).toHaveAttribute('aria-level', '1');
-    await expect(page.locator('#now-question')).toHaveText(
-      `Is it ${QUESTION[topic]} in ${city.name} right now?`,
-    );
+    await expect(page.locator('#now-question')).toHaveText(question(city.name, 'now', topic));
     // The title is about today, whichever view is showing.
-    await expect(page).toHaveTitle(new RegExp(`^Is it ${topic} in ${city.name} today\\? `));
+    await expect(page).toHaveTitle(new RegExp(`^${literal(question(city.name, 'today', topic))} `));
 
     await page.locator('#tab-today').click();
     await expect(page.locator('#tab-today')).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('#question')).toHaveText(
-      `Will it be ${QUESTION[topic]} in ${city.name} tomorrow?`,
-    );
-    const day = topic === 'wet' ? city.data.rain!.days[1]! : city.data.days[1]!;
+    await expect(page.locator('#question')).toHaveText(question(city.name, 'today', topic, true));
+    const day = DAYS[topic](city.data)[1]!;
     await expect(page.locator('#answer')).toHaveText(day.answer);
     await expect(page.locator('#verdict')).toHaveText(day.verdict);
     // Tomorrow's answer is about all of tomorrow, in the future tense.
@@ -81,11 +93,9 @@ for (const topic of ['hot', 'wet'] as const) {
     await expect(page.locator('#detail')).not.toContainText(/still to come|rest of the day|today/i);
     await expect(page.locator('#view-live')).toHaveText(new RegExp(`^Tomorrow: ${day.answer} `));
     // The page wears tomorrow's colours.
-    const palette =
-      topic === 'wet' ? RAIN_PALETTES[day.band as RainBand] : PALETTES[day.band as Band];
     await expect
       .poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--g1')))
-      .toBe(palette.g1);
+      .toBe(paletteFor(day.band).g1);
   });
 }
 

@@ -1,0 +1,12 @@
+---
+/** willitsnow.today/in/<slug> (served from here by the edge function's rewrite). */
+import CityPage from '../../../components/CityPage.astro';
+import { loadCityPage } from '../../../lib/cityPage';
+
+export const prerender = false;
+
+const page = await loadCityPage(Astro, 'snow');
+if (page instanceof Response) return page;
+---
+
+<CityPage {...page} />

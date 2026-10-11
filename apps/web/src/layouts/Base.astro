@@ -9,11 +9,11 @@ import fontAnswer from '../fonts/bricolage-answer.woff2?inline';
 import {
   DEFAULT_DESCRIPTIONS,
   DEFAULT_TITLES,
-  RAIN_PALETTES,
   SITES,
   type Palette,
   type Topic,
 } from '@isithot/core';
+import { LOOKS } from '../lib/topics';
 
 interface Props {
   title?: string;
@@ -36,20 +36,22 @@ const {
   palette,
   noindex = false,
 } = Astro.props;
-// Wet pages carry their own icons; /wet paths work on isitwet.today too (the edge function
-// passes them through).
-const assets = topic === 'wet' ? '/wet' : '';
+// Each site carries its own icons, under its prefix (none for hot): /wet and /snow paths work on
+// isitwet.today and willitsnow.today too (the edge function passes them through).
+const { prefix } = SITES[topic];
 
-// Wet pages also replace the slate behind the page (overscroll, before the gradient paints).
-const fallback = topic === 'wet' ? `;--page-fallback:${RAIN_PALETTES.rain.g2}` : '';
-const vars = `--g1:${palette.g1};--g2:${palette.g2};--g3:${palette.g3};--ink:${palette.ink};--pill:${palette.pill};--glow:${palette.glow}${fallback}`;
+// Wet and snow pages also replace the slate behind the page (overscroll, before the gradient
+// paints).
+const { fallback } = LOOKS[topic];
+const vars = `--g1:${palette.g1};--g2:${palette.g2};--g3:${palette.g3};--ink:${palette.ink};--pill:${palette.pill};--glow:${palette.glow}${fallback ? `;--page-fallback:${fallback}` : ''}`;
 const beacon = import.meta.env.PUBLIC_CF_BEACON_TOKEN;
 /**
- * Links are written for isitwet.today, where the wet pages are at the root. Where they are served
- * from under /wet instead (deploy previews, a local server), this keeps internal links on them:
- * "/" → "/wet", "/?q" → "/wet?q", "/about" → "/wet/about". Runs after the page's own markup.
+ * Links are written for the site's own domain (isitwet.today, willitsnow.today), where its pages
+ * are at the root. Where they are served from under the prefix instead (deploy previews, a local
+ * server), this keeps internal links on them: "/" → "/wet", "/?q" → "/wet?q", "/about" →
+ * "/wet/about". Runs after the page's own markup.
  */
-const wetLinks = `(()=>{const p=location.pathname;if(p!=='/wet'&&!p.startsWith('/wet/'))return;for(const a of document.querySelectorAll('a[href^="/"]:not([href^="/wet"]):not([href^="//"])')){const h=a.getAttribute('href');a.setAttribute('href','/wet'+(h==='/'||h[1]==='?'?h.slice(1):h))}})()`;
+const prefixLinks = `(()=>{const p=location.pathname;if(p!=='${prefix}'&&!p.startsWith('${prefix}/'))return;for(const a of document.querySelectorAll('a[href^="/"]:not([href^="${prefix}"]):not([href^="//"])')){const h=a.getAttribute('href');a.setAttribute('href','${prefix}'+(h==='/'||h[1]==='?'?h.slice(1):h))}})()`;
 ---
 
 <!doctype html>
@@ -70,10 +72,10 @@ const wetLinks = `(()=>{const p=location.pathname;if(p!=='/wet'&&!p.startsWith('
       is:inline
       set:html={`@font-face{font-family:'Bricolage Answer';font-style:normal;font-display:block;font-weight:100 900;src:url(${fontAnswer}) format('woff2');unicode-range:U+0020-007E,U+2019,U+2026}@font-face{font-family:'Bricolage Grotesque';font-style:normal;font-display:swap;font-weight:200 800;src:url(${fontLatinExt}) format('woff2-variations'),url(${fontLatinExt}) format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}@font-face{font-family:'Bricolage Grotesque';font-style:normal;font-display:swap;font-weight:200 800;src:url(${fontLatin}) format('woff2-variations'),url(${fontLatin}) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}@font-face{font-family:'Bricolage Fallback Arial';src:local('Arial'),local('ArialMT'),local('Liberation Sans');size-adjust:103%}@font-face{font-family:'Bricolage Fallback Roboto';src:local('Roboto'),local('Roboto-Regular');size-adjust:103.5%}@font-face{font-family:'Bricolage Fallback DejaVu';src:local('DejaVu Sans');size-adjust:90.5%}`}
     />
-    <link rel="icon" href={`${assets}/favicon.svg`} type="image/svg+xml" />
-    <link rel="icon" href={`${assets}/favicon.ico`} sizes="32x32" />
-    <link rel="apple-touch-icon" href={`${assets}/apple-touch-icon.png`} />
-    <link rel="manifest" href={`${assets}/manifest.webmanifest`} />
+    <link rel="icon" href={`${prefix}/favicon.svg`} type="image/svg+xml" />
+    <link rel="icon" href={`${prefix}/favicon.ico`} sizes="32x32" />
+    <link rel="apple-touch-icon" href={`${prefix}/apple-touch-icon.png`} />
+    <link rel="manifest" href={`${prefix}/manifest.webmanifest`} />
     <meta property="og:site_name" content={SITES[topic].name} />
     <meta property="og:type" content="website" />
     <meta property="og:title" content={title} />
@@ -98,6 +100,6 @@ const wetLinks = `(()=>{const p=location.pathname;if(p!=='/wet'&&!p.startsWith('
       Skip to the answer
     </a>
     <slot />
-    {topic === 'wet' && <script is:inline set:html={wetLinks} />}
+    {prefix && <script is:inline set:html={prefixLinks} />}
   </body>
 </html>

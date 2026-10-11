@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { SITES } from '../../packages/core/src/config';
-import { HOSTS, route, type Route, type RouteRequest } from '../edge-functions/lib/route.ts';
+import { SITES as CORE, TOPICS } from '../../packages/core/src/config';
+import { SITES, route, type Route, type RouteRequest } from '../edge-functions/lib/route.ts';
 
 const PASS: Route = { kind: 'pass' };
 const rewrite = (to: string): Route => ({ kind: 'rewrite', to });
@@ -14,20 +14,25 @@ function req(host: string, path: string, extra: Partial<RouteRequest> = {}): Rou
     pathname: url.pathname,
     search: url.search,
     preview: false,
-    header: null,
+    headers: new Headers(),
     ...extra,
   };
 }
 
+/** Headers asking to act as a site: `{ 'x-isitwet-host': '1' }`. */
+const sent = (values: Record<string, string>) => new Headers(values);
+
 const PREVIEW = 'deploy-preview-7--isithotapp.netlify.app';
-const overridden = { preview: true, header: '1' };
+const overridden = { preview: true, headers: sent({ 'x-isitwet-host': '1' }) };
 
 describe('route', () => {
-  it('uses the hostnames of the two sites in core', () => {
-    expect(`https://${HOSTS.hot}`).toBe(SITES.hot.url);
-    expect(`https://${HOSTS.wet}`).toBe(SITES.wet.url);
-    expect(HOSTS.hot).toBe(SITES.hot.name);
-    expect(HOSTS.wet).toBe(SITES.wet.name);
+  it('uses the hosts and prefixes of the sites in core', () => {
+    expect(Object.keys(SITES)).toEqual(TOPICS);
+    for (const t of TOPICS) {
+      expect(`https://${SITES[t].host}`).toBe(CORE[t].url);
+      expect(SITES[t].host).toBe(CORE[t].name);
+      expect(SITES[t].prefix).toBe(CORE[t].prefix);
+    }
   });
 
   it.each<[string, string]>([
@@ -69,7 +74,7 @@ describe('route', () => {
         const first = route(req(host, path));
         expect(first).toMatchObject({ kind: 'redirect', status: 301 });
         const landed = new URL((first as { to: string }).to);
-        expect(landed.origin).toBe(SITES.wet.url);
+        expect(landed.origin).toBe(CORE.wet.url);
         expect(route(req(landed.host, landed.pathname + landed.search)).kind).not.toBe('redirect');
       }
     }
@@ -149,20 +154,26 @@ describe('route', () => {
     });
 
     it('honours only the value 1', () => {
-      for (const header of ['0', 'true', 'yes', '']) {
-        expect(route(req(PREVIEW, '/', { preview: true, header }))).toEqual(PASS);
+      for (const value of ['0', 'true', 'yes', '']) {
+        for (const name of ['x-isitwet-host', 'x-willitsnow-host']) {
+          const headers = sent({ [name]: value });
+          expect(route(req(PREVIEW, '/', { preview: true, headers }))).toEqual(PASS);
+        }
       }
     });
   });
 
-  it('ignores the header in production', () => {
-    for (const host of ['isithot.today', 'www.isithot.today', 'isithotapp.netlify.app']) {
-      expect(route(req(host, '/', { header: '1' }))).toEqual(PASS);
-      expect(route(req(host, '/in/london-gb', { header: '1' }))).toEqual(PASS);
+  it('ignores the headers in production', () => {
+    for (const name of ['x-isitwet-host', 'x-willitsnow-host']) {
+      const headers = sent({ [name]: '1' });
+      for (const host of ['isithot.today', 'www.isithot.today', 'isithotapp.netlify.app']) {
+        expect(route(req(host, '/', { headers }))).toEqual(PASS);
+        expect(route(req(host, '/in/london-gb', { headers }))).toEqual(PASS);
+      }
+      expect(route(req('isithot.today', '/wet', { headers }))).toEqual(
+        redirect('https://isitwet.today/'),
+      );
     }
-    expect(route(req('isithot.today', '/wet', { header: '1' }))).toEqual(
-      redirect('https://isitwet.today/'),
-    );
   });
 
   it('treats the real hosts the same on any deploy', () => {
@@ -172,5 +183,109 @@ describe('route', () => {
     expect(route(req('isithot.today', '/wet/in/london-gb', { preview: true }))).toEqual(
       redirect('https://isitwet.today/in/london-gb'),
     );
+  });
+
+  describe('willitsnow.today, the third site', () => {
+    const snowy = { preview: true, headers: sent({ 'x-willitsnow-host': '1' }) };
+
+    it.each<[string, string]>([
+      ['/', '/snow'],
+      ['/?lat=51.5&lon=-0.12&name=X', '/snow?lat=51.5&lon=-0.12&name=X'],
+      ['/in/london-gb', '/snow/in/london-gb'],
+      ['/in/london-gb?units=f', '/snow/in/london-gb?units=f'],
+      ['/about', '/snow/about'],
+      ['/robots.txt', '/snow/robots.txt'],
+      ['/sitemap.xml', '/snow/sitemap.xml'],
+      ['/og/london-gb.png', '/snow/og/london-gb.png'],
+      ['/favicon.svg', '/snow/favicon.svg'],
+      ['/no/such/page', '/snow/no/such/page'],
+      ['/snowy', '/snow/snowy'],
+      ['/wetter', '/snow/wetter'],
+    ])('willitsnow.today%s is served from %s', (path, to) => {
+      expect(route(req('willitsnow.today', path))).toEqual(rewrite(to));
+      expect(route(req(PREVIEW, path, snowy))).toEqual(rewrite(to));
+    });
+
+    it.each(['/snow', '/snow/', '/snow/in/london-gb', '/snow/og/london-gb.png', '/snow?x=1'])(
+      'willitsnow.today%s passes, so the rewrite does not loop',
+      (path) => {
+        expect(route(req('willitsnow.today', path))).toEqual(PASS);
+        expect(route(req(PREVIEW, path, snowy))).toEqual(PASS);
+      },
+    );
+
+    it.each<[string, string]>([
+      ['/', 'https://willitsnow.today/'],
+      ['/in/london-gb?units=f', 'https://willitsnow.today/in/london-gb?units=f'],
+      ['/snow', 'https://willitsnow.today/snow'],
+    ])('www.willitsnow.today%s redirects to %s', (path, to) => {
+      expect(route(req('www.willitsnow.today', path))).toEqual(redirect(to));
+    });
+
+    it('ignores case and a trailing dot in the host', () => {
+      expect(route({ ...req('willitsnow.today', '/about'), host: 'WillItSnow.Today.' })).toEqual(
+        rewrite('/snow/about'),
+      );
+      expect(route({ ...req('www.willitsnow.today', '/'), host: 'WWW.WillItSnow.Today' })).toEqual(
+        redirect('https://willitsnow.today/'),
+      );
+    });
+
+    it('with both headers on a preview, acts as the first site (isitwet.today)', () => {
+      const headers = sent({ 'x-isitwet-host': '1', 'x-willitsnow-host': '1' });
+      expect(route(req(PREVIEW, '/', { preview: true, headers }))).toEqual(rewrite('/wet'));
+    });
+  });
+
+  describe("a path under another site's prefix", () => {
+    it.each<[string, string, string]>([
+      ['isithot.today', '/snow', 'https://willitsnow.today/'],
+      ['isithot.today', '/snow/', 'https://willitsnow.today/'],
+      ['isithot.today', '/snow?lat=51.5&lon=-0.12', 'https://willitsnow.today/?lat=51.5&lon=-0.12'],
+      [
+        'isithot.today',
+        '/snow/in/london-gb?units=f',
+        'https://willitsnow.today/in/london-gb?units=f',
+      ],
+      ['www.isithot.today', '/snow/about', 'https://willitsnow.today/about'],
+      ['isitwet.today', '/snow', 'https://willitsnow.today/'],
+      ['isitwet.today', '/snow/in/london-gb', 'https://willitsnow.today/in/london-gb'],
+      ['isitwet.today', '/snow/og/london-gb.png', 'https://willitsnow.today/og/london-gb.png'],
+      ['willitsnow.today', '/wet', 'https://isitwet.today/'],
+      ['willitsnow.today', '/wet/in/london-gb', 'https://isitwet.today/in/london-gb'],
+      ['willitsnow.today', '/wet?lat=51.5&lon=-0.12', 'https://isitwet.today/?lat=51.5&lon=-0.12'],
+      ['willitsnow.today', '/wet//example.com', 'https://isitwet.today//example.com'],
+    ])('%s%s redirects to %s', (host, path, to) => {
+      expect(route(req(host, path))).toEqual(redirect(to));
+      expect(route(req(host, path, { preview: true }))).toEqual(redirect(to));
+    });
+
+    it('lands on a page that does not redirect again, from every real host', () => {
+      const paths = ['', '/', '?lat=51.5', '/in/london-gb?units=f', '/about', '/x'];
+      for (const host of [
+        'isithot.today',
+        'www.isithot.today',
+        'isitwet.today',
+        'willitsnow.today',
+      ]) {
+        for (const t of TOPICS) {
+          const { prefix } = SITES[t];
+          if (!prefix || host.endsWith(SITES[t].host)) continue;
+          for (const path of paths.map((p) => `${prefix}${p}`)) {
+            const first = route(req(host, path));
+            expect(first).toMatchObject({ kind: 'redirect', status: 301 });
+            const landed = new URL((first as { to: string }).to);
+            expect(landed.origin).toBe(CORE[t].url);
+            expect(route(req(landed.host, landed.pathname + landed.search)).kind).toBe('rewrite');
+          }
+        }
+      }
+    });
+
+    it("is served as it is on a preview acting as a site (each site's pages are there)", () => {
+      expect(route(req(PREVIEW, '/snow/in/london-gb', overridden))).toEqual(PASS);
+      const snowy = { preview: true, headers: sent({ 'x-willitsnow-host': '1' }) };
+      expect(route(req(PREVIEW, '/wet/in/london-gb', snowy))).toEqual(PASS);
+    });
   });
 });

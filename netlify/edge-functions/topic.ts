@@ -1,9 +1,10 @@
 /**
- * Netlify edge function: serves isitwet.today from the /wet pages of this deploy and sends
- * isithot.today/wet there. The decisions live in ./lib/route.ts (unit-tested); this only applies
- * them. Runs in Deno, so no npm imports, and relative imports keep their extension.
+ * Netlify edge function: serves isitwet.today and willitsnow.today from the /wet and /snow pages
+ * of this deploy, and sends a path under another site's prefix (isithot.today/wet,
+ * isitwet.today/snow, …) to that site. The decisions live in ./lib/route.ts (unit-tested); this
+ * only applies them. Runs in Deno, so no npm imports, and relative imports keep their extension.
  */
-import { route, WET_HOST_HEADER } from './lib/route.ts';
+import { route } from './lib/route.ts';
 
 /** The part of Netlify's edge function context used here. */
 interface Context {
@@ -17,9 +18,9 @@ export default (request: Request, context: Context): Response | URL | undefined 
     host: url.hostname,
     pathname: url.pathname,
     search: url.search,
-    // Without a deploy context, assume production: the header must never work there.
+    // Without a deploy context, assume production: the headers must never work there.
     preview: (context.deploy?.context ?? 'production') !== 'production',
-    header: request.headers.get(WET_HOST_HEADER),
+    headers: request.headers,
   });
   if (result.kind === 'rewrite') return new URL(result.to, url);
   if (result.kind === 'redirect') return Response.redirect(result.to, result.status);
@@ -28,7 +29,7 @@ export default (request: Request, context: Context): Response | URL | undefined 
 
 export const config = {
   path: '/*',
-  // Assets, the API, Netlify's own paths and files that are the same on both sites.
+  // Assets, the API, Netlify's own paths and files that are the same on every site.
   excludedPath: ['/_astro/*', '/api/*', '/.netlify/*', '/ads.txt', '/version.json'],
   // If the function fails, serve the request as if it were not here (isithot.today pages).
   onError: 'bypass',

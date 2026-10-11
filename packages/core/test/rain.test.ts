@@ -283,6 +283,39 @@ describe('computeRainDay: the rest of today', () => {
     ).toBeNull();
   });
 
+  it('uses each model’s snowfall for snow where the forecast has it', () => {
+    const withSnowfall = (d: DayData): DayData => ({
+      ...d,
+      hourly: d.hourly.map((h) => ({ ...h, snow: h.rain!.map((r) => r! * 0.7) })),
+    });
+    // Above the old snow line, but the models say snow.
+    expect(
+      computeRainDay(
+        withSnowfall(
+          day(
+            () => 0.3,
+            8,
+            () => 2,
+          ),
+        ),
+        { from: at(14.5) },
+      ),
+    ).toMatchObject({ snow: 'most' });
+    // Too warm in the blend: no snow, whatever the snowfall says.
+    expect(
+      computeRainDay(
+        withSnowfall(
+          day(
+            () => 0.3,
+            8,
+            () => 3,
+          ),
+        ),
+        { from: at(14.5) },
+      ),
+    ).toMatchObject({ snowShare: 0, snow: 'none' });
+  });
+
   it('uses each model’s own temperature for snow', () => {
     const cold = (_h: number, i: number) => (i < 4 ? -1 : null);
     expect(

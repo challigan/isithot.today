@@ -2,7 +2,16 @@
  * Every user-facing string. The website, the API and the future apps all read from here so
  * the words never drift apart. Sentence case everywhere.
  */
-import { RAIN_BANDS, SITES, type Band, type RainBand, type Topic } from './config';
+import {
+  RAIN_BANDS,
+  SITES,
+  type Band,
+  type RainBand,
+  type SnowBand,
+  type SnowReason,
+  type Topic,
+} from './config';
+import type { Units } from './units';
 
 export const SITE_NAME = SITES.hot.name;
 
@@ -10,6 +19,7 @@ export const SITE_NAME = SITES.hot.name;
 export const TOPIC_LABELS: Record<Topic, string> = {
   hot: 'Hot',
   wet: 'Wet',
+  snow: 'Snow',
 };
 
 export const MONTHS = [
@@ -62,12 +72,6 @@ export const TOMORROW_LABEL = 'Tomorrow';
 export function viewLabel(view: View, tomorrow = false): string {
   return view === 'today' && tomorrow ? TOMORROW_LABEL : VIEW_LABELS[view];
 }
-
-const VIEW_WHEN: Record<View, string> = {
-  now: 'right now',
-  today: 'today',
-  week: 'this week',
-};
 
 export const VERDICTS: Record<Band, string> = {
   freezing: "It's freezing.",
@@ -137,8 +141,10 @@ export const COPY = {
   climateCredit: 'Climate data: NASA POWER',
   unitsLabel: 'Temperature units',
   rainUnitsLabel: 'Rain units',
+  snowUnitsLabel: 'Snow units',
   topicLabel: 'Forecast type',
   nextHoursRain: 'Chance of rain, next 12 hours',
+  nextHoursSnow: 'Chance of snow, next 12 hours',
   changeLocation: 'change location',
   stale: 'Showing the last forecast we have. It will refresh shortly.',
   previewLabel: 'Preview each kind of day',
@@ -154,8 +160,33 @@ export const ERROR_MESSAGES = {
 } as const;
 
 /**
- * "Is it hot today?" / "Is it wet in London right now?", and for the middle view while it shows
- * tomorrow, "Will it be hot in London tomorrow?".
+ * Each topic's question for each view, and for the middle view while it shows tomorrow; `{where}`
+ * is " in London" on a city page. Snow is a verb, so its questions are worded on their own.
+ */
+const QUESTIONS: Record<Topic, Record<View | 'tomorrow', string>> = {
+  hot: {
+    today: 'Is it hot{where} today?',
+    now: 'Is it hot{where} right now?',
+    week: 'Is it hot{where} this week?',
+    tomorrow: 'Will it be hot{where} tomorrow?',
+  },
+  wet: {
+    today: 'Is it wet{where} today?',
+    now: 'Is it wet{where} right now?',
+    week: 'Is it wet{where} this week?',
+    tomorrow: 'Will it be wet{where} tomorrow?',
+  },
+  snow: {
+    today: 'Will it snow{where} today?',
+    now: 'Is it snowing{where} right now?',
+    week: 'Will it snow{where} this week?',
+    tomorrow: 'Will it snow{where} tomorrow?',
+  },
+};
+
+/**
+ * "Is it hot today?" / "Is it wet in London right now?" / "Will it snow this week?", and for the
+ * middle view while it shows tomorrow, "Will it be hot in London tomorrow?".
  */
 export function question(
   city?: string | null,
@@ -163,10 +194,31 @@ export function question(
   topic: Topic = 'hot',
   tomorrow = false,
 ): string {
-  const where = city ? ` in ${city}` : '';
-  if (view === 'today' && tomorrow) return `Will it be ${topic}${where} tomorrow?`;
-  return `Is it ${topic}${where} ${VIEW_WHEN[view]}?`;
+  const slot = view === 'today' && tomorrow ? 'tomorrow' : view;
+  // A function, so a "$" in a searched place's name is never read as a replacement pattern.
+  return QUESTIONS[topic][slot].replace('{where}', () => (city ? ` in ${city}` : ''));
 }
+
+/** The not-found page's question, for a place that is not there. */
+export const HERE_QUESTIONS: Record<Topic, string> = {
+  hot: 'Is it hot here?',
+  wet: 'Is it wet here?',
+  snow: 'Will it snow here?',
+};
+
+/** The units control's group label for each topic. */
+export const UNITS_LABELS: Record<Topic, string> = {
+  hot: COPY.unitsLabel,
+  wet: COPY.rainUnitsLabel,
+  snow: COPY.snowUnitsLabel,
+};
+
+/** The units control's two choices for each topic: one setting serves all three. */
+export const UNIT_NAMES: Record<Topic, Record<Units, string>> = {
+  hot: { c: '°C', f: '°F' },
+  wet: { c: 'mm', f: 'in' },
+  snow: { c: 'cm', f: 'in' },
+};
 
 export function monthName(date: string): string {
   return MONTHS[Number(date.slice(5, 7)) - 1] ?? '';
@@ -258,10 +310,12 @@ export const DEFAULT_DESCRIPTION =
 export const DEFAULT_TITLES: Record<Topic, string> = {
   hot: DEFAULT_TITLE,
   wet: `Is it wet today? | ${SITES.wet.name}`,
+  snow: `Will it snow today? | ${SITES.snow.name}`,
 };
 export const DEFAULT_DESCRIPTIONS: Record<Topic, string> = {
   hot: DEFAULT_DESCRIPTION,
   wet: 'Will it rain today where you are? One answer from several forecast models: how likely rain is, how much and when.',
+  snow: 'Will it snow today where you are? One answer from several forecast models: how likely snow is, how much and when.',
 };
 
 // ---- Is it wet? -------------------------------------------------------------------
@@ -472,4 +526,222 @@ export function rainNormalLine(kind: RainNormal, month: string): string {
   if (kind === 'wetter') return `Wetter than usual for ${month}.`;
   if (kind === 'drier') return `Drier than usual for ${month}.`;
   return `About normal for ${month}.`;
+}
+
+// ---- Will it snow? ----------------------------------------------------------------
+
+export const SNOW_BAND_LABELS: Record<SnowBand, string> = {
+  nosnow: 'No snow',
+  flakes: 'A few flakes',
+  maybesnow: 'Snow possible',
+  snow: 'Snow',
+  heavysnow: 'Heavy snow',
+  deepsnow: 'Deep snow',
+};
+
+/** A day without snow is labelled with why (week rows, page titles), never "No snow". */
+export const SNOW_REASON_LABELS: Record<SnowReason, string> = {
+  warm: 'Too warm',
+  rain: 'Rain',
+  dry: 'Dry',
+};
+
+/** A band's label, or for a day without snow, why. */
+export function snowLabel(band: SnowBand, reason: SnowReason | null): string {
+  return reason ? SNOW_REASON_LABELS[reason] : SNOW_BAND_LABELS[band];
+}
+
+export const SNOW_ANSWERS: Record<SnowBand, string> = {
+  nosnow: 'No.',
+  flakes: 'No.',
+  maybesnow: 'Maybe.',
+  snow: 'Yes.',
+  heavysnow: 'Yes.',
+  deepsnow: 'Yes.',
+};
+
+/** Today and tomorrow (the same words serve both). */
+export const SNOW_DAY_VERDICTS: Record<SnowBand, string> = {
+  nosnow: "It won't snow.",
+  flakes: 'A few flakes at most.',
+  maybesnow: 'It might snow.',
+  snow: "It'll snow.",
+  heavysnow: 'Heavy snow.',
+  deepsnow: 'Deep snow.',
+};
+
+export const SNOW_NOW_VERDICTS: Record<SnowBand, string> = {
+  nosnow: "It's not snowing.",
+  flakes: 'Just a few flakes.',
+  maybesnow: 'Snow showers around.',
+  snow: "It's snowing.",
+  heavysnow: 'Heavy snow.',
+  deepsnow: 'Very heavy snow.',
+};
+
+/** A day, or an hour, without snow says why when it is too warm or wet. */
+export const SNOW_NONE_VERDICTS = { warm: 'Too warm for snow.', rain: 'Rain, not snow.' } as const;
+export const SNOW_NONE_NOW_VERDICTS = {
+  warm: 'Too warm for snow.',
+  rain: 'Raining, not snowing.',
+} as const;
+
+/** The Now view's first sentence, about the current hour (snow and more add the rate). */
+export const SNOW_NOW_PHRASES: Record<SnowBand, string> = {
+  nosnow: 'Dry now.',
+  flakes: 'A few flakes possible now.',
+  maybesnow: 'Snow possible now.',
+  snow: 'Snow now',
+  heavysnow: 'Heavy snow now',
+  deepsnow: 'Very heavy snow now',
+};
+
+export const SNOW_COPY = {
+  rainNow: 'Rain now.',
+  lightSnowNow: 'Light snow now.',
+  littleOrNone: 'Little or no snow in most forecasts.',
+  noSnowNext12: 'No snow for the next 12 hours.',
+  barelyAny: 'Barely any snow all week.',
+} as const;
+
+export const SNOW_WEEK_VERDICTS = {
+  snowy: 'A snowy week.',
+  possibleMost: 'Snow possible most days.',
+  warm: 'Too warm for snow all week.',
+  none: 'No snow this week.',
+} as const;
+
+/** "Snow now, about 1cm an hour." */
+export function snowRateLine(phrase: string, rate: string): string {
+  return `${phrase}, about ${rate} an hour.`;
+}
+
+/**
+ * "About 3cm still to come." for the rest of today, "2 to 5cm of snow." for a whole day, or "A
+ * dusting…". `amount` is the depth (one number, or a range written "2 to 5cm" so screen readers
+ * say it), or null for a dusting.
+ */
+export function snowAmountLine(
+  amount: { low: number; high: number } | null,
+  unit: string,
+  partial: boolean,
+): string {
+  const what = !amount
+    ? 'A dusting'
+    : amount.low === amount.high
+      ? `About ${amount.high}${unit}`
+      : `${amount.low} to ${amount.high}${unit}`;
+  return partial ? `${what} still to come.` : `${what} of snow.`;
+}
+
+/** "Some forecasts say up to 2cm." / "One forecast says a dusting." (null for a dusting). */
+export function snowUpToLine(amount: string | null, one: boolean): string {
+  if (amount) return upToLine(amount, one);
+  return one ? 'One forecast says a dusting.' : 'Some forecasts say a dusting.';
+}
+
+/** "No lower than 9° for the rest of the day." / "… all day." / "… all week." */
+export function noLowerLine(low: number, when: 'rest' | 'day' | 'week'): string {
+  const span = when === 'rest' ? 'for the rest of the day' : `all ${when}`;
+  return `No lower than ${low}° ${span}.`;
+}
+
+/** "Down to -4° at the coldest." */
+export function coldestLine(low: number): string {
+  return `Down to ${low}° at the coldest.`;
+}
+
+export function snowFromLine(hour: number): string {
+  return `Snow likely from about ${formatHour(hour)}.`;
+}
+
+export function snowPossibleFromLine(hour: number): string {
+  return `Snow possible from about ${formatHour(hour)}.`;
+}
+
+/** While snow is possible now: snow likely later. */
+export function likelyFromLine(hour: number): string {
+  return `Likely from about ${formatHour(hour)}.`;
+}
+
+/** While snow is possible now: when it clears. */
+export function clearingLine(hour: number): string {
+  return `Clearing by about ${endHour(hour)}.`;
+}
+
+/** "6 of 8 forecasts expect snow" / "1 of 8 forecasts expects snow". */
+export function snowAgreementLine(snowy: number, total: number): string {
+  return `${snowy} of ${total} forecasts ${snowy === 1 ? 'expects' : 'expect'} snow`;
+}
+
+/** Accessible summary of the snow strip. `min` and `max` are amount texts ("0cm"). */
+export function snowStripSummary(args: {
+  min: string;
+  max: string;
+  snowy: number;
+  total: number;
+}): string {
+  const range =
+    args.min === args.max
+      ? `All forecasts say ${args.min}`
+      : `Forecasts range from ${args.min} to ${args.max}`;
+  const snowy =
+    args.snowy === 0
+      ? 'none expect snow'
+      : `${args.snowy} of ${args.total} ${args.snowy === 1 ? 'expects' : 'expect'} snow`;
+  return `${range}; ${snowy}.`;
+}
+
+/** "A snowy week." / "A snowy week, heaviest on Fri." / "A snowy week, heaviest today." */
+export function snowyWeekLine(heaviest: string | null): string {
+  return heaviest ? `A snowy week, heaviest ${heaviest}.` : SNOW_WEEK_VERDICTS.snowy;
+}
+
+/**
+ * "Snow on Thu and Fri." / "Snow today and on Sat, heavy on Sat." / "Heavy snow on Fri."
+ * `heavy` is when the heavy days fall, or null without one; `allHeavy` when every day is heavy.
+ */
+export function snowDaysLine(when: string, heavy: string | null, allHeavy: boolean): string {
+  if (allHeavy) return `Heavy snow ${when}.`;
+  return heavy ? `Snow ${when}, heavy ${heavy}.` : `Snow ${when}.`;
+}
+
+/** "Snow possible on Sat." */
+export function possibleDaysLine(when: string): string {
+  return `Snow possible ${when}.`;
+}
+
+/** "A few flakes on Thu, nothing more." */
+export function flakesDaysLine(when: string): string {
+  return `A few flakes ${when}, nothing more.`;
+}
+
+/** Snow against normal: a month where it is rare or common, or a week's snow compared. */
+export type SnowNormal = 'rare' | 'common' | 'more' | 'less' | 'usual';
+
+/**
+ * "Snow is rare here in October." / "More snow than usual for January." `month` is null for a
+ * week across two months.
+ */
+export function snowNormalLine(kind: SnowNormal, month: string | null): string {
+  const inMonth = month ? `in ${month}` : 'at this time of year';
+  const forMonth = month ?? 'the time of year';
+  if (kind === 'rare') return `Snow is rare here ${inMonth}.`;
+  if (kind === 'common') return `Snow is common here ${inMonth}.`;
+  if (kind === 'more') return `More snow than usual for ${forMonth}.`;
+  if (kind === 'less') return `Less snow than usual for ${forMonth}.`;
+  return `About usual for ${forMonth}.`;
+}
+
+/**
+ * "Will it snow in Oslo today? Yes. Heavy snow | willitsnow.today". A day without snow is
+ * labelled with why ("No. Too warm"), never "No. No snow".
+ */
+export function snowPageTitle(args: {
+  city?: string | null;
+  answer: string;
+  band: SnowBand;
+  reason: SnowReason | null;
+}): string {
+  return `${question(args.city, 'today', 'snow')} ${args.answer} ${snowLabel(args.band, args.reason)} | ${SITES.snow.name}`;
 }

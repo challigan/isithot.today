@@ -7,7 +7,7 @@
  * kept dim enough for small text even at its brightest point (scripts/palette-contrast.mjs).
  * e2e/contrast.spec.ts checks every pair on the rendered page.
  */
-import type { Palette, RainBand } from './config';
+import type { Palette, RainBand, SnowBand } from './config';
 
 export const RAIN_PALETTES: Record<RainBand, Palette> = {
   dry: {
@@ -57,5 +57,64 @@ export const RAIN_PALETTES: Record<RainBand, Palette> = {
     ink: '#ffffff',
     pill: '#18153f',
     glow: '26%',
+  },
+};
+
+/**
+ * Colours for the snow bands ("Will it snow?"): winter dusk, from a pale lilac sky with a low sun
+ * when there is no snow, through lavender and violet to plum and an aubergine night as the snow
+ * deepens. Every blue is taken by Hot's Cold and Freezing and by all of Wet, so a switch between
+ * the topics always changes the colour family, and snow itself is the white of the text and the
+ * icon, never the background. The two pale bands carry dark text; from Maybe up the text is
+ * white, with the glow kept dim enough for small text (scripts/palette-contrast.mjs).
+ */
+export const SNOW_PALETTES: Record<SnowBand, Palette> = {
+  nosnow: {
+    g1: '#f6eef9',
+    g2: '#e1c9e8',
+    g3: '#ffe3d3',
+    ink: '#341a3c',
+    pill: '#f6eef9',
+    glow: '85%',
+  },
+  flakes: {
+    g1: '#ebe4f5',
+    g2: '#c4b1db',
+    g3: '#ffffff',
+    ink: '#281938',
+    pill: '#ebe4f5',
+    glow: '70%',
+  },
+  maybesnow: {
+    g1: '#70548f',
+    g2: '#583d75',
+    g3: '#ede2fb',
+    ink: '#ffffff',
+    pill: '#583d75',
+    glow: '14%',
+  },
+  snow: {
+    g1: '#783d90',
+    g2: '#552269',
+    g3: '#f6e9fd',
+    ink: '#ffffff',
+    pill: '#552269',
+    glow: '20%',
+  },
+  heavysnow: {
+    g1: '#642a64',
+    g2: '#3e113f',
+    g3: '#e8cee7',
+    ink: '#ffffff',
+    pill: '#3e113f',
+    glow: '24%',
+  },
+  deepsnow: {
+    g1: '#37243d',
+    g2: '#160c19',
+    g3: '#eae4f7',
+    ink: '#ffffff',
+    pill: '#160c19',
+    glow: '30%',
   },
 };

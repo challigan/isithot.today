@@ -3,29 +3,39 @@
  * adjusted without touching logic. The native apps should mirror this file.
  */
 
-import { RAIN_PALETTES } from './palettes';
+import { RAIN_PALETTES, SNOW_PALETTES } from './palettes';
 
 export type Band = 'freezing' | 'cold' | 'mild' | 'warm' | 'hot' | 'scorching';
 
 /** Bands from coldest to hottest. The index is used for capping and flooring. */
 export const BANDS: readonly Band[] = ['freezing', 'cold', 'mild', 'warm', 'hot', 'scorching'];
 
-/** The two questions: "Is it hot?" and "Is it wet?". */
-export type Topic = 'hot' | 'wet';
-export const TOPICS: readonly Topic[] = ['hot', 'wet'];
+/** The three questions, in the toggle's order: "Is it hot?", "Is it wet?" and "Will it snow?". */
+export type Topic = 'hot' | 'wet' | 'snow';
+export const TOPICS: readonly Topic[] = ['hot', 'wet', 'snow'];
+
+/** A topic named by untrusted text (a data attribute, a query), or hot. */
+export function parseTopic(value: string | null | undefined): Topic {
+  return TOPICS.find((t) => t === value) ?? 'hot';
+}
 
 /**
  * One site per topic, served by the same deploy: the domain a visitor arrives on decides which
  * topic the page opens on. Canonical URLs, robots.txt and sitemaps use these, never the deploy URL.
+ * `prefix` is where a topic's pages live when every topic shares one host (deploy previews, a
+ * local server); hot's pages sit at the root.
  */
-export const SITES: Record<Topic, { name: string; url: string }> = {
-  hot: { name: 'isithot.today', url: 'https://isithot.today' },
-  wet: { name: 'isitwet.today', url: 'https://isitwet.today' },
+export const SITES: Record<Topic, { name: string; url: string; prefix: string }> = {
+  hot: { name: 'isithot.today', url: 'https://isithot.today', prefix: '' },
+  wet: { name: 'isitwet.today', url: 'https://isitwet.today', prefix: '/wet' },
+  snow: { name: 'willitsnow.today', url: 'https://willitsnow.today', prefix: '/snow' },
 };
 
-/** The topic a host serves: isitwet.today (and www) is wet; everything else opens on hot. */
+/** The topic a host serves: each site (and its www) its own; everything else opens on hot. */
 export function hostTopic(hostname: string): Topic {
-  return hostname === SITES.wet.name || hostname === `www.${SITES.wet.name}` ? 'wet' : 'hot';
+  return (
+    TOPICS.find((t) => hostname === SITES[t].name || hostname === `www.${SITES[t].name}`) ?? 'hot'
+  );
 }
 
 /** Whether a host is one of the real sites (not a deploy preview or a local server). */
@@ -35,14 +45,16 @@ export function isSiteHost(hostname: string): boolean {
 
 /**
  * Where a link to `path` ("/", "/in/london-gb", "/?lat=…") goes for a topic. On the real sites
- * a link for the other topic crosses to its domain; anywhere else (deploy previews, a local
- * server) both topics live on one host and wet pages sit under /wet.
+ * a link for another topic crosses to its domain; anywhere else (deploy previews, a local
+ * server) every topic lives on one host, each under its prefix.
  */
 export function sitePath(topic: Topic, path: string, hostname: string): string {
   if (isSiteHost(hostname))
     return hostTopic(hostname) === topic ? path : `${SITES[topic].url}${path}`;
-  if (topic === 'hot') return path;
-  return path === '/' ? '/wet' : path.startsWith('/?') ? `/wet${path.slice(1)}` : `/wet${path}`;
+  const { prefix } = SITES[topic];
+  if (!prefix) return path;
+  if (path === '/') return prefix;
+  return path.startsWith('/?') ? `${prefix}${path.slice(1)}` : `${prefix}${path}`;
 }
 
 /** Rain bands from driest to wettest. */
@@ -55,6 +67,38 @@ export const RAIN_BANDS: readonly RainBand[] = [
   'heavy',
   'drenched',
 ];
+
+/**
+ * Snow bands from none to deep. Every key differs from the hot and rain bands' keys, as palettes,
+ * icons and preview chips are looked up by band alone.
+ */
+export type SnowBand = 'nosnow' | 'flakes' | 'maybesnow' | 'snow' | 'heavysnow' | 'deepsnow';
+export const SNOW_BANDS: readonly SnowBand[] = [
+  'nosnow',
+  'flakes',
+  'maybesnow',
+  'snow',
+  'heavysnow',
+  'deepsnow',
+];
+
+/** Why a day or an hour without snow has none: too warm throughout, rain instead, or dry. */
+export type SnowReason = 'warm' | 'rain' | 'dry';
+
+/** Any topic's band. */
+export type AnyBand = Band | RainBand | SnowBand;
+
+/** Each topic's bands, in order. */
+export const BANDS_BY_TOPIC: Record<Topic, readonly AnyBand[]> = {
+  hot: BANDS,
+  wet: RAIN_BANDS,
+  snow: SNOW_BANDS,
+};
+
+/** The topic a band belongs to, or null for anything that is not a band. */
+export function topicOfBand(band: string): Topic | null {
+  return TOPICS.find((t) => (BANDS_BY_TOPIC[t] as readonly string[]).includes(band)) ?? null;
+}
 
 /**
  * How rain is judged. Every model gives its own total for a window (a whole day, the rest of
@@ -102,6 +146,61 @@ export const RAIN = {
     minDifference: 5,
     compareFrom: 5,
     usualDryBelow: 2,
+  },
+} as const;
+
+/**
+ * How snow is judged, as rain is: every model gives its own snow over a window, cm (depth at
+ * Open-Meteo's 7cm for every 10mm of water); the share of models with at least the window's snow
+ * amount is the chance of snow and the median is the amount. Which part of an hour's
+ * precipitation falls as snow is one rule for both topics (snowWater in snow.ts).
+ */
+export const SNOW = {
+  /** Depth of snow from a millimetre of water, cm: Open-Meteo's own ratio. */
+  cmPerMm: 0.7,
+  /**
+   * Nothing falls as snow in an hour whose blended temperature is above this, °C, whatever a
+   * model's snowfall says (some models judge snow for a grid cell higher than the place).
+   */
+  warmAboveC: 2.5,
+  /**
+   * Thresholds for one hour and for a whole day, cm, scaled for other windows as rain's are.
+   * Hourly heavy and deep sit below the usual rates for the same reason as rain's.
+   */
+  hour: { snow: 0.1, flakes: 0.07, heavy: 0.8, deep: 2 },
+  day: { snow: 0.5, flakes: 0.1, heavy: 5, deep: 15 },
+  /** Share of models expecting snow for "Maybe", and for "Yes". */
+  maybeFrom: 0.25,
+  likelyFrom: 0.6,
+  /** A model's 2-hour block has snow with at least this much, cm (the Now view's rows). */
+  blockSnow: 0.1,
+  /** Snow in the current hour under this much is "light snow", cm. */
+  lightBelow: 0.2,
+  /** In a sentence, less snow than this is "a dusting", cm. */
+  dustingBelow: 0.5,
+  /** Hours where at least this share of models has snow are the "likely" hours. */
+  hourLikely: 0.5,
+  /** Without a likely hour, the snowiest hour is named only from this share up. */
+  hourPossible: 0.375,
+  /** The model strip's scale never ends below this, so a day without snow still shows the zone. */
+  scaleFloor: { cm: 5, in: 2 },
+  /** This week: snow days for a snowy week, snow-possible days for "most days", days named. */
+  week: { snowyFrom: 4, possibleMostFrom: 4, nameDays: 3 },
+  /**
+   * Normal snowfall (NASA POWER PRECSNOLAND, as depth). A month with under `rareBelow` cm a day
+   * is one where snow is rare, and from `commonFrom` one where it is common. A week is compared
+   * with normal as rain's is (1.5× and 1cm more, or half and 1cm less), only when either is at
+   * least `compareFrom`. Normals are used only where the climate cell's mean height is within
+   * `maxHeightDifference` metres of the place's, as snow depends so much on height.
+   */
+  normals: {
+    rareBelow: 0.01,
+    commonFrom: 0.2,
+    compareFrom: 1,
+    moreRatio: 1.5,
+    lessRatio: 0.5,
+    minDifference: 1,
+    maxHeightDifference: 300,
   },
 } as const;
 
@@ -247,7 +346,7 @@ export const CACHE = {
    * Version of that saved answer (page markup and data). The page's inline restore script and
    * the app both read it, so bump it here whenever the saved markup or data changes shape.
    */
-  snapshotVersion: 5,
+  snapshotVersion: 6,
 } as const;
 
 export const RATE_LIMIT = {
@@ -351,11 +450,13 @@ export const PALETTES: Record<Band, Palette> = {
   },
 };
 
-export { RAIN_PALETTES };
+export { RAIN_PALETTES, SNOW_PALETTES };
 
-/** The palette for a hot or a rain band. */
-export function paletteFor(band: Band | RainBand): Palette {
-  return (PALETTES as Record<string, Palette>)[band] ?? RAIN_PALETTES[band as RainBand];
+const ALL_PALETTES: Record<AnyBand, Palette> = { ...PALETTES, ...RAIN_PALETTES, ...SNOW_PALETTES };
+
+/** The palette for any topic's band. */
+export function paletteFor(band: AnyBand): Palette {
+  return ALL_PALETTES[band];
 }
 
 /** Neutral slate shown while loading. */

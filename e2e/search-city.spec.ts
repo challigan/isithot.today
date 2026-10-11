@@ -28,6 +28,18 @@ test('a city search from a wet city page stays on the wet site', async ({ page }
   await expect(page.locator('#app')).toHaveAttribute('data-topic', 'wet');
 });
 
+test('a city search from a snow city page stays on the snow site', async ({ page }) => {
+  await keepToday(page);
+  await page.goto('/snow/in/london-gb');
+  await expect(page.locator('#answer')).toHaveText(/^\s*(Yes|No|Maybe)\.\s*$/);
+  await page.locator('#place-btn').click();
+  await page.locator('#search-input').fill('Bris');
+  await page.getByRole('button', { name: /Bristol/ }).click();
+  await expect(page).toHaveURL(/\/snow\/in\/bristol-gb$/);
+  await expect(page.locator('#question')).toHaveText('Will it snow in Bristol today?');
+  await expect(page.locator('#app')).toHaveAttribute('data-topic', 'snow');
+});
+
 test('search sheet closes on Escape', async ({ page }) => {
   await page.goto('/');
   await page.locator('#place-btn').click();

@@ -1,8 +1,9 @@
 name: Production smoke test
 
-# Waits for the production deploy of each push to main, then checks both live sites against the
-# real upstream data: isithot.today (API and pages), isitwet.today (served by the edge function
-# from the /wet pages) and the redirect from isithot.today/wet to isitwet.today.
+# Waits for the production deploy of each push to main, then checks the three live sites against
+# the real upstream data: isithot.today (API and pages), isitwet.today and willitsnow.today (served
+# by the edge function from the /wet and /snow pages), and the redirects between them: a path
+# under another site's prefix goes to that site, and www.willitsnow.today to willitsnow.today.
 on:
   push:
     branches: [main]
@@ -18,6 +19,7 @@ jobs:
     env:
       SITE: https://isithot.today
       WET_SITE: https://isitwet.today
+      SNOW_SITE: https://willitsnow.today
       SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
@@ -36,18 +38,27 @@ jobs:
           done
           echo "Timed out waiting for the production deploy"; exit 1
 
-      - name: Smoke test isithot.today and isitwet.today
-        run: node scripts/smoke.mjs "$SITE" --wet-site "$WET_SITE"
+      - name: Smoke test isithot.today, isitwet.today and willitsnow.today
+        run: node scripts/smoke.mjs "$SITE" --wet-site "$WET_SITE" --snow-site "$SNOW_SITE"
 
-      - name: isithot.today/wet redirects to isitwet.today
+      - name: Paths under another site's prefix, and www.willitsnow.today, redirect to that site
         run: |
           failed=0
           expect() {
-            got=$(curl -sSI -o /dev/null -w '%{http_code} %{redirect_url}' "$SITE$1")
-            if [ "$got" = "301 $WET_SITE$2" ]; then echo "PASS  $SITE$1 -> $got"
-            else echo "FAIL  $SITE$1 -> '$got' (expected 301 $WET_SITE$2)"; failed=1; fi
+            got=$(curl -sSI -o /dev/null -w '%{http_code} %{redirect_url}' "$1")
+            if [ "$got" = "301 $2" ]; then echo "PASS  $1 -> $got"
+            else echo "FAIL  $1 -> '$got' (expected 301 $2)"; failed=1; fi
           }
-          expect /wet /
-          expect /wet/in/newcastle-upon-tyne-gb /in/newcastle-upon-tyne-gb
-          expect '/wet?lat=51.5&lon=-0.12' '/?lat=51.5&lon=-0.12'
+          expect "$SITE/wet" "$WET_SITE/"
+          expect "$SITE/wet/in/newcastle-upon-tyne-gb" "$WET_SITE/in/newcastle-upon-tyne-gb"
+          expect "$SITE/wet?lat=51.5&lon=-0.12" "$WET_SITE/?lat=51.5&lon=-0.12"
+          expect "$SITE/snow" "$SNOW_SITE/"
+          expect "$SITE/snow/in/newcastle-upon-tyne-gb" "$SNOW_SITE/in/newcastle-upon-tyne-gb"
+          expect "$SITE/snow?lat=51.5&lon=-0.12" "$SNOW_SITE/?lat=51.5&lon=-0.12"
+          expect "$WET_SITE/snow" "$SNOW_SITE/"
+          expect "$WET_SITE/snow/in/newcastle-upon-tyne-gb" "$SNOW_SITE/in/newcastle-upon-tyne-gb"
+          expect "$SNOW_SITE/wet" "$WET_SITE/"
+          expect "$SNOW_SITE/wet/in/newcastle-upon-tyne-gb" "$WET_SITE/in/newcastle-upon-tyne-gb"
+          expect "https://www.willitsnow.today/" "$SNOW_SITE/"
+          expect "https://www.willitsnow.today/in/newcastle-upon-tyne-gb" "$SNOW_SITE/in/newcastle-upon-tyne-gb"
           exit $failed

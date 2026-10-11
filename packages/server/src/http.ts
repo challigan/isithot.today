@@ -27,10 +27,21 @@ export const NO_STORE = {
   'Netlify-CDN-Cache-Control': 'no-store',
 };
 
-export function errorResult(code: ErrorCode, message: string): HandlerResult<never> {
+/**
+ * An error answer. `detail` says what went wrong upstream (e.g. "open-meteo: timed out after
+ * 6000ms (2 attempts)") for logs, the smoke test and anyone debugging; it is already free of
+ * secrets, and clients show `message`, never `detail`.
+ */
+export function errorResult(
+  code: ErrorCode,
+  message: string,
+  detail?: string,
+): HandlerResult<never> {
+  const error: ApiError['error'] & { detail?: string } = { code, message };
+  if (detail) error.detail = detail;
   return {
     status: ERROR_STATUS[code],
-    body: { error: { code, message } },
+    body: { error },
     headers: { ...NO_STORE },
   };
 }
