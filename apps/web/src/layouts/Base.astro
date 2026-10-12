@@ -16,13 +16,19 @@ import {
 import { LOOKS } from '../lib/topics';
 
 interface Props {
+  /** For search results and the browser: stable, never the answer, which would go stale. */
   title?: string;
   description?: string;
+  /** Share cards may carry the answer (a city page's): they default to the title and description. */
+  ogTitle?: string;
+  ogDescription?: string;
   /** Absolute canonical URL, or null for no canonical tag. */
   canonical?: string | null;
   ogImage?: string;
   palette: Palette;
   noindex?: boolean;
+  /** Structured data for search engines (lib/seo.ts), as JSON-LD. */
+  jsonLd?: object | null;
   /** The site the page belongs to: names, icons and defaults follow it. */
   topic?: Topic;
 }
@@ -35,7 +41,11 @@ const {
   ogImage = `${SITES[topic].url}/og/default.png`,
   palette,
   noindex = false,
+  jsonLd = null,
 } = Astro.props;
+const { ogTitle = title, ogDescription = description } = Astro.props;
+// "</script>" inside a string must not end the script.
+const ld = jsonLd && JSON.stringify(jsonLd).replace(/</g, '\\u003c');
 // Each site carries its own icons, under its prefix (none for hot): /wet and /snow paths work on
 // isitwet.today and willitsnow.today too (the edge function passes them through).
 const { prefix } = SITES[topic];
@@ -78,13 +88,14 @@ const prefixLinks = `(()=>{const p=location.pathname;if(p!=='${prefix}'&&!p.star
     <link rel="manifest" href={`${prefix}/manifest.webmanifest`} />
     <meta property="og:site_name" content={SITES[topic].name} />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content={title} />
-    <meta property="og:description" content={description} />
+    <meta property="og:title" content={ogTitle} />
+    <meta property="og:description" content={ogDescription} />
     {canonical && <meta property="og:url" content={canonical} />}
     <meta property="og:image" content={ogImage} />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
+    {ld && <script is:inline type="application/ld+json" set:html={ld} />}
     <slot name="head" />
     {beacon && (
       <script

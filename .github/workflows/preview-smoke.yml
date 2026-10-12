@@ -60,11 +60,13 @@ jobs:
           git commit -m "Record live upstream fixtures for provider tests"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
 
+      # A convenience copy (changed recordings are committed above): never fail the smoke test on it.
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: live-fixtures
           path: packages/providers/test/fixtures/
-          retention-days: 14
+          retention-days: 3
 
       - name: Wait for the deploy preview of this commit
         run: |

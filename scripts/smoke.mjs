@@ -25,6 +25,9 @@ function option(name) {
 // under their prefix on any deploy, and at the root on a preview sent their header (the edge
 // function, netlify/edge-functions/lib/route.ts); their pages ask their own question.
 const HOT = 'https://isithot.today';
+// Each sitemap lists home, About, the places page and the city pages the site lists: all 300 on
+// isithot.today and isitwet.today; willitsnow.today leaves out the places where it never snows
+// (SNOWLESS in packages/core/src/config.ts, 63 of them), such as Singapore.
 const SITES = {
   wet: {
     url: 'https://isitwet.today',
@@ -32,6 +35,7 @@ const SITES = {
     header: 'x-isitwet-host',
     home: 'Is it wet today?',
     city: 'Is it wet in Newcastle today?',
+    minUrls: 303,
   },
   snow: {
     url: 'https://willitsnow.today',
@@ -39,9 +43,13 @@ const SITES = {
     header: 'x-willitsnow-host',
     home: 'Will it snow today?',
     city: 'Will it snow in Newcastle today?',
+    minUrls: 240,
+    unlisted: 'singapore-sg',
   },
 };
 const CITY = 'newcastle-upon-tyne-gb';
+/** A title with an answer in it ("… today? Yes. 24° | …"): titles must never carry one. */
+const ANSWERED = / (Yes|No|Almost|Maybe)\. /;
 
 /** Each site's own domain to check, from --wet-site and --snow-site. */
 const siteUrls = {};
@@ -101,7 +109,7 @@ const locs = (xml) => [...String(xml).matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) 
  * can ask a deploy preview to act as the site. Whatever the route, the pages must name the site.
  */
 async function checkSite(t, label, { origin = base, prefix = '', headers = {} } = {}) {
-  const { url: own, home: asked, city: cityAsked } = SITES[t];
+  const { url: own, home: asked, city: cityAsked, minUrls, unlisted } = SITES[t];
   const host = new URL(own).host;
   // "/" is "/wet" and "/?q" is "/wet?q" under the prefix.
   const path = (p) => (prefix ? prefix + p.replace(/^\/(?=\?|$)/, '') : p);
@@ -131,7 +139,7 @@ async function checkSite(t, label, { origin = base, prefix = '', headers = {} } 
   const title = titleOf(page.body);
   const canonical = canonicalOf(page.body);
   check(
-    page.res.status === 200 && !!title?.startsWith(cityAsked),
+    page.res.status === 200 && !!title?.startsWith(cityAsked) && !ANSWERED.test(title),
     name(`/in/${CITY}`),
     `${page.res.status} ${page.ms}ms "${title}"`,
   );
@@ -157,11 +165,20 @@ async function checkSite(t, label, { origin = base, prefix = '', headers = {} } 
   const urls = locs(sitemap.body);
   check(
     sitemap.res.status === 200 &&
-      urls.length >= 302 &&
+      urls.length >= minUrls &&
       urls.every((u) => u.startsWith(`${own}/`)) &&
-      urls.includes(`${own}/in/${CITY}`),
+      urls.includes(`${own}/in/${CITY}`) &&
+      urls.includes(`${own}/places`) &&
+      (!unlisted || !urls.includes(`${own}/in/${unlisted}`)),
     name('/sitemap.xml'),
     `${urls.length} urls, first ${urls[0]}`,
+  );
+
+  const places = await at('/places');
+  check(
+    places.res.status === 200 && canonicalOf(places.body) === `${own}/places`,
+    name('/places'),
+    `${places.res.status} ${places.ms}ms ${canonicalOf(places.body)}`,
   );
 
   const missing = await at('/in/atlantis-xx');
@@ -375,7 +392,9 @@ try {
   const page = await get(`/in/${CITY}`);
   const title = titleOf(page.body);
   check(
-    page.res.status === 200 && title?.startsWith('Is it hot in Newcastle today?'),
+    page.res.status === 200 &&
+      title?.startsWith('Is it hot in Newcastle today?') &&
+      !ANSWERED.test(title),
     `GET /in/${CITY}`,
     `${page.ms}ms "${title}"`,
   );
@@ -399,9 +418,19 @@ try {
   const sitemap = await get('/sitemap.xml');
   const urls = locs(sitemap.body);
   check(
-    sitemap.res.status === 200 && urls.length >= 302 && urls.every((u) => u.startsWith(`${HOT}/`)),
+    sitemap.res.status === 200 &&
+      urls.length >= 303 &&
+      urls.every((u) => u.startsWith(`${HOT}/`)) &&
+      urls.includes(`${HOT}/places`),
     'GET /sitemap.xml',
     `${urls.length} urls`,
+  );
+
+  const places = await get('/places');
+  check(
+    places.res.status === 200 && canonicalOf(places.body) === `${HOT}/places`,
+    'GET /places',
+    `${places.ms}ms ${canonicalOf(places.body)}`,
   );
 
   const bad = await get('/api/v1/today?lat=999&lon=0');

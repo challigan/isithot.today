@@ -1,14 +1,16 @@
 ---
 /**
  * The Hot | Wet | Snow toggle, the tab bar and the three views (Now | Today | This week) in one
- * horizontal scroller, plus the place links they share. Today comes first in the markup (it is
- * the page's purpose, its answer is the only h1 and the LCP element) and sits in the middle on
- * screen. In the evening at the place the middle view answers for tomorrow and the page opens
- * on Now (core `showsTomorrow`, `defaultView`).
+ * horizontal scroller, plus what they share: when the forecast was fetched and the place links (a
+ * city page adds its own after them). Today comes first in the markup (it is the page's purpose,
+ * its question and answer are the only h1, and the answer is the LCP element) and sits in the
+ * middle on screen. In the evening at the place the middle view answers for tomorrow and the page
+ * opens on Now (core `showsTomorrow`, `defaultView`).
  */
 import {
   COPY,
   outboundLinks,
+  updatedTime,
   viewDisplay,
   type DisplayState,
   type NearbyCity,
@@ -43,13 +45,19 @@ const escape = (text: string): string =>
 const nearbyHtml = nearby
   .map((c) => `<a href="/in/${encodeURIComponent(c.slug)}">${escape(c.name)}</a>`)
   .join(', ');
+const day = data?.days[0];
+const updated = data && day && updatedTime(data.updatedAt, data.location.timezone, day.date);
 ---
 
 {/* The question on screen (scripts/app.ts keeps it up to date as the toggle changes it). */}
 <main id="main" tabindex="-1" data-topic={topic}>
   <TopicToggle topic={topic} />
   <ViewTabs start={start} tomorrow={tomorrow} />
-  <div class="views" id="views">
+  {/*
+   * Without an answer (the home page's loading state) the views hold placeholder text, which
+   * search results must never quote.
+   */}
+  <div class="views" id="views" data-nosnippet={state === 'ready' ? undefined : ''}>
     <Today
       view={viewDisplay(data, topic, 'today', state, { ...opts, tomorrow })}
       start={start === 'today'}
@@ -62,6 +70,8 @@ const nearbyHtml = nearby
     {COPY.retry}
   </button>
   <p class="sr-only" id="view-live" aria-live="polite"></p>
+  <!-- prettier-ignore -->
+  <p class="updated" id="updated" hidden={!updated}>{COPY.updated} <time id="updated-at" datetime={updated ? data?.updatedAt : undefined}>{updated}</time></p>
   <p class="stale" id="stale" hidden={!data?.stale}>
     {COPY.stale}
   </p>
@@ -70,4 +80,5 @@ const nearbyHtml = nearby
   <p class="nearby" id="nearby" hidden={nearby.length === 0}>
     {COPY.nearby} <span id="nearby-links" set:html={nearbyHtml} />
   </p>
+  <slot />
 </main>

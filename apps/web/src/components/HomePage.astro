@@ -3,15 +3,18 @@
  * The home page of each site: isithot.today (/), isitwet.today (/wet) and willitsnow.today
  * (/snow), each served at / on its own domain by the edge function. Sent in its loading state,
  * already asking the page's own question; the browser fills in the answer for where the visitor
- * is.
+ * is. The answer is never rendered on the server: search engines crawl from the US and would
+ * index a US town's. They read the introduction under it instead.
  */
 import Base from '../layouts/Base.astro';
 import Header from './Header.astro';
 import Views from './Views.astro';
 import AdSlot from './AdSlot.astro';
 import Footer from './Footer.astro';
+import Intro from './Intro.astro';
 import SearchSheet from './SearchSheet.astro';
 import { CACHE, LOADING_PALETTE, SITES, TOMORROW_FROM_HOUR, type Topic } from '@isithot/core';
+import { websiteLd } from '../lib/seo';
 import { lastKey } from '../lib/topics';
 
 interface Props {
@@ -27,7 +30,12 @@ const maxAge = CACHE.localAnswerMaxAgeMs;
 const evening = TOMORROW_FROM_HOUR;
 ---
 
-<Base topic={topic} canonical={`${SITES[topic].url}/`} palette={LOADING_PALETTE}>
+<Base
+  topic={topic}
+  canonical={`${SITES[topic].url}/`}
+  palette={LOADING_PALETTE}
+  jsonLd={websiteLd(topic)}
+>
   <script is:inline slot="head">
     // Start the API request before the main script has downloaded. Mirrors apiUrl() in
     // scripts/app.ts; if they ever disagree the app simply makes its own request.
@@ -65,6 +73,7 @@ const evening = TOMORROW_FROM_HOUR;
     <Header site={topic} />
     <Views data={null} state="loading" topic={topic} />
     <AdSlot />
+    <Intro topic={topic} />
     <Footer />
   </div>
   <SearchSheet />

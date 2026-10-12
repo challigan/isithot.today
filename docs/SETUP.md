@@ -75,7 +75,8 @@ wet?"; isithot.today/wet redirects to isitwet.today. Nothing else to deploy. In 
 3. **HTTPS**: the certificate lists both domains (and the www names). Use **Renew
    certificate** if a new alias is missing.
 4. Google Search Console: add the isitwet.today property and submit
-   `https://isitwet.today/sitemap.xml`. Before ads go on, add isitwet.today to AdSense's sites.
+   `https://isitwet.today/sitemap.xml` (section 7). Before ads go on, add isitwet.today to
+   AdSense's sites.
 
 Deploy previews cannot use the isitwet.today host, so the wet site is at
 `https://deploy-preview-<n>--isithotapp.netlify.app/wet` there; sending the header
@@ -107,8 +108,8 @@ between the sites):
    the other sites' names. Use **Renew certificate** if they are missing, and check that
    https://willitsnow.today/ answers before merging.
 5. Google Search Console: add the willitsnow.today property and submit
-   `https://willitsnow.today/sitemap.xml`. Before ads go on, add willitsnow.today to AdSense's
-   sites.
+   `https://willitsnow.today/sitemap.xml` (section 7). Before ads go on, add willitsnow.today to
+   AdSense's sites.
 
 On deploy previews the snow site is at `https://deploy-preview-<n>--isithotapp.netlify.app/snow`,
 and the header `x-willitsnow-host: 1` makes a preview act as willitsnow.today (previews only).
@@ -149,10 +150,42 @@ https://willitsnow.today/in/london-gb
 
 Alert on a non-200 response, or when the API body does not contain `"days"`.
 
-## 7. Before launch
+## 7. Search Console and Bing
+
+Once the three domains answer over HTTPS. Best after the paid Open-Meteo plan (section 2):
+crawlers fetch every city page, and on the free plan's daily limit that can push the sites onto
+stale answers. Each site's `robots.txt` already names its sitemap.
+
+1. **Google Search Console** (https://search.google.com/search-console): add three **Domain**
+   properties (not URL prefix, so `www` and `http` are covered too): `isithot.today`,
+   `isitwet.today` and `willitsnow.today`. Each shows a `google-site-verification=…` TXT
+   record: add it in Netlify (**Domains → the domain → DNS settings → Add new record**, type
+   TXT, name `@`) or at the registrar, wait a few minutes and press **Verify**.
+2. In each property, **Sitemaps**: submit `sitemap.xml`. Expect 303 URLs on isithot.today and
+   isitwet.today, and 240 on willitsnow.today, which leaves out the 63 places where it never
+   snows (DECISIONS.md, "Search engines").
+3. **URL Inspection** → **Test live URL** on each site's home page and two city pages (say
+   `/in/london-gb` and `/in/leeds-gb`), then **View tested page** → **Screenshot** and
+   **HTML**. Home pages should show the introduction and Popular places, and no "00°" text;
+   city pages the answer, "Updated …", the links to the other two sites and "All places".
+   Then **Request indexing** for each home page.
+4. **Bing Webmaster Tools** (https://www.bing.com/webmasters): sign in, choose **Import from
+   Google Search Console**, and pick all three sites. It brings their sitemaps with them.
+
+Each month, per site (about 15 minutes):
+
+- **Pages** (indexing): a rising "Crawled – currently not indexed" count for `/in/` pages means
+  Google finds city pages thin: tell me before adding cities. willitsnow.today's places where it
+  never snows show as "Excluded by 'noindex' tag", as intended.
+- **Performance**: filter to the UK and to queries with a place in them, to see which
+  question-plus-place searches ("will it rain in Leeds today") bring visitors.
+- **Manual actions** and **Security issues**: both should say none.
+- **Core Web Vitals**, once ads are on, and **Links** (who links to the sites).
+- Open-Meteo's usage page: crawlers count against the plan too.
+
+## 8. Before launch
 
 - Review the Privacy, Cookies and Terms drafts and add a contact email (Privacy page).
-- Confirm NASA POWER's terms cover use on an ad-supported site (spec open decision).
 - Decide on the items marked **Needs a decision** in [DECISIONS.md](DECISIONS.md).
 - Try the place picker on a real iPhone and Android phone (open it, type, hide the keyboard,
   pick a result), and look at the Tomorrow tab with text at 200% (the word should break with a

@@ -7,6 +7,7 @@
 import {
   CACHE,
   COPY,
+  DEFAULT_TITLES,
   GRID,
   LOADING_PALETTE,
   SEARCH,
@@ -14,6 +15,7 @@ import {
   UNITS_LABELS,
   UNIT_NAMES,
   VIEWS,
+  cityTitle,
   computeNow,
   computeRainNow,
   computeSnowNow,
@@ -25,11 +27,11 @@ import {
   isSiteHost,
   outboundLinks,
   parseTopic,
-  question,
   roundToGrid,
   showsTomorrow,
   sitePath,
   topicOfBand,
+  updatedTime,
   viewDisplay,
   viewLabel,
   type AnyBand,
@@ -54,7 +56,7 @@ import {
 } from '@isithot/core';
 // Types only: the preview module itself loads on demand, and only with ?preview=1.
 import type * as PreviewKit from '@isithot/core/preview';
-import { CITY_TITLES, HOURLY, TOPIC_DAYS, lastKey } from '../lib/topics';
+import { HOURLY, TOPIC_DAYS, lastKey } from '../lib/topics';
 import { glyphFor, hoursHtml, listHtml, pct, uvHtml, weekHtml } from '../lib/view';
 import { wireViews, type ViewsController } from './views';
 
@@ -351,6 +353,7 @@ function renderLinks(res: TodayResponse): void {
     const a = $<HTMLAnchorElement>(`out-${i}`);
     if (a) a.href = link.url;
   });
+  renderSiteLinks();
   const nearby = $('nearby');
   const holder = $('nearby-links');
   if (!nearby || !holder) return;
@@ -367,6 +370,27 @@ function renderLinks(res: TodayResponse): void {
   nearby.hidden = list.length === 0;
 }
 
+/**
+ * A city page's links to the same city on the other sites (CityLinks.astro) go to their domains,
+ * carrying the units chosen here; on deploy previews and locally they stay on this host.
+ */
+function renderSiteLinks(): void {
+  document.querySelectorAll<HTMLAnchorElement>('a[data-site]').forEach((a) => {
+    const href = siteLink(parseTopic(a.dataset.site), a.dataset.path ?? '/');
+    if (a.getAttribute('href') !== href) a.setAttribute('href', href);
+  });
+}
+
+/** When the forecast behind the answer was fetched, at the place ("Updated 3:05pm BST"). */
+function renderUpdated(res: TodayResponse): void {
+  const el = $('updated');
+  const time = $('updated-at');
+  if (!el || !time) return;
+  setText('updated-at', updatedTime(res.updatedAt, res.location.timezone, res.days[0]!.date));
+  time.setAttribute('datetime', res.updatedAt);
+  el.hidden = false;
+}
+
 /** One units setting serves every topic: °C | °F for Hot, mm | in for Wet, cm | in for Snow. */
 function renderUnits(): void {
   document.querySelector('.units')?.setAttribute('aria-label', UNITS_LABELS[topic]);
@@ -378,18 +402,14 @@ function renderUnits(): void {
 }
 
 /**
- * The tab title answers the question on screen, about today whichever view is showing. City
- * titles are the topic's own (as on its site's city pages); the home page's names the site of
- * the question on screen, as the header does.
+ * The tab title asks the question on screen, about today whichever view is showing, and never
+ * gives the answer: search engines run this script and index the title it sets, and an answer
+ * there would go out of date in their results. City titles are the topic's own (as on its site's
+ * city pages); the home page's names the site of the question on screen, as the header does.
  */
-function titleFor(res: TodayResponse | null): string {
+function titleFor(): string {
   const city = cityName();
-  const site = SITES[topic].name;
-  const day = res && TOPIC_DAYS[topic](res)?.[0];
-  if (res && day) {
-    return (city && CITY_TITLES[topic](city, res)) || `${day.answer} ${day.verdict} | ${site}`;
-  }
-  return `${question(city, 'today', topic)} | ${site}`;
+  return city ? cityTitle(city, topic) : DEFAULT_TITLES[topic];
 }
 
 /**
@@ -415,10 +435,11 @@ function render(res: TodayResponse, animate: boolean): void {
   const stale = $('stale');
   if (stale) stale.hidden = !res.stale;
   renderWeek(shown(res, 'week'));
+  renderUpdated(res);
   renderLinks(res);
   renderUnits();
   renderBrand();
-  document.title = titleFor(res);
+  document.title = titleFor();
 }
 
 /**
@@ -623,7 +644,7 @@ function renderPending(state: 'loading' | 'error'): void {
   renderHours(viewDisplay(null, topic, 'now', state, opts));
   renderWeek(viewDisplay(null, topic, 'week', state, opts));
   renderBrand();
-  document.title = titleFor(null);
+  document.title = titleFor();
 }
 
 function renderLoading(): void {
@@ -702,10 +723,10 @@ function saveLast(res: TodayResponse): void {
     const open = panel.dataset.view === start;
     panel.toggleAttribute('inert', !open);
     panel.toggleAttribute('hidden', !open);
-    // Today's answer is the real h1; another start view's answer takes its place.
-    const answer = panel.querySelector('.answer');
-    if (open && start !== 'today') answer?.setAttribute('aria-level', '1');
-    else answer?.removeAttribute('aria-level');
+    // Today's heading is the real h1; another start view's heading takes its place.
+    const heading = panel.querySelector('.heading');
+    if (open && start !== 'today') heading?.setAttribute('aria-level', '1');
+    else heading?.removeAttribute('aria-level');
   });
   copy.querySelector<HTMLElement>('#views')?.removeAttribute('style');
   const tabs = copy.querySelector<HTMLElement>('#tabs');
@@ -1193,6 +1214,7 @@ export function start(): void {
   if (carried === 'c' || carried === 'f') storage.set(KEYS.units, carried);
   dropParams('units');
   units = storage.get<Units>(KEYS.units) ?? units;
+  renderSiteLinks();
   views = wireViews({
     onShow: (next) => {
       const switching = next !== view;

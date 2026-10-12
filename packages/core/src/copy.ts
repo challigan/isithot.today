@@ -3,8 +3,10 @@
  * the words never drift apart. Sentence case everywhere.
  */
 import {
+  MODELS,
   RAIN_BANDS,
   SITES,
+  TITLE_MAX_LENGTH,
   type Band,
   type RainBand,
   type SnowBand,
@@ -12,6 +14,7 @@ import {
   type Topic,
   type UvLevel,
 } from './config';
+import { localDateTime, zoneAbbreviation } from './dates';
 import type { Units } from './units';
 
 export const SITE_NAME = SITES.hot.name;
@@ -138,7 +141,14 @@ export const COPY = {
   yourLocation: 'Your location',
   outboundIntro: 'Want the full picture? See the forecast on',
   nearby: 'Nearby:',
-  forecastCredit: 'Forecast data: Open-Meteo.com (CC BY 4.0)',
+  /**
+   * Open-Meteo's licence asks for "Weather data by Open-Meteo.com", linked, next to the data, and
+   * CC BY for a note that we changed it (the blends and verdicts are ours).
+   */
+  forecastCredit: 'Weather data by Open-Meteo.com (CC BY 4.0), modified',
+  /** The Met Office's grids (the UKMO model) are CC BY-SA 4.0 and need their own credit. */
+  metOfficeCredit:
+    'Contains Met Office data © Crown copyright, the Met Office, licensed under CC BY-SA 4.0',
   climateCredit: 'Climate data: NASA POWER',
   unitsLabel: 'Temperature units',
   rainUnitsLabel: 'Rain units',
@@ -150,7 +160,27 @@ export const COPY = {
   stale: 'Showing the last forecast we have. It will refresh shortly.',
   previewLabel: 'Preview each kind of day',
   previewNote: 'Sample data for design preview.',
+  /** When the forecast behind the answer was fetched ("Updated 3:05pm BST"). */
+  updated: 'Updated',
+  yesterday: 'yesterday',
+  howItWorks: 'How it works',
+  places: 'Places',
+  allPlaces: 'All places',
+  popularPlaces: 'Popular places',
+  /** The places page's two parts. */
+  uk: 'United Kingdom',
+  world: 'Around the world',
+  /** willitsnow.today's places page leaves out places where it never snows (SNOWLESS). */
+  snowlessNote:
+    'Places in the tropics and subtropics, where it does not snow, are left out here, but you can still search for them.',
 } as const;
+
+/** The data credits: the API's `attribution`, and the footer of every page with links added. */
+export const ATTRIBUTION: readonly string[] = [
+  COPY.forecastCredit,
+  COPY.metOfficeCredit,
+  COPY.climateCredit,
+];
 
 /** Messages for the API error envelope. */
 export const ERROR_MESSAGES = {
@@ -349,6 +379,94 @@ export const DEFAULT_DESCRIPTIONS: Record<Topic, string> = {
   wet: 'Will it rain today where you are? One answer from several forecast models: how likely rain is, how much and when.',
   snow: 'Will it snow today where you are? One answer from several forecast models: how likely snow is, how much and when.',
 };
+
+/** "{n}" in a string is the number of forecast models, "{city}" a city page's place. */
+const fill = (text: string, city = ''): string =>
+  text.replace('{n}', String(MODELS.length)).replace('{city}', () => city);
+
+/**
+ * What a city page offers, after its question in the search title, the longest that fits first.
+ * Wet's say "rain", the word people search with; snow's question already says "snow".
+ */
+const CITY_TITLE_TAILS: Record<Topic, readonly string[]> = {
+  hot: ['Hour by hour from {n} forecasts', 'From {n} forecasts'],
+  wet: [
+    'Rain hour by hour from {n} forecasts',
+    'Hourly rain from {n} forecasts',
+    'Rain from {n} forecasts',
+  ],
+  snow: ['Hour by hour from {n} forecasts', 'From {n} forecasts'],
+};
+
+/**
+ * A city page's title in search results and the browser: its question and what the page offers,
+ * never the answer, which would go out of date in the results ("Is it wet in Leeds today? Rain
+ * hour by hour from 8 forecasts | isitwet.today"). The words after the question give way to keep
+ * it within TITLE_MAX_LENGTH; the question never does. Share cards carry the answer instead.
+ */
+export function cityTitle(city: string, topic: Topic): string {
+  const asked = question(city, 'today', topic);
+  const title =
+    CITY_TITLE_TAILS[topic]
+      .map((tail) => `${asked} ${fill(tail)}`)
+      .find((t) => t.length <= TITLE_MAX_LENGTH) ?? asked;
+  return `${title} | ${SITES[topic].name}`;
+}
+
+const CITY_DESCRIPTIONS: Record<Topic, string> = {
+  hot: 'Will today feel hot in {city}? One answer from {n} forecast models, judged against what is normal there, with the next 12 hours and the week ahead.',
+  wet: 'Will it rain in {city} today? One answer from {n} forecast models: how likely rain is, how much and when, with the next 12 hours and the week ahead.',
+  snow: 'Will it snow in {city} today? One answer from {n} forecast models: how likely snow is, how much and when, with the next 12 hours and the week ahead.',
+};
+
+/** A city page's description for search results: what the page answers, never the answer. */
+export function cityDescription(city: string, topic: Topic): string {
+  return fill(CITY_DESCRIPTIONS[topic], city);
+}
+
+/** What each site answers and how; "{site}" is its name. */
+const INTROS: Record<Topic, string> = {
+  hot: '{site} answers one question: will today feel hot where you are? It combines {n} forecast models and judges the day against what is normal for the place and the time of year, so 24°C can be hot in Newcastle and mild in Seville.',
+  wet: '{site} answers one question: will it rain where you are today? It combines {n} forecast models into one answer, with how likely rain is, how much and when, and compares the week with what is normal for the place.',
+  snow: '{site} answers one question: will it snow where you are today? It combines {n} forecast models into one answer, with how likely snow is, how much and when, and compares the week with what is normal for the place.',
+};
+
+/**
+ * A home page's introduction under the answer, for visitors and search engines alike (the answer
+ * itself is the visitor's own, worked out in the browser).
+ */
+export function intro(topic: Topic): { heading: string; text: string } {
+  return {
+    heading: fill('One answer from {n} forecasts'),
+    text: fill(INTROS[topic]).replace('{site}', SITES[topic].name),
+  };
+}
+
+/** The places page's introduction and description: "Is it hot today? Choose a town or city…". */
+export function placesIntro(topic: Topic): string {
+  return `${question(null, 'today', topic)} Choose a town or city: the UK by nation, then the rest of the world by country.`;
+}
+
+/** "3:05pm" from a time of day in hours (15.0833…), to the minute. */
+export function clockTime(hours: number): string {
+  const minutes = Math.round(hours * 60);
+  const mm = String(minutes % 60).padStart(2, '0');
+  return formatHour(Math.floor(minutes / 60)).replace(/[ap]m$/, (suffix) => `:${mm}${suffix}`);
+}
+
+/**
+ * When the forecast behind an answer was fetched (the API's `updatedAt`), in the place's own time:
+ * "3:05pm BST", or "yesterday, 11:40pm GMT" when that was before `today` there (the answer's
+ * date: a stale copy can be from the evening before). The zone is named where it has an
+ * abbreviation (`zoneAbbreviation`).
+ */
+export function updatedTime(iso: string, timezone: string, today: string): string {
+  const at = new Date(iso);
+  const local = localDateTime(timezone, at);
+  const zone = zoneAbbreviation(timezone, at);
+  const time = zone ? `${clockTime(local.hours)} ${zone}` : clockTime(local.hours);
+  return local.date < today ? `${COPY.yesterday}, ${time}` : time;
+}
 
 // ---- Is it wet? -------------------------------------------------------------------
 

@@ -134,18 +134,24 @@ test('city pages are server-rendered with the real answer', async ({ page, reque
   const res = await request.get('/in/newcastle-upon-tyne-gb');
   expect(res.status()).toBe(200);
   const html = await res.text();
+  // A stable title for search results; the share card carries the answer.
+  expect(html).toContain(
+    '<title>Is it hot in Newcastle today? Hour by hour from 8 forecasts | isithot.today</title>',
+  );
   expect(html).toMatch(
-    /<title>Is it hot in Newcastle today\? (Yes|No|Almost)\. -?\d+° \| isithot\.today<\/title>/,
+    /<meta property="og:title" content="Is it hot in Newcastle today\? (Yes|No|Almost)\. -?\d+° \| isithot\.today">/,
   );
   expect(html).toContain('<link rel="canonical" href="');
   expect(html).toContain('/og/newcastle-upon-tyne-gb.png');
-  // "Almost." is marked long, to be sized to fit.
-  expect(html).toMatch(/<h1 class="answer" id="answer"( data-long)?>\s*(Yes|No|Almost)\.\s*<\/h1>/);
+  // The heading is the question with its answer; "Almost." is marked long, to be sized to fit.
+  expect(html).toMatch(
+    /<h1 class="heading" id="heading">\s*<span class="question" id="question">\s*(Is it hot in Newcastle today\?|Will it be hot in Newcastle tomorrow\?)\s*<\/span>\s*<span class="answer" id="answer"( data-long)?>\s*(Yes|No|Almost)\.\s*<\/span>\s*<\/h1>/,
+  );
 
   await keepToday(page);
   await page.goto('/in/newcastle-upon-tyne-gb');
   await expect(page.locator('#question')).toHaveText('Is it hot in Newcastle today?');
-  await expect(page.locator('#nearby a')).toHaveCount(4);
+  await expect(page.locator('#nearby a')).toHaveCount(8);
   const bbc = page.locator('#out-0');
   await expect(bbc).toHaveAttribute('href', 'https://www.bbc.co.uk/weather/2641673');
 });
@@ -155,10 +161,13 @@ test('unknown city pages 404', async ({ request }) => {
   expect(res.status()).toBe(404);
 });
 
-test('sitemap lists home, about and every city page', async ({ request }) => {
+test('sitemap lists home, about, places and every city page', async ({ request }) => {
   const xml = await (await request.get('/sitemap.xml')).text();
-  expect((xml.match(/<loc>/g) ?? []).length).toBe(302);
+  expect((xml.match(/<loc>/g) ?? []).length).toBe(303);
+  expect(xml).toContain('<loc>https://isithot.today/places</loc>');
   expect(xml).toContain('/in/newcastle-upon-tyne-gb</loc>');
+  // Google ignores both, and nothing knows when a page last changed.
+  expect(xml).not.toMatch(/<(changefreq|priority|lastmod)>/);
   const robots = await (await request.get('/robots.txt')).text();
   expect(robots).toContain('Allow: /');
 });

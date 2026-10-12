@@ -21,4 +21,5 @@ export * from './snowNow';
 export * from './snowWeek';
 export * from './uv';
 export * from './display';
+export * from './places';
 export type * from './types';

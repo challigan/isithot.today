@@ -1,8 +1,8 @@
 /**
  * What the pages and the browser need to know about each topic, in tables, so nothing tests for a
- * topic by name: where its answer is in a response, how a city page is titled, how long today's
- * answer holds, where each site keeps its last answer, and the colours its pages take without an
- * answer.
+ * topic by name: where its answer is in a response, how a city page's share card is titled, how
+ * long today's answer holds, where each site keeps its last answer, and the colours its pages take
+ * without an answer.
  */
 import {
   PALETTES,
@@ -34,8 +34,11 @@ export const TOPIC_DAYS: Record<Topic, (res: TodayResponse) => readonly TopicDay
   snow: (res) => res.snow?.days,
 };
 
-/** A city page's title with today's answer to the topic's question, or undefined without one. */
-export const CITY_TITLES: Record<Topic, (city: string, res: TodayResponse) => string | undefined> =
+/**
+ * A city page's share-card title (og:title) with today's answer to the topic's question, or
+ * undefined without one. Its search and browser title never carries the answer (core `cityTitle`).
+ */
+export const SHARE_TITLES: Record<Topic, (city: string, res: TodayResponse) => string | undefined> =
   {
     hot: (city, res) => {
       const day = res.days[0];

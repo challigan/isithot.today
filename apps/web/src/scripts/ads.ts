@@ -51,7 +51,9 @@ function consentSettled(): Promise<void> {
             resolve();
         });
       } else if (Date.now() - started > 4000) {
-        // No CMP on the page: AdSense serves non-personalised ads under its own rules.
+        // No CMP on the page: AdSense decides under its own rules. For UK/EEA visitors without
+        // consent that means a limited ad, which uses no cookies, or none (not a non-personalised
+        // ad, which needs consent there too).
         resolve();
       } else {
         setTimeout(wait, 100);

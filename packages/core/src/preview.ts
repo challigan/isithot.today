@@ -15,7 +15,7 @@ import {
   type RainBand,
   type SnowBand,
 } from './config';
-import { COPY } from './copy';
+import { ATTRIBUTION } from './copy';
 import { formatDay, type DayComputation, type DayData } from './compute';
 import type { MonthlyNormals } from './climate';
 import { formatNow, judgeSeries, type NowComputation } from './now';
@@ -207,7 +207,7 @@ function hotPreview(band: Band, units: Units): TodayResponse {
     now: formatNow(now),
     week,
     updatedAt: `${s.date}T08:00:00Z`,
-    attribution: [COPY.forecastCredit, COPY.climateCredit],
+    attribution: [...ATTRIBUTION],
   };
 }
 

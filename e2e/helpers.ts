@@ -35,7 +35,7 @@ import {
 import { GRID, type Topic } from '../packages/core/src/config';
 import { roundToGrid } from '../packages/core/src/geo';
 import { syntheticTimezone } from '../packages/providers/src/synthetic';
-import type { TodayResponse } from '../packages/core/src/types';
+import type { City, TodayResponse } from '../packages/core/src/types';
 import { LONDON, atLocal, localTime, minutes, serverNow, CLOCK_SHIFT } from './time';
 
 export { LONDON, atLocal, localTime, serverNow, CLOCK_SHIFT };
@@ -153,16 +153,10 @@ export const setVisibility = (page: Page, state: 'hidden' | 'visible') =>
     document.dispatchEvent(new Event('visibilitychange'));
   }, state);
 
-interface CityRow {
-  slug: string;
-  name: string;
-  lat: number;
-  lon: number;
-}
-
-const CITIES = JSON.parse(
+/** Every city page, as the server has them. */
+export const CITIES = JSON.parse(
   readFileSync(new URL('../data/cities.json', import.meta.url), 'utf8'),
-) as CityRow[];
+) as City[];
 
 export interface CityAt {
   slug: string;
@@ -188,7 +182,7 @@ export async function cityAt(
     return m >= minutes(from) && m < minutes(to);
   };
   // The server answers for the city's point on its forecast grid.
-  const zone = (c: CityRow) =>
+  const zone = (c: City) =>
     syntheticTimezone(roundToGrid(c.lat, GRID.forecast), roundToGrid(c.lon, GRID.forecast));
   for (const city of CITIES.filter((c) => inWindow(zone(c)))) {
     const res = await request.get(`/api/v1/today?place=${city.slug}&units=c`);

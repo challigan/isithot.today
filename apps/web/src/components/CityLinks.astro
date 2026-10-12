@@ -1,0 +1,34 @@
+---
+/**
+ * Where a city page leads on, after Nearby: the same city on the other two sites, as real links
+ * to their own domains, so people and search engines can follow it from one site to the next,
+ * and the site's places page. A site that keeps the city out of search engines (core `listed`)
+ * is not linked. On deploy previews and locally the browser keeps the cross-site links on the
+ * same host, and carries the chosen units across, as for Nearby (scripts/app.ts).
+ */
+import { COPY, SITES, TOPICS, listed, question, type City, type Topic } from '@isithot/core';
+
+interface Props {
+  /** The site the page belongs to. */
+  topic: Topic;
+  city: City;
+}
+
+const { topic, city } = Astro.props;
+const path = `/in/${city.slug}`;
+const others = TOPICS.filter((t) => t !== topic && listed(city, t));
+---
+
+<p class="nearby also" id="also">
+  {others.map((t) => (
+    <>
+      <a
+        href={`${SITES[t].url}${path}`}
+        data-site={t}
+        data-path={path}
+        set:text={question(city.name, 'today', t)}
+      />{' '}
+    </>
+  ))}
+  <a href="/places" set:text={COPY.allPlaces} />
+</p>

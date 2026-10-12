@@ -1,4 +1,4 @@
-import { distanceKm, nearest, type City, type LatLon } from '@isithot/core';
+import { LINKS, distanceKm, nearest, type City, type LatLon } from '@isithot/core';
 import citiesData from '../../../data/cities.json';
 
 export const CITIES: readonly City[] = citiesData as City[];
@@ -10,8 +10,12 @@ export function cityBySlug(slug: string): City | undefined {
   return bySlug.get(slug.toLowerCase());
 }
 
-/** The 4 nearest other city pages, for internal linking. */
-export function nearbyCities(point: LatLon, count = 4, excludeSlug?: string): City[] {
+/** The nearest other city pages (8, `LINKS.nearby`), for internal linking. */
+export function nearbyCities(
+  point: LatLon,
+  count: number = LINKS.nearby,
+  excludeSlug?: string,
+): City[] {
   return nearest(CITIES, point, count, (c) => c.slug !== excludeSlug);
 }
 

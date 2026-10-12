@@ -3,7 +3,8 @@
  * A city's page on any of the sites (isithot.today/in/<slug>, isitwet.today/in/<slug>,
  * willitsnow.today/in/<slug>), rendered on the server with the answer to that site's question: the
  * question, answer, colours and icon are right before any script runs. lib/cityPage.ts handles
- * the request.
+ * the request. A snow page for a place where it never snows works but is kept out of search
+ * engines (core `listed`).
  */
 import Base from '../layouts/Base.astro';
 import Header from './Header.astro';
@@ -12,9 +13,11 @@ import AdSlot from './AdSlot.astro';
 import Footer from './Footer.astro';
 import SearchSheet from './SearchSheet.astro';
 import NotFound from './NotFound.astro';
-import { SITES, question, type Topic } from '@isithot/core';
+import CityLinks from './CityLinks.astro';
+import { SITES, cityDescription, cityTitle, listed } from '@isithot/core';
 import type { CityPageProps } from '../lib/cityPage';
-import { CITY_TITLES } from '../lib/topics';
+import { breadcrumbLd } from '../lib/seo';
+import { SHARE_TITLES } from '../lib/topics';
 
 type Props = CityPageProps;
 
@@ -22,17 +25,13 @@ const { topic, city, units, data, state, today, start, tomorrow, palette } = Ast
 const site = SITES[topic];
 const name = city?.name ?? '';
 
-/** Without an answer, what the page is for. */
-const ABOUT: Record<Topic, string> = {
-  hot: `Will today feel hot in ${name}? One answer from several forecast models, judged against what is normal there.`,
-  wet: `Will it rain in ${name} today? One answer from several forecast models: how likely rain is, how much and when.`,
-  snow: `Will it snow in ${name} today? One answer from several forecast models: how likely snow is, how much and when.`,
-};
-
-// The title and description are about today, whichever view the page opens on.
-const answerTitle = data && CITY_TITLES[topic](name, data);
-const title = answerTitle || `${question(name, 'today', topic)} | ${site.name}`;
-const description = today.band ? `${today.verdict} ${today.detail}` : ABOUT[topic];
+// Search results show the title and description long after the page was made, so they say what
+// the page answers, never the answer. Share cards carry today's answer, as the page does, whichever
+// view it opens on.
+const title = cityTitle(name, topic);
+const description = cityDescription(name, topic);
+const shareTitle = (data && SHARE_TITLES[topic](name, data)) || title;
+const shareDescription = today.band ? `${today.verdict} ${today.detail}` : description;
 const initial = JSON.stringify(data).replace(/</g, '\\u003c');
 ---
 
@@ -40,9 +39,13 @@ const initial = JSON.stringify(data).replace(/</g, '\\u003c');
   <Base
     title={title}
     description={description}
+    ogTitle={shareTitle}
+    ogDescription={shareDescription}
     canonical={`${site.url}/in/${city.slug}`}
     ogImage={`${site.url}/og/${city.slug}.png`}
     palette={palette}
+    noindex={!listed(city, topic)}
+    jsonLd={breadcrumbLd(topic, city)}
     topic={topic}
   >
     <div
@@ -61,7 +64,9 @@ const initial = JSON.stringify(data).replace(/</g, '\\u003c');
         topic={topic}
         start={start}
         tomorrow={tomorrow}
-      />
+      >
+        <CityLinks topic={topic} city={city} />
+      </Views>
       <AdSlot />
       <Footer />
     </div>

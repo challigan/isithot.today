@@ -69,8 +69,23 @@ import {
   snowStripSummary,
   snowUpToLine,
   snowyWeekLine,
+  cityDescription,
+  cityTitle,
+  clockTime,
+  intro,
+  placesIntro,
+  updatedTime,
 } from '../src/copy';
-import { BANDS, RAIN_BANDS, SNOW_BANDS, type RainBand } from '../src/config';
+import {
+  BANDS,
+  MODELS,
+  RAIN_BANDS,
+  SITES,
+  SNOW_BANDS,
+  TITLE_MAX_LENGTH,
+  TOPICS,
+  type RainBand,
+} from '../src/config';
 
 describe('copy', () => {
   it('has an answer, verdict and label for every band', () => {
@@ -385,5 +400,94 @@ describe('snow copy', () => {
     expect(snowNormalLine('more', 'January')).toBe('More snow than usual for January.');
     expect(snowNormalLine('less', null)).toBe('Less snow than usual for the time of year.');
     expect(snowNormalLine('usual', 'January')).toBe('About usual for January.');
+  });
+});
+
+describe('search titles and descriptions', () => {
+  it('titles a city page with its question and what it offers, never the answer', () => {
+    expect(cityTitle('Leeds', 'hot')).toBe(
+      'Is it hot in Leeds today? Hour by hour from 8 forecasts | isithot.today',
+    );
+    expect(cityTitle('Leeds', 'wet')).toBe(
+      'Is it wet in Leeds today? Rain hour by hour from 8 forecasts | isitwet.today',
+    );
+    expect(cityTitle('Leeds', 'snow')).toBe(
+      'Will it snow in Leeds today? Hour by hour from 8 forecasts | willitsnow.today',
+    );
+    expect(MODELS).toHaveLength(8);
+  });
+
+  it('drops words after the question to keep a title short, never the question', () => {
+    // 46 characters of question leave room for the short tail only.
+    expect(cityTitle('Las Palmas de Gran Canaria', 'hot')).toBe(
+      'Is it hot in Las Palmas de Gran Canaria today? From 8 forecasts | isithot.today',
+    );
+    expect(cityTitle('Las Palmas de Gran Canaria', 'snow')).toBe(
+      'Will it snow in Las Palmas de Gran Canaria today? | willitsnow.today',
+    );
+    // Rain keeps its word as long as it can.
+    expect(cityTitle('Middlesbrough', 'wet')).toBe(
+      'Is it wet in Middlesbrough today? Hourly rain from 8 forecasts | isitwet.today',
+    );
+    expect(cityTitle('Newcastle under Lyme', 'wet')).toBe(
+      'Is it wet in Newcastle under Lyme today? Rain from 8 forecasts | isitwet.today',
+    );
+    expect(cityTitle('Las Palmas de Gran Canaria', 'wet')).toBe(
+      'Is it wet in Las Palmas de Gran Canaria today? | isitwet.today',
+    );
+    const long = 'Llanfairpwllgwyngyllgogerychwyrndrobwllllantysiliogogogoch';
+    expect(cityTitle(long, 'wet')).toBe(`Is it wet in ${long} today? | isitwet.today`);
+    for (const topic of TOPICS) {
+      for (const city of ['York', 'Newcastle under Lyme', 'Santa Cruz de Tenerife']) {
+        const before = cityTitle(city, topic).slice(0, -` | ${SITES[topic].name}`.length);
+        expect(before.length, `${topic} ${city}`).toBeLessThanOrEqual(TITLE_MAX_LENGTH);
+        expect(before).toContain(question(city, 'today', topic));
+      }
+    }
+  });
+
+  it('describes a city page without its answer', () => {
+    expect(cityDescription('Leeds', 'hot')).toBe(
+      'Will today feel hot in Leeds? One answer from 8 forecast models, judged against what is normal there, with the next 12 hours and the week ahead.',
+    );
+    expect(cityDescription('Leeds', 'wet')).toMatch(/^Will it rain in Leeds today\? .+ rain /);
+    expect(cityDescription('Leeds', 'snow')).toMatch(/^Will it snow in Leeds today\? .+ snow /);
+    // A "$" in a name is taken as it is.
+    expect(cityDescription('$&', 'hot')).toMatch(/^Will today feel hot in \$&\?/);
+  });
+
+  it('introduces each site and its places page', () => {
+    for (const topic of TOPICS) {
+      expect(intro(topic).heading).toBe('One answer from 8 forecasts');
+      expect(intro(topic).text).toMatch(new RegExp(`^${SITES[topic].name} answers one question: `));
+      expect(intro(topic).text).toContain('8 forecast models');
+      expect(placesIntro(topic)).toMatch(/^(Is it|Will it) \w+ today\? Choose a town or city: /);
+    }
+    expect(COPY.allPlaces).toBe('All places');
+  });
+});
+
+describe('when the forecast was fetched', () => {
+  it('reads a time of day to the minute', () => {
+    expect(clockTime(15 + 5 / 60)).toBe('3:05pm');
+    expect(clockTime(0)).toBe('12:00am');
+    expect(clockTime(12.5)).toBe('12:30pm');
+    expect(clockTime(23 + 59 / 60)).toBe('11:59pm');
+  });
+
+  it("gives the place's time with its zone where it has a name", () => {
+    expect(updatedTime('2026-10-11T14:05:00Z', 'Europe/London', '2026-10-11')).toBe('3:05pm BST');
+    expect(updatedTime('2026-01-11T09:40:00Z', 'Europe/London', '2026-01-11')).toBe('9:40am GMT');
+    expect(updatedTime('2026-10-11T14:05:00Z', 'America/New_York', '2026-10-11')).toBe(
+      '10:05am EDT',
+    );
+    // Only an offset: the time alone.
+    expect(updatedTime('2026-10-11T14:05:00Z', 'Asia/Tokyo', '2026-10-11')).toBe('11:05pm');
+  });
+
+  it('says yesterday for a forecast fetched the evening before', () => {
+    expect(updatedTime('2026-10-10T22:40:00Z', 'Europe/London', '2026-10-11')).toBe(
+      'yesterday, 11:40pm BST',
+    );
   });
 });

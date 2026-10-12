@@ -13,13 +13,12 @@ import {
   type RainBand,
   type Topic,
 } from '../packages/core/src/config';
-import { question } from '../packages/core/src/copy';
+import { cityTitle, question } from '../packages/core/src/copy';
 import type { TodayResponse } from '../packages/core/src/types';
 import {
   atLocal,
   cityAt,
   expect,
-  literal,
   localTime,
   pinLocalTime,
   setVisibility,
@@ -76,11 +75,12 @@ for (const topic of TOPICS) {
     await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
     await expect(page.getByRole('tab')).toHaveText(['Now', 'Tomorrow', 'This week']);
     await expectOpenOn(page, 'now');
-    // Now's answer is the page's main heading while it is the one on screen.
-    await expect(page.locator('#now-answer')).toHaveAttribute('aria-level', '1');
+    // Now's heading (its question and answer) is the page's main one while it is on screen.
+    await expect(page.locator('#now-heading')).toHaveAttribute('aria-level', '1');
+    await expect(page.locator('#now-heading #now-answer')).toHaveCount(1);
     await expect(page.locator('#now-question')).toHaveText(question(city.name, 'now', topic));
-    // The title is about today, whichever view is showing.
-    await expect(page).toHaveTitle(new RegExp(`^${literal(question(city.name, 'today', topic))} `));
+    // The title asks about today, whichever view is showing, and never gives the answer.
+    await expect(page).toHaveTitle(cityTitle(city.name, topic));
 
     await page.locator('#tab-today').click();
     await expect(page.locator('#tab-today')).toHaveAttribute('aria-selected', 'true');
@@ -119,9 +119,12 @@ test.describe('without JavaScript', () => {
     await expect(page.getByRole('tab')).toHaveText(['Now', 'Tomorrow', 'This week']);
     await expectOpenOn(page, 'now');
     await expect(page.locator('#now-answer')).toHaveText(/^\s*(Yes|No|Maybe)\.\s*$/);
-    await expect(page.locator('#now-answer')).toHaveAttribute('aria-level', '1');
-    // Today's answer stays the h1 in the markup, answering for tomorrow behind its tab.
-    await expect(page.locator('h1#answer')).toHaveText(city.data.rain!.days[1]!.answer);
+    await expect(page.locator('#now-heading')).toHaveAttribute('aria-level', '1');
+    // Today's heading stays the h1 in the markup, answering for tomorrow behind its tab.
+    await expect(page.locator('h1 #answer')).toHaveText(city.data.rain!.days[1]!.answer);
+    await expect(page.locator('h1 #question')).toHaveText(
+      `Will it be wet in ${city.name} tomorrow?`,
+    );
     await expect(page.locator('#question')).toHaveText(`Will it be wet in ${city.name} tomorrow?`);
     // The page wears Now's colours.
     const band = (await page.locator('#view-now').getAttribute('data-band')) as RainBand;
@@ -209,8 +212,8 @@ test.describe('the home page in the evening', () => {
     await expectOpenOn(page, 'now');
     await expect(page.locator('#now-answer')).toHaveText(/^\s*(Yes|No|Almost)\.\s*$/);
     await expect(page.locator('#question')).toHaveText('Will it be hot tomorrow?');
-    // The title is about today.
-    await expect(page).toHaveTitle(/^(Yes|No|Almost)\. It's .+ \| isithot\.today$/);
+    // The title asks about today, and never gives the answer.
+    await expect(page).toHaveTitle('Is it hot today? | isithot.today');
 
     await expect
       .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('isithot:last') ?? '{}')))

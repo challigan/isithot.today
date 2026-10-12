@@ -1,8 +1,10 @@
 import {
+  ATTRIBUTION,
   CACHE,
   COPY,
   ERROR_MESSAGES,
   GRID,
+  LINKS,
   MODELS,
   SNOW,
   computeDay,
@@ -482,8 +484,11 @@ export async function getToday(
     // is summarised in `week`.
     days: days.slice(0, 2).map((d, i) => formatDay(d, units, i === 1)),
     updatedAt: new Date(loaded.fetchedAt).toISOString(),
-    attribution: [COPY.forecastCredit, COPY.climateCredit],
-    nearby: nearbyCities(point, 4, located.slug).map((c) => ({ slug: c.slug, name: c.name })),
+    attribution: [...ATTRIBUTION],
+    nearby: nearbyCities(point, LINKS.nearby, located.slug).map((c) => ({
+      slug: c.slug,
+      name: c.name,
+    })),
   };
   if (now) body.now = formatNow(now);
   if (week) body.week = formatWeek(week, units);

@@ -97,7 +97,8 @@ export function wireViews(events: ViewsEvents): ViewsController | null {
 
   /**
    * Make `view` the active panel: the others become inert, rescuing focus first. The active
-   * view's answer is the page's main heading (Today's is the real h1, for search engines).
+   * view's heading (its question and answer) is the page's main one (Today's is the real h1,
+   * for search engines).
    */
   function activate(view: View): void {
     const changed = view !== active;
@@ -111,9 +112,9 @@ export function wireViews(events: ViewsEvents): ViewsController | null {
         panelFor(view).focus({ preventScroll: true });
       }
       panel.inert = v !== view;
-      const answer = panel.querySelector('.answer');
-      if (v !== 'today') answer?.toggleAttribute('aria-level', v === view);
-      if (v !== 'today' && v === view) answer?.setAttribute('aria-level', '1');
+      const heading = panel.querySelector('.heading');
+      if (v !== 'today') heading?.toggleAttribute('aria-level', v === view);
+      if (v !== 'today' && v === view) heading?.setAttribute('aria-level', '1');
     }
     fitHeight();
     if (changed) events.onSettle(view);

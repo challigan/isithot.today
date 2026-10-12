@@ -7,7 +7,7 @@ when; and **will it snow?** (Yes / Maybe / No), the same for snow. All three ans
 now, today and this week (from 6pm at the place, tomorrow instead of today); a Hot | Wet | Snow
 toggle switches between them, and each domain opens on its own question.
 
-- **Website**: Astro + TypeScript, vanilla client JS (about 20 KB gzipped). One deploy serves
+- **Website**: Astro + TypeScript, vanilla client JS (about 21 KB gzipped). One deploy serves
   all three domains; an edge function routes isitwet.today to the `/wet` pages and
   willitsnow.today to the `/snow` pages.
 - **API**: `/api/v1/today` and `/api/v1/search`, shared by the website now and the apps later.
@@ -147,12 +147,26 @@ Set these in Netlify under **Project configuration → Environment variables**. 
 
 `PUBLIC_*` variables are read at build time, so redeploy after changing them.
 
+## Search engines
+
+Each site has its own sitemap and `robots.txt`, a places page (`/places`: the UK by nation,
+then the world by country) and structured data (WebSite on home pages, BreadcrumbList on the
+places page and city pages). Titles and descriptions never carry the live answer, which would
+go out of date in search results; share cards do. Home pages never render an answer on the
+server (Googlebot would index its own US location), and their loading placeholder is marked
+`data-nosnippet`. willitsnow.today keeps pages for places where it never snows out of search
+(`SNOWLESS` in `config.ts`). The reasons are in [docs/DECISIONS.md](docs/DECISIONS.md) ("Search
+engines"), and Search Console and Bing setup in [docs/SETUP.md](docs/SETUP.md) (section 7).
+
 ## Data and licensing
 
-- Forecasts: [Open-Meteo](https://open-meteo.com/) (CC BY 4.0). The free API is for
-  non-commercial use only and bans ads: fine for testing with friends, but switch to the paid
-  Standard plan before ads or a public launch.
-- Climate normals: [NASA POWER](https://power.larc.nasa.gov/) climatology, `T2M + T2M_RANGE / 2`
+- Forecasts: [Open-Meteo](https://open-meteo.com/) (CC BY 4.0; the Met Office's UKMO data is
+  CC BY-SA 4.0). The free API is for non-commercial use only and bans ads: fine for testing with
+  friends, but switch to the paid Standard plan before ads or a public launch. The credits
+  every page and the API carry are `ATTRIBUTION` in `packages/core/src/copy.ts` (see
+  `docs/DECISIONS.md`, "Credits and licences").
+- Climate normals: [NASA POWER](https://power.larc.nasa.gov/) climatology (CC BY 4.0, no
+  restrictions on use; NASA asks to be cited), `T2M + T2M_RANGE / 2`
   (the normal daily high; see `docs/DECISIONS.md`), `PRECTOTCORR` (normal rainfall, for the
   week's "wetter than usual") and `PRECSNOLAND` (normal snowfall, for "Snow is rare here in
   October." and the week's "more snow than usual").

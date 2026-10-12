@@ -1,15 +1,17 @@
 ---
-import { COPY } from '@isithot/core';
+import { ATTRIBUTION } from '@isithot/core';
+import Credit from './Credit.astro';
 ---
 
 <footer class="site-footer">
   <nav aria-label="Site">
+    <a href="/places">Places</a>
     <a href="/about">About</a>
     <a href="/privacy">Privacy</a>
     <a href="/cookies">Cookies</a>
     <a href="/terms">Terms</a>
   </nav>
   <!-- prettier-ignore -->
-  <p class="credit"><a href="https://open-meteo.com/" rel="noopener">{COPY.forecastCredit}</a>. <a href="https://power.larc.nasa.gov/" rel="noopener">{COPY.climateCredit}</a>. Place names: <a href="https://www.geonames.org/" rel="noopener">GeoNames</a>.</p>
+  <p class="credit">{ATTRIBUTION.map((credit) => <><Credit text={credit} />. </>)}Place names: <a href="https://www.geonames.org/" rel="noopener">GeoNames</a>.</p>
   <div class="preview" id="preview" hidden></div>
 </footer>
