@@ -198,3 +198,54 @@ test('units cross with links to and from willitsnow.today', async ({ browser, ba
   await expect(page.locator('[data-units="f"]')).toHaveAttribute('aria-pressed', 'true');
   await context.close();
 });
+
+test('a city page links to the same city on the other domains, and to its places page', async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await allSites(browser, baseURL!);
+  const page = await context.newPage();
+  await ready(page, `${HOT}/in/london-gb`);
+  // Real links to the other sites' own domains; the places page is on this one.
+  await expect(page.locator('#also a[data-site=wet]')).toHaveAttribute(
+    'href',
+    `${WET}/in/london-gb`,
+  );
+  await expect(page.locator('#also a[data-site=snow]')).toHaveAttribute(
+    'href',
+    `${SNOW}/in/london-gb`,
+  );
+  await expect(page.locator('#also').getByRole('link', { name: 'All places' })).toHaveAttribute(
+    'href',
+    '/places',
+  );
+  // Chosen units go with them, as with Nearby.
+  await page.locator('[data-units="f"]').click();
+  await expect(page.locator('#also a[data-site=wet]')).toHaveAttribute(
+    'href',
+    `${WET}/in/london-gb?units=f`,
+  );
+  await page.locator('#also a[data-site=wet]').click();
+  await expect(page).toHaveURL(`${WET}/in/london-gb`);
+  await expect(page.locator('[data-units="f"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#also a[data-site=hot]')).toHaveAttribute(
+    'href',
+    `${HOT}/in/london-gb?units=f`,
+  );
+
+  // Each domain serves its own places page at /places, linking to its own city pages.
+  await page.locator('#also').getByRole('link', { name: 'All places' }).click();
+  await expect(page).toHaveURL(`${WET}/places`);
+  await expect(page.locator('link[rel=canonical]')).toHaveAttribute('href', `${WET}/places`);
+  await expect(page.getByRole('link', { name: 'Leeds', exact: true })).toHaveAttribute(
+    'href',
+    '/in/leeds-gb',
+  );
+  await page.goto(`${SNOW}/places`);
+  await expect(page.locator('link[rel=canonical]')).toHaveAttribute('href', `${SNOW}/places`);
+  await expect(page.getByRole('link', { name: 'Oslo', exact: true })).toHaveAttribute(
+    'href',
+    '/in/oslo-no',
+  );
+  await context.close();
+});

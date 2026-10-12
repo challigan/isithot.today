@@ -1,7 +1,8 @@
 ---
 /** The terms of use, the same for every site: they are one service. */
 import Content from '../layouts/Content.astro';
-import { SITES, type Topic } from '@isithot/core';
+import Credit from './Credit.astro';
+import { COPY, SITES, type Topic } from '@isithot/core';
 import { siteNames } from '../lib/topics';
 
 interface Props {
@@ -19,7 +20,7 @@ const site = SITES[topic].name;
 >
   <h1>Terms</h1>
   <p>
-    <em>Draft for review. Last updated 7 October 2026.</em>
+    <em>Draft for review. Last updated 11 October 2026.</em>
   </p>
   <p>{siteNames(topic)} are one service, and these terms cover all three.</p>
 
@@ -33,15 +34,18 @@ const site = SITES[topic].name;
 
   <h2>Use of the sites</h2>
   <p>
-    You may use the sites for personal, non-commercial purposes. Please do not scrape them or call
-    their API at volume; requests are rate-limited.
+    Please use the sites and their API reasonably. Do not scrape them in bulk with automated tools
+    or send requests in volumes that put a heavy load on them. Requests are rate-limited, and we may
+    limit or block heavy use.
   </p>
 
   <h2>Data and credits</h2>
   <p>
-    Forecast data from Open-Meteo.com (CC BY 4.0). Climate data from NASA POWER. Place names from
-    GeoNames (CC BY 4.0). Links to BBC Weather, the Met Office and AccuWeather are provided for
-    convenience; we are not affiliated with them.
+    <Credit text={COPY.forecastCredit} />: the answers and blended figures are our own work.
+    <Credit text={COPY.metOfficeCredit} />. Climate data from NASA POWER (CC BY 4.0). Place names
+    from GeoNames (CC BY 4.0). The data stays under its own licences, and nothing in these terms
+    limits what those licences allow. Links to BBC Weather, the Met Office and AccuWeather are
+    provided for convenience; we are not affiliated with them.
   </p>
 
   <h2>Liability</h2>

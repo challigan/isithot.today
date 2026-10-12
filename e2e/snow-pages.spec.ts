@@ -1,15 +1,18 @@
 import type { Page } from '@playwright/test';
 import { SNOW_BANDS, SNOW_PALETTES, type SnowBand } from '../packages/core/src/config';
-import { SNOW_ANSWERS, snowPageTitle } from '../packages/core/src/copy';
+import { SNOW_ANSWERS, cityTitle, snowPageTitle } from '../packages/core/src/copy';
+import { listed } from '../packages/core/src/places';
 import type { TodayResponse } from '../packages/core/src/types';
 import { SNOW_GLYPHS } from '../apps/web/src/lib/snowGlyphs';
-import { cityAt, expect, keepToday, test } from './helpers';
+import { CITIES, cityAt, expect, keepToday, test } from './helpers';
 
 // The snow pages as a deploy preview or a local server serves them: under /snow. On
 // willitsnow.today the edge function serves the same pages at the root (smoke.mjs checks that on
 // the preview).
 const CITY = '/snow/in/london-gb';
 const CONTENT = ['about', 'privacy', 'cookies', 'terms'] as const;
+/** The footer's links: the places page, then the content pages. */
+const FOOTER = ['places', ...CONTENT] as const;
 const SNOW_BRAND = 'willitsnow<span>.today</span>';
 const ICON = '<link rel="icon" href="/snow/favicon.svg" type="image/svg+xml">';
 
@@ -76,13 +79,15 @@ test.describe('willitsnow.today pages', () => {
     expect(html).toContain(
       `<html lang="en-GB" style="--g1:${p.g1};--g2:${p.g2};--g3:${p.g3};--ink:${p.ink};--pill:${p.pill};--glow:${p.glow};`,
     );
-    const title = snowPageTitle({
+    // A stable title for search results; the share card carries today's answer.
+    expect(html).toContain(`<title>${cityTitle(city.name, 'snow')}</title>`);
+    const share = snowPageTitle({
       city: city.name,
       answer: SNOW_ANSWERS[band],
       band,
       reason: today.reason,
     });
-    expect(html).toContain(`<title>${title}</title>`);
+    expect(html).toContain(`<meta property="og:title" content="${share}">`);
     const url = `https://willitsnow.today/in/${city.slug}`;
     expect(html).toContain(`<link rel="canonical" href="${url}">`);
     expect(html).toContain(`<meta property="og:url" content="${url}">`);
@@ -92,12 +97,11 @@ test.describe('willitsnow.today pages', () => {
     expect(html).toContain('<meta property="og:site_name" content="willitsnow.today">');
     expect(html).toContain(ICON);
     expect(html).toContain('<link rel="manifest" href="/snow/manifest.webmanifest">');
-    // "Maybe." is marked long, to be sized to fit.
+    // The heading is the question with its answer; "Maybe." is marked long, to be sized to fit.
     expect(html).toMatch(
-      /<h1 class="answer" id="answer"( data-long)?>\s*(Yes|No|Maybe)\.\s*<\/h1>/,
-    );
-    expect(html).toMatch(
-      new RegExp(`id="question">\\s*Will it snow in ${city.name} today\\?\\s*<`),
+      new RegExp(
+        `<h1 class="heading" id="heading">\\s*<span class="question" id="question">\\s*Will it snow in ${city.name} today\\?\\s*</span>\\s*<span class="answer" id="answer"( data-long)?>\\s*(Yes|No|Maybe)\\.\\s*</span>\\s*</h1>`,
+      ),
     );
     expect(html).toMatch(/<div class="wrap" id="app"[^>]* data-topic="snow"/);
     // Links are written for willitsnow.today, where the snow pages are at the root.
@@ -147,19 +151,19 @@ test.describe('willitsnow.today pages', () => {
     await page.goto(CITY);
     await expect(page.locator('.brand')).toHaveAttribute('href', '/snow');
     const footer = page.locator('.site-footer nav a');
-    await expect(footer).toHaveCount(4);
-    for (const [i, name] of CONTENT.entries()) {
+    await expect(footer).toHaveCount(5);
+    for (const [i, name] of FOOTER.entries()) {
       await expect(footer.nth(i)).toHaveAttribute('href', `/snow/${name}`);
     }
     const nearby = page.locator('#nearby a');
-    await expect(nearby).toHaveCount(4);
+    await expect(nearby).toHaveCount(8);
     for (const link of await nearby.all()) {
       await expect(link).toHaveAttribute('href', /^\/snow\/in\/[a-z0-9-]+$/);
     }
     // Other sites' links are left alone.
     await expect(page.locator('#out-0')).toHaveAttribute('href', /^https:\/\//);
 
-    await footer.first().click();
+    await footer.nth(1).click();
     await expect(page).toHaveURL(/\/snow\/about$/);
     expect(await brandText(page)).toBe('willitsnow.today');
     await expect(page.locator('.brand')).toHaveAttribute('href', '/snow');
@@ -206,8 +210,13 @@ test.describe('willitsnow.today pages', () => {
     const robots = await (await request.get('/snow/robots.txt')).text();
     expect(robots).toContain('Sitemap: https://willitsnow.today/sitemap.xml');
     const xml = await (await request.get('/snow/sitemap.xml')).text();
-    expect((xml.match(/<loc>/g) ?? []).length).toBe(302);
+    // Home, About, places and every city page but those where it never snows.
+    const shown = CITIES.filter((c) => listed(c, 'snow'));
+    expect(shown.length).toBe(237);
+    expect((xml.match(/<loc>/g) ?? []).length).toBe(3 + shown.length);
+    expect(xml).toContain('<loc>https://willitsnow.today/places</loc>');
     expect(xml).toContain('<loc>https://willitsnow.today/in/london-gb</loc>');
+    expect(xml).not.toContain('/in/singapore-sg<');
     expect(xml).not.toContain('isithot.today');
   });
 

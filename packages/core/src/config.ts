@@ -57,6 +57,53 @@ export function sitePath(topic: Topic, path: string, hostname: string): string {
   return path.startsWith('/?') ? `${prefix}${path.slice(1)}` : `${prefix}${path}`;
 }
 
+/**
+ * Links that make each site browsable, for visitors and search engines alike: every page links
+ * to the places page (/places), city pages to their nearest city pages, and home pages to a few
+ * popular ones.
+ */
+export const LINKS = {
+  /** Nearby city pages under the answer, nearest first (the API's `nearby`). */
+  nearby: 8,
+  /** The home pages' "Popular places": UK city pages, by slug, across all four nations. */
+  popular: [
+    'london-gb',
+    'birmingham-gb',
+    'manchester-gb',
+    'glasgow-gb',
+    'leeds-gb',
+    'liverpool-gb',
+    'edinburgh-gb',
+    'bristol-gb',
+    'sheffield-gb',
+    'newcastle-upon-tyne-gb',
+    'cardiff-gb',
+    'belfast-gb',
+    'nottingham-gb',
+    'leicester-gb',
+    'southampton-gb',
+    'brighton-gb',
+    'aberdeen-gb',
+    'plymouth-gb',
+    'norwich-gb',
+    'york-gb',
+  ] as readonly string[],
+} as const;
+
+/**
+ * Where it never snows: within `latitude` degrees of the equator and below `elevation` metres.
+ * Those places' snow pages would say No all year, so they are kept out of search engines
+ * (noindex) and left out of willitsnow.today's sitemap and places page; the pages still work.
+ * In the tropics snow falls only high in the mountains (La Paz, at 3,640 m, sees some).
+ */
+export const SNOWLESS = { latitude: 30, elevation: 3000 } as const;
+
+/**
+ * A search title is kept to this many characters before " | <site>" where it can be (search
+ * results cut longer ones), by dropping words after the question; the question is never cut.
+ */
+export const TITLE_MAX_LENGTH = 65;
+
 /** Rain bands from driest to wettest. */
 export type RainBand = 'dry' | 'spots' | 'showers' | 'rain' | 'heavy' | 'drenched';
 export const RAIN_BANDS: readonly RainBand[] = [
@@ -373,7 +420,7 @@ export const CACHE = {
    * Version of that saved answer (page markup and data). The page's inline restore script and
    * the app both read it, so bump it here whenever the saved markup or data changes shape.
    */
-  snapshotVersion: 7,
+  snapshotVersion: 8,
 } as const;
 
 export const RATE_LIMIT = {

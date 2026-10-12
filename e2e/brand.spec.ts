@@ -6,7 +6,7 @@
  */
 import type { Page } from '@playwright/test';
 import { SITES, TOPICS, type Topic } from '../packages/core/src/config';
-import { question } from '../packages/core/src/copy';
+import { DEFAULT_TITLES, cityTitle } from '../packages/core/src/copy';
 import { expect, keepToday, literal, test, toggle } from './helpers';
 
 /** The header, the tab's icons and (on home pages) the title's site, for one site. */
@@ -32,7 +32,7 @@ for (const own of TOPICS) {
   for (const path of [SITES[own].prefix || '/', `${SITES[own].prefix}/in/london-gb`]) {
     test(`the header follows the toggle on ${path}`, async ({ page, ipPlace }) => {
       const home = !path.includes('/in/');
-      // A home page's title answers for today, as the page does until 6pm.
+      // A home page that opens on Today, as it does until 6pm.
       if (home) await keepToday(page, ipPlace.tz);
       await page.goto(path);
       await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
@@ -41,18 +41,9 @@ for (const own of TOPICS) {
       for (const other of TOPICS.filter((t) => t !== own)) {
         await toggle(page, other).click();
         await expectSite(page, other, home);
-        if (home) {
-          // The home page's title answers the question on screen, for its site.
-          const answer = (await page.locator('#answer').textContent())!.trim();
-          const verdict = (await page.locator('#verdict').textContent())!.trim();
-          await expect(page).toHaveTitle(`${answer} ${verdict} | ${SITES[other].name}`);
-        } else {
-          // A city's title is the topic's own, as on its site's page.
-          const asked = literal(question('London', 'today', other));
-          await expect(page).toHaveTitle(
-            new RegExp(`^${asked} .+ \\| ${literal(SITES[other].name)}$`),
-          );
-        }
+        // The title asks the question on screen, for its site, as on that site's own page (and
+        // never gives the answer).
+        await expect(page).toHaveTitle(home ? DEFAULT_TITLES[other] : cityTitle('London', other));
 
         await toggle(page, own).click();
         await expectSite(page, own, home);

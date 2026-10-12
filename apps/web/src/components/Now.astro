@@ -39,17 +39,14 @@ const { view, start = false } = Astro.props;
     data-glyph={view.band ?? ''}
     set:html={glyphFor(view.band)}
   />
-  <p class="question" id="now-question">
-    {view.question}
-  </p>
-  {/* The start view's answer is the page's main heading, as scripts/views.ts makes it. */}
-  <h2
-    class="answer"
-    id="now-answer"
-    aria-level={start ? '1' : undefined}
-    data-long={view.answer.length > 4 ? '' : undefined}
-  >
-    {view.answer}
+  {/* The start view's heading is the page's main one, as scripts/views.ts makes it. */}
+  <h2 class="heading" id="now-heading" aria-level={start ? '1' : undefined}>
+    <span class="question" id="now-question">
+      {view.question}
+    </span>{' '}
+    <span class="answer" id="now-answer" data-long={view.answer.length > 4 ? '' : undefined}>
+      {view.answer}
+    </span>
   </h2>
   <p class="verdict hold" id="now-verdict">
     {view.verdict}

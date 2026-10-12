@@ -248,7 +248,16 @@ main {
   }
 }
 
+/*
+ * Each view's heading holds its question and answer ("Is it hot in Leeds today? Yes."), which
+ * look as they did apart: the heading itself adds nothing.
+ */
+.heading {
+  margin: 0;
+  font: inherit;
+}
 .question {
+  display: block;
   margin: 0 0 0.25rem;
   font-size: clamp(1.15rem, 3.2vw, 1.4rem);
   font-weight: 450;
@@ -260,6 +269,7 @@ main[data-topic='snow'] .question {
   max-width: calc(100% - var(--glyph-size));
 }
 .answer {
+  display: block;
   /* Positioned, so the answer paints over the icon where a long word reaches it. */
   position: relative;
   font-family: 'Bricolage Answer', var(--font);
@@ -1018,6 +1028,79 @@ button.place span {
 .nearby[hidden] {
   display: none;
 }
+/* A city page's links on (CityLinks.astro): the other sites' pages for it, and all places. */
+.also {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.25rem;
+}
+
+/* When the forecast was fetched: as quiet as the stale notice under it. */
+.updated {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+}
+.updated[hidden] {
+  display: none;
+}
+
+/*
+ * The home page's introduction under the answer (Intro.astro), and every list of places (there
+ * and on the places page): links that wrap like words, never wider than the page.
+ */
+.intro {
+  margin-top: 2.5rem;
+  max-width: 38rem;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+.intro h2 {
+  margin: 1.5rem 0 0.4rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.intro h2:first-child {
+  margin-top: 0;
+}
+.intro p {
+  margin: 0;
+}
+.intro a {
+  color: inherit;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
+.place-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 1.1rem;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+.prose .place-list li {
+  margin: 0;
+}
+/*
+ * The places page: the world's countries, a few places each, flow A to Z down as many columns as
+ * fit (two on most phones, three from tablets up, one with enlarged text), never split.
+ */
+.place-groups.grid {
+  column-width: 10rem;
+  column-gap: 1.5rem;
+  margin-top: 1rem;
+}
+/* Spaced below, not above, so the columns' tops line up. */
+.place-groups.grid > div {
+  break-inside: avoid;
+  padding-bottom: 0.9rem;
+}
+.place-groups.grid h3 {
+  margin-top: 0;
+}
+.place-list a {
+  overflow-wrap: anywhere;
+}
 
 .ad-slot {
   margin: 2.5rem 0 0;
@@ -1256,6 +1339,10 @@ dialog.sheet::backdrop {
   font-size: 1.3rem;
   margin: 2rem 0 0.5rem;
   letter-spacing: -0.01em;
+}
+.prose h3 {
+  font-size: 1.05rem;
+  margin: 1.25rem 0 0.35rem;
 }
 .prose a {
   color: inherit;

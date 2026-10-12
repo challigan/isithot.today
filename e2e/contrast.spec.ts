@@ -29,6 +29,11 @@ const SHARED: Target[] = [
   { name: 'stale notice', selector: '#stale' },
   { name: 'place note', selector: '#place-note' },
   { name: 'nearby', selector: '#nearby' },
+  { name: 'updated', selector: '#updated' },
+  // The home page's introduction, under the answer.
+  { name: 'intro heading', selector: '.intro h2' },
+  { name: 'intro', selector: '.intro p' },
+  { name: 'popular places', selector: '.intro .place-list a' },
   { name: 'footer links', selector: '.site-footer nav a' },
   { name: 'credit', selector: '.site-footer .credit' },
 ];

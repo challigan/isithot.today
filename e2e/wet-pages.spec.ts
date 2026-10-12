@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { RAIN_BANDS, RAIN_PALETTES, type RainBand } from '../packages/core/src/config';
-import { RAIN_ANSWERS, wetPageTitle } from '../packages/core/src/copy';
+import { RAIN_ANSWERS, cityTitle, wetPageTitle } from '../packages/core/src/copy';
 import type { TodayResponse } from '../packages/core/src/types';
 import { RAIN_GLYPHS } from '../apps/web/src/lib/wetGlyphs';
 import { cityAt, expect, keepToday, test } from './helpers';
@@ -9,6 +9,8 @@ import { cityAt, expect, keepToday, test } from './helpers';
 // the edge function serves the same pages at the root (smoke.mjs checks that on the preview).
 const CITY = '/wet/in/london-gb';
 const CONTENT = ['about', 'privacy', 'cookies', 'terms'] as const;
+/** The footer's links: the places page, then the content pages. */
+const FOOTER = ['places', ...CONTENT] as const;
 const WET_BRAND = 'isitwet<span>.today</span>';
 
 /** The band the Today view shows, from the served HTML. */
@@ -65,13 +67,15 @@ test.describe('isitwet.today pages', () => {
     expect(html).toContain(
       `<html lang="en-GB" style="--g1:${p.g1};--g2:${p.g2};--g3:${p.g3};--ink:${p.ink};--pill:${p.pill};--glow:${p.glow};`,
     );
-    const title = wetPageTitle({
+    // A stable title for search results; the share card carries today's answer.
+    expect(html).toContain(`<title>${cityTitle(city.name, 'wet')}</title>`);
+    const share = wetPageTitle({
       city: city.name,
       answer: RAIN_ANSWERS[band],
       band,
       snow: today.snow,
     });
-    expect(html).toContain(`<title>${title}</title>`);
+    expect(html).toContain(`<meta property="og:title" content="${share}">`);
     const url = `https://isitwet.today/in/${city.slug}`;
     expect(html).toContain(`<link rel="canonical" href="${url}">`);
     expect(html).toContain(`<meta property="og:url" content="${url}">`);
@@ -81,11 +85,12 @@ test.describe('isitwet.today pages', () => {
     expect(html).toContain('<meta property="og:site_name" content="isitwet.today">');
     expect(html).toContain('<link rel="icon" href="/wet/favicon.svg" type="image/svg+xml">');
     expect(html).toContain('<link rel="manifest" href="/wet/manifest.webmanifest">');
-    // "Maybe." is marked long, to be sized to fit.
+    // The heading is the question with its answer; "Maybe." is marked long, to be sized to fit.
     expect(html).toMatch(
-      /<h1 class="answer" id="answer"( data-long)?>\s*(Yes|No|Maybe)\.\s*<\/h1>/,
+      new RegExp(
+        `<h1 class="heading" id="heading">\\s*<span class="question" id="question">\\s*Is it wet in ${city.name} today\\?\\s*</span>\\s*<span class="answer" id="answer"( data-long)?>\\s*(Yes|No|Maybe)\\.\\s*</span>\\s*</h1>`,
+      ),
     );
-    expect(html).toMatch(new RegExp(`id="question">\\s*Is it wet in ${city.name} today\\?\\s*<`));
     expect(html).toMatch(/<div class="wrap" id="app"[^>]* data-topic="wet"/);
     // Links are written for isitwet.today, where the wet pages are at the root.
     expect(html).toContain('<a class="brand" id="brand" href="/">');
@@ -117,19 +122,19 @@ test.describe('isitwet.today pages', () => {
     await page.goto(CITY);
     await expect(page.locator('.brand')).toHaveAttribute('href', '/wet');
     const footer = page.locator('.site-footer nav a');
-    await expect(footer).toHaveCount(4);
-    for (const [i, name] of CONTENT.entries()) {
+    await expect(footer).toHaveCount(5);
+    for (const [i, name] of FOOTER.entries()) {
       await expect(footer.nth(i)).toHaveAttribute('href', `/wet/${name}`);
     }
     const nearby = page.locator('#nearby a');
-    await expect(nearby).toHaveCount(4);
+    await expect(nearby).toHaveCount(8);
     for (const link of await nearby.all()) {
       await expect(link).toHaveAttribute('href', /^\/wet\/in\/[a-z0-9-]+$/);
     }
     // Other sites' links are left alone.
     await expect(page.locator('#out-0')).toHaveAttribute('href', /^https:\/\//);
 
-    await footer.first().click();
+    await footer.nth(1).click();
     await expect(page).toHaveURL(/\/wet\/about$/);
     expect(await brandText(page)).toBe('isitwet.today');
     await expect(page.locator('.brand')).toHaveAttribute('href', '/wet');
@@ -201,7 +206,8 @@ test.describe('isithot.today pages are unchanged', () => {
     await page.goto('/in/london-gb');
     await expect(page.locator('#question')).toHaveText('Is it hot in London today?');
     await expect(page.locator('.brand')).toHaveAttribute('href', '/');
-    await expect(page.locator('.site-footer nav a').first()).toHaveAttribute('href', '/about');
+    await expect(page.locator('.site-footer nav a').first()).toHaveAttribute('href', '/places');
+    await expect(page.locator('.site-footer nav a').nth(1)).toHaveAttribute('href', '/about');
     expect(await brandText(page)).toBe('isithot.today');
   });
 

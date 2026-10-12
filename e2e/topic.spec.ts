@@ -71,7 +71,7 @@ test.describe('Hot | Wet | Snow', () => {
   test('each site opens on its own question', async ({ page, request, ipPlace }) => {
     // The wet home page asks its question before any script runs.
     const html = await (await request.get('/wet')).text();
-    expect(html).toMatch(/<p class="question" id="question">\s*Is it wet today\?\s*</);
+    expect(html).toMatch(/<span class="question" id="question">\s*Is it wet today\?\s*</);
     expect(html).toContain('<link rel="canonical" href="https://isitwet.today/"');
 
     await keepToday(page, ipPlace.tz);
@@ -81,7 +81,8 @@ test.describe('Hot | Wet | Snow', () => {
     await expect(page.locator('#question')).toHaveText('Is it hot today?');
     await expect(page.locator('[data-units]')).toHaveText(['°C', '°F']);
     await expect(page.getByRole('group', { name: 'Temperature units' })).toBeVisible();
-    await expect(page).toHaveTitle(/^(Yes|No|Almost)\. .+ \| isithot\.today$/);
+    // The title asks the question and never gives the answer.
+    await expect(page).toHaveTitle('Is it hot today? | isithot.today');
 
     await ready(page, '/wet');
     await expectTopic(page, 'wet');
@@ -90,12 +91,12 @@ test.describe('Hot | Wet | Snow', () => {
     await expect(page.locator('#agree')).toHaveText(/^\d of \d forecasts expects? rain$/);
     await expect(page.locator('[data-units]')).toHaveText(['mm', 'in']);
     await expect(page.getByRole('group', { name: 'Rain units' })).toBeVisible();
-    await expect(page).toHaveTitle(/^(Yes|No|Maybe)\. .+ \| isitwet\.today$/);
+    await expect(page).toHaveTitle('Is it wet today? | isitwet.today');
     const today = (await band(page, 'today')) as RainBand;
     await expect.poll(() => g1(page)).toBe(RAIN_PALETTES[today].g1);
 
     const snow = await (await request.get('/snow')).text();
-    expect(snow).toMatch(/<p class="question" id="question">\s*Will it snow today\?\s*</);
+    expect(snow).toMatch(/<span class="question" id="question">\s*Will it snow today\?\s*</);
     expect(snow).toContain('<link rel="canonical" href="https://willitsnow.today/"');
     await ready(page, '/snow');
     await expectTopic(page, 'snow');
@@ -104,7 +105,7 @@ test.describe('Hot | Wet | Snow', () => {
     await expect(page.locator('#agree')).toHaveText(/^\d of \d forecasts expects? snow$/);
     await expect(page.locator('[data-units]')).toHaveText(['cm', 'in']);
     await expect(page.getByRole('group', { name: 'Snow units' })).toBeVisible();
-    await expect(page).toHaveTitle(/^(Yes|No|Maybe)\. .+ \| willitsnow\.today$/);
+    await expect(page).toHaveTitle('Will it snow today? | willitsnow.today');
     const snowToday = (await band(page, 'today')) as SnowBand;
     await expect.poll(() => g1(page)).toBe(SNOW_PALETTES[snowToday].g1);
   });
@@ -161,10 +162,8 @@ test.describe('Hot | Wet | Snow', () => {
     await expectGlyph(page, 'week-glyph', RAIN_GLYPHS[week]);
     await expect(page.locator('[data-units]')).toHaveText(['mm', 'in']);
     await expect(page.getByRole('group', { name: 'Rain units' })).toBeVisible();
-    const answer = await page.locator('#answer').textContent();
-    const verdict = await page.locator('#verdict').textContent();
-    // The home page names the site of the question on screen, as the header does.
-    await expect(page).toHaveTitle(`${answer!.trim()} ${verdict!.trim()} | isitwet.today`);
+    // The home page's title asks the question on screen and names its site, as the header does.
+    await expect(page).toHaveTitle('Is it wet today? | isitwet.today');
 
     await toggle(page, 'snow').click();
     await expectTopic(page, 'snow');
@@ -184,11 +183,7 @@ test.describe('Hot | Wet | Snow', () => {
     await expectGlyph(page, 'week-glyph', SNOW_GLYPHS[snowWeek]);
     await expect(page.locator('[data-units]')).toHaveText(['cm', 'in']);
     await expect(page.getByRole('group', { name: 'Snow units' })).toBeVisible();
-    const snowAnswer = await page.locator('#answer').textContent();
-    const snowVerdict = await page.locator('#verdict').textContent();
-    await expect(page).toHaveTitle(
-      `${snowAnswer!.trim()} ${snowVerdict!.trim()} | willitsnow.today`,
-    );
+    await expect(page).toHaveTitle('Will it snow today? | willitsnow.today');
 
     await toggle(page, 'hot').click();
     await expectTopic(page, 'hot');
@@ -197,7 +192,7 @@ test.describe('Hot | Wet | Snow', () => {
     await expect(page.locator('#week-answer')).toHaveText(HOT_ANSWERS);
     await expect.poll(() => g1(page)).toBe(PALETTES[(await band(page, 'week')) as Band].g1);
     await expect(page.locator('[data-units]')).toHaveText(['°C', '°F']);
-    await expect(page).toHaveTitle(/^(Yes|No|Almost)\. .+ \| isithot\.today$/);
+    await expect(page).toHaveTitle('Is it hot today? | isithot.today');
     // Both answers come in the one response.
     expect(calls).toHaveLength(1);
   });
@@ -551,7 +546,9 @@ test.describe('Hot | Wet | Snow', () => {
     await expect(page.locator('#answer')).toHaveText(/^\s*(Yes|No|Almost)\.\s*$/);
     await toggle(page, 'wet').click();
     await expect(page.locator('#question')).toHaveText('Is it wet in Bristol today?');
-    await expect(page).toHaveTitle(/^Is it wet in Bristol today\? .+ \| isitwet\.today$/);
+    await expect(page).toHaveTitle(
+      'Is it wet in Bristol today? Rain hour by hour from 8 forecasts | isitwet.today',
+    );
     await page.locator('#place-btn').click();
     await page.locator('#search-input').fill('Hex');
     await page.getByRole('button', { name: /Hexham/ }).click();

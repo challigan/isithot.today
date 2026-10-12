@@ -1,0 +1,25 @@
+---
+/**
+ * A data credit from copy.ts (`ATTRIBUTION`, as the API gives it) with its source and licence
+ * linked: "Weather data by Open-Meteo.com" to Open-Meteo, as its licence asks, and each licence to
+ * its text. Link text goes in with set:text: as a child, Prettier's line breaks would put spaces
+ * inside the link.
+ */
+interface Props {
+  text: string;
+}
+
+const LINKS: Record<string, string> = {
+  'Weather data by Open-Meteo.com': 'https://open-meteo.com/',
+  'CC BY 4.0': 'https://creativecommons.org/licenses/by/4.0/',
+  'CC BY-SA 4.0': 'https://creativecommons.org/licenses/by-sa/4.0/',
+  'NASA POWER': 'https://power.larc.nasa.gov/',
+};
+// Splitting on a capturing group keeps the phrases as parts of their own.
+const phrases = new RegExp(`(${Object.keys(LINKS).join('|').replaceAll('.', '\\.')})`);
+const parts = Astro.props.text.split(phrases).filter(Boolean);
+---
+
+{parts.map((part) =>
+  LINKS[part] ? <a href={LINKS[part]} rel="noopener" set:text={part} /> : part,
+)}

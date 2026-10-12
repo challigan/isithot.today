@@ -1,6 +1,12 @@
 import { createServer, type AddressInfo } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
-import type { ApiError, SearchResponse, TodayResponse } from '@isithot/core';
+import {
+  LINKS,
+  listed,
+  type ApiError,
+  type SearchResponse,
+  type TodayResponse,
+} from '@isithot/core';
 import { createSyntheticFetch, type FetchLike } from '@isithot/providers';
 import {
   CACHE_READ_TIMEOUT_MS,
@@ -111,11 +117,13 @@ describe('GET /api/v1/today', () => {
     expect(day.consensus.total).toBe(8);
     expect(day.models).toHaveLength(8);
     expect(body.attribution).toEqual([
-      'Forecast data: Open-Meteo.com (CC BY 4.0)',
+      'Weather data by Open-Meteo.com (CC BY 4.0), modified',
+      'Contains Met Office data © Crown copyright, the Met Office, licensed under CC BY-SA 4.0',
       'Climate data: NASA POWER',
     ]);
     expect(body.updatedAt).toBe(NOW.toISOString());
-    expect(body.nearby).toHaveLength(4);
+    // Nearest first, for the "Nearby" links: 8 of them (LINKS.nearby).
+    expect(body.nearby).toHaveLength(8);
     expect(body.nearby!.map((c) => c.slug)).not.toContain('newcastle-upon-tyne-gb');
     expect(body.stale).toBeUndefined();
     expect(r.headers['Cache-Control']).toBe('public, max-age=600');
@@ -999,6 +1007,26 @@ describe('cities and reverse geocoding', () => {
     expect(near).toHaveLength(4);
     expect(near).toContain('South Shields');
     expect(near).not.toContain('Newcastle');
+    // Eight by default (LINKS.nearby), nearest first.
+    const eight = nearbyCities(newcastle, undefined, newcastle.slug);
+    expect(eight).toHaveLength(8);
+    expect(eight.slice(0, 4).map((c) => c.name)).toEqual(near);
+  });
+
+  it('has a city page for every popular place, all in the UK', () => {
+    expect(LINKS.popular).toHaveLength(20);
+    expect(new Set(LINKS.popular).size).toBe(20);
+    for (const slug of LINKS.popular) expect(cityBySlug(slug)?.country, slug).toBe('GB');
+  });
+
+  it('keeps snow pages where it never snows out of the snow site, and no others', () => {
+    const out = CITIES.filter((c) => !listed(c, 'snow'));
+    // Within 30° of the equator, below 3,000 m (DECISIONS.md lists them).
+    expect(out).toHaveLength(63);
+    expect(out.every((c) => Math.abs(c.lat) < 30)).toBe(true);
+    expect(out.map((c) => c.slug)).toEqual(expect.arrayContaining(['singapore-sg', 'dubai-ae']));
+    expect(CITIES.filter((c) => c.country === 'GB').every((c) => listed(c, 'snow'))).toBe(true);
+    expect(CITIES.every((c) => listed(c, 'hot') && listed(c, 'wet'))).toBe(true);
   });
 
   it('matches searched places to city pages', () => {

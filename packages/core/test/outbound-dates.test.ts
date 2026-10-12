@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { outboundLinks } from '../src/outbound';
-import { localDate, localDateTime } from '../src/dates';
+import { localDate, localDateTime, zoneAbbreviation } from '../src/dates';
 
 describe('outboundLinks', () => {
   it('links to the home pages without a place', () => {
@@ -75,5 +75,28 @@ describe('localDateTime across a clock change', () => {
     // Repeat calls reuse the cached formatter, unknown zones included.
     expect(localDateTime('Not/AZone', new Date('2026-10-25T01:00:00Z')).hours).toBe(1);
     expect(localDateTime('Not/AZone', new Date('2026-10-25T02:00:00Z')).hours).toBe(2);
+  });
+});
+
+describe('zoneAbbreviation', () => {
+  const summer = new Date('2026-07-01T12:00:00Z');
+  const winter = new Date('2026-01-15T12:00:00Z');
+
+  it('names a zone with its British or American abbreviation', () => {
+    expect(zoneAbbreviation('Europe/London', summer)).toBe('BST');
+    expect(zoneAbbreviation('Europe/London', winter)).toBe('GMT');
+    expect(zoneAbbreviation('Europe/Madrid', summer)).toBe('CEST');
+    expect(zoneAbbreviation('America/New_York', summer)).toBe('EDT');
+    expect(zoneAbbreviation('America/Los_Angeles', winter)).toBe('PST');
+    expect(zoneAbbreviation('UTC', summer)).toBe('UTC');
+  });
+
+  it('gives none where a zone has only an offset, or is unknown', () => {
+    expect(zoneAbbreviation('Asia/Tokyo', summer)).toBeNull();
+    expect(zoneAbbreviation('Etc/GMT-3', summer)).toBeNull();
+    expect(zoneAbbreviation('Not/AZone', summer)).toBeNull();
+    // The cached formatters answer again.
+    expect(zoneAbbreviation('Not/AZone', winter)).toBeNull();
+    expect(zoneAbbreviation('Europe/London', summer)).toBe('BST');
   });
 });

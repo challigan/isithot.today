@@ -588,7 +588,7 @@ Carl wants to save places in the native apps. Nothing is built for it on the web
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,
 `limitedText`, `stripSummary`, `scale`, `models[].value` (one decimal, for the strip),
-top-level `nearby` (4 nearest city pages), `now` and `week` (the two new views; shapes in
+top-level `nearby` (nearest city pages: 4, 8 since "Search engines"), `now` and `week` (the two new views; shapes in
 `packages/core/src/types.ts`), `rain` (Is it wet?, with its own `days`, `now` and `week`)
 and `snow` (Will it snow?, the same shape as `rain`, with amounts in cm or in). `location` may
 include `slug` and `geonameId`. `days` holds today and tomorrow (never more than two); the rest
@@ -644,6 +644,119 @@ UV index and place height additions (no field changes its meaning):
 - `location.elevation` and `SearchResult.elevation` (optional): the place's height, whole
   metres, when known. `/api/v1/today` takes `elevation` with `source=search`.
 
+Search engines change (no field changes its meaning):
+
+- `nearby` holds the 8 nearest city pages (`LINKS.nearby`), up from 4.
+
+## Credits and licences
+
+- **Credits follow each source's licence.** Open-Meteo's licence asks for a "Weather data by
+  Open-Meteo.com" link to open-meteo.com next to the data, and its CC BY 4.0 asks us to say
+  when the data was changed (the blends, medians and verdicts are changes). The Met Office's
+  grids (UKMO, one of the 8 models) are CC BY-SA 4.0 instead. So the credits are "Weather data
+  by Open-Meteo.com (CC BY 4.0), modified", "Contains Met Office data © Crown copyright, the
+  Met Office, licensed under CC BY-SA 4.0" and "Climate data: NASA POWER" (`ATTRIBUTION` in
+  `copy.ts`). The API's `attribution` carries them; the footer of every page on all three
+  sites shows them, with Open-Meteo, NASA POWER and both licences linked, plus GeoNames. The
+  About pages name the agencies behind the models (from `MODELS`, so dropping a model updates
+  them) and say that the sites combine and modify the data. The apps will need the same
+  visible credits, not only the JSON field.
+- **Fair use, not non-commercial.** ShareAlike attaches only to adapted material, and a verdict
+  or a median of 8 models very likely is not (a reading, not legal advice). The per-model
+  figures the pages and `models[]` show are the closest thing to passing on Met Office data,
+  and CC BY-SA does not let us add terms that restrict them. The Terms page therefore drops
+  "personal, non-commercial purposes" for a fair-use clause (reasonable use, no automated bulk
+  scraping or heavy load, rate limits apply) and says the data stays under its own licences.
+- **NASA POWER terms (closed).** NASA's registry entry for POWER: "There are no restrictions on
+  the use, access, and/or download of data from the NASA POWER Project. We request that you
+  cite the NASA POWER Project when using the data provided from NASA POWER Project.", licensed
+  CC BY 4.0. An ad-supported site may use it; the footer and About pages cite it.
+- **Declined consent means a limited ad or none.** In the UK and EEA a non-personalised ad
+  still needs consent, so without it Google shows a limited ad, which uses no cookies, or no ad.
+  The Cookies page and the comment in `scripts/ads.ts` say so; ad behaviour is unchanged.
+
+## Search engines
+
+Carl approved the SEO groundwork from the October research. Google's own weather box answers
+generic searches ("weather today"), so the sites aim at a question with a place ("will it rain
+in Leeds today"), with pages that are plainly original, easy to browse and honest to crawlers.
+
+- **Home pages never offer a crawler a made-up answer.** The server still sends the loading
+  state, whose placeholder ("High of 00°, feels like 00°…") holds the layout. The views carry
+  `data-nosnippet` while unanswered, so search results never quote it. The attribute stays once
+  the browser answers, so the answer for a crawler's own location stays out of snippets too.
+  The answer is still never rendered on the server: Googlebot crawls from the US and would
+  index a US town in °F (so "render the home answer from the visitor's location", under
+  Performance, is for speed only, never for search engines).
+- **Home pages say what they are.** Under the answer and the ad, a short static introduction
+  (what the site answers, that it combines 8 forecasts and compares with what is normal for the
+  place, a link to How it works), "Popular places" (20 UK city pages across the four nations,
+  `LINKS.popular` in `config.ts`) and a link to the places page. It is a labelled region
+  outside `<main>`, so the saved snapshot does not carry it.
+- **The heading is the question with its answer**: an `h1` holding the question ("Is it hot in
+  Leeds today?", `#question`) and the answer ("Yes.", `#answer`), and the same for Now and This
+  week (`h2`, raised to level 1 while on screen, as before: one main heading a page). The look
+  and the ids are unchanged. Today's live region holds the heading and the verdict, so an answer that
+  arrives or changes is read with its question ("Is it hot in Leeds today? Yes. It's hot.").
+  Nothing in it changes from minute to minute (Now's minute update is outside it; an e2e test
+  watches it for three minutes), and a Hot | Wet | Snow switch is still announced once.
+  `CACHE.snapshotVersion` went from 7 to 8 for the new markup.
+- **Titles never carry the answer**, which went out of date in search results and contradicted
+  the page after 6pm. City pages give the question and what the page offers: "Is it wet in
+  Leeds today? Rain hour by hour from 8 forecasts | isitwet.today" (8 is `MODELS.length`).
+  Words after the question give way when the part before the site name would pass 65
+  characters (`TITLE_MAX_LENGTH`); the question never does (core `cityTitle`). Wet's titles say
+  "rain", the word people search with, while the page still asks "Is it wet…?". Descriptions
+  say what the page answers (`cityDescription`). The tab title follows suit, since search
+  engines run the page's script and index the title it sets: the home page's tab no longer
+  reads "Yes. It's hot.", though it still names the site of the question on screen. Share
+  cards (og:title, og:description, the OG image) keep today's answer.
+- **"Updated 3:05pm BST"** under the views says when the forecast behind the answer was fetched
+  (the API's `updatedAt`), in the place's own time, with the zone's abbreviation where it has
+  one (BST, CEST, EDT; none for zones known only by an offset, such as Tokyo's), in a
+  `<time datetime>`. A stale copy from before midnight reads "yesterday, 11:40pm GMT". The
+  browser updates it with every new answer. There was no freshness line to reuse.
+- **Places pages.** `/places` on each site (isitwet.today/places and willitsnow.today/places
+  through the edge function's usual rewrite) lists every city page the site lists: the UK by
+  nation, then the world by country, A to Z (core `placeGroups`). Every footer, the home pages
+  and city pages link to it, so every city page is two clicks from a home page.
+- **City pages link on**: 8 nearby city pages (was 4; `LINKS.nearby`, also the API's `nearby`
+  count), the same city on the other two sites as real links to their own domains (which the
+  browser keeps on the same host on previews and locally, and which carry the chosen units, as
+  Nearby's do), and All places. The Hot | Wet | Snow toggle stays as buttons.
+- **Structured data**: WebSite (name, alternateName, url) on each home page, one per domain as
+  Google's site names need; BreadcrumbList (site › Places › city) on city pages and the places
+  page. No FAQPage or HowTo: Google no longer shows either.
+- **Sitemaps** list home, About, the places page and the city pages the site lists. No
+  `lastmod` (nothing knows when a page last changed), `changefreq` or `priority` (Google
+  ignores both).
+- **Snow pages where it never snows** would say No all year. They get `noindex`, are left out of
+  willitsnow.today's sitemap and places page, and the other sites' pages for those places do
+  not link to them. The pages still work, and search on the site still finds them. The rule
+  (`SNOWLESS` in `config.ts`, core `snowless`), applied to `data/cities.json` as pages and
+  sitemaps are built: within 30° of the equator and below 3,000 m, a city without a recorded
+  height counting as low. No city in the list is that high (Bogotá, 2,582 m, is the highest).
+  **Needs a decision**: check the 63 it leaves out. Houston (snow in January 2025),
+  Johannesburg (1,767 m, snow every few years) and Chongqing see snow on rare days; Cairo,
+  Basrah, Alexandria, Funchal, Casablanca, Los Angeles, Sydney and Cape Town, just past 30°,
+  stay listed though they almost never do.
+  - Angola: Luanda. Australia: Brisbane. Bangladesh: Chittagong, Dhaka. Brazil: Belo
+    Horizonte, Brasília, Fortaleza, Rio de Janeiro, Salvador, São Paulo. China: Chongqing,
+    Dongguan, Guangzhou, Shenzhen. Colombia: Bogotá, Cali. Congo - Kinshasa: Kinshasa. Côte
+    d’Ivoire: Abidjan. Cuba: Havana. Dominican Republic: Santo Domingo. Ethiopia: Addis Ababa.
+    Hong Kong: Hong Kong. India: Ahmedabad, Bengaluru, Chennai, Delhi, Hyderabad, Kolkata,
+    Mumbai, Pune. Indonesia: Denpasar, Jakarta, Surabaya. Kenya: Nairobi. Mexico: Cancún,
+    Mexico City. Myanmar: Yangon. Nigeria: Ibadan, Kano, Lagos. Pakistan: Karachi. Peru: Lima.
+    Philippines: Quezon City. Saudi Arabia: Jeddah, Riyadh. Senegal: Dakar. Singapore:
+    Singapore. Somalia: Mogadishu. South Africa: Durban, Johannesburg. Spain: Las Palmas de
+    Gran Canaria, Santa Cruz de Tenerife. Taiwan: Taipei. Tanzania: Dar es Salaam. Thailand:
+    Bangkok, Phuket. United Arab Emirates: Dubai. United States: Houston, Miami, Orlando.
+    Venezuela: Caracas, Maracaibo. Vietnam: Ho Chi Minh City.
+- **Not done here** (Carl's calls, from the same research): the wet question's wording
+  ("Will it rain…?" on the page), different city lists per site, page-specific additions such
+  as the best and worst day of the week, "where in the UK" pages, and the About page's name and
+  contact. Search Console and Bing are in SETUP.md, section 7.
+
 ## Design
 
 - **Header controls and the tab bar sit on a pill.** They sit on the bright top-right glow, so
@@ -690,9 +803,10 @@ marks them `noindex`; the live site scores 100.
 
 The workflow also measures https://isithot.today on every run, for comparison.
 
-Site JS is about 20 KB gzipped (budget 25 KB, checked in CI by `scripts/js-budget.mjs`; it
-was 8 KB before Now and This week, 12 KB before Is it wet?, 16 KB before round 2 and 17 KB
-before Will it snow?). The rain and snow day and week judging runs only on the server; the
+Site JS is about 21 KB gzipped (budget 25 KB, checked in CI by `scripts/js-budget.mjs`; it
+was 8 KB before Now and This week, 12 KB before Is it wet?, 16 KB before round 2, 17 KB before
+Will it snow? and 20.7 KB before the credits and Search engines work, which added the titles,
+the Updated line's time zones and the links to the other sites). The rain and snow day and week judging runs only on the server; the
 browser carries the code that keeps rain's and snow's "now" current. Cached API responses come
 back from the Netlify CDN in 10–40 ms. LCP sits just above the 1.5 s target under Lighthouse's
 simulated Moto G on slow 4G. Things that got it there:
@@ -706,10 +820,10 @@ simulated Moto G on slow 4G. Things that got it there:
   script has loaded.
 
 Possible next step if LCP needs to drop further: render the home page's answer on the server
-from the visitor's approximate location.
+from the visitor's approximate location. Keep it out of what search engines see (they would
+index the crawler's own US town; see "Search engines").
 
 ## Open decisions carried over from the spec
 
-- NASA POWER terms for an ad-supported site.
 - Tuning α and the band edges after real use (all in `packages/core/src/config.ts`).
 - Remove-ads model. The `AdSlot` component takes an `adsDisabled` flag for it.

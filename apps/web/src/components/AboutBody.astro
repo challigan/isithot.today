@@ -4,7 +4,8 @@ import Content from '../layouts/Content.astro';
 import AboutHot from './AboutHot.astro';
 import AboutSnow from './AboutSnow.astro';
 import AboutWet from './AboutWet.astro';
-import { SITES, TOPICS, type Topic } from '@isithot/core';
+import Credit from './Credit.astro';
+import { COPY, MODELS, SITES, TOPICS, type Topic } from '@isithot/core';
 import { siteNames } from '../lib/topics';
 
 interface Props {
@@ -25,6 +26,22 @@ const description: Record<Topic, string> = {
 /** How each question is answered, the page's own first. */
 const SECTIONS = { hot: AboutHot, wet: AboutWet, snow: AboutSnow };
 const order = [topic, ...TOPICS.filter((t) => t !== topic)];
+/** Who runs each forecast model, for the credits: "NOAA (GFS)". */
+const AGENCIES: Record<string, string> = {
+  ecmwf_ifs025: 'ECMWF',
+  ncep_gfs_seamless: 'NOAA',
+  dwd_icon_seamless: 'DWD',
+  ukmo_seamless: 'the Met Office',
+  meteofrance_seamless: 'Météo-France',
+  metno_seamless: 'MET Norway',
+  cmc_gem_seamless: 'Environment and Climate Change Canada',
+  jma_seamless: 'JMA',
+};
+const agencies = MODELS.map((m) => {
+  const agency = AGENCIES[m.id] ?? m.name;
+  return agency === m.name ? agency : `${agency} (${m.name})`;
+});
+const agencyList = `${agencies.slice(0, -1).join(', ')} and ${agencies.at(-1)}`;
 ---
 
 <Content title="How it works" path="/about" description={description[topic]} topic={topic}>
@@ -50,12 +67,21 @@ const order = [topic, ...TOPICS.filter((t) => t !== topic)];
     also search for any place. Read more in our <a href="/privacy">privacy notice</a>.
   </p>
 
-  <h2>Where the data comes from</h2>
+  <h2>Data sources</h2>
+  <p>
+    The forecasts come from {MODELS.length} models run by {agencyList}, through Open-Meteo. We
+    combine and modify them: the blended figures and the answers are our own work, not the weather
+    services'.
+  </p>
   <ul>
+    <li>
+      <Credit text={COPY.forecastCredit} />.
+    </li>
+    <li>
+      <Credit text={COPY.metOfficeCredit} />.
+    </li>
     <!-- prettier-ignore -->
-    <li>Forecasts: <a href="https://open-meteo.com/" rel="noopener">Open-Meteo.com</a>, licensed under <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a>.</li>
-    <!-- prettier-ignore -->
-    <li>Climate normals: <a href="https://power.larc.nasa.gov/" rel="noopener">NASA POWER</a> (Prediction Of Worldwide Energy Resources), long-term monthly averages of daily highs, rainfall and snowfall.</li>
+    <li>Climate normals: <a href="https://power.larc.nasa.gov/" rel="noopener">NASA POWER</a> (Prediction Of Worldwide Energy Resources), long-term monthly averages of daily highs, rainfall and snowfall, from the NASA Langley Research Center (LaRC) POWER Project and licensed under <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a>. In NASA's words, "There are no restrictions on the use, access, and/or download of data from the NASA POWER Project."</li>
     <!-- prettier-ignore -->
     <li>Place names: <a href="https://www.geonames.org/" rel="noopener">GeoNames</a>, licensed under CC BY 4.0.</li>
   </ul>

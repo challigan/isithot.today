@@ -1,0 +1,56 @@
+---
+/**
+ * Each site's places page (/places, served at isitwet.today/places and willitsnow.today/places by
+ * the edge function): every city page the site lists, the UK by nation, then the rest of the
+ * world by country (core `placeGroups`). Linked from every footer, the home pages and city pages,
+ * so each city page is a click or two from the home page.
+ */
+import Content from '../layouts/Content.astro';
+import { COPY, listed, placeGroups, placesIntro, type Topic } from '@isithot/core';
+import { CITIES } from '@isithot/server';
+import { breadcrumbLd } from '../lib/seo';
+
+interface Props {
+  topic: Topic;
+}
+const { topic } = Astro.props;
+const groups = placeGroups(CITIES, topic);
+// The world's countries hold a few places each: side by side where there is room.
+const parts = [
+  { id: 'places-uk', name: COPY.uk, groups: groups.uk, grid: false },
+  { id: 'places-world', name: COPY.world, groups: groups.world, grid: true },
+];
+// willitsnow.today leaves out places where it never snows (core `snowless`), and says so.
+const leftOut = CITIES.some((c) => !listed(c, topic));
+---
+
+<Content
+  title={COPY.places}
+  path="/places"
+  description={placesIntro(topic)}
+  topic={topic}
+  jsonLd={breadcrumbLd(topic)}
+>
+  <h1>{COPY.places}</h1>
+  <p>{placesIntro(topic)}</p>
+  {leftOut && <p>{COPY.snowlessNote}</p>}
+  {parts.map((part) => (
+    <section aria-labelledby={part.id}>
+      <h2 id={part.id}>{part.name}</h2>
+      <div class:list={['place-groups', { grid: part.grid }]}>
+        {part.groups.map((group) => (
+          <div>
+            <h3>{group.name}</h3>
+            <ul class="place-list">
+              {group.cities.map((c) => (
+                <li>
+                  <a href={`/in/${c.slug}`} set:text={c.name} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
+  ))}
+</Content>

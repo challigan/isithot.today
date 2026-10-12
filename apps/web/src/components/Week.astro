@@ -38,11 +38,13 @@ const { view, start = false } = Astro.props;
     data-glyph={view.band ?? ''}
     set:html={glyphFor(view.band)}
   />
-  <p class="question" id="week-question">
-    {view.question}
-  </p>
-  <h2 class="answer" id="week-answer" data-long={view.answer.length > 4 ? '' : undefined}>
-    {view.answer}
+  <h2 class="heading" id="week-heading">
+    <span class="question" id="week-question">
+      {view.question}
+    </span>{' '}
+    <span class="answer" id="week-answer" data-long={view.answer.length > 4 ? '' : undefined}>
+      {view.answer}
+    </span>
   </h2>
   <p class="verdict hold" id="week-verdict">
     {view.verdict}

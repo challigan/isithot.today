@@ -48,12 +48,19 @@ const { models } = view;
     data-glyph={view.band ?? ''}
     set:html={glyphFor(view.band)}
   />
-  <p class="question" id="question">
-    {view.question}
-  </p>
+  {/*
+   * The heading is the question with its answer ("Is it hot in Leeds today? Yes."). The live
+   * region holds it and the verdict, so an answer that arrives or changes is read with its
+   * question; nothing in it changes from minute to minute.
+   */}
   <div aria-live="polite" aria-atomic="true" id="live">
-    <h1 class="answer" id="answer" data-long={view.answer.length > 4 ? '' : undefined}>
-      {view.answer}
+    <h1 class="heading" id="heading">
+      <span class="question" id="question">
+        {view.question}
+      </span>{' '}
+      <span class="answer" id="answer" data-long={view.answer.length > 4 ? '' : undefined}>
+        {view.answer}
+      </span>
     </h1>
     <p class="verdict hold" id="verdict">
       {view.verdict}
