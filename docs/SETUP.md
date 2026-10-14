@@ -191,3 +191,45 @@ Each month, per site (about 15 minutes):
   pick a result), and look at the Tomorrow tab with text at 200% (the word should break with a
   hyphen); both were checked in emulation only.
 - Run the deploy preview smoke test (it runs on every pull request) and check Lighthouse.
+
+## 9. CI on your own server (self-hosted runner)
+
+GitHub's free Actions minutes run out on a private repository. The workflows can run on your own
+Docker server instead, where they cost nothing; they switch with one repository variable, so
+GitHub's machines remain a fallback.
+
+1. **Get a registration token.** On GitHub: the repository → **Settings → Actions → Runners →
+   New self-hosted runner** → Linux, x64. In the commands it shows, copy only the value after
+   `--token` (it expires after an hour).
+2. **Start the runner** on the server (Docker with Compose; 2 CPU cores and 4 GB of memory are
+   plenty; the end-to-end tests run Chromium). Copy `ops/github-runner/compose.yml` from this
+   repository into a folder there, then in that folder:
+
+   ```
+   RUNNER_TOKEN=XXXX docker compose up -d
+   docker compose logs -f   # wait for "Listening for Jobs", then Ctrl+C
+   ```
+
+   The runner now shows as **Idle** under **Settings → Actions → Runners**, labelled
+   `homelab`. Later restarts need no token: the registration is kept in the `runner-home`
+   volume.
+
+3. **Point the workflows at it.** **Settings → Secrets and variables → Actions → Variables →
+   New repository variable**: name `RUNS_ON`, value `homelab`. Every workflow now runs on the
+   server; delete the variable to go back to GitHub's machines (for example if the server is
+   off for a while: jobs for `homelab` wait up to a day for the runner, then fail).
+4. **Check it**: open any pull request (or re-run the last workflow) and watch the jobs under
+   **Actions**; the first run is slower while Node, pnpm's packages and Chromium are fetched,
+   after that they come from the volume.
+
+Notes:
+
+- One runner runs one job at a time, so a pull request's three jobs (checks, Playwright, the
+  preview smoke test) run one after another, about 20 minutes in all.
+- The runner runs whatever the repository's workflows say, so keep the repository private and
+  only give write access to people you trust. The container has no access to the server's
+  Docker socket or files beyond its own volume.
+- To remove it: **Settings → Actions → Runners → homelab → Remove** shows a removal token; run
+  `docker compose run --rm runner ./config.sh remove --token XXXX`, then
+  `docker compose down -v`.
+- The runner updates itself; the image version in `compose.yml` only sets where it starts.
