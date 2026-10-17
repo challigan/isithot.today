@@ -1,4 +1,5 @@
-import { FAHRENHEIT_COUNTRIES } from './config';
+import { FAHRENHEIT_COUNTRIES, MPH_COUNTRIES } from './config';
+import type { WindUnit } from './types';
 
 export type Units = 'c' | 'f';
 
@@ -39,5 +40,18 @@ export function defaultUnitsForCountry(countryCode: string | null | undefined): 
 
 export function parseUnits(value: string | null | undefined): Units | null {
   if (value === 'c' || value === 'f') return value;
+  return null;
+}
+
+/**
+ * Wind speeds have a setting of their own (the UK reads °C with mph): mph in MPH_COUNTRIES, km/h
+ * elsewhere.
+ */
+export function defaultWindUnitForCountry(countryCode: string | null | undefined): WindUnit {
+  return countryCode && MPH_COUNTRIES.includes(countryCode.toUpperCase()) ? 'mph' : 'kmh';
+}
+
+export function parseWindUnit(value: string | null | undefined): WindUnit | null {
+  if (value === 'mph' || value === 'kmh') return value;
   return null;
 }

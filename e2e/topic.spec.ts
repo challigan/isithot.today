@@ -1,6 +1,6 @@
 /**
- * Hot | Wet | Snow: each site opens on its own question, and the toggle answers the others in
- * place from the same response.
+ * Hot | Wet | Snow | Wind: each site opens on its own question, and the toggle answers the others
+ * in place from the same response.
  */
 import type { Page } from '@playwright/test';
 import {
@@ -8,13 +8,16 @@ import {
   RAIN_PALETTES,
   SNOW_PALETTES,
   TOPICS,
+  WIND_PALETTES,
   type Band,
   type RainBand,
   type SnowBand,
   type Topic,
+  type WindBand,
 } from '../packages/core/src/config';
 import { RAIN_GLYPHS } from '../apps/web/src/lib/wetGlyphs';
 import { SNOW_GLYPHS } from '../apps/web/src/lib/snowGlyphs';
+import { WIND_GLYPHS } from '../apps/web/src/lib/windGlyphs';
 import {
   DAYTIME,
   expect,
@@ -31,12 +34,21 @@ const HOT_ANSWERS = /^(Yes\.|No\.|Almost\.)$/;
 const WET_ANSWERS = /^(Yes\.|No\.|Maybe\.)$/;
 const WET_WEEK_ANSWERS = /^(Yes\.|No\.|Maybe\.|Partly\.)$/;
 const SNOW_ANSWERS = /^(Yes\.|No\.|Maybe\.)$/;
+const WIND_ANSWERS = /^(Yes\.|No\.|A bit\.)$/;
+const WIND_WEEK_ANSWERS = /^(Yes\.|No\.|A bit\.|Partly\.)$/;
 const HOUR = 60 * 60 * 1000;
+
+/** Each site's answers to Today's question, by the path's prefix. */
+const ANSWERS: Array<[string, RegExp]> = [
+  ['/wet', WET_ANSWERS],
+  ['/snow', SNOW_ANSWERS],
+  ['/wind', WIND_ANSWERS],
+];
 
 async function ready(page: Page, path = '/'): Promise<void> {
   await page.goto(path);
   await expect(page.locator('#answer')).toHaveText(
-    path.startsWith('/wet') ? WET_ANSWERS : path.startsWith('/snow') ? SNOW_ANSWERS : HOT_ANSWERS,
+    ANSWERS.find(([prefix]) => path.startsWith(prefix))?.[1] ?? HOT_ANSWERS,
   );
 }
 
@@ -67,7 +79,7 @@ const g1 = (page: Page) =>
 const band = async (page: Page, view: 'now' | 'today' | 'week') =>
   (await page.locator(`#view-${view}`).getAttribute('data-band')) as string;
 
-test.describe('Hot | Wet | Snow', () => {
+test.describe('Hot | Wet | Snow | Wind', () => {
   test('each site opens on its own question', async ({ page, request, ipPlace }) => {
     // The wet home page asks its question before any script runs.
     const html = await (await request.get('/wet')).text();
@@ -108,6 +120,25 @@ test.describe('Hot | Wet | Snow', () => {
     await expect(page).toHaveTitle('Will it snow today? | willitsnow.today');
     const snowToday = (await band(page, 'today')) as SnowBand;
     await expect.poll(() => g1(page)).toBe(SNOW_PALETTES[snowToday].g1);
+
+    const wind = await (await request.get('/wind')).text();
+    expect(wind).toMatch(/<span class="question" id="question">\s*Is it windy today\?\s*</);
+    expect(wind).toContain('<link rel="canonical" href="https://isitwindy.today/"');
+    // Wind's own units, unchosen until the answer says which the place uses.
+    expect(wind).toMatch(/<div class="pill units" role="group" aria-label="Wind units">/);
+    await ready(page, '/wind');
+    await expectTopic(page, 'wind');
+    await expect(page.locator('#question')).toHaveText('Is it windy today?');
+    await expect(page.locator('#verdict')).not.toBeEmpty();
+    await expect(page.locator('#agree')).toHaveText(
+      /^\d of \d forecasts says? (light winds|breezy|windy|very windy|gales|storm force)$/,
+    );
+    await expect(page.locator('[data-units]')).toHaveText(['mph', 'km/h']);
+    await expect(page.getByRole('group', { name: 'Wind units' })).toBeVisible();
+    await expect(page.locator('[data-units][aria-pressed=true]')).toHaveCount(1);
+    await expect(page).toHaveTitle('Is it windy today? | isitwindy.today');
+    const windToday = (await band(page, 'today')) as WindBand;
+    await expect.poll(() => g1(page)).toBe(WIND_PALETTES[windToday].g1);
   });
 
   test('the wet home page does not shift while it loads', async ({ page }) => {
@@ -185,6 +216,28 @@ test.describe('Hot | Wet | Snow', () => {
     await expect(page.getByRole('group', { name: 'Snow units' })).toBeVisible();
     await expect(page).toHaveTitle('Will it snow today? | willitsnow.today');
 
+    await toggle(page, 'wind').click();
+    await expectTopic(page, 'wind');
+    // Still on This week, now answering "Will it be windy?" in every view.
+    await expect(page.locator('#tab-week')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#view-week')).not.toHaveAttribute('inert', '');
+    await expect(page.locator('#week-question')).toHaveText('Will it be windy this week?');
+    await expect(page.locator('#week-answer')).toHaveText(WIND_WEEK_ANSWERS);
+    await expect(page.locator('#week-days li')).toHaveCount(7);
+    await expect(page.locator('#week-days li .t').first()).toHaveText(/^\d+(mph|km\/h)$/);
+    await expect(page.locator('#question')).toHaveText('Is it windy today?');
+    await expect(page.locator('#now-question')).toHaveText('Is it windy right now?');
+    await expect(page.locator('#now-h')).toHaveText('Gusts, next 12 hours');
+    const windWeek = (await band(page, 'week')) as WindBand;
+    expect(Object.keys(WIND_PALETTES)).toContain(windWeek);
+    await expect.poll(() => g1(page)).toBe(WIND_PALETTES[windWeek].g1);
+    await expectGlyph(page, 'week-glyph', WIND_GLYPHS[windWeek]);
+    await expect(page.locator('[data-units]')).toHaveText(['mph', 'km/h']);
+    await expect(page.getByRole('group', { name: 'Wind units' })).toBeVisible();
+    await expect(page).toHaveTitle('Is it windy today? | isitwindy.today');
+    // The UV line is Hot's alone.
+    await expect(page.locator('#uv')).toHaveAttribute('hidden', '');
+
     await toggle(page, 'hot').click();
     await expectTopic(page, 'hot');
     await expect(page.locator('#tab-week')).toHaveAttribute('aria-selected', 'true');
@@ -193,7 +246,7 @@ test.describe('Hot | Wet | Snow', () => {
     await expect.poll(() => g1(page)).toBe(PALETTES[(await band(page, 'week')) as Band].g1);
     await expect(page.locator('[data-units]')).toHaveText(['°C', '°F']);
     await expect(page).toHaveTitle('Is it hot today? | isithot.today');
-    // Both answers come in the one response.
+    // Every answer comes in the one response.
     expect(calls).toHaveLength(1);
   });
 
@@ -213,6 +266,35 @@ test.describe('Hot | Wet | Snow', () => {
     await expect(drift).toHaveCSS('animation-iteration-count', '2');
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await expect(drift).toHaveCSS('animation-name', 'none');
+  });
+
+  test('the wind blows a few times, then rests', async ({ page }) => {
+    // Wind lines (every band from breezy), the flag, the trees and the torn leaves.
+    for (const [band, part, rounds] of [
+      ['windy', 'gust', '3'],
+      ['breezy', 'flap', '4'],
+      ['verywindy', 'sway', '3'],
+      ['gale', 'blow', '3'],
+    ] as const) {
+      await page.emulateMedia({ reducedMotion: 'no-preference' });
+      await page.goto(`/?preview=1&band=${band}`);
+      const moving = page.locator(`#glyph .${part}`).first();
+      await expect(moving).toHaveCSS('animation-name', part);
+      await expect(moving).toHaveCSS('animation-iteration-count', rounds);
+      // All done within 4.2 seconds, delays included.
+      const ends = await page.locator('#glyph [class]').evaluateAll((els) =>
+        els.map((el) => {
+          const style = getComputedStyle(el);
+          const s = (v: string) => parseFloat(v) * (v.endsWith('ms') ? 0.001 : 1);
+          return (
+            s(style.animationDelay) + s(style.animationDuration) * +style.animationIterationCount
+          );
+        }),
+      );
+      expect(Math.max(...ends), band).toBeLessThanOrEqual(4.2);
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await expect(moving).toHaveCSS('animation-name', 'none');
+    }
   });
 
   test('works from the keyboard, and focus stays on the toggle', async ({ page, ipPlace }) => {
@@ -236,6 +318,14 @@ test.describe('Hot | Wet | Snow', () => {
     await page.keyboard.press('Space');
     await expectTopic(page, 'snow');
     await expect(page.locator('#question')).toHaveText('Will it snow today?');
+    await expect(toggle(page, 'snow')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(toggle(page, 'wind')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expectTopic(page, 'wind');
+    await expect(page.locator('#question')).toHaveText('Is it windy today?');
+    await expect(toggle(page, 'wind')).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
     await expect(toggle(page, 'snow')).toBeFocused();
     await page.keyboard.press('Shift+Tab');
     await expect(toggle(page, 'wet')).toBeFocused();
@@ -305,6 +395,14 @@ test.describe('Hot | Wet | Snow', () => {
     await expect(page.locator('#answer')).toHaveText(SNOW_ANSWERS);
     await expectTopic(page, 'snow');
     await expect(page.locator('#question')).toHaveText('Will it snow today?');
+
+    await ready(page, '/wind');
+    await toggle(page, 'snow').click();
+    await expectTopic(page, 'snow');
+    await page.reload();
+    await expect(page.locator('#answer')).toHaveText(WIND_ANSWERS);
+    await expectTopic(page, 'wind');
+    await expect(page.locator('#question')).toHaveText('Is it windy today?');
   });
 
   test('back after half an hour away: the page’s own question, on Today', async ({
@@ -356,10 +454,33 @@ test.describe('Hot | Wet | Snow', () => {
       .toBe(SNOW_PALETTES[(await band(page, 'today')) as SnowBand].g1);
   });
 
-  // Rain and snow are both judged hour by hour.
-  for (const [block, path, answers] of [
-    ['rain', '/wet', WET_ANSWERS],
-    ['snow', '/snow', SNOW_ANSWERS],
+  test('back after half an hour away on /wind: Wind again, on Today', async ({ page, ipPlace }) => {
+    await startClock(page, todayTime(ipPlace.tz));
+    await ready(page, '/wind');
+    await page.locator('#tab-week').click();
+    await expect(page.locator('#tab-week')).toHaveAttribute('aria-selected', 'true');
+    await toggle(page, 'hot').click();
+    await expect(page.locator('#week-question')).toHaveText('Is it hot this week?');
+    await expect(page.locator('#brand')).toHaveText('isithot.today');
+
+    await setVisibility(page, 'hidden');
+    await page.clock.fastForward('31:00');
+    await setVisibility(page, 'visible');
+    await expectTopic(page, 'wind');
+    await expect(page.locator('#brand')).toHaveText('isitwindy.today');
+    await expect(page.locator('#tab-today')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#question')).toHaveText('Is it windy today?');
+    await expect(page.locator('#answer')).toHaveText(WIND_ANSWERS);
+    await expect
+      .poll(() => g1(page))
+      .toBe(WIND_PALETTES[(await band(page, 'today')) as WindBand].g1);
+  });
+
+  // Rain, snow and wind are all judged hour by hour.
+  for (const [block, path, answers, spoken] of [
+    ['rain', '/wet', WET_ANSWERS, /^\d+% chance at \d+(am|pm)$/],
+    ['snow', '/snow', SNOW_ANSWERS, /^\d+% chance at \d+(am|pm)$/],
+    ['wind', '/wind', WIND_ANSWERS, /^Gusts up to \d+(mph|km\/h) from \d+(am|pm)$/],
   ] as const) {
     test(`${block} "now" keeps up with the clock without asking the server`, async ({ page }) => {
       await startClock(page);
@@ -367,9 +488,7 @@ test.describe('Hot | Wet | Snow', () => {
       await page.locator('#tab-now').click();
       await expect(page.locator('#now-answer')).toHaveText(answers);
       await expect(page.locator('#now-hours li')).toHaveCount(6);
-      await expect(page.locator('#now-hours .sr-only').first()).toHaveText(
-        /^\d+% chance at \d+(am|pm)$/,
-      );
+      await expect(page.locator('#now-hours .sr-only').first()).toHaveText(spoken);
       const first = () => page.locator('#now-hours li .n').first().textContent();
       const before = await first();
       // From here the server never answers: whatever changes is worked out in the page.
@@ -393,8 +512,8 @@ test.describe('Hot | Wet | Snow', () => {
         typeof block,
         { days: Array<{ from: string }> }
       >;
-      // Today's rain and snow are for the rest of the day from when they were worked out, so they
-      // hold until the next hour.
+      // Today's rain, snow and wind are for the rest of the day from when they were worked out,
+      // so they hold until the next hour.
       const until = Math.floor(Date.parse(body[block].days[0]!.from) / HOUR) * HOUR + HOUR;
       const now = await page.evaluate(() => Date.now());
       expect(calls).toHaveLength(1);
@@ -547,7 +666,7 @@ test.describe('Hot | Wet | Snow', () => {
     await toggle(page, 'wet').click();
     await expect(page.locator('#question')).toHaveText('Is it wet in Bristol today?');
     await expect(page).toHaveTitle(
-      'Is it wet in Bristol today? Rain hour by hour from 8 forecasts | isitwet.today',
+      'Is it wet in Bristol today? Rain hour by hour from 6 forecasts | isitwet.today',
     );
     await page.locator('#place-btn').click();
     await page.locator('#search-input').fill('Hex');
@@ -559,6 +678,10 @@ test.describe('Hot | Wet | Snow', () => {
 
   test('each site restores its own last answer', async ({ page, ipPlace }) => {
     await keepToday(page, ipPlace.tz);
+    await ready(page, '/wind');
+    const wind = (await page.locator('#answer').textContent())!.trim();
+    const windVerdict = (await page.locator('#verdict').textContent())!.trim();
+    await page.waitForTimeout(300);
     await ready(page, '/snow');
     const snow = (await page.locator('#answer').textContent())!.trim();
     const snowVerdict = (await page.locator('#verdict').textContent())!.trim();
@@ -578,6 +701,10 @@ test.describe('Hot | Wet | Snow', () => {
     await page.waitForTimeout(500);
     await toggle(page, 'snow').click();
     await page.locator('[data-units="c"]').click();
+    await toggle(page, 'wind').click();
+    await page.locator('[data-units="kmh"]').click();
+    await expect(page.locator('[data-units="kmh"]')).toHaveAttribute('aria-pressed', 'true');
+    await page.waitForTimeout(500);
     await toggle(page, 'hot').click();
     await page.waitForTimeout(300);
 
@@ -604,11 +731,19 @@ test.describe('Hot | Wet | Snow', () => {
     await expect(page.locator('#question')).toHaveText('Will it snow today?');
     await expect(page.locator('#answer')).toHaveText(snow);
     await expect(page.locator('#verdict')).toHaveText(snowVerdict);
+
+    await page.goto('/wind');
+    await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+    await expectTopic(page, 'wind');
+    await expect(page.locator('#question')).toHaveText('Is it windy today?');
+    await expect(page.locator('#answer')).toHaveText(wind);
+    await expect(page.locator('#verdict')).toHaveText(windVerdict);
   });
 
   for (const [topic, path, key, asked] of [
     ['wet', '/wet', 'isitwet:last', 'Is it wet today?'],
     ['snow', '/snow', 'willitsnow:last', 'Will it snow today?'],
+    ['wind', '/wind', 'isitwindy:last', 'Is it windy today?'],
   ] as const) {
     test(`a ${topic} snapshot is not shown past its hour`, async ({ page }) => {
       await ready(page, path);
@@ -701,5 +836,132 @@ test.describe('Hot | Wet | Snow', () => {
     await toggle(page, 'wet').click();
     await expect(chips).toHaveCount(6);
     await expect(chips.filter({ hasText: 'Showers' })).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
+test.describe('Wind', () => {
+  test('a wind band preview opens on Wind, with chips for the question on screen', async ({
+    page,
+  }) => {
+    await page.goto('/?preview=1&band=storm');
+    await expectTopic(page, 'wind');
+    await expect(page.locator('#question')).toHaveText('Is it windy today?');
+    await expect(page.locator('#answer')).toHaveText('Yes.');
+    await expect.poll(() => g1(page)).toBe(WIND_PALETTES.storm.g1);
+    const chips = page.getByRole('group', { name: 'Preview each kind of day' }).locator('button');
+    await expect(chips).toHaveText([
+      'Light winds',
+      'Breezy',
+      'Windy',
+      'Very windy',
+      'Gale',
+      'Storm',
+    ]);
+    await expect(chips.filter({ hasText: 'Storm' })).toHaveAttribute('aria-pressed', 'true');
+    // Each sample shows its band in every view.
+    for (const view of ['now', 'week'] as const) {
+      expect(await band(page, view)).toBe('storm');
+    }
+    // A UK sample's storm links to the Met Office's warnings, never words one of its own.
+    const link = page.locator('#warnings a');
+    await expect(link).toBeVisible();
+    await expect(link).toHaveText('Met Office warnings');
+    await expect(link).toHaveAttribute(
+      'href',
+      'https://weather.metoffice.gov.uk/warnings-and-advice/uk-warnings',
+    );
+    await expect(page.locator('main')).not.toContainText(/warning(?! *s\b)|alert|danger/i);
+
+    await chips.filter({ hasText: 'Breezy' }).click();
+    await expect(page.locator('#answer')).toHaveText('A bit.');
+    await expect(page.locator('#answer')).toHaveAttribute('data-long', '');
+    await expect.poll(() => g1(page)).toBe(WIND_PALETTES.breezy.g1);
+    await expect(page.locator('#warnings')).toBeHidden();
+    for (const view of ['now', 'week'] as const) {
+      expect(await band(page, view)).toBe('breezy');
+    }
+
+    // Every band, in every view, with its own icon and colours.
+    for (const [i, windBand] of (
+      ['calm', 'breezy', 'windy', 'verywindy', 'gale', 'storm'] as const
+    ).entries()) {
+      await chips.nth(i).click();
+      await expect(chips.nth(i)).toHaveAttribute('aria-pressed', 'true');
+      await expect.poll(() => band(page, 'today')).toBe(windBand);
+      await expectGlyph(page, 'glyph', WIND_GLYPHS[windBand]);
+      await expect.poll(() => g1(page)).toBe(WIND_PALETTES[windBand].g1);
+    }
+
+    await toggle(page, 'hot').click();
+    await expect(chips).toHaveText(['Freezing', 'Cold', 'Mild', 'Warm', 'Hot', 'Scorching']);
+    await expect(page.locator('#question')).toHaveText('Is it hot today?');
+    await expect(page.locator('#warnings')).toBeHidden();
+  });
+
+  test('the wind units switch between mph and km/h, apart from °C and °F', async ({ page }) => {
+    // London's and Leeds's pages open on Today until 6pm there.
+    await keepToday(page);
+    const calls: URL[] = [];
+    page.on('request', (r) => {
+      if (r.url().includes('/api/v1/today')) calls.push(new URL(r.url()));
+    });
+    const city = async (path: string) => {
+      await page.goto(path);
+      await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+    };
+    await city('/wind/in/london-gb');
+    // A UK city in mph, its own unit; °C stays the temperature setting.
+    await expect(page.locator('[data-units="mph"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#detail')).toContainText(/\d+mph/);
+    await expect(page.locator('#list li .t').first()).toHaveText(/^\d+mph$/);
+    await expect(page.locator('#smax')).toHaveText(/^\s*\d+mph\s*$/);
+
+    await page.locator('[data-units="kmh"]').click();
+    await expect(page.locator('[data-units="kmh"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-units="mph"]')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('#detail')).toContainText(/\d+km\/h/);
+    await expect(page.locator('#list li .t').first()).toHaveText(/^\d+km\/h$/);
+    await expect(page.locator('#week-days li .t').first()).toHaveText(/^\d+km\/h$/);
+    expect(calls.at(-1)!.searchParams.get('windUnits')).toBe('kmh');
+    expect(calls.at(-1)!.searchParams.get('units')).toBe('c');
+
+    // Hot keeps °C, unchanged by the wind setting.
+    await toggle(page, 'hot').click();
+    await expect(page.locator('[data-units]')).toHaveText(['°C', '°F']);
+    await expect(page.locator('[data-units="c"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#detail')).toContainText('°');
+
+    // Remembered: the next page asks in km/h from the start, and a city page made in mph asks
+    // again quietly.
+    calls.length = 0;
+    await city('/wind/in/leeds-gb');
+    await expect(page.locator('[data-units="kmh"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#list li .t').first()).toHaveText(/^\d+km\/h$/);
+    expect(calls.map((u) => u.searchParams.get('windUnits'))).toEqual(['kmh']);
+    calls.length = 0;
+    await ready(page, '/wind');
+    await expect(page.locator('[data-units="kmh"]')).toHaveAttribute('aria-pressed', 'true');
+    // The early request in the page's head asked in km/h too, and the app used it.
+    expect(calls.map((u) => u.searchParams.get('windUnits'))).toEqual(['kmh']);
+  });
+
+  test('a place where it storms all year answers Yes in every view', async ({ page, request }) => {
+    // Reykjavík's synthetic forecasts have a storm every hour (e2e runs at any time of year).
+    const data = (await (await request.get('/api/v1/today?place=reykjavik-is&units=c')).json()) as {
+      wind: { unit: string; days: Array<{ band: string }>; week: { answer: string } };
+    };
+    expect(data.wind.unit).toBe('kmh');
+    expect(data.wind.days[0]!.band).toBe('storm');
+    expect(data.wind.week.answer).toBe('Yes.');
+    // Today's and tomorrow's answers alike, whichever the middle view shows.
+    await page.goto('/wind/in/reykjavik-is');
+    await expect(page.locator('#answer')).toHaveText('Yes.');
+    await expect(page.locator('#verdict')).toHaveText('Storm-force winds.');
+    await expect(page.locator('#list li .t').first()).toHaveText(/^\d+km\/h$/);
+    // Not a UK place: no link to the Met Office's warnings.
+    await expect(page.locator('#warnings')).toBeHidden();
+    await page.locator('#tab-week').click();
+    await expect(page.locator('#week-answer')).toHaveText('Yes.');
+    expect(await band(page, 'week')).toBe('storm');
   });
 });

@@ -8,8 +8,10 @@
  *                      previews only (the edge function ignores it in production and does not run
  *                      under astro dev).
  *   --snow             The same for willitsnow.today: under /snow, and with x-willitsnow-host: 1.
+ *   --wind             The same for isitwindy.today: under /wind, and with x-isitwindy-host: 1.
  *   --wet-site <url>   Also check the isitwet.today pages on their own domain (production).
  *   --snow-site <url>  The same for willitsnow.today.
+ *   --wind-site <url>  The same for isitwindy.today.
  */
 const args = process.argv.slice(2);
 /** The value of `--name value` or `--name=value`, taken out of the arguments. */
@@ -26,8 +28,8 @@ function option(name) {
 // function, netlify/edge-functions/lib/route.ts); their pages ask their own question.
 const HOT = 'https://isithot.today';
 // Each sitemap lists home, About, the places page and the city pages the site lists: all 300 on
-// isithot.today and isitwet.today; willitsnow.today leaves out the places where it never snows
-// (SNOWLESS in packages/core/src/config.ts, 63 of them), such as Singapore.
+// isithot.today, isitwet.today and isitwindy.today; willitsnow.today leaves out the places where
+// it never snows (SNOWLESS in packages/core/src/config.ts, 63 of them), such as Singapore.
 const SITES = {
   wet: {
     url: 'https://isitwet.today',
@@ -46,12 +48,20 @@ const SITES = {
     minUrls: 240,
     unlisted: 'singapore-sg',
   },
+  wind: {
+    url: 'https://isitwindy.today',
+    prefix: '/wind',
+    header: 'x-isitwindy-host',
+    home: 'Is it windy today?',
+    city: 'Is it windy in Newcastle today?',
+    minUrls: 303,
+  },
 };
 const CITY = 'newcastle-upon-tyne-gb';
 /** A title with an answer in it ("… today? Yes. 24° | …"): titles must never carry one. */
-const ANSWERED = / (Yes|No|Almost|Maybe)\. /;
+const ANSWERED = / (Yes|No|Almost|Maybe|A bit|Partly)\. /;
 
-/** Each site's own domain to check, from --wet-site and --snow-site. */
+/** Each site's own domain to check, from --wet-site, --snow-site and --wind-site. */
 const siteUrls = {};
 for (const [t, site] of Object.entries(SITES)) {
   const url = option(`--${t}-site`)?.replace(/\/$/, '');
@@ -104,9 +114,9 @@ const ogImageOf = (html) =>
 const locs = (xml) => [...String(xml).matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1]);
 
 /**
- * A site's pages (isitwet.today, willitsnow.today), wherever they are served from: `origin` is
- * the deploy, `prefix` is the site's ("/wet") when requesting the pages directly, and `headers`
- * can ask a deploy preview to act as the site. Whatever the route, the pages must name the site.
+ * A site's pages (isitwet.today, willitsnow.today, isitwindy.today), wherever they are served
+ * from: `origin` is the deploy, `prefix` is the site's ("/wet") when requesting the pages
+ * directly, and `headers` can ask a deploy preview to act as the site. Whatever the route, the pages must name the site.
  */
 async function checkSite(t, label, { origin = base, prefix = '', headers = {} } = {}) {
   const { url: own, home: asked, city: cityAsked, minUrls, unlisted } = SITES[t];
@@ -351,6 +361,78 @@ try {
       console.log(`      snow now: ${snowNow.answer} ${snowNow.verdict} | ${snowNow.detail}`);
   }
 
+  // "Is it windy?" too, from the same forecast at the same moment, in its own units: Newcastle's,
+  // mph, when the request names °C but not the wind's units. Structure only.
+  const wind = t1.body?.wind;
+  const windDay = wind?.days?.[0];
+  check(
+    wind?.unit === 'mph' && !!windDay && /^(Yes|No|A bit)\.$/.test(windDay.answer),
+    'wind answered, in mph for Newcastle',
+    wind ? `unit=${wind.unit} ${windDay?.answer}` : 'no wind in the response',
+  );
+  if (windDay) {
+    console.log(
+      `      wind: ${windDay.date} ${windDay.band} | ${windDay.answer} ${windDay.verdict} | ${windDay.detail}`,
+    );
+    console.log(
+      `      ${windDay.agreementText} | confidence=${windDay.confidence} | gust=${windDay.gust}${wind.unit} mean=${windDay.mean}${wind.unit} peak=${windDay.peak} normal=${windDay.normal}`,
+    );
+    console.log(
+      `      models: ${windDay.models.map((m) => `${m.name}=${m.gust}/${m.mean}${wind.unit}`).join(', ')}`,
+    );
+    check(
+      windDay.models.length >= 5 &&
+        windDay.models.every((m) => Number.isFinite(m.gust) && Number.isFinite(m.mean)),
+      'at least 5 models have wind and gusts',
+      `${windDay.models.length}`,
+    );
+    // Gusts and the mean wind are separate variables: if no model's differ, one is misread.
+    check(
+      windDay.models.some((m) => m.gust !== m.mean),
+      'gusts read apart from the mean wind',
+    );
+    check(wind.days.length === 2, 'two wind days returned', `${wind.days.length}`);
+    check(
+      windDay.from === rainDay?.from,
+      'wind and rain worked out from the same moment',
+      `${windDay.from} ${rainDay?.from}`,
+    );
+    const windNow = wind.now;
+    check(
+      !!windNow && /^(Yes|No|A bit)\.$/.test(windNow.answer),
+      'wind now answered',
+      windNow?.detail,
+    );
+    check(
+      windNow?.series?.length >= 20,
+      'wind now carries a day of hourly series',
+      `${windNow?.series?.length}`,
+    );
+    const windWeek = wind.week;
+    check(
+      !!windWeek && windWeek.days.length >= 5 && /^(Yes|No|A bit|Partly)\.$/.test(windWeek.answer),
+      'wind week answered',
+      `${windWeek?.days?.length} days`,
+    );
+    if (windWeek) {
+      console.log(`      wind week: ${windWeek.answer} ${windWeek.verdict} | ${windWeek.detail}`);
+      console.log(
+        `      days: ${windWeek.days.map((d) => `${d.label}=${d.gust}${wind.unit}(${d.bandLabel})`).join(' ')}`,
+      );
+    }
+    if (windNow) {
+      console.log(`      wind now: ${windNow.answer} ${windNow.verdict} | ${windNow.detail}`);
+      console.log(`      hours: ${windNow.hours.map((h) => `${h.label}=${h.gust}`).join(' ')}`);
+    }
+  }
+  // Wind's own units when asked for, leaving the temperature's alone.
+  const kmh = await get(`${q}&windUnits=kmh`);
+  check(
+    kmh.res.status === 200 && kmh.body?.wind?.unit === 'kmh' && kmh.body?.units === 'c',
+    'windUnits=kmh gives km/h',
+    `${kmh.res.status} units=${kmh.body?.units} wind=${kmh.body?.wind?.unit}${why(kmh)}`,
+  );
+
   const t2 = await get(q);
   check(
     t2.res.status === 200,
@@ -374,12 +456,19 @@ try {
     'snow unit follows the temperature units',
     `units=${ip.body?.units} snow=${ip.body?.snow?.unit}`,
   );
+  check(
+    ip.body?.wind?.unit === 'mph' || ip.body?.wind?.unit === 'kmh',
+    'wind has a unit of its own',
+    `units=${ip.body?.units} wind=${ip.body?.wind?.unit}`,
+  );
 
   const city = await get('/api/v1/today?place=seville-es&units=c');
   check(
-    city.res.status === 200 && city.body.location.slug === 'seville-es',
-    'GET today?place=seville-es',
-    `${city.res.status} ${city.ms}ms ${city.body?.days?.[0]?.answer} ${city.body?.days?.[0]?.detail} | rain: ${city.body?.rain?.days?.[0]?.answer} ${city.body?.rain?.days?.[0]?.detail} | snow: ${city.body?.snow?.days?.[0]?.answer} ${city.body?.snow?.days?.[0]?.detail}${why(city)}`,
+    city.res.status === 200 &&
+      city.body.location.slug === 'seville-es' &&
+      city.body.wind?.unit === 'kmh',
+    'GET today?place=seville-es (wind in km/h, Spain’s unit)',
+    `${city.res.status} ${city.ms}ms ${city.body?.days?.[0]?.answer} ${city.body?.days?.[0]?.detail} | rain: ${city.body?.rain?.days?.[0]?.answer} ${city.body?.rain?.days?.[0]?.detail} | snow: ${city.body?.snow?.days?.[0]?.answer} ${city.body?.snow?.days?.[0]?.detail} | wind: ${city.body?.wind?.days?.[0]?.answer} ${city.body?.wind?.days?.[0]?.detail}${why(city)}`,
   );
 
   const search = await get('/api/v1/search?q=Newcastle');

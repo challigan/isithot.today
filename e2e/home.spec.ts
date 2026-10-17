@@ -1,3 +1,4 @@
+import { MODELS } from '../packages/core/src/config';
 import { expect, keepToday, prepare, test } from './helpers';
 
 const ANSWERS = /^(Yes\.|No\.|Almost\.)$/;
@@ -23,8 +24,8 @@ test.describe('home page', () => {
     await expect(page.locator('#verdict')).toHaveText(/^It's /);
     await expect(page.locator('#detail')).toContainText('High of');
     await expect(page.locator('#agree')).toHaveText(/\d of \d forecasts agree within 2°/);
-    await expect(page.locator('#list li')).toHaveCount(8);
-    await expect(page.locator('#strip .dot')).toHaveCount(8);
+    await expect(page.locator('#list li')).toHaveCount(MODELS.length);
+    await expect(page.locator('#strip .dot')).toHaveCount(MODELS.length);
     await expect(page.locator('#strip-summary')).toContainText('Forecasts range from');
     // No permission prompt on first load: a quiet link instead.
     await expect(page.getByRole('button', { name: 'Use my exact location' })).toBeVisible();

@@ -1,10 +1,10 @@
 ---
 /**
- * The home page of each site: isithot.today (/), isitwet.today (/wet) and willitsnow.today
- * (/snow), each served at / on its own domain by the edge function. Sent in its loading state,
- * already asking the page's own question; the browser fills in the answer for where the visitor
- * is. The answer is never rendered on the server: search engines crawl from the US and would
- * index a US town's. They read the introduction under it instead.
+ * The home page of each site: isithot.today (/), isitwet.today (/wet), willitsnow.today (/snow) and
+ * isitwindy.today (/wind), each served at / on its own domain by the edge function. Sent in its
+ * loading state, already asking the page's own question; the browser fills in the answer for where
+ * the visitor is. The answer is never rendered on the server: search engines crawl from the US and
+ * would index a US town's. They read the introduction under it instead.
  */
 import Base from '../layouts/Base.astro';
 import Header from './Header.astro';
@@ -45,6 +45,8 @@ const evening = TOMORROW_FROM_HOUR;
         const get = (k) => JSON.parse(localStorage.getItem(k) || 'null');
         const t = get('isithot:place') || { kind: 'ip' };
         const units = get('isithot:units') || (t.kind === 'ip' ? null : 'c');
+        // Wind's own units only once chosen: until then the server picks the place's.
+        const windUnits = get('isithot:windUnits');
         const p = new URLSearchParams();
         if (t.kind === 'city') p.set('place', t.slug);
         if (t.kind === 'coords') {
@@ -58,6 +60,7 @@ const evening = TOMORROW_FROM_HOUR;
           p.set('source', t.source);
         }
         if (units) p.set('units', units);
+        if (windUnits === 'mph' || windUnits === 'kmh') p.set('windUnits', windUnits);
         const qs = p.toString();
         const url = '/api/v1/today' + (qs ? '?' + qs : '');
         window.__isithotPrefetch = {
@@ -78,9 +81,9 @@ const evening = TOMORROW_FROM_HOUR;
   </div>
   <SearchSheet />
   <script is:inline define:vars={{ key, version, maxAge, evening }}>
-    // Paint the last answer instantly (under 3 hours old) before the main script loads. A wet or
-    // snow answer is for the rest of the day from when it was worked out: only until the next
-    // hour.
+    // Paint the last answer instantly (under 3 hours old) before the main script loads. A wet,
+    // snow or wind answer is for the rest of the day from when it was worked out: only until the
+    // next hour.
     // The page opens on Today, or in the evening at the place on Now with Tomorrow in the middle
     // (scripts/app.ts saveLast): only while that is still the day and slot at the place.
     try {

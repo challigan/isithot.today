@@ -23,6 +23,16 @@ export interface ModelDay {
    * Present with precipitation, for the snow topic ("Too warm for snow.").
    */
   low?: number | null;
+  /**
+   * The strongest mean wind and the strongest gust over the day's waking hours (WIND.day), km/h,
+   * or null unless the model has both for every one of those hours (dailyWind in windDay.ts). Kept
+   * here because the server drops later days' hours before caching. Absent for forecasts recorded
+   * without wind.
+   */
+  wind?: number | null;
+  gust?: number | null;
+  /** The mean of the day's 24 hourly wind speeds, km/h (for normals), or null without them all. */
+  windMean?: number | null;
 }
 
 /** Hourly temperatures across all models for one local hour, °C. */
@@ -51,6 +61,17 @@ export interface HourTemps {
    * it does `rain`. Absent for forecasts recorded without it.
    */
   uv?: readonly (number | null)[];
+  /**
+   * The mean wind per model at 10 m, km/h: instant, at the hour's start (`time`), as the
+   * temperatures are. Absent for forecasts recorded without wind.
+   */
+  wind?: readonly (number | null)[];
+  /**
+   * The strongest gust per model during this hour, km/h. Open-Meteo labels gusts with the end of
+   * the hour they are the maximum of, so the parser moves them to the hour's start as it does
+   * `rain`. Absent for forecasts recorded without wind.
+   */
+  gust?: readonly (number | null)[];
 }
 
 export interface BlendedModel {

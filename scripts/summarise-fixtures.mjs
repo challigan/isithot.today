@@ -5,7 +5,15 @@ import { readFileSync } from 'node:fs';
 const dir = new URL('../packages/providers/test/fixtures/', import.meta.url);
 const read = (name) => JSON.parse(readFileSync(new URL(name, dir), 'utf8'));
 
-for (const name of ['open-meteo-forecast-newcastle.json', 'open-meteo-forecast-seville.json']) {
+const median = (values) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+};
+const r1 = (v) => Math.round(v * 10) / 10;
+
+for (const place of ['newcastle', 'seville']) {
+  const name = `open-meteo-forecast-${place}.json`;
   const f = read(name);
   const times = f.hourly?.time ?? [];
   const dates = [...new Set(times.map((t) => t.slice(0, 10)))];
@@ -45,12 +53,74 @@ for (const name of ['open-meteo-forecast-newcastle.json', 'open-meteo-forecast-s
       );
     }
   }
+  // Wind as the parser lines it up: the mean wind at stamp t is the hour from t; the gust at
+  // stamp t + 1 is the strongest of it. Checks that every model gives both for the first 48
+  // hours, that no model's series is a copy of another's, and that gusts are at least the mean
+  // wind (a check on the alignment and the units).
+  const winds = Object.keys(f.hourly ?? {}).filter((k) => k.startsWith('wind_speed_10m'));
+  if (!winds.length) console.log('  wind: no wind_speed_10m in this recording');
+  const means = [];
+  for (const key of winds) {
+    const id = key.slice('wind_speed_10m'.length);
+    const wind = f.hourly[key];
+    const gust = f.hourly[`wind_gusts_10m${id}`] ?? [];
+    const first = (series, from) => series.slice(from, from + 48).filter((v) => v !== null).length;
+    let pairs = 0;
+    let above = 0;
+    for (let t = 0; t + 1 < times.length; t++) {
+      if (wind[t] === null || gust[t + 1] === null || gust[t + 1] === undefined) continue;
+      pairs++;
+      if (gust[t + 1] >= wind[t]) above++;
+    }
+    const copies = winds
+      .filter((other) => other !== key)
+      .filter((other) => f.hourly[other].every((v, i) => v === wind[i]))
+      .map((other) => other.slice('wind_speed_10m_'.length));
+    console.log(
+      `  wind${id}: ${first(wind, 0)}/48h of wind, ${first(gust, 1)}/48h of gusts,` +
+        ` gust >= wind in ${pairs ? Math.round((100 * above) / pairs) : '-'}% of ${pairs} hours` +
+        (copies.length ? `, same wind as ${copies.join(', ')}` : ''),
+    );
+    // Each model's 24-hour mean wind on the first two whole days, for the normals' calibration.
+    for (const d of dates.slice(0, 2)) {
+      const day = times.flatMap((t, i) => (t.startsWith(d) ? [wind[i]] : []));
+      if (day.length === 24 && day.every((v) => v !== null)) {
+        means.push({ date: d, mean: day.reduce((a, b) => a + b, 0) / 24 });
+      }
+    }
+  }
+  // The models' 24-hour mean wind against the climate cell's normal for the month (WS10M, m/s),
+  // which decides WIND.normals.scale.
+  const normals = read(`nasa-power-wind-${place}.json`).properties?.parameter?.WS10M;
+  const month = [
+    'JAN',
+    'FEB',
+    'MAR',
+    'APR',
+    'MAY',
+    'JUN',
+    'JUL',
+    'AUG',
+    'SEP',
+    'OCT',
+    'NOV',
+    'DEC',
+  ][Number(dates[0]?.slice(5, 7)) - 1];
+  if (means.length && normals?.[month] >= 0) {
+    const forecast = median(means.map((m) => m.mean));
+    const normal = normals[month] * 3.6;
+    console.log(
+      `  wind calibration: median 24-hour mean ${r1(forecast)}km/h over ${means.length} model-days` +
+        ` against the ${month} normal ${r1(normal)}km/h (ratio ${Math.round((forecast / normal) * 100) / 100})`,
+    );
+  }
 }
 for (const place of ['newcastle', 'seville', 'london', 'singapore']) {
   for (const name of [
     `nasa-power-${place}.json`,
     `nasa-power-rain-${place}.json`,
     `nasa-power-snow-${place}.json`,
+    `nasa-power-wind-${place}.json`,
   ]) {
     const nasa = read(name);
     console.log(

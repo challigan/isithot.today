@@ -75,6 +75,37 @@ import {
   intro,
   placesIntro,
   updatedTime,
+  STILL_LABEL,
+  STILL_VERDICTS,
+  WIND_AGREE_WORDS,
+  WIND_ANSWERS,
+  WIND_BAND_LABELS,
+  WIND_COPY,
+  WIND_DAY_VERDICTS,
+  WIND_NOW_VERDICTS,
+  WIND_PHRASES,
+  WIND_UNITS,
+  WIND_UNIT_NAMES,
+  WIND_WEEK_ANSWERS,
+  WIND_WEEK_VERDICTS,
+  breezierFromLine,
+  breezyDaysLine,
+  calmWeekLine,
+  lighterFromLine,
+  lightWindsLine,
+  windAgreementLine,
+  windDayLine,
+  windDaysLine,
+  windiestAroundLine,
+  windiestLine,
+  windLabel,
+  windNormalLine,
+  windNowLine,
+  windPageTitle,
+  windRowSpoken,
+  windStripSummary,
+  windyFromLine,
+  windyWeekLine,
 } from '../src/copy';
 import {
   BANDS,
@@ -84,6 +115,7 @@ import {
   SNOW_BANDS,
   TITLE_MAX_LENGTH,
   TOPICS,
+  WIND_BANDS,
   type RainBand,
 } from '../src/config';
 
@@ -296,6 +328,7 @@ describe('snow copy', () => {
       hot: 'Is it hot here?',
       wet: 'Is it wet here?',
       snow: 'Will it snow here?',
+      wind: 'Is it windy here?',
     });
   });
 
@@ -319,6 +352,7 @@ describe('snow copy', () => {
       hot: 'Temperature units',
       wet: 'Rain units',
       snow: 'Snow units',
+      wind: 'Wind units',
     });
     expect(UNIT_NAMES.snow).toEqual({ c: 'cm', f: 'in' });
     expect(UNIT_NAMES.wet).toEqual({ c: 'mm', f: 'in' });
@@ -406,31 +440,38 @@ describe('snow copy', () => {
 describe('search titles and descriptions', () => {
   it('titles a city page with its question and what it offers, never the answer', () => {
     expect(cityTitle('Leeds', 'hot')).toBe(
-      'Is it hot in Leeds today? Hour by hour from 8 forecasts | isithot.today',
+      'Is it hot in Leeds today? Hour by hour from 6 forecasts | isithot.today',
     );
     expect(cityTitle('Leeds', 'wet')).toBe(
-      'Is it wet in Leeds today? Rain hour by hour from 8 forecasts | isitwet.today',
+      'Is it wet in Leeds today? Rain hour by hour from 6 forecasts | isitwet.today',
     );
     expect(cityTitle('Leeds', 'snow')).toBe(
-      'Will it snow in Leeds today? Hour by hour from 8 forecasts | willitsnow.today',
+      'Will it snow in Leeds today? Hour by hour from 6 forecasts | willitsnow.today',
     );
-    expect(MODELS).toHaveLength(8);
+    expect(cityTitle('Leeds', 'wind')).toBe(
+      'Is it windy in Leeds today? Hour by hour from 6 forecasts | isitwindy.today',
+    );
+    expect(MODELS).toHaveLength(6);
   });
 
   it('drops words after the question to keep a title short, never the question', () => {
     // 46 characters of question leave room for the short tail only.
     expect(cityTitle('Las Palmas de Gran Canaria', 'hot')).toBe(
-      'Is it hot in Las Palmas de Gran Canaria today? From 8 forecasts | isithot.today',
+      'Is it hot in Las Palmas de Gran Canaria today? From 6 forecasts | isithot.today',
     );
     expect(cityTitle('Las Palmas de Gran Canaria', 'snow')).toBe(
       'Will it snow in Las Palmas de Gran Canaria today? | willitsnow.today',
     );
+    // Wind's question is a letter shorter than snow's, so its short tail just fits.
+    expect(cityTitle('Las Palmas de Gran Canaria', 'wind')).toBe(
+      'Is it windy in Las Palmas de Gran Canaria today? From 6 forecasts | isitwindy.today',
+    );
     // Rain keeps its word as long as it can.
     expect(cityTitle('Middlesbrough', 'wet')).toBe(
-      'Is it wet in Middlesbrough today? Hourly rain from 8 forecasts | isitwet.today',
+      'Is it wet in Middlesbrough today? Hourly rain from 6 forecasts | isitwet.today',
     );
     expect(cityTitle('Newcastle under Lyme', 'wet')).toBe(
-      'Is it wet in Newcastle under Lyme today? Rain from 8 forecasts | isitwet.today',
+      'Is it wet in Newcastle under Lyme today? Rain from 6 forecasts | isitwet.today',
     );
     expect(cityTitle('Las Palmas de Gran Canaria', 'wet')).toBe(
       'Is it wet in Las Palmas de Gran Canaria today? | isitwet.today',
@@ -448,7 +489,10 @@ describe('search titles and descriptions', () => {
 
   it('describes a city page without its answer', () => {
     expect(cityDescription('Leeds', 'hot')).toBe(
-      'Will today feel hot in Leeds? One answer from 8 forecast models, judged against what is normal there, with the next 12 hours and the week ahead.',
+      'Will today feel hot in Leeds? One answer from 6 forecast models, judged against what is normal there, with the next 12 hours and the week ahead.',
+    );
+    expect(cityDescription('Leeds', 'wind')).toBe(
+      'Will it be windy in Leeds today? One answer from 6 forecast models: how strong the wind and gusts get and when, with the next 12 hours and the week ahead.',
     );
     expect(cityDescription('Leeds', 'wet')).toMatch(/^Will it rain in Leeds today\? .+ rain /);
     expect(cityDescription('Leeds', 'snow')).toMatch(/^Will it snow in Leeds today\? .+ snow /);
@@ -458,9 +502,9 @@ describe('search titles and descriptions', () => {
 
   it('introduces each site and its places page', () => {
     for (const topic of TOPICS) {
-      expect(intro(topic).heading).toBe('One answer from 8 forecasts');
+      expect(intro(topic).heading).toBe('One answer from 6 forecasts');
       expect(intro(topic).text).toMatch(new RegExp(`^${SITES[topic].name} answers one question: `));
-      expect(intro(topic).text).toContain('8 forecast models');
+      expect(intro(topic).text).toContain('6 forecast models');
       expect(placesIntro(topic)).toMatch(/^(Is it|Will it) \w+ today\? Choose a town or city: /);
     }
     expect(COPY.allPlaces).toBe('All places');
@@ -488,6 +532,121 @@ describe('when the forecast was fetched', () => {
   it('says yesterday for a forecast fetched the evening before', () => {
     expect(updatedTime('2026-10-10T22:40:00Z', 'Europe/London', '2026-10-11')).toBe(
       'yesterday, 11:40pm BST',
+    );
+  });
+});
+
+describe('wind copy', () => {
+  it('asks the wind questions', () => {
+    expect(TOPIC_LABELS.wind).toBe('Wind');
+    expect(question(null, 'today', 'wind')).toBe('Is it windy today?');
+    expect(question(null, 'now', 'wind')).toBe('Is it windy right now?');
+    expect(question('Leeds', 'week', 'wind')).toBe('Will it be windy in Leeds this week?');
+    expect(question('Leeds', 'today', 'wind', true)).toBe('Will it be windy in Leeds tomorrow?');
+    expect(DEFAULT_TITLES.wind).toBe('Is it windy today? | isitwindy.today');
+    expect(DEFAULT_DESCRIPTIONS.wind).toMatch(/^Will it be windy today where you are\? /);
+    expect(placesIntro('wind')).toBe(
+      'Is it windy today? Choose a town or city: the UK by nation, then the rest of the world by country.',
+    );
+  });
+
+  it('has its own units, mph or km/h', () => {
+    expect(UNITS_LABELS.wind).toBe('Wind units');
+    expect(WIND_UNITS).toEqual(['mph', 'kmh']);
+    expect(WIND_UNIT_NAMES).toEqual({ mph: 'mph', kmh: 'km/h' });
+    expect(COPY.nextHoursWind).toBe('Gusts, next 12 hours');
+    expect(COPY.metOfficeWarnings).toBe('Met Office warnings');
+  });
+
+  it('has an answer, verdicts, a label and words for every wind band', () => {
+    for (const band of WIND_BANDS) {
+      expect(WIND_ANSWERS[band]).toMatch(/^(No|A bit|Yes)\.$/);
+      expect(WIND_DAY_VERDICTS[band]).toMatch(/\.$/);
+      expect(WIND_NOW_VERDICTS[band]).toMatch(/\.$/);
+      expect(WIND_BAND_LABELS[band]).toBeTruthy();
+      expect(WIND_AGREE_WORDS[band]).toBeTruthy();
+    }
+    expect(WIND_ANSWERS).toEqual({
+      calm: 'No.',
+      breezy: 'A bit.',
+      windy: 'Yes.',
+      verywindy: 'Yes.',
+      gale: 'Yes.',
+      storm: 'Yes.',
+    });
+    expect([WIND_DAY_VERDICTS.breezy, WIND_DAY_VERDICTS.gale]).toEqual([
+      'Breezy, not windy.',
+      'Gales.',
+    ]);
+    expect(WIND_NOW_VERDICTS.windy).toBe("It's windy.");
+    expect(STILL_VERDICTS).toEqual({ day: "It'll be calm.", now: "It's calm." });
+    expect(windLabel('calm', false)).toBe('Light winds');
+    expect(windLabel('calm', true)).toBe(STILL_LABEL);
+    expect(windLabel('verywindy', false)).toBe('Very windy');
+    expect(WIND_PHRASES.storm).toBe('storm-force winds');
+    expect(WIND_WEEK_ANSWERS.partly).toBe('Partly.');
+    expect(WIND_WEEK_VERDICTS.light).toBe('Light winds all week.');
+    // Never a warning of ours: no warning words, and no shouting.
+    const all = [
+      ...Object.values(WIND_DAY_VERDICTS),
+      ...Object.values(WIND_NOW_VERDICTS),
+      ...Object.values(WIND_WEEK_VERDICTS),
+      ...Object.values(WIND_COPY),
+    ].join(' ');
+    expect(all).not.toMatch(/warning|danger|alert|take care|!/i);
+  });
+
+  it('writes the day, Now and the strip in the wind unit', () => {
+    expect(windDayLine('45mph', '25mph')).toBe('Gusts up to 45mph, wind up to 25mph.');
+    expect(lightWindsLine('15mph')).toBe('Light winds, gusts up to 15mph.');
+    expect(windiestAroundLine(15)).toBe('Windiest around 3pm.');
+    expect(windNowLine('18mph', '32mph')).toBe('Wind 18mph, gusts 32mph right now.');
+    expect(windyFromLine('windy', 15)).toBe('Windy from about 3pm.');
+    expect(windyFromLine('verywindy', 15)).toBe('Very windy from about 3pm.');
+    expect(windyFromLine('gale', 0)).toBe('Gales from about 12am.');
+    expect(windyFromLine('storm', 21)).toBe('Storm-force winds from about 9pm.');
+    expect(lighterFromLine(21)).toBe('Lighter from about 9pm.');
+    expect(breezierFromLine(14)).toBe('Breezier from about 2pm.');
+    expect(WIND_COPY).toEqual({
+      breezyNext12: 'Breezy for the next 12 hours.',
+      lightNext12: 'Light winds for the next 12 hours.',
+    });
+    expect(windRowSpoken('32mph', '3pm')).toBe('Gusts up to 32mph from 3pm');
+    expect(windAgreementLine(4, 6, 'windy')).toBe('4 of 6 forecasts say windy');
+    expect(windAgreementLine(1, 6, 'gale')).toBe('1 of 6 forecasts says gales');
+    expect(
+      windStripSummary({ min: '25mph', max: '48mph', agree: 4, total: 6, band: 'windy' }),
+    ).toBe('Forecast gusts range from 25mph to 48mph; 4 of 6 say windy.');
+    expect(windStripSummary({ min: '9mph', max: '9mph', agree: 1, total: 1, band: 'calm' })).toBe(
+      'All forecasts give gusts of 9mph; 1 of 1 says light winds.',
+    );
+  });
+
+  it('writes the week and the normals', () => {
+    expect(windyWeekLine(null)).toBe('A windy week.');
+    expect(windyWeekLine({ phrase: 'gales', when: 'on Fri' })).toBe('A windy week, gales on Fri.');
+    expect(windDaysLine('on Thu and Fri', null, false)).toBe('Windy on Thu and Fri.');
+    expect(windDaysLine('on Thu and Fri', { phrase: 'gales', when: 'on Fri' }, false)).toBe(
+      'Windy on Thu and Fri, gales on Fri.',
+    );
+    expect(windDaysLine('on Fri', { phrase: 'very windy', when: 'on Fri' }, true)).toBe(
+      'Very windy on Fri.',
+    );
+    expect(breezyDaysLine('on Mon and Tue')).toBe('Breezy on Mon and Tue.');
+    expect(windiestLine('on Friday', '45mph')).toBe('Windiest on Friday, gusts up to 45mph.');
+    expect(windiestLine('today', '72km/h')).toBe('Windiest today, gusts up to 72km/h.');
+    expect(calmWeekLine('15mph')).toBe('Gusts no stronger than 15mph all week.');
+    expect(windNormalLine('windier', 'October')).toBe('Windier than usual for October.');
+    expect(windNormalLine('calmer', null)).toBe('Calmer than usual for the time of year.');
+    expect(windNormalLine('usual', 'March')).toBe('About usual for March.');
+  });
+
+  it('titles a share card with the answer and its label', () => {
+    expect(windPageTitle({ city: 'Leeds', answer: 'Yes.', band: 'windy', still: false })).toBe(
+      'Is it windy in Leeds today? Yes. Windy | isitwindy.today',
+    );
+    expect(windPageTitle({ answer: 'No.', band: 'calm', still: true })).toBe(
+      'Is it windy today? No. Calm | isitwindy.today',
     );
   });
 });

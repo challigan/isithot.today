@@ -82,11 +82,11 @@ production, responses carry `x-isithot-via: function` when the dedicated functio
     `forecast for … took 2030ms`, the 503 body carries the reason in `error.detail` (timeout,
     `HTTP <status>` with Open-Meteo's reason, a network error and its cause, or the start of a
     body that is not JSON, with any API key masked), and `scripts/smoke.mjs` prints it.
-- **Needs a decision: MET Norway counts ECMWF twice outside Scandinavia.** Open-Meteo's
+- **Closed: MET Norway counted ECMWF twice outside Scandinavia.** Open-Meteo's
   `metno_seamless` is MET Nordic over Norway, Sweden, Finland and Denmark, and ECMWF's 9 km
-  model everywhere else (and after 2.5 days everywhere). For UK visitors it is close to a
-  second copy of ECMWF, so "8 forecasts agree" overstates the independent forecasts by one.
-  Options: keep it (simple, as the spec lists it), drop it outside the Nordics, or label it.
+  model everywhere else (and after 2.5 days everywhere). For UK visitors it was close to a
+  second copy of ECMWF, so "8 forecasts agree" overstated the independent forecasts by one.
+  Carl dropped it with the wind topic (see "Six models").
 - **Normal daily highs come from NASA POWER's `T2M + T2M_RANGE / 2`, not `T2M_MAX`.**
   Checked against live responses: in the climatology endpoint `T2M_MAX` is the highest
   temperature of the period, and `T2M_MAX_AVG` is the average _hottest day_ of each month.
@@ -211,10 +211,10 @@ to "Yes, drenched", and later bought isitwet.today so the domain decides which q
 - **Hot changes.** From 640px up the toggle adds about 2.75rem above the tab bar; model names
   are at full opacity (with the page a little longer, Cold's model list sits on a lighter part
   of the gradient); the units buttons are a little narrower so "mm" fits.
-- **Needs a decision: MET Norway matters more for rain.** Outside the Nordics it is close to a
-  second copy of ECMWF (see Data above), and for rain each model is a plain wet/dry vote, so
-  ECMWF effectively votes twice: 2 of 8 is enough for Maybe. Dropping MET Norway outside the
-  Nordics would make it 2 of 7.
+- **Closed: MET Norway mattered more for rain.** Outside the Nordics it was close to a second
+  copy of ECMWF (see Data above), and for rain each model is a plain wet/dry vote, so ECMWF
+  effectively voted twice. It is gone (see "Six models"): Maybe is now 2 of 6 independent
+  forecasts.
 - **Needs a decision: rain thresholds** (1 mm a day, 60% and 25% of models) after real use.
 - OG images are drawn in °C and mm for every city, as before, so a US city's image shows mm
   while its page shows inches.
@@ -570,6 +570,182 @@ little bit saying whether its high medium or low", then "Include very high and e
   echoes a requested height without changing its temperatures, so the end-to-end tests' answers
   stay put.
 
+## Six models
+
+Carl, with the wind topic: "Yes to both": drop MET Norway and JMA, and give wind its own units.
+Six models remain: ECMWF (`ecmwf_ifs025`), GFS, ICON, UKMO, Météo-France and GEM.
+
+- **Why these two.** Outside the Nordic countries Open-Meteo's `metno_seamless` is ECMWF's own
+  model, so it counted ECMWF twice (and answered GFS's UV index as its own); JMA stores no wind
+  gusts at all and its licence was unclear. Open-Meteo's source (main f625df2) shows that each of
+  the six stores its own 10 m wind and gusts, so none answers a copy. This closes "MET Norway
+  counts ECMWF twice" (Data) and "MET Norway matters more for rain" (Is it wet?).
+- **Counts.** Everything that counts models reads `MODELS.length`: "5 of 6 forecasts agree",
+  "Rain hour by hour from 6 forecasts", the About pages' agency list, and the loading strip's
+  placeholder rows (six, so the answer's arrival never shifts the layout; it held eight). The
+  counts quoted in older sections above are history.
+- **One threshold changed.** With six models the shares are sixths. `RAIN.hourPossible` and
+  `SNOW.hourPossible` were 0.375 (3 of 8 names the likeliest hour); 2 of 6 is a third and 3 of 6
+  is already a likely hour, so 0.375 could never be reached and every showery six-model day said
+  "On and off.". Both are now 1/3: 2 of 6 names the hour, while 2 of 8 and 2 of 7 still do not,
+  so eight-model behaviour is unchanged. It also names 1 of 3 on a three-model day, which only
+  happens far out in the week, where no timing line is shown. Every other share keeps its count
+  or its meaning: Maybe from 2 of 6 (2 of 8 before), Yes from 4 of 6 (5 of 8), a likely hour at
+  3 of 6 (4 of 8), and the hot blend still trims one at each end.
+- **Request and cache.** `FORECAST_CACHE_VERSION` went from 5 to 6 and the request line changed,
+  so CI's preview job re-records the fixtures; older eight-model recordings without wind still
+  parse (with no wind in them). `CACHE.snapshotVersion` went from 8 to 9 (six model rows and
+  the four-button toggle in the saved markup).
+- **Quota.** 6 models × 7 variables is 4.2 calls a fetch (3.0 without wind's two; 4.0 with
+  eight models and five variables): about 99 places checked around the clock on the free API's
+  10,000 a day, against about 104 before (SETUP.md, section 2).
+
+## Is it windy? (isitwindy.today)
+
+Carl: "someone suggested I add a Wind tab, I purchased isitwindy.today as I think it's a good
+idea." The same one-pager for wind (Now, Today or Tomorrow, This week), with its own palettes,
+gradients and icons, and answers from "No." to "Yes." across six bands. isitwindy.today opens on
+the wind question, and the toggle reads Hot | Wet | Snow | Wind on all four sites.
+
+- **Data.** The one forecast request gains hourly `wind_speed_10m` and `wind_gusts_10m` (km/h,
+  Open-Meteo's unit), 4.2 calls a fetch (see "Six models"). Open-Meteo labels the wind speed as
+  instant and the gusts as the strongest of the hour before the stamp (three hours for ECMWF), so
+  the parser keeps wind at its stamp and moves each gust to the hour's start, as it does rain and
+  the UV index. Copied series are still dropped (`withoutCopies`), though no model copies
+  another's wind. Each model's day keeps its strongest wind and gust between 7am and 9pm and its
+  24-hour mean, worked out before the server drops the later days' hours.
+- **Bands** (`WIND` in `config.ts`, whole km/h). A band is reached by its mean wind **or** its
+  gust, the rule the Met Office uses for a gale ("force 8 or gusts reaching 43 knots"):
+
+  | Band        | Answer | Mean wind from   | Gusts from        | Basis                                     |
+  | ----------- | ------ | ---------------- | ----------------- | ----------------------------------------- |
+  | Light winds | No.    | below breezy     | below breezy      | Beaufort 0–3                              |
+  | Breezy      | A bit. | 21 km/h (13 mph) | 32 km/h (20 mph)  | Beaufort force 4                          |
+  | Windy       | Yes.   | 30 km/h (19 mph) | 48 km/h (30 mph)  | force 5                                   |
+  | Very windy  | Yes.   | 40 km/h (25 mph) | 64 km/h (40 mph)  | force 6                                   |
+  | Gale        | Yes.   | 62 km/h (39 mph) | 80 km/h (50 mph)  | force 8; Met Office gale gusts 43 knots   |
+  | Storm       | Yes.   | 88 km/h (55 mph) | 112 km/h (70 mph) | force 10; Met Office storm gusts 61 knots |
+
+  Sources: the Met Office's Beaufort scale and marine glossary (gale, severe gale and storm by
+  force or gusts), RMetS Metlink's land descriptions, and the US National Weather Service's
+  forecast terms for breezy, windy and very windy (which start a little higher; ours start from
+  the forces whose effects people notice). Changes from the spec's starting point: breezy's mean
+  is force 4, not 3 (force 3 is about the UK's average wind); the mean wind counts for every
+  band, not only the lower two; a storm's gusts are 70 mph, the Met Office's 61 knots, not 65.
+  UK wind warnings have no fixed thresholds (they weigh likelihood and impact), so the bands
+  never claim to be warnings. Still air (mean under 6 km/h and gusts under 16 km/h) reads "It's
+  calm." and "Calm"; other light days read "Light winds", the Met Office's everyday words for
+  force 1 to 3.
+
+- **Whole numbers that agree with the band.** Each model's wind and gust is rounded to whole km/h
+  as it is shown, the window's value is the median of those, and mph is worked out from the
+  whole km/h. Every edge above converts to the right side in mph (a unit test checks every km/h
+  value from 0 to 200), so "50mph" is never shown under a band that starts at 50 and says it is
+  not reached. The backend chose to round each model before the median (the design said full
+  precision): a one-hour Today then always equals Now.
+- **Today, Tomorrow and the week.** Whole days are the waking hours, 7am to 9pm. Today is the
+  rest of it, from the start of the current hour to 9pm (to midnight from 9pm), so a windy
+  evening still to come counts; peaks are not sums, so nothing is scaled. Because Today always
+  includes the current hour it is never calmer than Now (a property test over 300 random days).
+  "Windiest around 3pm" names the hour with the strongest median gust. A model agrees when its
+  own band is the window's ("4 of 6 forecasts say windy"); the strip shows each model's
+  strongest gust, with the band's gust range as its zone. The week: Yes. with four or more windy
+  days or any gale or storm, Partly. with fewer windy days, A bit. with breezy days only, else
+  No.; "Windiest on Friday, gusts up to 45mph." names the day.
+- **Normals.** NASA POWER's `WS10M` (monthly mean wind at 10 m) in its own request and cache
+  entry (`climate-wind/v1/<cell>`), with snow's 300 m height guard: a cell's mean height can be
+  far from a valley town's, and exposure matters as much as height. Used only for "Windier than
+  usual for October." (a day at 1.4 × normal and 5 km/h more, a week at 1.25 × and 3 km/h; calmer
+  the same way down). **Needs a decision once CI has recorded live data**: the forecast is a
+  point and the normal a 50 km cell's mean (coastal cells include sea), so the comparison may
+  lean one way. `scripts/summarise-fixtures.mjs` prints the ratio of the forecasts' 24-hour mean
+  to the cell's normal at Newcastle and Seville; if both are off by more than 30%, set
+  `WIND.normals.scale` from it or drop the day line. The committed `nasa-power-wind-*` fixtures
+  are synthetic stand-ins until then.
+- **No warnings of ours.** Nothing says "warning", "danger" or "alert". For a UK place whose
+  Today (or Tomorrow) or Now is a gale or a storm, the view links to the Met Office's official
+  warnings page ("Met Office warnings", core `warningsLink`), a plain link under the detail;
+  other countries have services of their own, so none. The About and Terms pages say the sites
+  issue no warnings.
+- **Words.** "Is it windy today?", "Is it windy right now?", "Will it be windy tomorrow?", "Will
+  it be windy this week?", "Is it windy in Leeds today?". Answers No., A bit., Yes. (and the
+  week's Partly.); "Very windy." wraps at the answer's size, so it is a verdict, never an answer.
+  Speeds have no space before the unit, as amounts do: `45mph`, `72km/h`.
+- **Units: a setting of their own.** The UK reads °C with mph, so wind does not follow the
+  temperature setting. Wind is in mph by default in the UK, the Crown Dependencies, the US and
+  its territories (`MPH_COUNTRIES`), km/h elsewhere. The wind site's pill reads mph | km/h
+  ("Wind units"); on the other three sites, showing Wind, the same two buttons switch to it.
+  - The API takes `windUnits=mph|kmh`. Without it, a request that names `units` gets the
+    place's unit (so it stays shareable at the CDN, and hot, wet and snow caching is unchanged);
+    one that names neither gets the visitor's.
+  - The browser keeps the choice under `isithot:windUnits` and sends it once chosen; until then
+    it sends nothing for the first answer (the server picks the place's) and then the last
+    answer's unit, as it does for °C and °F. The page's early request in `<head>` does the same.
+  - City pages are rendered in the city's country's unit (London mph, Paris km/h); a visitor's
+    other choice asks again quietly, as for °F.
+  - Links between the domains carry it as `windUnits=` beside `units=` (F8), and the page there
+    stores it and takes it out of the address.
+- **Four domains, one deploy.** isitwindy.today is a fourth row in the edge function's table
+  (`netlify/edge-functions/lib/route.ts`): served from `/wind`, www.isitwindy.today redirects to
+  it, any real host's `/wind/…` goes there and isitwindy.today's `/wet/…` and `/snow/…` go to
+  their sites, and `x-isitwindy-host: 1` makes a deploy preview act as it (never in production;
+  with several headers sent, the first in table order wins). Nothing else tested for a topic by
+  name; the route tests gained the fourth site.
+- **Pages.** `/wind` mirrors `/snow`: home, city pages, places, About (with "Is it windy?" first,
+  its bands in both units from `WIND`), Privacy, Cookies, Terms, 404, OG images, sitemap, robots
+  and icons (`public/wind`, from `scripts/make-icons.mjs`; three white wind lines on green). The
+  UV line stays Hot's alone. Each site's last answer: `isitwindy:last`, held only until the next
+  forecast hour, as for wet and snow.
+- **Search engines.** Wind blows everywhere, so no wind page is noindexed: the sitemap and the
+  places page list all 300 cities, and other sites' pages link to every city's wind page.
+  Titles follow the others' ("Is it windy in Leeds today? Hour by hour from 6 forecasts |
+  isitwindy.today"); share cards carry the answer ("… Yes. Windy | isitwindy.today").
+- **Palettes: yellow to green.** Every blue and violet is taken (Hot's Cold and Freezing, all of
+  Wet, all of Snow), so the spec's "pale sky to storm teal-grey" would have looked like Wet's Dry,
+  Showers and Heavy. Wind takes the free part of the wheel: pale straw with a warm sun for calm,
+  spring green for breezy, then greens darkening to pine, and a storm's charcoal under a
+  yellow-green light. Each palette is at least 13.4 (CIEDE2000) from every other topic's (the
+  closest existing pair, Hot's Mild and Wet's Spots, is 11.7). `scripts/palette-contrast.mjs`
+  holds Wind to every column (lowest 4.71, Windy at the glow's centre), and
+  `e2e/contrast.spec.ts` measures all 24 bands as rendered. **Needs a decision**: green is the
+  only free family; if Carl wants greyer, sea-green came within 11–14 of Wet's teals, so a
+  switch between Wet and Wind on a wet, windy day would barely change colour.
+- **Icons** follow the Beaufort scale's signs: a flag hanging still (calm), flying (breezy), the
+  three wind lines (windy), a tree bending (very windy), bent hard with leaves torn off (gale),
+  and Wet's and Snow's heavy cloud with violent gusts (storm). The wind always blows from the
+  left. Wind lines, the flag, the trees and the leaves move three or four times and come to rest
+  within 4.2 seconds, and not at all with reduced motion.
+- **The four-way toggle.** Four buttons squeezed together at 320px with 200% text, and words were
+  clipped at 125–150%. The toggle now has three steps on its container (`.wrap`, in ems, half an
+  em early because the phone pill has that much more room than the page): icons and words from
+  19.5em up (360px phones and desktop at the usual size), words alone below, smaller words below
+  12.5em, and below 10.5em each icon over a smaller word, as on a phone's tab bar, four equal
+  buttons in a pill no taller than before (60px buttons in 251px of the 256px it may use at
+  320px with 200% text). Rejected: icons alone at the narrowest (enlarged text would lose the
+  words), a 2 × 2 grid (twice as tall) and only the pressed button's word (buttons would move
+  under the finger). `e2e/layout.spec.ts` checks every icon and word inside its button from
+  320px to 1280px at 100–200% text. Wind's longer questions ("Will it be windy tomorrow?") keep
+  clear of the icon as snow's do.
+- **Synthetic data** (offline development and e2e): each place cycles from calm to gale over ten
+  days, each model within ±15%, windiest in the afternoon; Reykjavík (64° or more) has a storm
+  every hour of the year, so every band shows in any month. The preview (`?preview=1`) has a
+  sample for each wind band, the UK ones in mph with the warnings link for gale and storm.
+- **Fixtures.** CI's next preview run records the six models and `WS10M`. The provider tests on
+  those recordings require at least 5 models with a day's wind on days 1–2, 3 on every day, and
+  gusts at least the mean wind in 90% of model-hours (the design said 95%; loosened so one
+  model's diagnosed gusts cannot block the commit of the fixtures).
+- **Size.** The browser keeps wind's "now" current with rain's code, as snow's does; wind's day
+  and week judging runs only on the server and in the on-demand preview. The app chunk went from
+  about 21 to 24.1 KB gzipped (budget 25.6 KB): wind's now, the four-topic client, the icons, and
+  wind's day and week strings, which reach the chunk through the shared copy module as rain's and
+  snow's do. Moving those strings to a module only the server and the preview import would win
+  back about 0.5 KB if the budget gets tight.
+- **Needs a decision.** Should `MPH_COUNTRIES` add Liberia, the Caribbean states and the UK's
+  overseas territories (they sign roads in mph)? Is "Light winds" right for the calm band, with
+  "Calm" only for still air? At 200% text on phones up to about 420px the toggle shows each icon
+  over a small word rather than the larger words alone; a single labelled button opening a menu
+  would need new interaction code.
+
 ## Saved places (planned for the apps)
 
 Carl wants to save places in the native apps. Nothing is built for it on the web.
@@ -590,7 +766,8 @@ The spec's shape is implemented exactly. Additive fields: `days[].month`, `agree
 `limitedText`, `stripSummary`, `scale`, `models[].value` (one decimal, for the strip),
 top-level `nearby` (nearest city pages: 4, 8 since "Search engines"), `now` and `week` (the two new views; shapes in
 `packages/core/src/types.ts`), `rain` (Is it wet?, with its own `days`, `now` and `week`)
-and `snow` (Will it snow?, the same shape as `rain`, with amounts in cm or in). `location` may
+`snow` (Will it snow?, the same shape as `rain`, with amounts in cm or in) and `wind` (Is it
+windy?, the same shape again, with speeds in mph or km/h). `location` may
 include `slug` and `geonameId`. `days` holds today and tomorrow (never more than two); the rest
 of the week is summarised in `week`.
 
@@ -644,6 +821,17 @@ UV index and place height additions (no field changes its meaning):
 - `location.elevation` and `SearchResult.elevation` (optional): the place's height, whole
   metres, when known. `/api/v1/today` takes `elevation` with `source=search`.
 
+Is it windy? additions (no field changes its meaning):
+
+- `wind` is present when the forecast has wind and gusts: `wind.days` (the rest of today from the
+  current hour to 9pm, or midnight from 9pm, then tomorrow 7am to 9pm), `wind.now` (the current
+  hour with a day of judged hourly points, kept current in the browser by core
+  `computeWindNow`/`formatWindNow`) and `wind.week`. Speeds are whole numbers in `wind.unit`
+  (`mph` or `kmh`); each model's `gust` and `mean` are whole numbers, `value` one decimal for the
+  strip. Responses cached before it lack it.
+- `/api/v1/today` takes `windUnits=mph|kmh`. Without it, wind is in the place's country's unit
+  when `units` is given (so the response stays shareable), else the visitor's.
+
 Search engines change (no field changes its meaning):
 
 - `nearby` holds the 8 nearest city pages (`LINKS.nearby`), up from 4.
@@ -656,7 +844,7 @@ Search engines change (no field changes its meaning):
   grids (UKMO, one of the 8 models) are CC BY-SA 4.0 instead. So the credits are "Weather data
   by Open-Meteo.com (CC BY 4.0), modified", "Contains Met Office data © Crown copyright, the
   Met Office, licensed under CC BY-SA 4.0" and "Climate data: NASA POWER" (`ATTRIBUTION` in
-  `copy.ts`). The API's `attribution` carries them; the footer of every page on all three
+  `copy.ts`). The API's `attribution` carries them; the footer of every page on all the
   sites shows them, with Open-Meteo, NASA POWER and both licences linked, plus GeoNames. The
   About pages name the agencies behind the models (from `MODELS`, so dropping a model updates
   them) and say that the sites combine and modify the data. The apps will need the same
@@ -721,9 +909,9 @@ in Leeds today"), with pages that are plainly original, easy to browse and hones
   nation, then the world by country, A to Z (core `placeGroups`). Every footer, the home pages
   and city pages link to it, so every city page is two clicks from a home page.
 - **City pages link on**: 8 nearby city pages (was 4; `LINKS.nearby`, also the API's `nearby`
-  count), the same city on the other two sites as real links to their own domains (which the
-  browser keeps on the same host on previews and locally, and which carry the chosen units, as
-  Nearby's do), and All places. The Hot | Wet | Snow toggle stays as buttons.
+  count), the same city on the other sites (three since Is it windy?) as real links to their own
+  domains (which the browser keeps on the same host on previews and locally, and which carry the
+  chosen units, as Nearby's do), and All places. The toggle stays as buttons.
 - **Structured data**: WebSite (name, alternateName, url) on each home page, one per domain as
   Google's site names need; BreadcrumbList (site › Places › city) on city pages and the places
   page. No FAQPage or HowTo: Google no longer shows either.
@@ -763,8 +951,8 @@ in Leeds today"), with pages that are plainly original, easy to browse and hones
   they get a backing in each band's `pill` colour (the gradient colour with the most contrast
   against the text) at 85%.
 - **Every text meets WCAG 2.2 AA in every band and view** (Carl's go-ahead, October 2026).
-  `e2e/contrast.spec.ts` measures it on rendered pages for all 18 bands (six each for hot, wet
-  and snow), all three views, on phone and desktop, and fails CI below 4.5:1 (3:1 for large
+  `e2e/contrast.spec.ts` measures it on rendered pages for all 24 bands (six each for hot, wet,
+  snow and wind), all three views, on phone and desktop, and fails CI below 4.5:1 (3:1 for large
   text). What changed from the approved prototype (`reference/prototype.html` is updated to
   match):
   - Hot is darker: `#cc3d17` to `#a51c17`, with a deeper glow (`#ff9a4a`). The old `#e8571f`
@@ -803,11 +991,12 @@ marks them `noindex`; the live site scores 100.
 
 The workflow also measures https://isithot.today on every run, for comparison.
 
-Site JS is about 21 KB gzipped (budget 25 KB, checked in CI by `scripts/js-budget.mjs`; it
+Site JS is about 24 KB gzipped (budget 25 KB, checked in CI by `scripts/js-budget.mjs`; it
 was 8 KB before Now and This week, 12 KB before Is it wet?, 16 KB before round 2, 17 KB before
-Will it snow? and 20.7 KB before the credits and Search engines work, which added the titles,
-the Updated line's time zones and the links to the other sites). The rain and snow day and week judging runs only on the server; the
-browser carries the code that keeps rain's and snow's "now" current. Cached API responses come
+Will it snow?, 20.7 KB before the credits and Search engines work, which added the titles,
+the Updated line's time zones and the links to the other sites, and about 21 KB before Is it
+windy?). The rain, snow and wind day and week judging runs only on the server; the browser
+carries the code that keeps rain's, snow's and wind's "now" current. Cached API responses come
 back from the Netlify CDN in 10–40 ms. LCP sits just above the 1.5 s target under Lighthouse's
 simulated Moto G on slow 4G. Things that got it there:
 

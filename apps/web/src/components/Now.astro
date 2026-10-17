@@ -1,17 +1,20 @@
 ---
 /** The Now view: the blended forecast for the current time and the next few hours. */
-import type { NowDisplay } from '@isithot/core';
+import type { NowDisplay, OutboundLink } from '@isithot/core';
 import { glyphFor, hoursHtml } from '../lib/view';
 import UvLine from './UvLine.astro';
+import WarningsLine from './WarningsLine.astro';
 
 interface Props {
   /** From core `viewDisplay`. */
   view: NowDisplay;
   /** The page opens on this view (else it starts hidden, until the views join the scroller). */
   start?: boolean;
+  /** Wind's link to the Met Office's warnings, for a gale or storm in the UK. */
+  warnings?: OutboundLink | null;
 }
 
-const { view, start = false } = Astro.props;
+const { view, start = false, warnings = null } = Astro.props;
 ---
 
 <section
@@ -55,6 +58,7 @@ const { view, start = false } = Astro.props;
     {view.detail}
   </p>
   <UvLine id="now-uv" uv={view.uv} />
+  <WarningsLine id="now-warnings" link={warnings} />
   <section class="ahead hold" aria-labelledby="now-h">
     <h2 id="now-h">{view.heading}</h2>
     <ul class="list" id="now-hours" set:html={hoursHtml(view.items)} />

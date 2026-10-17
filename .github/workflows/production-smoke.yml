@@ -1,9 +1,10 @@
 name: Production smoke test
 
-# Waits for the production deploy of each push to main, then checks the three live sites against
-# the real upstream data: isithot.today (API and pages), isitwet.today and willitsnow.today (served
-# by the edge function from the /wet and /snow pages), and the redirects between them: a path
-# under another site's prefix goes to that site, and www.willitsnow.today to willitsnow.today.
+# Waits for the production deploy of each push to main, then checks the four live sites against
+# the real upstream data: isithot.today (API and pages), isitwet.today, willitsnow.today and
+# isitwindy.today (served by the edge function from the /wet, /snow and /wind pages), and the
+# redirects between them: a path under another site's prefix goes to that site, and
+# www.willitsnow.today and www.isitwindy.today to their own sites.
 on:
   push:
     branches: [main]
@@ -20,6 +21,7 @@ jobs:
       SITE: https://isithot.today
       WET_SITE: https://isitwet.today
       SNOW_SITE: https://willitsnow.today
+      WIND_SITE: https://isitwindy.today
       SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
@@ -38,10 +40,12 @@ jobs:
           done
           echo "Timed out waiting for the production deploy"; exit 1
 
-      - name: Smoke test isithot.today, isitwet.today and willitsnow.today
-        run: node scripts/smoke.mjs "$SITE" --wet-site "$WET_SITE" --snow-site "$SNOW_SITE"
+      - name: Smoke test isithot.today, isitwet.today, willitsnow.today and isitwindy.today
+        run: >-
+          node scripts/smoke.mjs "$SITE" --wet-site "$WET_SITE" --snow-site "$SNOW_SITE"
+          --wind-site "$WIND_SITE"
 
-      - name: Paths under another site's prefix, and www.willitsnow.today, redirect to that site
+      - name: Paths under another site's prefix, and the www hosts, redirect to that site
         run: |
           failed=0
           expect() {
@@ -61,4 +65,13 @@ jobs:
           expect "$SNOW_SITE/wet/in/newcastle-upon-tyne-gb" "$WET_SITE/in/newcastle-upon-tyne-gb"
           expect "https://www.willitsnow.today/" "$SNOW_SITE/"
           expect "https://www.willitsnow.today/in/newcastle-upon-tyne-gb" "$SNOW_SITE/in/newcastle-upon-tyne-gb"
+          expect "$SITE/wind" "$WIND_SITE/"
+          expect "$SITE/wind/in/newcastle-upon-tyne-gb" "$WIND_SITE/in/newcastle-upon-tyne-gb"
+          expect "$SITE/wind?lat=51.5&lon=-0.12" "$WIND_SITE/?lat=51.5&lon=-0.12"
+          expect "$WET_SITE/wind" "$WIND_SITE/"
+          expect "$SNOW_SITE/wind/in/newcastle-upon-tyne-gb" "$WIND_SITE/in/newcastle-upon-tyne-gb"
+          expect "$WIND_SITE/wet" "$WET_SITE/"
+          expect "$WIND_SITE/snow/in/newcastle-upon-tyne-gb" "$SNOW_SITE/in/newcastle-upon-tyne-gb"
+          expect "https://www.isitwindy.today/" "$WIND_SITE/"
+          expect "https://www.isitwindy.today/in/newcastle-upon-tyne-gb" "$WIND_SITE/in/newcastle-upon-tyne-gb"
           exit $failed

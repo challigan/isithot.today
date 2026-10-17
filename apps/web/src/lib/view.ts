@@ -6,15 +6,21 @@
  */
 import {
   UV_LEVEL_LABELS,
+  warningsLink,
   type AnyBand,
   type Band,
   type NowItem,
+  type OutboundLink,
   type TodayModels,
+  type TodayResponse,
+  type Topic,
   type UvDisplay,
   type WeekItem,
+  type WindBand,
 } from '@isithot/core';
 import { SNOW_GLYPHS } from './snowGlyphs';
 import { RAIN_GLYPHS } from './wetGlyphs';
+import { WIND_GLYPHS } from './windGlyphs';
 
 const rays = (n: number, r1: number, r2: number, cx = 60, cy = 60): string =>
   Array.from({ length: n }, (_, i) => {
@@ -43,7 +49,12 @@ export const GLYPHS: Record<Band, string> = {
 };
 
 /** Every topic's icons, by band: band keys are unique across topics. */
-const ALL_GLYPHS: Record<AnyBand, string> = { ...GLYPHS, ...RAIN_GLYPHS, ...SNOW_GLYPHS };
+const ALL_GLYPHS: Record<AnyBand, string> = {
+  ...GLYPHS,
+  ...RAIN_GLYPHS,
+  ...SNOW_GLYPHS,
+  ...WIND_GLYPHS,
+};
 
 /** The icon for any topic's band, or nothing without one. */
 export function glyphFor(band: AnyBand | null): string {
@@ -99,6 +110,19 @@ export function uvHtml(uv: UvDisplay | null): string {
   if (!uv) return '';
   const level = UV_LEVEL_LABELS[uv.level];
   return `<span aria-hidden="true">${uv.text.replace(level, `<b>${level}</b>`)}</span><span class="sr-only">${uv.sr}</span>`;
+}
+
+/**
+ * The Met Office's official warnings, linked under a gale or storm on Wind for a UK place (core
+ * `warningsLink`), or null. Never a warning of ours.
+ */
+export function warningsFor(
+  topic: Topic,
+  res: TodayResponse | null,
+  band: AnyBand | null,
+): OutboundLink | null {
+  if (topic !== 'wind' || !res || !band) return null;
+  return warningsLink(res.location.country, band as WindBand);
 }
 
 /** One row per day: name, a dot on the week's scale, the value and its band. */

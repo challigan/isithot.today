@@ -1,0 +1,20 @@
+---
+/**
+ * Wind's link to the Met Office's official warnings, under the detail of Today (or Tomorrow) and
+ * Now when the view's answer is a gale or a storm at a place in the UK (core `warningsLink`). A
+ * plain link: the sites never word a warning of their own. Hidden otherwise; scripts/app.ts
+ * shows and hides the same nodes.
+ */
+import { COPY, MET_OFFICE_WARNINGS, type OutboundLink } from '@isithot/core';
+
+interface Props {
+  /** "warnings" on Today, "now-warnings" on Now. */
+  id: string;
+  link: OutboundLink | null;
+}
+
+const { id, link } = Astro.props;
+---
+
+<!-- prettier-ignore -->
+<p class="warnings hold" id={id} hidden={!link}><a href={link?.url ?? MET_OFFICE_WARNINGS} target="_blank" rel="noopener">{link?.name ?? COPY.metOfficeWarnings}</a></p>

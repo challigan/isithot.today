@@ -9,11 +9,13 @@ import {
   RAIN_BANDS,
   SNOW,
   SNOW_BANDS,
+  WIND_BANDS,
   topicOfBand,
   type AnyBand,
   type Band,
   type RainBand,
   type SnowBand,
+  type WindBand,
 } from './config';
 import { ATTRIBUTION } from './copy';
 import { formatDay, type DayComputation, type DayData } from './compute';
@@ -29,8 +31,11 @@ import { computeSnowNow, formatSnowNow } from './snowNow';
 import { computeSnowWeek, formatSnowWeek } from './snowWeek';
 import { formatWeek } from './week';
 import { mean } from './stats';
-import type { ApiRain, ApiSnow, TodayResponse } from './types';
-import type { Units } from './units';
+import type { ApiRain, ApiSnow, ApiWind, TodayResponse, WindUnit } from './types';
+import { defaultWindUnitForCountry, type Units } from './units';
+import { computeWindDay, dailyWind, formatWindDay, judgeWindSeries, windSeries } from './windDay';
+import { computeWindNow, formatWindNow } from './windNow';
+import { computeWindWeek, formatWindWeek } from './windWeek';
 
 interface Sample {
   place: string;
@@ -124,7 +129,8 @@ const SAMPLES: Record<Band, Sample> = {
 export const PREVIEW_BANDS: readonly Band[] = BANDS;
 export const PREVIEW_RAIN_BANDS: readonly RainBand[] = RAIN_BANDS;
 export const PREVIEW_SNOW_BANDS: readonly SnowBand[] = SNOW_BANDS;
-export { BAND_LABELS, RAIN_BAND_LABELS, SNOW_BAND_LABELS } from './copy';
+export const PREVIEW_WIND_BANDS: readonly WindBand[] = WIND_BANDS;
+export { BAND_LABELS, RAIN_BAND_LABELS, SNOW_BAND_LABELS, WIND_BAND_LABELS } from './copy';
 
 function hotPreview(band: Band, units: Units): TodayResponse {
   const s = SAMPLES[band];
@@ -228,13 +234,14 @@ interface Spell {
   shifts?: readonly number[];
 }
 
-const FACTORS = [1, 1.25, 0.8, 1.1, 0.9, 1.3, 0.7, 1.05];
-const SHIFTS = [0, 1, 0, -1, 0, 0, 1, 0];
-const STEADY = [0, 0, 0, -1, 0, 0, 0, 0];
+/** One entry per model (MODELS, in order). */
+const FACTORS = [1, 1.25, 0.8, 1.1, 0.9, 1.3];
+const SHIFTS = [0, 1, 0, -1, 0, 0];
+const STEADY = [0, 0, 0, -1, 0, 0];
 /** Two forecasts with a little rain: spots. */
-const TWO = [1, 0, 0, 1.2, 0, 0, 0, 0];
+const TWO = [1, 0, 0, 1.2, 0, 0];
 /** Three forecasts with rain: showers. */
-const THREE = [1, 0, 1.4, 0, 0, 0.8, 0, 0];
+const THREE = [1, 0, 1.4, 0, 0, 0.8];
 
 const spots = (from: number): Spell => ({ from, to: from + 2, mm: 0.4, models: TWO });
 const showers = (from: number, mm = 3): Spell => ({ from, to: from + 4, mm, models: THREE });
@@ -242,11 +249,11 @@ const rain = (from: number, to: number, mm: number): Spell => ({ from, to, mm, s
 
 /** Seven days of spells, today first; the preview's "now" is 10:30 on the first day. */
 const RAIN_SAMPLES: Record<RainBand | 'snow', (readonly Spell[])[]> = {
-  dry: [[], [], [], [], [{ from: 15, to: 17, mm: 0.3, models: [1, 0, 0, 0, 0, 0, 0, 0] }], [], []],
+  dry: [[], [], [], [], [{ from: 15, to: 17, mm: 0.3, models: [1, 0, 0, 0, 0, 0] }], [], []],
   spots: [
     [
-      { from: 9, to: 12, mm: 0.36, models: [1, 0, 1, 0, 0, 1, 0, 0], shifts: STEADY },
-      { from: 14, to: 16, mm: 0.3, models: [1, 0, 1, 0, 0, 1, 0, 0] },
+      { from: 9, to: 12, mm: 0.36, models: [1, 0, 1, 0, 0, 1], shifts: STEADY },
+      { from: 14, to: 16, mm: 0.3, models: [1, 0, 1, 0, 0, 1] },
     ],
     [spots(13)],
     [],
@@ -256,7 +263,7 @@ const RAIN_SAMPLES: Record<RainBand | 'snow', (readonly Spell[])[]> = {
     [spots(16)],
   ],
   showers: [
-    [{ from: 10, to: 11, mm: 0.4, models: [1, 0, 1, 0, 0, 0, 0, 0] }, showers(13)],
+    [{ from: 10, to: 11, mm: 0.4, models: [1, 0, 1, 0, 0, 0] }, showers(13)],
     [spots(9)],
     [showers(15, 4)],
     [],
@@ -302,7 +309,7 @@ const FLAKES: Spell = {
   from: 9,
   to: 12,
   mm: 0.36,
-  models: [1, 0, 1, 0, 0, 1, 0, 0],
+  models: [1, 0, 1, 0, 0, 1],
   shifts: STEADY,
 };
 
@@ -449,12 +456,171 @@ function snowPreview(days: DayData[], s: Sample, units: Units): ApiSnow {
   };
 }
 
+// ---- Is it windy? ----------------------------------------------------------------
+
+/** Each model's share of a day's wind (MODELS, in order): close, as wind forecasts mostly are. */
+const WIND_FACTORS = [1, 1.12, 0.9, 1.04, 0.96, 1.18];
+
+/** A day's wind for a typical model: its strongest mean wind and gust, km/h, at 2pm. */
+type WindSpec = readonly [mean: number, gust: number];
+
 /**
- * A full sample answer for any band, with all three topics so the toggle works: a rain or snow
- * band comes with a hot sample that suits it (a dry day is warm, a snowy one freezing), and a hot
- * band with a week of rain that suits it. Rain and snow are judged on the same sample days.
+ * Seven days of wind for each wind band, today first. Each band shows in all three views: the
+ * preview's "now" (10:30) is near enough the afternoon peak to be in the day's band, and the week
+ * is judged to the same band (the calm week is still today and light after it; the gale week has
+ * two days of gales; the others have four windy days or more, or breezy ones).
  */
-export function previewResponse(band: AnyBand, units: Units = 'c'): TodayResponse {
+const WIND_SAMPLES: Record<WindBand, readonly WindSpec[]> = {
+  calm: [
+    [4, 11],
+    [12, 24],
+    [8, 18],
+    [4, 11],
+    [14, 28],
+    [10, 22],
+    [6, 14],
+  ],
+  breezy: [
+    [18, 40],
+    [16, 36],
+    [12, 26],
+    [18, 42],
+    [20, 44],
+    [14, 30],
+    [18, 40],
+  ],
+  windy: [
+    [26, 55],
+    [24, 52],
+    [18, 40],
+    [28, 58],
+    [26, 56],
+    [16, 34],
+    [22, 50],
+  ],
+  verywindy: [
+    [34, 72],
+    [26, 55],
+    [30, 60],
+    [20, 42],
+    [34, 70],
+    [28, 58],
+    [18, 38],
+  ],
+  gale: [
+    [50, 92],
+    [20, 42],
+    [16, 36],
+    [44, 90],
+    [22, 44],
+    [18, 40],
+    [24, 46],
+  ],
+  storm: [
+    [75, 130],
+    [40, 85],
+    [36, 70],
+    [30, 62],
+    [60, 100],
+    [26, 52],
+    [34, 72],
+  ],
+};
+
+/** The hot sample and the week of rain shown with each wind band. */
+const HOT_FOR_WIND: Record<WindBand, Band> = {
+  calm: 'warm',
+  breezy: 'mild',
+  windy: 'cold',
+  verywindy: 'cold',
+  gale: 'cold',
+  storm: 'cold',
+};
+const RAIN_FOR_WIND: Record<WindBand, RainBand> = {
+  calm: 'dry',
+  breezy: 'showers',
+  windy: 'rain',
+  verywindy: 'rain',
+  gale: 'heavy',
+  storm: 'drenched',
+};
+
+/** The wind shown with each hot, rain and snow band. */
+const WIND_FOR: Record<Band | RainBand | SnowBand, WindBand> = {
+  freezing: 'breezy',
+  cold: 'windy',
+  mild: 'breezy',
+  warm: 'calm',
+  hot: 'calm',
+  scorching: 'calm',
+  dry: 'calm',
+  spots: 'breezy',
+  showers: 'breezy',
+  rain: 'windy',
+  heavy: 'verywindy',
+  drenched: 'gale',
+  nosnow: 'calm',
+  flakes: 'breezy',
+  maybesnow: 'breezy',
+  snow: 'windy',
+  heavysnow: 'verywindy',
+  deepsnow: 'gale',
+};
+
+/** Monthly normal wind at 10m, m/s, January first. */
+const WIND_NORMALS: Record<string, MonthlyNormals> = {
+  GB: [6.4, 6.1, 5.9, 5.2, 4.8, 4.5, 4.5, 4.6, 5, 5.6, 5.9, 6.2],
+  ES: [3.4, 3.6, 3.7, 3.6, 3.4, 3.4, 3.5, 3.3, 3.1, 3.1, 3.2, 3.3],
+};
+
+/**
+ * The sample days with each model's hourly wind and gusts (km/h, one decimal as Open-Meteo gives
+ * them), strongest at 2pm and easing either side, and each model's daily wind as the providers
+ * work it out.
+ */
+function windDays(days: readonly DayData[], specs: readonly WindSpec[]): DayData[] {
+  return days.map((d, k) => {
+    const [windMean, gustPeak] = specs[k]!;
+    const hourly = d.hourly.map((h) => {
+      const shape = Math.max(0.5, 1 - 0.025 * Math.abs(h.hour - 14));
+      const at = (peak: number) =>
+        MODELS.map((_, m) => Math.round(peak * WIND_FACTORS[m]! * shape * 10) / 10);
+      return { ...h, wind: at(windMean), gust: at(gustPeak) };
+    });
+    return {
+      ...d,
+      models: d.models.map((m, i) => ({ ...m, ...dailyWind(hourly, i) })),
+      hourly,
+    };
+  });
+}
+
+/** The wind block, from the sample days by the same code as real forecasts. */
+function windPreview(days: DayData[], s: Sample, unit: WindUnit): ApiWind {
+  const now = Date.parse(`${s.date}T00:00:00Z`) + 10.5 * HOUR;
+  const normals = WIND_NORMALS[s.country]!;
+  const today = computeWindDay(days[0]!, { from: now, normals })!;
+  const later = days.slice(1).map((d) => computeWindDay(d, { normals })!);
+  const series = judgeWindSeries(windSeries(days), unit, 'UTC');
+  return {
+    unit,
+    days: [formatWindDay(today, unit), formatWindDay(later[0]!, unit)],
+    now: formatWindNow(computeWindNow(series, now)!, unit),
+    week: formatWindWeek(computeWindWeek([today, ...later])!, unit),
+  };
+}
+
+/**
+ * A full sample answer for any band, with all four topics so the toggle works: a rain, snow or
+ * wind band comes with a hot sample that suits it (a dry day is warm, a snowy one freezing), and
+ * every band with rain and wind that suit it. Rain and snow are judged on the same sample days.
+ * Wind speeds are in `windUnit`, by default the sample place's own (mph in the UK).
+ */
+export function previewResponse(
+  band: AnyBand,
+  units: Units = 'c',
+  windUnit?: WindUnit,
+): TodayResponse {
   const topic = topicOfBand(band);
   let hot: Band;
   let spells: (readonly Spell[])[];
@@ -464,15 +630,24 @@ export function previewResponse(band: AnyBand, units: Units = 'c'): TodayRespons
   } else if (topic === 'snow') {
     hot = HOT_FOR_SNOW[band as SnowBand];
     spells = SNOW_SAMPLES[band as SnowBand];
+  } else if (topic === 'wind') {
+    hot = HOT_FOR_WIND[band as WindBand];
+    spells = RAIN_SAMPLES[RAIN_FOR_WIND[band as WindBand]];
   } else {
     hot = band as Band;
     spells = RAIN_SAMPLES[RAIN_FOR_HOT[hot]];
   }
+  const wind = topic === 'wind' ? (band as WindBand) : WIND_FOR[band as Band | RainBand | SnowBand];
   const s = SAMPLES[hot];
   const days = sampleDays(spells, s);
   return {
     ...hotPreview(hot, units),
     rain: rainPreview(days, s, units),
     snow: snowPreview(days, s, units),
+    wind: windPreview(
+      windDays(days, WIND_SAMPLES[wind]),
+      s,
+      windUnit ?? defaultWindUnitForCountry(s.country),
+    ),
   };
 }

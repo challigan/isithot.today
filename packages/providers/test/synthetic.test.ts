@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { MODELS, RAIN, SNOW, type ModelDay } from '@isithot/core';
+import {
+  MODELS,
+  RAIN,
+  SNOW,
+  computeWindDay,
+  windSeries,
+  type ModelDay,
+  type WindBand,
+} from '@isithot/core';
 import {
   OPEN_METEO_FREE,
   NASA_POWER_URL,
@@ -8,9 +16,11 @@ import {
   fetchForecast,
   fetchRainNormals,
   fetchSnowNormals,
+  fetchWindNormals,
   searchPlaces,
   syntheticForecast,
   syntheticSnowNormals,
+  syntheticWindNormals,
   syntheticTimezone,
   zoneOffsetSeconds,
 } from '../src';
@@ -47,12 +57,11 @@ describe('synthetic data source', () => {
       { lat: 54.95, lon: -1.6 },
       MODELS,
     );
-    expect(f.days[0]!.models.map((m) => m.high)).toEqual([
-      12, 16.5, 14.3, 12.6, 13.9, 13.2, 13.5, 14,
-    ]);
+    // Each model's own, as with eight models (MET Norway's and JMA's left out).
+    expect(f.days[0]!.models.map((m) => m.high)).toEqual([12, 16.5, 14.3, 12.6, 13.9, 13.5]);
     expect(f.days[0]!.hourly[14]).toMatchObject({
-      temps: [11.9, 16.4, 14.2, 12.5, 13.8, 13.1, 13.4, 13.9],
-      feels: [9.9, 14.4, 12.2, 10.5, 11.8, 11.1, 11.4, 11.9],
+      temps: [11.9, 16.4, 14.2, 12.5, 13.8, 13.4],
+      feels: [9.9, 14.4, 12.2, 10.5, 11.8, 11.4],
     });
   });
 
@@ -114,20 +123,64 @@ describe('synthetic data source', () => {
     expect(starts.some((s) => s.size > 1)).toBe(true);
   });
 
-  it("stops Météo-France's rain at its horizon, as its temperatures do", async () => {
+  it("stops Météo-France's rain and wind at its horizon, as its temperatures do", async () => {
     const f = await week(54.95, -1.6, '2026-10-06T08:00:00Z');
     const i = MODELS.findIndex((m) => m.id === 'meteofrance_seamless');
-    expect(f.days.map((d) => d.models[i]!.rain === null)).toEqual([
-      false,
-      false,
-      false,
-      false,
-      true,
-      true,
-      true,
-    ]);
+    const stops = [false, false, false, false, true, true, true];
+    expect(f.days.map((d) => d.models[i]!.rain === null)).toEqual(stops);
+    expect(f.days.map((d) => d.models[i]!.gust === null)).toEqual(stops);
     // Every other model covers the whole week, the last day with its 23 hours.
-    expect(f.days.map((d) => totals(d.models).length)).toEqual([8, 8, 8, 8, 7, 7, 7]);
+    expect(f.days.map((d) => totals(d.models).length)).toEqual([6, 6, 6, 6, 5, 5, 5]);
+    expect(f.days.map((d) => d.models.filter((m) => m.gust !== null).length)).toEqual([
+      6, 6, 6, 6, 5, 5, 5,
+    ]);
+  });
+
+  /** The wind band of each whole day of the week from a date, as the server judges it. */
+  const windWeek = async (lat: number, lon: number, iso: string): Promise<WindBand[]> =>
+    (await week(lat, lon, iso)).days.slice(1).map((d) => computeWindDay(d)!.band);
+
+  it('blows from calm to gales over the weeks, for every model a little differently', async () => {
+    const bands = new Set<WindBand>();
+    for (let d = 0; d < 35; d += 7) {
+      const iso = new Date(Date.UTC(2026, 9, 6 + d, 8)).toISOString();
+      for (const band of await windWeek(51.5, -0.15, iso)) bands.add(band);
+    }
+    expect(bands).toEqual(new Set(['calm', 'breezy', 'windy', 'verywindy', 'gale']));
+    // Gusts are stronger than the mean wind, and strongest in the afternoon.
+    const f = await week(51.5, -0.15, '2026-10-06T08:00:00Z');
+    for (const h of f.days.flatMap((d) => d.hourly)) {
+      h.wind!.forEach((w, i) => {
+        if (w !== null && h.gust![i] !== null) expect(h.gust![i]!).toBeGreaterThan(w);
+      });
+    }
+    const day = f.days[1]!;
+    expect(day.hourly[3]!.gust![0]!).toBeLessThan(day.hourly[14]!.gust![0]!);
+    expect(new Set(day.models.map((m) => m.gust)).size).toBeGreaterThan(1);
+    // The Now view has every hour of the first three days.
+    expect(windSeries(f.days.slice(0, 3)).length).toBe(72);
+  });
+
+  it('has a storm in Reykjavik every hour of the year, for the end-to-end tests', async () => {
+    for (const iso of ['2026-07-10T08:00:00Z', '2026-10-10T08:00:00Z', '2027-01-10T08:00:00Z']) {
+      expect(new Set(await windWeek(64.15, -21.95, iso))).toEqual(new Set(['storm']));
+      const f = await week(64.15, -21.95, iso);
+      expect(new Set(windSeries(f.days).map((p) => p.band))).toEqual(new Set(['storm']));
+    }
+  });
+
+  it('labels each gust with the end of its hour, as Open-Meteo does', () => {
+    const raw = syntheticForecast(51.5, -0.15, ['ecmwf_ifs025'], new Date('2026-10-06T08:00Z'));
+    const wind = raw.hourly.wind_speed_10m_ecmwf_ifs025 as number[];
+    const gust = raw.hourly.wind_gusts_10m_ecmwf_ifs025 as number[];
+    expect([wind.length, gust.length]).toEqual([168, 168]);
+    // The gust for the hour from stamp t is at stamp t + 1, so it keeps its own day's ratio to
+    // the wind at stamp t, the first hour after midnight too (the two days differ here).
+    const ratio = (t: number) => gust[t + 1]! / wind[t]!;
+    const near = (a: number, b: number) => expect(Math.abs(a - b)).toBeLessThan(0.1);
+    for (const t of [0, 12, 23]) near(ratio(t), ratio(1));
+    for (const t of [24, 30, 40]) near(ratio(t), ratio(25));
+    expect(Math.abs(ratio(1) - ratio(25))).toBeGreaterThan(0.2);
   });
 
   it('snows only where it is cold', async () => {
@@ -254,6 +307,17 @@ describe('synthetic data source', () => {
     expect(moscow[0]!).toBeGreaterThan(0);
     expect(moscow[6]!).toBe(0);
     expect(syntheticSnowNormals(-55)[6]!).toBeGreaterThan(0);
+    // Normal wind, m/s: strongest in the storm tracks, in each hemisphere's winter.
+    const wind = await fetchWindNormals(
+      { url: NASA_POWER_URL, fetch: fetcher },
+      { lat: 55, lon: -1.875 },
+    );
+    expect(wind.height).toBe(50);
+    expect(wind.normals.every((v) => v > 3 && v < 8)).toBe(true);
+    expect(wind.normals[0]!).toBeGreaterThan(wind.normals[6]!);
+    expect(syntheticWindNormals(-45)[6]!).toBeGreaterThan(syntheticWindNormals(-45)[0]!);
+    expect(syntheticWindNormals(1.5)[0]!).toBeLessThan(wind.normals[0]!);
+    expect(syntheticWindNormals(64)[0]!).toBeGreaterThan(wind.normals[0]!);
     const places = await searchPlaces({ ...OPEN_METEO_FREE, fetch: fetcher }, 'newc', 8);
     expect(places[0]!.name).toBe('Newcastle');
     expect(await searchPlaces({ ...OPEN_METEO_FREE, fetch: fetcher }, 'zzzz', 8)).toEqual([]);

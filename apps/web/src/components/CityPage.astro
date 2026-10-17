@@ -1,10 +1,10 @@
 ---
 /**
  * A city's page on any of the sites (isithot.today/in/<slug>, isitwet.today/in/<slug>,
- * willitsnow.today/in/<slug>), rendered on the server with the answer to that site's question: the
- * question, answer, colours and icon are right before any script runs. lib/cityPage.ts handles
- * the request. A snow page for a place where it never snows works but is kept out of search
- * engines (core `listed`).
+ * willitsnow.today/in/<slug>, isitwindy.today/in/<slug>), rendered on the server with the answer
+ * to that site's question: the question, answer, colours and icon are right before any script
+ * runs. lib/cityPage.ts handles the request. A snow page for a place where it never snows works
+ * but is kept out of search engines (core `listed`).
  */
 import Base from '../layouts/Base.astro';
 import Header from './Header.astro';
@@ -21,7 +21,7 @@ import { SHARE_TITLES } from '../lib/topics';
 
 type Props = CityPageProps;
 
-const { topic, city, units, data, state, today, start, tomorrow, palette } = Astro.props;
+const { topic, city, units, windUnit, data, state, today, start, tomorrow, palette } = Astro.props;
 const site = SITES[topic];
 const name = city?.name ?? '';
 
@@ -56,7 +56,7 @@ const initial = JSON.stringify(data).replace(/</g, '\\u003c');
       data-slug={city.slug}
       data-topic={topic}
     >
-      <Header placeName={city.name} units={units} site={topic} />
+      <Header placeName={city.name} units={units} windUnit={windUnit} site={topic} />
       <Views
         data={data}
         city={city.name}

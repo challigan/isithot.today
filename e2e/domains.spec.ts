@@ -1,9 +1,9 @@
 /**
- * The real sites: isithot.today, isitwet.today and willitsnow.today are three domains, each with
- * its own storage and its own location permission, so whatever crosses between them goes in the
- * address. All three hosts are served here from the e2e server, with the edge function's routing
- * applied to pages (netlify/edge-functions/lib/route.ts: isitwet.today pages come from /wet,
- * willitsnow.today pages from /snow). Its redirects (www, another site's prefix) are covered by
+ * The real sites: isithot.today, isitwet.today, willitsnow.today and isitwindy.today are four
+ * domains, each with its own storage and its own location permission, so whatever crosses between
+ * them goes in the address. All four hosts are served here from the e2e server, with the edge
+ * function's routing applied to pages (netlify/edge-functions/lib/route.ts: isitwet.today pages
+ * come from /wet, willitsnow.today pages from /snow, isitwindy.today pages from /wind). Its redirects (www, another site's prefix) are covered by
  * netlify/test/route.test.ts.
  */
 import type { Browser, BrowserContext, Page } from '@playwright/test';
@@ -13,6 +13,7 @@ import { expect, prepare, test, toggle } from './helpers';
 const HOT = 'https://isithot.today';
 const WET = 'https://isitwet.today';
 const SNOW = 'https://willitsnow.today';
+const WIND = 'https://isitwindy.today';
 
 /** A browser where every site is served by the e2e server at `local`. */
 async function allSites(
@@ -22,7 +23,7 @@ async function allSites(
 ): Promise<BrowserContext> {
   const context = await browser.newContext(options);
   await prepare(context);
-  await context.route(/^https:\/\/(isithot|isitwet|willitsnow)\.today\//, async (r) => {
+  await context.route(/^https:\/\/(isithot|isitwet|willitsnow|isitwindy)\.today\//, async (r) => {
     const request = r.request();
     const url = new URL(request.url());
     let path = `${url.pathname}${url.search}`;
@@ -215,6 +216,10 @@ test('a city page links to the same city on the other domains, and to its places
     'href',
     `${SNOW}/in/london-gb`,
   );
+  await expect(page.locator('#also a[data-site=wind]')).toHaveAttribute(
+    'href',
+    `${WIND}/in/london-gb`,
+  );
   await expect(page.locator('#also').getByRole('link', { name: 'All places' })).toHaveAttribute(
     'href',
     '/places',
@@ -247,5 +252,91 @@ test('a city page links to the same city on the other domains, and to its places
     'href',
     '/in/oslo-no',
   );
+  await context.close();
+});
+
+test('the device location crosses to isitwindy.today in the address', async ({
+  browser,
+  baseURL,
+}) => {
+  // Edinburgh, with permission given on willitsnow.today only.
+  const context = await allSites(browser, baseURL!, {
+    geolocation: { latitude: 55.95, longitude: -3.19 },
+  });
+  await context.grantPermissions(['geolocation'], { origin: SNOW });
+  const page = await context.newPage();
+  await ready(page, `${SNOW}/in/london-gb`);
+  await toggle(page, 'wind').click();
+  await page.locator('#place-btn').click();
+  await page.locator('#use-location').click();
+  await expect(page).toHaveURL(`${WIND}/`);
+  await expect(page.locator('#place')).toHaveText('Edinburgh');
+  await expect(page.locator('#app')).toHaveAttribute('data-topic', 'wind');
+  expect(await stored(page, 'isithot:place')).toMatchObject({
+    kind: 'coords',
+    source: 'device',
+    lat: 55.95,
+    lon: -3.2,
+  });
+  // Edinburgh's wind is in mph, the UK's unit, without a choice made.
+  await expect(page.locator('[data-units="mph"]')).toHaveAttribute('aria-pressed', 'true');
+  await context.close();
+});
+
+test('wind units cross with links to and from isitwindy.today, apart from °C and °F', async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await allSites(browser, baseURL!);
+  const page = await context.newPage();
+  await ready(page, `${HOT}/in/london-gb`);
+  await toggle(page, 'wind').click();
+  // London's wind is in mph; the pill sets wind's own units.
+  await expect(page.locator('.units')).toHaveAttribute('aria-label', 'Wind units');
+  await expect(page.locator('[data-units]')).toHaveText(['mph', 'km/h']);
+  await expect(page.locator('[data-units="mph"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('[data-units="kmh"]').click();
+  await expect(page.locator('[data-units="kmh"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#week-days li .t').first()).toHaveText(/^\d+km\/h$/);
+  expect(await stored(page, 'isithot:windUnits')).toBe('kmh');
+  expect(await stored(page, 'isithot:units')).toBeNull();
+  // The header, the places nearby and the other sites' pages carry it to isitwindy.today.
+  await expect(page.locator('#brand')).toHaveAttribute('href', `${WIND}/?windUnits=kmh`);
+  await expect(page.locator('link[rel="icon"]').first()).toHaveAttribute(
+    'href',
+    `${WIND}/favicon.svg`,
+  );
+  await expect(page.locator('#also a[data-site=wind]')).toHaveAttribute(
+    'href',
+    `${WIND}/in/london-gb?windUnits=kmh`,
+  );
+  const nearby = page.locator('#nearby-links a').first();
+  await expect(nearby).toHaveAttribute(
+    'href',
+    /^https:\/\/isitwindy\.today\/in\/[a-z-]+\?windUnits=kmh$/,
+  );
+  await nearby.click();
+  // The page there stores it and takes it out of the address. The page was made in mph (a UK
+  // city's), so it asks again quietly in km/h.
+  await expect(page).toHaveURL(/^https:\/\/isitwindy\.today\/in\/[a-z-]+$/);
+  await expect(page.locator('[data-units="kmh"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#week-days li .t').first()).toHaveText(/^\d+km\/h$/);
+  expect(await stored(page, 'isithot:windUnits')).toBe('kmh');
+
+  // Temperatures keep their own setting: °C for a UK city, with nothing chosen.
+  await toggle(page, 'hot').click();
+  await expect(page.locator('.units')).toHaveAttribute('aria-label', 'Temperature units');
+  await expect(page.locator('[data-units]')).toHaveText(['°C', '°F']);
+  await expect(page.locator('[data-units="c"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('[data-units="f"]').click();
+  await expect(page.locator('[data-units="f"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#brand')).toHaveAttribute('href', `${HOT}/?units=f&windUnits=kmh`);
+  await page.locator('#brand').click();
+  await expect(page).toHaveURL(`${HOT}/`);
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+  expect(await stored(page, 'isithot:units')).toBe('f');
+  expect(await stored(page, 'isithot:windUnits')).toBe('kmh');
+  await toggle(page, 'wind').click();
+  await expect(page.locator('[data-units="kmh"]')).toHaveAttribute('aria-pressed', 'true');
   await context.close();
 });

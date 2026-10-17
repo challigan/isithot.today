@@ -1,8 +1,9 @@
 /**
- * Netlify edge function: serves isitwet.today and willitsnow.today from the /wet and /snow pages
- * of this deploy, and sends a path under another site's prefix (isithot.today/wet,
- * isitwet.today/snow, …) to that site. The decisions live in ./lib/route.ts (unit-tested); this
- * only applies them. Runs in Deno, so no npm imports, and relative imports keep their extension.
+ * Netlify edge function: serves isitwet.today, willitsnow.today and isitwindy.today from the /wet,
+ * /snow and /wind pages of this deploy, and sends a path under another site's prefix
+ * (isithot.today/wet, isitwet.today/snow, isitwindy.today/snow, …) to that site. The decisions live
+ * in ./lib/route.ts (unit-tested); this only applies them. Runs in Deno, so no npm imports, and
+ * relative imports keep their extension.
  */
 import { route } from './lib/route.ts';
 

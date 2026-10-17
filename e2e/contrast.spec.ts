@@ -1,5 +1,6 @@
 /**
- * Text contrast as rendered, for every band of every topic (Hot, Wet and Snow) and every view, on
+ * Text contrast as rendered, for every band of every topic (Hot, Wet, Snow and Wind: 24) and every
+ * view, on
  * the phone and desktop projects. The background is sampled behind each piece of text (gradient,
  * glow and control backings included) and the worst pixel counts. Targets are WCAG 2.2 AA: 3:1
  * for large text (24px, or 18.66px bold), 4.5:1 for everything else.
@@ -45,6 +46,7 @@ const VIEW_TARGETS: Record<'today' | 'now' | 'week', Target[]> = {
     { name: 'verdict', selector: '#verdict' },
     { name: 'detail', selector: '#detail' },
     { name: 'UV line', selector: '#uv-line > [aria-hidden]' },
+    { name: 'warnings link', selector: '#warnings a' },
     { name: 'agreement', selector: '#agree' },
     { name: 'scale', selector: '#smin, #smax' },
     { name: 'model temperature', selector: '#list li .t' },
@@ -57,6 +59,7 @@ const VIEW_TARGETS: Record<'today' | 'now' | 'week', Target[]> = {
     { name: 'verdict', selector: '#now-verdict' },
     { name: 'detail', selector: '#now-detail' },
     { name: 'UV line', selector: '#now-uv-line > [aria-hidden]' },
+    { name: 'warnings link', selector: '#now-warnings a' },
     { name: 'heading', selector: '#now-h' },
     { name: 'hour temperature', selector: '#now-hours .t' },
     { name: 'hour', selector: '#now-hours .n' },
@@ -148,7 +151,7 @@ async function locate(page: Page, targets: Target[]): Promise<Measured[]> {
 }
 
 /**
- * On phones the Hot | Wet | Snow toggle floats over the page, which scrolls under it: the page's
+ * On phones the Hot | Wet | Snow | Wind toggle floats over the page, which scrolls under it: the page's
  * text is measured without it, and the toggle on its own.
  */
 async function measure(page: Page, targets: Target[], label: string): Promise<string[]> {
@@ -205,7 +208,8 @@ async function measureEach(page: Page, targets: Target[], label: string): Promis
   return failures;
 }
 
-// A band's preview opens on its topic: a rain band on Wet, a snow band on Snow.
+// A band's preview opens on its topic: a rain band on Wet, a snow band on Snow, a wind band on
+// Wind.
 for (const band of TOPICS.flatMap((t) => BANDS_BY_TOPIC[t])) {
   test(`text contrast meets WCAG AA: ${band}`, async ({ page }, info) => {
     await page.goto(`/?preview=1&band=${band}`);
@@ -247,6 +251,10 @@ for (const band of TOPICS.flatMap((t) => BANDS_BY_TOPIC[t])) {
       // Every hot sample has a UV line on Today and Now (hidden lines are not measured).
       if (topic === 'hot' && view !== 'week') {
         await expect(page.locator(view === 'today' ? '#uv' : '#now-uv')).toBeVisible();
+      }
+      // The UK samples' gales and storms link to the Met Office's warnings on Today.
+      if ((band === 'gale' || band === 'storm') && view === 'today') {
+        await expect(page.locator('#warnings')).toBeVisible();
       }
       const label = `${info.project.name.padEnd(7)} ${band.padEnd(9)} ${view.padEnd(5)}`;
       const found = await measure(page, [...VIEW_TARGETS[view], ...SHARED], label);

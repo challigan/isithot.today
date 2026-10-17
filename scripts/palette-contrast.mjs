@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Worst-case WCAG contrast for every palette (Hot, Wet and Snow) at the places text is read, worked
- * out from the colours alone so a palette can be tuned before the page exists. The real test is
- * e2e/contrast.spec.ts, which measures the rendered page. Small text needs 4.5:1; this asks for
+ * Worst-case WCAG contrast for every palette (Hot, Wet, Snow and Wind) at the places text is read,
+ * worked out from the colours alone so a palette can be tuned before the page exists. The real test
+ * is e2e/contrast.spec.ts, which measures the rendered page. Small text needs 4.5:1; this asks for
  * 4.6 to leave room for antialiasing and the gradient's dithering.
  *
  * Positions (see apps/web/src/styles/global.css):
@@ -15,9 +15,9 @@
  * - sheet: the search sheet (pill fading 15% towards g2): result details at 90% opacity, and
  *   typed text on the input's 8% ink tint.
  *
- * Wet and Snow are held to every column. Hot was tuned on the rendered page before this script,
- * and its glow and detail columns are shown for comparison only (marked * when low): on Hot no
- * page text sits at the glow's centre, nor faint text at the very ends of the gradient.
+ * Wet, Snow and Wind are held to every column. Hot was tuned on the rendered page before this
+ * script, and its glow and detail columns are shown for comparison only (marked * when low): on Hot
+ * no page text sits at the glow's centre, nor faint text at the very ends of the gradient.
  *
  * Run: node scripts/palette-contrast.mjs
  */
@@ -31,7 +31,7 @@ const bundle = await build({
   write: false,
   logLevel: 'error',
 });
-const { PALETTES, RAIN_PALETTES, SNOW_PALETTES } = await import(
+const { PALETTES, RAIN_PALETTES, SNOW_PALETTES, WIND_PALETTES } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`
 );
 
@@ -87,6 +87,7 @@ for (const [topic, palettes] of [
   ['Hot', PALETTES],
   ['Wet', RAIN_PALETTES],
   ['Snow', SNOW_PALETTES],
+  ['Wind', WIND_PALETTES],
 ]) {
   const keys = Object.keys(check(Object.values(palettes)[0]));
   console.log(`${topic.padEnd(10)}${keys.map((k) => k.padStart(9)).join('')}`);

@@ -2,7 +2,7 @@
  * The /api/v1 contract shared by the website and the future apps. Never change the meaning
  * of a field; add fields or create /api/v2.
  */
-import type { Band, RainBand, SnowBand, SnowReason, UvLevel } from './config';
+import type { Band, RainBand, SnowBand, SnowReason, UvLevel, WindBand } from './config';
 import type { Confidence } from './blend';
 import type { Units } from './units';
 
@@ -243,7 +243,7 @@ export interface ApiRainDay {
   models: ApiRainModel[];
   /** Month name for the date, e.g. "October". */
   month: string;
-  /** "6 of 8 forecasts expect rain" */
+  /** "5 of 6 forecasts expect rain" */
   agreementText: string;
   /** "Limited forecast data" when fewer than 3 models cover the window, otherwise null. */
   limitedText: string | null;
@@ -423,7 +423,7 @@ export interface ApiSnowDay {
   models: ApiSnowModel[];
   /** Month name for the date, e.g. "January". */
   month: string;
-  /** "6 of 8 forecasts expect snow" */
+  /** "5 of 6 forecasts expect snow" */
   agreementText: string;
   /** "Limited forecast data" when fewer than 3 models cover the window, otherwise null. */
   limitedText: string | null;
@@ -524,6 +524,186 @@ export interface ApiSnow {
   week?: ApiSnowWeek;
 }
 
+/** Wind speeds have their own units setting: mph or km/h (MPH_COUNTRIES by default). */
+export type WindUnit = 'mph' | 'kmh';
+
+/**
+ * Speeds in the wind types below are whole numbers in `ApiWind.unit`, worked out from whole km/h
+ * (so the number shown always agrees with the band, which is decided in km/h). The text for a
+ * speed is `${value}mph` or `${value}km/h` (core `windText`).
+ */
+export interface ApiWindModel {
+  id: string;
+  name: string;
+  /** The model's strongest gust and strongest mean wind over the window. */
+  gust: number;
+  mean: number;
+  /** The gust to one decimal, for positioning on the strip. */
+  value: number;
+  /** The model's own band, from its two peaks. */
+  band: WindBand;
+  /** Its band is the window's band. */
+  agrees: boolean;
+}
+
+/** "Is it windy today?" for one window: the rest of today, or a whole day's waking hours. */
+export interface ApiWindDay {
+  /** The local date (YYYY-MM-DD). */
+  date: string;
+  /**
+   * Today: the moment of the request, as for rain (the answer is out of date an hour after it,
+   * and clients refetch then); later days: the start of the waking hours, 7am local.
+   */
+  from: string;
+  /** True when the window is the rest of the day rather than the whole day's waking hours. */
+  partial: boolean;
+  /**
+   * The local hours judged, start inclusive and end exclusive (24 is midnight): 7 to 21 for a
+   * whole day; for the rest of today from the current hour to 21, or to 24 from 9pm.
+   */
+  window: { from: number; to: number };
+  band: WindBand;
+  /** "No." / "A bit." / "Yes." */
+  answer: string;
+  /** "It'll be windy." / "It'll be calm." */
+  verdict: string;
+  /** "Gusts up to 45mph, wind up to 25mph. Windiest around 3pm." */
+  detail: string;
+  /** A calm window of still air (WIND.still): "It'll be calm.", labelled "Calm". */
+  still: boolean;
+  /** The medians of the models' strongest gust and strongest mean wind over the window. */
+  gust: number;
+  mean: number;
+  /** When the blended gusts peak ("3pm"), or null (calm, a one-hour window, no hours kept). */
+  peak: string | null;
+  /** Models whose own band is the window's band, and models with data for the whole window. */
+  agree: number;
+  total: number;
+  confidence: Confidence;
+  /** The strip's highlighted zone: the band's gust range; `to` is null for storm (no end). */
+  zone: { from: number; to: number | null };
+  /** The strip's range (min is always 0). */
+  scale: { min: number; max: number };
+  models: ApiWindModel[];
+  /** Month name for the date, e.g. "October". */
+  month: string;
+  /** "4 of 6 forecasts say windy" */
+  agreementText: string;
+  /** "Limited forecast data" when fewer than 3 models cover the window, otherwise null. */
+  limitedText: string | null;
+  /** Accessible summary of the model strip. */
+  stripSummary: string;
+  /**
+   * The calendar day's 24-hour mean wind (the median of the models' own) and the normal for the
+   * date (NASA POWER), or null without either: the "Windier than usual" line compares them.
+   */
+  dayMean: number | null;
+  normal: number | null;
+}
+
+/** One forecast hour of wind, judged by the server, for recomputing "now" later. */
+export interface ApiWindPoint {
+  /** Start of the hour, epoch milliseconds. */
+  time: number;
+  /** Local date (YYYY-MM-DD) and hour (0–23) in the place's time zone. */
+  date: string;
+  hour: number;
+  /** The median mean wind at the hour's start, and the median strongest gust during the hour. */
+  mean: number;
+  gust: number;
+  /** The stronger of this hour's and the next hour's gust (the Now view's rows). */
+  gust2h: number;
+  /** The verdict for this hour, decided in whole km/h. */
+  band: WindBand;
+  /** Calm and still air (WIND.still). */
+  still: boolean;
+}
+
+/** One row in the wind Now view's list: the strongest gust in the two hours from `time`. */
+export interface ApiWindHour {
+  /** Start of the two hours, ISO 8601 UTC. */
+  time: string;
+  /** Local time, "3pm". */
+  label: string;
+  gust: number;
+}
+
+/** "Is it windy right now?": the hour containing the moment and the next twelve. */
+export interface ApiWindNow {
+  /** The moment the values are for, ISO 8601 UTC. */
+  time: string;
+  band: WindBand;
+  answer: string;
+  verdict: string;
+  /** "Wind 18mph, gusts 32mph right now. Windy from about 3pm." */
+  detail: string;
+  /** This hour's median mean wind and gust. */
+  mean: number;
+  gust: number;
+  still: boolean;
+  /** The next 12 hours in 2-hour blocks. */
+  hours: ApiWindHour[];
+  /**
+   * The judged hourly forecast from the hour before now to a day ahead, so clients can keep
+   * "now" current between requests (core `computeWindNow` and `formatWindNow`).
+   */
+  series: ApiWindPoint[];
+}
+
+/** One day in the wind week view. */
+export interface ApiWindWeekDay {
+  date: string;
+  /** "Today", then short weekday names ("Thu"). */
+  label: string;
+  /** The day's gust and mean wind (today: the rest of the day). */
+  gust: number;
+  mean: number;
+  band: WindBand;
+  /** "Windy", "Light winds", or "Calm" for a still day. */
+  bandLabel: string;
+  still: boolean;
+}
+
+/** "Will it be windy this week?": today (the rest of it) and the next six days. */
+export interface ApiWindWeek {
+  /** First and last dates (YYYY-MM-DD). */
+  from: string;
+  to: string;
+  band: WindBand;
+  /** "No." / "A bit." / "Partly." / "Yes." */
+  answer: string;
+  /** "Windy on Thu, gales on Fri." / "A windy week." / "Light winds all week." */
+  verdict: string;
+  /** "Windiest on Friday, gusts up to 45mph. Windier than usual for October." */
+  detail: string;
+  /** Days judged windy or more, and days judged breezy. */
+  windyDays: number;
+  breezyDays: number;
+  /** The windiest day by its gust (the earlier one on a tie). */
+  windiest: { date: string; gust: number };
+  /**
+   * The week's 24-hour mean wind (the median of each model's own mean, models covering every
+   * day) and its normal, or null with fewer than 3 such models or without wind normals.
+   */
+  mean: number | null;
+  normal: number | null;
+  days: ApiWindWeekDay[];
+}
+
+/**
+ * "Is it windy?" for the same place, in `unit`. Present when the forecast has wind and today has
+ * an answer.
+ */
+export interface ApiWind {
+  unit: WindUnit;
+  /** Today (the rest of the day), then tomorrow (its waking hours) when the forecast has it. */
+  days: ApiWindDay[];
+  /** Absent when the series does not cover the moment. */
+  now?: ApiWindNow;
+  /** Absent without five usable days. */
+  week?: ApiWindWeek;
+}
+
 export interface TodayResponse {
   location: ApiLocation;
   units: Units;
@@ -543,6 +723,11 @@ export interface TodayResponse {
   rain?: ApiRain;
   /** "Will it snow?" for the same place. Present exactly when `rain` is. */
   snow?: ApiSnow;
+  /**
+   * "Is it windy?" for the same place, in `wind.unit` (its own setting, `windUnits`). Absent for
+   * forecasts without wind.
+   */
+  wind?: ApiWind;
 }
 
 export interface NearbyCity {

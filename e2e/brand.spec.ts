@@ -2,7 +2,7 @@
  * The header names the site of the question on screen, and links to it: on a page of one site
  * with another question showing, it reads (and goes to) that question's site. So do the tab's
  * icons and the home page's title. Locally every site shares one host, the others under their
- * prefixes, /wet and /snow (domains.spec.ts covers the real hosts).
+ * prefixes, /wet, /snow and /wind (domains.spec.ts covers the real hosts).
  */
 import type { Page } from '@playwright/test';
 import { SITES, TOPICS, type Topic } from '../packages/core/src/config';
@@ -76,4 +76,16 @@ test('the brand opens the snow site’s home page from another site', async ({ p
   await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
   await expect(page.locator('#question')).toHaveText('Will it snow today?');
   await expect(page.locator('#brand')).toHaveText('willitsnow.today');
+});
+
+test('the brand opens the wind site’s home page from another site', async ({ page, ipPlace }) => {
+  await keepToday(page, ipPlace.tz);
+  await page.goto('/snow/in/london-gb');
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+  await toggle(page, 'wind').click();
+  await page.locator('#brand').click();
+  await expect(page).toHaveURL(/\/wind$/);
+  await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+  await expect(page.locator('#question')).toHaveText('Is it windy today?');
+  await expect(page.locator('#brand')).toHaveText('isitwindy.today');
 });

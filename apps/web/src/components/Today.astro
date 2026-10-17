@@ -1,13 +1,14 @@
 ---
 /**
  * The Today view (Tomorrow in the evening, from the forecast's next day): answer, verdict, on Hot
- * the UV index, and model agreement. Rendered on the server with data (city pages) or in its loading state (home
- * page); the browser script updates the same nodes. Its answer is the page's only h1 whichever
- * view is on screen.
+ * the UV index, on Wind the Met Office's warnings for a UK gale or storm, and model agreement.
+ * Rendered on the server with data (city pages) or in its loading state (home page); the browser
+ * script updates the same nodes. Its answer is the page's only h1 whichever view is on screen.
  */
-import { COPY, type TodayDisplay } from '@isithot/core';
+import { COPY, type OutboundLink, type TodayDisplay } from '@isithot/core';
 import { glyphFor, listHtml, stripHtml } from '../lib/view';
 import UvLine from './UvLine.astro';
+import WarningsLine from './WarningsLine.astro';
 
 interface Props {
   /** From core `viewDisplay`. */
@@ -16,9 +17,11 @@ interface Props {
   start?: boolean;
   /** It answers for tomorrow. */
   tomorrow?: boolean;
+  /** Wind's link to the Met Office's warnings, for a gale or storm in the UK. */
+  warnings?: OutboundLink | null;
 }
 
-const { view, start = true, tomorrow = false } = Astro.props;
+const { view, start = true, tomorrow = false, warnings = null } = Astro.props;
 const { models } = view;
 ---
 
@@ -70,6 +73,7 @@ const { models } = view;
     {view.detail}
   </p>
   <UvLine id="uv" uv={view.uv} />
+  <WarningsLine id="warnings" link={warnings} />
 
   <section class="models hold" id="models" aria-labelledby="models-h">
     <h2 id="models-h">

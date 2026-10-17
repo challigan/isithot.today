@@ -1,8 +1,8 @@
 /**
- * Which site a request is for. One deploy serves all three: isithot.today as it is, and
- * isitwet.today and willitsnow.today from the pages under their prefixes (/wet, /snow). Pure and
- * import-free so it runs in the Deno edge runtime and in vitest alike. The hosts and prefixes
- * mirror SITES in packages/core/src/config.ts (a test checks).
+ * Which site a request is for. One deploy serves all four: isithot.today as it is, and
+ * isitwet.today, willitsnow.today and isitwindy.today from the pages under their prefixes (/wet,
+ * /snow, /wind). Pure and import-free so it runs in the Deno edge runtime and in vitest alike. The
+ * hosts and prefixes mirror SITES in packages/core/src/config.ts (a test checks).
  */
 
 /**
@@ -13,6 +13,7 @@ export const SITES = {
   hot: { host: 'isithot.today', prefix: '', header: null },
   wet: { host: 'isitwet.today', prefix: '/wet', header: 'x-isitwet-host' },
   snow: { host: 'willitsnow.today', prefix: '/snow', header: 'x-willitsnow-host' },
+  wind: { host: 'isitwindy.today', prefix: '/wind', header: 'x-isitwindy-host' },
 } as const;
 
 type Site = keyof typeof SITES;

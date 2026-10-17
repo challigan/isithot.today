@@ -1,7 +1,7 @@
 /**
- * The UV index on the hot views: a line under the detail on Today (or Tomorrow) and on Now, no
- * line on Now at night, and none on Wet and Snow. Home pages answer for the approximate place,
- * on the equator (helpers.ts `ipPlaceAt`), where the UV index is above 0 all day and 0 all night.
+ * The UV index on the hot views: a line under the detail on Today (or Tomorrow) and on Now, no line
+ * on Now at night, and none on Wet, Snow and Wind. Home pages answer for the approximate place, on
+ * the equator (helpers.ts `ipPlaceAt`), where the UV index is above 0 all day and 0 all night.
  */
 import { BANDS } from '../packages/core/src/config';
 import { UV_LEVEL_LABELS } from '../packages/core/src/copy';
@@ -48,11 +48,11 @@ test.describe('in the daytime', () => {
     await expect(page.locator(spoken('now-uv'))).toHaveText(NOW_SPOKEN);
   });
 
-  test('Wet and Snow have no UV line', async ({ page }) => {
+  test('Wet, Snow and Wind have no UV line', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('#uv')).toBeVisible();
     await expect(page.locator('#now-uv')).not.toHaveAttribute('hidden');
-    for (const topic of ['wet', 'snow'] as const) {
+    for (const topic of ['wet', 'snow', 'wind'] as const) {
       await toggle(page, topic).click();
       await expect(toggle(page, topic)).toHaveAttribute('aria-pressed', 'true');
       await expect(page.locator('#uv')).toBeHidden();
@@ -62,8 +62,8 @@ test.describe('in the daytime', () => {
     await toggle(page, 'hot').click();
     await expect(page.locator('#uv')).toBeVisible();
 
-    // Nor do the wet and snow sites' own pages.
-    for (const path of ['/wet', '/snow']) {
+    // Nor do the wet, snow and wind sites' own pages.
+    for (const path of ['/wet', '/snow', '/wind']) {
       await page.goto(path);
       await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
       await expect(page.locator('#uv')).toHaveAttribute('hidden', '');

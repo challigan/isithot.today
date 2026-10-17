@@ -13,9 +13,11 @@ import {
   type SnowReason,
   type Topic,
   type UvLevel,
+  type WindBand,
 } from './config';
 import { localDateTime, zoneAbbreviation } from './dates';
 import type { Units } from './units';
+import type { WindUnit } from './types';
 
 export const SITE_NAME = SITES.hot.name;
 
@@ -24,6 +26,7 @@ export const TOPIC_LABELS: Record<Topic, string> = {
   hot: 'Hot',
   wet: 'Wet',
   snow: 'Snow',
+  wind: 'Wind',
 };
 
 export const MONTHS = [
@@ -153,9 +156,11 @@ export const COPY = {
   unitsLabel: 'Temperature units',
   rainUnitsLabel: 'Rain units',
   snowUnitsLabel: 'Snow units',
+  windUnitsLabel: 'Wind units',
   topicLabel: 'Forecast type',
   nextHoursRain: 'Chance of rain, next 12 hours',
   nextHoursSnow: 'Chance of snow, next 12 hours',
+  nextHoursWind: 'Gusts, next 12 hours',
   changeLocation: 'change location',
   stale: 'Showing the last forecast we have. It will refresh shortly.',
   previewLabel: 'Preview each kind of day',
@@ -173,6 +178,11 @@ export const COPY = {
   /** willitsnow.today's places page leaves out places where it never snows (SNOWLESS). */
   snowlessNote:
     'Places in the tropics and subtropics, where it does not snow, are left out here, but you can still search for them.',
+  /**
+   * The link under a gale or storm answer for a UK place (core `warningsLink`): the official
+   * warnings, never a warning of ours.
+   */
+  metOfficeWarnings: 'Met Office warnings',
 } as const;
 
 /** The data credits: the API's `attribution`, and the footer of every page with links added. */
@@ -192,7 +202,8 @@ export const ERROR_MESSAGES = {
 
 /**
  * Each topic's question for each view, and for the middle view while it shows tomorrow; `{where}`
- * is " in London" on a city page. Snow is a verb, so its questions are worded on their own.
+ * is " in London" on a city page. Snow is a verb, so its questions are worded on their own; wind
+ * asks about the week ahead as a forecast ("Will it be windy this week?").
  */
 const QUESTIONS: Record<Topic, Record<View | 'tomorrow', string>> = {
   hot: {
@@ -212,6 +223,12 @@ const QUESTIONS: Record<Topic, Record<View | 'tomorrow', string>> = {
     now: 'Is it snowing{where} right now?',
     week: 'Will it snow{where} this week?',
     tomorrow: 'Will it snow{where} tomorrow?',
+  },
+  wind: {
+    today: 'Is it windy{where} today?',
+    now: 'Is it windy{where} right now?',
+    week: 'Will it be windy{where} this week?',
+    tomorrow: 'Will it be windy{where} tomorrow?',
   },
 };
 
@@ -235,6 +252,7 @@ export const HERE_QUESTIONS: Record<Topic, string> = {
   hot: 'Is it hot here?',
   wet: 'Is it wet here?',
   snow: 'Will it snow here?',
+  wind: 'Is it windy here?',
 };
 
 /** The units control's group label for each topic. */
@@ -242,14 +260,22 @@ export const UNITS_LABELS: Record<Topic, string> = {
   hot: COPY.unitsLabel,
   wet: COPY.rainUnitsLabel,
   snow: COPY.snowUnitsLabel,
+  wind: COPY.windUnitsLabel,
 };
 
-/** The units control's two choices for each topic: one setting serves all three. */
-export const UNIT_NAMES: Record<Topic, Record<Units, string>> = {
+/** The topics whose units follow the temperature setting; wind has a setting of its own. */
+export type TemperatureUnitsTopic = Exclude<Topic, 'wind'>;
+
+/** The units control's two choices for hot, wet and snow: one setting serves all three. */
+export const UNIT_NAMES: Record<TemperatureUnitsTopic, Record<Units, string>> = {
   hot: { c: '°C', f: '°F' },
   wet: { c: 'mm', f: 'in' },
   snow: { c: 'cm', f: 'in' },
 };
+
+/** The wind site's units control, in the toggle's order: its own setting, "Wind units". */
+export const WIND_UNITS: readonly WindUnit[] = ['mph', 'kmh'];
+export const WIND_UNIT_NAMES: Record<WindUnit, string> = { mph: 'mph', kmh: 'km/h' };
 
 export function monthName(date: string): string {
   return MONTHS[Number(date.slice(5, 7)) - 1] ?? '';
@@ -373,11 +399,13 @@ export const DEFAULT_TITLES: Record<Topic, string> = {
   hot: DEFAULT_TITLE,
   wet: `Is it wet today? | ${SITES.wet.name}`,
   snow: `Will it snow today? | ${SITES.snow.name}`,
+  wind: `Is it windy today? | ${SITES.wind.name}`,
 };
 export const DEFAULT_DESCRIPTIONS: Record<Topic, string> = {
   hot: DEFAULT_DESCRIPTION,
   wet: 'Will it rain today where you are? One answer from several forecast models: how likely rain is, how much and when.',
   snow: 'Will it snow today where you are? One answer from several forecast models: how likely snow is, how much and when.',
+  wind: 'Will it be windy today where you are? One answer from several forecast models: how strong the wind and gusts get, and when.',
 };
 
 /** "{n}" in a string is the number of forecast models, "{city}" a city page's place. */
@@ -386,7 +414,8 @@ const fill = (text: string, city = ''): string =>
 
 /**
  * What a city page offers, after its question in the search title, the longest that fits first.
- * Wet's say "rain", the word people search with; snow's question already says "snow".
+ * Wet's say "rain", the word people search with; snow's and wind's questions already say "snow"
+ * and "windy".
  */
 const CITY_TITLE_TAILS: Record<Topic, readonly string[]> = {
   hot: ['Hour by hour from {n} forecasts', 'From {n} forecasts'],
@@ -396,12 +425,13 @@ const CITY_TITLE_TAILS: Record<Topic, readonly string[]> = {
     'Rain from {n} forecasts',
   ],
   snow: ['Hour by hour from {n} forecasts', 'From {n} forecasts'],
+  wind: ['Hour by hour from {n} forecasts', 'From {n} forecasts'],
 };
 
 /**
  * A city page's title in search results and the browser: its question and what the page offers,
  * never the answer, which would go out of date in the results ("Is it wet in Leeds today? Rain
- * hour by hour from 8 forecasts | isitwet.today"). The words after the question give way to keep
+ * hour by hour from 6 forecasts | isitwet.today"). The words after the question give way to keep
  * it within TITLE_MAX_LENGTH; the question never does. Share cards carry the answer instead.
  */
 export function cityTitle(city: string, topic: Topic): string {
@@ -417,6 +447,7 @@ const CITY_DESCRIPTIONS: Record<Topic, string> = {
   hot: 'Will today feel hot in {city}? One answer from {n} forecast models, judged against what is normal there, with the next 12 hours and the week ahead.',
   wet: 'Will it rain in {city} today? One answer from {n} forecast models: how likely rain is, how much and when, with the next 12 hours and the week ahead.',
   snow: 'Will it snow in {city} today? One answer from {n} forecast models: how likely snow is, how much and when, with the next 12 hours and the week ahead.',
+  wind: 'Will it be windy in {city} today? One answer from {n} forecast models: how strong the wind and gusts get and when, with the next 12 hours and the week ahead.',
 };
 
 /** A city page's description for search results: what the page answers, never the answer. */
@@ -429,6 +460,7 @@ const INTROS: Record<Topic, string> = {
   hot: '{site} answers one question: will today feel hot where you are? It combines {n} forecast models and judges the day against what is normal for the place and the time of year, so 24°C can be hot in Newcastle and mild in Seville.',
   wet: '{site} answers one question: will it rain where you are today? It combines {n} forecast models into one answer, with how likely rain is, how much and when, and compares the week with what is normal for the place.',
   snow: '{site} answers one question: will it snow where you are today? It combines {n} forecast models into one answer, with how likely snow is, how much and when, and compares the week with what is normal for the place.',
+  wind: '{site} answers one question: will it be windy where you are today? It combines {n} forecast models into one answer, with how strong the wind and gusts get and when, and compares the week with what is normal for the place.',
 };
 
 /**
@@ -614,7 +646,7 @@ export function dryFromLine(hour: number): string {
   return `Dry from about ${formatHour(hour)}.`;
 }
 
-/** "6 of 8 forecasts expect rain" / "1 of 8 forecasts expects rain". */
+/** "5 of 6 forecasts expect rain" / "1 of 6 forecasts expects rain". */
 export function rainAgreementLine(wet: number, total: number): string {
   return `${wet} of ${total} forecasts ${wet === 1 ? 'expects' : 'expect'} rain`;
 }
@@ -819,7 +851,7 @@ export function clearingLine(hour: number): string {
   return `Clearing by about ${endHour(hour)}.`;
 }
 
-/** "6 of 8 forecasts expect snow" / "1 of 8 forecasts expects snow". */
+/** "5 of 6 forecasts expect snow" / "1 of 6 forecasts expects snow". */
 export function snowAgreementLine(snowy: number, total: number): string {
   return `${snowy} of ${total} forecasts ${snowy === 1 ? 'expects' : 'expect'} snow`;
 }
@@ -894,4 +926,218 @@ export function snowPageTitle(args: {
   reason: SnowReason | null;
 }): string {
   return `${question(args.city, 'today', 'snow')} ${args.answer} ${snowLabel(args.band, args.reason)} | ${SITES.snow.name}`;
+}
+
+// ---- Is it windy? -----------------------------------------------------------------
+
+/**
+ * The calm band is "Light winds", the Met Office's everyday words for force 1 to 3; still air
+ * within it is "Calm" (STILL_LABEL).
+ */
+export const WIND_BAND_LABELS: Record<WindBand, string> = {
+  calm: 'Light winds',
+  breezy: 'Breezy',
+  windy: 'Windy',
+  verywindy: 'Very windy',
+  gale: 'Gale',
+  storm: 'Storm',
+};
+/** A calm day or hour of still air (WIND.still). */
+export const STILL_LABEL = 'Calm';
+
+/** A band's label, or "Calm" for still air. */
+export function windLabel(band: WindBand, still: boolean): string {
+  return still ? STILL_LABEL : WIND_BAND_LABELS[band];
+}
+
+export const WIND_ANSWERS: Record<WindBand, string> = {
+  calm: 'No.',
+  breezy: 'A bit.',
+  windy: 'Yes.',
+  verywindy: 'Yes.',
+  gale: 'Yes.',
+  storm: 'Yes.',
+};
+
+/**
+ * Today (the rest of it) and tomorrow: the same words serve both, as for rain and snow. "Breezy,
+ * not windy." answers "A bit." as hot's "It's warm, not hot." answers "Almost."; gales and storms
+ * are named as the Met Office defines them, never as a warning.
+ */
+export const WIND_DAY_VERDICTS: Record<WindBand, string> = {
+  calm: "It won't be windy.",
+  breezy: 'Breezy, not windy.',
+  windy: "It'll be windy.",
+  verywindy: "It'll be very windy.",
+  gale: 'Gales.',
+  storm: 'Storm-force winds.',
+};
+
+export const WIND_NOW_VERDICTS: Record<WindBand, string> = {
+  calm: "It's not windy.",
+  breezy: 'Breezy, not windy.',
+  windy: "It's windy.",
+  verywindy: "It's very windy.",
+  gale: 'Gales.',
+  storm: 'Storm-force winds.',
+};
+
+/** Still air in place of the calm band's verdict. */
+export const STILL_VERDICTS = { day: "It'll be calm.", now: "It's calm." } as const;
+
+/** Bands from windy up in a sentence: "gales on Fri", "Very windy from about 3pm". */
+export type WindyBand = Exclude<WindBand, 'calm' | 'breezy'>;
+export const WIND_PHRASES: Record<WindyBand, string> = {
+  windy: 'windy',
+  verywindy: 'very windy',
+  gale: 'gales',
+  storm: 'storm-force winds',
+};
+
+/** What a forecast "says" in the agreement line. */
+export const WIND_AGREE_WORDS: Record<WindBand, string> = {
+  calm: 'light winds',
+  breezy: 'breezy',
+  windy: 'windy',
+  verywindy: 'very windy',
+  gale: 'gales',
+  storm: 'storm force',
+};
+
+export const WIND_WEEK_ANSWERS = {
+  yes: 'Yes.',
+  partly: 'Partly.',
+  bit: 'A bit.',
+  no: 'No.',
+} as const;
+
+export const WIND_WEEK_VERDICTS = {
+  windy: 'A windy week.',
+  breezy: 'A breezy week.',
+  light: 'Light winds all week.',
+  calm: 'A calm week.',
+} as const;
+
+export const WIND_COPY = {
+  breezyNext12: 'Breezy for the next 12 hours.',
+  lightNext12: 'Light winds for the next 12 hours.',
+} as const;
+
+const capitalise = (text: string): string => `${text[0]!.toUpperCase()}${text.slice(1)}`;
+
+/** "Gusts up to 45mph, wind up to 25mph." (hot's "High of 21°, feels like 24°."). */
+export function windDayLine(gust: string, mean: string): string {
+  return `Gusts up to ${gust}, wind up to ${mean}.`;
+}
+
+/** "Light winds, gusts up to 15mph." */
+export function lightWindsLine(gust: string): string {
+  return `Light winds, gusts up to ${gust}.`;
+}
+
+/** "Windiest around 3pm." */
+export function windiestAroundLine(hour: number): string {
+  return `Windiest around ${formatHour(hour)}.`;
+}
+
+/** "Wind 18mph, gusts 32mph right now." (hot's "13° right now, feels like 11°."). */
+export function windNowLine(mean: string, gust: string): string {
+  return `Wind ${mean}, gusts ${gust} right now.`;
+}
+
+/** "Windy from about 3pm." / "Gales from about 3pm." */
+export function windyFromLine(band: WindyBand, hour: number): string {
+  return `${capitalise(WIND_PHRASES[band])} from about ${formatHour(hour)}.`;
+}
+
+/** While breezy now: when the wind drops to light. */
+export function lighterFromLine(hour: number): string {
+  return `Lighter from about ${formatHour(hour)}.`;
+}
+
+/** While calm now: when it turns breezy. */
+export function breezierFromLine(hour: number): string {
+  return `Breezier from about ${formatHour(hour)}.`;
+}
+
+/** "Gusts up to 32mph from 3pm", what a screen reader hears for a Now row. */
+export function windRowSpoken(gust: string, label: string): string {
+  return `Gusts up to ${gust} from ${label}`;
+}
+
+/** "4 of 6 forecasts say windy" / "1 of 6 forecasts says gales". */
+export function windAgreementLine(agree: number, total: number, band: WindBand): string {
+  return `${agree} of ${total} forecasts ${agree === 1 ? 'says' : 'say'} ${WIND_AGREE_WORDS[band]}`;
+}
+
+/** Accessible summary of the wind strip: "Forecast gusts range from 25mph to 48mph; 4 of 6 say windy." */
+export function windStripSummary(args: {
+  min: string;
+  max: string;
+  agree: number;
+  total: number;
+  band: WindBand;
+}): string {
+  const range =
+    args.min === args.max
+      ? `All forecasts give gusts of ${args.min}`
+      : `Forecast gusts range from ${args.min} to ${args.max}`;
+  return `${range}; ${args.agree} of ${args.total} ${args.agree === 1 ? 'says' : 'say'} ${WIND_AGREE_WORDS[args.band]}.`;
+}
+
+/** The strongest band of a week and when: "gales" and "on Fri". */
+export interface WindTop {
+  phrase: string;
+  when: string;
+}
+
+/** "A windy week." / "A windy week, gales on Fri." */
+export function windyWeekLine(top: WindTop | null): string {
+  return top ? `A windy week, ${top.phrase} ${top.when}.` : WIND_WEEK_VERDICTS.windy;
+}
+
+/**
+ * "Windy on Thu and Fri." / "Windy on Thu and Fri, gales on Fri." / "Gales on Fri." `top` is the
+ * strongest band's phrase and days when it is stronger than windy; `allTop` when every windy day
+ * is at it.
+ */
+export function windDaysLine(when: string, top: WindTop | null, allTop: boolean): string {
+  if (top && allTop) return `${capitalise(top.phrase)} ${top.when}.`;
+  return top ? `Windy ${when}, ${top.phrase} ${top.when}.` : `Windy ${when}.`;
+}
+
+/** "Breezy on Mon and Tue." */
+export function breezyDaysLine(when: string): string {
+  return `Breezy ${when}.`;
+}
+
+/** "Windiest on Friday, gusts up to 45mph." / "Windiest today, gusts up to 45mph." */
+export function windiestLine(when: string, gust: string): string {
+  return `Windiest ${when}, gusts up to ${gust}.`;
+}
+
+/** "Gusts no stronger than 15mph all week." */
+export function calmWeekLine(gust: string): string {
+  return `Gusts no stronger than ${gust} all week.`;
+}
+
+/** Wind against normal. */
+export type WindNormal = 'windier' | 'calmer' | 'usual';
+
+/** "Windier than usual for October." `month` is null for a week across two months. */
+export function windNormalLine(kind: WindNormal, month: string | null): string {
+  const forMonth = month ?? 'the time of year';
+  if (kind === 'windier') return `Windier than usual for ${forMonth}.`;
+  if (kind === 'calmer') return `Calmer than usual for ${forMonth}.`;
+  return `About usual for ${forMonth}.`;
+}
+
+/** "Is it windy in Leeds today? Yes. Windy | isitwindy.today" (share cards only). */
+export function windPageTitle(args: {
+  city?: string | null;
+  answer: string;
+  band: WindBand;
+  still: boolean;
+}): string {
+  return `${question(args.city, 'today', 'wind')} ${args.answer} ${windLabel(args.band, args.still)} | ${SITES.wind.name}`;
 }

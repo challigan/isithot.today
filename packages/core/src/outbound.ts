@@ -1,4 +1,7 @@
+import type { WindBand } from './config';
+import { COPY } from './copy';
 import { geohash } from './geo';
+import { windRank } from './wind';
 
 export interface OutboundLink {
   name: string;
@@ -42,4 +45,20 @@ export function outboundLinks(place: OutboundPlace | null): OutboundLink[] {
       url: `https://www.accuweather.com/en/search-locations?query=${query}`,
     },
   ];
+}
+
+/** The Met Office's official warnings for the UK (a link, never a warning of ours). */
+export const MET_OFFICE_WARNINGS =
+  'https://weather.metoffice.gov.uk/warnings-and-advice/uk-warnings';
+
+/**
+ * A plain link to the official warnings under a gale or storm answer for a UK place, or null.
+ * The site never words a warning itself; other countries have services of their own, so none.
+ */
+export function warningsLink(
+  country: string | null | undefined,
+  band: WindBand | null | undefined,
+): OutboundLink | null {
+  if (country?.toUpperCase() !== 'GB' || !band || windRank(band) < windRank('gale')) return null;
+  return { name: COPY.metOfficeWarnings, url: MET_OFFICE_WARNINGS };
 }

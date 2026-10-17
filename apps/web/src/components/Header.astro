@@ -1,17 +1,46 @@
 ---
-import { COPY, SITES, UNITS_LABELS, UNIT_NAMES, type Topic, type Units } from '@isithot/core';
+import {
+  COPY,
+  SITES,
+  UNITS_LABELS,
+  UNIT_NAMES,
+  WIND_UNITS,
+  WIND_UNIT_NAMES,
+  type Topic,
+  type Units,
+  type WindUnit,
+} from '@isithot/core';
 
 interface Props {
   placeName?: string | null;
   units?: Units;
+  /** The wind site's setting of its own (mph | km/h), or null to leave it unchosen. */
+  windUnit?: WindUnit | null;
   controls?: boolean;
   /** The site the page belongs to. The browser switches the brand to the topic on screen. */
   site?: Topic;
 }
-const { placeName = null, units = 'c', controls = true, site = 'hot' } = Astro.props;
+const {
+  placeName = null,
+  units = 'c',
+  windUnit = null,
+  controls = true,
+  site = 'hot',
+} = Astro.props;
 const [brand, tld] = SITES[site].name.split('.');
-// One setting serves every topic: °C goes with millimetres and centimetres, °F with inches.
-const names = UNIT_NAMES[site];
+/**
+ * Two buttons whose values follow the question on screen (scripts/app.ts swaps them). One setting
+ * serves hot, wet and snow: °C goes with millimetres and centimetres, °F with inches. Wind has its
+ * own, mph | km/h.
+ */
+const choices =
+  site === 'wind'
+    ? WIND_UNITS.map((u) => ({ value: u, name: WIND_UNIT_NAMES[u], pressed: u === windUnit }))
+    : (['c', 'f'] as const).map((u) => ({
+        value: u,
+        name: UNIT_NAMES[site][u],
+        pressed: u === units,
+      }));
 ---
 
 <header>
@@ -37,12 +66,11 @@ const names = UNIT_NAMES[site];
           <span class="sr-only">, {COPY.changeLocation}</span>
         </button>
         <div class="pill units" role="group" aria-label={UNITS_LABELS[site]}>
-          <button type="button" data-units="c" aria-pressed={units === 'c' ? 'true' : 'false'}>
-            {names.c}
-          </button>
-          <button type="button" data-units="f" aria-pressed={units === 'f' ? 'true' : 'false'}>
-            {names.f}
-          </button>
+          {choices.map((c) => (
+            <button type="button" data-units={c.value} aria-pressed={c.pressed ? 'true' : 'false'}>
+              {c.name}
+            </button>
+          ))}
         </div>
       </div>
       <p class="place-note" id="place-note" hidden />

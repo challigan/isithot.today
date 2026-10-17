@@ -2,6 +2,7 @@ import { createServer, type AddressInfo } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
 import {
   LINKS,
+  MODELS,
   listed,
   type ApiError,
   type SearchResponse,
@@ -114,8 +115,8 @@ describe('GET /api/v1/today', () => {
     expect(day).toHaveProperty('answer');
     expect(day).toHaveProperty('verdict');
     expect(day.normalHigh).not.toBeNull();
-    expect(day.consensus.total).toBe(8);
-    expect(day.models).toHaveLength(8);
+    expect(day.consensus.total).toBe(MODELS.length);
+    expect(day.models).toHaveLength(MODELS.length);
     expect(body.attribution).toEqual([
       'Weather data by Open-Meteo.com (CC BY 4.0), modified',
       'Contains Met Office data © Crown copyright, the Met Office, licensed under CC BY-SA 4.0',
@@ -132,16 +133,17 @@ describe('GET /api/v1/today', () => {
   it('serves the second call from cache', async () => {
     const { deps, calls } = makeDeps();
     await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
-    // The forecast, then normal highs, rainfall and snowfall (three climatology requests).
+    // The forecast, then normal highs, rainfall, snowfall and wind (four climatology requests).
     expect(calls).toEqual([
       '/v1/forecast',
       '/api/temporal/climatology/point',
       '/api/temporal/climatology/point',
       '/api/temporal/climatology/point',
+      '/api/temporal/climatology/point',
     ]);
     await getToday(q({ lat: '54.95', lon: '-1.6', units: 'f' }), null, deps);
-    await getToday(q({ lat: '54.97', lon: '-1.62', units: 'c' }), null, deps);
-    expect(calls).toHaveLength(4);
+    await getToday(q({ lat: '54.97', lon: '-1.62', units: 'c', windUnits: 'kmh' }), null, deps);
+    expect(calls).toHaveLength(5);
   });
 
   it('uses the name passed by search and marks the source', async () => {
@@ -274,7 +276,7 @@ describe('GET /api/v1/today', () => {
     expect(r.headers['Cache-Control']).toBe('public, max-age=60');
     // The log says why, and what was served instead (a 503 is retried at once).
     expect(logs.find((l) => l.startsWith('forecast unavailable'))).toMatch(
-      /^forecast unavailable for forecast\/v5\/54\.95,-1\.60\/dem after \d+ms: open-meteo: HTTP 503 \(2 attempts\); answering with the copy from 2026-10-06T08:00:00.000Z$/,
+      /^forecast unavailable for forecast\/v6\/54\.95,-1\.60\/dem after \d+ms: open-meteo: HTTP 503 \(2 attempts\); answering with the copy from 2026-10-06T08:00:00.000Z$/,
     );
 
     now = new Date(NOW.getTime() + 7 * 60 * 60 * 1000);
@@ -342,8 +344,8 @@ describe('GET /api/v1/today', () => {
     // Today's row in the week is Today's own answer.
     expect(week.days[0]!.band).toBe(body.days[0]!.band);
     expect(week.days[0]!.high).toBe(body.days[0]!.high);
-    // Météo-France stops after about four days, so later days have seven models.
-    expect(body.days[0]!.consensus.total).toBe(8);
+    // Météo-France stops after about four days, so later days have five models.
+    expect(body.days[0]!.consensus.total).toBe(MODELS.length);
   });
 
   it('answers "Is it wet?" alongside "Is it hot?"', async () => {
@@ -358,8 +360,8 @@ describe('GET /api/v1/today', () => {
     ]);
     for (const d of rain.days) {
       expect(d.answer).toMatch(/^(Yes|No|Maybe)\.$/);
-      expect(d.total).toBe(8);
-      expect(d.models).toHaveLength(8);
+      expect(d.total).toBe(MODELS.length);
+      expect(d.models).toHaveLength(MODELS.length);
     }
     expect(rain.now!.time).toBe(NOW.toISOString());
     expect(rain.now!.hours).toHaveLength(6);
@@ -388,7 +390,7 @@ describe('GET /api/v1/today', () => {
     );
     for (const d of snow.days) {
       expect(d.answer).toMatch(/^(Yes|No|Maybe)\.$/);
-      expect(d.total).toBe(8);
+      expect(d.total).toBe(MODELS.length);
     }
     // Newcastle in October is too mild for snow, and says why.
     expect(snow.days[0]!.band).toBe('nosnow');
@@ -402,6 +404,168 @@ describe('GET /api/v1/today', () => {
     expect(week.normal).not.toBeNull();
     const f = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'f' }), null, deps));
     expect(f.snow!.unit).toBe('in');
+  });
+
+  it('answers "Is it windy?" from the same forecast, in mph in the UK', async () => {
+    const { deps } = makeDeps();
+    const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
+    const wind = body.wind!;
+    // °C with mph: wind has its own units, from the place when `units` is given.
+    expect([body.units, wind.unit]).toEqual(['c', 'mph']);
+    // Today from the current hour (9am in London) to 9pm; tomorrow over its waking hours.
+    expect(wind.days.map((d) => [d.date, d.partial, d.from, d.window])).toEqual([
+      ['2026-10-06', true, NOW.toISOString(), { from: 9, to: 21 }],
+      ['2026-10-07', false, '2026-10-07T06:00:00.000Z', { from: 7, to: 21 }],
+    ]);
+    for (const d of wind.days) {
+      expect(d.answer).toMatch(/^(Yes|No|A bit)\.$/);
+      expect(d.total).toBe(MODELS.length);
+      expect(d.models).toHaveLength(MODELS.length);
+      expect(d.models.some((m) => m.gust > m.mean)).toBe(true);
+      expect(Number.isInteger(d.gust) && Number.isInteger(d.mean)).toBe(true);
+      expect(d.agreementText).toMatch(/^\d of 6 forecasts says? /);
+      expect(d.normal).not.toBeNull();
+    }
+    const now = wind.now!;
+    expect(now.time).toBe(NOW.toISOString());
+    expect(now.detail).toMatch(/^Wind \d+mph, gusts \d+mph right now\. /);
+    expect(now.hours).toHaveLength(6);
+    expect(now.series.length).toBeGreaterThan(20);
+    // Today is never calmer than Now.
+    const rank = ['calm', 'breezy', 'windy', 'verywindy', 'gale', 'storm'];
+    expect(rank.indexOf(wind.days[0]!.band)).toBeGreaterThanOrEqual(rank.indexOf(now.band));
+    const week = wind.week!;
+    expect(week.from).toBe('2026-10-06');
+    expect(week.days).toHaveLength(7);
+    expect(week.answer).toMatch(/^(Yes|No|A bit|Partly)\.$/);
+    expect(week.days[0]!.band).toBe(wind.days[0]!.band);
+    expect(week.days[0]!.gust).toBe(wind.days[0]!.gust);
+    // Later days are judged from each model's day, kept when their hours are dropped.
+    expect(week.mean).not.toBeNull();
+    expect(week.normal).not.toBeNull();
+    expect(week.detail).toMatch(/(Windier than|Calmer than|About) usual for October\.$/);
+    // The temperature units leave the wind's alone.
+    const f = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'f' }), null, deps));
+    expect([f.units, f.wind!.unit]).toEqual(['f', 'mph']);
+    const seville = ok(await getToday(q({ place: 'seville-es', units: 'c' }), null, deps));
+    expect(seville.wind!.unit).toBe('kmh');
+    expect(seville.wind!.days[0]!.detail).toMatch(/km\/h/);
+  });
+
+  it('takes the wind units asked for, else the place’s with units given, else the visitor’s', async () => {
+    const { deps } = makeDeps();
+    const unit = async (params: Record<string, string>, country?: string) => {
+      const r = await getToday(q(params), country ? { country } : null, deps);
+      return [ok(r).wind!.unit, r.headers['Cache-Control']];
+    };
+    const london = { place: 'london-gb' };
+    expect(await unit({ ...london, units: 'c', windUnits: 'kmh' })).toEqual([
+      'kmh',
+      'public, max-age=600',
+    ]);
+    // A visitor from France gets London's mph when the units are named, so the CDN can share it.
+    expect(await unit({ ...london, units: 'c' }, 'FR')).toEqual(['mph', 'public, max-age=600']);
+    // With nothing named, the visitor's own (and the answer is theirs alone).
+    expect(await unit(london, 'FR')).toEqual(['kmh', 'private, max-age=300']);
+    expect(await unit(london, 'US')).toEqual(['mph', 'private, max-age=300']);
+    expect(await unit({ ...london, windUnits: 'kmh' }, 'US')).toEqual([
+      'kmh',
+      'private, max-age=300',
+    ]);
+    // Anything else is ignored.
+    expect(await unit({ place: 'paris-fr', units: 'c', windUnits: 'knots' })).toEqual([
+      'kmh',
+      'public, max-age=600',
+    ]);
+    // The IP fallback's own country, without a visitor's.
+    const ip = ok(await getToday(q({}), null, deps));
+    expect(ip.wind!.unit).toBe('mph');
+  });
+
+  it('keeps the other answers when the wind normals fail, and caches briefly while they load', async () => {
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    const noWindNormals: FetchLike = async (url, init) =>
+      url.includes('WS10M') ? new Response('{}', { status: 500 }) : synthetic(url, init);
+    const failed = makeDeps({ fetch: noWindNormals });
+    const body = ok(
+      await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, failed.deps),
+    );
+    expect(body.days[0]!.normalHigh).not.toBeNull();
+    expect(body.snow!.week!.normal).not.toBeNull();
+    expect(body.wind!.days[0]!.normal).toBeNull();
+    expect(body.wind!.week!.normal).toBeNull();
+    expect(body.wind!.week!.detail).not.toMatch(/usual/);
+
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const slowWind: FetchLike = async (url, init) => {
+      if (url.includes('WS10M')) await gate;
+      return synthetic(url, init);
+    };
+    const { deps, background } = makeDeps({ fetch: slowWind, climateWaitMs: 10 });
+    const first = await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
+    expect(first.headers['Cache-Control']).toBe('public, max-age=60');
+    release();
+    await Promise.all(background);
+    const again = await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
+    expect(again.headers['Cache-Control']).toBe('public, max-age=600');
+    expect(ok(again).wind!.week!.normal).not.toBeNull();
+  });
+
+  it('uses wind normals only where the climate cell is near the place in height', async () => {
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    const answer = async (elevation: number, cellHeight = true) => {
+      const changed: FetchLike = async (url, init) => {
+        const json = (await (await synthetic(url, init)).json()) as Record<string, unknown>;
+        if (url.includes('forecast')) json.elevation = elevation;
+        if (!cellHeight && url.includes('WS10M')) {
+          json.geometry = { type: 'Point', coordinates: [0, 55] };
+        }
+        return new Response(JSON.stringify(json));
+      };
+      const { deps } = makeDeps({ fetch: changed });
+      return ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps)).wind!;
+    };
+    expect((await answer(1050)).week!.normal).toBeNull();
+    expect((await answer(340)).week!.normal).not.toBeNull();
+    expect((await answer(1050, false)).week!.normal).not.toBeNull();
+  });
+
+  it('has a storm in Reykjavik, and no wind for a forecast recorded without it', async () => {
+    const { deps } = makeDeps();
+    const storm = ok(await getToday(q({ place: 'reykjavik-is', units: 'c' }), null, deps)).wind!;
+    expect([storm.unit, storm.days[0]!.band, storm.now!.band, storm.week!.band]).toEqual([
+      'kmh',
+      'storm',
+      'storm',
+      'storm',
+    ]);
+    expect(storm.days[0]!.zone).toEqual({ from: 112, to: null });
+    const synthetic = createSyntheticFetch(CITIES, () => NOW);
+    const noWind: FetchLike = async (url, init) => {
+      const json = (await (await synthetic(url, init)).json()) as {
+        hourly?: Record<string, unknown>;
+      };
+      for (const key of Object.keys(json.hourly ?? {})) {
+        if (key.startsWith('wind_')) delete json.hourly![key];
+      }
+      return new Response(JSON.stringify(json));
+    };
+    const old = makeDeps({ fetch: noWind });
+    const body = ok(await getToday(q({ place: 'leeds-gb', units: 'c' }), null, old.deps));
+    expect(body).not.toHaveProperty('wind');
+    expect(body.rain).toBeDefined();
+  });
+
+  it('serves city pages in the wind unit of the city, or the one asked for', async () => {
+    const platform = { env: (k: string) => ({ DATA_SOURCE: 'synthetic' })[k] };
+    const london = await todayForCity('london-gb', platform);
+    expect((london.body as TodayResponse).wind!.unit).toBe('mph');
+    const paris = await todayForCity('paris-fr', platform, 'c');
+    expect((paris.body as TodayResponse).wind!.unit).toBe('kmh');
+    const kmh = await todayForCity('london-gb', platform, 'f', 'kmh');
+    expect((kmh.body as TodayResponse).wind!.unit).toBe('kmh');
+    expect((kmh.body as TodayResponse).units).toBe('f');
   });
 
   it('says snow where it is always freezing, and Wet agrees', async () => {
@@ -489,7 +653,7 @@ describe('GET /api/v1/today', () => {
     const first = await at({ source: 'search', elevation: '1034' });
     expect(first.location).toMatchObject({ source: 'search', elevation: 1034 });
     expect(heights).toEqual(['1050']);
-    expect(await deps.cache.get('forecast/v5/46.60,8.05/1050')).not.toBeNull();
+    expect(await deps.cache.get('forecast/v6/46.60,8.05/1050')).not.toBeNull();
     // Another place in the band shares the forecast; one 300 m lower in the same cell does not.
     await at({ source: 'search', elevation: '1060.4' });
     expect(heights).toEqual(['1050']);
@@ -501,7 +665,7 @@ describe('GET /api/v1/today', () => {
     expect(device.location.source).toBe('device');
     expect(device.location).not.toHaveProperty('elevation');
     expect(heights).toEqual(['1050', '750', null]);
-    expect(await deps.cache.get('forecast/v5/46.60,8.05/dem')).not.toBeNull();
+    expect(await deps.cache.get('forecast/v6/46.60,8.05/dem')).not.toBeNull();
   });
 
   it('ignores a height that is not a plausible number of metres', async () => {
@@ -739,10 +903,10 @@ describe('GET /api/v1/today', () => {
     const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
     expect(body.days[0]!.anomaly).toBeNull();
     expect(body.rain!.week!.normal).toBeNull();
-    // One request each for normal highs, rainfall and snowfall, then none again for an hour.
-    expect(nasaCalls).toBe(3);
+    // One request each for normal highs, rainfall, snowfall and wind, then none again for an hour.
+    expect(nasaCalls).toBe(4);
     await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
-    expect(nasaCalls).toBe(3);
+    expect(nasaCalls).toBe(4);
   });
 
   it('reports upstream_unavailable when the forecast has no data for today', async () => {
@@ -790,7 +954,7 @@ describe('GET /api/v1/today', () => {
     });
     expect(logs).toContainEqual(
       expect.stringMatching(
-        /^forecast unavailable for forecast\/v5\/11\.00,11\.00\/dem after \d+ms: open-meteo: timed out after 60ms \(2 attempts\); no usable cached copy, answering 503$/,
+        /^forecast unavailable for forecast\/v6\/11\.00,11\.00\/dem after \d+ms: open-meteo: timed out after 60ms \(2 attempts\); no usable cached copy, answering 503$/,
       ),
     );
   });
@@ -812,7 +976,7 @@ describe('GET /api/v1/today', () => {
     expect(r.status).toBe(200);
     expect(forecasts).toBe(2);
     expect(logs).toContainEqual(
-      expect.stringMatching(/^forecast for forecast\/v5\/12\.00,12\.00\/dem took \d+ms$/),
+      expect.stringMatching(/^forecast for forecast\/v6\/12\.00,12\.00\/dem took \d+ms$/),
     );
   });
 

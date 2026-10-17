@@ -7,7 +7,7 @@
  * kept dim enough for small text even at its brightest point (scripts/palette-contrast.mjs).
  * e2e/contrast.spec.ts checks every pair on the rendered page.
  */
-import type { Palette, RainBand, SnowBand } from './config';
+import type { Palette, RainBand, SnowBand, WindBand } from './config';
 
 export const RAIN_PALETTES: Record<RainBand, Palette> = {
   dry: {
@@ -115,6 +115,67 @@ export const SNOW_PALETTES: Record<SnowBand, Palette> = {
     g3: '#eae4f7',
     ink: '#ffffff',
     pill: '#160c19',
+    glow: '30%',
+  },
+};
+
+/**
+ * Colours for the wind bands ("Is it windy?"): from a still, hazy day to a storm. Every blue and
+ * violet is taken (Hot's Cold and Freezing, all of Wet, all of Snow), so wind takes the free part of
+ * the wheel, yellow to green: pale straw with a warm sun for calm, fresh spring green for breezy,
+ * then the greens of trees in the wind, darkening to a pine-dark gale and a storm's charcoal under a
+ * yellow-green storm light. The two pale bands carry dark text; from Windy up the text is white,
+ * with the glow kept dim enough for small text (scripts/palette-contrast.mjs). Every palette is at
+ * least 13.4 (CIEDE2000) from every Hot, Wet and Snow palette; the closest existing cross-topic pair
+ * is 11.7 (Hot's Mild and Wet's Spots).
+ */
+export const WIND_PALETTES: Record<WindBand, Palette> = {
+  calm: {
+    g1: '#fbf6db',
+    g2: '#f1e7a5',
+    g3: '#fff8e0',
+    ink: '#2a2b0a',
+    pill: '#fbf6db',
+    glow: '85%',
+  },
+  breezy: {
+    g1: '#ecfad6',
+    g2: '#bbe98b',
+    g3: '#ffffff',
+    ink: '#172d12',
+    pill: '#ecfad6',
+    glow: '70%',
+  },
+  windy: {
+    g1: '#2c7043',
+    g2: '#0e5632',
+    g3: '#ddf7d8',
+    ink: '#ffffff',
+    pill: '#0e5632',
+    glow: '12%',
+  },
+  verywindy: {
+    g1: '#155b3d',
+    g2: '#063b28',
+    g3: '#d1f2d7',
+    ink: '#ffffff',
+    pill: '#063b28',
+    glow: '18%',
+  },
+  gale: {
+    g1: '#28432e',
+    g2: '#0d2517',
+    g3: '#d7edcb',
+    ink: '#ffffff',
+    pill: '#0d2517',
+    glow: '24%',
+  },
+  storm: {
+    g1: '#2d3322',
+    g2: '#0c1109',
+    g3: '#eaeaa3',
+    ink: '#ffffff',
+    pill: '#0c1109',
     glow: '30%',
   },
 };
