@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   cToF,
   defaultUnitsForCountry,
+  defaultWindUnitForCountry,
   deltaCToF,
   deltaToUnits,
   parseUnits,
+  parseWindUnit,
   round1,
   roundTemp,
   toUnits,
@@ -47,5 +49,23 @@ describe('units', () => {
     expect(parseUnits('f')).toBe('f');
     expect(parseUnits('F')).toBeNull();
     expect(parseUnits(null)).toBeNull();
+  });
+
+  it('defaults wind to mph in the UK and the US, and their islands, and km/h elsewhere', () => {
+    for (const code of ['GB', 'gb', 'IM', 'JE', 'GG', 'US', 'PR', 'GU', 'VI', 'AS', 'MP', 'UM']) {
+      expect(defaultWindUnitForCountry(code)).toBe('mph');
+    }
+    for (const code of ['IE', 'FR', 'CA', 'AU', 'BS'])
+      expect(defaultWindUnitForCountry(code)).toBe('kmh');
+    expect(defaultWindUnitForCountry(null)).toBe('kmh');
+    expect(defaultWindUnitForCountry(undefined)).toBe('kmh');
+  });
+
+  it('parses the wind units query', () => {
+    expect(parseWindUnit('mph')).toBe('mph');
+    expect(parseWindUnit('kmh')).toBe('kmh');
+    expect(parseWindUnit('km/h')).toBeNull();
+    expect(parseWindUnit('MPH')).toBeNull();
+    expect(parseWindUnit(null)).toBeNull();
   });
 });

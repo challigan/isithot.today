@@ -215,10 +215,9 @@ function syntheticRain(cell: string, lat: number, date: string, id: string): num
 
 /**
  * Only two models give their own UV index; the second stops after its 54-hour regional domain.
- * MET Norway's is GFS's copied in, as Open-Meteo answers; the other models' are all nulls.
+ * The other models' are all nulls.
  */
 const UV_HORIZON_HOURS: Record<string, number> = { ncep_gfs_seamless: Infinity, ukmo_seamless: 54 };
-const UV_COPIED_FROM: Record<string, string> = { metno_seamless: 'ncep_gfs_seamless' };
 
 /** How much of the clear-sky UV gets through each day's sky. */
 const UV_THROUGH: Record<Sky, number> = {
@@ -250,6 +249,81 @@ function syntheticUv(cell: string, lat: number, lon: number, end: number, id: st
   const date = mid.toISOString().slice(0, 10);
   const through = UV_THROUGH[syntheticSky(cell, date)];
   return r2(12.5 * sunHeight ** 2.4 * through * between(`${cell}|${date}|${id}|uv`, 0.9, 1.1));
+}
+
+type Wind = 'calm' | 'breezy' | 'windy' | 'verywindy' | 'gale' | 'storm';
+
+/**
+ * Each place's wind runs through this ten-day cycle (from a point of its own, apart from its
+ * skies), each day with a chance of turning into its alternative, so a week holds light and
+ * windy days and now and then a gale. Places from SNOWY_FROM_LAT (Reykjavik is the one city page
+ * there) have a storm every day of the year, so end-to-end tests can show one in any month.
+ */
+const WINDS: ReadonlyArray<readonly [Wind, Wind, number]> = [
+  ['calm', 'calm', 0],
+  ['breezy', 'calm', 0.3],
+  ['windy', 'breezy', 0.3],
+  ['verywindy', 'windy', 0.3],
+  ['gale', 'verywindy', 0.35],
+  ['windy', 'breezy', 0.3],
+  ['breezy', 'breezy', 0],
+  ['calm', 'breezy', 0.3],
+  ['breezy', 'windy', 0.3],
+  ['windy', 'windy', 0],
+];
+
+/** A typical model's strongest mean wind and gust of each kind of day, km/h (mid-band). */
+const WIND_PEAKS: Record<Wind, readonly [number, number]> = {
+  calm: [8, 18],
+  breezy: [15, 40],
+  windy: [24, 56],
+  verywindy: [30, 72],
+  gale: [45, 95],
+  storm: [70, 130],
+};
+
+function syntheticWind(cell: string, lat: number, date: string): Wind {
+  if (Math.abs(lat) >= SNOWY_FROM_LAT) return 'storm';
+  const day = Math.round(parseDate(date) / 86_400_000) + Math.floor(unit(`${cell}|wind`) * 10);
+  const [wind, alternative, chance] = WINDS[day % WINDS.length]!;
+  return unit(`${cell}|${day}|wind turn`) < chance ? alternative : wind;
+}
+
+/**
+ * One model's mean wind and gust in each hour of a local day, km/h: strongest in the afternoon
+ * and about 60% of that at night (a storm blows as hard all day and night), each model a little
+ * stronger or lighter than the others.
+ */
+function syntheticWindHours(
+  cell: string,
+  lat: number,
+  date: string,
+  id: string,
+): { wind: number[]; gust: number[] } {
+  const kind = syntheticWind(cell, lat, date);
+  const [mean, gust] = WIND_PEAKS[kind];
+  const jitter = between(`${cell}|${date}|${id}|wind`, 0.85, 1.15);
+  const peak = 13 + Math.floor(unit(`${cell}|${date}|wind peak`) * 3);
+  const swing = kind === 'storm' ? 0 : 0.4;
+  const shape = (h: number) =>
+    1 - swing + swing * ((Math.cos(((h - peak) / 24) * 2 * Math.PI) + 1) / 2);
+  return {
+    wind: Array.from({ length: 24 }, (_, h) => r1(mean * jitter * shape(h))),
+    gust: Array.from({ length: 24 }, (_, h) => r1(gust * jitter * shape(h))),
+  };
+}
+
+/**
+ * Normal wind at 10m, m/s by month: strongest in the mid-latitude storm tracks and over the
+ * Arctic, lightest in the tropics, and windiest in each hemisphere's winter.
+ */
+export function syntheticWindNormals(lat: number): number[] {
+  const a = Math.abs(lat);
+  const base = a >= SNOWY_FROM_LAT ? 8 : 3 + 2.5 * Math.exp(-(((a - 55) / 15) ** 2));
+  const windiest = lat >= 0 ? 0 : 6;
+  return Array.from({ length: 12 }, (_, m) =>
+    r2(base * (1 + 0.15 * Math.cos((2 * Math.PI * (m - windiest)) / 12))),
+  );
 }
 
 /** Offset of a time zone from UTC at a moment, seconds. */
@@ -327,9 +401,17 @@ export function syntheticForecast(
     const precipitation: Array<number | null> = [addDays(today, -1), ...dates]
       .flatMap((date) => syntheticRain(cell, lat, date, id))
       .slice(23, 23 + temps.length);
+    // Wind speed is instant, at its stamp; a gust is labelled with the end of the hour it is the
+    // strongest of, so the first stamp carries the last hour of the day before, as precipitation.
+    const winds = dates.map((date) => syntheticWindHours(cell, lat, date, id));
+    const wind: Array<number | null> = winds.flatMap((w) => w.wind);
+    const gust: Array<number | null> = [
+      syntheticWindHours(cell, lat, addDays(today, -1), id).gust[23]!,
+      ...winds.flatMap((w) => w.gust),
+    ].slice(0, temps.length);
     const horizon = HORIZON_HOURS[id] ?? Infinity;
     temps.forEach((_, i) => {
-      if (i >= horizon) temps[i] = apparent[i] = precipitation[i] = null;
+      if (i >= horizon) temps[i] = apparent[i] = precipitation[i] = wind[i] = gust[i] = null;
     });
     // Snowfall as depth, with the temperature at the end of the hour, as Open-Meteo labels both.
     const snowfall = precipitation.map((mm, i) =>
@@ -339,13 +421,14 @@ export function syntheticForecast(
     hourly[`apparent_temperature_${id}`] = apparent;
     hourly[`precipitation_${id}`] = precipitation;
     hourly[`snowfall_${id}`] = snowfall;
-    const uvId = UV_COPIED_FROM[id] ?? id;
-    const uvHorizon = UV_HORIZON_HOURS[uvId] ?? -1;
+    const uvHorizon = UV_HORIZON_HOURS[id] ?? -1;
     hourly[`uv_index_${id}`] = (hourly.time as string[]).map((stamp, i) =>
       i < uvHorizon
-        ? syntheticUv(cell, lat, lon, Date.parse(`${stamp}Z`) - offset * 1000, uvId)
+        ? syntheticUv(cell, lat, lon, Date.parse(`${stamp}Z`) - offset * 1000, id)
         : null,
     );
+    hourly[`wind_speed_10m_${id}`] = wind;
+    hourly[`wind_gusts_10m_${id}`] = gust;
   }
 
   return {
@@ -424,6 +507,25 @@ export function syntheticSnowClimatology(lat: number, lon: number) {
   };
 }
 
+/** Normal wind in NASA POWER's format: WS10M, m/s, with the cell's height. */
+export function syntheticWindClimatology(lat: number, lon: number) {
+  const normals = syntheticWindNormals(lat);
+  const WS10M: Record<string, number> = {};
+  MONTHS.forEach((k, i) => {
+    WS10M[k] = normals[i] as number;
+  });
+  WS10M.ANN = r2(normals.reduce((a, b) => a + b, 0) / 12);
+  return {
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [lon, lat, 50] },
+    properties: { parameter: { WS10M } },
+    header: { title: 'NASA/POWER synthetic climatology', fill_value: -999 },
+    messages: [],
+    parameters: { WS10M: { units: 'm/s', longname: 'Wind Speed at 10 Meters' } },
+    times: { data: 0, process: 0 },
+  };
+}
+
 const fold = (s: string): string => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 export function syntheticSearch(query: string, count: number, places: readonly SyntheticPlace[]) {
@@ -480,7 +582,9 @@ export function createSyntheticFetch(
         ? syntheticRainClimatology
         : parameters.includes('PRECSNOLAND')
           ? syntheticSnowClimatology
-          : syntheticClimatology;
+          : parameters.includes('WS10M')
+            ? syntheticWindClimatology
+            : syntheticClimatology;
       return json(climatology(Number(p.get('latitude')), Number(p.get('longitude'))));
     }
     return new Response('Not found', { status: 404 });

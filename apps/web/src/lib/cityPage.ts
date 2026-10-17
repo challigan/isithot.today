@@ -1,13 +1,14 @@
 /**
  * The request side of a city page, shared by the sites' /in/<slug> pages (isithot.today,
- * isitwet.today, willitsnow.today): the canonical address, the answer and the cache headers.
- * CityPage.astro renders the result.
+ * isitwet.today, willitsnow.today, isitwindy.today): the canonical address, the answer and the
+ * cache headers. CityPage.astro renders the result.
  */
 import type { AstroGlobal } from 'astro';
 import {
   CACHE,
   defaultUnitsForCountry,
   defaultView,
+  defaultWindUnitForCountry,
   showsTomorrow,
   sitePath,
   viewDisplay,
@@ -19,6 +20,7 @@ import {
   type Topic,
   type Units,
   type View,
+  type WindUnit,
 } from '@isithot/core';
 import { cdnCacheControl, cityBySlug, todayForCity } from '@isithot/server';
 import { platformFrom } from './platform';
@@ -29,6 +31,8 @@ export interface CityPageProps {
   /** Null for an unknown slug (a 404). */
   city: City | null;
   units: Units;
+  /** Wind speeds' unit, the city's country's (mph for London, km/h for Paris). */
+  windUnit: WindUnit;
   data: TodayResponse | null;
   state: DisplayState;
   /** Today's answer in the page's topic, for the description (always about today). */
@@ -48,12 +52,13 @@ export async function loadCityPage(
 ): Promise<CityPageProps | Response> {
   const slug = (Astro.params.slug ?? '').toLowerCase();
   const city = cityBySlug(slug) ?? null;
-  // Wet and snow pages sit under /wet and /snow only where they are served from there (deploy
-  // previews, a local server); on isitwet.today the same page is at /in/<slug>.
+  // Wet, snow and wind pages sit under /wet, /snow and /wind only where they are served from there
+  // (deploy previews, a local server); on isitwet.today the same page is at /in/<slug>.
   if (city && city.slug !== Astro.params.slug) {
     return Astro.redirect(sitePath(topic, `/in/${city.slug}`, Astro.url.hostname), 301);
   }
   const units = defaultUnitsForCountry(city?.country);
+  const windUnit = defaultWindUnitForCountry(city?.country);
   if (!city) {
     Astro.response.status = 404;
     Astro.response.headers.set('Cache-Control', 'public, max-age=300');
@@ -63,6 +68,7 @@ export async function loadCityPage(
       topic,
       city,
       units,
+      windUnit,
       data: null,
       state,
       today,
@@ -72,7 +78,7 @@ export async function loadCityPage(
     };
   }
 
-  const result = await todayForCity(city.slug, platformFrom(Astro.locals), units);
+  const result = await todayForCity(city.slug, platformFrom(Astro.locals), units, windUnit);
   const data = result.status === 200 ? (result.body as TodayResponse) : null;
   const state: DisplayState = data?.days[0] ? 'ready' : 'error';
   const opts = { city: city.name };
@@ -84,13 +90,13 @@ export async function loadCityPage(
   const start = defaultView(data, now);
   const palette = viewDisplay(data, topic, start, state, { ...opts, tomorrow }).palette;
 
-  // Never past the next hour, stale or not: the page carries today's rain and snow answers for
-  // the rest of the day, and the evening's Tomorrow from 6pm.
+  // Never past the next hour, stale or not: the page carries today's rain, snow and wind answers
+  // for the rest of the day, and the evening's Tomorrow from 6pm.
   const cache = today.band ? Math.min(CACHE.cityPage, result.maxAge ?? CACHE.cityPage) : 60;
   Astro.response.headers.set('Cache-Control', `public, max-age=${Math.min(cache, 300)}`);
   Astro.response.headers.set(
     'Netlify-CDN-Cache-Control',
     cdnCacheControl(cache, result.expiresIn ?? null),
   );
-  return { topic, city, units, data, state, today, start, tomorrow, palette };
+  return { topic, city, units, windUnit, data, state, today, start, tomorrow, palette };
 }

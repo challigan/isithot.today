@@ -3,16 +3,19 @@
  * adjusted without touching logic. The native apps should mirror this file.
  */
 
-import { RAIN_PALETTES, SNOW_PALETTES } from './palettes';
+import { RAIN_PALETTES, SNOW_PALETTES, WIND_PALETTES } from './palettes';
 
 export type Band = 'freezing' | 'cold' | 'mild' | 'warm' | 'hot' | 'scorching';
 
 /** Bands from coldest to hottest. The index is used for capping and flooring. */
 export const BANDS: readonly Band[] = ['freezing', 'cold', 'mild', 'warm', 'hot', 'scorching'];
 
-/** The three questions, in the toggle's order: "Is it hot?", "Is it wet?" and "Will it snow?". */
-export type Topic = 'hot' | 'wet' | 'snow';
-export const TOPICS: readonly Topic[] = ['hot', 'wet', 'snow'];
+/**
+ * The four questions, in the toggle's order: "Is it hot?", "Is it wet?", "Will it snow?" and "Is
+ * it windy?".
+ */
+export type Topic = 'hot' | 'wet' | 'snow' | 'wind';
+export const TOPICS: readonly Topic[] = ['hot', 'wet', 'snow', 'wind'];
 
 /** A topic named by untrusted text (a data attribute, a query), or hot. */
 export function parseTopic(value: string | null | undefined): Topic {
@@ -29,6 +32,7 @@ export const SITES: Record<Topic, { name: string; url: string; prefix: string }>
   hot: { name: 'isithot.today', url: 'https://isithot.today', prefix: '' },
   wet: { name: 'isitwet.today', url: 'https://isitwet.today', prefix: '/wet' },
   snow: { name: 'willitsnow.today', url: 'https://willitsnow.today', prefix: '/snow' },
+  wind: { name: 'isitwindy.today', url: 'https://isitwindy.today', prefix: '/wind' },
 };
 
 /** The topic a host serves: each site (and its www) its own; everything else opens on hot. */
@@ -132,14 +136,26 @@ export const SNOW_BANDS: readonly SnowBand[] = [
 /** Why a day or an hour without snow has none: too warm throughout, rain instead, or dry. */
 export type SnowReason = 'warm' | 'rain' | 'dry';
 
+/** Wind bands from still to storm. Every key differs from the other topics' keys. */
+export type WindBand = 'calm' | 'breezy' | 'windy' | 'verywindy' | 'gale' | 'storm';
+export const WIND_BANDS: readonly WindBand[] = [
+  'calm',
+  'breezy',
+  'windy',
+  'verywindy',
+  'gale',
+  'storm',
+];
+
 /** Any topic's band. */
-export type AnyBand = Band | RainBand | SnowBand;
+export type AnyBand = Band | RainBand | SnowBand | WindBand;
 
 /** Each topic's bands, in order. */
 export const BANDS_BY_TOPIC: Record<Topic, readonly AnyBand[]> = {
   hot: BANDS,
   wet: RAIN_BANDS,
   snow: SNOW_BANDS,
+  wind: WIND_BANDS,
 };
 
 /** The topic a band belongs to, or null for anything that is not a band. */
@@ -171,8 +187,11 @@ export const RAIN = {
   lightBelow: 0.5,
   /** Hours where at least this share of models has rain are the "likely" hours. */
   hourLikely: 0.5,
-  /** Without a likely hour, the wettest hour is named only from this share up. */
-  hourPossible: 0.375,
+  /**
+   * Without a likely hour, the wettest hour is named only from this share up: a third, so 2 of 6
+   * models name it (3 of 6 is already a likely hour), as 3 of 8 did.
+   */
+  hourPossible: 1 / 3,
   /** Rain in an hour at or below this blended temperature counts as snow, °C. */
   snowAtOrBelowC: 1,
   /** Share of a window's rain that falls as snow for "snow", and for "some may fall as snow". */
@@ -227,8 +246,8 @@ export const SNOW = {
   dustingBelow: 0.5,
   /** Hours where at least this share of models has snow are the "likely" hours. */
   hourLikely: 0.5,
-  /** Without a likely hour, the snowiest hour is named only from this share up. */
-  hourPossible: 0.375,
+  /** Without a likely hour, the snowiest hour is named only from this share up, as for rain. */
+  hourPossible: 1 / 3,
   /** The model strip's scale never ends below this, so a day without snow still shows the zone. */
   scaleFloor: { cm: 5, in: 2 },
   /** This week: snow days for a snowy week, snow-possible days for "most days", days named. */
@@ -247,6 +266,49 @@ export const SNOW = {
     moreRatio: 1.5,
     lessRatio: 0.5,
     minDifference: 1,
+    maxHeightDifference: 300,
+  },
+} as const;
+
+/**
+ * How wind is judged. Every model gives its strongest mean wind and gust over a window; the
+ * medians of those are the window's wind, and a band is reached by its mean wind or its gust, as
+ * the Met Office defines a gale ("force 8 or gusts reaching 43 knots"). Speeds are km/h,
+ * Open-Meteo's own unit, and every value is judged in whole km/h, so the number shown in either
+ * unit always agrees with the band (each edge below converts to the right side in mph).
+ */
+export const WIND = {
+  /**
+   * Each band from breezy up starts at this mean wind or this gust, km/h: Beaufort forces 4, 5, 6,
+   * 8 and 10 for the mean wind (13, 19, 25, 39 and 55 mph), and gusts of 20, 30, 40, 50 and 70
+   * mph (the last two the Met Office's gale and storm gusts, 43 and 61 knots).
+   */
+  from: {
+    breezy: { mean: 21, gust: 32 },
+    windy: { mean: 30, gust: 48 },
+    verywindy: { mean: 40, gust: 64 },
+    gale: { mean: 62, gust: 80 },
+    storm: { mean: 88, gust: 112 },
+  },
+  /** Calm below both of these is still air, "It's calm." (Beaufort 0–1, gusts under 10 mph). */
+  still: { mean: 6, gust: 16 },
+  /** Whole days are judged over the waking hours, local, end exclusive. */
+  day: { fromHour: 7, toHour: 21 },
+  /** This week: windy days for a windy week, breezy days for a breezy one, days named at most. */
+  week: { windyFrom: 4, breezyFrom: 4, nameDays: 3 },
+  /** The strip's scale never ends below this, in the display unit. */
+  scaleFloor: { mph: 50, kmh: 80 },
+  /**
+   * Comparing a day's or week's 24-hour mean wind with normal (NASA POWER WS10M, m/s, × 3.6 ×
+   * `scale`). Windier needs `windierRatio` × normal and `minDifference` km/h more; calmer needs
+   * `calmerRatio` × normal and `minDifference` km/h less. `scale` corrects the climate cell's
+   * mean against a point forecast once the recordings show how far apart they sit. Used only
+   * where the climate cell's mean height is within `maxHeightDifference` metres of the place's.
+   */
+  normals: {
+    scale: 1,
+    day: { windierRatio: 1.4, calmerRatio: 0.6, minDifference: 5 },
+    week: { windierRatio: 1.25, calmerRatio: 0.75, minDifference: 3 },
     maxHeightDifference: 300,
   },
 } as const;
@@ -373,7 +435,9 @@ export interface ModelConfig {
  * Forecast models blended into the answer. Checked against the current Open-Meteo
  * docs (open-meteo-website `src/routes/en/docs/options.ts`, October 2026). The spec's
  * `gfs_seamless`, `icon_seamless` and `gem_seamless` now appear in the docs as
- * `ncep_gfs_seamless`, `dwd_icon_seamless` and `cmc_gem_seamless`.
+ * `ncep_gfs_seamless`, `dwd_icon_seamless` and `cmc_gem_seamless`. Six since the wind topic:
+ * MET Norway's seamless model is ECMWF's outside the Nordic countries (and its UV index GFS's),
+ * so it counted ECMWF twice, and JMA has no wind gusts.
  */
 export const MODELS: readonly ModelConfig[] = [
   { id: 'ecmwf_ifs025', name: 'ECMWF' },
@@ -381,9 +445,7 @@ export const MODELS: readonly ModelConfig[] = [
   { id: 'dwd_icon_seamless', name: 'ICON', aliases: ['icon_seamless'] },
   { id: 'ukmo_seamless', name: 'UKMO' },
   { id: 'meteofrance_seamless', name: 'Météo-France' },
-  { id: 'metno_seamless', name: 'MET Norway' },
   { id: 'cmc_gem_seamless', name: 'GEM', aliases: ['gem_seamless'] },
-  { id: 'jma_seamless', name: 'JMA' },
 ];
 
 export const GRID = {
@@ -420,7 +482,7 @@ export const CACHE = {
    * Version of that saved answer (page markup and data). The page's inline restore script and
    * the app both read it, so bump it here whenever the saved markup or data changes shape.
    */
-  snapshotVersion: 8,
+  snapshotVersion: 9,
 } as const;
 
 export const RATE_LIMIT = {
@@ -455,6 +517,25 @@ export const FAHRENHEIT_COUNTRIES: readonly string[] = [
   'PW',
   'FM',
   'MH',
+];
+
+/**
+ * Countries whose wind speeds are in mph by default (km/h elsewhere): the UK and the US, as the
+ * spec asks, with the Crown Dependencies and the US territories, which sign their roads the same
+ * way under codes of their own.
+ */
+export const MPH_COUNTRIES: readonly string[] = [
+  'GB',
+  'IM',
+  'JE',
+  'GG',
+  'US',
+  'PR',
+  'GU',
+  'VI',
+  'AS',
+  'MP',
+  'UM',
 ];
 
 export interface Palette {
@@ -524,9 +605,14 @@ export const PALETTES: Record<Band, Palette> = {
   },
 };
 
-export { RAIN_PALETTES, SNOW_PALETTES };
+export { RAIN_PALETTES, SNOW_PALETTES, WIND_PALETTES };
 
-const ALL_PALETTES: Record<AnyBand, Palette> = { ...PALETTES, ...RAIN_PALETTES, ...SNOW_PALETTES };
+const ALL_PALETTES: Record<AnyBand, Palette> = {
+  ...PALETTES,
+  ...RAIN_PALETTES,
+  ...SNOW_PALETTES,
+  ...WIND_PALETTES,
+};
 
 /** The palette for any topic's band. */
 export function paletteFor(band: AnyBand): Palette {

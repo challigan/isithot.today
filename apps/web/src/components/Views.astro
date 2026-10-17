@@ -1,8 +1,8 @@
 ---
 /**
- * The Hot | Wet | Snow toggle, the tab bar and the three views (Now | Today | This week) in one
- * horizontal scroller, plus what they share: when the forecast was fetched and the place links (a
- * city page adds its own after them). Today comes first in the markup (it is the page's purpose,
+ * The Hot | Wet | Snow | Wind toggle, the tab bar and the three views (Now | Today | This week) in
+ * one horizontal scroller, plus what they share: when the forecast was fetched and the place links
+ * (a city page adds its own after them). Today comes first in the markup (it is the page's purpose,
  * its question and answer are the only h1, and the answer is the LCP element) and sits in the
  * middle on screen. In the evening at the place the middle view answers for tomorrow and the page
  * opens on Now (core `showsTomorrow`, `defaultView`).
@@ -23,6 +23,7 @@ import ViewTabs from './ViewTabs.astro';
 import Today from './Today.astro';
 import Now from './Now.astro';
 import Week from './Week.astro';
+import { warningsFor } from '../lib/view';
 
 interface Props {
   data: TodayResponse | null;
@@ -47,6 +48,8 @@ const nearbyHtml = nearby
   .join(', ');
 const day = data?.days[0];
 const updated = data && day && updatedTime(data.updatedAt, data.location.timezone, day.date);
+const today = viewDisplay(data, topic, 'today', state, { ...opts, tomorrow });
+const now = viewDisplay(data, topic, 'now', state, opts);
 ---
 
 {/* The question on screen (scripts/app.ts keeps it up to date as the toggle changes it). */}
@@ -59,11 +62,16 @@ const updated = data && day && updatedTime(data.updatedAt, data.location.timezon
    */}
   <div class="views" id="views" data-nosnippet={state === 'ready' ? undefined : ''}>
     <Today
-      view={viewDisplay(data, topic, 'today', state, { ...opts, tomorrow })}
+      view={today}
       start={start === 'today'}
       tomorrow={tomorrow}
+      warnings={warningsFor(topic, data, today.empty ? null : today.band)}
     />
-    <Now view={viewDisplay(data, topic, 'now', state, opts)} start={start === 'now'} />
+    <Now
+      view={now}
+      start={start === 'now'}
+      warnings={warningsFor(topic, data, now.empty ? null : now.band)}
+    />
     <Week view={viewDisplay(data, topic, 'week', state, opts)} start={start === 'week'} />
   </div>
   <button class="button retry" id="retry" type="button" hidden={state !== 'error'}>

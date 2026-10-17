@@ -46,20 +46,21 @@ const {
 const { ogTitle = title, ogDescription = description } = Astro.props;
 // "</script>" inside a string must not end the script.
 const ld = jsonLd && JSON.stringify(jsonLd).replace(/</g, '\\u003c');
-// Each site carries its own icons, under its prefix (none for hot): /wet and /snow paths work on
-// isitwet.today and willitsnow.today too (the edge function passes them through).
+// Each site carries its own icons, under its prefix (none for hot): /wet, /snow and /wind paths
+// work on isitwet.today, willitsnow.today and isitwindy.today too (the edge function passes them
+// through).
 const { prefix } = SITES[topic];
 
-// Wet and snow pages also replace the slate behind the page (overscroll, before the gradient
-// paints).
+// Wet, snow and wind pages also replace the slate behind the page (overscroll, before the
+// gradient paints).
 const { fallback } = LOOKS[topic];
 const vars = `--g1:${palette.g1};--g2:${palette.g2};--g3:${palette.g3};--ink:${palette.ink};--pill:${palette.pill};--glow:${palette.glow}${fallback ? `;--page-fallback:${fallback}` : ''}`;
 const beacon = import.meta.env.PUBLIC_CF_BEACON_TOKEN;
 /**
- * Links are written for the site's own domain (isitwet.today, willitsnow.today), where its pages
- * are at the root. Where they are served from under the prefix instead (deploy previews, a local
- * server), this keeps internal links on them: "/" → "/wet", "/?q" → "/wet?q", "/about" →
- * "/wet/about". Runs after the page's own markup.
+ * Links are written for the site's own domain (isitwet.today, willitsnow.today, isitwindy.today),
+ * where its pages are at the root. Where they are served from under the prefix instead (deploy
+ * previews, a local server), this keeps internal links on them: "/" → "/wet", "/?q" → "/wet?q",
+ * "/about" → "/wet/about". Runs after the page's own markup.
  */
 const prefixLinks = `(()=>{const p=location.pathname;if(p!=='${prefix}'&&!p.startsWith('${prefix}/'))return;for(const a of document.querySelectorAll('a[href^="/"]:not([href^="${prefix}"]):not([href^="//"])')){const h=a.getAttribute('href');a.setAttribute('href','${prefix}'+(h==='/'||h[1]==='?'?h.slice(1):h))}})()`;
 ---

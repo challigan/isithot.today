@@ -9,6 +9,8 @@ import {
   SNOW_BANDS,
   SNOW_PALETTES,
   TOPICS,
+  WIND_BANDS,
+  WIND_PALETTES,
   hostTopic,
   isSiteHost,
   paletteFor,
@@ -29,8 +31,8 @@ describe('config', () => {
 
   it('keeps band keys unique across every topic, as palettes, icons and previews use them', () => {
     const all = TOPICS.flatMap((t) => BANDS_BY_TOPIC[t]);
-    expect(all).toEqual([...BANDS, ...RAIN_BANDS, ...SNOW_BANDS]);
-    expect(new Set(all).size).toBe(18);
+    expect(all).toEqual([...BANDS, ...RAIN_BANDS, ...SNOW_BANDS, ...WIND_BANDS]);
+    expect(new Set(all).size).toBe(24);
     // The pages carry them in data attributes that tests read with [a-z]+.
     for (const band of all) expect(band).toMatch(/^[a-z]+$/);
   });
@@ -40,6 +42,7 @@ describe('config', () => {
       for (const band of BANDS_BY_TOPIC[topic]) expect(topicOfBand(band)).toBe(topic);
     }
     for (const band of SNOW_BANDS) expect(paletteFor(band)).toBe(SNOW_PALETTES[band]);
+    for (const band of WIND_BANDS) expect(paletteFor(band)).toBe(WIND_PALETTES[band]);
     expect(topicOfBand('blizzard')).toBeNull();
     expect(topicOfBand('')).toBeNull();
   });
@@ -71,8 +74,13 @@ describe('config', () => {
     expect(hostTopic('snow.isithot.today')).toBe('hot');
   });
 
-  it('links across all three sites', () => {
-    const hosts = { hot: 'isithot.today', wet: 'isitwet.today', snow: 'willitsnow.today' };
+  it('links across all four sites', () => {
+    const hosts = {
+      hot: 'isithot.today',
+      wet: 'isitwet.today',
+      snow: 'willitsnow.today',
+      wind: 'isitwindy.today',
+    };
     for (const from of TOPICS) {
       for (const to of TOPICS) {
         expect(sitePath(to, '/in/oslo-no', hosts[from])).toBe(
@@ -81,6 +89,24 @@ describe('config', () => {
       }
     }
     expect(sitePath('snow', '/', 'www.isitwet.today')).toBe('https://willitsnow.today/');
+    expect(sitePath('wind', '/', 'www.willitsnow.today')).toBe('https://isitwindy.today/');
+  });
+
+  it('opens isitwindy.today on wind, with its pages under /wind on previews', () => {
+    expect(TOPICS).toEqual(['hot', 'wet', 'snow', 'wind']);
+    expect(SITES.wind).toEqual({
+      name: 'isitwindy.today',
+      url: 'https://isitwindy.today',
+      prefix: '/wind',
+    });
+    expect(hostTopic('isitwindy.today')).toBe('wind');
+    expect(hostTopic('www.isitwindy.today')).toBe('wind');
+    expect(isSiteHost('isitwindy.today')).toBe(true);
+    expect(parseTopic('wind')).toBe('wind');
+    const preview = 'deploy-preview-4--isithotapp.netlify.app';
+    expect(sitePath('wind', '/', preview)).toBe('/wind');
+    expect(sitePath('wind', '/in/leeds-gb', preview)).toBe('/wind/in/leeds-gb');
+    expect(sitePath('wind', '/?lat=1&lon=2', 'localhost')).toBe('/wind?lat=1&lon=2');
   });
 
   it('keeps snow pages under /snow on previews and local servers', () => {

@@ -1,15 +1,16 @@
-# isithot.today, isitwet.today and willitsnow.today
+# isithot.today, isitwet.today, willitsnow.today and isitwindy.today
 
-Will today feel hot where I am? One answer (Yes / Almost / No) blended from several forecast
-models, judged against what is normal for that place and time of year. And its siblings, **is
-it wet?** (Yes / Partly / Maybe / No): how many of the same models expect rain, how much and
-when; and **will it snow?** (Yes / Maybe / No), the same for snow. All three answer for right
-now, today and this week (from 6pm at the place, tomorrow instead of today); a Hot | Wet | Snow
-toggle switches between them, and each domain opens on its own question.
+Will today feel hot where I am? One answer (Yes / Almost / No) blended from six forecast models,
+judged against what is normal for that place and time of year. And its siblings, **is it wet?**
+(Yes / Partly / Maybe / No): how many of the same models expect rain, how much and when; **will
+it snow?** (Yes / Maybe / No), the same for snow; and **is it windy?** (Yes / A bit / No): how
+strong the wind and gusts get, and when. All four answer for right now, today and this week
+(from 6pm at the place, tomorrow instead of today); a Hot | Wet | Snow | Wind toggle switches
+between them, and each domain opens on its own question.
 
-- **Website**: Astro + TypeScript, vanilla client JS (about 21 KB gzipped). One deploy serves
-  all three domains; an edge function routes isitwet.today to the `/wet` pages and
-  willitsnow.today to the `/snow` pages.
+- **Website**: Astro + TypeScript, vanilla client JS (about 24 KB gzipped). One deploy serves
+  all four domains; an edge function routes isitwet.today to the `/wet` pages, willitsnow.today
+  to the `/snow` pages and isitwindy.today to the `/wind` pages.
 - **API**: `/api/v1/today` and `/api/v1/search`, shared by the website now and the apps later.
 - **Hosting**: Netlify (production from `main`, a deploy preview for every pull request).
 
@@ -22,7 +23,7 @@ decision).
 ```
 apps/web             Astro site: pages, components, styles, client script, OG images
 functions/api        Netlify Functions serving /api/v1/* (thin adapters)
-netlify/             Edge function routing isitwet.today and willitsnow.today to their pages
+netlify/             Edge function routing isitwet.today, willitsnow.today and isitwindy.today
 packages/core        Pure TS: blending, climate normals, verdict, copy, units. No I/O.
 packages/providers   Open-Meteo forecast + geocoding and NASA POWER adapters
 packages/server      API handlers, caching (memory + Netlify Blobs), location resolution
@@ -54,12 +55,14 @@ Useful pages while developing:
 
 - `/?preview=1` shows the prototype's "preview each kind of day" chips (`&band=hot` to pick one;
   a rain band such as `&band=drenched` opens on Wet, a snow band such as `&band=deepsnow` on
-  Snow).
+  Snow, a wind band such as `&band=gale` on Wind).
 - `/in/newcastle-upon-tyne-gb` is a server-rendered city page; `/wet` and
   `/wet/in/newcastle-upon-tyne-gb` are the isitwet.today versions, `/snow` and
-  `/snow/in/newcastle-upon-tyne-gb` the willitsnow.today ones. Pages follow the time at the
+  `/snow/in/newcastle-upon-tyne-gb` the willitsnow.today ones, `/wind` and
+  `/wind/in/newcastle-upon-tyne-gb` the isitwindy.today ones. Pages follow the time at the
   place: a city where it is past 6pm opens on Now, with Tomorrow in the middle tab. With
-  `DATA_SOURCE=synthetic`, `/snow/in/reykjavik-is` has snow in any month.
+  `DATA_SOURCE=synthetic`, `/snow/in/reykjavik-is` has snow in any month, and
+  `/wind/in/reykjavik-is` a storm.
 - `/api/v1/today?lat=54.95&lon=-1.6&units=c` and `/api/v1/search?q=Leeds` are the API.
 
 ## Checks
@@ -71,8 +74,8 @@ pnpm typecheck        # tsc + astro check
 pnpm test:coverage    # Vitest; packages/core must stay at 100% branch coverage
 pnpm test:e2e         # Playwright (phone + desktop), with synthetic data
 pnpm build:netlify    # The exact production build Netlify runs
-node scripts/smoke.mjs <url> --wet --snow  # Smoke-test a deploy (and its /wet and /snow pages) against live data
-node scripts/smoke.mjs <url> --wet-site <url> --snow-site <url>  # Production: the other sites on their own domains
+node scripts/smoke.mjs <url> --wet --snow --wind  # Smoke-test a deploy (and its /wet, /snow and /wind pages) against live data
+node scripts/smoke.mjs <url> --wet-site <url> --snow-site <url> --wind-site <url>  # Production: the other sites on their own domains
 pnpm test:e2e -g contrast                # Rendered text contrast, every band and view (WCAG AA)
 E2E_IP_HOUR=20 pnpm test:e2e             # Home pages as if it were 8pm at the approximate place
 E2E_CLOCK=19:30 pnpm test:e2e            # The whole suite as if it were 7:30pm in London
@@ -91,8 +94,8 @@ tests (`e2e/helpers.ts` explains how a test pins the time of day it relies on).
 ## API
 
 `GET /api/v1/today` with one of `lat`+`lon`, `place` (a city slug), or nothing (approximate IP
-location). Optional `units=c|f` (default: °F for US visitors, °C elsewhere). `lat`/`lon` requests
-may also pass `name`, `region`, `country`, `geonameId` and `source=search`, and with
+location). Optional `units=c|f` (default: °F for US visitors, °C elsewhere) and
+`windUnits=mph|kmh` (see `wind` below). `lat`/`lon` requests may also pass `name`, `region`, `country`, `geonameId` and `source=search`, and with
 `source=search` the place's `elevation` (whole metres, from the search result): the forecast is
 then for that height (to the nearest 50 m), and `location.elevation` echoes it. City pages are
 forecast for the city's height when `data/cities.json` has it.
@@ -118,6 +121,13 @@ Amounts are in `rain.unit`: millimetres with `units=c`, inches with `units=f`.
 `computeSnowNow`/`formatSnowNow`, `snow.week`), worked out at the same moment. A day without
 snow says why in `reason` (`warm`, `rain` or `dry`). Amounts are fresh snowfall in `snow.unit`:
 centimetres with `units=c`, inches with `units=f`.
+
+`wind` answers "Is it windy?" in the same shape again (`wind.days`, `wind.now` with core
+`computeWindNow`/`formatWindNow`, `wind.week`), worked out at the same moment: each day's
+strongest gust and mean wind, when it peaks, and each model's own band. Speeds are whole numbers
+in `wind.unit`, `mph` or `kmh`, a setting of its own: `windUnits` when given, else the place's
+country's when `units` is given (mph in the UK and US, km/h elsewhere), else the visitor's.
+Absent when the forecast has no wind (responses cached before it).
 
 `GET /api/v1/search?q=` returns up to 8 places, with `slug` when the place has a city page and
 `elevation` (whole metres) when its height is known.
@@ -155,8 +165,9 @@ places page and city pages). Titles and descriptions never carry the live answer
 go out of date in search results; share cards do. Home pages never render an answer on the
 server (Googlebot would index its own US location), and their loading placeholder is marked
 `data-nosnippet`. willitsnow.today keeps pages for places where it never snows out of search
-(`SNOWLESS` in `config.ts`). The reasons are in [docs/DECISIONS.md](docs/DECISIONS.md) ("Search
-engines"), and Search Console and Bing setup in [docs/SETUP.md](docs/SETUP.md) (section 7).
+(`SNOWLESS` in `config.ts`); the other sites, isitwindy.today included, list every city. The
+reasons are in [docs/DECISIONS.md](docs/DECISIONS.md) ("Search engines"), and Search Console and
+Bing setup in [docs/SETUP.md](docs/SETUP.md) (section 7).
 
 ## Data and licensing
 
@@ -168,8 +179,9 @@ engines"), and Search Console and Bing setup in [docs/SETUP.md](docs/SETUP.md) (
 - Climate normals: [NASA POWER](https://power.larc.nasa.gov/) climatology (CC BY 4.0, no
   restrictions on use; NASA asks to be cited), `T2M + T2M_RANGE / 2`
   (the normal daily high; see `docs/DECISIONS.md`), `PRECTOTCORR` (normal rainfall, for the
-  week's "wetter than usual") and `PRECSNOLAND` (normal snowfall, for "Snow is rare here in
-  October." and the week's "more snow than usual").
+  week's "wetter than usual"), `PRECSNOLAND` (normal snowfall, for "Snow is rare here in
+  October." and the week's "more snow than usual") and `WS10M` (normal wind speed at 10 m, for
+  "Windier than usual for October.").
 - Place names and coordinates: [GeoNames](https://www.geonames.org/) (CC BY 4.0), via the
   `all-the-cities` package. Regenerate with `pnpm cities`, then add the cities' heights from a
   GeoNames dump with `node scripts/city-heights.mjs <cities1000.txt>`.

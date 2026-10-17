@@ -2,14 +2,18 @@ import { describe, expect, it } from 'vitest';
 import {
   BANDS,
   LOADING_PALETTE,
+  MODELS,
   PALETTES,
   RAIN_BANDS,
   RAIN_PALETTES,
   SNOW_BANDS,
   SNOW_PALETTES,
+  WIND_BANDS,
+  WIND_PALETTES,
   type Band,
   type RainBand,
   type SnowBand,
+  type WindBand,
 } from '../src/config';
 import {
   ANSWERS,
@@ -19,6 +23,7 @@ import {
   VERDICTS,
   VIEWS,
   WEEK_VERDICTS,
+  WIND_ANSWERS,
 } from '../src/copy';
 import { defaultView, showsTomorrow, viewDisplay, type DisplayState } from '../src/display';
 import type {
@@ -33,9 +38,14 @@ import type {
   ApiSnowNow,
   ApiSnowWeek,
   ApiWeek,
+  ApiWind,
+  ApiWindDay,
+  ApiWindNow,
+  ApiWindWeek,
   RainUnit,
   SnowUnit,
   TodayResponse,
+  WindUnit,
 } from '../src/types';
 
 // ---- Fixtures --------------------------------------------------------------------
@@ -432,7 +442,12 @@ describe('viewDisplay: hot', () => {
       zone: null,
       origin: 0,
       dots: [],
-      items: Array.from({ length: 8 }, () => ({ value: '00°', name: 'Model', out: false })),
+      // One row per model, so the answer's arrival never shifts the layout.
+      items: Array.from({ length: MODELS.length }, () => ({
+        value: '00°',
+        name: 'Model',
+        out: false,
+      })),
       limited: null,
     });
     const now = viewDisplay(res, 'hot', 'now', state);
@@ -628,7 +643,7 @@ describe('viewDisplay: wet', () => {
     expect(today.verdict.length).toBeGreaterThan(0);
     expect(today.detail.length).toBeGreaterThan(0);
     expect(today.models).toMatchObject({ heading: '0 of 0 forecasts expect rain', min: '0mm' });
-    expect(today.models.items).toHaveLength(8);
+    expect(today.models.items).toHaveLength(MODELS.length);
     const now = viewDisplay(null, 'wet', 'now', state);
     expect(now).toMatchObject({ answer, heading: COPY.nextHoursRain });
     expect(now.items).toEqual(
@@ -842,6 +857,237 @@ describe('viewDisplay: snow', () => {
       left: null,
     });
     expect(viewDisplay(null, 'snow', 'week', 'loading').verdict).toBe('Snow on Thu and Fri.');
+  });
+});
+
+// ---- Wind ------------------------------------------------------------------------------
+
+const windDay = (band: WindBand, extra: Partial<ApiWindDay> = {}): ApiWindDay => ({
+  date: '2026-10-15',
+  from: '2026-10-15T12:20:00.000Z',
+  partial: true,
+  window: { from: 12, to: 21 },
+  band,
+  answer: WIND_ANSWERS[band],
+  verdict: `Verdict for ${band}.`,
+  detail: 'Gusts up to 35mph, wind up to 17mph. Windiest around 3pm.',
+  still: false,
+  gust: 35,
+  mean: 17,
+  peak: '3pm',
+  agree: 2,
+  total: 3,
+  confidence: 'good',
+  zone: { from: 30, to: 40 },
+  scale: { min: 0, max: 50 },
+  models: [
+    { id: 'a', name: 'ECMWF', gust: 35, mean: 17, value: 35.4, band: 'windy', agrees: true },
+    { id: 'b', name: 'GFS', gust: 22, mean: 11, value: 21.7, band: 'breezy', agrees: false },
+    { id: 'c', name: 'ICON', gust: 60, mean: 30, value: 60.2, band: 'gale', agrees: true },
+  ],
+  month: 'October',
+  agreementText: '2 of 3 forecasts say windy',
+  limitedText: null,
+  stripSummary: 'Forecast gusts range from 22mph to 60mph; 2 of 3 say windy.',
+  dayMean: 12,
+  normal: 11,
+  ...extra,
+});
+
+const windNow = (band: WindBand): ApiWindNow => ({
+  time: '2026-10-15T12:20:00.000Z',
+  band,
+  answer: WIND_ANSWERS[band],
+  verdict: `Now verdict for ${band}.`,
+  detail: 'Wind 16mph, gusts 32mph right now. Easing off by about 6pm.',
+  mean: 16,
+  gust: 32,
+  still: false,
+  hours: [
+    { time: '2026-10-15T13:00:00.000Z', label: '1pm', gust: 32 },
+    { time: '2026-10-15T15:00:00.000Z', label: '3pm', gust: 28 },
+  ],
+  series: [],
+});
+
+const windWeek = (band: WindBand, gusts = [30, 10, 50]): ApiWindWeek => ({
+  from: '2026-10-15',
+  to: '2026-10-17',
+  band,
+  answer: WIND_ANSWERS[band],
+  verdict: `Week verdict for ${band}.`,
+  detail: 'Windiest on Saturday, gusts up to 50mph.',
+  windyDays: 2,
+  breezyDays: 0,
+  windiest: { date: '2026-10-17', gust: 50 },
+  mean: 12,
+  normal: 11,
+  days: gusts.map((gust, i) => ({
+    date: `2026-10-${15 + i}`,
+    label: ['Today', 'Fri', 'Sat'][i]!,
+    gust,
+    mean: gust / 2,
+    band,
+    bandLabel: `Label ${band}`,
+    still: false,
+  })),
+});
+
+const windOf = (band: WindBand, unit: WindUnit = 'mph', extra: Partial<ApiWind> = {}): ApiWind => ({
+  unit,
+  days: [windDay(band)],
+  now: windNow(band),
+  week: windWeek(band),
+  ...extra,
+});
+
+describe('viewDisplay: wind', () => {
+  it.each(WIND_BANDS.flatMap((band) => VIEWS.map((view) => [band, view] as const)))(
+    'shows %s for %s in its colours',
+    (band, view) => {
+      const wind = windOf(band);
+      const source = { today: wind.days[0]!, now: wind.now!, week: wind.week! }[view];
+      const d = viewDisplay(response({ wind }), 'wind', view, 'ready');
+      expect(d).toMatchObject({
+        view,
+        topic: 'wind',
+        state: 'ready',
+        band,
+        answer: WIND_ANSWERS[band],
+        verdict: source.verdict,
+        detail: source.detail,
+        empty: false,
+        pending: false,
+      });
+      expect(d.palette).toBe(WIND_PALETTES[band]);
+    },
+  );
+
+  it('asks whether it is windy, and will be this week', () => {
+    const res = response({ wind: windOf('windy') });
+    expect(viewDisplay(res, 'wind', 'today', 'ready').question).toBe('Is it windy today?');
+    expect(viewDisplay(res, 'wind', 'now', 'ready', { city: 'Leeds' }).question).toBe(
+      'Is it windy in Leeds right now?',
+    );
+    expect(viewDisplay(res, 'wind', 'week', 'ready').question).toBe('Will it be windy this week?');
+  });
+
+  it("highlights the band's gusts on the Today strip, in mph or km/h", () => {
+    const d = viewDisplay(response({ wind: windOf('windy') }), 'wind', 'today', 'ready');
+    expect(d.models).toEqual({
+      heading: '2 of 3 forecasts say windy',
+      summary: 'Forecast gusts range from 22mph to 60mph; 2 of 3 say windy.',
+      min: '0mph',
+      max: '50mph',
+      zone: { left: 60, width: 20 },
+      origin: 70,
+      dots: [
+        { left: at(35.4, 0, 50), out: false, title: 'ECMWF 35mph' },
+        { left: at(21.7, 0, 50), out: true, title: 'GFS 22mph' },
+        { left: 100, out: false, title: 'ICON 60mph' },
+      ],
+      items: [
+        { value: '35mph', name: 'ECMWF', out: false },
+        { value: '22mph', name: 'GFS', out: true },
+        { value: '60mph', name: 'ICON', out: false },
+      ],
+      limited: null,
+    });
+    // A storm's zone runs to the end of the strip.
+    const storm = windOf('storm', 'kmh', {
+      days: [windDay('storm', { zone: { from: 112, to: null }, scale: { min: 0, max: 200 } })],
+    });
+    const s = viewDisplay(response({ wind: storm }), 'wind', 'today', 'ready');
+    const left = at(112, 0, 200);
+    expect(s.models).toMatchObject({
+      min: '0km/h',
+      max: '200km/h',
+      zone: { left, width: 100 - left },
+    });
+    expect(s.models.items[0]!.value).toBe('35km/h');
+    // A zone that starts past the end of the scale has no width.
+    const past = windOf('gale', 'mph', {
+      days: [windDay('gale', { zone: { from: 50, to: 70 }, scale: { min: 0, max: 40 } })],
+    });
+    expect(viewDisplay(response({ wind: past }), 'wind', 'today', 'ready').models.zone).toEqual({
+      left: 100,
+      width: 0,
+    });
+  });
+
+  it('gives the gusts for the next hours, with words for screen readers', () => {
+    const res = response({ wind: windOf('windy') });
+    const d = viewDisplay(res, 'wind', 'now', 'ready');
+    expect(d.heading).toBe(COPY.nextHoursWind);
+    expect(d.items).toEqual([
+      { value: '32mph', label: '1pm', sr: 'Gusts up to 32mph from 1pm' },
+      { value: '28mph', label: '3pm', sr: 'Gusts up to 28mph from 3pm' },
+    ]);
+    const fresh = { ...windNow('storm'), hours: [] };
+    expect(viewDisplay(res, 'wind', 'now', 'ready', { windNow: fresh })).toMatchObject({
+      band: 'storm',
+      items: [],
+    });
+    expect(viewDisplay(res, 'wind', 'now', 'ready', { windNow: null })).toMatchObject({
+      band: null,
+      empty: true,
+    });
+    // Snow's "now" is no use for wind.
+    expect(viewDisplay(res, 'wind', 'now', 'ready', { snowNow: null }).band).toBe('windy');
+  });
+
+  it('places each day of the week from still air to the windiest', () => {
+    const res = response({ wind: windOf('gale', 'kmh') });
+    expect(viewDisplay(res, 'wind', 'week', 'ready')).toMatchObject({
+      heading: COPY.nextDays,
+      items: [
+        { label: 'Today', value: '30km/h', bandLabel: 'Label gale', left: 60 },
+        { label: 'Fri', value: '10km/h', bandLabel: 'Label gale', left: 20 },
+        { label: 'Sat', value: '50km/h', bandLabel: 'Label gale', left: 100 },
+      ],
+    });
+  });
+
+  it('answers the middle view from tomorrow after 6pm', () => {
+    const tomorrow = windDay('gale', { date: '2026-10-16', partial: false });
+    const res = response({
+      wind: windOf('breezy', 'mph', { days: [windDay('breezy'), tomorrow] }),
+    });
+    expect(viewDisplay(res, 'wind', 'today', 'ready', { tomorrow: true })).toMatchObject({
+      question: 'Will it be windy tomorrow?',
+      band: 'gale',
+    });
+  });
+
+  it('says every view is not available when the answer has no wind', () => {
+    for (const view of VIEWS) {
+      expect(viewDisplay(response(), 'wind', view, 'ready')).toMatchObject({
+        band: null,
+        answer: COPY.notAvailable,
+        empty: true,
+      });
+    }
+    const noWeek = response({ wind: windOf('calm', 'mph', { week: undefined, now: undefined }) });
+    expect(viewDisplay(noWeek, 'wind', 'week', 'ready').empty).toBe(true);
+    expect(viewDisplay(noWeek, 'wind', 'now', 'ready').empty).toBe(true);
+  });
+
+  it('holds the layout with placeholders while loading', () => {
+    const today = viewDisplay(null, 'wind', 'today', 'loading');
+    expect(today.models).toMatchObject({ heading: '0 of 0 forecasts say windy', min: '00mph' });
+    expect(today.models.items).toHaveLength(MODELS.length);
+    expect(today.uv).toBeNull();
+    expect(viewDisplay(null, 'wind', 'now', 'loading')).toMatchObject({
+      heading: COPY.nextHoursWind,
+      verdict: "It's windy.",
+    });
+    expect(viewDisplay(null, 'wind', 'week', 'loading').items[0]).toEqual({
+      label: 'Day',
+      value: '00mph',
+      bandLabel: 'Windy',
+      left: null,
+    });
+    expect(viewDisplay(null, 'wind', 'week', 'loading').verdict).toBe('Windy on Thu and Fri.');
   });
 });
 

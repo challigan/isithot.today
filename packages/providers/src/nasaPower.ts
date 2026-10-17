@@ -26,13 +26,27 @@ export const NASA_POWER_RAIN_PARAMETERS = ['PRECTOTCORR'] as const;
  */
 export const NASA_POWER_SNOW_PARAMETERS = ['PRECSNOLAND'] as const;
 
-/** Normal snowfall, and the climate cell's mean height (snow depends so much on height). */
-export interface SnowNormals {
-  /** Twelve monthly rates, January first, mm/day of water. */
+/**
+ * Normal wind: the monthly mean wind speed at 10m, m/s (MERRA-2, the mean flow over the climate
+ * cell). Its own request too, as the others.
+ */
+export const NASA_POWER_WIND_PARAMETERS = ['WS10M'] as const;
+
+/**
+ * Twelve monthly normals and the climate cell's mean height: snow and wind depend so much on
+ * height and exposure that the server uses them only where the cell is near the place's height.
+ */
+export interface CellNormals {
+  /** Twelve monthly values, January first: mm/day of water for snow, m/s for wind. */
   normals: MonthlyNormals;
   /** The cell's mean height, m, or null when the response does not give it. */
   height: number | null;
 }
+
+/** Normal snowfall (mm/day of water) and the cell's height. */
+export type SnowNormals = CellNormals;
+/** Normal wind at 10m (m/s) and the cell's height. */
+export type WindNormals = CellNormals;
 
 export interface NasaPowerConfig {
   url: string;
@@ -78,6 +92,10 @@ export function buildSnowClimatologyUrl(url: string, point: LatLon): string {
   return climatologyUrl(url, point, NASA_POWER_SNOW_PARAMETERS);
 }
 
+export function buildWindClimatologyUrl(url: string, point: LatLon): string {
+  return climatologyUrl(url, point, NASA_POWER_WIND_PARAMETERS);
+}
+
 type Monthly = Record<string, unknown>;
 
 const parametersOf = (json: unknown): Record<string, Monthly> | undefined =>
@@ -105,7 +123,8 @@ export function parseClimatology(json: unknown): MonthlyNormals {
 function parseRates(json: unknown, parameter: string): MonthlyNormals {
   const rate = parametersOf(json)?.[parameter];
   if (!rate) throw new ProviderError('nasa-power', 'unexpected climatology response shape');
-  // -999 is the fill value; rain and snow are never negative, so anything below zero is missing.
+  // -999 is the fill value; rain, snow and wind speed are never negative, so anything below zero
+  // is missing.
   const monthly: unknown[] = MONTH_KEYS.map((key) => {
     const r = rate[key];
     return isFiniteNumber(r) && r >= 0 ? r : null;
@@ -125,9 +144,21 @@ export function parseRainClimatology(json: unknown): MonthlyNormals {
  * are missing, as for rain, and the site then says nothing about normal snow.
  */
 export function parseSnowClimatology(json: unknown): SnowNormals {
-  const normals = parseRates(json, 'PRECSNOLAND');
+  return { normals: parseRates(json, 'PRECSNOLAND'), height: cellHeight(json) };
+}
+
+/**
+ * Twelve monthly normal wind speeds at 10m, January first, m/s, and the cell's mean height. The
+ * mean flow over a 50km cell, so coastal cells include the sea's stronger winds.
+ */
+export function parseWindClimatology(json: unknown): WindNormals {
+  return { normals: parseRates(json, 'WS10M'), height: cellHeight(json) };
+}
+
+/** The climate cell's mean height (the point's third coordinate), or null. */
+function cellHeight(json: unknown): number | null {
   const height = (json as { geometry?: { coordinates?: unknown[] } }).geometry?.coordinates?.[2];
-  return { normals, height: isFiniteNumber(height) ? height : null };
+  return isFiniteNumber(height) ? height : null;
 }
 
 export async function fetchClimateNormals(
@@ -167,4 +198,17 @@ export async function fetchSnowNormals(
     config.timeoutMs ?? 8000,
   );
   return parseSnowClimatology(json);
+}
+
+export async function fetchWindNormals(
+  config: NasaPowerConfig,
+  point: LatLon,
+): Promise<WindNormals> {
+  const json = await fetchJson(
+    'nasa-power',
+    config.fetch,
+    buildWindClimatologyUrl(config.url, point),
+    config.timeoutMs ?? 8000,
+  );
+  return parseWindClimatology(json);
 }

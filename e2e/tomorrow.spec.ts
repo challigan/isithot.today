@@ -36,6 +36,7 @@ const DAYS = {
   hot: (res) => res.days,
   wet: (res) => res.rain!.days,
   snow: (res) => res.snow!.days,
+  wind: (res) => res.wind!.days,
 } satisfies Record<Topic, (res: TodayResponse) => unknown>;
 
 /**

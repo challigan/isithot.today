@@ -1,13 +1,14 @@
 /**
- * Phone layout: the Hot | Wet | Snow toggle floats at the foot of the screen in thumb reach (from
- * 640px up it sits above the tabs), nothing scrolls sideways with large text on a narrow phone,
- * long answers ("Maybe.", "Almost.") are sized to fit, and so is the hot views' UV line.
+ * Phone layout: the Hot | Wet | Snow | Wind toggle floats at the foot of the screen in thumb reach
+ * (from 640px up it sits above the tabs), its four buttons keep their icons and words inside them
+ * at any width and text size, nothing scrolls sideways with large text on a narrow phone, long
+ * answers ("Maybe.", "Almost.", "A bit.") are sized to fit, and so is the hot views' UV line.
  */
 import type { Page } from '@playwright/test';
 import { TOPICS } from '../packages/core/src/config';
 import { expect, test } from './helpers';
 
-const PAGES = ['/', '/wet', '/snow', '/in/london-gb'];
+const PAGES = ['/', '/wet', '/snow', '/wind', '/in/london-gb', '/wind/in/london-gb'];
 
 async function ready(page: Page, path: string): Promise<void> {
   await page.goto(path);
@@ -23,7 +24,7 @@ const footerTextBottom = (page: Page) =>
     return Math.max(...[...range.getClientRects()].map((r) => r.bottom));
   });
 
-test.describe('the Hot | Wet | Snow toggle', () => {
+test.describe('the Hot | Wet | Snow | Wind toggle', () => {
   test('floats at the foot of a phone screen, clear of the footer', async ({ page }, info) => {
     test.skip(info.project.name !== 'phone', 'phone layout');
     const vp = page.viewportSize()!;
@@ -80,12 +81,77 @@ test.describe('the Hot | Wet | Snow toggle', () => {
       const box = (await page.locator('#topic').boundingBox())!;
       expect(box.x, path).toBeGreaterThanOrEqual(0);
       expect(box.x + box.width, path).toBeLessThanOrEqual(320);
-      // Every button of the toggle is still there to press (the icons give way at this size).
+      // Every button of the toggle is still there to press (at this size each icon sits over its
+      // word, as on a phone's tab bar).
       for (const t of TOPICS) {
         const button = (await page.locator(`#topic [data-topic=${t}]`).boundingBox())!;
         expect(button.width, `${path} ${t}`).toBeGreaterThan(40);
         expect(button.x + button.width, `${path} ${t}`).toBeLessThanOrEqual(320);
       }
+    }
+  });
+
+  test('keeps every icon and word inside its button, at any width and text size', async ({
+    page,
+  }, info) => {
+    const widths = info.project.name === 'phone' ? [320, 360, 375, 414, 430] : [640, 1280];
+    await ready(page, '/wind');
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 800 });
+      for (const size of ['100%', '125%', '150%', '175%', '200%']) {
+        await page.evaluate((s) => {
+          document.documentElement.style.fontSize = s;
+        }, size);
+        const label = `${width}px, ${size} text`;
+        await expect
+          .poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth), label)
+          .toBeLessThanOrEqual(0);
+        const fit = await page.evaluate(() => {
+          const pill = document.getElementById('topic')!.getBoundingClientRect();
+          const over: string[] = [];
+          for (const b of document.querySelectorAll<HTMLElement>('#topic button')) {
+            const box = b.getBoundingClientRect();
+            const range = document.createRange();
+            range.selectNodeContents(b);
+            // The word: the button's text without the icon.
+            const text = [...range.getClientRects()].filter((r) => r.height > 0 && r.width > 0);
+            const icon = b.querySelector('svg')!;
+            const parts = getComputedStyle(icon).display === 'none' ? [] : [icon];
+            const rects = [...text, ...parts.map((p) => p.getBoundingClientRect())];
+            for (const r of rects) {
+              const out = Math.max(box.left - r.left, r.right - box.right, box.top - r.top);
+              if (out > 0.5 || r.bottom - box.bottom > 0.5) over.push(b.dataset.topic!);
+            }
+            if (box.left < pill.left - 0.5 || box.right > pill.right + 0.5) over.push('pill');
+          }
+          return { over, left: pill.left, right: pill.right };
+        });
+        expect(fit.over, label).toEqual([]);
+        expect(fit.left, label).toBeGreaterThanOrEqual(0);
+        expect(fit.right, label).toBeLessThanOrEqual(width);
+      }
+    }
+  });
+});
+
+test.describe("wind's questions", () => {
+  test('stay clear of the icon on a narrow phone', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 800 });
+    await page.goto('/wind?preview=1&band=windy');
+    await page.evaluate(() => document.fonts.ready);
+    for (const view of ['today', 'now', 'week'] as const) {
+      await page.locator(`#tab-${view}`).click();
+      const id = view === 'today' ? '' : `${view}-`;
+      await expect(page.locator(`#${id}question`)).toBeVisible();
+      // "Will it be windy this week?" wraps before the icon rather than running under it.
+      const gap = await page.evaluate((prefix) => {
+        const range = document.createRange();
+        range.selectNodeContents(document.getElementById(`${prefix}question`)!);
+        const text = range.getBoundingClientRect();
+        const glyph = document.getElementById(`${prefix}glyph`)!.getBoundingClientRect();
+        return { right: text.right, max: glyph.left + glyph.width * 0.1 };
+      }, id);
+      expect(gap.right, view).toBeLessThanOrEqual(gap.max);
     }
   });
 });
@@ -95,6 +161,7 @@ test.describe('long answers', () => {
   const CASES = [
     { band: 'showers', answer: 'Maybe.', long: true },
     { band: 'warm', answer: 'Almost.', long: true },
+    { band: 'breezy', answer: 'A bit.', long: true },
     { band: 'hot', answer: 'Yes.', long: false },
   ];
 

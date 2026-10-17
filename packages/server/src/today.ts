@@ -7,6 +7,7 @@ import {
   LINKS,
   MODELS,
   SNOW,
+  WIND,
   computeDay,
   computeNow,
   computeRainDay,
@@ -16,7 +17,11 @@ import {
   computeSnowNow,
   computeSnowWeek,
   computeWeek,
+  computeWindDay,
+  computeWindNow,
+  computeWindWeek,
   defaultUnitsForCountry,
+  defaultWindUnitForCountry,
   formatDay,
   formatNow,
   formatRainDay,
@@ -26,6 +31,9 @@ import {
   formatSnowNow,
   formatSnowWeek,
   formatWeek,
+  formatWindDay,
+  formatWindNow,
+  formatWindWeek,
   cellKey,
   forecastHeight,
   gridKey,
@@ -36,15 +44,18 @@ import {
   judgeRainSeries,
   judgeSeries,
   judgeSnowSeries,
+  judgeWindSeries,
   localDate,
   parseElevation,
   parseUnits,
+  parseWindUnit,
   rainSeries,
   rainUnit,
   roundPoint,
   snapToCell,
   snowSeries,
   snowUnit,
+  windSeries,
   type ApiLocation,
   type DayComputation,
   type LatLon,
@@ -52,6 +63,7 @@ import {
   type RainDayComputation,
   type SnowDayComputation,
   type TodayResponse,
+  type WindDayComputation,
 } from '@isithot/core';
 import {
   FORECAST_CACHE_VERSION,
@@ -61,6 +73,7 @@ import {
   fetchForecast,
   fetchRainNormals,
   fetchSnowNormals,
+  fetchWindNormals,
   type Forecast,
 } from '@isithot/providers';
 import { cityBySlug, cityForPlace, nearbyCities } from './cities';
@@ -86,7 +99,7 @@ interface ForecastEntry {
 interface ClimateEntry {
   fetchedAt: number;
   normals: number[] | null;
-  /** The climate cell's mean height, m (snow normals only). */
+  /** The climate cell's mean height, m (snow and wind normals only). */
   height?: number | null;
 }
 
@@ -224,7 +237,8 @@ const HOURLY_DAYS = 3;
 
 /**
  * Later days only need each model's daily high, so their hours are dropped before caching
- * (a seven-day, eight-model hourly forecast is otherwise about 2,700 numbers per entry).
+ * (a seven-day, six-model hourly forecast is otherwise about 7,000 numbers per entry). Each
+ * model's day keeps its strongest wind, so the week's later days are still judged for wind.
  */
 function slim(forecast: Forecast): Forecast {
   return {
@@ -309,11 +323,14 @@ async function loadForecast(
 type NormalsResult = {
   normals: MonthlyNormals | null;
   pending: boolean;
-  /** The climate cell's mean height, m, when the source gives it (snow normals). */
+  /** The climate cell's mean height, m, when the source gives it (snow and wind normals). */
   height?: number | null;
 };
 
-/** What a NASA POWER request gives: twelve monthly values, and for snow the cell's height. */
+/**
+ * What a NASA POWER request gives: twelve monthly values, and for snow and wind the cell's
+ * height.
+ */
 type Monthly = { normals: MonthlyNormals; height?: number | null };
 
 /**
@@ -402,19 +419,38 @@ function loadSnowNormals(point: LatLon, deps: ServerDeps): Promise<NormalsResult
 }
 
 /**
- * Snow normals only where the climate cell's mean height is near the place's: a 50km cell's
- * normal snow says little about a valley town below its mountains, or a ski resort above them.
- * Without either height they are used as they are.
+ * Normal wind at 10m, for "Windier than usual" lines. Its own request and cache entry, as rain's
+ * and snow's, with the climate cell's height; a failure only removes those lines.
  */
-function nearbyHeight(normals: NormalsResult, elevation: number | null): MonthlyNormals | null {
-  const { height } = normals;
-  if (!isFiniteNumber(height) || elevation === null) return normals.normals;
-  return Math.abs(height - elevation) <= SNOW.normals.maxHeightDifference ? normals.normals : null;
+function loadWindNormals(point: LatLon, deps: ServerDeps): Promise<NormalsResult> {
+  const config = { url: deps.config.nasaPowerUrl, fetch: deps.fetch, timeoutMs: 9000 };
+  return loadMonthly(
+    `climate-wind/v1/${cellKey(point, GRID.climate)}`,
+    'wind normals',
+    () => fetchWindNormals(config, snapToCell(point, GRID.climate)),
+    deps,
+  );
 }
 
 /**
- * Seconds until the next forecast hour starts. Today's rain and snow answers cover the rest of the
- * day from the moment of the request, so no cache may keep them past the hour.
+ * Normals only where the climate cell's mean height is within `limit` metres of the place's: a
+ * 50km cell's normal snow says little about a valley town below its mountains, or a ski resort
+ * above them, and its normal wind little about a sheltered valley or an exposed top. Without
+ * either height they are used as they are.
+ */
+function nearbyHeight(
+  normals: NormalsResult,
+  elevation: number | null,
+  limit: number,
+): MonthlyNormals | null {
+  const { height } = normals;
+  if (!isFiniteNumber(height) || elevation === null) return normals.normals;
+  return Math.abs(height - elevation) <= limit ? normals.normals : null;
+}
+
+/**
+ * Seconds until the next forecast hour starts. Today's rain, snow and wind answers cover the rest
+ * of the day from the moment of the request, so no cache may keep them past the hour.
  */
 function secondsToNextHour(forecast: Forecast, now: number): number | null {
   for (const day of forecast.days) {
@@ -445,13 +481,22 @@ export async function getToday(
   const nowTime = nowDate.getTime();
   const explicitUnits = parseUnits(params.get('units'));
   const units = explicitUnits ?? defaultUnitsForCountry(geo?.country ?? located.country);
+  // Wind has its own setting. With `units` given the answer must not depend on the visitor (the
+  // CDN shares it), so wind then defaults from the place; with neither given it follows the
+  // visitor, as temperature does.
+  const windUnit =
+    parseWindUnit(params.get('windUnits')) ??
+    defaultWindUnitForCountry(
+      explicitUnits === null ? (geo?.country ?? located.country) : located.country,
+    );
 
   const point = { lat: located.lat, lon: located.lon };
-  const [loaded, climate, rainClimate, snowClimate] = await Promise.all([
+  const [loaded, climate, rainClimate, snowClimate, windClimate] = await Promise.all([
     loadForecast(point, forecastHeight(located.elevation), deps, nowDate),
     loadNormals(point, deps),
     loadRainNormals(point, deps),
     loadSnowNormals(point, deps),
+    loadWindNormals(point, deps),
   ]);
   const normals = climate.normals;
   if ('failure' in loaded) {
@@ -519,7 +564,8 @@ export async function getToday(
 
   // Will it snow? The same windows as rain, from the same forecast.
   // The place's own height where known, else the one the forecast is for.
-  const snowNormals = nearbyHeight(snowClimate, located.elevation ?? loaded.forecast.elevation);
+  const height = located.elevation ?? loaded.forecast.elevation;
+  const snowNormals = nearbyHeight(snowClimate, height, SNOW.normals.maxHeightDifference);
   const snowToday =
     forecastDays[0]?.date === today
       ? computeSnowDay(forecastDays[0], { from: nowTime, normals: snowNormals })
@@ -543,13 +589,39 @@ export async function getToday(
     if (snowWeek) body.snow.week = formatSnowWeek(snowWeek, units);
   }
 
+  // Is it windy? Today from the current hour, later days over their waking hours, from the same
+  // forecast; nothing for a forecast recorded without wind.
+  const windNormals = nearbyHeight(windClimate, height, WIND.normals.maxHeightDifference);
+  const windToday =
+    forecastDays[0]?.date === today
+      ? computeWindDay(forecastDays[0], { from: nowTime, normals: windNormals })
+      : null;
+  if (windToday) {
+    const later = forecastDays
+      .slice(1)
+      .map((d) => computeWindDay(d, { normals: windNormals }))
+      .filter((d): d is WindDayComputation => d !== null);
+    const windNow = computeWindNow(
+      judgeWindSeries(windSeries(loaded.forecast.days), windUnit, loaded.forecast.timezone),
+      nowTime,
+    );
+    const windWeek = computeWindWeek([windToday, ...later]);
+    body.wind = {
+      unit: windUnit,
+      days: [windToday, ...later.slice(0, 1)].map((d) => formatWindDay(d, windUnit)),
+    };
+    if (windNow) body.wind.now = formatWindNow(windNow, windUnit);
+    if (windWeek) body.wind.week = formatWindWeek(windWeek, windUnit);
+  }
+
   // Responses that depend on the visitor (IP location or country-default units) must not be
-  // shared by the CDN.
+  // shared by the CDN. Wind units follow the place whenever `units` is given, so they never do.
   const shared = located.source !== 'ip' && explicitUnits !== null;
   // Short cache while stale, or while climate normals are still loading in the background, and
-  // never past the next hour (today's rain and snow answers are for the rest of the day from now),
-  // stale or not.
-  const loading = climate.pending || rainClimate.pending || snowClimate.pending;
+  // never past the next hour (today's rain, snow and wind answers are for the rest of the day
+  // from now), stale or not.
+  const loading =
+    climate.pending || rainClimate.pending || snowClimate.pending || windClimate.pending;
   let maxAge = loaded.stale || loading ? 60 : CACHE.edgeMaxAge;
   const toNextHour = secondsToNextHour(loaded.forecast, nowTime);
   if (toNextHour !== null) maxAge = Math.min(maxAge, Math.max(60, toNextHour));

@@ -1,6 +1,7 @@
 import {
   FORECAST,
   SNOW,
+  dailyWind,
   isFiniteNumber,
   parseElevation,
   snowWater,
@@ -42,24 +43,35 @@ export interface OpenMeteoConfig {
 export const FORECAST_TIMING = { timeoutMs: 6000, hedgeAfterMs: 2000 };
 
 /**
- * Hourly variables requested for every model. The free API charges by variables × models (five
- * variables and eight models: 4.0 calls a fetch), so daily highs and rain and snow totals are
- * worked out here from the hourly values (Open-Meteo's own daily maximum and sum are the same
- * 24-hour aggregations) rather than requested separately. `snowfall` is each model's own split
- * of its precipitation into snow, as depth (cm, at 7cm for every 10mm of water). Only two of the
- * models give their own `uv_index` (GFS, and UKMO in its UK domain); the others answer nulls or,
- * like MET Norway, GFS's copied in (see withoutCopies). A request of its own would still cost a
- * whole call (Open-Meteo charges at least one per request) against 0.8 here.
+ * Hourly variables requested for every model. The free API charges by variables × models (seven
+ * variables and six models: 4.2 calls a fetch), so daily highs, rain and snow totals and the
+ * day's strongest wind are worked out here from the hourly values (Open-Meteo's own daily
+ * maximum and sum are the same 24-hour aggregations) rather than requested separately.
+ * `snowfall` is each model's own split of its precipitation into snow, as depth (cm, at 7cm for
+ * every 10mm of water). Only two of the models give their own `uv_index` (GFS, and UKMO in its
+ * UK domain); the others answer nulls (and a model that answers another's copy is dropped, see
+ * withoutCopies). A request of its own would still cost a whole call (Open-Meteo charges at least
+ * one per request) against 0.6 here. Wind speed and gusts at 10m come in km/h, Open-Meteo's
+ * default; every one of the six models has its own of both.
  */
 export const FORECAST_VARIABLES = {
-  hourly: ['temperature_2m', 'apparent_temperature', 'precipitation', 'snowfall', 'uv_index'],
+  hourly: [
+    'temperature_2m',
+    'apparent_temperature',
+    'precipitation',
+    'snowfall',
+    'uv_index',
+    'wind_speed_10m',
+    'wind_gusts_10m',
+  ],
 };
 
 /**
  * Bump when the request or the parsed Forecast shape changes: cached forecasts are keyed by it,
- * and recorded test fixtures are re-recorded when the signature below changes.
+ * and recorded test fixtures are re-recorded when the signature below changes. 6: six models,
+ * and wind.
  */
-export const FORECAST_CACHE_VERSION = 5;
+export const FORECAST_CACHE_VERSION = 6;
 
 /** One line describing the forecast request, written next to recorded fixtures. */
 export function forecastSignature(): string {
@@ -181,8 +193,9 @@ export function dailyMin(hours: readonly HourTemps[], index: number): number | n
 
 /**
  * The series with any exact copy of an earlier one replaced by null. Open-Meteo fills a variable
- * a model lacks from another model (MET Norway's UV index is GFS's, hour for hour), and a copy
- * counted as a second model would outvote the others in the median.
+ * a model lacks from another model (MET Norway's UV index was GFS's, hour for hour, when it was
+ * one of the models), and a copy counted as a second model would outvote the others in the
+ * median.
  */
 export function withoutCopies(
   series: readonly (readonly unknown[] | null)[],
@@ -218,12 +231,20 @@ export function parseForecast(json: unknown, models: readonly ModelConfig[]): Fo
   const precipitation = models.map((m) => seriesFor(hourly, 'precipitation', m, models.length));
   const snowfall = models.map((m) => seriesFor(hourly, 'snowfall', m, models.length));
   const uv = withoutCopies(models.map((m) => seriesFor(hourly, 'uv_index', m, models.length)));
+  const wind = withoutCopies(
+    models.map((m) => seriesFor(hourly, 'wind_speed_10m', m, models.length)),
+  );
+  const gusts = withoutCopies(
+    models.map((m) => seriesFor(hourly, 'wind_gusts_10m', m, models.length)),
+  );
   // Older recordings have no precipitation at all: leave rain out rather than call them dry.
   const hasRain = precipitation.some((series) => series !== null);
   // Nor snowfall: snow is then judged by each model's temperature (snowWater in core).
   const hasSnow = snowfall.some((series) => series !== null);
   // Nor the UV index: the hot views then show none.
   const hasUv = uv.some((series) => series !== null);
+  // Nor wind: leave it out rather than call the day calm.
+  const hasWind = wind.some((series) => series !== null) && gusts.some((s) => s !== null);
 
   // Local timestamps ("2026-10-07T14:00") grouped by date, in order.
   const byDate = new Map<string, HourTemps[]>();
@@ -244,6 +265,13 @@ export function parseForecast(json: unknown, models: readonly ModelConfig[]): Fo
     // Snowfall is labelled the same way, and so is the UV index (the hour's average).
     if (hasSnow) last.snow = snowfall.map((series) => numberOrNull(series?.[t + 1]));
     if (hasUv) last.uv = uv.map((series) => numberOrNull(series?.[t + 1]));
+    if (hasWind) {
+      // Wind speed is instant, at its stamp (the hour's start, as temperature is); a gust is the
+      // strongest of the hour before its stamp, so the hour from stamp t takes the next stamp's,
+      // as rain does.
+      last.wind = wind.map((series) => numberOrNull(series?.[t]));
+      last.gust = gusts.map((series) => numberOrNull(series?.[t + 1]));
+    }
     hours.push(last);
     byDate.set(date, hours);
   });
@@ -256,6 +284,8 @@ export function parseForecast(json: unknown, models: readonly ModelConfig[]): Fo
       high: dailyMax(hours, (h) => h.temps[i] ?? null),
       feelsLike: dailyMax(hours, (h) => h.feels?.[i] ?? null),
       ...(hasRain ? { ...dailyRain(hours, i, last), low: dailyMin(hours, i) } : {}),
+      // Each day's strongest wind, kept with the model as the server drops later days' hours.
+      ...(hasWind ? dailyWind(hours, i) : {}),
     })),
     hourly: hours,
   }));

@@ -10,11 +10,15 @@ export const prerender = false;
 /** "About 6mm still to come. Mostly between 2pm and 6pm." → "About 6mm still to come." */
 const firstSentence = (text: string): string => text.split(/(?<=\.)\s+/)[0]!;
 
-/** The line under the verdict: hot's high, and the first sentence of rain's or snow's detail. */
+/**
+ * The line under the verdict: hot's high, and the first sentence of the other topics' detail
+ * ("Gusts up to 45mph, wind up to 25mph.").
+ */
 const DETAILS: Record<Topic, (res: TodayResponse, day: TopicDay) => string> = {
   hot: ({ days: [day] }) => `High of ${day!.high}°, feels like ${day!.feelsLike}°.`,
   wet: (_, day) => firstSentence(day.detail),
   snow: (_, day) => firstSentence(day.detail),
+  wind: (_, day) => firstSentence(day.detail),
 };
 
 /** A city's answer to the site's question as an image; "default" is the site's own image. */
@@ -46,8 +50,8 @@ export const ogImage =
       const asked = question(city.name, 'today', topic);
       if (body && day) {
         if (HOURLY[topic]) {
-          // Today's rain and snow are for the rest of the day from when they were worked out:
-          // like the city page, never cached past the next hour, stale or not.
+          // Today's rain, snow and wind are for the rest of the day from when they were worked
+          // out: like the city page, never cached past the next hour, stale or not.
           maxAge = Math.min(maxAge, result.maxAge ?? maxAge);
           expiresIn = result.expiresIn ?? null;
         }

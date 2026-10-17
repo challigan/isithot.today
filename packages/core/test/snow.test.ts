@@ -401,9 +401,20 @@ describe('snow day words', () => {
     // Two models, at different times.
     const scattered = day((h, i) => ((i === 0 && h === 3) || (i === 1 && h === 9) ? cm(0.6) : 0));
     expect(say(scattered)).toBe('Maybe. It might snow. Some forecasts say up to 1cm. On and off.');
-    // Three of eight in one hour.
+    // Three of eight in one hour, or two of six (a third: SNOW.hourPossible); not two of eight.
     expect(say(day(during([15], cm(0.6), (i) => i < 3)))).toBe(
       'Maybe. It might snow. Some forecasts say up to 1cm. Most likely around 3pm.',
+    );
+    expect(
+      say(
+        day(
+          during([15], cm(0.6), (i) => i < 2),
+          6,
+        ),
+      ),
+    ).toBe('Maybe. It might snow. Some forecasts say up to 1cm. Most likely around 3pm.');
+    expect(say(day(during([15], cm(0.6), (i) => i < 2)))).toBe(
+      'Maybe. It might snow. Some forecasts say up to 1cm. On and off.',
     );
     // One of four, with no hours to time it.
     expect(say(totals([0.6, 0, 0, 0]))).toBe(

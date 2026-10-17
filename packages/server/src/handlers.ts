@@ -1,4 +1,4 @@
-import { COPY, ERROR_MESSAGES, type TodayResponse } from '@isithot/core';
+import { COPY, ERROR_MESSAGES, type TodayResponse, type WindUnit } from '@isithot/core';
 import { createDeps, type Platform } from './deps';
 import { errorResult, toResponse, type HandlerResult } from './http';
 import { getSearch } from './search';
@@ -42,15 +42,21 @@ export function handleRateLimited(): Response {
   return toResponse({ ...result, headers: { ...result.headers, 'Retry-After': '60' } });
 }
 
-/** Today's answer for a city page, rendered on the server. */
+/**
+ * Today's answer for a city page, rendered on the server. Wind speeds are in `windUnit`, by
+ * default the city's country's (mph for London, km/h for Paris).
+ */
 export async function todayForCity(
   slug: string,
   platform: Platform,
   units: 'c' | 'f' = 'c',
+  windUnit?: WindUnit,
 ): Promise<HandlerResult<TodayResponse>> {
   try {
     const deps = createDeps(platform);
-    return await getToday(new URLSearchParams({ place: slug, units }), null, deps);
+    const params = new URLSearchParams({ place: slug, units });
+    if (windUnit) params.set('windUnits', windUnit);
+    return await getToday(params, null, deps);
   } catch (err) {
     console.log(`[isithot] city ${slug} failed: ${String(err)}`);
     return errorResult('upstream_unavailable', COPY.unavailable);

@@ -195,8 +195,10 @@ test.describe('willitsnow.today pages', () => {
       expect(html).toMatch(/<title>[^<]+ \| willitsnow\.today<\/title>/);
       expect(html).toContain(SNOW_BRAND);
       expect(html).toContain(ICON);
-      // One service on three domains, the page's own first.
-      expect(html).toContain('willitsnow.today, isithot.today and isitwet.today are one service');
+      // One service on four domains, the page's own first.
+      expect(html).toContain(
+        'willitsnow.today, isithot.today, isitwet.today and isitwindy.today are one service',
+      );
     }
     const about = await (await request.get('/snow/about')).text();
     expect(about).toContain('<h2>Will it snow?</h2>');

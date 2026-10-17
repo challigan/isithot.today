@@ -1,0 +1,45 @@
+{
+ "type": "Feature",
+ "geometry": {
+  "type": "Point",
+  "coordinates": [
+   -1.875,
+   55,
+   50
+  ]
+ },
+ "properties": {
+  "parameter": {
+   "WS10M": {
+    "JAN": 6.32,
+    "FEB": 6.21,
+    "MAR": 5.91,
+    "APR": 5.5,
+    "MAY": 5.09,
+    "JUN": 4.79,
+    "JUL": 4.68,
+    "AUG": 4.79,
+    "SEP": 5.09,
+    "OCT": 5.5,
+    "NOV": 5.91,
+    "DEC": 6.21,
+    "ANN": 5.5
+   }
+  }
+ },
+ "header": {
+  "title": "NASA/POWER synthetic climatology",
+  "fill_value": -999
+ },
+ "messages": [],
+ "parameters": {
+  "WS10M": {
+   "units": "m/s",
+   "longname": "Wind Speed at 10 Meters"
+  }
+ },
+ "times": {
+  "data": 0,
+  "process": 0
+ }
+}

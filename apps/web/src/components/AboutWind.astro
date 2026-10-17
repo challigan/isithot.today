@@ -1,0 +1,56 @@
+---
+/** How "Is it windy?" works, in plain words: a section of the About page on every site. */
+import {
+  MODELS,
+  WIND,
+  WIND_BANDS,
+  WIND_BAND_LABELS,
+  formatHour,
+  toWindUnits,
+  type WindBand,
+} from '@isithot/core';
+
+type Rising = Exclude<WindBand, 'calm'>;
+/** "13 mph (21 km/h)": a band's edge in both units, as the sites show them. */
+const both = (kmh: number): string => `${toWindUnits(kmh, 'mph')} mph (${kmh} km/h)`;
+/** "Breezy from a wind of 13 mph (21 km/h) or gusts of 20 mph (32 km/h)." */
+const bands = (WIND_BANDS.slice(1) as Rising[]).map(
+  (band) =>
+    `${WIND_BAND_LABELS[band]} from a wind of ${both(WIND.from[band].mean)} or gusts of ${both(WIND.from[band].gust)}.`,
+);
+const days = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'];
+const waking = `${formatHour(WIND.day.fromHour)} and ${formatHour(WIND.day.toHour)}`;
+---
+
+<h2>Is it windy?</h2>
+<p>
+  For wind, we ask {MODELS.length} forecast models for the wind and its gusts 10 metres above the
+  ground, hour by hour, and take the middle of what they say (the median). A day is judged on its
+  strongest wind and gusts between {waking}, the hours most people are out in it.
+</p>
+<p>
+  The bands follow the Beaufort scale and the Met Office's own definitions of a gale and a storm,
+  where the wind or its gusts can each be enough:
+</p>
+<ul>
+  {bands.map((line) => (
+    <li>{line}</li>
+  ))}
+</ul>
+<p>
+  Windy or more is Yes, and breezy is A bit. The strip under the answer shows each forecast's
+  strongest gust, and the line above it how many forecasts put the day in the same band.
+</p>
+<p>
+  Today means the rest of today, from the current hour to {formatHour(WIND.day.toHour)} (to midnight
+  later in the evening), so a windy afternoon still to come counts. This week is Yes when{' '}
+  {days[WIND.week.windyFrom]} or more days are windy or any day brings a gale, and Partly when fewer
+  are windy. Where NASA POWER's long-term records cover it, we also compare the wind with what is
+  normal there at this time of year, but only where the records' 50 km grid cell is within{' '}
+  {WIND.normals.maxHeightDifference} m of the place's height: hills and coasts are much windier than
+  the land around them.
+</p>
+<p>
+  These sites do not issue warnings. For a gale or a storm at a place in the UK, the page links to
+  the Met Office's official warnings.
+</p>

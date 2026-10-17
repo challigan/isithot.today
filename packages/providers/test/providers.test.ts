@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { BLEND, MODELS, RAIN, SNOW, trimmedMean, type ModelConfig } from '@isithot/core';
+import { BLEND, MODELS, RAIN, SNOW, WIND, trimmedMean, type ModelConfig } from '@isithot/core';
 import {
   NASA_POWER_URL,
   OPEN_METEO_CUSTOMER,
@@ -11,16 +11,19 @@ import {
   buildRainClimatologyUrl,
   buildSearchUrl,
   buildSnowClimatologyUrl,
+  buildWindClimatologyUrl,
   dailyMin,
   forecastSignature,
   fetchClimateNormals,
   fetchForecast,
   fetchRainNormals,
   fetchSnowNormals,
+  fetchWindNormals,
   parseClimatology,
   parseForecast,
   parseRainClimatology,
   parseSnowClimatology,
+  parseWindClimatology,
   parseSearch,
   searchPlaces,
   syntheticForecast,
@@ -47,8 +50,19 @@ describe('Open-Meteo forecast', () => {
     // Daily highs are worked out from the hourly values, which halves the quota used.
     expect(url.searchParams.has('daily')).toBe(false);
     expect(url.searchParams.get('hourly')).toBe(
-      'temperature_2m,apparent_temperature,precipitation,snowfall,uv_index',
+      'temperature_2m,apparent_temperature,precipitation,snowfall,uv_index,wind_speed_10m,wind_gusts_10m',
     );
+    // Wind in km/h, Open-Meteo's default.
+    expect(url.searchParams.has('wind_speed_unit')).toBe(false);
+    // Six models: seven variables cost 4.2 calls a fetch.
+    expect(url.searchParams.get('models')!.split(',')).toEqual([
+      'ecmwf_ifs025',
+      'ncep_gfs_seamless',
+      'dwd_icon_seamless',
+      'ukmo_seamless',
+      'meteofrance_seamless',
+      'cmc_gem_seamless',
+    ]);
     expect(url.searchParams.get('models')!.split(',')).toEqual(MODELS.map((m) => m.id));
     expect(url.searchParams.has('apikey')).toBe(false);
     // Without a known height Open-Meteo uses the terrain's at the point.
@@ -66,7 +80,7 @@ describe('Open-Meteo forecast', () => {
 
   it('pins the request so a change has to bump the cache version', () => {
     expect(forecastSignature()).toBe(
-      'v5 forecast_days=7 hourly=temperature_2m,apparent_temperature,precipitation,snowfall,uv_index',
+      'v6 forecast_days=7 hourly=temperature_2m,apparent_temperature,precipitation,snowfall,uv_index,wind_speed_10m,wind_gusts_10m',
     );
   });
 
@@ -115,6 +129,16 @@ describe('Open-Meteo forecast', () => {
     const hasSnow = Object.keys(raw.hourly).some((k) => k.startsWith('snowfall_'));
     const hasUv = Object.keys(raw.hourly).some((k) => k.startsWith('uv_index_'));
     const uvSeries = withoutCopies(MODELS.map((m) => raw.hourly[`uv_index_${m.id}`] ?? null));
+    const hasWind = Object.keys(raw.hourly).some((k) => k.startsWith('wind_gusts_10m_'));
+    const windSeries = withoutCopies(
+      MODELS.map((m) => raw.hourly[`wind_speed_10m_${m.id}`] ?? null),
+    );
+    const gustSeries = withoutCopies(
+      MODELS.map((m) => raw.hourly[`wind_gusts_10m_${m.id}`] ?? null),
+    );
+    // Gusts against the mean wind, the hour from each stamp (a check on alignment and units).
+    let windHours = 0;
+    let gustier = 0;
     const lastStamp = raw.hourly.time.length - 1;
     let stamp = 0;
     /** The blended temperature at a stamp, as core blends it. */
@@ -198,6 +222,35 @@ describe('Open-Meteo forecast', () => {
         } else {
           expect(model).not.toHaveProperty('low');
         }
+        // The day's strongest wind and gust over the waking hours (the wind at each stamp, the
+        // gust at the next), only with both for every one of them; and the mean of the day's
+        // 24 wind speeds.
+        if (hasWind) {
+          const stamps: number[] = raw.hourly.time.flatMap((t: string, k: number) =>
+            t.startsWith(day.date) ? [k] : [],
+          );
+          const waking = stamps.filter((k) => {
+            const hour = Number(raw.hourly.time[k].slice(11, 13));
+            return hour >= WIND.day.fromHour && hour < WIND.day.toHour;
+          });
+          const winds = waking.map((k) => windSeries[i]?.[k] ?? null);
+          const gusts = waking.map((k) => gustSeries[i]?.[k + 1] ?? null);
+          const covered =
+            waking.length === WIND.day.toHour - WIND.day.fromHour &&
+            [...winds, ...gusts].every((v) => v !== null);
+          expect(model.wind).toBe(covered ? Math.max(...(winds as number[])) : null);
+          expect(model.gust).toBe(covered ? Math.max(...(gusts as number[])) : null);
+          const all = stamps.map((k) => (windSeries[i]?.[k] ?? null) as number | null);
+          if (all.length >= 24 && all.every((v) => v !== null)) {
+            expect(model.windMean).toBeCloseTo(all.reduce((a, b) => a! + b!, 0)! / 24, 6);
+          } else {
+            expect(model.windMean).toBeNull();
+          }
+        } else {
+          expect(model).not.toHaveProperty('wind');
+          expect(model).not.toHaveProperty('gust');
+          expect(model).not.toHaveProperty('windMean');
+        }
       }
       for (const h of day.hourly) {
         if (hasRain) expect(h.rain).toHaveLength(MODELS.length);
@@ -208,6 +261,21 @@ describe('Open-Meteo forecast', () => {
         // takes the next stamp's value; a model's copy of another's counts once.
         if (hasUv) expect(h.uv).toEqual(uvSeries.map((series) => series?.[stamp + 1] ?? null));
         else expect(h).not.toHaveProperty('uv');
+        // Wind is instant at its stamp; the gust is the strongest of the hour before its stamp,
+        // so the hour from a stamp takes the next stamp's. A copy of another model's counts once.
+        if (hasWind) {
+          expect(h.wind).toEqual(windSeries.map((series) => series?.[stamp] ?? null));
+          expect(h.gust).toEqual(gustSeries.map((series) => series?.[stamp + 1] ?? null));
+          h.wind!.forEach((w, i) => {
+            const g = h.gust![i];
+            if (w === null || g === null || g === undefined) return;
+            windHours++;
+            if (g >= w) gustier++;
+          });
+        } else {
+          expect(h).not.toHaveProperty('wind');
+          expect(h).not.toHaveProperty('gust');
+        }
         stamp++;
       }
       const withHigh = day.models.filter((m) => m.high !== null).length;
@@ -222,7 +290,13 @@ describe('Open-Meteo forecast', () => {
       if (hasRain && dayIndex < 2) expect(withRain).toBeGreaterThanOrEqual(5);
       if (hasRain) expect(withRain).toBeGreaterThanOrEqual(3);
       if (!hasRain) expect(withRain).toBe(0);
+      // Likewise for wind, the last day included (its waking hours all have a gust).
+      const withWind = day.models.filter((m) => typeof m.gust === 'number').length;
+      if (hasWind && dayIndex < 2) expect(withWind).toBeGreaterThanOrEqual(5);
+      if (hasWind) expect(withWind).toBeGreaterThanOrEqual(3);
     }
+    // A gust is the strongest of its hour, so it is almost never below the mean wind.
+    if (hasWind) expect(gustier / windHours).toBeGreaterThanOrEqual(0.9);
   });
 
   /** 24 hourly stamps for a date with values from `value(hour)`. */
@@ -381,6 +455,60 @@ describe('Open-Meteo forecast', () => {
       [1, 2, 3],
       null,
     ]);
+  });
+
+  it('keeps the wind at its stamp and moves gusts to the start of their hour', () => {
+    const models: ModelConfig[] = [
+      { id: 'ecmwf_ifs025', name: 'ECMWF' },
+      { id: 'ncep_gfs_seamless', name: 'GFS', aliases: ['gfs_seamless'] },
+      { id: 'cmc_gem_seamless', name: 'GEM' },
+    ];
+    const wind = twoDays.map((_, k) => k / 2);
+    const f = parseForecast(
+      {
+        timezone: 'UTC',
+        hourly: {
+          time: twoDays,
+          wind_speed_10m_ecmwf_ifs025: wind,
+          wind_gusts_10m_ecmwf_ifs025: twoDays.map((_, k) => k),
+          // By alias, and a model that stops after the first day.
+          wind_speed_10m_gfs_seamless: twoDays.map((_, k) => (k < 24 ? 10 : null)),
+          wind_gusts_10m_gfs_seamless: twoDays.map((_, k) => (k < 24 ? 20 : null)),
+          // A copy of another model's wind counts once.
+          wind_speed_10m_cmc_gem_seamless: [...wind],
+          wind_gusts_10m_cmc_gem_seamless: twoDays.map(() => 30),
+        },
+      },
+      models,
+    );
+    const [first, last] = f.days;
+    expect(first!.hourly[0]).toMatchObject({ wind: [0, 10, null], gust: [1, 20, 30] });
+    expect(first!.hourly[23]).toMatchObject({ wind: [11.5, 10, null], gust: [24, null, 30] });
+    expect(last!.hourly[23]).toMatchObject({ wind: [23.5, null, null], gust: [null, null, null] });
+    // The day's strongest over 7am to 9pm: the wind at 8pm, the gust from 8pm to 9pm.
+    expect(first!.models.map((m) => [m.wind, m.gust, m.windMean])).toEqual([
+      [10, 21, 5.75],
+      [10, 20, 10],
+      [null, null, null],
+    ]);
+    expect(last!.models.map((m) => [m.wind, m.gust, m.windMean])).toEqual([
+      [22, 45, 17.75],
+      [null, null, null],
+      [null, null, null],
+    ]);
+  });
+
+  it('leaves wind out of forecasts recorded without gusts', () => {
+    const f = parseForecast(
+      {
+        timezone: 'UTC',
+        hourly: { time: twoDays, wind_speed_10m: twoDays.map(() => 10) },
+      },
+      ecmwf,
+    );
+    expect(f.days[0]!.hourly[0]).not.toHaveProperty('wind');
+    expect(f.days[0]!.hourly[0]).not.toHaveProperty('gust');
+    expect(f.days[0]!.models[0]).not.toHaveProperty('gust');
   });
 
   it("only totals rain for a day with every hour, except the forecast's very last", () => {
@@ -896,5 +1024,58 @@ describe('NASA POWER climatology', () => {
     expect(snow.normals).toHaveLength(12);
     expect(snow.height).toBe(raw.geometry.coordinates[2]);
     expect(new URL(urls[0]!).searchParams.get('parameters')).toBe('PRECSNOLAND');
+  });
+
+  it('asks for normal wind in a request of its own', () => {
+    const url = new URL(buildWindClimatologyUrl(NASA_POWER_URL, { lat: 51.5, lon: 0 }));
+    expect(url.origin + url.pathname).toBe(NASA_POWER_URL);
+    expect(url.searchParams.get('parameters')).toBe('WS10M');
+    expect(url.searchParams.get('community')).toBe('AG');
+    expect(url.searchParams.get('format')).toBe('JSON');
+  });
+
+  it.each(['newcastle', 'seville', 'london', 'singapore'])(
+    'parses the recorded wind climatology for %s',
+    (place) => {
+      const raw = fixture(`nasa-power-wind-${place}.json`);
+      const speeds = raw.properties.parameter.WS10M;
+      const wind = parseWindClimatology(raw);
+      expect(wind).toEqual({
+        normals: MONTHS.map((k) => speeds[k]),
+        height: raw.geometry.coordinates[2],
+      });
+      // Metres a second: a breezy month is a few, never tens.
+      expect(wind.normals.every((v) => v > 0 && v < 20)).toBe(true);
+    },
+  );
+
+  it('rejects wind fill values, and copes without the cell height', () => {
+    const raw = fixture('nasa-power-wind-london.json');
+    raw.properties.parameter.WS10M.FEB = -999;
+    expect(() => parseWindClimatology(raw)).toThrow('missing monthly values');
+    raw.properties.parameter.WS10M.FEB = 5.1;
+    delete raw.geometry;
+    expect(parseWindClimatology(raw).height).toBeNull();
+    expect(() => parseWindClimatology(fixture('nasa-power-snow-london.json'))).toThrow(
+      'unexpected climatology response shape',
+    );
+  });
+
+  it('fetches wind normals', async () => {
+    const raw = fixture('nasa-power-wind-newcastle.json');
+    const urls: string[] = [];
+    const wind = await fetchWindNormals(
+      {
+        url: NASA_POWER_URL,
+        fetch: async (url) => {
+          urls.push(url);
+          return jsonFetch(raw)();
+        },
+      },
+      { lat: 55, lon: -1.875 },
+    );
+    expect(wind.normals).toHaveLength(12);
+    expect(wind.height).toBe(raw.geometry.coordinates[2]);
+    expect(new URL(urls[0]!).searchParams.get('parameters')).toBe('WS10M');
   });
 });

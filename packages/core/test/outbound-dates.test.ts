@@ -1,6 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { outboundLinks } from '../src/outbound';
+import { MET_OFFICE_WARNINGS, outboundLinks, warningsLink } from '../src/outbound';
 import { localDate, localDateTime, zoneAbbreviation } from '../src/dates';
+
+describe('warningsLink', () => {
+  it('links to the Met Office warnings for a UK gale or storm, and nothing else', () => {
+    const link = { name: 'Met Office warnings', url: MET_OFFICE_WARNINGS };
+    expect(MET_OFFICE_WARNINGS).toBe(
+      'https://weather.metoffice.gov.uk/warnings-and-advice/uk-warnings',
+    );
+    expect(warningsLink('GB', 'gale')).toEqual(link);
+    expect(warningsLink('gb', 'storm')).toEqual(link);
+    expect(warningsLink('GB', 'verywindy')).toBeNull();
+    expect(warningsLink('GB', 'calm')).toBeNull();
+    expect(warningsLink('GB', null)).toBeNull();
+    expect(warningsLink('IE', 'storm')).toBeNull();
+    expect(warningsLink(null, 'storm')).toBeNull();
+    expect(warningsLink(undefined, undefined)).toBeNull();
+  });
+});
 
 describe('outboundLinks', () => {
   it('links to the home pages without a place', () => {

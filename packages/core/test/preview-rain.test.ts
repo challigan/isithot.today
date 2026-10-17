@@ -56,7 +56,7 @@ describe('previewResponse for rain', () => {
     expect(say('showers')).toEqual([
       'Maybe.',
       'Showers possible.',
-      'Some forecasts say up to 3mm. Most likely around 1pm.',
+      'Some forecasts say up to 3mm. Mostly between 1pm and 5pm.',
       'Showers around.',
       'Mostly dry, but rain possible today and on Sat.',
     ]);

@@ -1,9 +1,10 @@
 ---
-/** The About page of each site: how all three questions are answered, the site's own first. */
+/** The About page of each site: how all four questions are answered, the site's own first. */
 import Content from '../layouts/Content.astro';
 import AboutHot from './AboutHot.astro';
 import AboutSnow from './AboutSnow.astro';
 import AboutWet from './AboutWet.astro';
+import AboutWind from './AboutWind.astro';
 import Credit from './Credit.astro';
 import { COPY, MODELS, SITES, TOPICS, type Topic } from '@isithot/core';
 import { siteNames } from '../lib/topics';
@@ -17,14 +18,16 @@ const intro: Record<Topic, string> = {
   hot: 'will today feel hot where you are? Here is how we get from a pile of forecasts to a single Yes, Almost or No.',
   wet: 'will it rain where you are today? Here is how we get from a pile of forecasts to a single Yes, Maybe or No.',
   snow: 'will it snow where you are today? Here is how we get from a pile of forecasts to a single Yes, Maybe or No.',
+  wind: 'will it be windy where you are today? Here is how we get from a pile of forecasts to a single Yes, A bit or No.',
 };
 const description: Record<Topic, string> = {
   hot: `How ${site} blends several forecast models and judges hot against what is normal for your place and time of year.`,
   wet: `How ${site} blends several forecast models into one answer about rain: how likely it is, how much and when.`,
   snow: `How ${site} blends several forecast models into one answer about snow: how likely it is, how much and when.`,
+  wind: `How ${site} blends several forecast models into one answer about wind: how strong the wind and gusts get, and when.`,
 };
 /** How each question is answered, the page's own first. */
-const SECTIONS = { hot: AboutHot, wet: AboutWet, snow: AboutSnow };
+const SECTIONS = { hot: AboutHot, wet: AboutWet, snow: AboutSnow, wind: AboutWind };
 const order = [topic, ...TOPICS.filter((t) => t !== topic)];
 /** Who runs each forecast model, for the credits: "NOAA (GFS)". */
 const AGENCIES: Record<string, string> = {
@@ -33,9 +36,7 @@ const AGENCIES: Record<string, string> = {
   dwd_icon_seamless: 'DWD',
   ukmo_seamless: 'the Met Office',
   meteofrance_seamless: 'Météo-France',
-  metno_seamless: 'MET Norway',
   cmc_gem_seamless: 'Environment and Climate Change Canada',
-  jma_seamless: 'JMA',
 };
 const agencies = MODELS.map((m) => {
   const agency = AGENCIES[m.id] ?? m.name;
@@ -50,9 +51,9 @@ const agencyList = `${agencies.slice(0, -1).join(', ')} and ${agencies.at(-1)}`;
     {site} answers one question: {intro[topic]}
   </p>
   <p>
-    {siteNames(topic)} are one service with three questions: will today feel hot, will it rain, and
-    will it snow? Each site opens on its own question, and the Hot, Wet and Snow switch at the top
-    of the page swaps between them.
+    {siteNames(topic)} are one service with four questions: will today feel hot, will it rain, will
+    it snow, and will it be windy? Each site opens on its own question, and the Hot, Wet, Snow and
+    Wind switch at the top of the page swaps between them.
   </p>
 
   {order.map((t) => {
@@ -81,12 +82,12 @@ const agencyList = `${agencies.slice(0, -1).join(', ')} and ${agencies.at(-1)}`;
       <Credit text={COPY.metOfficeCredit} />.
     </li>
     <!-- prettier-ignore -->
-    <li>Climate normals: <a href="https://power.larc.nasa.gov/" rel="noopener">NASA POWER</a> (Prediction Of Worldwide Energy Resources), long-term monthly averages of daily highs, rainfall and snowfall, from the NASA Langley Research Center (LaRC) POWER Project and licensed under <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a>. In NASA's words, "There are no restrictions on the use, access, and/or download of data from the NASA POWER Project."</li>
+    <li>Climate normals: <a href="https://power.larc.nasa.gov/" rel="noopener">NASA POWER</a> (Prediction Of Worldwide Energy Resources), long-term monthly averages of daily highs, rainfall, snowfall and wind speed, from the NASA Langley Research Center (LaRC) POWER Project and licensed under <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a>. In NASA's words, "There are no restrictions on the use, access, and/or download of data from the NASA POWER Project."</li>
     <!-- prettier-ignore -->
     <li>Place names: <a href="https://www.geonames.org/" rel="noopener">GeoNames</a>, licensed under CC BY 4.0.</li>
   </ul>
   <p>
-    Forecasts are estimates. For anything that matters, like heat health or flood warnings, check
-    your national weather service.
+    Forecasts are estimates. For anything that matters, like heat health, flood or wind warnings,
+    check your national weather service.
   </p>
 </Content>

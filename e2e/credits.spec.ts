@@ -1,5 +1,5 @@
 /**
- * Credits and legal wording on all three sites (served here under '', /wet and /snow): every
+ * Credits and legal wording on all four sites (served here under '', /wet, /snow and /wind): every
  * page's footer carries the API's credits, with "Weather data by Open-Meteo.com" linked as
  * Open-Meteo's licence asks and both licences linked; About names the sources and licences; Terms
  * ask for fair use rather than non-commercial use; Cookies say what declining consent means.
@@ -8,14 +8,22 @@ import { MODELS } from '../packages/core/src/config';
 import { ATTRIBUTION } from '../packages/core/src/copy';
 import { expect, test } from './helpers';
 
-const PREFIXES = ['', '/wet', '/snow'];
+const PREFIXES = ['', '/wet', '/snow', '/wind'];
 const LICENCES = {
   'CC BY 4.0': 'https://creativecommons.org/licenses/by/4.0/',
   'CC BY-SA 4.0': 'https://creativecommons.org/licenses/by-sa/4.0/',
 };
 
 test('every page credits the data, with the sources and licences linked', async ({ page }) => {
-  for (const path of ['/', '/wet', '/snow', '/in/london-gb', '/snow/about']) {
+  for (const path of [
+    '/',
+    '/wet',
+    '/snow',
+    '/wind',
+    '/in/london-gb',
+    '/snow/about',
+    '/wind/about',
+  ]) {
     await page.goto(path);
     const credit = page.locator('.site-footer .credit');
     for (const text of ATTRIBUTION) await expect(credit, path).toContainText(text);

@@ -52,14 +52,14 @@ describe('previewResponse for snow', () => {
     expect(say('maybesnow')).toEqual([
       'Maybe.',
       'It might snow.',
-      'Some forecasts say up to 1cm. Most likely around 10am.',
+      'Some forecasts say up to 1cm. Mostly between 10am and 2pm.',
       'Snow showers around.',
       'Snow possible today and on Sun.',
     ]);
     expect(say('deepsnow')).toEqual([
       'Yes.',
       'Deep snow.',
-      '20 to 25cm still to come. Easing off by about 6pm.',
+      '20 to 30cm still to come. Easing off by about 6pm.',
       'Very heavy snow.',
       'A snowy week, heaviest on Sun.',
     ]);
@@ -80,7 +80,7 @@ describe('previewResponse for snow', () => {
   it('follows the units', () => {
     const snow = previewResponse('heavysnow', 'f').snow!;
     expect(snow.unit).toBe('in');
-    expect(snow.days[0]!.detail).toBe('2.5 to 3in still to come. Easing off by about 5pm.');
+    expect(snow.days[0]!.detail).toBe('2.5 to 4in still to come. Easing off by about 5pm.');
     expect(snow.days[0]!.scale).toEqual({ min: 0, max: 5 });
   });
 });

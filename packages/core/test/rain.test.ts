@@ -522,6 +522,23 @@ describe('formatRainDay', () => {
         .split('. ')
         .at(-1),
     ).toBe('Most likely around 3pm.');
+    // So is one with 2 of 6, a third of the models (RAIN.hourPossible), but not 2 of 8.
+    expect(RAIN.hourPossible).toBeCloseTo(1 / 3, 10);
+    expect(
+      detail(
+        day(
+          during([15], 2, (i) => i < 2),
+          6,
+        ),
+      )
+        .split('. ')
+        .at(-1),
+    ).toBe('Most likely around 3pm.');
+    expect(
+      detail(day(during([15], 2, (i) => i < 2)))
+        .split('. ')
+        .at(-1),
+    ).toBe('On and off.');
   });
 
   it('gives the amount still to come, or the day’s amount', () => {

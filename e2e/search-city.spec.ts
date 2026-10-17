@@ -41,6 +41,18 @@ test('a city search from a snow city page stays on the snow site', async ({ page
   await expect(page.locator('#app')).toHaveAttribute('data-topic', 'snow');
 });
 
+test('a city search from a wind city page stays on the wind site', async ({ page }) => {
+  await keepToday(page);
+  await page.goto('/wind/in/london-gb');
+  await expect(page.locator('#answer')).toHaveText(/^\s*(Yes|No|A bit)\.\s*$/);
+  await page.locator('#place-btn').click();
+  await page.locator('#search-input').fill('Bris');
+  await page.getByRole('button', { name: /Bristol/ }).click();
+  await expect(page).toHaveURL(/\/wind\/in\/bristol-gb$/);
+  await expect(page.locator('#question')).toHaveText('Is it windy in Bristol today?');
+  await expect(page.locator('#app')).toHaveAttribute('data-topic', 'wind');
+});
+
 test('search sheet closes on Escape', async ({ page }) => {
   await page.goto('/');
   await page.locator('#place-btn').click();
@@ -136,7 +148,7 @@ test('city pages are server-rendered with the real answer', async ({ page, reque
   const html = await res.text();
   // A stable title for search results; the share card carries the answer.
   expect(html).toContain(
-    '<title>Is it hot in Newcastle today? Hour by hour from 8 forecasts | isithot.today</title>',
+    '<title>Is it hot in Newcastle today? Hour by hour from 6 forecasts | isithot.today</title>',
   );
   expect(html).toMatch(
     /<meta property="og:title" content="Is it hot in Newcastle today\? (Yes|No|Almost)\. -?\d+° \| isithot\.today">/,

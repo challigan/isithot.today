@@ -1,5 +1,6 @@
 /**
- * What search engines see, on all three sites (served here under '', /wet and /snow): home pages
+ * What search engines see, on all four sites (served here under '', /wet, /snow and /wind): home
+ * pages
  * that keep their loading placeholder out of snippets and say what the site does, a places page
  * per site, city pages that link on (nearby, the same city on the other sites, the places page),
  * titles that never carry the answer, the "Updated" line, headings that hold the question and its
@@ -91,8 +92,8 @@ test.describe('home pages', () => {
           const found: string[] = [];
           for (let n = walker.nextNode(); n; n = walker.nextNode()) {
             const text = n.textContent ?? '';
-            // The placeholder's made-up values: "00°", "0pm", "September", "Checking…".
-            if (!/\b0+°|\b0+(am|pm|mm|cm|%)|September|Checking…/.test(text)) continue;
+            // The placeholder's made-up values: "00°", "0pm", "00mph", "September", "Checking…".
+            if (!/\b0+°|\b0+(am|pm|mm|cm|mph|km\/h|%)|September|Checking…/.test(text)) continue;
             if (n.parentElement?.closest('script, [data-nosnippet]')) continue;
             found.push(text.trim());
           }
@@ -163,7 +164,8 @@ test.describe('home pages', () => {
         'href',
         `${prefix(topic)}/in/london-gb`,
       );
-      // At the end of the page the footer is clear of the phone's floating Hot | Wet | Snow pill.
+      // At the end of the page the footer is clear of the phone's floating Hot | Wet | Snow | Wind
+      // pill.
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
       await page.locator('.site-footer').getByRole('link', { name: 'Places' }).click();
       await expect(page).toHaveURL(new RegExp(`${prefix(topic)}/places$`));
@@ -255,7 +257,7 @@ test.describe('city pages', () => {
       // Share cards keep today's answer, as the page does.
       expect(attr(html, /<meta property="og:title" content="([^"]*)">/)).toMatch(
         new RegExp(
-          `^${question('London', 'today', topic).replace('?', '\\?')} (Yes|No|Almost|Maybe)\\. `,
+          `^${question('London', 'today', topic).replace('?', '\\?')} (Yes|No|Almost|Maybe|A bit)\\. `,
         ),
       );
       expect(html).not.toContain('<meta name="robots"');
@@ -266,7 +268,7 @@ test.describe('city pages', () => {
         ['Places', `${url}/places`],
         ['London', `${url}/in/london-gb`],
       ]);
-      // The same city on the other two sites, as real links to their own domains.
+      // The same city on the other three sites, as real links to their own domains.
       for (const other of TOPICS.filter((t) => t !== topic)) {
         expect(html).toContain(
           `<a href="${SITES[other].url}/in/london-gb" data-site="${other}" data-path="/in/london-gb">${question('London', 'today', other)}</a>`,
@@ -423,7 +425,7 @@ test.describe('snow pages where it never snows', () => {
       expect(sitemap).not.toContain(`/in/${c.slug}<`);
       expect(places).not.toContain(`/in/${c.slug}"`);
     }
-    for (const t of ['', '/wet']) {
+    for (const t of ['', '/wet', '/wind']) {
       const xml = await (await request.get(`${t}/sitemap.xml`)).text();
       expect(xml).toContain('/in/singapore-sg<');
     }
@@ -431,5 +433,21 @@ test.describe('snow pages where it never snows', () => {
     const hot = await (await request.get('/in/singapore-sg')).text();
     expect(hot).not.toContain('data-site="snow"');
     expect(hot).toContain('data-site="wet"');
+    expect(hot).toContain('data-site="wind"');
+  });
+});
+
+test.describe('wind pages', () => {
+  test('are all for search engines: wind blows everywhere', async ({ request }) => {
+    expect(CITIES.every((c) => listed(c, 'wind'))).toBe(true);
+    const robots = '<meta name="robots" content="noindex">';
+    for (const path of ['/wind', '/wind/in/singapore-sg', '/wind/in/reykjavik-is']) {
+      expect(await (await request.get(path)).text(), path).not.toContain(robots);
+    }
+    const sitemap = await (await request.get('/wind/sitemap.xml')).text();
+    expect((sitemap.match(/<loc>/g) ?? []).length).toBe(3 + CITIES.length);
+    const places = await (await request.get('/wind/places')).text();
+    expect(places).not.toContain(COPY.snowlessNote);
+    expect(places).toContain('/in/singapore-sg"');
   });
 });

@@ -15,12 +15,14 @@ import {
   NASA_POWER_RAIN_PARAMETERS,
   NASA_POWER_SNOW_PARAMETERS,
   NASA_POWER_URL,
+  NASA_POWER_WIND_PARAMETERS,
   OPEN_METEO_FREE,
   buildClimatologyUrl,
   buildForecastUrl,
   buildRainClimatologyUrl,
   buildSnowClimatologyUrl,
   buildSearchUrl,
+  buildWindClimatologyUrl,
   createSyntheticFetch,
   forecastSignature,
 } from '../packages/providers/src/index';
@@ -54,6 +56,7 @@ const jobs: Array<[string, string]> = [
     [`nasa-power-${place}.json`, buildClimatologyUrl(NASA_POWER_URL, cell)],
     [`nasa-power-rain-${place}.json`, buildRainClimatologyUrl(NASA_POWER_URL, cell)],
     [`nasa-power-snow-${place}.json`, buildSnowClimatologyUrl(NASA_POWER_URL, cell)],
+    [`nasa-power-wind-${place}.json`, buildWindClimatologyUrl(NASA_POWER_URL, cell)],
   ]),
 ];
 
@@ -68,7 +71,14 @@ for (const [file, url] of jobs) {
 // The preview workflow re-records whenever these request lines differ from the committed ones.
 const request =
   `Forecast request: ${forecastSignature()}\n` +
-  `Climate request: parameters=${NASA_POWER_PARAMETERS.join(',')}; parameters=${NASA_POWER_RAIN_PARAMETERS.join(',')}; parameters=${NASA_POWER_SNOW_PARAMETERS.join(',')}\n`;
+  `Climate request: ${[
+    NASA_POWER_PARAMETERS,
+    NASA_POWER_RAIN_PARAMETERS,
+    NASA_POWER_SNOW_PARAMETERS,
+    NASA_POWER_WIND_PARAMETERS,
+  ]
+    .map((p) => `parameters=${p.join(',')}`)
+    .join('; ')}\n`;
 writeFileSync(
   join(out, 'SOURCE.md'),
   (synthetic

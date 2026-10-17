@@ -10,9 +10,11 @@ import {
   SITES,
   SNOW_PALETTES,
   TOPICS,
+  WIND_PALETTES,
   pageTitle,
   snowPageTitle,
   wetPageTitle,
+  windPageTitle,
   type AnyBand,
   type Palette,
   type TodayResponse,
@@ -32,6 +34,7 @@ export const TOPIC_DAYS: Record<Topic, (res: TodayResponse) => readonly TopicDay
   hot: (res) => res.days,
   wet: (res) => res.rain?.days,
   snow: (res) => res.snow?.days,
+  wind: (res) => res.wind?.days,
 };
 
 /**
@@ -52,20 +55,27 @@ export const SHARE_TITLES: Record<Topic, (city: string, res: TodayResponse) => s
       const day = res.snow?.days[0];
       return day && snowPageTitle({ city, answer: day.answer, band: day.band, reason: day.reason });
     },
+    wind: (city, res) => {
+      const day = res.wind?.days[0];
+      return day && windPageTitle({ city, answer: day.answer, band: day.band, still: day.still });
+    },
   };
 
 /**
- * Today's rain and snow answers are for the rest of the day from when they were worked out, so
- * they hold only until the next forecast hour; hot's holds all day.
+ * Today's rain, snow and wind answers are for the rest of the day from when they were worked out,
+ * so they hold only until the next forecast hour; hot's holds all day.
  */
-export const HOURLY: Record<Topic, boolean> = { hot: false, wet: true, snow: true };
+export const HOURLY: Record<Topic, boolean> = { hot: false, wet: true, snow: true, wind: true };
 
-/** Each site's last answer in local storage: "isithot:last", "isitwet:last", "willitsnow:last". */
+/**
+ * Each site's last answer in local storage: "isithot:last", "isitwet:last", "willitsnow:last",
+ * "isitwindy:last".
+ */
 export const lastKey = (topic: Topic): string => `${SITES[topic].name.split('.')[0]}:last`;
 
 /**
- * The site's own name first, then the others: "isitwet.today, isithot.today and
- * willitsnow.today".
+ * The site's own name first, then the others: "isitwet.today, isithot.today, willitsnow.today and
+ * isitwindy.today".
  */
 export function siteNames(topic: Topic): string {
   const names = [topic, ...TOPICS.filter((t) => t !== topic)].map((t) => SITES[t].name);
@@ -105,5 +115,12 @@ export const LOOKS: Record<Topic, SiteLook> = {
     fallback: SNOW_PALETTES.snow.g2,
     og: 'snow',
     ogPending: 'flakes',
+  },
+  wind: {
+    content: WIND_PALETTES.windy,
+    notFound: WIND_PALETTES.verywindy,
+    fallback: WIND_PALETTES.windy.g2,
+    og: 'windy',
+    ogPending: 'breezy',
   },
 };

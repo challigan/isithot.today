@@ -24,16 +24,18 @@ Merging the pull request deploys to production at https://isithotapp.netlify.app
 
 The free API is for non-commercial use only and bans ads. Testing with friends, with ads off,
 is fine on it. Its limits are 600 calls a minute, 5,000 an hour, 10,000 a day and 300,000 a
-month. Each forecast fetch costs 4.0 calls (8 models × 5 hourly variables: temperature,
-feels-like, precipitation, snowfall and UV index, one request serving all three sites; it was
-2.4 before Will it snow? and 3.2 before the UV index), and a fetch only happens when a 5 km
-cell's cached forecast is over an hour old: at most 96 calls a day for a place checked around
-the clock, so it would take roughly 100 such places (or search engines crawling every city page
-of the three sites every hour) to reach the daily limit. Searched places and city pages are
-forecast for their own height (50 m bands) while device and IP locations are not, so a cell
-visited both ways is two forecasts (about 50 such places reach the limit), and in hills places
-in one cell at different heights are more. A group of friends is nowhere near it. If the limit is ever hit, the API serves the last forecast (up to 6
-hours old) marked stale, and the Netlify function log shows
+month. Each forecast fetch costs 4.2 calls (6 models × 7 hourly variables: temperature,
+feels-like, precipitation, snowfall, UV index, wind speed and wind gusts, one request serving
+all four sites; it was 2.4 before Will it snow?, 3.2 before the UV index, and 4.0 with eight
+models before Is it windy?; without wind's two variables six models would cost 3.0), and a
+fetch only happens when a 5 km cell's cached forecast is over an hour old: at most 101 calls a
+day for a place checked around the clock, so it would take roughly 99 such places (or search
+engines crawling every city page of the four sites every hour) to reach the daily limit.
+Searched places and city pages are forecast for their own height (50 m bands) while device and
+IP locations are not, so a cell visited both ways is two forecasts (about 50 such places reach
+the limit), and in hills places in one cell at different heights are more. A group of friends
+is nowhere near it. If the limit is ever hit, the API serves the last forecast (up to 6 hours
+old) marked stale, and the Netlify function log shows
 `forecast unavailable for … open-meteo: HTTP 429 …` (a 503 says the same in `error.detail`).
 
 1. Subscribe to the Standard plan at https://open-meteo.com/en/pricing ($29/month, 1M calls).
@@ -42,15 +44,15 @@ hours old) marked stale, and the Netlify function log shows
 3. Trigger a redeploy. With a key present the code switches to the
    `customer-api.open-meteo.com` and `customer-geocoding-api.open-meteo.com` hosts by itself.
 
-Quota: each cache miss is one forecast request for 8 models × 5 hourly variables (4.0 calls),
+Quota: each cache miss is one forecast request for 6 models × 7 hourly variables (4.2 calls),
 and a second one when Open-Meteo has not answered within 2 seconds.
 Forecasts are cached per 5 km grid cell (and 50 m height band, where the place's height is
 known) for an hour, and API responses at the CDN for up to 10
-minutes (never past the next hour, stale copies included, since today's rain and snow answers
-cover the rest of the day), so calls scale with the number of distinct places, not page views.
-All three sites share the cache. NASA POWER needs no key and has no quota to plan for: each
-50 km climate cell is fetched once (three small requests: highs, rainfall and snowfall) and
-cached for good.
+minutes (never past the next hour, stale copies included, since today's rain, snow and wind
+answers cover the rest of the day), so calls scale with the number of distinct places, not page
+views. All four sites share the cache. NASA POWER needs no key and has no quota to plan for:
+each 50 km climate cell is fetched once (four small requests: highs, rainfall, snowfall and wind
+speed) and cached for good.
 
 ## 3. Custom domain
 
@@ -59,7 +61,7 @@ cached for good.
 3. Netlify issues the HTTPS certificate automatically. Make `isithot.today` the primary
    domain; `www` redirects to it.
 
-Canonical URLs, sitemaps, robots.txt and OG image links use the three site addresses in
+Canonical URLs, sitemaps, robots.txt and OG image links use the four site addresses in
 `packages/core/src/config.ts` (`SITES`), not the deploy URL.
 
 ### isitwet.today (the second site)
@@ -113,7 +115,33 @@ between the sites):
 
 On deploy previews the snow site is at `https://deploy-preview-<n>--isithotapp.netlify.app/snow`,
 and the header `x-willitsnow-host: 1` makes a preview act as willitsnow.today (previews only).
-The preview smoke test checks both (`scripts/smoke.mjs --wet --snow`).
+The preview smoke test checks both (`scripts/smoke.mjs --wet --snow --wind`).
+
+### isitwindy.today (the fourth site)
+
+The same deploy serves it as well: the edge function sends requests for isitwindy.today to the
+`/wind` pages, which open on "Is it windy?". A path under another site's prefix goes to that
+site, as for the others (isithot.today/wind to isitwindy.today, isitwindy.today/snow to
+willitsnow.today). In the Netlify UI, **before the wind branch is merged** (the production smoke
+test after that deploy checks the domain, its www and the redirects between the sites, and fails
+until they answer):
+
+1. **Domain management**: add `isitwindy.today` as a **domain alias** of the project.
+   `isithot.today` stays the **primary** domain.
+2. Add `www.isitwindy.today` as another alias; the edge function sends it to the apex.
+3. DNS: if the domain's DNS is not on Netlify, add the records Netlify shows for both names at
+   the registrar (where Carl bought it).
+4. **HTTPS**: the certificate must list `isitwindy.today` and `www.isitwindy.today` as well as
+   the other sites' names. Use **Renew certificate** if they are missing, and check that
+   https://isitwindy.today/ and https://www.isitwindy.today/ answer before merging.
+5. Google Search Console: add the isitwindy.today property and submit
+   `https://isitwindy.today/sitemap.xml` (section 7). Before ads go on, add isitwindy.today to
+   AdSense's sites.
+
+On deploy previews the wind site is at `https://deploy-preview-<n>--isithotapp.netlify.app/wind`,
+and the header `x-isitwindy-host: 1` makes a preview act as isitwindy.today (previews only).
+Wind speeds have a units setting of their own (`windUnits=mph|kmh` in links between the sites,
+alongside `units`): mph by default in the UK and US, km/h elsewhere.
 
 ## 4. Cloudflare Web Analytics (cookieless, free)
 
@@ -146,31 +174,33 @@ Any free monitor (UptimeRobot, Better Stack) on:
 https://isithot.today/api/v1/today?place=london-gb&units=c
 https://isitwet.today/in/london-gb
 https://willitsnow.today/in/london-gb
+https://isitwindy.today/in/london-gb
 ```
 
 Alert on a non-200 response, or when the API body does not contain `"days"`.
 
 ## 7. Search Console and Bing
 
-Once the three domains answer over HTTPS. Best after the paid Open-Meteo plan (section 2):
+Once the four domains answer over HTTPS. Best after the paid Open-Meteo plan (section 2):
 crawlers fetch every city page, and on the free plan's daily limit that can push the sites onto
 stale answers. Each site's `robots.txt` already names its sitemap.
 
-1. **Google Search Console** (https://search.google.com/search-console): add three **Domain**
+1. **Google Search Console** (https://search.google.com/search-console): add four **Domain**
    properties (not URL prefix, so `www` and `http` are covered too): `isithot.today`,
-   `isitwet.today` and `willitsnow.today`. Each shows a `google-site-verification=…` TXT
-   record: add it in Netlify (**Domains → the domain → DNS settings → Add new record**, type
-   TXT, name `@`) or at the registrar, wait a few minutes and press **Verify**.
-2. In each property, **Sitemaps**: submit `sitemap.xml`. Expect 303 URLs on isithot.today and
-   isitwet.today, and 240 on willitsnow.today, which leaves out the 63 places where it never
-   snows (DECISIONS.md, "Search engines").
+   `isitwet.today`, `willitsnow.today` and `isitwindy.today`. Each shows a
+   `google-site-verification=…` TXT record: add it in Netlify (**Domains → the domain → DNS
+   settings → Add new record**, type TXT, name `@`) or at the registrar, wait a few minutes and
+   press **Verify**.
+2. In each property, **Sitemaps**: submit `sitemap.xml`. Expect 303 URLs on isithot.today,
+   isitwet.today and isitwindy.today, and 240 on willitsnow.today, which leaves out the 63 places
+   where it never snows (DECISIONS.md, "Search engines").
 3. **URL Inspection** → **Test live URL** on each site's home page and two city pages (say
    `/in/london-gb` and `/in/leeds-gb`), then **View tested page** → **Screenshot** and
    **HTML**. Home pages should show the introduction and Popular places, and no "00°" text;
-   city pages the answer, "Updated …", the links to the other two sites and "All places".
+   city pages the answer, "Updated …", the links to the other three sites and "All places".
    Then **Request indexing** for each home page.
 4. **Bing Webmaster Tools** (https://www.bing.com/webmasters): sign in, choose **Import from
-   Google Search Console**, and pick all three sites. It brings their sitemaps with them.
+   Google Search Console**, and pick all four sites. It brings their sitemaps with them.
 
 Each month, per site (about 15 minutes):
 
