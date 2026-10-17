@@ -83,7 +83,7 @@ test('a searched place without a page gets a shareable URL', async ({ page }) =>
   await page.locator('#place-btn').click();
   await page.locator('#search-input').fill('Hex');
   await page.getByRole('button', { name: /Hexham/ }).click();
-  await expect(page).toHaveURL(/\/\?lat=54\.95&lon=-2\.1&name=Hexham$/);
+  await expect(page).toHaveURL(/\/\?lat=54\.95&lon=-2\.1&name=Hexham&country=GB$/);
   await expect(page.locator('#place')).toHaveText('Hexham');
 });
 
@@ -124,13 +124,17 @@ test('a searched place is forecast for its height, after a reload too', async ({
   expect(asked.searchParams.get('source')).toBe('search');
   expect(asked.searchParams.get('elevation')).toBe('50');
   await expect(page.locator('#place')).toHaveText('Hexham');
-  // The address carries the height, so a reload or a shared link asks for the same forecast.
-  await expect(page).toHaveURL(/\/\?lat=54\.95&lon=-2\.1&name=Hexham&elevation=50$/);
+  // The address carries the country and height, so a reload or a shared link asks for the same
+  // forecast, in the place's wind unit.
+  await expect(page).toHaveURL(/\/\?lat=54\.95&lon=-2\.1&name=Hexham&country=GB&elevation=50$/);
   calls.length = 0;
+  const reloaded = page.waitForResponse((r) => r.url().includes('/api/v1/today'));
   await page.reload();
   await expect(page.locator('#place')).toHaveText('Hexham');
   await page.waitForLoadState('networkidle');
   expect(calls.map((u) => u.searchParams.get('elevation'))).toEqual(['50']);
+  expect(calls.map((u) => u.searchParams.get('country'))).toEqual(['GB']);
+  expect(((await (await reloaded).json()) as TodayResponse).wind!.unit).toBe('mph');
 
   // The remembered place has it too: the head script's early request asks for it, and the app
   // takes that answer rather than asking again.

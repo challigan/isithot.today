@@ -152,12 +152,15 @@ test.describe('isitwindy.today pages', () => {
       await request.get('/api/v1/today?place=reykjavik-is&units=c')
     ).json()) as TodayResponse;
     expect(data.wind!.week!.answer).toBe('Yes.');
+    // More stormy days than are named: all of them, never three that read as the only ones.
+    expect(data.wind!.week!.verdict).toBe('A windy week, storm-force winds all week.');
     await page.goto('/wind/in/reykjavik-is');
     await page.locator('#tab-week').click();
     await expect(page.locator('#week-question')).toHaveText(
       'Will it be windy in Reykjavík this week?',
     );
     await expect(page.locator('#week-answer')).toHaveText('Yes.');
+    await expect(page.locator('#week-verdict')).toHaveText(data.wind!.week!.verdict);
     const band = await expectWindBand(page, 'week');
     expect(band).toBe('storm');
     await expect(page.locator('#week-days li .t').first()).toHaveText(/^\d+km\/h$/);

@@ -165,14 +165,17 @@ async function locateFromCoords(params: URLSearchParams): Promise<Located | null
   const countryParam = params.get('country');
   let country = countryParam && COUNTRY.test(countryParam) ? countryParam.toUpperCase() : null;
   let geonameId = parseGeonameId(params.get('geonameId'));
-  if (!name) {
+  // Without a name, the nearest town names the point. A named place without a country (an older
+  // address, or an API client's) takes the nearest town's, which picks its wind unit and
+  // warnings link.
+  if (!name || !country) {
     const place = await reverseGeocode(point.lat, point.lon);
-    if (place) {
+    if (place && !name) {
       name = place.name;
       region = region ?? place.region;
-      country = country ?? place.country;
       geonameId = geonameId ?? place.geonameId;
     }
+    country = country ?? place?.country ?? null;
   }
   const source = params.get('source') === 'search' ? 'search' : 'device';
   const city = name
@@ -496,7 +499,7 @@ export async function getToday(
     loadNormals(point, deps),
     loadRainNormals(point, deps),
     loadSnowNormals(point, deps),
-    loadWindNormals(point, deps),
+    deps.config.compareWind ? loadWindNormals(point, deps) : { normals: null, pending: false },
   ]);
   const normals = climate.normals;
   if ('failure' in loaded) {

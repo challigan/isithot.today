@@ -1021,6 +1021,9 @@ export const WIND_WEEK_VERDICTS = {
 export const WIND_COPY = {
   breezyNext12: 'Breezy for the next 12 hours.',
   lightNext12: 'Light winds for the next 12 hours.',
+  /** When a windy week's strongest band covers more days than are named. */
+  allWeek: 'all week',
+  mostDays: 'on most days',
 } as const;
 
 const capitalise = (text: string): string => `${text[0]!.toUpperCase()}${text.slice(1)}`;

@@ -1058,8 +1058,10 @@ function choose(r: SearchResult): void {
   };
   rememberPlace(t);
   setNote('none');
-  // The address carries the height too, so a reload or a shared link has the same forecast.
+  // The address carries the country (for the wind unit and warnings link) and the height too, so
+  // a reload or a shared link has the same answer.
   const query = new URLSearchParams({ lat: String(t.lat), lon: String(t.lon), name: r.name });
+  if (r.country) query.set('country', r.country);
   if (r.elevation !== undefined) query.set('elevation', String(r.elevation));
   const path = `/?${query}`;
   if (mode === 'home') {
@@ -1262,12 +1264,14 @@ function initialTarget(): Target {
     const source = q.get('source') === 'device' ? 'device' : 'search';
     // Only a searched place has a height (the server checks it).
     const height = source === 'search' ? q.get('elevation') : null;
+    const country = q.get('country');
     return {
       kind: 'coords',
       source,
       lat: roundToGrid(lat, GRID.forecast),
       lon: roundToGrid(lon, GRID.forecast),
       name: q.get('name') ?? undefined,
+      country: country && /^[A-Za-z]{2}$/.test(country) ? country.toUpperCase() : undefined,
       elevation: height && Number.isFinite(+height) ? +height : undefined,
     };
   }

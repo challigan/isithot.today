@@ -610,6 +610,8 @@ describe('wind copy', () => {
     expect(WIND_COPY).toEqual({
       breezyNext12: 'Breezy for the next 12 hours.',
       lightNext12: 'Light winds for the next 12 hours.',
+      allWeek: 'all week',
+      mostDays: 'on most days',
     });
     expect(windRowSpoken('32mph', '3pm')).toBe('Gusts up to 32mph from 3pm');
     expect(windAgreementLine(4, 6, 'windy')).toBe('4 of 6 forecasts say windy');

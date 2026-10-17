@@ -45,10 +45,16 @@ const waking = `${formatHour(WIND.day.fromHour)} and ${formatHour(WIND.day.toHou
   Today means the rest of today, from the current hour to {formatHour(WIND.day.toHour)} (to midnight
   later in the evening), so a windy afternoon still to come counts. This week is Yes when{' '}
   {days[WIND.week.windyFrom]} or more days are windy or any day brings a gale, and Partly when fewer
-  are windy. Where NASA POWER's long-term records cover it, we also compare the wind with what is
-  normal there at this time of year, but only where the records' 50 km grid cell is within{' '}
-  {WIND.normals.maxHeightDifference} m of the place's height: hills and coasts are much windier than
-  the land around them.
+  are windy.
+  {WIND.normals.compare && (
+    <>
+      {' '}
+      Where NASA POWER's long-term records cover it, we also compare the wind with what is normal
+      there at this time of year, but only where the records' 50 km grid cell is within{' '}
+      {WIND.normals.maxHeightDifference} m of the place's height: hills and coasts are much windier
+      than the land around them.
+    </>
+  )}
 </p>
 <p>
   These sites do not issue warnings. For a gale or a storm at a place in the UK, the page links to

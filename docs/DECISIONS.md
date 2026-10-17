@@ -503,9 +503,9 @@ little bit saying whether its high medium or low", then "Include very high and e
   BY 4.0), recorded in `data/cities.json` by `scripts/city-heights.mjs` and never fetched at
   runtime. Run it again after `pnpm cities` changes the list (which keeps recorded heights).
 - **In the browser** a searched place's height stays with it: in the remembered place, and in
-  the page's address (`/?lat=…&lon=…&name=…&elevation=…`), so a reload, a shared link and the
-  head script's early request all ask for the same forecast. Places remembered before this have
-  no height and work as before.
+  the page's address (`/?lat=…&lon=…&name=…&country=…&elevation=…`), so a reload, a shared link
+  and the head script's early request all ask for the same forecast. Places remembered before
+  this have no height and work as before.
 - **Validation.** Whole metres from -500 to 9,000 (the Dead Sea shore is about -430, Everest
   8,849); anything else, or anything that is not a plain number, is ignored as if absent
   (`parseElevation` in core).
@@ -651,7 +651,9 @@ the wind question, and the toggle reads Hot | Wet | Snow | Wind on all four site
   own band is the window's ("4 of 6 forecasts say windy"); the strip shows each model's
   strongest gust, with the band's gust range as its zone. The week: Yes. with four or more windy
   days or any gale or storm, Partly. with fewer windy days, A bit. with breezy days only, else
-  No.; "Windiest on Friday, gusts up to 45mph." names the day.
+  No.; "Windiest on Friday, gusts up to 45mph." names the day. Up to three days are named ("very
+  windy today and on Fri and Sat"); a windy week's strongest band on more reads "on most days"
+  or "all week", never a list that looks complete but is cut short.
 - **Normals.** NASA POWER's `WS10M` (monthly mean wind at 10 m) in its own request and cache
   entry (`climate-wind/v1/<cell>`), with snow's 300 m height guard: a cell's mean height can be
   far from a valley town's, and exposure matters as much as height. Used only for "Windier than
@@ -683,6 +685,9 @@ the wind question, and the toggle reads Hot | Wet | Snow | Wind on all four site
     answer's unit, as it does for °C and °F. The page's early request in `<head>` does the same.
   - City pages are rendered in the city's country's unit (London mph, Paris km/h); a visitor's
     other choice asks again quietly, as for °F.
+  - A searched place's address carries its country (`country=GB`), so a reload or a shared link
+    keeps its unit and warnings link. A named place without one (an older address, or an
+    API client's) takes the nearest town's from the offline reverse geocoder.
   - Links between the domains carry it as `windUnits=` beside `units=` (F8), and the page there
     stores it and takes it out of the address.
 - **Four domains, one deploy.** isitwindy.today is a fourth row in the edge function's table
@@ -730,10 +735,21 @@ the wind question, and the toggle reads Hot | Wet | Snow | Wind on all four site
   days, each model within ±15%, windiest in the afternoon; Reykjavík (64° or more) has a storm
   every hour of the year, so every band shows in any month. The preview (`?preview=1`) has a
   sample for each wind band, the UK ones in mph with the warnings link for gale and storm.
-- **Fixtures.** CI's next preview run records the six models and `WS10M`. The provider tests on
-  those recordings require at least 5 models with a day's wind on days 1–2, 3 on every day, and
-  gusts at least the mean wind in 90% of model-hours (the design said 95%; loosened so one
-  model's diagnosed gusts cannot block the commit of the fixtures).
+- **Fixtures.** CI's preview run records the six models and `WS10M`. The provider tests on
+  those recordings require at least 5 models with a day's wind on days 1–2, 3 on every day, and,
+  for at least 4 of the 6 models, gusts at least the mean wind in 90% of that model's hours. The
+  first live recording (17 October 2026) showed why per model: ECMWF, ICON, UKMO and Météo-France
+  were at 97–100% at Newcastle and Seville, but GFS's and GEM's diagnosed gusts fell below their
+  own mean wind in light winds (Seville 68% and 72%), which a pooled 90% rule rejected. A
+  misaligned or swapped series would fail every model.
+- **Normals held back (17 October 2026).** That recording put the forecasts' 24-hour mean wind at
+  0.44 (Newcastle) and 0.55 (Seville) of the cells' October normals, over two calm days: enough
+  to show the comparison would lean to "calmer than usual" (the preview said so of a week with a
+  very windy Friday), not enough to set `scale`. So `WIND.normals.compare` is false: the server
+  neither fetches `WS10M` nor passes normals to the judge, the API's wind `normal` is null and
+  About does not mention it. The fixture recordings keep recording `WS10M`, and
+  `scripts/summarise-fixtures.mjs` prints the ratio each time; once a few weeks of recordings,
+  windy days included, agree on a ratio, set `scale` to it and `compare` to true.
 - **Size.** The browser keeps wind's "now" current with rain's code, as snow's does; wind's day
   and week judging runs only on the server and in the on-demand preview. The app chunk went from
   about 21 to 24.1 KB gzipped (budget 25.6 KB): wind's now, the four-topic client, the icons, and

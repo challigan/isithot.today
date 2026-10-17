@@ -126,9 +126,18 @@ describe('windWeekVerdict', () => {
     expect(say(WINDY, WINDY, GALE, WINDY, BREEZY, WINDY, CALM)).toBe(
       'Yes. A windy week, gales on Sat. (gale)',
     );
-    // At most three days are named.
+    // At most three days are named; more are most days, or all of them.
     expect(say(STORM, STORM, STORM, STORM, STORM)).toBe(
-      'Yes. A windy week, storm-force winds today and on Fri and Sat. (storm)',
+      'Yes. A windy week, storm-force winds all week. (storm)',
+    );
+    expect(say(VERY, VERY, VERY, VERY, CALM, CALM, CALM)).toBe(
+      'Yes. A windy week, very windy on most days. (verywindy)',
+    );
+    expect(say(VERY, WINDY, VERY, VERY, VERY, WINDY, CALM)).toBe(
+      'Yes. A windy week, very windy on most days. (verywindy)',
+    );
+    expect(say(VERY, WINDY, VERY, CALM, VERY, CALM, CALM)).toBe(
+      'Yes. A windy week, very windy today and on Sat and Mon. (verywindy)',
     );
   });
 
