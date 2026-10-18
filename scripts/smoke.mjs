@@ -80,8 +80,33 @@ function check(ok, label, detail = '') {
   if (!ok) failures++;
 }
 
-/** Redirects are not followed, so a page that should be served but redirects fails. */
-async function get(path, { origin = base, headers = {} } = {}) {
+/** fetch's own message ("fetch failed") with what it wraps: the socket or TLS error and its code. */
+function describe(err) {
+  const cause = err instanceof TypeError ? err.cause : undefined;
+  const detail = cause ? [cause.code, cause.message].filter(Boolean).join(' ') : '';
+  return detail ? `${err}: ${detail}` : String(err);
+}
+
+/**
+ * Redirects are not followed, so a page that should be served but redirects fails. A dropped
+ * connection (fetch's TypeError, from the runner's network or the far end) is logged with its
+ * cause and tried once more; a second one fails the run, naming the address.
+ */
+async function get(path, options = {}) {
+  try {
+    return await request(path, options);
+  } catch (err) {
+    if (!(err instanceof TypeError)) throw err;
+    console.log(`RETRY ${options.origin ?? base}${path}  (${describe(err)})`);
+    try {
+      return await request(path, options);
+    } catch (again) {
+      throw new Error(`${options.origin ?? base}${path}: ${describe(again)}`, { cause: again });
+    }
+  }
+}
+
+async function request(path, { origin = base, headers = {} } = {}) {
   const started = performance.now();
   const res = await fetch(origin + path, { redirect: 'manual', headers });
   const ms = Math.round(performance.now() - started);
@@ -530,16 +555,25 @@ try {
 
   const missing = await get('/in/atlantis-xx');
   check(missing.res.status === 404, 'unknown city page gives 404', `${missing.res.status}`);
-
-  for (const [t, { prefix, header }] of Object.entries(SITES)) {
-    if (args.includes(`--${t}`)) {
-      await checkSite(t, `${t} under ${prefix}`, { prefix });
-      await checkSite(t, `${t} via ${header}`, { headers: { [header]: '1' } });
-    }
-    if (siteUrls[t]) await checkSite(t, `${t} at ${siteUrls[t]}`, { origin: siteUrls[t] });
-  }
 } catch (err) {
-  check(false, 'smoke test crashed', String(err));
+  check(false, 'smoke test crashed', describe(err));
+}
+
+// Each site's checks run on their own, so one that crashes does not hide the others.
+for (const [t, { prefix, header }] of Object.entries(SITES)) {
+  const runs = [];
+  if (args.includes(`--${t}`)) {
+    runs.push([`${t} under ${prefix}`, { prefix }]);
+    runs.push([`${t} via ${header}`, { headers: { [header]: '1' } }]);
+  }
+  if (siteUrls[t]) runs.push([`${t} at ${siteUrls[t]}`, { origin: siteUrls[t] }]);
+  for (const [label, where] of runs) {
+    try {
+      await checkSite(t, label, where);
+    } catch (err) {
+      check(false, `${label}: crashed`, describe(err));
+    }
+  }
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll checks passed');
