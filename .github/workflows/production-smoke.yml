@@ -31,6 +31,7 @@ jobs:
           node-version: 22
 
       - name: Wait for the production deploy of this commit
+        id: deploy
         run: |
           for i in $(seq 1 90); do
             commit=$(curl -fsS "$SITE/version.json" 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).commit)}catch{console.log("")}})')
@@ -45,7 +46,9 @@ jobs:
           node scripts/smoke.mjs "$SITE" --wet-site "$WET_SITE" --snow-site "$SNOW_SITE"
           --wind-site "$WIND_SITE"
 
+      # Runs on the live deploy even when the page checks above fail, so they do not hide its result.
       - name: Paths under another site's prefix, and the www hosts, redirect to that site
+        if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
         run: |
           failed=0
           expect() {

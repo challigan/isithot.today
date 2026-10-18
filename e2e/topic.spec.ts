@@ -671,7 +671,7 @@ test.describe('Hot | Wet | Snow | Wind', () => {
     await page.locator('#place-btn').click();
     await page.locator('#search-input').fill('Hex');
     await page.getByRole('button', { name: /Hexham/ }).click();
-    await expect(page).toHaveURL(/\/wet\?lat=54\.95&lon=-2\.1&name=Hexham$/);
+    await expect(page).toHaveURL(/\/wet\?lat=54\.95&lon=-2\.1&name=Hexham&country=GB$/);
     await expect(page.locator('#place')).toHaveText('Hexham');
     await expectTopic(page, 'wet');
   });

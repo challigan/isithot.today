@@ -5,33 +5,45 @@
   "coordinates": [
    -6.25,
    37.5,
-   50
+   187.78
   ]
  },
  "properties": {
   "parameter": {
    "WS10M": {
-    "JAN": 4.19,
-    "FEB": 4.11,
-    "MAR": 3.91,
-    "APR": 3.64,
-    "MAY": 3.37,
-    "JUN": 3.17,
-    "JUL": 3.09,
-    "AUG": 3.17,
-    "SEP": 3.37,
-    "OCT": 3.64,
-    "NOV": 3.91,
-    "DEC": 4.11,
-    "ANN": 3.64
+    "JAN": 3.78,
+    "FEB": 3.93,
+    "MAR": 3.97,
+    "APR": 3.75,
+    "MAY": 3.54,
+    "JUN": 3.47,
+    "JUL": 3.47,
+    "AUG": 3.3,
+    "SEP": 3.05,
+    "OCT": 3.44,
+    "NOV": 3.77,
+    "DEC": 3.87,
+    "ANN": 3.61
    }
   }
  },
  "header": {
-  "title": "NASA/POWER synthetic climatology",
-  "fill_value": -999
+  "title": "NASA/POWER Source Native Resolution Climatology Climatologies",
+  "api": {
+   "version": "v2.10.1",
+   "name": "POWER Climatology API"
+  },
+  "sources": [
+   "MERRA2",
+   "POWER"
+  ],
+  "fill_value": -999,
+  "time_standard": "LST",
+  "range": "25-year Meteorological and Solar Monthly & Annual Climatologies (January 2001 - December 2025)"
  },
- "messages": [],
+ "messages": [
+  "The requested parameters are retrieved from a pre-computed climatological period (January 2001 - December 2025)"
+ ],
  "parameters": {
   "WS10M": {
    "units": "m/s",
@@ -39,7 +51,7 @@
   }
  },
  "times": {
-  "data": 0,
-  "process": 0
+  "data": 0.055,
+  "process": 0.03
  }
 }

@@ -136,9 +136,10 @@ describe('Open-Meteo forecast', () => {
     const gustSeries = withoutCopies(
       MODELS.map((m) => raw.hourly[`wind_gusts_10m_${m.id}`] ?? null),
     );
-    // Gusts against the mean wind, the hour from each stamp (a check on alignment and units).
-    let windHours = 0;
-    let gustier = 0;
+    // Gusts against the mean wind, per model, the hour from each stamp (a check on alignment
+    // and units).
+    const windHours = MODELS.map(() => 0);
+    const gustier = MODELS.map(() => 0);
     const lastStamp = raw.hourly.time.length - 1;
     let stamp = 0;
     /** The blended temperature at a stamp, as core blends it. */
@@ -269,8 +270,8 @@ describe('Open-Meteo forecast', () => {
           h.wind!.forEach((w, i) => {
             const g = h.gust![i];
             if (w === null || g === null || g === undefined) return;
-            windHours++;
-            if (g >= w) gustier++;
+            windHours[i]!++;
+            if (g >= w) gustier[i]!++;
           });
         } else {
           expect(h).not.toHaveProperty('wind');
@@ -295,8 +296,16 @@ describe('Open-Meteo forecast', () => {
       if (hasWind && dayIndex < 2) expect(withWind).toBeGreaterThanOrEqual(5);
       if (hasWind) expect(withWind).toBeGreaterThanOrEqual(3);
     }
-    // A gust is the strongest of its hour, so it is almost never below the mean wind.
-    if (hasWind) expect(gustier / windHours).toBeGreaterThanOrEqual(0.9);
+    // A gust is the strongest of its hour, so for most models it is almost never below the mean
+    // wind. GFS's and GEM's gust estimates can dip below it in light winds (the first live
+    // Seville recording: 68% and 72% of hours), while a misaligned or swapped series would break
+    // it for every model.
+    if (hasWind) {
+      const aligned = MODELS.filter(
+        (_, i) => windHours[i]! > 0 && gustier[i]! / windHours[i]! >= 0.9,
+      );
+      expect(aligned.length).toBeGreaterThanOrEqual(MODELS.length - 2);
+    }
   });
 
   /** 24 hourly stamps for a date with values from `value(hour)`. */

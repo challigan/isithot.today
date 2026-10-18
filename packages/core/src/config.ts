@@ -306,6 +306,14 @@ export const WIND = {
    * where the climate cell's mean height is within `maxHeightDifference` metres of the place's.
    */
   normals: {
+    /**
+     * Off until the recordings calibrate `scale`. The first live recording (October 2026) put
+     * the models' 24-hour mean wind at about half NASA POWER's monthly normal (0.44 at
+     * Newcastle, 0.55 at Seville, over two calm days), so comparing now would call most days
+     * calmer than usual. The server neither fetches the normals nor passes them on while off;
+     * scripts/summarise-fixtures.mjs prints the ratio from each recording.
+     */
+    compare: false,
     scale: 1,
     day: { windierRatio: 1.4, calmerRatio: 0.6, minDifference: 5 },
     week: { windierRatio: 1.25, calmerRatio: 0.75, minDifference: 3 },

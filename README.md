@@ -181,7 +181,7 @@ Bing setup in [docs/SETUP.md](docs/SETUP.md) (section 7).
   (the normal daily high; see `docs/DECISIONS.md`), `PRECTOTCORR` (normal rainfall, for the
   week's "wetter than usual"), `PRECSNOLAND` (normal snowfall, for "Snow is rare here in
   October." and the week's "more snow than usual") and `WS10M` (normal wind speed at 10 m, for
-  "Windier than usual for October.").
+  "Windier than usual for October."; held back until it is calibrated, see `docs/DECISIONS.md`).
 - Place names and coordinates: [GeoNames](https://www.geonames.org/) (CC BY 4.0), via the
   `all-the-cities` package. Regenerate with `pnpm cities`, then add the cities' heights from a
   GeoNames dump with `node scripts/city-heights.mjs <cities1000.txt>`.

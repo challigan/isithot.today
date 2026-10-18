@@ -7,6 +7,7 @@ import { BLEND, WEEK, WIND, WIND_BANDS, type WindBand } from './config';
 import { parseDate } from './climate';
 import {
   WEEKDAYS,
+  WIND_COPY,
   WIND_PHRASES,
   WIND_WEEK_ANSWERS,
   WIND_WEEK_VERDICTS,
@@ -103,15 +104,19 @@ export function windWeekVerdict(week: WindWeekComputation): {
   const { days, today } = week;
   const top = WIND_BANDS[Math.max(...days.map((d) => windRank(d.band)))]!;
   const windy = days.filter((d) => isWindy(d.band));
-  // The strongest band and its days, when stronger than windy: "gales on Fri".
+  // The strongest band and its days, when stronger than windy: "gales on Fri". Up to three days
+  // are named; more (only in a windy week) are most of the week: "on most days", or "all week".
+  const topDays = days.filter((d) => d.band === top).map((d) => d.date);
   const strongest: WindTop | null =
     windRank(top) > windRank('windy')
       ? {
           phrase: WIND_PHRASES[top as WindyBand],
-          when: when(
-            days.filter((d) => d.band === top).map((d) => d.date),
-            today,
-          ),
+          when:
+            topDays.length <= WIND.week.nameDays
+              ? when(topDays, today)
+              : topDays.length === days.length
+                ? WIND_COPY.allWeek
+                : WIND_COPY.mostDays,
         }
       : null;
   const allTop = windy.every((d) => d.band === top);

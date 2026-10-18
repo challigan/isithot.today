@@ -56,6 +56,8 @@ function makeDeps(overrides: Partial<ServerDeps> = {}) {
 }
 
 const q = (params: Record<string, string>) => new URLSearchParams(params);
+/** Config with wind compared against its normals (off by default until calibrated). */
+const compareWind = { ...resolveServerConfig(() => undefined), compareWind: true };
 const ok = (r: { body: TodayResponse | ApiError }) => r.body as TodayResponse;
 
 /** Gives a city page a height for the length of a test (cities.json may not have one). */
@@ -79,6 +81,7 @@ describe('config', () => {
     expect(free.openMeteo.forecastUrl).toBe('https://api.open-meteo.com/v1/forecast');
     expect(free.dataSource).toBe('live');
     expect(free.fallbackPlace).toBe('london-gb');
+    expect(free.compareWind).toBe(false);
     const env: Record<string, string> = { OPEN_METEO_API_KEY: ' k ', DATA_SOURCE: 'synthetic' };
     const paid = resolveServerConfig((k) => env[k]);
     expect(paid.openMeteo.forecastUrl).toBe('https://customer-api.open-meteo.com/v1/forecast');
@@ -131,7 +134,7 @@ describe('GET /api/v1/today', () => {
   });
 
   it('serves the second call from cache', async () => {
-    const { deps, calls } = makeDeps();
+    const { deps, calls } = makeDeps({ config: compareWind });
     await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
     // The forecast, then normal highs, rainfall, snowfall and wind (four climatology requests).
     expect(calls).toEqual([
@@ -170,6 +173,25 @@ describe('GET /api/v1/today', () => {
       slug: 'new-york-city-us',
     });
     expect(body.units).toBe('f');
+  });
+
+  it('gives a searched place without a country the nearest town’s, for its units', async () => {
+    const { deps } = makeDeps();
+    const at = async (params: Record<string, string>) =>
+      ok(await getToday(q({ source: 'search', units: 'c', ...params }), null, deps));
+    // An address from before it carried the country: Ambleside keeps its name, in mph.
+    const ambleside = await at({ lat: '54.45', lon: '-2.95', name: 'Ambleside' });
+    expect(ambleside.location).toMatchObject({ name: 'Ambleside', country: 'GB', region: null });
+    expect(ambleside.location.geonameId).toBeUndefined();
+    expect(ambleside.wind!.unit).toBe('mph');
+    // A city page by name finds its page, as with the country given.
+    const london = await at({ lat: '51.5', lon: '-0.1', name: 'London' });
+    expect(london.location).toMatchObject({ country: 'GB', slug: 'london-gb' });
+    // The country given wins, and a place with no town near keeps none.
+    const given = await at({ lat: '54.45', lon: '-2.95', name: 'Ambleside', country: 'ie' });
+    expect([given.location.country, given.wind!.unit]).toEqual(['IE', 'kmh']);
+    const sea = await at({ lat: '0', lon: '-30', name: 'Mid-Atlantic' });
+    expect([sea.location.country, sea.wind!.unit]).toEqual([null, 'kmh']);
   });
 
   it('names places with no nearby town "Your location"', async () => {
@@ -407,7 +429,7 @@ describe('GET /api/v1/today', () => {
   });
 
   it('answers "Is it windy?" from the same forecast, in mph in the UK', async () => {
-    const { deps } = makeDeps();
+    const { deps } = makeDeps({ config: compareWind });
     const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
     const wind = body.wind!;
     // °C with mph: wind has its own units, from the place when `units` is given.
@@ -486,7 +508,7 @@ describe('GET /api/v1/today', () => {
     const synthetic = createSyntheticFetch(CITIES, () => NOW);
     const noWindNormals: FetchLike = async (url, init) =>
       url.includes('WS10M') ? new Response('{}', { status: 500 }) : synthetic(url, init);
-    const failed = makeDeps({ fetch: noWindNormals });
+    const failed = makeDeps({ fetch: noWindNormals, config: compareWind });
     const body = ok(
       await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, failed.deps),
     );
@@ -502,7 +524,11 @@ describe('GET /api/v1/today', () => {
       if (url.includes('WS10M')) await gate;
       return synthetic(url, init);
     };
-    const { deps, background } = makeDeps({ fetch: slowWind, climateWaitMs: 10 });
+    const { deps, background } = makeDeps({
+      fetch: slowWind,
+      climateWaitMs: 10,
+      config: compareWind,
+    });
     const first = await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
     expect(first.headers['Cache-Control']).toBe('public, max-age=60');
     release();
@@ -510,6 +536,20 @@ describe('GET /api/v1/today', () => {
     const again = await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps);
     expect(again.headers['Cache-Control']).toBe('public, max-age=600');
     expect(ok(again).wind!.week!.normal).not.toBeNull();
+  });
+
+  it('leaves wind uncompared with its normals, and unfetched, until they are calibrated', async () => {
+    const { deps, calls } = makeDeps();
+    const wind = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps)).wind!;
+    expect(wind.days[0]!.normal).toBeNull();
+    expect(wind.week!.normal).toBeNull();
+    expect(`${wind.days[0]!.detail} ${wind.week!.detail}`).not.toMatch(/usual/);
+    expect(calls.filter((c) => c.includes('climatology')).length).toBeGreaterThan(0);
+    const compared = makeDeps({ config: compareWind });
+    const windy = ok(
+      await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, compared.deps),
+    ).wind!;
+    expect(windy.week!.normal).not.toBeNull();
   });
 
   it('uses wind normals only where the climate cell is near the place in height', async () => {
@@ -523,7 +563,7 @@ describe('GET /api/v1/today', () => {
         }
         return new Response(JSON.stringify(json));
       };
-      const { deps } = makeDeps({ fetch: changed });
+      const { deps } = makeDeps({ fetch: changed, config: compareWind });
       return ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps)).wind!;
     };
     expect((await answer(1050)).week!.normal).toBeNull();
@@ -899,7 +939,7 @@ describe('GET /api/v1/today', () => {
       }
       return synthetic(url, init);
     };
-    const { deps } = makeDeps({ fetch: noNasa });
+    const { deps } = makeDeps({ fetch: noNasa, config: compareWind });
     const body = ok(await getToday(q({ lat: '54.95', lon: '-1.6', units: 'c' }), null, deps));
     expect(body.days[0]!.anomaly).toBeNull();
     expect(body.rain!.week!.normal).toBeNull();
