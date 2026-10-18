@@ -402,8 +402,10 @@ try {
     console.log(
       `      ${windDay.agreementText} | confidence=${windDay.confidence} | gust=${windDay.gust}${wind.unit} mean=${windDay.mean}${wind.unit} peak=${windDay.peak} normal=${windDay.normal}`,
     );
+    /** "SW", "variable" (null) or "-" (absent: the forecast had no direction). */
+    const point = (d) => (d === undefined ? '-' : (d?.compass ?? 'variable'));
     console.log(
-      `      models: ${windDay.models.map((m) => `${m.name}=${m.gust}/${m.mean}${wind.unit}`).join(', ')}`,
+      `      models: ${windDay.models.map((m) => `${m.name}=${m.gust}/${m.mean}${wind.unit} ${point(m.direction)}`).join(', ')}`,
     );
     check(
       windDay.models.length >= 5 &&
@@ -415,6 +417,20 @@ try {
     check(
       windDay.models.some((m) => m.gust !== m.mean),
       'gusts read apart from the mean wind',
+    );
+    // Where the wind blows from: each model's own for today (its key there means Open-Meteo gave
+    // the model a direction; null is a model whose wind is too light to name one), and today's.
+    const withDirection = windDay.models.filter((m) => m.direction !== undefined);
+    const named = (d) => d === null || /^from the [a-z-]+$/.test(d?.words ?? '');
+    check(
+      withDirection.length >= 5 && withDirection.every((m) => named(m.direction)),
+      'at least 5 models say where the wind blows from',
+      `${withDirection.length} of ${windDay.models.length}`,
+    );
+    check(
+      windDay.direction !== undefined && named(windDay.direction),
+      'today says where the wind blows from (or that it is variable)',
+      `direction=${point(windDay.direction)} | ${windDay.detail}`,
     );
     check(wind.days.length === 2, 'two wind days returned', `${wind.days.length}`);
     check(
@@ -433,6 +449,14 @@ try {
       'wind now carries a day of hourly series',
       `${windNow?.series?.length}`,
     );
+    // Every hour has a direction, in degrees, or null when variable (light or disagreeing).
+    const dirs = windNow?.series?.map((p) => p.dir) ?? [];
+    check(
+      dirs.length > 0 &&
+        dirs.every((d) => d === null || (Number.isInteger(d) && d >= 0 && d < 360)),
+      'every hour of wind now says where the wind blows from (or null)',
+      `${dirs.filter((d) => typeof d === 'number').length} of ${dirs.length} hours named; now ${point(windNow?.direction)}`,
+    );
     const windWeek = wind.week;
     check(
       !!windWeek && windWeek.days.length >= 5 && /^(Yes|No|A bit|Partly)\.$/.test(windWeek.answer),
@@ -447,7 +471,9 @@ try {
     }
     if (windNow) {
       console.log(`      wind now: ${windNow.answer} ${windNow.verdict} | ${windNow.detail}`);
-      console.log(`      hours: ${windNow.hours.map((h) => `${h.label}=${h.gust}`).join(' ')}`);
+      console.log(
+        `      hours: ${windNow.hours.map((h) => `${h.label}=${h.gust} ${point(h.direction)}`).join(' ')}`,
+      );
     }
   }
   // Wind's own units when asked for, leaving the temperature's alone.

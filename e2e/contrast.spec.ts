@@ -59,10 +59,13 @@ const VIEW_TARGETS: Record<'today' | 'now' | 'week', Target[]> = {
     { name: 'verdict', selector: '#now-verdict' },
     { name: 'detail', selector: '#now-detail' },
     { name: 'UV line', selector: '#now-uv-line > [aria-hidden]' },
+    // Wind's compass point beside its arrow, under the detail and in each row.
+    { name: 'direction', selector: '#now-dir > span' },
     { name: 'warnings link', selector: '#now-warnings a' },
     { name: 'heading', selector: '#now-h' },
     { name: 'hour temperature', selector: '#now-hours .t' },
     { name: 'hour', selector: '#now-hours .n' },
+    { name: 'hour direction', selector: '#now-hours .w' },
   ],
   week: [
     { name: 'question', selector: '#week-question' },
@@ -255,6 +258,11 @@ for (const band of TOPICS.flatMap((t) => BANDS_BY_TOPIC[t])) {
       // The UK samples' gales and storms link to the Met Office's warnings on Today.
       if ((band === 'gale' || band === 'storm') && view === 'today') {
         await expect(page.locator('#warnings')).toBeVisible();
+      }
+      // Every wind sample but the calm one's light air says where the wind blows from on Now.
+      if (topic === 'wind' && band !== 'calm' && view === 'now') {
+        await expect(page.locator('#now-dir')).toBeVisible();
+        await expect(page.locator('#now-hours .w span').first()).toBeVisible();
       }
       const label = `${info.project.name.padEnd(7)} ${band.padEnd(9)} ${view.padEnd(5)}`;
       const found = await measure(page, [...VIEW_TARGETS[view], ...SHARED], label);

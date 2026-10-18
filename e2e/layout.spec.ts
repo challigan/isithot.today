@@ -2,7 +2,8 @@
  * Phone layout: the Hot | Wet | Snow | Wind toggle floats at the foot of the screen in thumb reach
  * (from 640px up it sits above the tabs), its four buttons keep their icons and words inside them
  * at any width and text size, nothing scrolls sideways with large text on a narrow phone, long
- * answers ("Maybe.", "Almost.", "A bit.") are sized to fit, and so is the hot views' UV line.
+ * answers ("Maybe.", "Almost.", "A bit.") are sized to fit, and so are the hot views' UV line and
+ * wind's direction line and rows.
  */
 import type { Page } from '@playwright/test';
 import { TOPICS } from '../packages/core/src/config';
@@ -232,6 +233,59 @@ test.describe('the UV line', () => {
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth), band)
         .toBeLessThanOrEqual(0);
+    }
+  });
+});
+
+test.describe("wind's direction and rows", () => {
+  test('fit inside the gutters at any width and text size', async ({ page }, info) => {
+    const widths = info.project.name === 'phone' ? [320, 360, 412] : [640, 1024, 1280];
+    // The widest values: Reykjavík's storm in km/h ("133km/h"), and the windy sample in mph.
+    for (const path of ['/wind/in/reykjavik-is', '/wind?preview=1&band=windy']) {
+      await page.goto(path);
+      await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+      await page.evaluate(() => document.fonts.ready);
+      await page.locator('#tab-now').click();
+      await expect(page.locator('#now-dir')).toBeVisible();
+      for (const width of widths) {
+        await page.setViewportSize({ width, height: 800 });
+        for (const size of ['100%', '150%', '200%']) {
+          await page.evaluate((s) => {
+            document.documentElement.style.fontSize = s;
+          }, size);
+          const label = `${path} at ${width}px, ${size} text`;
+          // Every figure, time, arrow and compass point lies within the view's gutters, and no
+          // two rows overlap.
+          const fit = () =>
+            page.evaluate(() => {
+              const view = document.getElementById('view-now')!;
+              const box = view.getBoundingClientRect();
+              const style = getComputedStyle(view);
+              const left = box.left + parseFloat(style.paddingLeft);
+              const right = box.right - parseFloat(style.paddingRight);
+              const parts = [
+                ...view.querySelectorAll('#now-dir > *, #now-hours li > :not(.sr-only)'),
+              ].map((el) => el.getBoundingClientRect());
+              const over = Math.max(...parts.map((r) => Math.max(left - r.left, r.right - right)));
+              const values = [...view.querySelectorAll('#now-hours .t')].map((el) =>
+                el.getBoundingClientRect(),
+              );
+              const overlap = values.some((a, i) =>
+                values.some(
+                  (b, j) =>
+                    i < j &&
+                    a.left < b.right - 0.5 &&
+                    b.left < a.right - 0.5 &&
+                    a.top < b.bottom - 0.5 &&
+                    b.top < a.bottom - 0.5,
+                ),
+              );
+              return { over, overlap, arrows: view.querySelectorAll('#now-hours .arrow').length };
+            });
+          await expect.poll(async () => (await fit()).over, label).toBeLessThanOrEqual(0.5);
+          expect(await fit(), label).toMatchObject({ overlap: false, arrows: 6 });
+        }
+      }
     }
   });
 });

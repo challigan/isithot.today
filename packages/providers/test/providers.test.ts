@@ -50,11 +50,11 @@ describe('Open-Meteo forecast', () => {
     // Daily highs are worked out from the hourly values, which halves the quota used.
     expect(url.searchParams.has('daily')).toBe(false);
     expect(url.searchParams.get('hourly')).toBe(
-      'temperature_2m,apparent_temperature,precipitation,snowfall,uv_index,wind_speed_10m,wind_gusts_10m',
+      'temperature_2m,apparent_temperature,precipitation,snowfall,uv_index,wind_speed_10m,wind_gusts_10m,wind_direction_10m',
     );
     // Wind in km/h, Open-Meteo's default.
     expect(url.searchParams.has('wind_speed_unit')).toBe(false);
-    // Six models: seven variables cost 4.2 calls a fetch.
+    // Six models: eight variables cost 4.8 calls a fetch.
     expect(url.searchParams.get('models')!.split(',')).toEqual([
       'ecmwf_ifs025',
       'ncep_gfs_seamless',
@@ -80,7 +80,7 @@ describe('Open-Meteo forecast', () => {
 
   it('pins the request so a change has to bump the cache version', () => {
     expect(forecastSignature()).toBe(
-      'v6 forecast_days=7 hourly=temperature_2m,apparent_temperature,precipitation,snowfall,uv_index,wind_speed_10m,wind_gusts_10m',
+      'v7 forecast_days=7 hourly=temperature_2m,apparent_temperature,precipitation,snowfall,uv_index,wind_speed_10m,wind_gusts_10m,wind_direction_10m',
     );
   });
 
@@ -136,6 +136,13 @@ describe('Open-Meteo forecast', () => {
     const gustSeries = withoutCopies(
       MODELS.map((m) => raw.hourly[`wind_gusts_10m_${m.id}`] ?? null),
     );
+    // Recordings before wind direction have none; later ones have it for most models.
+    const hasDirection = Object.keys(raw.hourly).some((k) => k.startsWith('wind_direction_10m_'));
+    const dirSeries = withoutCopies(
+      MODELS.map((m) => raw.hourly[`wind_direction_10m_${m.id}`] ?? null),
+    );
+    /** Hours in the first two days with a direction, per model. */
+    const dirHours = MODELS.map(() => 0);
     // Gusts against the mean wind, per model, the hour from each stamp (a check on alignment
     // and units).
     const windHours = MODELS.map(() => 0);
@@ -277,6 +284,18 @@ describe('Open-Meteo forecast', () => {
           expect(h).not.toHaveProperty('wind');
           expect(h).not.toHaveProperty('gust');
         }
+        // Wind direction is instant, at its stamp, as the wind is: degrees from 0 to 360.
+        if (hasWind && hasDirection) {
+          expect(h.dir).toEqual(dirSeries.map((series) => series?.[stamp] ?? null));
+          h.dir!.forEach((d, i) => {
+            if (d === null) return;
+            expect(d).toBeGreaterThanOrEqual(0);
+            expect(d).toBeLessThanOrEqual(360);
+            if (dayIndex < 2) dirHours[i]!++;
+          });
+        } else {
+          expect(h).not.toHaveProperty('dir');
+        }
         stamp++;
       }
       const withHigh = day.models.filter((m) => m.high !== null).length;
@@ -305,6 +324,11 @@ describe('Open-Meteo forecast', () => {
         (_, i) => windHours[i]! > 0 && gustier[i]! / windHours[i]! >= 0.9,
       );
       expect(aligned.length).toBeGreaterThanOrEqual(MODELS.length - 2);
+    }
+    // Most models give a direction for every hour of the first two days (all six do in
+    // Open-Meteo's source); a misread or missing series would drop them below.
+    if (hasWind && hasDirection) {
+      expect(dirHours.filter((n) => n === 48).length).toBeGreaterThanOrEqual(MODELS.length - 1);
     }
   });
 
@@ -486,14 +510,30 @@ describe('Open-Meteo forecast', () => {
           // A copy of another model's wind counts once.
           wind_speed_10m_cmc_gem_seamless: [...wind],
           wind_gusts_10m_cmc_gem_seamless: twoDays.map(() => 30),
+          // Directions at their stamps, as the wind; a copied direction counts once too.
+          wind_direction_10m_ecmwf_ifs025: twoDays.map((_, k) => k * 5),
+          wind_direction_10m_gfs_seamless: twoDays.map((_, k) => (k < 24 ? 270 : null)),
+          wind_direction_10m_cmc_gem_seamless: twoDays.map((_, k) => k * 5),
         },
       },
       models,
     );
     const [first, last] = f.days;
-    expect(first!.hourly[0]).toMatchObject({ wind: [0, 10, null], gust: [1, 20, 30] });
-    expect(first!.hourly[23]).toMatchObject({ wind: [11.5, 10, null], gust: [24, null, 30] });
-    expect(last!.hourly[23]).toMatchObject({ wind: [23.5, null, null], gust: [null, null, null] });
+    expect(first!.hourly[0]).toMatchObject({
+      wind: [0, 10, null],
+      gust: [1, 20, 30],
+      dir: [0, 270, null],
+    });
+    expect(first!.hourly[23]).toMatchObject({
+      wind: [11.5, 10, null],
+      gust: [24, null, 30],
+      dir: [115, 270, null],
+    });
+    expect(last!.hourly[23]).toMatchObject({
+      wind: [23.5, null, null],
+      gust: [null, null, null],
+      dir: [235, null, null],
+    });
     // The day's strongest over 7am to 9pm: the wind at 8pm, the gust from 8pm to 9pm.
     expect(first!.models.map((m) => [m.wind, m.gust, m.windMean])).toEqual([
       [10, 21, 5.75],
@@ -518,6 +558,28 @@ describe('Open-Meteo forecast', () => {
     expect(f.days[0]!.hourly[0]).not.toHaveProperty('wind');
     expect(f.days[0]!.hourly[0]).not.toHaveProperty('gust');
     expect(f.days[0]!.models[0]).not.toHaveProperty('gust');
+  });
+
+  it('judges wind without a direction from forecasts recorded before it', () => {
+    const f = parseForecast(
+      {
+        timezone: 'UTC',
+        hourly: {
+          time: twoDays,
+          wind_speed_10m: twoDays.map(() => 10),
+          wind_gusts_10m: twoDays.map(() => 20),
+        },
+      },
+      ecmwf,
+    );
+    expect(f.days[0]!.hourly[0]).toMatchObject({ wind: [10], gust: [20] });
+    expect(f.days[0]!.hourly[0]).not.toHaveProperty('dir');
+    // Nor is a direction without wind any use.
+    const only = parseForecast(
+      { timezone: 'UTC', hourly: { time: twoDays, wind_direction_10m: twoDays.map(() => 90) } },
+      ecmwf,
+    );
+    expect(only.days[0]!.hourly[0]).not.toHaveProperty('dir');
   });
 
   it("only totals rain for a day with every hour, except the forecast's very last", () => {

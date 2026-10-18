@@ -11,6 +11,7 @@ import {
   TOMORROW_FROM_HOUR,
   paletteFor,
   type AnyBand,
+  type Compass,
   type Palette,
   type Topic,
   type UvLevel,
@@ -36,6 +37,7 @@ import type {
   ApiSnow,
   ApiSnowNow,
   ApiWindDay,
+  ApiWindDirection,
   ApiWindNow,
   TodayResponse,
   WindUnit,
@@ -136,6 +138,20 @@ export interface TodayDisplay extends DisplayBase {
   uv: UvDisplay | null;
 }
 
+/**
+ * Where the wind blows from, on wind's Now view and its rows: an arrow pointing where the wind
+ * goes, as the Met Office draws it (a wind from the south-west points north-east), beside the
+ * compass point it comes from.
+ */
+export interface DirectionDisplay {
+  /** "SW". */
+  compass: Compass;
+  /** "from the south-west", for screen readers. */
+  words: string;
+  /** The arrow's turn clockwise from pointing up (north), whole degrees: where the wind goes. */
+  turn: number;
+}
+
 export interface NowItem {
   /** "13°" / "60%" / "32mph". */
   value: string;
@@ -143,6 +159,11 @@ export interface NowItem {
   label: string;
   /** What a screen reader hears for the row instead, or null to read it as shown. */
   sr: string | null;
+  /**
+   * Wind's rows only, when the forecast has directions: where the wind blows from at the row's
+   * start, or null when it is variable (the row keeps the space, empty).
+   */
+  direction?: DirectionDisplay | null;
 }
 
 export interface NowDisplay extends DisplayBase {
@@ -150,6 +171,11 @@ export interface NowDisplay extends DisplayBase {
   heading: string;
   items: NowItem[];
   uv: UvDisplay | null;
+  /**
+   * Wind's line under the detail: where the wind blows from this hour, or null (other topics, a
+   * variable direction, or none in the forecast).
+   */
+  direction: DirectionDisplay | null;
 }
 
 export interface WeekItem {
@@ -171,11 +197,15 @@ export interface WeekDisplay extends DisplayBase {
 export type ViewDisplay = TodayDisplay | NowDisplay | WeekDisplay;
 export type DisplayFor<V extends View> = Extract<ViewDisplay, { view: V }>;
 
-/** A view's answer lines, what it shows below them, and on the hot views the UV line. */
+/**
+ * A view's answer lines, what it shows below them, on the hot views the UV line, and on wind's
+ * Now its direction.
+ */
 interface Parts<T> {
   shown: { band: AnyBand; answer: string; verdict: string; detail: string };
   parts: T;
   uv?: UvDisplay | null;
+  direction?: DirectionDisplay | null;
 }
 
 /**
@@ -232,6 +262,8 @@ const PLACEHOLDERS: Record<
     bandLabel: string;
     /** Today's UV line (hot only: the other topics have none). */
     uv: UvDisplay | null;
+    /** Now's direction, on its line and each row (wind only). */
+    direction?: DirectionDisplay;
   }
 > = {
   hot: {
@@ -297,10 +329,16 @@ const PLACEHOLDERS: Record<
     day: '00mph',
     bandLabel: 'Windy',
     uv: null,
+    direction: { compass: 'SW', words: '', turn: 45 },
   },
 };
 
 const times = <T>(n: number, item: () => T): T[] => Array.from({ length: n }, item);
+
+/** The arrow points where the wind goes: opposite to where it comes from. */
+function directionDisplay(d: ApiWindDirection | null | undefined): DirectionDisplay | null {
+  return d ? { compass: d.compass, words: d.words, turn: (d.degrees + 180) % 360 } : null;
+}
 
 /** The agreement band around the consensus, and each model's high, on the day's scale. */
 function hotModels(day: ApiDay): TodayModels {
@@ -417,8 +455,15 @@ function nowParts(res: TodayResponse, topic: Topic, opts: DisplayOptions): Parts
       shown: now,
       parts: now.hours.map((h) => {
         const value = windText(h.gust, block.unit);
-        return { value, label: h.label, sr: windRowSpoken(value, h.label) };
+        const item: NowItem = {
+          value,
+          label: h.label,
+          sr: windRowSpoken(value, h.label, h.direction?.words),
+        };
+        if (h.direction !== undefined) item.direction = directionDisplay(h.direction);
+        return item;
       }),
+      direction: directionDisplay(now.direction),
     };
   }
   if (topic !== 'hot') {
@@ -548,9 +593,19 @@ export function viewDisplay<V extends View>(
     parts = {
       heading: NOW_HEADINGS[topic],
       items:
-        now?.parts ?? (pending ? times(6, () => ({ value: ph.hour, label: '0pm', sr: null })) : []),
+        now?.parts ??
+        (pending
+          ? times(6, () => ({
+              value: ph.hour,
+              label: '0pm',
+              sr: null,
+              ...(ph.direction ? { direction: ph.direction } : {}),
+            }))
+          : []),
       // No placeholder: at night, when the page opens on Now, there is no UV line to hold.
       uv: now?.uv ?? null,
+      // Wind's direction line is held, as it is there whenever the wind is more than light.
+      direction: now ? (now.direction ?? null) : pending ? (ph.direction ?? null) : null,
     };
   } else {
     const week = live && weekParts(live, topic);

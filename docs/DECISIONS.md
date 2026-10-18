@@ -762,6 +762,83 @@ the wind question, and the toggle reads Hot | Wet | Snow | Wind on all four site
   over a small word rather than the larger words alone; a single labelled button opening a menu
   would need new interaction code.
 
+## Wind direction
+
+Carl: "Is it feasible to add wind direction?" Yes: isitwindy.today now says where the wind blows
+from, in words and with an arrow. Hot, Wet and Snow, and the week, are unchanged.
+
+- **Data.** One more hourly variable in the one forecast request, `wind_direction_10m` (degrees
+  clockwise from north, where the wind blows from): 8 variables × 6 models is 4.8 calls a fetch
+  (from 4.2), about 87 places checked around the clock on the free API's 10,000 a day (SETUP.md,
+  section 2). Open-Meteo's source (main f625df2) shows all six models serve it: ECMWF, GFS, ICON
+  and Météo-France work it out from their own wind components, UKMO and GEM store it. It is
+  instant at its stamp, as the wind speed is, so the parser keeps it there (gusts move, it does
+  not), and drops copies (`withoutCopies`) as for the other wind variables.
+  `FORECAST_CACHE_VERSION` went from 6 to 7, so CI's preview job re-records the fixtures; older
+  recordings still parse (wind without a direction), and on recordings with it the provider tests
+  want every hour of the first two days from at least 5 of the 6 models.
+- **Never averaging angles.** 350° and 10° average to 180°, the opposite wind. Core
+  `meanDirection` (`windDirection.ts`) adds each direction as a vector as long as its wind speed,
+  so a strong wind counts for more than a light one, and the sum points the mean way. A direction
+  is named only when it means something (`WIND.direction`): the winds' median speed is at least
+  8 km/h (5 mph, within Beaufort 2, a light breeze; below it models' directions wander), and the
+  resultant is at least 0.6 of the speeds' sum (1 when all agree; two forecasts 100° apart make
+  0.64, 110° apart 0.57; opposite ones cancel out). Otherwise it is variable: `null` in the API,
+  and left out of the words. The median, as the wind shown is, not the average, so still air
+  never has one: two strong models of six would lift the average over the line and lend calm air
+  their direction. It is of the unrounded speeds, so right at the line a wind shown as 5mph
+  (8 km/h) may have none.
+- **Which hour.** An hour's direction is all its models' together (`dir` on each Now series
+  point, whole degrees, so the browser names it as the server would). A day's (Today, Tomorrow)
+  is the direction at its peak, the hour "Windiest around 3pm" names, as that is when the wind
+  matters; without a peak (a calm window, or one hour late in the evening) it is every model's
+  every hour of the window together, by the same rules. Each model's own (`models[].direction`)
+  is worked out the same way from it alone. A Now row's is its first hour's: a direction is for a
+  moment, and the row's gust the stronger of two hours. The week has none: later days' hours are
+  not kept, and "Windiest on Friday" says enough.
+- **Words.** The eight points as the Met Office writes them, "from the north", "from the
+  north-east" … "from the north-west", and N, NE, E, SE, S, SW, W, NW, each from whole degrees
+  (north-east is 23° to 67°; 22.5° rounds up to 23°). Today and Tomorrow: "Gusts up to 27mph
+  from the south-west, wind up to 10mph. Windiest around 12pm."; a calm day with a settled
+  direction "Light winds from the south-west, gusts up to 9mph.", a forecaster's "light
+  south-westerly winds" (still air never has one). Now: "Wind 12mph from the west, gusts 20mph
+  right now." A variable direction is simply left out ("Gusts up to 27mph, wind up to 10mph."),
+  never "variable" or "changeable", which read like a forecast of change.
+- **The arrow** points where the wind goes (direction + 180°), as the Met Office draws it, beside
+  the compass point it comes from: on a line under Now's detail (`DirectionLine.astro`) and on
+  each row of the next 12 hours, under the time. A filled dart turned by an SVG `transform`
+  attribute: the site sends no Content-Security-Policy (`netlify.toml` sets none and there is no
+  `_headers`), and the strip already positions dots with inline styles, but an attribute needs
+  nothing from a future policy's `style-src`. It never moves, so reduced motion has nothing to
+  stop. Screen readers hear each row as "Gusts up to 32mph from 3pm, wind from the south-west"
+  in place of its figures, letters and arrow; the Now line is hidden from them, as the detail
+  before it has just said "from the west". A variable row keeps its line, empty, so the rows
+  stay level; a variable Now hides its line.
+- **Fitting.** Wind's gusts are the widest values in the rows ("130km/h" is about 5.8em at their
+  size), and the rows already ran past the gutters at 320px with 200% text (and Reykjavík's
+  km/h at 1280px) before a third line was added. Wind's rows now sit 0.6rem apart and take
+  columns by the width of `.ahead`, a container: six from 37.8em (the desktop page), three from
+  18.6em (phones from 360px at the usual size), two from 12.2em, else one. `e2e/layout.spec.ts`
+  checks every figure, time, arrow and point inside the gutters from 320px to 1280px at 100–200%
+  text; `e2e/contrast.spec.ts` measures the compass points in all six wind palettes (lowest 6.2,
+  Windy). `CACHE.snapshotVersion` went from 9 to 10 for the new line in the saved markup.
+- **Size.** The browser names directions (`wind.ts`) and draws the arrows; judging them
+  (`windDirection.ts`, the vector mean) stays with the server and the preview, as wind's day and
+  week do. The app chunk went from 24.3 to 24.9 KB gzipped (budget 25.6 KB).
+- **Synthetic data**: each place's day blows from a direction of its own, veering up to 60°
+  through the day, each model within 12° of the others; on calm days each model's wanders up to
+  120° either way, hour by hour, so variable hours show; Reykjavík's storm blows from the
+  north-east all year. The preview's samples veer from the south-west or west, 2° an hour; the
+  calm sample's light air is variable all day, its tomorrow light winds from the west.
+- **Checks on live data.** `scripts/smoke.mjs` checks that at least 5 of today's models carry a
+  direction (named, or null for a model whose own wind is too light), that today has one or is
+  variable, and every hour of Now's series; `scripts/summarise-fixtures.mjs` prints each model's
+  hours with a direction over the first two days, and any copies.
+- **Needs a decision.** 8 km/h and 0.6 are starting points: once recordings show how often the
+  models disagree in light winds, move them in `WIND.direction`. Left as it was: the Today view's
+  model list (every topic) still runs past the gutters at 320px with 200% text, and wind's at
+  1280px with three-figure km/h gusts; the same column steps would fix it.
+
 ## Saved places (planned for the apps)
 
 Carl wants to save places in the native apps. Nothing is built for it on the web.
@@ -847,6 +924,15 @@ Is it windy? additions (no field changes its meaning):
   strip. Responses cached before it lack it.
 - `/api/v1/today` takes `windUnits=mph|kmh`. Without it, wind is in the place's country's unit
   when `units` is given (so the response stays shareable), else the visitor's.
+
+Wind direction additions (no field changes its meaning):
+
+- `wind.days[i].direction`, `wind.days[i].models[j].direction`, `wind.now.direction` and
+  `wind.now.hours[i].direction` (optional): `{ degrees, compass, words }` (whole degrees from 0
+  to 359, where the wind blows from; `N`, `NE` … `NW`; "from the south-west"), or `null` when the
+  direction is variable. `wind.now.series[i].dir` (optional): the hour's whole degrees, or
+  `null`. Each is absent when the forecast has no direction for it (responses cached before it,
+  and later days whose hours the server no longer keeps); the week's days have none.
 
 Search engines change (no field changes its meaning):
 

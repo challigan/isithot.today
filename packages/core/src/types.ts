@@ -2,7 +2,7 @@
  * The /api/v1 contract shared by the website and the future apps. Never change the meaning
  * of a field; add fields or create /api/v2.
  */
-import type { Band, RainBand, SnowBand, SnowReason, UvLevel, WindBand } from './config';
+import type { Band, Compass, RainBand, SnowBand, SnowReason, UvLevel, WindBand } from './config';
 import type { Confidence } from './blend';
 import type { Units } from './units';
 
@@ -544,6 +544,27 @@ export interface ApiWindModel {
   band: WindBand;
   /** Its band is the window's band. */
   agrees: boolean;
+  /**
+   * Where the model's wind blows from, judged as the window's `direction` is (at the window's
+   * windiest hour, or across its hours), by the model alone: null when its wind is too light to
+   * name one. Absent without directions in the forecast for those hours.
+   */
+  direction?: ApiWindDirection | null;
+}
+
+/**
+ * Where the wind blows from (meteorological: a south-west wind blows from the south-west, towards
+ * the north-east), as one value for several forecasts or hours (core `meanDirection`). Wherever a
+ * direction may be given, null means it is variable: too light, or the forecasts point too many
+ * ways to name one.
+ */
+export interface ApiWindDirection {
+  /** Whole degrees clockwise from north, 0 to 359 (225 is from the south-west). */
+  degrees: number;
+  /** The nearest of the eight compass points, "SW". */
+  compass: Compass;
+  /** How the site says it, and what screen readers hear: "from the south-west". */
+  words: string;
 }
 
 /** "Is it windy today?" for one window: the rest of today, or a whole day's waking hours. */
@@ -567,7 +588,7 @@ export interface ApiWindDay {
   answer: string;
   /** "It'll be windy." / "It'll be calm." */
   verdict: string;
-  /** "Gusts up to 45mph, wind up to 25mph. Windiest around 3pm." */
+  /** "Gusts up to 45mph from the south-west, wind up to 25mph. Windiest around 3pm." */
   detail: string;
   /** A calm window of still air (WIND.still): "It'll be calm.", labelled "Calm". */
   still: boolean;
@@ -576,6 +597,12 @@ export interface ApiWindDay {
   mean: number;
   /** When the blended gusts peak ("3pm"), or null (calm, a one-hour window, no hours kept). */
   peak: string | null;
+  /**
+   * Where the wind blows from at `peak`, or without one across the window's hours: null when
+   * variable. Absent without directions in the forecast (responses cached before them, and
+   * days whose hours the server no longer keeps).
+   */
+  direction?: ApiWindDirection | null;
   /** Models whose own band is the window's band, and models with data for the whole window. */
   agree: number;
   total: number;
@@ -617,6 +644,11 @@ export interface ApiWindPoint {
   band: WindBand;
   /** Calm and still air (WIND.still). */
   still: boolean;
+  /**
+   * Where the wind blows from at the hour's start across the models, whole degrees (as
+   * `ApiWindDirection.degrees`), or null when variable. Absent without directions in the forecast.
+   */
+  dir?: number | null;
 }
 
 /** One row in the wind Now view's list: the strongest gust in the two hours from `time`. */
@@ -626,6 +658,8 @@ export interface ApiWindHour {
   /** Local time, "3pm". */
   label: string;
   gust: number;
+  /** Where the wind blows from at `time` (the series point's `dir`); null when variable. */
+  direction?: ApiWindDirection | null;
 }
 
 /** "Is it windy right now?": the hour containing the moment and the next twelve. */
@@ -635,12 +669,17 @@ export interface ApiWindNow {
   band: WindBand;
   answer: string;
   verdict: string;
-  /** "Wind 18mph, gusts 32mph right now. Windy from about 3pm." */
+  /** "Wind 18mph from the west, gusts 32mph right now. Windy from about 3pm." */
   detail: string;
   /** This hour's median mean wind and gust. */
   mean: number;
   gust: number;
   still: boolean;
+  /**
+   * Where the wind blows from this hour (the series point's `dir`): null when variable, absent
+   * without directions in the forecast.
+   */
+  direction?: ApiWindDirection | null;
   /** The next 12 hours in 2-hour blocks. */
   hours: ApiWindHour[];
   /**

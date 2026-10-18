@@ -11,6 +11,7 @@ import {
   normalForDate,
   parseDate,
   roundToGrid,
+  wholeDegrees,
 } from '@isithot/core';
 import type { FetchLike } from './errors';
 
@@ -314,6 +315,28 @@ function syntheticWindHours(
 }
 
 /**
+ * Where one model's wind blows from in each hour of a local day, whole degrees as Open-Meteo gives
+ * them: each place's day from a direction of its own, veering (turning clockwise) by up to 60°
+ * through the day as behind a front, each model within 12° of the others. On a calm day the
+ * light air has no settled direction, so each model's wanders by up to 120° either way, hour by
+ * hour (the hours are variable on the Now view). Places from SNOWY_FROM_LAT have their storm from
+ * the north-east all year, so end-to-end tests know where it comes from.
+ */
+function syntheticDirections(cell: string, lat: number, date: string, id: string): number[] {
+  const own = between(`${cell}|${date}|${id}|direction`, -12, 12);
+  if (Math.abs(lat) >= SNOWY_FROM_LAT) {
+    return Array.from({ length: 24 }, () => wholeDegrees(45 + own));
+  }
+  const kind = syntheticWind(cell, lat, date);
+  const from = between(`${cell}|${date}|direction`, 0, 360);
+  const veer = between(`${cell}|${date}|veer`, 0, 60);
+  return Array.from({ length: 24 }, (_, h) => {
+    const wander = kind === 'calm' ? between(`${cell}|${date}|${id}|${h}|wander`, -120, 120) : 0;
+    return wholeDegrees(from + (veer * h) / 23 + own + wander);
+  });
+}
+
+/**
  * Normal wind at 10m, m/s by month: strongest in the mid-latitude storm tracks and over the
  * Arctic, lightest in the tropics, and windiest in each hemisphere's winter.
  */
@@ -405,13 +428,19 @@ export function syntheticForecast(
     // strongest of, so the first stamp carries the last hour of the day before, as precipitation.
     const winds = dates.map((date) => syntheticWindHours(cell, lat, date, id));
     const wind: Array<number | null> = winds.flatMap((w) => w.wind);
+    // The direction is instant too, at its stamp.
+    const direction: Array<number | null> = dates.flatMap((date) =>
+      syntheticDirections(cell, lat, date, id),
+    );
     const gust: Array<number | null> = [
       syntheticWindHours(cell, lat, addDays(today, -1), id).gust[23]!,
       ...winds.flatMap((w) => w.gust),
     ].slice(0, temps.length);
     const horizon = HORIZON_HOURS[id] ?? Infinity;
     temps.forEach((_, i) => {
-      if (i >= horizon) temps[i] = apparent[i] = precipitation[i] = wind[i] = gust[i] = null;
+      if (i >= horizon) {
+        temps[i] = apparent[i] = precipitation[i] = wind[i] = gust[i] = direction[i] = null;
+      }
     });
     // Snowfall as depth, with the temperature at the end of the hour, as Open-Meteo labels both.
     const snowfall = precipitation.map((mm, i) =>
@@ -429,6 +458,7 @@ export function syntheticForecast(
     );
     hourly[`wind_speed_10m_${id}`] = wind;
     hourly[`wind_gusts_10m_${id}`] = gust;
+    hourly[`wind_direction_10m_${id}`] = direction;
   }
 
   return {

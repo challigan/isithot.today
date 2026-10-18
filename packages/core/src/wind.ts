@@ -1,12 +1,15 @@
 /**
- * "Is it windy?": units and bands. A band is reached by its mean wind or its gust, whichever gets
- * there first (WIND in config.ts), always on whole km/h, so the number shown in either unit agrees
- * with the band. The day, hour and week live in windDay.ts, windNow.ts and windWeek.ts; the
- * browser loads only this file and windNow.ts.
+ * "Is it windy?": units, bands and the names of directions. A band is reached by its mean wind or
+ * its gust, whichever gets there first (WIND in config.ts), always on whole km/h, so the number
+ * shown in either unit agrees with the band. The day, hour and week live in windDay.ts,
+ * windNow.ts and windWeek.ts, and the judging of directions in windDirection.ts; the browser
+ * loads only this file and windNow.ts.
  */
-import { WIND, WIND_BANDS, type WindBand } from './config';
+import { COMPASS_POINTS, WIND, WIND_BANDS, type Compass, type WindBand } from './config';
+import { windFromWords } from './copy';
+import { isFiniteNumber } from './stats';
 import { round1 } from './units';
-import type { WindUnit } from './types';
+import type { ApiWindDirection, WindUnit } from './types';
 
 /** Kilometres in a mile: an mph value is km/h ÷ this. */
 export const KMH_PER_MPH = 1.609344;
@@ -56,4 +59,37 @@ export function gustRange(band: WindBand): { from: number; to: number | null } {
     from: band === 'calm' ? 0 : WIND.from[band].gust,
     to: next ? WIND.from[next].gust : null,
   };
+}
+
+/** Whole degrees from 0 to 359. */
+export const wholeDegrees = (degrees: number): number => ((Math.round(degrees) % 360) + 360) % 360;
+
+/** The nearest of the eight compass points, from whole degrees: 23° to 67° is north-east. */
+export function compassPoint(degrees: number): Compass {
+  return COMPASS_POINTS[Math.round(wholeDegrees(degrees) / 45) % COMPASS_POINTS.length]!;
+}
+
+/**
+ * A judged direction (whole degrees, meanDirection in windDirection.ts) as the API gives it:
+ * degrees, compass point and words.
+ */
+export function windDirection(degrees: number): ApiWindDirection {
+  const compass = compassPoint(degrees);
+  return { degrees: wholeDegrees(degrees), compass, words: windFromWords(compass) };
+}
+
+/**
+ * The API's `direction` field for a judged direction: the direction, null when variable, or no
+ * field at all without one, so answers from forecasts without directions keep their shape.
+ */
+export function directionField(dir: number | null | undefined): {
+  direction?: ApiWindDirection | null;
+} {
+  if (dir === undefined) return {};
+  return { direction: dir === null ? null : windDirection(dir) };
+}
+
+/** "from the south-west" for a judged direction, or null when it is variable or unknown. */
+export function directionWords(dir: number | null | undefined): string | null {
+  return isFiniteNumber(dir) ? windFromWords(compassPoint(dir)) : null;
 }

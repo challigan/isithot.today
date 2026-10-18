@@ -106,6 +106,38 @@ describe('formatWindNow', () => {
   });
 });
 
+describe('formatWindNow: where the wind blows from', () => {
+  // Veering 5° an hour from 200° at midnight; 4am too variable to name.
+  const series = points(repeat('windy', 16)).map((p, h) => ({
+    ...p,
+    dir: h === 4 ? null : 200 + 5 * h,
+  }));
+
+  it('names it in the detail and gives it for the hour and each row', () => {
+    const now = formatWindNow(computeWindNow(series, at(1.25))!, 'mph');
+    expect(now.direction).toEqual({ degrees: 205, compass: 'SW', words: 'from the south-west' });
+    expect(now.detail).toBe(
+      'Wind 16mph from the south-west, gusts 35mph right now. Set to last the next 12 hours.',
+    );
+    // Each row's is its first hour's: 2am, 4am (variable), 6am…
+    expect(now.hours.map((h) => [h.label, h.direction?.degrees ?? h.direction])).toEqual([
+      ['2am', 210],
+      ['4am', null],
+      ['6am', 230],
+      ['8am', 240],
+      ['10am', 250],
+      ['12pm', 260],
+    ]);
+    expect(now.hours[4]!.direction).toEqual({ degrees: 250, compass: 'W', words: 'from the west' });
+  });
+
+  it('leaves it out of the detail when it is variable', () => {
+    const now = formatWindNow(computeWindNow(series, at(4.5))!, 'kmh');
+    expect(now.direction).toBeNull();
+    expect(now.detail).toBe('Wind 16km/h, gusts 35km/h right now. Set to last the next 12 hours.');
+  });
+});
+
 describe('windTrendLine', () => {
   it('says when wind that is windy or more eases, or that it will last', () => {
     expect(trend('windy', ['windy', 'verywindy', 'gale', 'breezy'])).toBe(

@@ -4,6 +4,7 @@ import {
   RAIN,
   SNOW,
   computeWindDay,
+  directionOver,
   windSeries,
   type ModelDay,
   type WindBand,
@@ -166,6 +167,47 @@ describe('synthetic data source', () => {
       expect(new Set(await windWeek(64.15, -21.95, iso))).toEqual(new Set(['storm']));
       const f = await week(64.15, -21.95, iso);
       expect(new Set(windSeries(f.days).map((p) => p.band))).toEqual(new Set(['storm']));
+    }
+  });
+
+  it('veers the wind through the day, with variable hours on calm days', async () => {
+    const f = await week(51.5, -0.15, '2026-10-06T08:00:00Z');
+    const i = MODELS.findIndex((m) => m.id === 'meteofrance_seamless');
+    let named = 0;
+    let variable = 0;
+    for (const d of f.days.slice(0, 3)) {
+      const band = computeWindDay(d)!.band;
+      const hours = d.hourly.map((h) => directionOver([h]));
+      if (band !== 'calm') {
+        // Whole degrees, every model within 24° of the others, turning clockwise by up to 60°.
+        for (const h of d.hourly) {
+          const dirs = h.dir!.filter((v) => v !== null);
+          expect(dirs).toHaveLength(MODELS.length);
+          expect(dirs.every((v) => Number.isInteger(v) && v >= 0 && v < 360)).toBe(true);
+          const spread = Math.max(
+            ...dirs.map((a) => Math.min(Math.abs(a - dirs[0]!), 360 - Math.abs(a - dirs[0]!))),
+          );
+          expect(spread).toBeLessThanOrEqual(24);
+        }
+        const turn = (((hours[23]! - hours[0]!) % 360) + 360) % 360;
+        expect(turn).toBeLessThanOrEqual(61);
+      }
+      named += hours.filter((v) => typeof v === 'number').length;
+      variable += hours.filter((v) => v === null).length;
+    }
+    // Both show on the Now view's three days.
+    expect(named).toBeGreaterThan(0);
+    expect(variable).toBeGreaterThan(0);
+    // Météo-France's stops at its horizon with the rest of its forecast.
+    expect(f.days[4]!.hourly[12]!.dir![i]).toBeNull();
+    expect(f.days[3]!.hourly[12]!.dir![i]).not.toBeNull();
+  });
+
+  it("blows Reykjavik's storm from the north-east all year", async () => {
+    for (const iso of ['2026-07-10T08:00:00Z', '2027-01-10T08:00:00Z']) {
+      const f = await week(64.15, -21.95, iso);
+      const dirs = f.days.slice(0, 4).flatMap((d) => d.hourly.map((h) => directionOver([h])));
+      expect(dirs.every((v) => typeof v === 'number' && v >= 33 && v <= 57)).toBe(true);
     }
   });
 
