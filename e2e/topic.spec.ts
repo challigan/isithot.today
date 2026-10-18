@@ -553,51 +553,80 @@ test.describe('Hot | Wet | Snow | Wind', () => {
       }) => {
         // Routing turns off the browser's cache, whose entries would otherwise expire in real time.
         await page.route('**/api/v1/today**', (route) => route.continue());
-        // Each request for a fresh answer: the minute on the page's clock it was made in, and how
-        // long the server had left of its hour when it answered.
-        const fresh: Array<{ minute: number; left: number }> = [];
-        let minute = 0;
-        let pending = 0;
-        page.on('request', (r) => {
-          if (!r.url().includes('/api/v1/today')) return;
-          pending++;
-          if (!r.url().includes('t=')) return;
-          const entry = { minute, left: -1 };
-          fresh.push(entry);
-          // (A request still on its way when the test ends is not waited for.)
-          r.response()
-            .then(async (response) => {
-              const body = (await response!.json()) as { rain: { days: Array<{ from: string }> } };
-              const from = Date.parse(body.rain.days[0]!.from);
-              entry.left = Math.ceil(from / HOUR) * HOUR - from;
-            })
-            .catch(() => {});
+        // The page counts the app's requests for today's answer itself, from when the app asks
+        // until it has read the answer. (Playwright hears of a request only once the browser has it
+        // on its way, by when the page's clock may have run on minutes, past the app's quiet
+        // refetch of an answer still to come.) Of each request for a fresh answer the page keeps
+        // the time on its clock it was made at, and when the server worked the answer out.
+        type Requests = { pending: number; fresh: Array<{ at: number; from: string }> };
+        await page.addInitScript(() => {
+          const requests: Requests = { pending: 0, fresh: [] };
+          (window as unknown as { __requests: Requests }).__requests = requests;
+          const get = window.fetch.bind(window);
+          window.fetch = async (input, init) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (!url.includes('/api/v1/today')) return get(input, init);
+            requests.pending++;
+            const entry = url.includes('t=') ? { at: Date.now(), from: '' } : null;
+            if (entry) requests.fresh.push(entry);
+            let response: Response;
+            try {
+              response = await get(input, init);
+            } catch (e) {
+              requests.pending--;
+              throw e;
+            }
+            // The answer is in once the app has read it: it reads every one, an error too (and the
+            // page's own early request, as its first), and keeps it (`hold`) before the page does
+            // anything else. One without today's rain leaves `from` empty.
+            const json = response.json.bind(response);
+            response.json = () =>
+              json()
+                .then((body: { rain?: { days: Array<{ from: string }> } | null }) => {
+                  if (entry) entry.from = body.rain?.days[0]?.from ?? '';
+                  return body;
+                })
+                .finally(() => requests.pending--);
+            return response;
+          };
         });
-        const done = (r: { url(): string }) => {
-          if (r.url().includes('/api/v1/today')) pending--;
-        };
-        page.on('requestfinished', done);
-        page.on('requestfailed', done);
+        const requests = () =>
+          page.evaluate(() => (window as unknown as { __requests: Requests }).__requests);
+        // The page's count starts again with each document, so the browser's own count of
+        // requests for a fresh answer, from any document, checks that it saw them all.
+        let browserFresh = 0;
+        page.on('request', (r) => {
+          if (r.url().includes('/api/v1/today') && r.url().includes('t=')) browserFresh++;
+        });
         // A device clock 70 minutes fast: today's rain always looks an hour old to it (and late in
         // the evening, today's answer looks like yesterday's).
         await startClock(page, serverNow() + 70 * 60 * 1000);
         await ready(page, '/wet');
         // An hour on the page's clock, a minute at a time, each answer in before the next minute.
         // (The server's clock hardly moves meanwhile, so its hour is the same throughout.)
-        for (minute = 1; minute <= 60; minute++) {
+        for (let minute = 1; minute <= 60; minute++) {
           await page.clock.runFor(60 * 1000);
-          await expect.poll(() => pending).toBe(0);
+          await expect.poll(async () => (await requests()).pending).toBe(0);
         }
-        // The page's clock runs on by itself from here: look at the hour just run.
-        const asked = fresh.slice();
-        await expect.poll(() => asked.every((f) => f.left >= 0)).toBe(true);
-        // The out-of-date rain is asked for again, past the caches.
+        // The page's clock runs on by itself from here: look at the hour just run, with how long
+        // the server had left of its hour when it answered each.
+        const asked = (await requests()).fresh.map(({ at, from }) => {
+          const made = Date.parse(from);
+          return { at, left: Math.ceil(made / HOUR) * HOUR - made };
+        });
+        // The out-of-date rain is asked for again, past the caches, and each time answered, all
+        // from the one page. (Every answer is in, so the browser has reported every request.)
         expect(asked.length).toBeGreaterThanOrEqual(1);
+        await expect.poll(() => browserFresh, 'requests the browser made').toBe(asked.length);
+        for (const [i, { left }] of asked.entries()) {
+          expect(left, `answer ${i + 1} of ${asked.length}`).toBeGreaterThanOrEqual(0);
+        }
         // But never sooner than the server could have a newer hour: once it was out of date when it
         // arrived, an answer is kept for as long as the server had left of its hour. (Asking every
-        // few minutes would make a clock an hour fast ask forever.)
+        // few minutes would make a clock an hour fast ask forever.) Measured on the page's clock,
+        // from asking to asking again.
         for (let i = 1; i < asked.length; i++) {
-          const gap = (asked[i]!.minute - asked[i - 1]!.minute + 1) * 60 * 1000;
+          const gap = asked[i]!.at - asked[i - 1]!.at;
           expect(gap, `request ${i + 1} of ${asked.length}`).toBeGreaterThanOrEqual(
             asked[i - 1]!.left,
           );
