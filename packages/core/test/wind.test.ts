@@ -56,6 +56,14 @@ function day(wind: PerModel, gust: PerModel, models = 6, start = T0, date = DATE
   };
 }
 
+/** The day with each model's wind direction in each hour, degrees (meteorological). */
+function withDir(d: DayData, dir: PerModel): DayData {
+  return {
+    ...d,
+    hourly: d.hourly.map((h) => ({ ...h, dir: h.temps.map((_, i) => dir(h.hour, i)) })),
+  };
+}
+
 /** Each model's own value, all day. */
 const each =
   (values: readonly (number | null)[]): PerModel =>
@@ -502,5 +510,113 @@ describe('windSeries', () => {
       mean: 30,
       gust: 64,
     });
+  });
+});
+
+/** Still air at four models of six, the other two at a fresh breeze. */
+const OUTLIERS = day(each([3, 3, 3, 3, 25, 25]), each([8, 8, 8, 8, 35, 35]));
+
+describe('computeWindDay: where the wind blows from', () => {
+  // Every model at 20km/h, gusts strongest at 3pm; the wind veers 5° an hour from the south, the
+  // models either side of each other.
+  const SPREAD = [0, 5, -5, 10, -10, 0];
+  const veering = withDir(day(flat(20), peaked([40, 44, 48, 50, 52, 56])), (h, i) => {
+    return 180 + 5 * h + SPREAD[i]!;
+  });
+
+  it('names it at the windiest hour, for all the models and for each', () => {
+    const c = computeWindDay(veering)!;
+    expect([c.band, c.peakHour, c.direction]).toEqual(['windy', 15, 255]);
+    expect(c.models.map((m) => m.direction)).toEqual([255, 260, 250, 265, 245, 255]);
+    // The rest of today has the same peak.
+    expect(computeWindDay(veering, { from: at(10.5) })!.direction).toBe(255);
+    const f = formatWindDay(c, 'mph');
+    expect(f.direction).toEqual({ degrees: 255, compass: 'W', words: 'from the west' });
+    expect(f.models[3]!.direction).toEqual({
+      degrees: 265,
+      compass: 'W',
+      words: 'from the west',
+    });
+    expect(f.detail).toBe(
+      'Gusts up to 30mph from the west, wind up to 12mph. Windiest around 3pm.',
+    );
+  });
+
+  it('takes the window’s hours without a peak: a calm day, or a single hour', () => {
+    // Light winds veering 2° an hour: 274° at 7am to 300° at 8pm, 287° on the whole.
+    const light = computeWindDay(withDir(day(flat(12), flat(24)), (h) => 260 + 2 * h))!;
+    expect([light.band, light.peakHour, light.direction]).toEqual(['calm', null, 287]);
+    expect(windDayDetail(light, 'mph')).toBe('Light winds from the west, gusts up to 15mph.');
+    // From 8pm the window is one hour, with no peak to name.
+    const last = computeWindDay(veering, { from: at(20.5) })!;
+    expect([last.window, last.peakHour, last.direction]).toEqual([{ from: 20, to: 21 }, null, 280]);
+  });
+
+  it('leaves it out when it is variable', () => {
+    // Half the models from the east and half from the west at the peak.
+    const split = computeWindDay(
+      withDir(day(flat(20), peaked([40, 44, 48, 50, 52, 56])), (h, i) => (i % 2 ? 90 : 270)),
+    )!;
+    expect(split.direction).toBeNull();
+    // Each model on its own still has one.
+    expect(split.models.map((m) => m.direction)).toEqual([270, 90, 270, 90, 270, 90]);
+    expect(windDayDetail(split, 'mph')).toBe(
+      'Gusts up to 30mph, wind up to 12mph. Windiest around 3pm.',
+    );
+    const f = formatWindDay(split, 'kmh');
+    expect(f.direction).toBeNull();
+    expect(f.models[0]!.direction).toMatchObject({ compass: 'W' });
+    // Still air has no direction either.
+    const still = computeWindDay(withDir(day(flat(3), flat(10)), () => 200))!;
+    expect([still.still, still.direction]).toEqual([true, null]);
+    expect(windDayDetail(still, 'mph')).toBe('Light winds, gusts up to 6mph.');
+    // Nor when only two strong models of six blow: the day is judged on the median wind.
+    const outliers = computeWindDay(withDir(OUTLIERS, () => 270))!;
+    expect([outliers.still, outliers.direction]).toEqual([true, null]);
+    expect(outliers.models.map((m) => m.direction)).toEqual([null, null, null, null, 270, 270]);
+    expect(windDayDetail(outliers, 'mph')).toBe('Light winds, gusts up to 5mph.');
+  });
+
+  it('has none without directions in the forecast, or without hours', () => {
+    const c = computeWindDay(day(flat(20), peaked([40, 44, 48, 50, 52, 56])))!;
+    expect(c).not.toHaveProperty('direction');
+    expect(c.models[0]).not.toHaveProperty('direction');
+    const f = formatWindDay(c, 'mph');
+    expect(f).not.toHaveProperty('direction');
+    expect(f.models[0]).not.toHaveProperty('direction');
+    // A later day the server keeps only each model's daily values for.
+    const slim = computeWindDay({ ...veering, hourly: [] })!;
+    expect(slim.band).toBe('windy');
+    expect(slim).not.toHaveProperty('direction');
+    // A model whose direction is missing for the hour has none of its own.
+    const gappy = computeWindDay(
+      withDir(day(flat(20), peaked([40, 44, 48, 50, 52, 56])), (h, i) => (i === 0 ? null : 200)),
+    )!;
+    expect(gappy.direction).toBe(200);
+    expect(gappy.models[0]).not.toHaveProperty('direction');
+    expect(gappy.models[1]!.direction).toBe(200);
+  });
+});
+
+describe('windSeries: where the wind blows from', () => {
+  it('judges each hour across the models, and sends it in either unit', () => {
+    const d = withDir(day(flat(20), flat(40), 3), (h, i) => {
+      if (h === 1) return [90, 270, 180][i]!;
+      if (h === 2) return i === 0 ? 300 : null;
+      if (h === 3) return null;
+      return 350 + 10 * i;
+    });
+    const points = windSeries([d]);
+    expect(points.slice(0, 5).map((p) => p.dir)).toEqual([0, null, 300, undefined, 0]);
+    expect(points[3]).not.toHaveProperty('dir');
+    // Light air has none.
+    const light = windSeries([withDir(day(flat(5), flat(12), 2), () => 90)]);
+    expect(light[0]!.dir).toBeNull();
+    const outliers = windSeries([withDir(OUTLIERS, () => 90)]);
+    expect([outliers[0]!.mean, outliers[0]!.still, outliers[0]!.dir]).toEqual([3, true, null]);
+    // Degrees are the same whatever the speed unit.
+    expect(judgeWindSeries(points.slice(0, 2), 'mph', 'UTC').map((p) => p.dir)).toEqual([0, null]);
+    expect(judgeWindSeries(points.slice(0, 1), 'kmh', 'UTC')[0]!.dir).toBe(0);
+    expect(judgeWindSeries(points.slice(3, 4), 'kmh', 'UTC')[0]).not.toHaveProperty('dir');
   });
 });

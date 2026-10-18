@@ -2,7 +2,8 @@
  * "Is it windy today?": the rest of today, or a whole day's waking hours (tomorrow, the days of
  * the week), and the judged hourly series the Now view picks from. Server and preview only: the
  * browser runs windNow.ts on the series. Every model gives its strongest mean wind and gust over
- * the window; the window's are the medians of those, in whole km/h.
+ * the window; the window's are the medians of those, in whole km/h. Where the wind blows from is
+ * judged at the window's windiest hour (windDirection.ts).
  */
 import { BLEND, WIND, type WindBand } from './config';
 import { normalForDate, parseDate, type MonthlyNormals } from './climate';
@@ -26,7 +27,17 @@ import {
 import { localDateTime } from './dates';
 import { HOUR, median, niceCeil } from './rain';
 import { isFiniteNumber, mean } from './stats';
-import { gustRange, isStill, toWindUnits, windBand, windText, windValue } from './wind';
+import {
+  directionField,
+  directionWords,
+  gustRange,
+  isStill,
+  toWindUnits,
+  windBand,
+  windText,
+  windValue,
+} from './wind';
+import { directionOver } from './windDirection';
 import type { ApiWindDay, ApiWindPoint, WindUnit } from './types';
 
 /** Normal wind (NASA POWER WS10M) is in m/s; everything here is km/h. */
@@ -76,6 +87,11 @@ export interface WindModelPeak {
   band: WindBand;
   /** Its 24-hour mean wind for the calendar day, km/h, or null (ModelDay `windMean`). */
   dayMean: number | null;
+  /**
+   * Where its wind blows from, judged as the window's `direction` is but from this model alone:
+   * whole degrees, null when variable, absent without directions.
+   */
+  direction?: number | null;
 }
 
 /** One window's result in whole km/h, before formatting. */
@@ -102,6 +118,12 @@ export interface WindDayComputation {
    * window, a one-hour window, or a day without hours.
    */
   peakHour: number | null;
+  /**
+   * Where the wind blows from at the peak hour, or without one across the window's hours, all
+   * models together (directionOver): whole degrees, or null when variable. Absent without
+   * directions for those hours (forecasts recorded without them, and days without hours).
+   */
+  direction?: number | null;
   /** The calendar day's 24-hour mean wind (median of the models'), km/h, or null. */
   dayMean: number | null;
   /** Normal mean wind for the date, km/h, or null without normals. */
@@ -157,7 +179,8 @@ export function computeWindDay(day: DayData, opts: WindDayOptions = {}): WindDay
   const fromTime = opts.from ?? Number.NEGATIVE_INFINITY;
   let hours: HourTemps[];
   let window: { from: number; to: number };
-  let models: WindModelPeak[];
+  // Each model with both values for the whole window, with its place in the hourly values.
+  let peaks: Array<{ index: number; model: WindModelPeak }>;
   if (partial) {
     const ahead = day.hourly.filter((h) => h.time + HOUR > fromTime);
     const first = ahead[0];
@@ -165,35 +188,49 @@ export function computeWindDay(day: DayData, opts: WindDayOptions = {}): WindDay
     const to = first.hour >= WIND.day.toHour ? 24 : WIND.day.toHour;
     hours = ahead.filter((h) => h.hour < to);
     window = { from: first.hour, to };
-    models = day.models.flatMap((m, i) => {
-      const values = hours.map((h) => both(h, i));
+    peaks = day.models.flatMap((m, index) => {
+      const values = hours.map((h) => both(h, index));
       if (!values.every((v) => v !== null)) return [];
-      return [
-        peak(m, Math.max(...values.map((v) => v.mean)), Math.max(...values.map((v) => v.gust))),
-      ];
+      const model = peak(
+        m,
+        Math.max(...values.map((v) => v.mean)),
+        Math.max(...values.map((v) => v.gust)),
+      );
+      return [{ index, model }];
     });
   } else {
     hours = day.hourly.filter((h) => waking(h.hour));
     window = { from: WIND.day.fromHour, to: WIND.day.toHour };
-    models = day.models.flatMap((m) =>
-      isFiniteNumber(m.wind) && isFiniteNumber(m.gust) ? [peak(m, m.wind, m.gust)] : [],
+    peaks = day.models.flatMap((m, index) =>
+      isFiniteNumber(m.wind) && isFiniteNumber(m.gust)
+        ? [{ index, model: peak(m, m.wind, m.gust) }]
+        : [],
     );
   }
+  const models = peaks.map((p) => p.model);
   if (models.length === 0) return null;
 
   const mean = Math.round(median(models.map((m) => m.mean)));
   const gust = Math.round(median(models.map((m) => m.gust)));
   const band = windBand(mean, gust);
-  let peakHour: number | null = null;
+  let peakAt: HourTemps | null = null;
   if (band !== 'calm' && hours.length > 1) {
     let best = Number.NEGATIVE_INFINITY;
     for (const h of hours) {
       const g = judgeHour(h)?.gust;
       if (g !== undefined && g > best) {
         best = g;
-        peakHour = h.hour;
+        peakAt = h;
       }
     }
+  }
+  // Where the wind blows from when it is strongest, or across the window when there is no peak
+  // (a calm window, or a single hour).
+  const directionHours = peakAt ? [peakAt] : hours;
+  const direction = directionOver(directionHours);
+  for (const { index, model } of peaks) {
+    const own = directionOver(directionHours, index);
+    if (own !== undefined) model.direction = own;
   }
   const means = day.models.map((m) => m.windMean).filter(isFiniteNumber);
   const start = day.hourly.find((h) => h.hour === WIND.day.fromHour)?.time;
@@ -208,7 +245,8 @@ export function computeWindDay(day: DayData, opts: WindDayOptions = {}): WindDay
     band,
     still: band === 'calm' && isStill(mean, gust),
     agree: models.filter((m) => m.band === band).length,
-    peakHour,
+    peakHour: peakAt?.hour ?? null,
+    ...(direction === undefined ? {} : { direction }),
     dayMean: means.length >= BLEND.minModels ? median(means) : null,
     normal: opts.normals
       ? normalForDate(opts.normals, day.date) * KMH_PER_MS * WIND.normals.scale
@@ -239,14 +277,17 @@ export function windDayVerdict(c: WindDayComputation): string {
 }
 
 /**
- * The detail line: the gusts and the wind ("Light winds, gusts up to 15mph." when calm), when
- * it is windiest, and a day that is windier or calmer than usual says so (a usual one says
- * nothing).
+ * The detail line: the gusts with where they come from, and the wind ("Light winds from the
+ * west, gusts up to 15mph." when calm; no direction when it is variable), when it is windiest,
+ * and a day that is windier or calmer than usual says so (a usual one says nothing).
  */
 export function windDayDetail(c: WindDayComputation, unit: WindUnit): string {
   const text = (kmh: number) => windText(toWindUnits(kmh, unit), unit);
+  const from = directionWords(c.direction);
   const parts = [
-    c.band === 'calm' ? lightWindsLine(text(c.gust)) : windDayLine(text(c.gust), text(c.mean)),
+    c.band === 'calm'
+      ? lightWindsLine(text(c.gust), from)
+      : windDayLine(text(c.gust), text(c.mean), from),
   ];
   if (c.peakHour !== null) parts.push(windiestAroundLine(c.peakHour));
   if (c.dayMean !== null && c.normal !== null) {
@@ -267,6 +308,7 @@ export function formatWindDay(c: WindDayComputation, unit: WindUnit): ApiWindDay
     value: windValue(m.gust, unit),
     band: m.band,
     agrees: m.band === c.band,
+    ...directionField(m.direction),
   }));
   const range = gustRange(c.band);
   const zone = { from: shown(range.from), to: range.to === null ? null : shown(range.to) };
@@ -286,6 +328,7 @@ export function formatWindDay(c: WindDayComputation, unit: WindUnit): ApiWindDay
     gust: shown(c.gust),
     mean: shown(c.mean),
     peak: c.peakHour === null ? null : formatHour(c.peakHour),
+    ...directionField(c.direction),
     agree: c.agree,
     total: c.models.length,
     confidence,
@@ -323,11 +366,16 @@ export interface WindSeriesPoint {
   gust2h: number;
   band: WindBand;
   still: boolean;
+  /**
+   * Where the wind blows from at the hour's start, every model with a direction together:
+   * whole degrees, or null when variable. Absent without directions.
+   */
+  dir?: number | null;
 }
 
 /**
  * Every forecast hour with at least one model with both values, in order, each judged on its
- * medians in whole km/h, as rainSeries does for rain.
+ * medians in whole km/h, as rainSeries does for rain, and on where its wind blows from.
  */
 export function windSeries(days: readonly DayData[]): WindSeriesPoint[] {
   const points: WindSeriesPoint[] = [];
@@ -335,6 +383,7 @@ export function windSeries(days: readonly DayData[]): WindSeriesPoint[] {
     const v = judgeHour(h);
     if (!v) continue;
     const band = windBand(v.mean, v.gust);
+    const dir = directionOver([h]);
     points.push({
       time: h.time,
       mean: v.mean,
@@ -342,6 +391,7 @@ export function windSeries(days: readonly DayData[]): WindSeriesPoint[] {
       gust2h: v.gust,
       band,
       still: band === 'calm' && isStill(v.mean, v.gust),
+      ...(dir === undefined ? {} : { dir }),
     });
   }
   points.forEach((p, j) => {
@@ -368,6 +418,8 @@ export function judgeWindSeries(
       gust2h: toWindUnits(p.gust2h, unit),
       band: p.band,
       still: p.still,
+      // Degrees, the same in either unit.
+      ...(p.dir === undefined ? {} : { dir: p.dir }),
     };
   });
 }

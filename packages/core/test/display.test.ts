@@ -26,6 +26,7 @@ import {
   WIND_ANSWERS,
 } from '../src/copy';
 import { defaultView, showsTomorrow, viewDisplay, type DisplayState } from '../src/display';
+import { windDirection } from '../src/wind';
 import type {
   ApiDay,
   ApiNow,
@@ -1036,6 +1037,59 @@ describe('viewDisplay: wind', () => {
     expect(viewDisplay(res, 'wind', 'now', 'ready', { snowNow: null }).band).toBe('windy');
   });
 
+  it('shows where the wind blows from now and in each row, with an arrow to where it goes', () => {
+    const sw = windDirection(225);
+    const now: ApiWindNow = {
+      ...windNow('windy'),
+      direction: sw,
+      hours: [
+        { time: '2026-10-15T13:00:00.000Z', label: '1pm', gust: 32, direction: sw },
+        { time: '2026-10-15T15:00:00.000Z', label: '3pm', gust: 28, direction: null },
+        { time: '2026-10-15T17:00:00.000Z', label: '5pm', gust: 24, direction: windDirection(0) },
+      ],
+    };
+    const d = viewDisplay(
+      response({ wind: windOf('windy', 'mph', { now }) }),
+      'wind',
+      'now',
+      'ready',
+    );
+    const arrowSw = { compass: 'SW', words: 'from the south-west', turn: 45 };
+    expect(d.direction).toEqual(arrowSw);
+    expect(d.items).toEqual([
+      {
+        value: '32mph',
+        label: '1pm',
+        sr: 'Gusts up to 32mph from 1pm, wind from the south-west',
+        direction: arrowSw,
+      },
+      // Variable: the row keeps its place for one, empty.
+      { value: '28mph', label: '3pm', sr: 'Gusts up to 28mph from 3pm', direction: null },
+      {
+        value: '24mph',
+        label: '5pm',
+        sr: 'Gusts up to 24mph from 5pm, wind from the north',
+        direction: { compass: 'N', words: 'from the north', turn: 180 },
+      },
+    ]);
+    // A wind from the north-west points south-east.
+    const nw = { ...now, direction: windDirection(315) };
+    const fresh = viewDisplay(response({ wind: windOf('windy') }), 'wind', 'now', 'ready', {
+      windNow: nw,
+    });
+    expect(fresh.direction).toEqual({ compass: 'NW', words: 'from the north-west', turn: 135 });
+    // Variable now, or no directions at all: no line, and rows without a place for one.
+    const variable = { ...now, direction: null };
+    expect(
+      viewDisplay(response({ wind: windOf('windy') }), 'wind', 'now', 'ready', {
+        windNow: variable,
+      }).direction,
+    ).toBeNull();
+    const plain = viewDisplay(response({ wind: windOf('windy') }), 'wind', 'now', 'ready');
+    expect(plain.direction).toBeNull();
+    expect(plain.items[0]).not.toHaveProperty('direction');
+  });
+
   it('places each day of the week from still air to the windiest', () => {
     const res = response({ wind: windOf('gale', 'kmh') });
     expect(viewDisplay(res, 'wind', 'week', 'ready')).toMatchObject({
@@ -1077,10 +1131,19 @@ describe('viewDisplay: wind', () => {
     expect(today.models).toMatchObject({ heading: '0 of 0 forecasts say windy', min: '00mph' });
     expect(today.models.items).toHaveLength(MODELS.length);
     expect(today.uv).toBeNull();
-    expect(viewDisplay(null, 'wind', 'now', 'loading')).toMatchObject({
-      heading: COPY.nextHoursWind,
-      verdict: "It's windy.",
-    });
+    const now = viewDisplay(null, 'wind', 'now', 'loading');
+    expect(now).toMatchObject({ heading: COPY.nextHoursWind, verdict: "It's windy." });
+    // The direction line and each row's direction hold their places too.
+    const held = { compass: 'SW', words: '', turn: 45 };
+    expect(now.direction).toEqual(held);
+    expect(now.items[0]).toEqual({ value: '00mph', label: '0pm', sr: null, direction: held });
+    // Other topics have neither.
+    for (const topic of ['hot', 'wet', 'snow'] as const) {
+      const other = viewDisplay(null, topic, 'now', 'error');
+      expect(other.direction).toBeNull();
+      expect(other.items[0]).not.toHaveProperty('direction');
+    }
+    expect(viewDisplay(null, 'wind', 'now', 'error').direction).toEqual(held);
     expect(viewDisplay(null, 'wind', 'week', 'loading').items[0]).toEqual({
       label: 'Day',
       value: '00mph',

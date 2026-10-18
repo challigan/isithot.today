@@ -129,6 +129,15 @@ in `wind.unit`, `mph` or `kmh`, a setting of its own: `windUnits` when given, el
 country's when `units` is given (mph in the UK and US, km/h elsewhere), else the visitor's.
 Absent when the forecast has no wind (responses cached before it).
 
+Where the wind blows from (wind only): `wind.days[i].direction`, `wind.now.direction` and each
+`wind.now.hours[i].direction` are `{ degrees, compass, words }`, e.g.
+`{ "degrees": 225, "compass": "SW", "words": "from the south-west" }` (meteorological degrees,
+0 to 359: where the wind comes from), or `null` when it is variable (too light, or the forecasts
+point too many ways). A day's is at its windiest hour (`peak`), else across its hours; each
+`wind.days[i].models[j].direction` is that model's own. Each `wind.now.series` point has `dir`,
+its hour's degrees or `null`, so clients can keep "now" current. Each is absent when the
+forecast has no direction for it (responses cached before it, and the days of `wind.week`).
+
 `GET /api/v1/search?q=` returns up to 8 places, with `slug` when the place has a city page and
 `elevation` (whole metres) when its height is known.
 

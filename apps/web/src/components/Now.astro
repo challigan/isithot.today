@@ -1,7 +1,11 @@
 ---
-/** The Now view: the blended forecast for the current time and the next few hours. */
+/**
+ * The Now view: the blended forecast for the current time and the next few hours, with on Hot the
+ * UV index and on Wind where the wind blows from.
+ */
 import type { NowDisplay, OutboundLink } from '@isithot/core';
 import { glyphFor, hoursHtml } from '../lib/view';
+import DirectionLine from './DirectionLine.astro';
 import UvLine from './UvLine.astro';
 import WarningsLine from './WarningsLine.astro';
 
@@ -57,6 +61,7 @@ const { view, start = false, warnings = null } = Astro.props;
   <p class="detail hold" id="now-detail">
     {view.detail}
   </p>
+  <DirectionLine direction={view.direction} />
   <UvLine id="now-uv" uv={view.uv} />
   <WarningsLine id="now-warnings" link={warnings} />
   <section class="ahead hold" aria-labelledby="now-h">

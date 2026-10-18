@@ -1,0 +1,25 @@
+---
+/**
+ * Wind's line under the Now view's detail: an arrow pointing where the wind blows to and the
+ * compass point it comes from ("SW"), as each row of the next hours shows them. The detail before
+ * it says the same in words ("Wind 12mph from the south-west, …"), so screen readers skip the
+ * line rather than hear it twice. Hidden when the direction is variable, without one in the
+ * forecast, and on the other topics (core `viewDisplay`). scripts/app.ts updates the same node.
+ */
+import type { DirectionDisplay } from '@isithot/core';
+import { directionHtml } from '../lib/view';
+
+interface Props {
+  direction: DirectionDisplay | null;
+}
+
+const { direction } = Astro.props;
+---
+
+<p
+  class="dir hold"
+  id="now-dir"
+  aria-hidden="true"
+  hidden={!direction}
+  set:html={directionHtml(direction)}
+/>

@@ -56,7 +56,7 @@ for (const place of ['newcastle', 'seville']) {
   // Wind as the parser lines it up: the mean wind at stamp t is the hour from t; the gust at
   // stamp t + 1 is the strongest of it. Checks that every model gives both for the first 48
   // hours, that no model's series is a copy of another's, and that gusts are at least the mean
-  // wind (a check on the alignment and the units).
+  // wind (a check on the alignment and the units); and the same coverage for wind direction.
   const winds = Object.keys(f.hourly ?? {}).filter((k) => k.startsWith('wind_speed_10m'));
   if (!winds.length) console.log('  wind: no wind_speed_10m in this recording');
   const means = [];
@@ -76,10 +76,23 @@ for (const place of ['newcastle', 'seville']) {
       .filter((other) => other !== key)
       .filter((other) => f.hourly[other].every((v, i) => v === wind[i]))
       .map((other) => other.slice('wind_speed_10m_'.length));
+    // Where the wind blows from, at its stamp as the wind is: how many of the first 48 hours have
+    // one, whether every value is in degrees, and whether it copies another model's.
+    const dir = f.hourly[`wind_direction_10m${id}`];
+    const sameDir = winds
+      .map((other) => `wind_direction_10m${other.slice('wind_speed_10m'.length)}`)
+      .filter((other) => dir && other !== `wind_direction_10m${id}` && f.hourly[other])
+      .filter((other) => f.hourly[other].every((v, i) => v === dir[i]))
+      .map((other) => other.slice('wind_direction_10m_'.length));
+    const degrees = (dir ?? []).every((v) => v === null || (v >= 0 && v <= 360));
     console.log(
       `  wind${id}: ${first(wind, 0)}/48h of wind, ${first(gust, 1)}/48h of gusts,` +
         ` gust >= wind in ${pairs ? Math.round((100 * above) / pairs) : '-'}% of ${pairs} hours` +
-        (copies.length ? `, same wind as ${copies.join(', ')}` : ''),
+        (copies.length ? `, same wind as ${copies.join(', ')}` : '') +
+        (dir
+          ? `, ${first(dir, 0)}/48h of direction${degrees ? '' : ' (NOT ALL IN DEGREES)'}` +
+            (sameDir.length ? `, same direction as ${sameDir.join(', ')}` : '')
+          : ', no direction'),
     );
     // Each model's 24-hour mean wind on the first two whole days, for the normals' calibration.
     for (const d of dates.slice(0, 2)) {

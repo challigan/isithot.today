@@ -707,6 +707,44 @@ input:focus-visible {
   font-weight: 650;
   white-space: nowrap;
 }
+/*
+ * Where the wind blows from, on Wind's Now (DirectionLine.astro) and each of its rows: an arrow
+ * pointing where the wind goes, beside the compass point it comes from. The arrow is turned by its
+ * own transform attribute and never moves, so there is nothing to stop under reduced motion.
+ */
+.dir {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  opacity: 0.9;
+}
+.dir[hidden] {
+  display: none;
+}
+.arrow {
+  flex: none;
+  width: 1.25em;
+  height: 1.25em;
+  fill: currentColor;
+}
+/* A row's line holds its height when the direction is variable, so the rows stay level. */
+.list .w {
+  display: flex;
+  align-items: center;
+  gap: 0.25em;
+  min-height: 1.5em;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.list .w .arrow {
+  width: 1.15em;
+  height: 1.15em;
+}
+
 /* Wind's link to the Met Office's warnings (WarningsLine.astro), as plain as the links below. */
 .warnings {
   margin: 0.75rem 0 0;
@@ -733,6 +771,30 @@ input:focus-visible {
 }
 .ahead .list {
   margin: 0;
+}
+/*
+ * Wind's gusts are the widest values in the rows ("130km/h" is about 5.8em at their size), so its
+ * columns sit closer, and with less room (large text, a narrow screen) the rows take fewer of
+ * them, so each value stays inside the gutters: six need 37.8em, three 18.6em and two 12.2em.
+ * At the usual text size phones from 360px keep three, and the desktop page six.
+ */
+main[data-topic='wind'] .ahead .list {
+  column-gap: 0.6rem;
+}
+@container (max-width: 37.75em) {
+  main[data-topic='wind'] .ahead .list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container (max-width: 18.55em) {
+  main[data-topic='wind'] .ahead .list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container (max-width: 12.15em) {
+  main[data-topic='wind'] .ahead .list {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* The week: one row per day with the high as a dot on the week's scale. */

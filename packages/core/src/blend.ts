@@ -67,6 +67,11 @@ export interface HourTemps {
    */
   wind?: readonly (number | null)[];
   /**
+   * Where the wind blows from per model at 10 m, degrees clockwise from north (meteorological):
+   * instant, at the hour's start, as `wind` is. Absent for forecasts recorded without it.
+   */
+  dir?: readonly (number | null)[];
+  /**
    * The strongest gust per model during this hour, km/h. Open-Meteo labels gusts with the end of
    * the hour they are the maximum of, so the parser moves them to the hour's start as it does
    * `rain`. Absent for forecasts recorded without wind.

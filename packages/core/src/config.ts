@@ -147,6 +147,10 @@ export const WIND_BANDS: readonly WindBand[] = [
   'storm',
 ];
 
+/** The eight compass points a wind direction is named by, clockwise from north. */
+export type Compass = 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW';
+export const COMPASS_POINTS: readonly Compass[] = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+
 /** Any topic's band. */
 export type AnyBand = Band | RainBand | SnowBand | WindBand;
 
@@ -298,6 +302,14 @@ export const WIND = {
   week: { windyFrom: 4, breezyFrom: 4, nameDays: 3 },
   /** The strip's scale never ends below this, in the display unit. */
   scaleFloor: { mph: 50, kmh: 80 },
+  /**
+   * Where the wind blows from is named only when it means something: the models' (and hours')
+   * median mean wind, as the wind shown is, is at least `fromMean` km/h (5 mph, within Beaufort
+   * 2, a light breeze), and their directions agree, the resultant of their speed-weighted vectors
+   * being at least `agreement` of the speeds' sum (1 when all blow from one direction, 0 when
+   * they cancel out). Otherwise the direction is variable (meanDirection in windDirection.ts).
+   */
+  direction: { fromMean: 8, agreement: 0.6 },
   /**
    * Comparing a day's or week's 24-hour mean wind with normal (NASA POWER WS10M, m/s, × 3.6 ×
    * `scale`). Windier needs `windierRatio` × normal and `minDifference` km/h more; calmer needs
@@ -490,7 +502,7 @@ export const CACHE = {
    * Version of that saved answer (page markup and data). The page's inline restore script and
    * the app both read it, so bump it here whenever the saved markup or data changes shape.
    */
-  snapshotVersion: 9,
+  snapshotVersion: 10,
 } as const;
 
 export const RATE_LIMIT = {

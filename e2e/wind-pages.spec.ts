@@ -1,10 +1,11 @@
 import type { Page } from '@playwright/test';
 import { WIND_BANDS, WIND_PALETTES, type WindBand } from '../packages/core/src/config';
 import { WIND_ANSWERS, cityTitle, windPageTitle } from '../packages/core/src/copy';
+import { previewResponse } from '../packages/core/src/preview';
 import { listed } from '../packages/core/src/places';
 import type { TodayResponse } from '../packages/core/src/types';
 import { WIND_GLYPHS } from '../apps/web/src/lib/windGlyphs';
-import { CITIES, cityAt, expect, keepToday, test } from './helpers';
+import { CITIES, cityAt, expect, keepToday, test, toggle } from './helpers';
 
 // The wind pages as a deploy preview or a local server serves them: under /wind. On
 // isitwindy.today the edge function serves the same pages at the root (smoke.mjs checks that on
@@ -244,6 +245,11 @@ test.describe('isitwindy.today pages', () => {
     expect(about).toContain('Gale from a wind of 39 mph (62 km/h) or gusts of 50 mph (80 km/h).');
     expect(about).toContain('Storm from a wind of 55 mph (88 km/h) or gusts of 70 mph (112 km/h).');
     expect(about).toContain('between 7am and 9pm');
+    // Which way the arrows point, and when there is no direction, from WIND.direction.
+    expect(about.replace(/\s+/g, ' ')).toContain(
+      "so a wind from the south-west (SW) points north-east. When the middle of the forecasts' " +
+        'winds is under 5 mph (8 km/h), or the forecasts point different ways',
+    );
     expect(about).toContain('These sites do not issue warnings.');
     // Six models, each with the agency that runs it; MET Norway and JMA are gone.
     expect(about).toContain('from 6 models run by ECMWF, NOAA (GFS), DWD (ICON),');
@@ -294,5 +300,121 @@ test.describe('isitwindy.today pages', () => {
     await page.goto('/wind/no-such-page');
     await expect(page.locator('.question')).toHaveText('Is it windy here?');
     await expect(page.locator('main a')).toHaveAttribute('href', '/wind');
+  });
+});
+
+test.describe('where the wind blows from', () => {
+  /** The turn of each arrow in a part of the page, degrees. */
+  const turns = (page: Page, selector: string) =>
+    page
+      .locator(`${selector} .arrow path`)
+      .evaluateAll((paths) =>
+        paths.map((p) => Number(/^rotate\((\d+) 12 12\)$/.exec(p.getAttribute('transform')!)![1])),
+      );
+
+  test('Now and each row show an arrow and the compass point, and say it in words', async ({
+    page,
+  }) => {
+    // The preview's windy sample: from the south-west, veering to the west by evening.
+    const wind = previewResponse('windy').wind!;
+    const now = wind.now!;
+    await page.goto('/wind?preview=1&band=windy');
+    await expect(page.locator('#detail')).toHaveText(wind.days[0]!.detail);
+    await expect(page.locator('#detail')).toHaveText(
+      'Gusts up to 35mph from the south-west, wind up to 17mph. Windiest around 2pm.',
+    );
+    await page.locator('#tab-now').click();
+    await expect(page.locator('#now-detail')).toHaveText(
+      'Wind 15mph from the south-west, gusts 32mph right now. Easing off by about 9pm.',
+    );
+    // The line under it: the arrow points where the wind goes (from 227° it goes to 47°), with
+    // the letters beside it; screen readers have heard it in the detail, so it is hidden from them.
+    const line = page.locator('#now-dir');
+    await expect(line).toBeVisible();
+    await expect(line).toHaveText('SW');
+    await expect(line).toHaveAttribute('aria-hidden', 'true');
+    expect(now.direction!.degrees).toBe(227);
+    expect(await turns(page, '#now-dir')).toEqual([47]);
+    // Each row: the arrow and letters for everyone, the words for screen readers.
+    const rows = page.locator('#now-hours li');
+    await expect(rows).toHaveCount(6);
+    await expect(page.locator('#now-hours .w')).toHaveText(
+      now.hours.map((h) => h.direction!.compass),
+    );
+    await expect(page.locator('#now-hours .w').first()).toHaveAttribute('aria-hidden', 'true');
+    expect(await turns(page, '#now-hours')).toEqual(
+      now.hours.map((h) => (h.direction!.degrees + 180) % 360),
+    );
+    await expect(page.locator('#now-hours .sr-only').first()).toHaveText(
+      `Gusts up to ${now.hours[0]!.gust}mph from ${now.hours[0]!.label}, wind from the south-west`,
+    );
+    await expect(page.locator('#now-hours .sr-only').last()).toHaveText(/, wind from the west$/);
+    // Never on the week, nor as an arrow on Today.
+    await expect(page.locator('#view-today .arrow, #view-week .arrow')).toHaveCount(0);
+  });
+
+  test('a variable direction is left out, and its rows keep their place', async ({ page }) => {
+    // The calm sample's light air has no direction to name.
+    await page.goto('/wind?preview=1&band=calm');
+    await expect(page.locator('#detail')).toHaveText(
+      'Light winds, gusts up to 7mph. Calmer than usual for June.',
+    );
+    await page.locator('#tab-now').click();
+    await expect(page.locator('#now-detail')).toHaveText(
+      'Wind 2mph, gusts 6mph right now. Light winds for the next 12 hours.',
+    );
+    await expect(page.locator('#now-dir')).toBeHidden();
+    await expect(page.locator('#now-hours .w')).toHaveCount(6);
+    await expect(page.locator('#now-hours .arrow')).toHaveCount(0);
+    await expect(page.locator('#now-hours .sr-only').first()).toHaveText(
+      /^Gusts up to \d+mph from \d+(am|pm)$/,
+    );
+    // The empty line still holds its height, so every row is as tall as one with a direction.
+    const heights = await page
+      .locator('#now-hours .w')
+      .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
+    expect(Math.min(...heights)).toBeGreaterThan(10);
+    // A windy sample, one switch away, shows it again.
+    await page.locator('#preview [data-band=windy]').click();
+    await expect(page.locator('#now-dir')).toHaveText('SW');
+  });
+
+  test("Reykjavík's storm comes from the north-east, on the server's page and in the browser", async ({
+    page,
+    request,
+  }) => {
+    const html = await (await request.get('/wind/in/reykjavik-is')).text();
+    expect(html).toMatch(
+      /<p class="dir hold" id="now-dir" aria-hidden="true"><svg class="arrow"[^>]*><path [^>]*transform="rotate\(2[1-3]\d 12 12\)"\/><\/svg><span>NE<\/span><\/p>/,
+    );
+    expect(html).toContain(', wind from the north-east</span>');
+    await page.goto('/wind/in/reykjavik-is');
+    await page.locator('#tab-now').click();
+    await expect(page.locator('#now-detail')).toHaveText(/^\s*Wind \d+km\/h from the north-east, /);
+    await expect(page.locator('#now-dir')).toHaveText('NE');
+    // Pointing south-west, where the storm goes.
+    for (const turn of await turns(page, '#view-now')) {
+      expect(turn).toBeGreaterThanOrEqual(213);
+      expect(turn).toBeLessThanOrEqual(237);
+    }
+    await expect(page.locator('#detail')).toHaveText(
+      /^\s*Gusts up to \d+km\/h from the north-east, /,
+    );
+  });
+
+  test('the other topics show no direction', async ({ page }) => {
+    await page.goto('/wind?preview=1&band=windy');
+    await page.locator('#tab-now').click();
+    await expect(page.locator('#now-dir')).toBeVisible();
+    for (const topic of ['hot', 'wet', 'snow'] as const) {
+      await toggle(page, topic).click();
+      await expect(page.locator('main')).toHaveAttribute('data-topic', topic);
+      await expect(page.locator('#now-dir')).toBeHidden();
+      await expect(page.locator('#now-hours li')).toHaveCount(6);
+      await expect(page.locator('#now-hours .w, #now-hours .arrow')).toHaveCount(0);
+      await expect(page.locator('#now-detail')).not.toHaveText(/ from the /);
+    }
+    await toggle(page, 'wind').click();
+    await expect(page.locator('#now-dir')).toHaveText('SW');
   });
 });

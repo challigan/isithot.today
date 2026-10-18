@@ -21,6 +21,7 @@ export * from './snowNow';
 export * from './snowWeek';
 export * from './wind';
 export * from './windDay';
+export * from './windDirection';
 export * from './windNow';
 export * from './windWeek';
 export * from './uv';

@@ -480,7 +480,13 @@ test.describe('Hot | Wet | Snow | Wind', () => {
   for (const [block, path, answers, spoken] of [
     ['rain', '/wet', WET_ANSWERS, /^\d+% chance at \d+(am|pm)$/],
     ['snow', '/snow', SNOW_ANSWERS, /^\d+% chance at \d+(am|pm)$/],
-    ['wind', '/wind', WIND_ANSWERS, /^Gusts up to \d+(mph|km\/h) from \d+(am|pm)$/],
+    // Wind's rows also say where the wind blows from, unless it is variable.
+    [
+      'wind',
+      '/wind',
+      WIND_ANSWERS,
+      /^Gusts up to \d+(mph|km\/h) from \d+(am|pm)(, wind from the [a-z-]+)?$/,
+    ],
   ] as const) {
     test(`${block} "now" keeps up with the clock without asking the server`, async ({ page }) => {
       await startClock(page);
