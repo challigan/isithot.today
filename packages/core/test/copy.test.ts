@@ -77,6 +77,7 @@ import {
   updatedTime,
   STILL_LABEL,
   STILL_VERDICTS,
+  COMPASS_WORDS,
   WIND_AGREE_WORDS,
   WIND_ANSWERS,
   WIND_BAND_LABELS,
@@ -96,6 +97,7 @@ import {
   windAgreementLine,
   windDayLine,
   windDaysLine,
+  windFromWords,
   windiestAroundLine,
   windiestLine,
   windLabel,
@@ -622,6 +624,38 @@ describe('wind copy', () => {
     expect(windStripSummary({ min: '9mph', max: '9mph', agree: 1, total: 1, band: 'calm' })).toBe(
       'All forecasts give gusts of 9mph; 1 of 1 says light winds.',
     );
+  });
+
+  it('says where the wind blows from, after the speed it goes with', () => {
+    expect(COMPASS_WORDS).toEqual({
+      N: 'north',
+      NE: 'north-east',
+      E: 'east',
+      SE: 'south-east',
+      S: 'south',
+      SW: 'south-west',
+      W: 'west',
+      NW: 'north-west',
+    });
+    expect(windFromWords('SW')).toBe('from the south-west');
+    const sw = windFromWords('SW');
+    expect(windDayLine('27mph', '10mph', sw)).toBe(
+      'Gusts up to 27mph from the south-west, wind up to 10mph.',
+    );
+    expect(lightWindsLine('9mph', windFromWords('W'))).toBe(
+      'Light winds from the west, gusts up to 9mph.',
+    );
+    expect(windNowLine('12mph', '20mph', windFromWords('W'))).toBe(
+      'Wind 12mph from the west, gusts 20mph right now.',
+    );
+    expect(windRowSpoken('32mph', '3pm', sw)).toBe(
+      'Gusts up to 32mph from 3pm, wind from the south-west',
+    );
+    // A variable direction is left out.
+    expect(windDayLine('27mph', '10mph', null)).toBe('Gusts up to 27mph, wind up to 10mph.');
+    expect(lightWindsLine('9mph', null)).toBe('Light winds, gusts up to 9mph.');
+    expect(windNowLine('3mph', '7mph', null)).toBe('Wind 3mph, gusts 7mph right now.');
+    expect(windRowSpoken('9mph', '3pm', null)).toBe('Gusts up to 9mph from 3pm');
   });
 
   it('writes the week and the normals', () => {

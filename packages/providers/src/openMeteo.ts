@@ -43,8 +43,8 @@ export interface OpenMeteoConfig {
 export const FORECAST_TIMING = { timeoutMs: 6000, hedgeAfterMs: 2000 };
 
 /**
- * Hourly variables requested for every model. The free API charges by variables × models (seven
- * variables and six models: 4.2 calls a fetch), so daily highs, rain and snow totals and the
+ * Hourly variables requested for every model. The free API charges by variables × models (eight
+ * variables and six models: 4.8 calls a fetch), so daily highs, rain and snow totals and the
  * day's strongest wind are worked out here from the hourly values (Open-Meteo's own daily
  * maximum and sum are the same 24-hour aggregations) rather than requested separately.
  * `snowfall` is each model's own split of its precipitation into snow, as depth (cm, at 7cm for
@@ -52,7 +52,9 @@ export const FORECAST_TIMING = { timeoutMs: 6000, hedgeAfterMs: 2000 };
  * UK domain); the others answer nulls (and a model that answers another's copy is dropped, see
  * withoutCopies). A request of its own would still cost a whole call (Open-Meteo charges at least
  * one per request) against 0.6 here. Wind speed and gusts at 10m come in km/h, Open-Meteo's
- * default; every one of the six models has its own of both.
+ * default; every one of the six models has its own of both. So does each have its own wind
+ * direction at 10m (degrees, where the wind blows from, instant at its stamp): ECMWF, GFS, ICON
+ * and Météo-France work it out from their own wind components, UKMO and GEM store it.
  */
 export const FORECAST_VARIABLES = {
   hourly: [
@@ -63,15 +65,16 @@ export const FORECAST_VARIABLES = {
     'uv_index',
     'wind_speed_10m',
     'wind_gusts_10m',
+    'wind_direction_10m',
   ],
 };
 
 /**
  * Bump when the request or the parsed Forecast shape changes: cached forecasts are keyed by it,
  * and recorded test fixtures are re-recorded when the signature below changes. 6: six models,
- * and wind.
+ * and wind; 7: wind direction.
  */
-export const FORECAST_CACHE_VERSION = 6;
+export const FORECAST_CACHE_VERSION = 7;
 
 /** One line describing the forecast request, written next to recorded fixtures. */
 export function forecastSignature(): string {
@@ -237,6 +240,9 @@ export function parseForecast(json: unknown, models: readonly ModelConfig[]): Fo
   const gusts = withoutCopies(
     models.map((m) => seriesFor(hourly, 'wind_gusts_10m', m, models.length)),
   );
+  const directions = withoutCopies(
+    models.map((m) => seriesFor(hourly, 'wind_direction_10m', m, models.length)),
+  );
   // Older recordings have no precipitation at all: leave rain out rather than call them dry.
   const hasRain = precipitation.some((series) => series !== null);
   // Nor snowfall: snow is then judged by each model's temperature (snowWater in core).
@@ -245,6 +251,8 @@ export function parseForecast(json: unknown, models: readonly ModelConfig[]): Fo
   const hasUv = uv.some((series) => series !== null);
   // Nor wind: leave it out rather than call the day calm.
   const hasWind = wind.some((series) => series !== null) && gusts.some((s) => s !== null);
+  // Nor wind direction (recordings before it): the wind is then judged without one.
+  const hasDirection = directions.some((series) => series !== null);
 
   // Local timestamps ("2026-10-07T14:00") grouped by date, in order.
   const byDate = new Map<string, HourTemps[]>();
@@ -271,6 +279,8 @@ export function parseForecast(json: unknown, models: readonly ModelConfig[]): Fo
       // as rain does.
       last.wind = wind.map((series) => numberOrNull(series?.[t]));
       last.gust = gusts.map((series) => numberOrNull(series?.[t + 1]));
+      // The direction is instant too: no shift.
+      if (hasDirection) last.dir = directions.map((series) => numberOrNull(series?.[t]));
     }
     hours.push(last);
     byDate.set(date, hours);

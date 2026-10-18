@@ -8,6 +8,7 @@ import {
   SITES,
   TITLE_MAX_LENGTH,
   type Band,
+  type Compass,
   type RainBand,
   type SnowBand,
   type SnowReason,
@@ -1028,14 +1029,40 @@ export const WIND_COPY = {
 
 const capitalise = (text: string): string => `${text[0]!.toUpperCase()}${text.slice(1)}`;
 
-/** "Gusts up to 45mph, wind up to 25mph." (hot's "High of 21°, feels like 24°."). */
-export function windDayLine(gust: string, mean: string): string {
-  return `Gusts up to ${gust}, wind up to ${mean}.`;
+/** The compass points in words, as the Met Office writes them mid-sentence. */
+export const COMPASS_WORDS: Record<Compass, string> = {
+  N: 'north',
+  NE: 'north-east',
+  E: 'east',
+  SE: 'south-east',
+  S: 'south',
+  SW: 'south-west',
+  W: 'west',
+  NW: 'north-west',
+};
+
+/** Where the wind blows from: "from the south-west" (core `windDirection`'s `words`). */
+export function windFromWords(point: Compass): string {
+  return `from the ${COMPASS_WORDS[point]}`;
 }
 
-/** "Light winds, gusts up to 15mph." */
-export function lightWindsLine(gust: string): string {
-  return `Light winds, gusts up to ${gust}.`;
+/**
+ * The lines below name the direction after the speed it goes with ("Gusts up to 45mph from the
+ * south-west") and leave it out when it is variable or unknown (`from` null or absent).
+ */
+const fromText = (from?: string | null): string => (from ? ` ${from}` : '');
+
+/**
+ * "Gusts up to 45mph from the south-west, wind up to 25mph." (hot's "High of 21°, feels like
+ * 24°.").
+ */
+export function windDayLine(gust: string, mean: string, from?: string | null): string {
+  return `Gusts up to ${gust}${fromText(from)}, wind up to ${mean}.`;
+}
+
+/** "Light winds from the south-west, gusts up to 15mph." */
+export function lightWindsLine(gust: string, from?: string | null): string {
+  return `Light winds${fromText(from)}, gusts up to ${gust}.`;
 }
 
 /** "Windiest around 3pm." */
@@ -1043,9 +1070,11 @@ export function windiestAroundLine(hour: number): string {
   return `Windiest around ${formatHour(hour)}.`;
 }
 
-/** "Wind 18mph, gusts 32mph right now." (hot's "13° right now, feels like 11°."). */
-export function windNowLine(mean: string, gust: string): string {
-  return `Wind ${mean}, gusts ${gust} right now.`;
+/**
+ * "Wind 18mph from the west, gusts 32mph right now." (hot's "13° right now, feels like 11°.").
+ */
+export function windNowLine(mean: string, gust: string, from?: string | null): string {
+  return `Wind ${mean}${fromText(from)}, gusts ${gust} right now.`;
 }
 
 /** "Windy from about 3pm." / "Gales from about 3pm." */
@@ -1063,9 +1092,12 @@ export function breezierFromLine(hour: number): string {
   return `Breezier from about ${formatHour(hour)}.`;
 }
 
-/** "Gusts up to 32mph from 3pm", what a screen reader hears for a Now row. */
-export function windRowSpoken(gust: string, label: string): string {
-  return `Gusts up to ${gust} from ${label}`;
+/**
+ * "Gusts up to 32mph from 3pm, wind from the south-west", what a screen reader hears for a Now
+ * row in place of its figures, letters and arrow.
+ */
+export function windRowSpoken(gust: string, label: string, from?: string | null): string {
+  return `Gusts up to ${gust} from ${label}${from ? `, wind ${from}` : ''}`;
 }
 
 /** "4 of 6 forecasts say windy" / "1 of 6 forecasts says gales". */

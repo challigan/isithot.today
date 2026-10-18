@@ -9,6 +9,7 @@ import {
   warningsLink,
   type AnyBand,
   type Band,
+  type DirectionDisplay,
   type NowItem,
   type OutboundLink,
   type TodayModels,
@@ -89,16 +90,37 @@ export function listHtml(models: TodayModels): string {
 }
 
 /**
+ * Wind's arrow (24×24 viewBox, filled): it points where the wind blows to, as the Met Office draws
+ * it, so a wind from the south-west points north-east. It is turned by an SVG `transform`
+ * attribute rather than a style, so it needs nothing from a Content-Security-Policy's
+ * style-src, and it never moves on its own.
+ */
+export function arrowHtml(turn: number): string {
+  return `<svg class="arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l6.5 18-6.5-4-6.5 4z" transform="rotate(${turn} 12 12)"/></svg>`;
+}
+
+/** The arrow and the compass point the wind comes from ("SW"), or nothing when variable. */
+export function directionHtml(d: DirectionDisplay | null): string {
+  return d ? `${arrowHtml(d.turn)}<span>${d.compass}</span>` : '';
+}
+
+/**
  * The next few hours: the value over the time, like the model list. Rows with their own
- * screen reader text ("60% chance at 3pm") read that instead of the two figures.
+ * screen reader text ("60% chance at 3pm") read that instead of the two figures. Wind's rows add
+ * where the wind blows from under the time, as an arrow and a compass point (a variable one keeps
+ * the line, empty, so the rows stay level); their screen reader text says it in words.
  */
 export function hoursHtml(items: readonly NowItem[]): string {
   return items
-    .map((h) =>
-      h.sr
-        ? `<li><span class="t" aria-hidden="true">${h.value}</span><span class="n" aria-hidden="true">${h.label}</span><span class="sr-only">${h.sr}</span></li>`
-        : `<li><span class="t">${h.value}</span><span class="n">${h.label}</span></li>`,
-    )
+    .map((h) => {
+      const dir =
+        h.direction === undefined
+          ? ''
+          : `<span class="w" aria-hidden="true">${directionHtml(h.direction)}</span>`;
+      return h.sr
+        ? `<li><span class="t" aria-hidden="true">${h.value}</span><span class="n" aria-hidden="true">${h.label}</span>${dir}<span class="sr-only">${h.sr}</span></li>`
+        : `<li><span class="t">${h.value}</span><span class="n">${h.label}</span>${dir}</li>`;
+    })
     .join('');
 }
 

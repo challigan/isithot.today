@@ -42,6 +42,13 @@ const waking = `${formatHour(WIND.day.fromHour)} and ${formatHour(WIND.day.toHou
   strongest gust, and the line above it how many forecasts put the day in the same band.
 </p>
 <p>
+  Where the wind blows from is the forecasts' directions combined, each counting for as much as its
+  wind is strong, at the windiest hour of the day. The arrows point where the wind is going, as the
+  Met Office draws them, so a wind from the south-west (SW) points north-east. When the middle of
+  the forecasts' winds is under {both(WIND.direction.fromMean)}, or the forecasts point different
+  ways, no direction is given.
+</p>
+<p>
   Today means the rest of today, from the current hour to {formatHour(WIND.day.toHour)} (to midnight
   later in the evening), so a windy afternoon still to come counts. This week is Yes when{' '}
   {days[WIND.week.windyFrom]} or more days are windy or any day brings a gale, and Partly when fewer

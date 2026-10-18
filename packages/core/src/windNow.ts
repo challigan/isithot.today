@@ -2,7 +2,7 @@
  * "Is it windy right now?": the hour containing a moment, from the judged series the server sends
  * (windSeries in windDay.ts). The server and the browser both run computeWindNow and
  * formatWindNow, on the same numbers. Wind is judged by the hour, as rain is, so nothing is
- * interpolated.
+ * interpolated; nor is its direction, which the server has already judged for each hour.
  */
 import {
   RAIN_COPY,
@@ -20,7 +20,7 @@ import {
 } from './copy';
 import { HOUR } from './rain';
 import { computeRainNow, rainRows, type RainNowComputation } from './rainNow';
-import { isWindy, windRank, windText } from './wind';
+import { directionField, directionWords, isWindy, windRank, windText } from './wind';
 import type { ApiWindNow, ApiWindPoint, WindUnit } from './types';
 
 /** The wind "now" view, before formatting. */
@@ -66,14 +66,17 @@ export function formatWindNow(now: WindNowComputation, unit: WindUnit): ApiWindN
     band: p.band,
     answer: WIND_ANSWERS[p.band],
     verdict: p.still ? STILL_VERDICTS.now : WIND_NOW_VERDICTS[p.band],
-    detail: `${windNowLine(windText(p.mean, unit), windText(p.gust, unit))} ${windTrendLine(now)}`,
+    detail: `${windNowLine(windText(p.mean, unit), windText(p.gust, unit), directionWords(p.dir))} ${windTrendLine(now)}`,
     mean: p.mean,
     gust: p.gust,
     still: p.still,
+    ...directionField(p.dir),
+    // Each row's direction is its first hour's: wind direction is for a moment, not a span.
     hours: rainRows(now).map((q) => ({
       time: new Date(q.time).toISOString(),
       label: formatHour(q.hour),
       gust: q.gust2h,
+      ...directionField(q.dir),
     })),
     series: now.series.map((q) => ({ ...q })),
   };

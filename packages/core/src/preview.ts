@@ -567,6 +567,22 @@ const WIND_FOR: Record<Band | RainBand | SnowBand, WindBand> = {
   deepsnow: 'gale',
 };
 
+/**
+ * Where each wind band's sample blows from at midnight on its first day, degrees: it veers
+ * (turns clockwise) by 2° an hour and 25° a day, as behind a front, and each model's
+ * (WIND_SPREAD, MODELS in order) is a little either side of the others'. The calm sample's light
+ * air has no direction to name, so its Now shows a variable one.
+ */
+const WIND_FROM: Record<WindBand, number> = {
+  calm: 200,
+  breezy: 240,
+  windy: 205,
+  verywindy: 250,
+  gale: 230,
+  storm: 260,
+};
+const WIND_SPREAD = [0, 8, -6, 12, -10, 4];
+
 /** Monthly normal wind at 10m, m/s, January first. */
 const WIND_NORMALS: Record<string, MonthlyNormals> = {
   GB: [6.4, 6.1, 5.9, 5.2, 4.8, 4.5, 4.5, 4.6, 5, 5.6, 5.9, 6.2],
@@ -575,17 +591,19 @@ const WIND_NORMALS: Record<string, MonthlyNormals> = {
 
 /**
  * The sample days with each model's hourly wind and gusts (km/h, one decimal as Open-Meteo gives
- * them), strongest at 2pm and easing either side, and each model's daily wind as the providers
- * work it out.
+ * them), strongest at 2pm and easing either side, with the direction each blows from (whole
+ * degrees, from `from` at the first midnight), and each model's daily wind as the providers work
+ * it out.
  */
-function windDays(days: readonly DayData[], specs: readonly WindSpec[]): DayData[] {
+function windDays(days: readonly DayData[], specs: readonly WindSpec[], from: number): DayData[] {
   return days.map((d, k) => {
     const [windMean, gustPeak] = specs[k]!;
     const hourly = d.hourly.map((h) => {
       const shape = Math.max(0.5, 1 - 0.025 * Math.abs(h.hour - 14));
       const at = (peak: number) =>
         MODELS.map((_, m) => Math.round(peak * WIND_FACTORS[m]! * shape * 10) / 10);
-      return { ...h, wind: at(windMean), gust: at(gustPeak) };
+      const dir = MODELS.map((_, m) => (from + 25 * k + 2 * h.hour + WIND_SPREAD[m]!) % 360);
+      return { ...h, wind: at(windMean), gust: at(gustPeak), dir };
     });
     return {
       ...d,
@@ -645,7 +663,7 @@ export function previewResponse(
     rain: rainPreview(days, s, units),
     snow: snowPreview(days, s, units),
     wind: windPreview(
-      windDays(days, WIND_SAMPLES[wind]),
+      windDays(days, WIND_SAMPLES[wind], WIND_FROM[wind]),
       s,
       windUnit ?? defaultWindUnitForCountry(s.country),
     ),

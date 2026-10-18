@@ -298,7 +298,7 @@ describe('GET /api/v1/today', () => {
     expect(r.headers['Cache-Control']).toBe('public, max-age=60');
     // The log says why, and what was served instead (a 503 is retried at once).
     expect(logs.find((l) => l.startsWith('forecast unavailable'))).toMatch(
-      /^forecast unavailable for forecast\/v6\/54\.95,-1\.60\/dem after \d+ms: open-meteo: HTTP 503 \(2 attempts\); answering with the copy from 2026-10-06T08:00:00.000Z$/,
+      /^forecast unavailable for forecast\/v7\/54\.95,-1\.60\/dem after \d+ms: open-meteo: HTTP 503 \(2 attempts\); answering with the copy from 2026-10-06T08:00:00.000Z$/,
     );
 
     now = new Date(NOW.getTime() + 7 * 60 * 60 * 1000);
@@ -450,9 +450,23 @@ describe('GET /api/v1/today', () => {
     }
     const now = wind.now!;
     expect(now.time).toBe(NOW.toISOString());
-    expect(now.detail).toMatch(/^Wind \d+mph, gusts \d+mph right now\. /);
+    expect(now.detail).toMatch(/^Wind \d+mph( from the [a-z-]+)?, gusts \d+mph right now\. /);
     expect(now.hours).toHaveLength(6);
     expect(now.series.length).toBeGreaterThan(20);
+    // Where the wind blows from: named, or null when variable, for the day, the hour, each row,
+    // each model and each hour of the series; never for the week.
+    const named = (d: unknown) =>
+      d === null || /^from the [a-z-]+$/.test((d as { words: string }).words);
+    for (const d of wind.days) {
+      expect(d).toHaveProperty('direction');
+      expect(named(d.direction)).toBe(true);
+      expect(d.models.every((m) => m.direction !== undefined && named(m.direction))).toBe(true);
+    }
+    expect(named(now.direction)).toBe(true);
+    expect(now.hours.every((h) => h.direction !== undefined && named(h.direction))).toBe(true);
+    expect(now.series.every((p) => p.dir === null || (p.dir! >= 0 && p.dir! < 360))).toBe(true);
+    expect(now.series.some((p) => typeof p.dir === 'number')).toBe(true);
+    expect(wind.week!.days[0]).not.toHaveProperty('direction');
     // Today is never calmer than Now.
     const rank = ['calm', 'breezy', 'windy', 'verywindy', 'gale', 'storm'];
     expect(rank.indexOf(wind.days[0]!.band)).toBeGreaterThanOrEqual(rank.indexOf(now.band));
@@ -581,6 +595,10 @@ describe('GET /api/v1/today', () => {
       'storm',
     ]);
     expect(storm.days[0]!.zone).toEqual({ from: 112, to: null });
+    // Its storm always blows from the north-east.
+    expect(storm.days[0]!.direction).toMatchObject({ compass: 'NE', words: 'from the north-east' });
+    expect(storm.now!.direction!.compass).toBe('NE');
+    expect(storm.now!.detail).toMatch(/^Wind \d+km\/h from the north-east, gusts /);
     const synthetic = createSyntheticFetch(CITIES, () => NOW);
     const noWind: FetchLike = async (url, init) => {
       const json = (await (await synthetic(url, init)).json()) as {
@@ -595,6 +613,21 @@ describe('GET /api/v1/today', () => {
     const body = ok(await getToday(q({ place: 'leeds-gb', units: 'c' }), null, old.deps));
     expect(body).not.toHaveProperty('wind');
     expect(body.rain).toBeDefined();
+    // A forecast recorded before wind direction: wind as before, without any direction.
+    const noDirection: FetchLike = async (url, init) => {
+      const json = (await (await synthetic(url, init)).json()) as {
+        hourly?: Record<string, unknown>;
+      };
+      for (const key of Object.keys(json.hourly ?? {})) {
+        if (key.startsWith('wind_direction_')) delete json.hourly![key];
+      }
+      return new Response(JSON.stringify(json));
+    };
+    const older = makeDeps({ fetch: noDirection });
+    const wind = ok(await getToday(q({ place: 'leeds-gb', units: 'c' }), null, older.deps)).wind!;
+    expect(wind.days[0]!.detail).not.toMatch(/ from the /);
+    expect(wind.now!.detail).not.toMatch(/ from the /);
+    expect(JSON.stringify(wind)).not.toMatch(/"dir(ection)?"/);
   });
 
   it('serves city pages in the wind unit of the city, or the one asked for', async () => {
@@ -693,7 +726,7 @@ describe('GET /api/v1/today', () => {
     const first = await at({ source: 'search', elevation: '1034' });
     expect(first.location).toMatchObject({ source: 'search', elevation: 1034 });
     expect(heights).toEqual(['1050']);
-    expect(await deps.cache.get('forecast/v6/46.60,8.05/1050')).not.toBeNull();
+    expect(await deps.cache.get('forecast/v7/46.60,8.05/1050')).not.toBeNull();
     // Another place in the band shares the forecast; one 300 m lower in the same cell does not.
     await at({ source: 'search', elevation: '1060.4' });
     expect(heights).toEqual(['1050']);
@@ -705,7 +738,7 @@ describe('GET /api/v1/today', () => {
     expect(device.location.source).toBe('device');
     expect(device.location).not.toHaveProperty('elevation');
     expect(heights).toEqual(['1050', '750', null]);
-    expect(await deps.cache.get('forecast/v6/46.60,8.05/dem')).not.toBeNull();
+    expect(await deps.cache.get('forecast/v7/46.60,8.05/dem')).not.toBeNull();
   });
 
   it('ignores a height that is not a plausible number of metres', async () => {
@@ -994,7 +1027,7 @@ describe('GET /api/v1/today', () => {
     });
     expect(logs).toContainEqual(
       expect.stringMatching(
-        /^forecast unavailable for forecast\/v6\/11\.00,11\.00\/dem after \d+ms: open-meteo: timed out after 60ms \(2 attempts\); no usable cached copy, answering 503$/,
+        /^forecast unavailable for forecast\/v7\/11\.00,11\.00\/dem after \d+ms: open-meteo: timed out after 60ms \(2 attempts\); no usable cached copy, answering 503$/,
       ),
     );
   });
@@ -1016,7 +1049,7 @@ describe('GET /api/v1/today', () => {
     expect(r.status).toBe(200);
     expect(forecasts).toBe(2);
     expect(logs).toContainEqual(
-      expect.stringMatching(/^forecast for forecast\/v6\/12\.00,12\.00\/dem took \d+ms$/),
+      expect.stringMatching(/^forecast for forecast\/v7\/12\.00,12\.00\/dem took \d+ms$/),
     );
   });
 

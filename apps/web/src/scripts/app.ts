@@ -63,7 +63,16 @@ import {
 // Types only: the preview module itself loads on demand, and only with ?preview=1.
 import type * as PreviewKit from '@isithot/core/preview';
 import { HOURLY, TOPIC_DAYS, lastKey } from '../lib/topics';
-import { glyphFor, hoursHtml, listHtml, pct, uvHtml, warningsFor, weekHtml } from '../lib/view';
+import {
+  directionHtml,
+  glyphFor,
+  hoursHtml,
+  listHtml,
+  pct,
+  uvHtml,
+  warningsFor,
+  weekHtml,
+} from '../lib/view';
 import { wireViews, type ViewsController } from './views';
 
 declare global {
@@ -663,6 +672,12 @@ function renderNow(res: TodayResponse): void {
 function renderHours(d: NowDisplay): void {
   renderPanel(d);
   renderUv(d.view, d.uv);
+  // Wind's direction line (components/DirectionLine.astro), hidden without one.
+  const dir = $('now-dir');
+  if (dir) {
+    dir.hidden = !d.direction;
+    dir.innerHTML = directionHtml(d.direction);
+  }
   setText('now-h', d.heading);
   const hours = $('now-hours');
   if (hours) hours.innerHTML = hoursHtml(d.items);
