@@ -51,11 +51,15 @@ describe('units', () => {
     expect(parseUnits(null)).toBeNull();
   });
 
-  it('defaults wind to mph in the UK and the US, and their islands, and km/h elsewhere', () => {
-    for (const code of ['GB', 'gb', 'IM', 'JE', 'GG', 'US', 'PR', 'GU', 'VI', 'AS', 'MP', 'UM']) {
+  it('defaults wind to mph where roads are signed in mph, and km/h elsewhere', () => {
+    // The UK, its dependencies and territories, the US and its, and the Caribbean states.
+    const mph = ['GB', 'gb', 'IM', 'JE', 'GG', 'VG', 'KY', 'FK', 'SH', 'TC', 'US', 'PR', 'GU'];
+    for (const code of [...mph, 'VI', 'AS', 'MP', 'UM', 'AG', 'BS', 'BZ', 'DM', 'GD', 'KN', 'LC']) {
       expect(defaultWindUnitForCountry(code)).toBe('mph');
     }
-    for (const code of ['IE', 'FR', 'CA', 'AU', 'BS'])
+    expect(defaultWindUnitForCountry('VC')).toBe('mph');
+    // Neighbours that sign in km/h stay in km/h.
+    for (const code of ['IE', 'FR', 'CA', 'AU', 'GI', 'BM', 'JM'])
       expect(defaultWindUnitForCountry(code)).toBe('kmh');
     expect(defaultWindUnitForCountry(null)).toBe('kmh');
     expect(defaultWindUnitForCountry(undefined)).toBe('kmh');

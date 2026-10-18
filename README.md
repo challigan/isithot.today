@@ -126,7 +126,8 @@ centimetres with `units=c`, inches with `units=f`.
 `computeWindNow`/`formatWindNow`, `wind.week`), worked out at the same moment: each day's
 strongest gust and mean wind, when it peaks, and each model's own band. Speeds are whole numbers
 in `wind.unit`, `mph` or `kmh`, a setting of its own: `windUnits` when given, else the place's
-country's when `units` is given (mph in the UK and US, km/h elsewhere), else the visitor's.
+country's when `units` is given (mph in the UK, the US and other places that sign roads in mph,
+km/h elsewhere), else the visitor's.
 Absent when the forecast has no wind (responses cached before it).
 
 Where the wind blows from (wind only): `wind.days[i].direction`, `wind.now.direction` and each

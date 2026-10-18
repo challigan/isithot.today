@@ -674,9 +674,10 @@ the wind question, and the toggle reads Hot | Wet | Snow | Wind on all four site
   week's Partly.); "Very windy." wraps at the answer's size, so it is a verdict, never an answer.
   Speeds have no space before the unit, as amounts do: `45mph`, `72km/h`.
 - **Units: a setting of their own.** The UK reads °C with mph, so wind does not follow the
-  temperature setting. Wind is in mph by default in the UK, the Crown Dependencies, the US and
-  its territories (`MPH_COUNTRIES`), km/h elsewhere. The wind site's pill reads mph | km/h
-  ("Wind units"); on the other three sites, showing Wind, the same two buttons switch to it.
+  temperature setting. Wind is in mph by default where roads are signed in mph
+  (`MPH_COUNTRIES`): the UK, the Crown Dependencies and the overseas territories that do, the US
+  and its territories, and the Caribbean states that do (Carl, 18 October 2026); km/h elsewhere.
+  The wind site's pill reads mph | km/h ("Wind units"); on the other three sites, showing Wind, the same two buttons switch to it.
   - The API takes `windUnits=mph|kmh`. Without it, a request that names `units` gets the
     place's unit (so it stays shareable at the CDN, and hot, wet and snow caching is unchanged);
     one that names neither gets the visitor's.
@@ -756,9 +757,11 @@ the wind question, and the toggle reads Hot | Wet | Snow | Wind on all four site
   wind's day and week strings, which reach the chunk through the shared copy module as rain's and
   snow's do. Moving those strings to a module only the server and the preview import would win
   back about 0.5 KB if the budget gets tight.
-- **Needs a decision.** Should `MPH_COUNTRIES` add Liberia, the Caribbean states and the UK's
-  overseas territories (they sign roads in mph)? Is "Light winds" right for the calm band, with
-  "Calm" only for still air? At 200% text on phones up to about 420px the toggle shows each icon
+- **Decided (Carl, 18 October 2026).** Wind keeps its green palettes; the calm band keeps
+  "Light winds", with "Calm" only for still air; `MPH_COUNTRIES` adds the Caribbean states and
+  the UK's overseas territories that sign roads in mph (not Samoa or Liberia, which use km/h as
+  well).
+- **Open.** At 200% text on phones up to about 420px the toggle shows each icon
   over a small word rather than the larger words alone; a single labelled button opening a menu
   would need new interaction code.
 
