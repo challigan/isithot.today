@@ -540,15 +540,23 @@ export const FAHRENHEIT_COUNTRIES: readonly string[] = [
 ];
 
 /**
- * Countries whose wind speeds are in mph by default (km/h elsewhere): the UK and the US, as the
- * spec asks, with the Crown Dependencies and the US territories, which sign their roads the same
- * way under codes of their own.
+ * Countries whose wind speeds are in mph by default (km/h elsewhere): those whose road speed
+ * limits are in mph. The UK with the Crown Dependencies and its overseas territories that sign
+ * in mph (the British Virgin Islands, the Cayman Islands, the Falklands, St Helena with Ascension
+ * and Tristan da Cunha, the Turks and Caicos), the US with its territories, and the Caribbean
+ * states that do (Antigua and Barbuda, the Bahamas, Belize, Dominica, Grenada, St Kitts and Nevis,
+ * St Lucia, St Vincent and the Grenadines). Not Samoa or Liberia, which use km/h as well.
  */
 export const MPH_COUNTRIES: readonly string[] = [
   'GB',
   'IM',
   'JE',
   'GG',
+  'VG',
+  'KY',
+  'FK',
+  'SH',
+  'TC',
   'US',
   'PR',
   'GU',
@@ -556,6 +564,14 @@ export const MPH_COUNTRIES: readonly string[] = [
   'AS',
   'MP',
   'UM',
+  'AG',
+  'BS',
+  'BZ',
+  'DM',
+  'GD',
+  'KN',
+  'LC',
+  'VC',
 ];
 
 export interface Palette {
