@@ -105,6 +105,17 @@ test('units cross with links to the other site', async ({ browser, baseURL }) =>
     'href',
     `${WET}/favicon.svg`,
   );
+  // So does the introduction under the answer, which now says what isitwet.today answers.
+  const intro = page.locator('.intro');
+  await expect(intro.locator('p').first()).toContainText('isitwet.today answers one question');
+  await expect(intro.getByRole('link', { name: 'How it works' })).toHaveAttribute(
+    'href',
+    `${WET}/about?units=f`,
+  );
+  await expect(intro.locator('.place-list a').first()).toHaveAttribute(
+    'href',
+    `${WET}/in/london-gb?units=f`,
+  );
   const nearby = page.locator('#nearby-links a').first();
   await expect(nearby).toHaveAttribute('href', /^https:\/\/isitwet\.today\/in\/[a-z-]+\?units=f$/);
   await nearby.click();

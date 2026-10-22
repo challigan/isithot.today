@@ -4,8 +4,10 @@
  */
 import type { Page } from '@playwright/test';
 import {
+  LINKS,
   PALETTES,
   RAIN_PALETTES,
+  SITES,
   SNOW_PALETTES,
   TOPICS,
   WIND_PALETTES,
@@ -15,6 +17,7 @@ import {
   type Topic,
   type WindBand,
 } from '../packages/core/src/config';
+import { COPY, intro } from '../packages/core/src/copy';
 import { RAIN_GLYPHS } from '../apps/web/src/lib/wetGlyphs';
 import { SNOW_GLYPHS } from '../apps/web/src/lib/snowGlyphs';
 import { WIND_GLYPHS } from '../apps/web/src/lib/windGlyphs';
@@ -49,6 +52,28 @@ async function ready(page: Page, path = '/'): Promise<void> {
   await page.goto(path);
   await expect(page.locator('#answer')).toHaveText(
     ANSWERS.find(([prefix]) => path.startsWith(prefix))?.[1] ?? HOT_ANSWERS,
+  );
+}
+
+/**
+ * The home page's introduction says what the site of `topic` answers, and its links go there
+ * (locally every site shares one host, under its prefix).
+ */
+async function expectIntro(page: Page, topic: Topic): Promise<void> {
+  const block = page.locator('.intro');
+  const at = SITES[topic].prefix;
+  await expect(block.locator('p').first()).toHaveText(`${intro(topic).text} ${COPY.howItWorks}`);
+  await expect(block.getByRole('link', { name: COPY.howItWorks })).toHaveAttribute(
+    'href',
+    `${at}/about`,
+  );
+  const popular = block.locator('.place-list a');
+  await expect(popular).toHaveCount(LINKS.popular.length);
+  await expect(popular.first()).toHaveAttribute('href', `${at}/in/${LINKS.popular[0]}`);
+  await expect(popular.last()).toHaveAttribute('href', `${at}/in/${LINKS.popular.at(-1)}`);
+  await expect(block.getByRole('link', { name: COPY.allPlaces })).toHaveAttribute(
+    'href',
+    `${at}/places`,
   );
 }
 
@@ -634,6 +659,30 @@ test.describe('Hot | Wet | Snow | Wind', () => {
       });
     });
   }
+
+  test("the home page's introduction is about the question on screen", async ({ page }) => {
+    await ready(page, '/');
+    await expectIntro(page, 'hot');
+    for (const topic of ['wet', 'snow', 'wind', 'hot'] as const) {
+      await toggle(page, topic).click();
+      await expectIntro(page, topic);
+    }
+    await ready(page, '/wind');
+    await expectIntro(page, 'wind');
+    await toggle(page, 'snow').click();
+    await expectIntro(page, 'snow');
+  });
+
+  test('the introduction follows the toggle before the answer arrives', async ({ page }) => {
+    await page.route('**/api/v1/today**', () => {});
+    await page.goto('/snow');
+    await expect(page.locator('#app')).toHaveAttribute('data-state', 'loading');
+    await expectIntro(page, 'snow');
+    await toggle(page, 'wet').click();
+    await expectIntro(page, 'wet');
+    await toggle(page, 'hot').click();
+    await expectIntro(page, 'hot');
+  });
 
   test('place links go to the site of the question on screen', async ({ page }) => {
     // Locally every site shares one host, with the wet pages under /wet and the snow ones under
