@@ -18,7 +18,7 @@ import {
 } from './config';
 import { localDateTime, zoneAbbreviation } from './dates';
 import type { Units } from './units';
-import type { WindUnit } from './types';
+import type { ApiUpdated, WindUnit } from './types';
 
 export const SITE_NAME = SITES.hot.name;
 
@@ -489,16 +489,26 @@ export function clockTime(hours: number): string {
 
 /**
  * When the forecast behind an answer was fetched (the API's `updatedAt`), in the place's own time:
- * "3:05pm BST", or "yesterday, 11:40pm GMT" when that was before `today` there (the answer's
- * date: a stale copy can be from the evening before). The zone is named where it has an
- * abbreviation (`zoneAbbreviation`).
+ * the local date, and the clock, "3:05pm BST". The zone is named where it has an abbreviation
+ * (`zoneAbbreviation`). The API sends it as `updated`, for clients that word the line themselves.
  */
-export function updatedTime(iso: string, timezone: string, today: string): string {
+export function updatedParts(iso: string, timezone: string): ApiUpdated {
   const at = new Date(iso);
   const local = localDateTime(timezone, at);
   const zone = zoneAbbreviation(timezone, at);
-  const time = zone ? `${clockTime(local.hours)} ${zone}` : clockTime(local.hours);
-  return local.date < today ? `${COPY.yesterday}, ${time}` : time;
+  return {
+    date: local.date,
+    clock: zone ? `${clockTime(local.hours)} ${zone}` : clockTime(local.hours),
+  };
+}
+
+/**
+ * The "Updated" line's time (`updatedParts`): "3:05pm BST", or "yesterday, 11:40pm GMT" when that
+ * was before `today` there (the answer's date: a stale copy can be from the evening before).
+ */
+export function updatedTime(iso: string, timezone: string, today: string): string {
+  const { date, clock } = updatedParts(iso, timezone);
+  return date < today ? `${COPY.yesterday}, ${clock}` : clock;
 }
 
 // ---- Is it wet? -------------------------------------------------------------------

@@ -31,7 +31,7 @@ export default (request: Request, context: Context): Response | URL | undefined 
 export const config = {
   path: '/*',
   // Assets, the API, Netlify's own paths and files that are the same on every site.
-  excludedPath: ['/_astro/*', '/api/*', '/.netlify/*', '/ads.txt', '/version.json'],
+  excludedPath: ['/_astro/*', '/api/*', '/.netlify/*', '/ads.txt', '/app-ads.txt', '/version.json'],
   // If the function fails, serve the request as if it were not here (isithot.today pages).
   onError: 'bypass',
 };

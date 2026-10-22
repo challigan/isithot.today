@@ -167,6 +167,11 @@ Works on any host, not only Cloudflare.
 Ads load after the page is interactive. They wait for the CMP's consent signal where GDPR
 applies, and the slot's height is reserved so the page does not jump.
 
+The apps' ads: once AdMob gives the publisher ID (`pub-…`), set `PUBLIC_ADMOB_PUBLISHER_ID` in
+Netlify and redeploy. `/app-ads.txt` on every domain then carries its line (until then, a
+comment). AdMob reads it from the developer website each app's store listing names, so each app
+lists its own site.
+
 ## 6. Uptime monitor
 
 Any free monitor (UptimeRobot, Better Stack) on:
