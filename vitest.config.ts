@@ -10,8 +10,13 @@ export default defineConfig({
     environment: 'node',
     coverage: {
       provider: 'v8',
-      include: ['packages/core/src/**/*.ts'],
-      exclude: ['packages/core/src/types.ts', 'packages/core/src/index.ts'],
+      include: ['packages/core/src/**/*.ts', 'packages/client/src/**/*.ts'],
+      exclude: [
+        'packages/core/src/types.ts',
+        'packages/core/src/index.ts',
+        'packages/client/src/types.ts',
+        'packages/client/src/index.ts',
+      ],
       reporter: ['text', 'html', 'json-summary'],
       thresholds: {
         branches: 100,

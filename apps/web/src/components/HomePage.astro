@@ -37,8 +37,9 @@ const evening = TOMORROW_FROM_HOUR;
   jsonLd={websiteLd(topic)}
 >
   <script is:inline slot="head">
-    // Start the API request before the main script has downloaded. Mirrors apiUrl() in
-    // scripts/app.ts; if they ever disagree the app simply makes its own request.
+    // Start the API request before the main script has downloaded. Mirrors todayQuery() in
+    // packages/client, as scripts/app.ts calls it (it cannot import it: it runs first); if they
+    // ever disagree the app simply makes its own request.
     (() => {
       try {
         if (location.search) return;

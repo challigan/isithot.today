@@ -519,6 +519,20 @@ export const SEARCH = {
 } as const;
 
 /**
+ * The native apps' widgets. Each fetches at most once every `refreshHours`, takes the app's saved
+ * answer while it is under `reuseMinutes` old, and with nothing usable tries again after
+ * `retryMinutes`. The answer's hours ahead keep a widget right from hour to hour, so raising
+ * `refreshHours` only saves calls.
+ */
+export const WIDGET = { refreshHours: 4, reuseMinutes: 60, retryMinutes: 60 } as const;
+
+/**
+ * Snow notifications in the native apps. An app registers again whenever what it registered
+ * changes, and otherwise at least every `heartbeatDays` while it is used.
+ */
+export const ALERTS = { heartbeatDays: 7 } as const;
+
+/**
  * Countries that use °F by default. The spec asks for the US; its territories and the
  * handful of other countries that use Fahrenheit day to day are included too.
  */
