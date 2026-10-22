@@ -5,8 +5,14 @@
  * Swift: `IsItLogic/HourPicker.swift`, `MiddleDay.swift` and `UpdatedLine.swift`, checked against
  * the golden vectors in `hours.json`.
  */
-import { COPY, showsTomorrow, type ApiSnowDay, type ApiSnowNow } from '@isithot/core';
-import type { AppResponse, SnowWeek } from './types';
+import {
+  COPY,
+  showsTomorrow,
+  type ApiSnowDay,
+  type ApiSnowNow,
+  type ApiSnowWeek,
+  type TodayResponse,
+} from '@isithot/core';
 import { usableUntil } from './freshness';
 
 /** The snow answers that hold at a moment, and for how long. */
@@ -17,7 +23,7 @@ export interface PickedHour {
   end: number;
   now: ApiSnowNow | Omit<ApiSnowNow, 'series'> | null;
   today: ApiSnowDay | null;
-  week: SnowWeek | null;
+  week: ApiSnowWeek | null;
   source: 'response' | 'ahead';
 }
 
@@ -28,7 +34,7 @@ export interface PickedHour {
  * `usableUntil` on, which is never later than the end of the last hour ahead, and null without
  * snow answers: the caller then says it has no recent forecast.
  */
-export function pickHour(res: AppResponse, now: number): PickedHour | null {
+export function pickHour(res: TodayResponse, now: number): PickedHour | null {
   const snow = res.snow;
   const until = usableUntil(res);
   if (!snow || now >= until) return null;
@@ -61,7 +67,7 @@ export function pickHour(res: AppResponse, now: number): PickedHour | null {
  * hour's today. Its tab reads `viewLabel('today', slot === 'tomorrow')`.
  */
 export function middleDay(
-  res: AppResponse,
+  res: TodayResponse,
   picked: PickedHour,
   now: number,
 ): { slot: 'today' | 'tomorrow'; day: ApiSnowDay | null } {

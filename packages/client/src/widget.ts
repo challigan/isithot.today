@@ -5,8 +5,7 @@
  *
  * Swift: `IsItLogic/WidgetPlanner.swift`, checked against the golden vectors in `widget.json`.
  */
-import { HOUR, WIDGET, type ApiSnowDay, type SnowBand } from '@isithot/core';
-import type { AppResponse } from './types';
+import { HOUR, WIDGET, type ApiSnowDay, type SnowBand, type TodayResponse } from '@isithot/core';
 import { usableUntil } from './freshness';
 import { middleDay, pickHour } from './hours';
 
@@ -47,7 +46,7 @@ export interface WidgetEntry {
  * has passed already, `WIDGET.retryMinutes` from now.
  */
 export function widgetEntries(
-  res: AppResponse | null,
+  res: TodayResponse | null,
   o: { fetchedAt: number; now: number; unlocked: boolean; placeName?: string },
 ): { entries: WidgetEntry[]; reloadAt: number | 'never' } {
   const placeName = o.placeName ?? res?.location.name ?? '';

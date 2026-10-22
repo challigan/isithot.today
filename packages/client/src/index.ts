@@ -8,4 +8,3 @@ export * from './alerts';
 export * from './links';
 export * from './recent';
 export * from './keys';
-export type * from './types';

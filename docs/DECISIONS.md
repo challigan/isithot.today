@@ -880,9 +880,9 @@ from it. The website adopts it in the same change, so the rules exist once.
   always stored them. The home page's head script (`HomePage.astro`) still builds its own copy
   of the query: it runs before any module has loaded, so it cannot import one. The e2e suites
   check that the app takes its answer rather than asking again.
-- **Fields the server does not send yet.** The snow week's agreement on each day and the hours
-  ahead (`ahead=snow`) are typed in the client (`types.ts`, `AppResponse`) as the spec gives
-  them, until core's types carry them; then core's replace them.
+- **Core's types throughout.** The snow week's agreement on each day and the hours ahead
+  (`ahead=snow`), which the spec types for the client, are in the API now ("API contract",
+  below), so the client reads `TodayResponse` as the website does and has no types of its own.
 - **Choices the spec left open.** `pickHour`'s `end` is also never later than `usableUntil`, so
   an app that picks again at `end` never shows an old hour. The notification sync's "every
   switch off" means the evening and morning switches: "also when snow is possible" only widens

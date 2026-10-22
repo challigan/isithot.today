@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { localDateTime, showsTomorrow } from '@isithot/core';
+import { localDateTime, showsTomorrow, type TodayResponse } from '@isithot/core';
 import { usableUntil } from '../src/freshness';
 import { pickHour } from '../src/hours';
-import type { AppResponse } from '../src/types';
 import { widgetEntries, type WidgetEntry } from '../src/widget';
 import { HOUR, MINUTE, STALE, answer, hourStart, snowDay } from './fixtures';
 
@@ -23,7 +22,7 @@ function plan(
 }
 
 /** What every plan holds to, whatever the place and the time. */
-function expectSound(res: AppResponse, now: number, entries: WidgetEntry[]): void {
+function expectSound(res: TodayResponse, now: number, entries: WidgetEntry[]): void {
   const until = usableUntil(res);
   const stale = entries.at(-1)!;
   expect(stale).toMatchObject({ date: until, state: 'stale', day: null, palette: 'nosnow' });
@@ -330,7 +329,7 @@ describe('widgetEntries: locked, and what an answer may lack', () => {
 
   it('names the place as the app does, and leaves out what the answer lacks', () => {
     const snow = res.snow!;
-    const bare: AppResponse = {
+    const bare: TodayResponse = {
       ...res,
       snow: { ...snow, now: undefined, week: undefined, days: snow.days.slice(0, 1), ahead: [] },
     };
@@ -351,7 +350,7 @@ describe('widgetEntries: locked, and what an answer may lack', () => {
       palette: 'nosnow',
     });
     // Without its middle day, the list starts with the first day there is.
-    const noTomorrow: AppResponse = { ...res, snow: { ...snow, days: snow.days.slice(0, 1) } };
+    const noTomorrow: TodayResponse = { ...res, snow: { ...snow, days: snow.days.slice(0, 1) } };
     const first = widgetEntries(noTomorrow, { fetchedAt: made, now, unlocked: true }).entries[0]!;
     expect(first.week.map((d) => d.date)).toEqual(snow.week!.days.slice(0, 4).map((d) => d.date));
   });

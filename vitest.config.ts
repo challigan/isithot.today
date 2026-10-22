@@ -15,7 +15,6 @@ export default defineConfig({
       exclude: [
         'packages/core/src/types.ts',
         'packages/core/src/index.ts',
-        'packages/client/src/types.ts',
         'packages/client/src/index.ts',
       ],
       reporter: ['text', 'html', 'json-summary'],

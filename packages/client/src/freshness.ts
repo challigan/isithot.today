@@ -5,7 +5,6 @@
  * Swift: `IsItLogic/Freshness.swift`, checked against the golden vectors in `freshness.json`.
  */
 import { CACHE, HOUR, computeNow, type TodayResponse } from '@isithot/core';
-import type { AppResponse } from './types';
 
 /** Why an answer is out of date: the place's day has moved on, or the hour it holds for. */
 export type Stale = 'day' | 'hour';
@@ -88,7 +87,7 @@ export function outOfDate(res: TodayResponse, now: number, holds: Holds): Stale 
  * server's own stale limit. Past it the apps and widgets say they have no recent forecast,
  * rather than show an old hour.
  */
-export function usableUntil(res: AppResponse): number {
+export function usableUntil(res: TodayResponse): number {
   const last = res.snow?.ahead?.at(-1);
   const end = last ? Date.parse(last.time) + HOUR : (hourUntil(res) ?? Infinity);
   return Math.min(end, Date.parse(res.updatedAt) + CACHE.forecastStale * 1000);

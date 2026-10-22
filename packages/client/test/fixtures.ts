@@ -7,18 +7,22 @@
 import {
   CACHE,
   SNOW_ANSWERS,
-  SNOW_BAND_LABELS,
   localDateTime,
+  outboundLinks,
+  snowLabel,
+  updatedParts,
   type ApiDay,
   type ApiNowPoint,
   type ApiRainDay,
   type ApiRainPoint,
   type ApiSnowDay,
   type ApiSnowNow,
+  type ApiSnowAhead,
   type ApiSnowPoint,
+  type ApiSnowWeek,
   type SnowBand,
+  type TodayResponse,
 } from '@isithot/core';
-import type { AppResponse, SnowAhead, SnowWeek } from '../src/types';
 
 export const MINUTE = 60 * 1000;
 export const HOUR = 60 * MINUTE;
@@ -93,6 +97,7 @@ export const snowDay = (
   from: iso(from),
   partial,
   band,
+  bandLabel: snowLabel(band, band === 'nosnow' ? 'warm' : null),
   answer: SNOW_ANSWERS[band],
   verdict: `Verdict for ${label}.`,
   detail: `Detail for ${label}.`,
@@ -125,7 +130,7 @@ const snowNow = (time: number, band: SnowBand, label: string): ApiSnowNow => ({
 });
 
 /** The week from `date`, seven days, each with its agreement. */
-export const snowWeek = (date: string, label = date): SnowWeek => ({
+export const snowWeek = (date: string, label = date): ApiSnowWeek => ({
   from: date,
   to: nextDate(date, 6),
   band: 'nosnow',
@@ -144,7 +149,7 @@ export const snowWeek = (date: string, label = date): SnowWeek => ({
       label: i === 0 ? 'Today' : WEEKDAYS[new Date(Date.parse(day)).getUTCDay()]!,
       amount: i,
       band: 'nosnow' as const,
-      bandLabel: SNOW_BAND_LABELS.nosnow,
+      bandLabel: snowLabel('nosnow', 'warm'),
       chance: 0,
       snowy: i % 7,
       total: 6,
@@ -165,7 +170,7 @@ export interface AnswerOptions {
 }
 
 /** An answer as the server gives it at `at`. */
-export function answer(o: AnswerOptions): AppResponse {
+export function answer(o: AnswerOptions): TodayResponse {
   const local = (t: number) => localDateTime(o.tz, new Date(t));
   const start = hourStart(o.tz, o.at);
   const times = Array.from({ length: 26 }, (_, i) => start + (i - 1) * HOUR);
@@ -200,7 +205,7 @@ export function answer(o: AnswerOptions): AppResponse {
     reason: 'warm',
     light: false,
   }));
-  const ahead: SnowAhead[] = Array.from({ length: o.ahead ?? 6 }, (_, i) => {
+  const ahead: ApiSnowAhead[] = Array.from({ length: o.ahead ?? 6 }, (_, i) => {
     const time = start + (i + 1) * HOUR;
     const label = `the hour from ${iso(time)}`;
     const { series: _series, ...now } = snowNow(time, 'nosnow', label);
@@ -211,20 +216,24 @@ export function answer(o: AnswerOptions): AppResponse {
       week: snowWeek(local(time).date, label),
     };
   });
+  const location = {
+    name: o.name ?? 'London',
+    region: null,
+    country: 'GB',
+    lat: 51.5,
+    lon: -0.1,
+    timezone: o.tz,
+    source: 'city',
+    slug: 'london-gb',
+  } as const;
+  const updatedAt = iso(o.updatedAt ?? o.at);
   return {
-    location: {
-      name: o.name ?? 'London',
-      region: null,
-      country: 'GB',
-      lat: 51.5,
-      lon: -0.1,
-      timezone: o.tz,
-      source: 'city',
-      slug: 'london-gb',
-    },
+    location,
     units: 'c',
     days: [hotDay(today), hotDay(tomorrow)],
-    updatedAt: iso(o.updatedAt ?? o.at),
+    updatedAt,
+    updated: updatedParts(updatedAt, o.tz),
+    links: outboundLinks(location),
     attribution: [],
     now: {
       time: iso(o.at),
