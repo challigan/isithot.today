@@ -190,6 +190,9 @@ const rainWeek = (band: RainBand, amounts = [4, 0, 12.5]): ApiRainWeek => ({
     band,
     bandLabel: `Label ${band}`,
     snow: false,
+    chance: 0.67,
+    wet: 2,
+    total: 3,
   })),
 });
 
@@ -214,7 +217,9 @@ const response = (extra: Partial<TodayResponse> = {}): TodayResponse => ({
   units: 'c',
   days: [hotDay('mild')],
   updatedAt: '2026-10-15T12:20:00.000Z',
+  updated: { date: '2026-10-15', clock: '1:20pm BST' },
   attribution: [],
+  links: [],
   now: hotNow('mild'),
   week: hotWeek('mild'),
   rain: rainOf('showers'),
@@ -668,6 +673,7 @@ const snowDay = (band: SnowBand, extra: Partial<ApiSnowDay> = {}): ApiSnowDay =>
   verdict: `Verdict for ${band}.`,
   detail: '2 to 5cm still to come. Mostly between 2pm and 6pm.',
   reason: null,
+  bandLabel: `Label ${band}`,
   amount: 3,
   chance: 0.67,
   snowy: 2,
@@ -721,6 +727,10 @@ const snowWeek = (band: SnowBand, amounts = [4, 0, 8]): ApiSnowWeek => ({
     amount,
     band,
     bandLabel: `Label ${band}`,
+    chance: 0.67,
+    snowy: 2,
+    total: 3,
+    reason: null,
   })),
 });
 

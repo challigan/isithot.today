@@ -3,17 +3,26 @@
  * domains, each with its own storage and its own location permission, so whatever crosses between
  * them goes in the address. All four hosts are served here from the e2e server, with the edge
  * function's routing applied to pages (netlify/edge-functions/lib/route.ts: isitwet.today pages
- * come from /wet, willitsnow.today pages from /snow, isitwindy.today pages from /wind). Its redirects (www, another site's prefix) are covered by
- * netlify/test/route.test.ts.
+ * come from /wet, willitsnow.today pages from /snow, isitwindy.today pages from /wind), except on
+ * the paths it never runs for (its `excludedPath`). Its redirects (www, another site's prefix) are
+ * covered by netlify/test/route.test.ts.
  */
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { route } from '../netlify/edge-functions/lib/route';
+import { config as edge } from '../netlify/edge-functions/topic';
 import { expect, prepare, test, toggle } from './helpers';
 
 const HOT = 'https://isithot.today';
 const WET = 'https://isitwet.today';
 const SNOW = 'https://willitsnow.today';
 const WIND = 'https://isitwindy.today';
+
+/** Whether Netlify runs the edge function for a path: its `path` patterns, less `excludedPath`. */
+function routed(pathname: string): boolean {
+  const matches = (pattern: string) =>
+    new RegExp(`^${pattern.replace(/[.]/g, '\\.').replace(/\*/g, '.*')}$`).test(pathname);
+  return matches(edge.path) && !edge.excludedPath.some(matches);
+}
 
 /** A browser where every site is served by the e2e server at `local`. */
 async function allSites(
@@ -27,7 +36,7 @@ async function allSites(
     const request = r.request();
     const url = new URL(request.url());
     let path = `${url.pathname}${url.search}`;
-    if (request.resourceType() === 'document') {
+    if (request.resourceType() === 'document' && routed(url.pathname)) {
       const to = route({
         host: url.hostname,
         pathname: url.pathname,
@@ -338,5 +347,18 @@ test('wind units cross with links to and from isitwindy.today, apart from °C an
   expect(await stored(page, 'isithot:windUnits')).toBe('kmh');
   await toggle(page, 'wind').click();
   await expect(page.locator('[data-units="kmh"]')).toHaveAttribute('aria-pressed', 'true');
+  await context.close();
+});
+
+test("the apps' app-ads.txt is the same file on every domain", async ({ browser, baseURL }) => {
+  const context = await allSites(browser, baseURL!);
+  const page = await context.newPage();
+  for (const site of [HOT, WET, SNOW, WIND]) {
+    const res = await page.goto(`${site}/app-ads.txt`);
+    expect(res!.status()).toBe(200);
+    expect(res!.headers()['content-type']).toBe('text/plain; charset=utf-8');
+    // From PUBLIC_ADMOB_PUBLISHER_ID, which the e2e server sets (playwright.config.ts).
+    expect(await res!.text()).toBe('google.com, pub-3940256099942544, DIRECT, f08c47fec0942fa0\n');
+  }
   await context.close();
 });

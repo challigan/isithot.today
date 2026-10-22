@@ -74,6 +74,7 @@ import {
   clockTime,
   intro,
   placesIntro,
+  updatedParts,
   updatedTime,
   STILL_LABEL,
   STILL_VERDICTS,
@@ -120,6 +121,7 @@ import {
   WIND_BANDS,
   type RainBand,
 } from '../src/config';
+import { localDateTime, zoneAbbreviation } from '../src/dates';
 
 describe('copy', () => {
   it('has an answer, verdict and label for every band', () => {
@@ -535,6 +537,56 @@ describe('when the forecast was fetched', () => {
     expect(updatedTime('2026-10-10T22:40:00Z', 'Europe/London', '2026-10-11')).toBe(
       'yesterday, 11:40pm BST',
     );
+  });
+
+  it('gives the local date and the clock apart, for the API', () => {
+    expect(updatedParts('2026-10-11T14:05:00Z', 'Europe/London')).toEqual({
+      date: '2026-10-11',
+      clock: '3:05pm BST',
+    });
+    expect(updatedParts('2026-10-10T22:40:00Z', 'Europe/London')).toEqual({
+      date: '2026-10-10',
+      clock: '11:40pm BST',
+    });
+    expect(updatedParts('2026-10-11T18:20:00Z', 'Asia/Kathmandu')).toEqual({
+      date: '2026-10-12',
+      clock: '12:05am',
+    });
+  });
+
+  it('words the line exactly as before it was split', () => {
+    // updatedTime before updatedParts: the website's line must not change.
+    const before = (iso: string, timezone: string, today: string): string => {
+      const at = new Date(iso);
+      const local = localDateTime(timezone, at);
+      const zone = zoneAbbreviation(timezone, at);
+      const time = zone ? `${clockTime(local.hours)} ${zone}` : clockTime(local.hours);
+      return local.date < today ? `${COPY.yesterday}, ${time}` : time;
+    };
+    const zones = [
+      'Europe/London',
+      'America/New_York',
+      'Asia/Kolkata',
+      'Asia/Kathmandu',
+      'Asia/Tokyo',
+      'Pacific/Kiritimati',
+      'UTC',
+    ];
+    // Every 37 minutes across the UK's autumn clock change, the day before it and the day after.
+    const from = Date.parse('2026-10-24T00:00:00Z');
+    let checked = 0;
+    for (let t = from; t < from + 3 * 86_400_000; t += 37 * 60_000) {
+      const iso = new Date(t).toISOString();
+      for (const zone of zones) {
+        const date = localDateTime(zone, new Date(t)).date;
+        const next = new Date(Date.parse(date) + 86_400_000).toISOString().slice(0, 10);
+        for (const today of [date, next]) {
+          expect(updatedTime(iso, zone, today)).toBe(before(iso, zone, today));
+          checked++;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(1500);
   });
 });
 

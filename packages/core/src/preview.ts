@@ -17,7 +17,7 @@ import {
   type SnowBand,
   type WindBand,
 } from './config';
-import { ATTRIBUTION } from './copy';
+import { ATTRIBUTION, updatedParts } from './copy';
 import { formatDay, type DayComputation, type DayData } from './compute';
 import type { MonthlyNormals } from './climate';
 import { formatNow, judgeSeries, type NowComputation } from './now';
@@ -30,6 +30,7 @@ import { computeSnowDay, formatSnowDay, judgeSnowSeries, snowSeries } from './sn
 import { computeSnowNow, formatSnowNow } from './snowNow';
 import { computeSnowWeek, formatSnowWeek } from './snowWeek';
 import { formatWeek } from './week';
+import { outboundLinks } from './outbound';
 import { mean } from './stats';
 import type { ApiRain, ApiSnow, ApiWind, TodayResponse, WindUnit } from './types';
 import { defaultWindUnitForCountry, type Units } from './units';
@@ -198,22 +199,26 @@ function hotPreview(band: Band, units: Units): TodayResponse {
     units,
   );
 
+  const location = {
+    name: s.place,
+    region: null,
+    country: s.country,
+    lat: s.lat,
+    lon: s.lon,
+    timezone,
+    source: 'city' as const,
+  };
+  const updatedAt = `${s.date}T08:00:00Z`;
   return {
-    location: {
-      name: s.place,
-      region: null,
-      country: s.country,
-      lat: s.lat,
-      lon: s.lon,
-      timezone,
-      source: 'city',
-    },
+    location,
     units,
     days: [formatDay(day, units)],
     now: formatNow(now),
     week,
-    updatedAt: `${s.date}T08:00:00Z`,
+    updatedAt,
+    updated: updatedParts(updatedAt, timezone),
     attribution: [...ATTRIBUTION],
+    links: outboundLinks(location),
   };
 }
 

@@ -7,3 +7,4 @@ reference/
 data/
 functions/lib/server.mjs
 packages/providers/test/fixtures/
+packages/server/test/fixtures/

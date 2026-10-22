@@ -29,6 +29,7 @@ import {
   rank,
   isRain,
   median,
+  round2,
   snowy,
 } from './rain';
 import type { RainDayComputation } from './rainDay';
@@ -240,6 +241,9 @@ export function formatRainWeek(week: RainWeekComputation, units: Units): ApiRain
         band: d.band,
         bandLabel: snow ? SNOW_LABEL : RAIN_BAND_LABELS[d.band],
         snow,
+        chance: round2(d.chance),
+        wet: d.wet,
+        total: d.models.length,
       };
     }),
   };

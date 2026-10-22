@@ -4,6 +4,7 @@
  */
 import type { Band, Compass, RainBand, SnowBand, SnowReason, UvLevel, WindBand } from './config';
 import type { Confidence } from './blend';
+import type { OutboundLink } from './outbound';
 import type { Units } from './units';
 
 export type LocationSource = 'device' | 'ip' | 'search' | 'city';
@@ -324,6 +325,11 @@ export interface ApiRainWeekDay {
   /** "Rain", "Mostly dry"… ("Snow" for a snowy wet day). */
   bandLabel: string;
   snow: boolean;
+  /** The share of models expecting rain, 0–1, two decimals, as the day's `ApiRainDay.chance`. */
+  chance: number;
+  /** Models expecting rain, and models with data for the day, as `ApiRainDay`'s. */
+  wet: number;
+  total: number;
 }
 
 /** "Is it wet this week?": today and the next six days. */
@@ -406,6 +412,11 @@ export interface ApiSnowDay {
   detail: string;
   /** Why a day without snow has none (`nosnow` only), otherwise null. */
   reason: SnowReason | null;
+  /**
+   * The band's label, or for a day without snow why, as the week's rows have it: "Heavy snow",
+   * "Snow possible", "Too warm".
+   */
+  bandLabel: string;
   /** The consensus amount: the median of the models' snow. */
   amount: number;
   /** The share of models expecting snow, 0–1, two decimals. */
@@ -487,6 +498,13 @@ export interface ApiSnowWeekDay {
   band: SnowBand;
   /** "Heavy snow", "A few flakes", or for a day without snow why: "Too warm", "Rain", "Dry". */
   bandLabel: string;
+  /** The share of models expecting snow, 0–1, two decimals, as the day's `ApiSnowDay.chance`. */
+  chance: number;
+  /** Models expecting snow, and models with data for the day, as `ApiSnowDay`'s. */
+  snowy: number;
+  total: number;
+  /** Why a day without snow has none (`nosnow` only), otherwise null, as `ApiSnowDay.reason`. */
+  reason: SnowReason | null;
 }
 
 /** "Will it snow this week?": today and the next six days. */
@@ -513,6 +531,33 @@ export interface ApiSnowWeek {
   days: ApiSnowWeekDay[];
 }
 
+/**
+ * One forecast hour after the request's (`ahead=snow`, the apps only): the views as the server
+ * answers at the first instant of that hour, from the same forecast (core `snowAhead`).
+ */
+export interface ApiSnowAhead {
+  /**
+   * The hour's start, ISO 8601 UTC. Forecast hours are local hours, so in +5:30 and +5:45 zones
+   * that is :30 or :15 past the UTC hour.
+   */
+  time: string;
+  /**
+   * The Now view for the hour, without `series`. Snow's Now depends only on the hour containing
+   * the moment, so this is the website's Now for the whole hour, but for `time`.
+   */
+  now: Omit<ApiSnowNow, 'series'>;
+  /**
+   * The rest of that hour's local day (after the place's midnight, the new date's): the answer
+   * the server gives at the first instant of that hour, from the same forecast. Not minute-exact:
+   * the server weights the current hour by the minutes left and scales its thresholds to the
+   * hours left, so its own Today, asked later in the same hour, can differ a little either way,
+   * most in the last hour or two before midnight.
+   */
+  today: ApiSnowDay;
+  /** The week view on the same basis, so its verdict, detail and first row agree with `today`. */
+  week: ApiSnowWeek | null;
+}
+
 /** The "Will it snow?" answers. Present exactly when `rain` is (the same forecast). */
 export interface ApiSnow {
   unit: SnowUnit;
@@ -522,6 +567,11 @@ export interface ApiSnow {
   now?: ApiSnowNow;
   /** Absent without five usable days. */
   week?: ApiSnowWeek;
+  /**
+   * The next AHEAD.hours forecast hours, in order, fewer near the end of the forecast. Only with
+   * `ahead=snow`, which the website never sends.
+   */
+  ahead?: ApiSnowAhead[];
 }
 
 /** Wind speeds have their own units setting: mph or km/h (MPH_COUNTRIES by default). */
@@ -743,13 +793,31 @@ export interface ApiWind {
   week?: ApiWindWeek;
 }
 
+/** When the forecast behind an answer was fetched, in the place's own time (core `updatedParts`). */
+export interface ApiUpdated {
+  /** The place's local date then (YYYY-MM-DD). */
+  date: string;
+  /** "3:05pm BST": the time to the minute, with the zone where it has an abbreviation. */
+  clock: string;
+}
+
 export interface TodayResponse {
   location: ApiLocation;
   units: Units;
   /** Today, then tomorrow when the forecast has it (never more than two). */
   days: ApiDay[];
   updatedAt: string;
+  /**
+   * `updatedAt` at the place: the website's "Updated" line is `clock`, or "yesterday, " and
+   * `clock` when `date` is before the answer's date (core `updatedTime`).
+   */
+  updated: ApiUpdated;
   attribution: string[];
+  /**
+   * The links out to the big forecast sites for the place, as the website's footer has them (core
+   * `outboundLinks`): BBC Weather, the Met Office and AccuWeather. Links only; never fetched.
+   */
+  links: OutboundLink[];
   /** Present and true when upstream failed and this is a cached result under 6 hours old. */
   stale?: boolean;
   /** The nearest city pages, for "Nearby" links. */

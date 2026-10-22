@@ -50,6 +50,8 @@ export default defineConfig({
       E2E_PORT: String(port),
       E2E: '1',
       E2E_CLOCK_SHIFT_MS: shift,
+      // Google's sample publisher ID (its demo apps'), so /app-ads.txt has its line to check.
+      PUBLIC_ADMOB_PUBLISHER_ID: 'pub-3940256099942544',
     },
   },
 });

@@ -201,6 +201,16 @@ describe('formatSnowWeek', () => {
       ['Tue', 0, 'maybesnow', 'Snow possible'],
       ['Wed', 8, 'heavysnow', 'Heavy snow'],
     ]);
+    // As each day's own answer: the models expecting snow, of those with data, and why none.
+    expect(w.days.map((d) => [d.label, d.chance, d.snowy, d.total, d.reason])).toEqual([
+      ['Today', 1, 8, 8, null],
+      ['Fri', 0, 0, 8, 'warm'],
+      ['Sat', 0, 0, 8, 'rain'],
+      ['Sun', 0, 0, 8, 'dry'],
+      ['Mon', 0, 0, 8, null],
+      ['Tue', 0.38, 3, 8, null],
+      ['Wed', 1, 8, 8, null],
+    ]);
     expect(w).toMatchObject({
       from: DATES[0],
       to: DATES[6],

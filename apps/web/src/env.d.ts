@@ -7,6 +7,8 @@ interface ImportMetaEnv {
   readonly PUBLIC_ADSENSE_CLIENT?: string;
   /** AdSense ad unit slot ID. */
   readonly PUBLIC_ADSENSE_SLOT?: string;
+  /** AdMob publisher ID for the apps, e.g. "pub-1234567890123456". Generates app-ads.txt. */
+  readonly PUBLIC_ADMOB_PUBLISHER_ID?: string;
   /** Cloudflare Web Analytics token (cookieless). */
   readonly PUBLIC_CF_BEACON_TOKEN?: string;
 }

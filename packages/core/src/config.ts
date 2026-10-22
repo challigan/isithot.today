@@ -426,6 +426,19 @@ export const NOW = {
   seriesHours: 24,
 } as const;
 
+/**
+ * `ahead=<topic>`, the apps' one opt-in: each of the next few forecast hours answered as the
+ * server answers at that hour's start (core `snowAhead`; DECISIONS "API contract").
+ */
+export const AHEAD = {
+  /**
+   * Forecast hours after the one containing the request moment. The apps stop showing a forecast
+   * CACHE.forecastStale after it was fetched, and an answer's `updatedAt` is never later than its
+   * request, so later hours would never be shown.
+   */
+  hours: 6,
+} as const;
+
 export const WEEK = {
   /** Days need at least this many models to count towards the week. */
   minModels: 3,
