@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SITES as CORE, TOPICS } from '../../packages/core/src/config';
 import { SITES, route, type Route, type RouteRequest } from '../edge-functions/lib/route.ts';
+import { config } from '../edge-functions/topic.ts';
 
 const PASS: Route = { kind: 'pass' };
 const rewrite = (to: string): Route => ({ kind: 'rewrite', to });
@@ -378,5 +379,45 @@ describe('route', () => {
       const windy = { preview: true, headers: sent({ 'x-isitwindy-host': '1' }) };
       expect(route(req(PREVIEW, '/snow/in/london-gb', windy))).toEqual(PASS);
     });
+  });
+});
+
+describe('files the same on every site', () => {
+  /** Netlify's match of one of the function's path patterns (`*` matches anything). */
+  const matches = (pattern: string, pathname: string) =>
+    new RegExp(`^${pattern.replace(/[.]/g, '\\.').replace(/\*/g, '.*')}$`).test(pathname);
+  /**
+   * What a request to `host` for `path` gets: Netlify runs the edge function on `config.path`
+   * except `config.excludedPath`, and then it decides.
+   */
+  const served = (host: string, path: string, extra: Partial<RouteRequest> = {}): Route =>
+    matches(config.path, path) && !config.excludedPath.some((p) => matches(p, path))
+      ? route(req(host, path, extra))
+      : PASS;
+  const HOSTS = [
+    'isithot.today',
+    'www.isithot.today',
+    'isitwet.today',
+    'www.isitwet.today',
+    'willitsnow.today',
+    'www.willitsnow.today',
+    'isitwindy.today',
+    'www.isitwindy.today',
+  ];
+
+  it.each(['/app-ads.txt', '/ads.txt', '/version.json'])(
+    "%s is the root file on every host, never a site's page",
+    (path) => {
+      for (const host of HOSTS) expect(served(host, path)).toEqual(PASS);
+      expect(served(PREVIEW, path, overridden)).toEqual(PASS);
+    },
+  );
+
+  it('would be sent to the pages under each prefix without the exclusion', () => {
+    // So it must stay in `excludedPath`: route() alone would look for /wet/app-ads.txt.
+    expect(route(req('isitwet.today', '/app-ads.txt'))).toEqual(rewrite('/wet/app-ads.txt'));
+    expect(route(req('willitsnow.today', '/app-ads.txt'))).toEqual(rewrite('/snow/app-ads.txt'));
+    expect(served('isitwet.today', '/about')).toEqual(rewrite('/wet/about'));
+    expect(served('isitwet.today', '/api/v1/today')).toEqual(PASS);
   });
 });

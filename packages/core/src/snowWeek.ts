@@ -21,7 +21,7 @@ import {
   whenDays,
   type SnowNormal,
 } from './copy';
-import { atLeast, median } from './rain';
+import { atLeast, median, round2 } from './rain';
 import { isSnow, roundSnow, snowRank, snowUnit, toSnowUnits } from './snow';
 import { lowLine, textDepth, type SnowDayComputation } from './snowDay';
 import { isFiniteNumber } from './stats';
@@ -244,6 +244,10 @@ export function formatSnowWeek(week: SnowWeekComputation, units: Units): ApiSnow
       amount: shown(d.amount),
       band: d.band,
       bandLabel: snowLabel(d.band, d.reason),
+      chance: round2(d.chance),
+      snowy: d.snowy,
+      total: d.models.length,
+      reason: d.reason,
     })),
   };
 }

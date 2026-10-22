@@ -1,4 +1,5 @@
 import {
+  AHEAD,
   ATTRIBUTION,
   CACHE,
   COPY,
@@ -46,6 +47,7 @@ import {
   judgeSnowSeries,
   judgeWindSeries,
   localDate,
+  outboundLinks,
   parseElevation,
   parseUnits,
   parseWindUnit,
@@ -53,8 +55,10 @@ import {
   rainUnit,
   roundPoint,
   snapToCell,
+  snowAhead,
   snowSeries,
   snowUnit,
+  updatedParts,
   windSeries,
   type ApiLocation,
   type DayComputation,
@@ -63,6 +67,7 @@ import {
   type RainDayComputation,
   type SnowDayComputation,
   type TodayResponse,
+  type Topic,
   type WindDayComputation,
 } from '@isithot/core';
 import {
@@ -451,6 +456,18 @@ function nearbyHeight(
   return Math.abs(height - elevation) <= limit ? normals.normals : null;
 }
 
+/** The topics whose next hours `ahead` may ask for (the apps' opt-in): snow so far. */
+const AHEAD_TOPICS: readonly Topic[] = ['snow'];
+
+/**
+ * The topics an app asks for with `ahead=snow` (comma-separated); unknown topics and repeats are
+ * ignored. The website never sends it.
+ */
+function aheadTopics(params: URLSearchParams): Set<Topic> {
+  const asked = (params.get('ahead') ?? '').split(',');
+  return new Set(AHEAD_TOPICS.filter((t) => asked.includes(t)));
+}
+
 /**
  * Seconds until the next forecast hour starts. Today's rain, snow and wind answers cover the rest
  * of the day from the moment of the request, so no cache may keep them past the hour.
@@ -525,14 +542,20 @@ export async function getToday(
     nowTime,
   );
   const week = computeWeek(days, normals);
+  const location = { ...located, timezone: loaded.forecast.timezone };
+  const updatedAt = new Date(loaded.fetchedAt).toISOString();
   const body: TodayResponse = {
-    location: { ...located, timezone: loaded.forecast.timezone },
+    location,
     units,
     // Today and tomorrow in full (tomorrow's verdict in the future tense); the rest of the week
     // is summarised in `week`.
     days: days.slice(0, 2).map((d, i) => formatDay(d, units, i === 1)),
-    updatedAt: new Date(loaded.fetchedAt).toISOString(),
+    updatedAt,
+    // The apps word the "Updated" line and draw the footer's links from these; the website works
+    // both out from `updatedAt` and `location` (the same core functions).
+    updated: updatedParts(updatedAt, location.timezone),
     attribution: [...ATTRIBUTION],
+    links: outboundLinks(location),
     nearby: nearbyCities(point, LINKS.nearby, located.slug).map((c) => ({
       slug: c.slug,
       name: c.name,
@@ -578,10 +601,12 @@ export async function getToday(
       .slice(1)
       .map((d) => computeSnowDay(d, { normals: snowNormals }))
       .filter((d): d is SnowDayComputation => d !== null);
-    const snowNow = computeSnowNow(
-      judgeSnowSeries(snowSeries(loaded.forecast.days), units, loaded.forecast.timezone),
-      nowTime,
+    const judged = judgeSnowSeries(
+      snowSeries(loaded.forecast.days),
+      units,
+      loaded.forecast.timezone,
     );
+    const snowNow = computeSnowNow(judged, nowTime);
     const snowWeek = computeSnowWeek([snowToday, ...later]);
     const unit = snowUnit(units);
     body.snow = {
@@ -590,6 +615,10 @@ export async function getToday(
     };
     if (snowNow) body.snow.now = formatSnowNow(snowNow, unit);
     if (snowWeek) body.snow.week = formatSnowWeek(snowWeek, units);
+    // The apps' next hours, each answered as at its start from this forecast.
+    if (aheadTopics(params).has('snow')) {
+      body.snow.ahead = snowAhead(judged, forecastDays, nowTime, AHEAD.hours, units, snowNormals);
+    }
   }
 
   // Is it windy? Today from the current hour, later days over their waking hours, from the same

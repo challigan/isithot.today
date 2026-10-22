@@ -139,6 +139,49 @@ point too many ways). A day's is at its windiest hour (`peak`), else across its 
 its hour's degrees or `null`, so clients can keep "now" current. Each is absent when the
 forecast has no direction for it (responses cached before it, and the days of `wind.week`).
 
+Every answer also carries what an app needs to draw it without working anything out (the
+website works the same out itself, with the same core functions):
+
+- `updated`: `updatedAt` at the place, `{ "date": "2026-10-19", "clock": "3:05pm BST" }` (core
+  `updatedParts`). The "Updated" line is `clock`, or "yesterday, " and `clock` when `date` is
+  before the answer's date (core `updatedTime`).
+- `links`: the links out to the big forecast sites for the place, `[{ name, url }]` for BBC
+  Weather, the Met Office and AccuWeather (core `outboundLinks`). Links only; never fetched.
+- `snow.days[i].bandLabel`: the day's label as the week's rows have it ("Heavy snow", "Snow
+  possible", or why there is none: "Too warm", "Rain", "Dry").
+- Each row of `snow.week.days` has its day's `chance` (the share of models expecting snow, 0–1,
+  two decimals), `snowy` and `total` (how many of the models with data for the day) and
+  `reason`, as `snow.days` has them; each row of `rain.week.days` has `chance`, `wet` and
+  `total`.
+
+`ahead=snow` is the apps' one opt-in; the website never sends it. The answer then has
+`snow.ahead`, the next six forecast hours after the one containing the request (`AHEAD.hours`;
+fewer near the end of the forecast), each `{ time, now, today, week }` as the server answers at
+that hour's first instant, from the same forecast:
+
+- `time` is the hour's start. Forecast hours are local hours, so in +5:30 and +5:45 zones it is
+  :30 or :15 past the UTC hour.
+- `now` is that hour's Now view, without `series`. Snow's Now depends only on the hour containing
+  the moment, so it is the website's Now for the whole hour, but for `time`.
+- `today` is the rest of that hour's local day (after the place's midnight, the new date's). It
+  is not minute-exact: the server weights the current hour by the minutes left and scales its
+  thresholds to the hours left, so its own Today, asked later in the same hour, can differ a
+  little either way, most in the last hour or two before midnight.
+- `week` is the week view on the same basis (its first row is `today`), or null.
+
+Unknown topics and repeats in `ahead` are ignored, so `ahead=snow,wet` is `ahead=snow`.
+
+Caching is the same for app requests as for the website's. Answers for a city or coordinates
+with explicit `units` are shared by the Netlify CDN, keyed by the full address (so clients round
+coordinates to the 0.05° grid first, as the website does); answers for the IP location, or
+without `units`, are cached by the browser only. No cache keeps an answer past the next forecast
+hour (only max-age's one-minute floor can run into it), so `t=<UTC hour>` is needed only after a
+clock running fast, as the website uses it. App requests carry `ahead`, so they never share the
+website's CDN entries; the app and its widgets share theirs with each other, and everyone shares
+the forecast cache (per grid cell and height). Each endpoint allows 60 requests a minute per IP
+on each domain (`RATE_LIMIT`), then answers 429 `rate_limited` with `Retry-After: 60`. The API
+sends no CORS headers, so other websites' pages cannot read it (DECISIONS, "API contract").
+
 `GET /api/v1/search?q=` returns up to 8 places, with `slug` when the place has a city page and
 `elevation` (whole metres) when its height is known.
 
@@ -160,6 +203,7 @@ Set these in Netlify under **Project configuration → Environment variables**. 
 | `PUBLIC_ADS_ENABLED`                                                    | `true` turns the AdSense unit on. Default `false` (set in `netlify.toml`).                     |
 | `PUBLIC_ADSENSE_CLIENT`                                                 | AdSense publisher ID (`ca-pub-…`). Also generates `/ads.txt`.                                  |
 | `PUBLIC_ADSENSE_SLOT`                                                   | AdSense ad unit ID.                                                                            |
+| `PUBLIC_ADMOB_PUBLISHER_ID`                                             | The apps' AdMob publisher ID (`pub-…`). Generates `/app-ads.txt` on all four domains.          |
 | `PUBLIC_CF_BEACON_TOKEN`                                                | Cloudflare Web Analytics token (cookieless page views).                                        |
 | `OPEN_METEO_FORECAST_URL`, `OPEN_METEO_GEOCODING_URL`, `NASA_POWER_URL` | Optional host overrides.                                                                       |
 | `DATA_SOURCE`                                                           | `synthetic` for offline development only. Never set in production.                             |

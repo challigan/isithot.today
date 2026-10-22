@@ -941,6 +941,131 @@ Search engines change (no field changes its meaning):
 
 - `nearby` holds the 8 nearest city pages (`LINKS.nearby`), up from 4.
 
+App additions, for the iPhone app (its build spec, section 5; no field changes its meaning). Every
+answer gains what an app needs to draw it without working anything out; the website works the
+same out itself, with the same core functions, and does not read them:
+
+- `updated`: `{ date, clock }`, `updatedAt` at the place (core `updatedParts`, which
+  `updatedTime` now uses, so the website's "Updated" line is byte for byte as before; a test checks
+  it at 37-minute steps across the autumn clock change, in seven zones). The split adds 29 B
+  gzipped to the website's script (24,905 to 24,934 B of the 25,600 B budget).
+- `links`: core `outboundLinks(location)`, the footer's BBC Weather, Met Office and AccuWeather
+  links.
+- `snow.days[i].bandLabel`: `snowLabel(band, reason)`, as the week's rows have it.
+- `snow.week.days[i]`: `chance`, `snowy`, `total` and `reason`; `rain.week.days[i]`: `chance`,
+  `wet` and `total`. Each is its day's own (`SnowDayComputation` and `RainDayComputation`, already
+  worked out), as `snow.days` and `rain.days` give them.
+- They are on every answer, not only with `ahead`: they add 0.17 to 0.19 KB gzipped (0.86 to
+  0.87 KB raw; measured with `tsx scripts/ahead-cost.ts`), the website can use them later, and nothing
+  unrelated hangs on the next-hours flag. The city pages embed their answer, so their HTML grows
+  by the same.
+- A contract test (`packages/server/test/contract.test.ts`) asks the website's own requests
+  (a city, device coordinates, a searched place and the IP location, each with and without
+  `units`, with `windUnits` and with `t`). The top-level and `snow` keys must be the documented
+  sets, so `ahead` is absent without the opt-in, and every other field, with the status and
+  headers, must equal a snapshot taken before these additions on the same synthetic data and
+  clock (`packages/server/test/fixtures/contract.json`). `tsx scripts/contract-snapshot.ts`
+  writes it, leaving out the added fields, so running it again must leave the file unchanged.
+
+`ahead=snow` is the only app opt-in, and the website never sends it. It adds `snow.ahead`
+(`ApiSnowAhead[]`, core `snowAhead`), present only when asked for and when the snow block
+exists, for `AHEAD.hours` (6) hours. `ahead=<topic>[,<topic>]`; v1 answers `snow`, and unknown
+topics and repeats are ignored. Its semantics, as the app spec words them (one sentence
+corrected, below):
+
+- Entry `i` is for the `i`-th forecast hour after the one containing the request moment, up to
+  `AHEAD.hours`. Its `time` is that hour's start. In +5:30 and +5:45 zones that is :30 or :15
+  past the UTC hour, because forecast hours are local hours.
+- `now` is `formatSnowNow(computeSnowNow(judged, time), unit)` without `series`. Snow's Now
+  depends only on the hour containing the moment, so this equals the website's Now for the whole
+  hour, except the `time` field, which the app never shows.
+- `today` is `formatSnowDay(computeSnowDay(day, { from: time, normals }), units)`: **the answer
+  the server gives at the first instant of that hour**, from the same forecast. After the
+  place's midnight it is the new date's day, from that hour.
+- `computeSnowDay` weights the current hour by the minutes left, and its thresholds scale with
+  the fractional window hours. So the website's Today, asked later in the same hour, can differ
+  a little from `today`, either way. The gap is biggest in the last hour or two before
+  midnight, when the window is short. The app shows `today` for the whole hour and never claims
+  it is minute-exact. From 18:00 the middle view shows Tomorrow, so in the evening `today`
+  reaches the screen only through the week's first row and the "Today" row of the medium
+  widget.
+- `week` is `formatSnowWeek(computeSnowWeek([today, ...later days]), units)` on the same basis,
+  so the week verdict, detail and first row always agree with `today`. After midnight the week
+  starts on the new date.
+- Why only 6 hours: the app and widgets stop showing a forecast once it is
+  `CACHE.forecastStale` (6 h) old, as the server's own stale rule does. A response's `updatedAt`
+  is never later than its request, so entries beyond 6 hours would never be shown.
+
+Built and checked:
+
+- **The correction.** The spec said the website's Today, later in the hour, "can be a little less
+  snowy". The tests show it can also be a little snowier: with the current hour dry, the minutes
+  left take nothing off the totals but lower the thresholds. Two forecasts with 0.16 cm in the
+  last hour of the day make 10pm's entry "No." (flakes; 0.2 cm needed over two hours) while the
+  server says "Maybe." at 10:30pm (0.15 cm over an hour and a half). A few flakes in the last
+  hour go the other way: 11pm's entry says flakes, the server at 11:30pm none. Both are pinned
+  in `packages/core/test/snow-ahead.test.ts` at 10pm, 10:30pm, 11pm, 11:30pm and 11:59pm.
+- An hour whose day has no snow answer (no model covers the rest of that day) is left out, as the
+  response itself would have no `snow` then.
+- **The semantic test** (`packages/server/test/ahead.test.ts`): each entry equals `getToday()`
+  asked at that hour's start on the same cached forecast (`snow.now` without `series`,
+  `snow.days[0]` and `snow.week`), for a morning, across the place's midnight, in Kolkata (+5:30)
+  and Kathmandu (+5:45), relabelled from the synthetic zones, and across the UK clock changes on
+  Sun 25 Oct 2026 and Sun 28 Mar 2027. The answer is otherwise the same as without `ahead`,
+  headers included.
+- **Cost (V10)**, measured with `tsx scripts/ahead-cost.ts` on synthetic data, 6 entries each.
+  Within the 1 KB gzipped budget:
+
+  | Place             | Moment (UTC)     | Today in the entries | Added, raw | Added, gzipped | Answer, gzipped |
+  | ----------------- | ---------------- | -------------------- | ---------- | -------------- | --------------- |
+  | Aberdeen (snowy)  | 2 Dec 2026 9:05  | snow in all six      | 17.4 KB    | 0.42 KB        | 4.38 → 4.81 KB  |
+  | Reykjavík (mixed) | 2 Dec 2026 15:05 | flakes, then none    | 17.3 KB    | 0.54 KB        | 4.01 → 4.56 KB  |
+  | Leeds (dry)       | 19 Oct 2026 9:05 | none                 | 16.9 KB    | 0.38 KB        | 4.21 → 4.59 KB  |
+
+  CPU per request, in this container (4 CPUs, Node 22, shared with another agent's work), in
+  five runs over two days, at load averages from under 1 to 5:
+  - warm (forecast and normals cached, code run before; medians of 200): `snowAhead` takes 0.5
+    to 0.7 ms, a whole request 0.6 to 0.9 ms more (3.6 to 4.8 ms without, 4.3 to 5.5 ms with),
+    and its JSON 0.03 to 0.05 ms more. One run, as the other agent's work started, measured its
+    first place at 1.3 ms for `snowAhead` and 1.7 ms more for the request (7.1 ms without, 8.8
+    ms with);
+  - cold (a new process, medians of 15): `snowAhead`'s first run takes 2.1 to 3.5 ms (5.4 ms in
+    that same run; 1.8 to 14.5 ms at the extremes), after that process's first request has
+    taken 93 to 165 ms.
+
+  The Netlify function's own duration is for Carl's preview logs after deploy. If either figure
+  ever runs over, the spec's fallback is to send `week` only where it differs from the entry
+  before.
+
+No CORS. The apps call the API natively (`URLSession` is not a browser), so CORS does not apply
+to them. `Access-Control-Allow-Origin: *` would let any other website call the API from its
+visitors' browsers, which costs Netlify invocations and Open-Meteo calls. So the API sends no
+`Access-Control-*` header, and the rule is: add CORS only for a named origin, if a web view ever
+needs it.
+
+Caching, `t` and rate limits for app traffic (nothing changes for them):
+
+- The app will always send explicit `units` (from the first answer's `units`), and a slug or
+  coordinates rounded to 0.05°, so its answers are shared by the CDN with everyone in the cell
+  who asks the same. Only its first launch, before any place is known, asks for the IP location,
+  which is private. A test checks the headers with `ahead` are the website's.
+- No `t` in normal use: no CDN entry outlives the next forecast hour (but for max-age's
+  one-minute floor), and the app ignores its local URL cache. It will follow the website's rule:
+  when the saved answer is out of date and the new one still is (a phone clock running fast),
+  it asks once more with `t=<UTC hour>` and then holds, so a fast clock costs at most one extra
+  request per server hour.
+- The rate limit stays at 60 a minute per IP on each domain. The app will treat a 429 like being
+  offline. If the function logs show 429s from carrier NAT after an evening notification, raise
+  `windowLimit` in `functions/api/today.mts` and `RATE_LIMIT` in core config together. Measure it in
+  TestFlight and in launch week. (The spec counts on CDN hits not counting towards the limit; that
+  is Netlify's to say, and is not checked here.)
+
+`/app-ads.txt` (the website, not the API): AdMob's ads.txt for the apps, from
+`PUBLIC_ADMOB_PUBLISHER_ID` (a comment line until it is set), as `/ads.txt` is from the AdSense
+ID. It is in the edge function's `excludedPath`, so all four domains serve the one root file and
+each app's listing can name its own site (`netlify/test/route.test.ts`; `e2e/domains.spec.ts`
+checks it answers `text/plain` on all four hosts).
+
 ## Credits and licences
 
 - **Credits follow each source's licence.** Open-Meteo's licence asks for a "Weather data by

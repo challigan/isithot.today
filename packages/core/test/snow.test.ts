@@ -496,6 +496,7 @@ describe('formatSnowDay', () => {
       band: 'snow',
       answer: 'Yes.',
       reason: null,
+      bandLabel: 'Snow',
       amount: 0.8,
       chance: 0.63,
       snowy: 5,
@@ -534,6 +535,20 @@ describe('formatSnowDay', () => {
   it('copies the likely hours', () => {
     const c: SnowDayComputation = computeSnowDay(day(during([14], cm(0.3))))!;
     expect(formatSnowDay(c, 'c').likely).toEqual({ from: 14, to: 15 });
+  });
+
+  it("labels the day as the week's rows do: its band, or why there is no snow", () => {
+    const label = (d: DayData) => {
+      const f = formatSnowDay(computeSnowDay(d)!, 'c');
+      return [f.band, f.reason, f.bandLabel];
+    };
+    expect(label(totals([20, 20, 20, 20, 20, 20]))).toEqual(['deepsnow', null, 'Deep snow']);
+    expect(label(totals([6, 6, 7, 7, 8, 8]))).toEqual(['heavysnow', null, 'Heavy snow']);
+    expect(label(totals([1, 1, 1, 0, 0, 0]))).toEqual(['maybesnow', null, 'Snow possible']);
+    expect(label(totals([0.2, 0.2, 0, 0, 0, 0]))).toEqual(['flakes', null, 'A few flakes']);
+    expect(label(totals([0, 0, 0, 0], { low: 5 }))).toEqual(['nosnow', 'warm', 'Too warm']);
+    expect(label(totals([0, 0, 0, 0], { rain: 5, low: -1 }))).toEqual(['nosnow', 'rain', 'Rain']);
+    expect(label(totals([0, 0, 0, 0], { low: -5 }))).toEqual(['nosnow', 'dry', 'Dry']);
   });
 });
 
