@@ -893,10 +893,11 @@ from it. The website adopts it in the same change, so the rules exist once.
   Without a middle day, a widget's list of days starts with the week's first. `hourUntil` falls
   back to snow's answer without rain's, which the server never sends (snow comes exactly with
   rain). Two topics ahead are written as a form writes them, `ahead=snow%2Cwind`.
-- **Size.** The site's app chunk went from 24.78 to 24.94 KB gzipped (all site JavaScript 25.07
-  KB, budget 25.6 KB). Estimated by taking each part out of the built chunk and gzipping it
-  again: about 40 B is `CLIENT` (the bundler keeps the whole object when one timing is read, so
-  the apps' four come too), 25 B `ahead` in the query and 3 B the fallback to snow. The other
+- **Size.** The site's app chunk went from 24.78 to 24.94 KB gzipped on the base it was built
+  on (24.96 KB with the API additions merged; all site JavaScript 25.08 KB, budget 25.6 KB).
+  Estimated by taking each part out of the built chunk and gzipping it again: about 40 B is
+  `CLIENT` (the bundler keeps the whole object when one timing is read, so the apps' four come
+  too), 25 B `ahead` in the query and 3 B the fallback to snow. The other
   90 B or so is the functions' new shape: they take the moment and the holds as arguments,
   `hold` returns a copy, the device and search targets are functions of their own, and the
   address is built in two places.
