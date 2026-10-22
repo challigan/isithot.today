@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
- * Proves the App Store Connect key works, and changes nothing: lists the account's apps and its
- * registered app IDs, names and identifiers only (the repo is public, and so is the job's log).
+ * Proves the App Store Connect key works, and changes nothing: counts the account's apps and its
+ * registered app IDs, and names only this project's (`today.*`, asc.mjs `report`), since the repo
+ * is public and so is the job's log.
  * Run by .github/workflows/asc-check.yml in the protected `testflight` environment.
  */
-import { AscError, credentials, getAll } from './asc.mjs';
+import { AscError, credentials, getAll, report } from './asc.mjs';
 
 const TEAM_ID = /^[A-Z0-9]{10}$/;
 
@@ -18,17 +19,11 @@ try {
   );
 
   const apps = await getAll('/v1/apps?limit=200&fields[apps]=name,bundleId', creds);
-  console.log(`\nThe key works. Apps on the account: ${apps.length}`);
-  for (const a of apps) console.log(`  ${a.attributes.name} (${a.attributes.bundleId})`);
-
   const ids = await getAll(
     '/v1/bundleIds?limit=200&fields[bundleIds]=name,identifier,platform',
     creds,
   );
-  console.log(`\nRegistered app IDs: ${ids.length}`);
-  for (const b of ids) {
-    console.log(`  ${b.attributes.identifier} (${b.attributes.platform}, "${b.attributes.name}")`);
-  }
+  console.log(`\n${report(apps, ids).join('\n')}`);
   if (!TEAM_ID.test(team)) process.exitCode = 1;
 } catch (err) {
   console.error(err.message);
