@@ -1,0 +1,33 @@
+name: App Store Connect check
+
+# Proves the App Store Connect API key in the protected `testflight` environment works: lists the
+# account's apps and registered app IDs, names and identifiers only, because the repo is public and
+# so is this log. Changes nothing. Runs once when it lands on main, then on demand. Like every job
+# in that environment, it waits for Carl's approval.
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/asc-check.yml, scripts/asc.mjs, scripts/asc-check.mjs]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: testflight
+    steps:
+      - uses: actions/checkout@v4
+      # Node's built-ins only, so there is nothing to install.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: List apps and app IDs
+        run: node scripts/asc-check.mjs
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
