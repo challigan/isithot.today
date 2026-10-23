@@ -1333,6 +1333,41 @@ This records where the build fills or differs from the spec.
   `BricolageAnswer`. On Linux, SnowKit's Swift was type-checked against a stub `Image` with
   SwiftUI's `init(decorative:bundle:)`, and every band's names checked against the catalogue.
 
+## The iPhone app's ports and the vector guard (IsItCore, phase 3)
+
+Phase 3 ports the shared rules to Swift, each checked against its vector file (spec sections 7.4
+and 9.2), and its exit asks for a test that the set of vector files the tests load equals the set
+generated, so none is skipped. This is in place before the first port, so the porters can work in
+parallel against it.
+
+- **One test target holds every port's golden test.** `IsItLogicTests` depends on IsItLogic,
+  IsItModel and IsItTestSupport, and 3.2's ports (`Target`, `TodayQuery`, `GridRounding`, in
+  IsItModel) are checked there too, so one guard sees every file. The vectors stay in
+  IsItTestSupport's resources, beside the fixtures they name.
+- **The guard runs the ports rather than watching for them.** Swift Testing runs tests in
+  parallel, in any order, with no hook after the last, so no test can see which files the others
+  loaded. Instead each port is a `VectorPort` (a check given the whole file) listed in
+  `PortedVectors.all`, and `VectorCoverageTests` has a test case for each file pnpm
+  mobile:generate writes: it loads the file and runs its port. Listed and loaded are then the
+  same thing. It fails for a generated file that isn't listed, a listed file that isn't
+  generated, a file whose port is still nil, and a port that leaves a function in its file
+  unread (`VectorFile.unread`), so the guard covers every function, not only every file.
+- **It fails until phase 3 lands,** with one issue per file not yet ported, naming the pull
+  request and the Swift that ports it; on 23 October 2026 that is all 13 files, listed in
+  `apps/ios/README.md`. So `swift test` in IsItCore exits non-zero meanwhile, and `ios.yml`'s
+  `swift-linux` job fails, which also keeps the macOS jobs that need it from running. Nothing is
+  skipped or marked as a known issue to hide that: each port turns its own files green.
+- **Parallel porters change different lines.** Each `PortedVectors.all` entry is a comment and a
+  line, with a blank line after it, so ports of different files merge without conflicts, and each
+  port lives in a test file of its own.
+- **The loader.** `VectorFile` reads a file's `{ fn, source, cases }` once, decodes one
+  function's cases as that function's own types when a test asks for them, and notes whose
+  cases were read. `file.compare(fn, input:, output:) { port }` checks the port on
+  each case and, on a mismatch, names the file, the case's index, the function and its input,
+  with both values. `Fixtures.decode(_:at:in:decoder:)` reads back an answer's object by the
+  path a vector names (`snow.ahead.2.today`), as `atPath` does in `vectors.ts`; a test checks it
+  against the decoded answer for every day, Now, week and hour ahead in all 21 fixtures.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,

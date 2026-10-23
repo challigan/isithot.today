@@ -22,6 +22,12 @@ let package = Package(
       resources: [.copy("Resources/Fixtures"), .copy("Resources/Vectors")]
     ),
     .testTarget(name: "IsItModelTests", dependencies: ["IsItModel", "IsItTestSupport"]),
+    // The ports' golden tests (phase 3): each vector file checked by the ports of its functions,
+    // IsItModel's (3.2) as well as IsItLogic's, and the guard that every file is (PortedVectors).
+    .testTarget(
+      name: "IsItLogicTests",
+      dependencies: ["IsItLogic", "IsItModel", "IsItTestSupport"]
+    ),
   ],
   swiftLanguageModes: [.v6]
 )

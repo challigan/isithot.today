@@ -16,8 +16,9 @@ Package.resolved         the pinned package versions, copied into the project by
 Configs/                 Base (every target), Team (Carl's team ID, not a secret), Snow (identifiers,
                          API origin, ad units), CI-Simulator (signed to run locally, for CI)
 Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API models; generated CoreCopy,
-                         Questions, AppCopy, Constants and Keys; and in Tests/IsItTestSupport the fixtures
-                         and golden vectors with their loaders
+                         Questions, AppCopy, Constants and Keys; in Tests/IsItTestSupport the fixtures
+                         and golden vectors with their loaders; in Tests/IsItLogicTests the ports' golden
+                         tests and the guard that every vector file is ported (below)
 Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore), IsItAds (Google's SDKs),
                          IsItUI (the skeleton's answer view, generated Palettes, Color(rgb:)), IsItWidgetUI
                          (the widget's entry, provider, view), SnowKit (Glyphs, and the glyph catalogues,
@@ -141,6 +142,9 @@ docker run --rm -v "$PWD/apps/ios/Packages/IsItCore":/w -w /w swift:6.3.3-noble 
   bash -c 'apt-get update -qq && apt-get install -y -qq tzdata >/dev/null && swift test'
 ```
 
+Until phase 3 has ported every vector file, that `swift test` fails, for those files only
+(below).
+
 **The answer font.** `pnpm mobile:check` never needs Python: it checks the font by the recipe
 stamped in it (`packages/mobile/src/exportFont.ts`). `pnpm mobile:generate` runs
 `scripts/make-answer-font.py --ttf` only when the font is out of date, which needs python3 with
@@ -171,12 +175,74 @@ parts can be type-checked in a scratch package: `SharedStore` was, with a stub f
 does, with the glyph catalogue copied in as a resource and a test that every band names an image
 set that exists. `swift package dump-package` in IsItKit checks its manifest.
 
+## Porting against the golden vectors (phase 3)
+
+Every rule the app shares with the website is ported from the TypeScript and checked against its
+vector file, case by case (spec sections 7.4 and 9.2). IsItCore's `IsItLogicTests` target holds
+every port's golden test, IsItModel's (3.2) as well as IsItLogic's, so that one guard sees them
+all: `VectorCoverageTests` (spec section 19, phase 3's exit) has a test case for each vector file
+pnpm mobile:generate writes, which loads the file and runs its port. It fails for a file whose
+port is still nil in `Tests/IsItLogicTests/PortedVectors.swift`, for a generated file that isn't
+listed there, and for a port that doesn't read the cases of every function in its file.
+
+To port a file:
+
+1. Write the Swift (in IsItLogic, or IsItModel for 3.2's).
+2. In a test file of its own in `Tests/IsItLogicTests`, define its port, reading every function
+   in the file; for `grid.json`, say:
+
+   ```swift
+   extension VectorPort {
+     static let grid = VectorPort { file in
+       struct Rounding: Decodable, Sendable {
+         let value: Double
+         let step: Double
+       }
+       try file.compare("roundToGrid", input: Rounding.self, output: Double.self) {
+         GridRounding.round($0.value, step: $0.step)
+       }
+     }
+   }
+   ```
+
+   `file.compare` runs the port on each case and, on a mismatch, names the file, the case's
+   index and its input, with both values. Where an output needs more than `==` (an answer named
+   by its path in the fixture, say), read the cases with `file.cases(_:input:output:decoder:)`
+   and expect what each needs; `Fixtures.decode(_:at:in:decoder:)` reads a path such as
+   `snow.days.1` back from the fixture, with `ApiJSON.decoder()` for the API's types.
+
+3. In `PortedVectors.swift`, change the file's `port: nil` to the port (`port: .grid`).
+
+**Until phase 3 lands, `swift test` fails** in IsItCore, with one issue for each file not yet
+ported, and everything else passes. On 23 October 2026 no file is ported, so it fails for all
+13:
+
+| Vector file      | Ported by | Swift                                               |
+| ---------------- | --------- | --------------------------------------------------- |
+| `grid.json`      | 3.2       | `GridRounding.round`                                |
+| `target.json`    | 3.2       | `Target.key`, `Target(query:)`, `Target(search:)`   |
+| `query.json`     | 3.2       | `TodayQuery.build`                                  |
+| `placeTime.json` | 3.3       | `PlaceTime.local(_:in:)`                            |
+| `tomorrow.json`  | 3.3       | `MiddleDay.showsTomorrow`, `.defaultView`, `.label` |
+| `freshness.json` | 3.3       | `Freshness`                                         |
+| `hours.json`     | 3.3       | `HourPicker.pick`, `UpdatedLine.text`               |
+| `questions.json` | 3.3       | `Questions.snow`                                    |
+| `strip.json`     | 3.3       | `StripGeometry`                                     |
+| `widget.json`    | 3.4       | `WidgetPlanner.entries`                             |
+| `alerts.json`    | 3.4       | `AlertSync.action`, `.body`, `.fingerprint`         |
+| `links.json`     | 3.4       | `DeepLink.parse`, `.route(payload:)`                |
+| `recent.json`    | 3.4       | `RecentPlaces`                                      |
+
+Meanwhile `ios.yml`'s `swift-linux` job fails at its Test step, and the jobs that need it
+(`ios`, `archive-check`, and so `contact-sheet`) don't run. Each porter checks that its own
+files' cases pass and that the issues left are only the files still to port.
+
 ## CI (`.github/workflows/ios.yml`)
 
 | Job             | Runs on                     | What it proves                                                                                                                                                                                                                                                             |
 | --------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `generated`     | ubuntu                      | `pnpm mobile:check`                                                                                                                                                                                                                                                        |
-| `swift-linux`   | ubuntu, `swift:6.3.3-noble` | every Swift file lints; IsItCore's tests pass (with `tzdata`)                                                                                                                                                                                                              |
+| `swift-linux`   | ubuntu, `swift:6.3.3-noble` | every Swift file lints; IsItCore's tests pass (with `tzdata`), the vector guard only once phase 3 has ported every file (above)                                                                                                                                            |
 | `ios`           | `macos-26`, Xcode 26.6      | the project generates; packages resolve to the pins; the app, widget and tests build for the iPhone 17 simulator (iOS 26.5), with the icon and glyph catalogues; the Unit and UI plans pass; a Release build has no debug hooks, no fixtures and no ads code in the widget |
 | `archive-check` | `macos-26`, Xcode 26.6      | an unsigned Release archive for iPhones builds and passes `scripts/check-archive.sh` with ads test: the release job's archive checks, on every pull request, with no key                                                                                                   |
 | `contact-sheet` | ubuntu                      | tiles every attached screen and widget into one PNG, whenever `ios` uploaded attachments (failed tests included); skipped when `ios` failed before its tests ran                                                                                                           |
