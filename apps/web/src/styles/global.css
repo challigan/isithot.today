@@ -1525,6 +1525,10 @@ dialog.sheet::backdrop {
   color: inherit;
   text-underline-offset: 0.2em;
 }
+/* An email address is one long word: let it break rather than push a narrow page sideways. */
+.prose a[href^='mailto:'] {
+  overflow-wrap: anywhere;
+}
 .prose li {
   margin: 0.3rem 0;
 }

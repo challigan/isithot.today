@@ -14,16 +14,17 @@ const site = SITES[topic].name;
 <Content
   title="Privacy"
   path="/privacy"
-  description={`What ${site} collects: an approximate, rounded location to look up the forecast. No accounts.`}
+  description={`What ${site} collects: an approximate, rounded location to look up the forecast. No accounts. Also what our iPhone app keeps for notifications.`}
   topic={topic}
 >
   <h1>Privacy</h1>
   <p>
-    <em>Draft for review. Last updated 14 October 2026.</em>
+    <em>Draft for review. Last updated 23 October 2026.</em>
   </p>
   <p>
     {siteNames(topic)} are one service, built to need as little about you as possible. This notice
-    covers all four. There are no accounts and we do not sell personal data.
+    covers all four, and our iPhone app (below). There are no accounts and we do not sell personal
+    data.
   </p>
 
   <h2>Location</h2>
@@ -71,10 +72,52 @@ const site = SITES[topic].name;
     </li>
   </ul>
 
+  <h2>Our apps</h2>
+  <p>
+    The willitsnow.today app for iPhone works like this website: it sends the place you ask about (a
+    town, or your location rounded to about 5&nbsp;km) and your units to our server to get the
+    forecast. As on the website, until you choose a place it uses a rough location from your IP
+    address, place searches go to Open-Meteo, and it keeps your place, units, recent places and last
+    answer on your iPhone. It has no accounts.
+  </p>
+  <ul>
+    <li>
+      <strong>Notifications.</strong> If you turn on notifications in the app, we keep your device's
+      notification token for the app, the place you chose (a town, or a location rounded to about
+      5&nbsp;km), its time zone, your units and which notifications you asked for, so we can tell
+      you when snow is likely. With them we keep an ID made from the token, the app's version,
+      whether it is a developer build, when you turned notifications on and when the app last
+      checked in with us. It checks in when you open it: at most once a week, unless you change
+      something. We delete all of this when you turn notifications off in the app, when Apple tells
+      us the app is no longer installed, or 90 days after the app last checked in, so about 90 days
+      after you last opened it. If you turn notifications off in your iPhone's Settings instead, we
+      delete it the next time you open the app. For a few days after each notification and each
+      test, we also keep a note that it was sent, even once the rest is deleted, so a notification
+      is never sent twice and tests keep to 3 an hour; it holds no token or place. Notifications are
+      sent through Apple's push service. Our server and its storage are run by Netlify, in the
+      United States. In the app, Settings → Your privacy shows the ID and the main things we keep,
+      and "Turn off notifications and delete my data" deletes them.
+    </li>
+    <!-- prettier-ignore -->
+    <li>
+      <strong>Ads in the app.</strong> The free version shows ads from Google AdMob. In the UK and
+      the EEA, Google's consent message asks for your choice first, and Settings → Privacy choices
+      lets you change it. Google may collect device identifiers, advertising data, usage and
+      diagnostics, and an approximate location from your IP address. See
+      <a href="https://policies.google.com/privacy" rel="noopener">Google's privacy policy</a>. The
+      one-off purchase turns the ads off.
+    </li>
+    <li>
+      <strong>Purchases.</strong> Apple handles purchases. We never see your payment details.
+    </li>
+  </ul>
+
   <h2>Your rights</h2>
   <p>
-    Under UK GDPR you can ask what we hold about you and ask us to delete it. Because we do not keep
-    personal data tied to you, there is usually nothing to find. Contact:{' '}
+    Under UK GDPR you can ask what we hold about you and ask us to delete it. The websites keep no
+    personal data tied to you, so for them there is usually nothing to find. If you use
+    notifications in the app, Settings → Your privacy shows the main things we keep and "Turn off
+    notifications and delete my data" deletes them, or you can email us the ID it shows. Contact:{' '}
     <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
   </p>
 </Content>

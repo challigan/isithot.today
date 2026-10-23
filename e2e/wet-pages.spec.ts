@@ -8,7 +8,7 @@ import { cityAt, expect, keepToday, test } from './helpers';
 // The wet pages as a deploy preview or a local server serves them: under /wet. On isitwet.today
 // the edge function serves the same pages at the root (smoke.mjs checks that on the preview).
 const CITY = '/wet/in/london-gb';
-const CONTENT = ['about', 'privacy', 'cookies', 'terms'] as const;
+const CONTENT = ['about', 'privacy', 'cookies', 'terms', 'support'] as const;
 /** The footer's links: the places page, then the content pages. */
 const FOOTER = ['places', ...CONTENT] as const;
 const WET_BRAND = 'isitwet<span>.today</span>';
@@ -122,7 +122,7 @@ test.describe('isitwet.today pages', () => {
     await page.goto(CITY);
     await expect(page.locator('.brand')).toHaveAttribute('href', '/wet');
     const footer = page.locator('.site-footer nav a');
-    await expect(footer).toHaveCount(5);
+    await expect(footer).toHaveCount(FOOTER.length);
     for (const [i, name] of FOOTER.entries()) {
       await expect(footer.nth(i)).toHaveAttribute('href', `/wet/${name}`);
     }
@@ -157,19 +157,23 @@ test.describe('isitwet.today pages', () => {
     expect((await request.get('/wet/og/atlantis-xx.png')).status()).toBe(404);
   });
 
-  test('About, Privacy, Cookies and Terms carry the wet brand', async ({ request }) => {
+  test('About, Privacy, Cookies, Terms and Support carry the wet brand', async ({ request }) => {
     for (const name of CONTENT) {
       const res = await request.get(`/wet/${name}`);
       expect(res.status(), name).toBe(200);
       const html = await res.text();
-      expect(html).toContain(`<link rel="canonical" href="https://isitwet.today/${name}">`);
+      // Support is the snow app's page: every site's copy is canonical on willitsnow.today.
+      const canonical =
+        name === 'support' ? 'https://willitsnow.today/support' : `https://isitwet.today/${name}`;
+      expect(html).toContain(`<link rel="canonical" href="${canonical}">`);
       expect(html).toMatch(/<title>[^<]+ \| isitwet\.today<\/title>/);
       expect(html).toContain(WET_BRAND);
       expect(html).toContain('<link rel="icon" href="/wet/favicon.svg" type="image/svg+xml">');
-      // One service on four domains, the page's own first.
-      expect(html).toContain(
-        'isitwet.today, isithot.today, willitsnow.today and isitwindy.today are one service',
-      );
+      // One service on four domains, the page's own first. Support is about the snow app alone.
+      const service =
+        'isitwet.today, isithot.today, willitsnow.today and isitwindy.today are one service';
+      if (name === 'support') expect(html).not.toContain(service);
+      else expect(html).toContain(service);
     }
     const about = await (await request.get('/wet/about')).text();
     expect(about).toContain('<h2>Is it wet?</h2>');
@@ -222,7 +226,9 @@ test.describe('isithot.today pages are unchanged', () => {
   test('content pages and the 404', async ({ request }) => {
     for (const name of CONTENT) {
       const html = await (await request.get(`/${name}`)).text();
-      expect(html).toContain(`<link rel="canonical" href="https://isithot.today/${name}">`);
+      const canonical =
+        name === 'support' ? 'https://willitsnow.today/support' : `https://isithot.today/${name}`;
+      expect(html).toContain(`<link rel="canonical" href="${canonical}">`);
       expect(html).toMatch(/<title>[^<]+ \| isithot\.today<\/title>/);
       expect(html).toContain('isithot<span>.today</span>');
       expect(html).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml">');
