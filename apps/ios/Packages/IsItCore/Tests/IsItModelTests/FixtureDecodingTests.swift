@@ -19,16 +19,13 @@ struct FixtureDecodingTests {
     #expect(try Fixtures.names() == ["aberdeen-snow", "leeds-dry"])
   }
 
-  @Test("every fixture decodes, with its snow, and encodes back to the same")
+  // Only what every fixture has by definition. Some leave a block out on purpose (no-now,
+  // no-week) or have fewer hours ahead, so each fixture's own test checks its blocks.
+  @Test("every fixture decodes, with its snow days, and encodes back to the same")
   func everyFixture() throws {
     for name in try Fixtures.names() {
       let response = try decode(name)
       #expect(response.snow?.days.isEmpty == false, "\(name)")
-      #expect(response.snow?.now != nil, "\(name)")
-      #expect(response.snow?.week != nil, "\(name)")
-      #expect(response.snow?.ahead?.count == 6, "\(name)")
-      #expect(response.links?.isEmpty == false, "\(name)")
-      #expect(response.updated != nil, "\(name)")
       let again = try ApiJSON.decoder().decode(
         TodayResponse.self,
         from: ApiJSON.encoder().encode(response)
@@ -95,13 +92,18 @@ struct FixtureDecodingTests {
     let response = try decode("leeds-dry")
     #expect(response.location.name == "Leeds")
     #expect(response.updatedAt == (try instant("2026-12-01T09:05:00Z")))
+    #expect(response.updated?.date == "2026-12-01")
+    #expect(response.updated?.clock == "9:05am GMT")
+    #expect(response.links?.map(\.name) == ["BBC Weather", "Met Office", "AccuWeather"])
     let snow = try #require(response.snow)
     #expect(snow.days.map(\.band) == [.nosnow, .nosnow])
     #expect(snow.days.map(\.answer) == ["No.", "No."])
     #expect(snow.days.map(\.reason) == [.rain, .dry])
     #expect(snow.days.map(\.bandLabel) == ["Rain", "Dry"])
     #expect(snow.days.first?.snowy == 0)
-    #expect(snow.now?.answer == "No.")
+    let now = try #require(snow.now)
+    #expect(now.answer == "No.")
+    #expect(now.hours.count == 6)
 
     let week = try #require(snow.week)
     #expect(week.answer == "No.")
@@ -118,6 +120,7 @@ struct FixtureDecodingTests {
 
     // Rain for the rest of the day until 2pm, then dry.
     let ahead = try #require(snow.ahead)
+    #expect(ahead.count == 6)
     #expect(ahead.map(\.today.band) == Array(repeating: .nosnow, count: 6))
     #expect(ahead.map(\.today.reason) == [.rain, .rain, .rain, .rain, .dry, .dry])
   }

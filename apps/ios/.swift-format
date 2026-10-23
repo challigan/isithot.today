@@ -24,7 +24,7 @@
     "accessLevel": "private"
   },
   "noAssignmentInExpressions": {
-    "allowedFunctions": []
+    "allowedFunctions": ["XCTAssertNoThrow"]
   },
   "orderedImports": {
     "includeConditionalImports": false
