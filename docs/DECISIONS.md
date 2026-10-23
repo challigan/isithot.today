@@ -1422,6 +1422,45 @@ and registered with the vector guard.
   the app makes has one (a coordinate on the grid is 0 or at least 0.05 in size), so the port
   keeps the behaviour, and `query.json` pins it.
 
+## The iPhone app's clock rules (IsItCore, phase 3.3)
+
+PR 3.3 ports the rules for what the app shows when: `PlaceTime`, `MiddleDay`, `Freshness`,
+`HourPicker`, `UpdatedLine`, `Questions` and `StripGeometry`, each checked against its vector file
+case by case (`placeTime`, `tomorrow`, `freshness`, `hours`, `questions` and `strip`).
+
+- **The clock rules read the hot and rain answers' moments, so the model decodes them.** Client
+  `hourUntil` reads rain's today and Now before snow's, and `dayUntil`, `hold`, `outOfDate` and
+  core `showsTomorrow` read the hot answer's days and Now. The spec's model decodes neither
+  (section 9.2), so `TodayResponse` gains `hotDays` (`days`: their dates), `hotNow` (`now`: its
+  time and its series' hours) and `rain` (its days' `from` and its Now's hours), and
+  `ApiSnowNow` gains `series` (the hours' moments and dates), each lenient: a damaged block is nil
+  and the rest is kept. Nothing else of the hot and rain answers is decoded. Reading snow's
+  instead would agree on every fixture, whose answers share their moments, but not with the
+  TypeScript for an answer without rain, or with rain but without its Now; the port follows the
+  TypeScript.
+- **Moments are `Date` in the API and whole milliseconds inside.** The app, its `TimelineView`
+  and WidgetKit work in `Date`, so the ports take and return `Date`, but the rules compare and
+  add `epochMs` (IsItModel's `Date(epochMs:)` and `.epochMs`, to the nearest millisecond), as the
+  TypeScript does, so a hold's `at`, or a moment a millisecond before a boundary, agrees to the
+  millisecond rather than to a `Double`'s rounding.
+- **`PlaceTime` reads only `TimeZone(identifier:)` and `secondsFromGMT(for:)`** (V4), then a
+  Gregorian calendar in UTC reads the shifted clock: no `DateFormatter`, whose patterns and zone
+  names differ between Linux and iOS. The seconds are dropped, as core's formatter drops them,
+  and an unknown zone is UTC, as in core, down to the four-digit year `toISOString` writes.
+- **The fallbacks have vectors of their own.** Every fixture carries rain, snow, both Nows, the
+  hot Now and the hours ahead, so no case reached the rules' fallbacks. `vectors.ts` now also
+  takes blocks out of two fixtures (`withoutBlocks`: rain, rain's Now, snow's Now, snow, the
+  hours ahead or the hot Now), one whose hours start off the UTC hour (Kolkata), where the
+  fallbacks give other moments, and one on it (Aberdeen), and records the reference's answers,
+  with `in.without` naming what was taken out. The Swift tests take the same blocks out before
+  decoding. Each fallback, broken on purpose in the Swift, fails its cases.
+- **The strip's amounts are written as JavaScript writes numbers** (`JavaScript.string`,
+  ECMAScript `Number::toString`: Swift's shortest digits, laid out as JavaScript lays them out),
+  since core words "0.9cm" with a template string. Its positions are the same `Double` arithmetic
+  in the same order, so they are compared exactly.
+- **`Questions` needed no Swift of its own:** the generated `Questions.snow(view:place:tomorrow:)`
+  passes every case, places that would trip a replacement pattern or an interpolation included.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,
