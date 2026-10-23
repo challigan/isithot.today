@@ -1110,7 +1110,12 @@ in Leeds today"), with pages that are plainly original, easy to browse and hones
   (what the site answers, that it combines 8 forecasts and compares with what is normal for the
   place, a link to How it works), "Popular places" (20 UK city pages across the four nations,
   `LINKS.popular` in `config.ts`) and a link to the places page. It is a labelled region
-  outside `<main>`, so the saved snapshot does not carry it.
+  outside `<main>`, so the saved snapshot does not carry it. It follows the Hot | Wet | Snow |
+  Wind toggle, as the brand and Nearby do (Carl noticed every site's toggle showed the hot
+  site's text): with Wet showing on isithot.today it says what isitwet.today answers, and its
+  links go there, carrying the chosen units. The server still renders only the page's own text;
+  the others ride in attributes (`data-wet` and so on), which search engines do not read as the
+  page's text, rather than in the script, which is near its size budget.
 - **The heading is the question with its answer**: an `h1` holding the question ("Is it hot in
   Leeds today?", `#question`) and the answer ("Yes.", `#answer`), and the same for Now and This
   week (`h2`, raised to level 1 while on screen, as before: one main heading a page). The look

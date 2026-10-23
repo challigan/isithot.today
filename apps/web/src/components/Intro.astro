@@ -3,8 +3,11 @@
  * The home page's introduction, below the answer and the ad: what the site answers and how, some
  * popular city pages and the places page. It is the same for everyone, so search engines read
  * it whatever their location; the answer above is the visitor's own, worked out in the browser.
+ * It follows the Hot | Wet | Snow | Wind toggle (scripts/app.ts renderIntro): the text carries
+ * each site's own, in attributes rather than the page so search engines read only this site's,
+ * and the links (data-path) go to the site of the question on screen.
  */
-import { COPY, LINKS, intro, type City, type Topic } from '@isithot/core';
+import { COPY, LINKS, TOPICS, intro, type City, type Topic } from '@isithot/core';
 import { cityBySlug } from '@isithot/server';
 
 interface Props {
@@ -14,6 +17,7 @@ interface Props {
 
 const { topic } = Astro.props;
 const { heading, text } = intro(topic);
+const texts = Object.fromEntries(TOPICS.map((t) => [`data-${t}`, intro(t).text]));
 const popular = LINKS.popular
   .map((slug) => cityBySlug(slug))
   .filter((c): c is City => c !== undefined);
@@ -22,16 +26,16 @@ const popular = LINKS.popular
 <section class="intro" aria-labelledby="intro-h">
   <h2 id="intro-h">{heading}</h2>
   <!-- prettier-ignore -->
-  <p>{text} <a href="/about">{COPY.howItWorks}</a></p>
+  <p><span id="intro-text" {...texts}>{text}</span> <a href="/about" data-path="/about">{COPY.howItWorks}</a></p>
   <h2>{COPY.popularPlaces}</h2>
   <ul class="place-list">
     {popular.map((c) => (
       <li>
-        <a href={`/in/${c.slug}`} set:text={c.name} />
+        <a href={`/in/${c.slug}`} data-path={`/in/${c.slug}`} set:text={c.name} />
       </li>
     ))}
   </ul>
   <p>
-    <a href="/places" set:text={COPY.allPlaces} />
+    <a href="/places" data-path="/places" set:text={COPY.allPlaces} />
   </p>
 </section>

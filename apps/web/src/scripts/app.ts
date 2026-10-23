@@ -409,13 +409,21 @@ function renderLinks(res: TodayResponse): void {
 
 /**
  * A city page's links to the same city on the other sites (CityLinks.astro) go to their domains,
- * carrying the units chosen here; on deploy previews and locally they stay on this host.
+ * carrying the units chosen here; on deploy previews and locally they stay on this host. The home
+ * page's introduction links (Intro.astro, no data-site) go to the site of the question on screen.
  */
 function renderSiteLinks(): void {
-  document.querySelectorAll<HTMLAnchorElement>('a[data-site]').forEach((a) => {
-    const href = siteLink(parseTopic(a.dataset.site), a.dataset.path ?? '/');
+  document.querySelectorAll<HTMLAnchorElement>('a[data-path]').forEach((a) => {
+    const href = siteLink(a.dataset.site ? parseTopic(a.dataset.site) : topic, a.dataset.path!);
     if (a.getAttribute('href') !== href) a.setAttribute('href', href);
   });
+}
+
+/** The home page's introduction says what the site of the question on screen answers. */
+function renderIntro(): void {
+  const text = $('intro-text');
+  const own = text?.dataset[topic];
+  if (own && text.textContent !== own) text.textContent = own;
 }
 
 /** When the forecast behind the answer was fetched, at the place ("Updated 3:05pm BST"). */
@@ -530,7 +538,11 @@ function setTopic(next: Topic, opts: { announce?: boolean } = {}): void {
     b.setAttribute('aria-pressed', String(b.dataset.topic === topic));
   });
   if (current) render(current, false);
-  else renderPending(app.dataset.state === 'error' ? 'error' : 'loading');
+  else {
+    renderPending(app.dataset.state === 'error' ? 'error' : 'loading');
+    renderSiteLinks();
+  }
+  renderIntro();
   renderUnits();
   applyViewPalette(true);
   if (preview) renderChips();
