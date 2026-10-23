@@ -45,6 +45,7 @@ import {
   pathIn,
   vectorFiles,
   vectorJson,
+  withoutBlocks,
   type NamedVectors,
   type VectorCase,
 } from '../src/vectors';
@@ -60,7 +61,9 @@ beforeAll(async () => {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type In = any;
 const fx = (name: string | null): Fixture | null => (name === null ? null : fixtures.get(name)!);
-const res = (i: In): Fixture => fx(i.fixture)!;
+/** The case's answer: its fixture, without the blocks `in.without` lists. */
+const res = (i: In): Fixture =>
+  i.without ? withoutBlocks(fx(i.fixture)!, i.without) : fx(i.fixture)!;
 
 /**
  * Each function called afresh from a case's input alone, with the paths in its output read back
@@ -256,6 +259,21 @@ describe('pathIn and atPath', () => {
   });
 });
 
+describe('withoutBlocks', () => {
+  it('takes the blocks out of a copy, and refuses a path with nothing at it', () => {
+    const f = fixtures.get('aberdeen-snow')!;
+    const g = withoutBlocks(f, ['rain', 'snow.now']);
+    expect(g.rain).toBeUndefined();
+    expect(g.snow!.now).toBeUndefined();
+    expect(g.snow!.days).toEqual(f.snow!.days);
+    expect(g.now).toEqual(f.now);
+    expect(f.rain).toBeDefined();
+    expect(f.snow!.now).toBeDefined();
+    expect(() => withoutBlocks(f, ['snow.nothing'])).toThrow(/Nothing at snow.nothing/);
+    expect(() => withoutBlocks(f, ['nothing.now'])).toThrow(/Nothing at nothing.now/);
+  });
+});
+
 describe('localMoments', () => {
   it('finds a time twice when the clocks go back, never when they skip it', () => {
     expect(localMoments('Europe/London', '2026-10-25', 1, 30)).toEqual([
@@ -349,6 +367,19 @@ describe('the cases cover what section 7.4 asks for', () => {
       if (midnight !== null) expect(nows, name).toContain(midnight);
       expect(nows, name).toContain(usableUntil(f));
     }
+    // The fallbacks: snow's series without rain, then the next UTC hour, which off the UTC hour
+    // (Kolkata) is another moment; no hour at all without snow or rain.
+    const kolkata = fixtures.get('kolkata-0530')!;
+    const without = (blocks: string[]) =>
+      casesFor('freshness', 'hourUntil').find(
+        (c) =>
+          (c.in as In).fixture === 'kolkata-0530' &&
+          JSON.stringify((c.in as In).without) === JSON.stringify(blocks),
+      )!.out;
+    expect(without(['rain'])).toBe(hourUntil(kolkata));
+    expect(without(['rain', 'snow.now'])).not.toBe(hourUntil(kolkata));
+    expect(without(['rain.now'])).toBe(without(['rain', 'snow.now']));
+    expect(without(['rain', 'snow'])).toBeNull();
     const outs = new Set(casesFor('freshness', 'outOfDate').map((c) => c.out));
     expect(outs).toEqual(new Set(['day', 'hour', null]));
     expect(
@@ -396,13 +427,19 @@ describe('the cases cover what section 7.4 asks for', () => {
   });
 
   it('strip: every fixture, today and tomorrow', () => {
-    const cases = casesFor('strip', 'viewDisplay');
+    const cases = casesFor('strip', 'viewDisplay').filter((c) => !(c.in as In).without);
     expect(cases).toHaveLength(fixtures.size * 2);
     // forecast-ends has no tomorrow, so no strip for it.
     const ends = cases.find(
       (c) => (c.in as In).fixture === 'forecast-ends' && (c.in as In).tomorrow,
     );
     expect((ends!.out as any).zone).toBeNull();
+    // Nor has an answer without snow, today or tomorrow.
+    const noSnow = casesFor('strip', 'viewDisplay').filter((c) => (c.in as In).without);
+    expect(noSnow.map((c) => [(c.in as In).without, (c.out as any).zone])).toEqual([
+      [['snow'], null],
+      [['snow'], null],
+    ]);
   });
 
   it('widget: section 6.5’s clocks, locked, stale and no answer', () => {
