@@ -1650,6 +1650,343 @@ What the review of phases 2 and 3 found, and what changed for it.
   jobs, and what App Intents reads at build time is from Apple's documentation, unchecked on
   Xcode.
 
+## The iPhone app's data and launch (IsItState, phase 5.1)
+
+PR 5.1's data half: the API client, what is stored, `AppModel` and the launch order (iOS build
+spec, sections 4 and 9.4 to 9.6). Everything that can be pure is in IsItCore and tested on
+Linux; IsItKit only fills its protocols. `apps/ios/README.md` lists the types.
+
+- **A third IsItCore module, `IsItState`,** rather than IsItLogic, which holds only ports of the
+  client's TypeScript with vectors. `AppModel` is in it, `@MainActor @Observable`, since
+  Observation and the main actor work in the Linux toolchain (Swift 6.3.3), so the launch order
+  and the refresh rules are tested there with fakes, in Swift 6 mode. The spec put `APIClient`
+  and the clock in IsItServices; they are here instead, over protocols (`HTTPTransport`,
+  `AppClock`), with URLSession behind `URLSessionTransport` in IsItServices. The app links
+  IsItLogic and IsItState as well; the widget reaches them through IsItServices.
+- **Services through `AppEnvironment`:** the client, the clock (`now`, and `schedule(at:_:)`,
+  which a test clock keeps until the test runs it, so no test waits on time), the stored state,
+  the widget reloads, the later phases' steps (`AppHooks`, with `NoHooks` doing nothing:
+  StoreKit in phase 7, the location fix in phase 6, the ads and notifications in phase 8, and
+  routes in phases 6 and 8) and the jitter's random source. Every protocol is `Sendable`, so the
+  main-actor model can call them across isolation in Swift 6 mode.
+- **The launch** (`init(environment:)`, then `launch()`): step 1 in `init`, so the saved answer
+  is on the first frame. It paints when its key is the target's, byte for byte as the website
+  compares keys, and `HourPicker.pick` is non-nil (nil from `usableUntil` on), and, beyond the
+  spec, only in the units asked for, so centimetres never paint for someone who chose inches.
+  The fetch is skipped when the answer was saved under `CLIENT.reuseMs` ago, again beyond the
+  spec only when it isn't out of date (a quick re-open past the hour still asks) and not saved
+  after now (a clock moved back). Out of date, the fetch is the website's `fresh` one: ask, and
+  when the answer is still out of date (a fast clock), ask once more with `TodayQuery.fresh`,
+  then `Freshness.hold`. Then steps 2 and 4 to 7 call the hooks in the spec's order: the
+  entitlement check starts first and is awaited only before the ads (step 5), which start only
+  when not unlocked.
+- **The first launch** asks by IP location with no units, as section 5.6 says, and keeps the
+  server's choice (`res.units`) in `units.v1`, so every later request, the widgets' included,
+  carries units. A city page's place that answers 404 `not_found` is dropped for IP location and
+  the user is told once (`AppCopy.slugGone`, `notice`), as section 4 says.
+- **Keeping current**: a quiet refresh at `Freshness.nextRefreshAt` plus 0 to 90 s of jitter,
+  scheduled after every answer and cancelled in the background, so no wait has to outlast the
+  phone's sleep. Back in the foreground, section 9.5's rule: after more than
+  `CLIENT.refreshAfterMs` away, the view for the time of day and a fetch; sooner, a fetch only
+  when the answer is out of date, past `usableUntil`, or missing (until the review, below, the
+  website's `wake` rule, which also fetched any answer older than 30 minutes). After a failure:
+  offline or 429 (which section 5.6 has the app treat as offline; since the review it is never
+  called offline) asks again after `CLIENT.retryAfterMs` plus the jitter, which costs the
+  server nothing while there is no connection; any other error waits for the
+  next forecast hour of the answer on screen, or with none, for "Try again" or the next return,
+  so a broken request can't spend the function quota every minute. Only the newest fetch's
+  answer is shown.
+- **Offline** is `URLError`'s no-connection codes, `timedOut` among them (a weak signal far more
+  often than a slow server, on a phone); `AnswerState` keeps the picked hour until
+  `usableUntil`, then the stale state, and with nothing saved says there is no recent forecast.
+  The footer's line is `AppCopy.offline` with `UpdatedLine`; an answer without `updated` has
+  none. An error keeps the answer on screen, and the message is the server's, or
+  `CoreCopy.unavailable` when it sent none (which the page says too since the review, below).
+- **What is stored.** `SavedToday` moved from IsItServices to IsItModel, with its codec: `v` is
+  read first, on its own, so another version's file is ignored whatever it holds.
+  `StoredUnlock` reads `unlock.v1` as `{ unlocked, checkedAt, productID }` JSON, the API's dates
+  in it; phase 7's StoreKit code writes it. `SharedStore` is the App Group's `StoredState`, and
+  `MemoryState` stands in when a Release build can't open the group (nothing is kept; the
+  widget sees nothing).
+- **Dates are exact to the millisecond.** `ApiJSON`'s encoder wrote dates with a formatter that
+  cuts the `Date`'s seconds, so a moment such as .234 s, whose double is a hair below, was
+  written .233: a saved answer fetched at an arbitrary moment read back a millisecond early. The
+  encoder now writes the moment's nearest whole millisecond as `toISOString` does, and the
+  decoder gives the millisecond's own `Date` (`Date(epochMs:)`), so a date written and read
+  back is equal; `SavedToday` keeps `savedAt` to the millisecond. Every date the server sends
+  reads as before, to the millisecond.
+- **The fixtures in the app** come through the transport now: `-fixture <name>` answers every
+  request with that fixture, after forgetting the saved answer, so the launch runs as it does
+  for real and the fixture is saved for the widget under the target's key (no longer
+  `fixture:<name>`). `-apiOrigin <url>` asks a deploy preview. The unit tests' host doesn't
+  launch (XCTest's `XCTestConfigurationFilePath`), so a live fetch can't write the App Group
+  under `AppGroupTests`; a fixture launch always launches. All three are in `DebugHooks.swift`
+  under `#if DEBUG`. (Connecting the halves started the model's clock at the fixture's moment
+  too: "The iPhone app's home screen, connected", below.)
+- **The skeleton's widget can't show an old hour.** It now finds real answers, so its provider
+  shows the hour `HourPicker.pick` gives (an entry now and at each hour ahead), and nothing from
+  `usableUntil` on, until phase 7's planner replaces it.
+- **Not proven here:** `URLSessionTransport`, `SharedStore`'s defaults, `WidgetCenterReloader`,
+  the app's wiring and the debug hooks are Apple only, built and run only by the macOS jobs.
+  IsItServices and the widget's provider type-check on Linux against stubs of WidgetKit and
+  `containerURL`; whether `XCTestConfigurationFilePath` is in the hosted app's environment on
+  Xcode 26.6 is from long practice, not checked.
+
+## The iPhone app's Today page (IsItCore, IsItKit, apps/ios; phase 5.1, the page half)
+
+The iOS build spec's PR 5.1, its page half: the home screen's top bar and its Today page, from a
+`TodayResponse`, as section 10.2 lays them out. The model that fetches (`AppModel`, the launch
+order) is the other half, written beside it; the two meet in `HomeView.swift`.
+
+- **The content is a presenter in IsItLogic, tested on Linux.**
+  `HomePage(_:view:at:phase:placeName:)` makes one page as plain values: its state, band and
+  palette, the question, the answer, the heading VoiceOver reads with the place, the verdict and
+  detail, the middle page's agreement heading, strip (`StripGeometry`), strip summary, model list
+  and limited line, Retry, and the footer. It works out nothing of its own: it takes the hour
+  `HourPicker` picks, the middle day `MiddleDay` gives, `Questions.snow`, `MiddleDay.label`,
+  `UpdatedLine` and the generated copy. `HomeTopBar(placeName:approximate:)` is the top bar, with "Finding you…"
+  (`CoreCopy.locating`) while no place is known, as the website's header has it.
+- **Its reference is TypeScript, and so are its vectors.** packages/mobile `page.ts` (`homePage`)
+  is built only of core's and the client's functions: core `viewDisplay` of the answer client
+  `pickHour` picks at the moment, as the website shows that answer, with the hour's Now as
+  `snowNow`, its today in place of the answer's own and its week (the server's answer at the
+  start of that hour, by the `ahead` semantic test), and the middle view's day from client
+  `middleDay`; core `question` and `viewLabel`; client `updatedLine`; `COPY` and appCopy.ts.
+  `page.json` holds its answers for every fixture and view at the fixture's own moment, and for
+  eleven of them at an hour ahead, the last minute before `usableUntil` and at it; for Durham
+  across 6pm and without tomorrow; after each kind of request; with the place's name given or
+  empty; without `updated` or snow; and with no answer: 222 page cases, and core `creditParts`'
+  cases. The vitest replays each from its input, the vector guard holds the Swift to every case
+  (`PageVectorTests`), and `HomePageTests` reads the spec's fixtures as examples, their strings
+  taken from the file. Broken on purpose (the offline line's precedence, the 6pm flip a minute
+  out), the Swift fails its cases.
+- **The states.** Loading (no answer, asking): "Checking…" on `nosnow`'s palette, with shapes
+  holding the page's layout. Error (no answer, the request failed): the website's "Forecasts
+  are unavailable right now…" with Retry; offline, since connecting the halves, "No recent
+  forecast. Connect to the internet to refresh." with Retry (below). Not available (an answer without
+  snow, or without the view's block: no Now, no week, no tomorrow from 6pm): "Not available right
+  now.". No recent forecast (past `usableUntil`, on every view): `AppCopy.staleApp`, never the
+  old hour. An answer on screen stays while a request is out or after one failed. Without an
+  answer to show, the page has no band, so no glyph, and `nosnow`'s palette.
+- **The footer.** "Updated" and the `UpdatedLine` (at the place's date now, so "yesterday, …"
+  after midnight); then the offline line, which says when the forecast is from, or else the
+  stale line: offline, "It will refresh shortly" would not be true. Past `usableUntil` there is
+  no notice, since no forecast is showing, and the Updated line stays. The links out and the
+  places nearby are the answer's own (`links`, `nearby`), each hidden when there are none; the
+  website words the links into a sentence ("… on BBC Weather, Met Office or AccuWeather."), and
+  the app lays them out as a row of links under the intro, as section 10.2 has them, so it needs
+  no joining words of its own. The credits are the answer's `attribution` in pieces with their
+  links (`Credits.parts`, the port of core `creditParts`, matching phrases code unit for code
+  unit as `startsWith` does).
+- **The credits' links moved into core,** from `Credit.astro` (`CREDIT_LINKS`, and
+  `creditParts` in place of its regular expression), so the website and the apps link the same
+  phrases from one list; the generator writes it into `CoreCopy.creditLinks`. The website's
+  output is unchanged: the old split and the new give the same pieces for every credit.
+- **Two app strings.** `headingLabel` ("{place}. {question} {answer}", section 10.2's "Leeds.
+  Will it snow tomorrow? Yes.") and `modelLine` ("{name} · {value}", "ECMWF · 2cm"). Without a
+  place's name the heading is the website's own, the question and then the answer. The question
+  on screen asks without the place, as on the website's home page.
+- **No units input.** The task named the units among the presenter's inputs, but nothing on the
+  page depends on them: every amount is the answer's own, in `snow.unit`, worded by the server or
+  by `StripGeometry`, so a units input would have nothing to decide. The units a request asks
+  for are the model's.
+- **The views take plain values and actions** (IsItUI):
+  `HomeShell(topBar:theme:actions:content:)`, the background of the page on screen,
+  cross-fading in 0.9 s when the band changes (at once with Reduce Motion), with the top bar over
+  the pages; `ForecastPageView(page:theme:glyph:actions:)`, one page; `PageTheme`; and
+  `HomeActions` (retry, open the place picker, open Settings, use my location, open a link,
+  select a nearby place). They never see the app's model, which is written beside them; `HomeView.swift` connects the two, and for now gives the
+  skeleton's model, links opening in Safari through `openURL`, and actions that wait for the
+  model that fetches and for phase 6's sheets. Phase 5.2 puts the switcher and the pager in the
+  shell's content and adds the Now and week bodies to `HomePage`, so the shell isn't rewritten.
+- **IsItUI depends on IsItLogic, and not on SnowKit.** The app gives each page its colours
+  (`PageTheme(palette)`, with SnowKit's `Color(rgb:)`) and its glyph (`Glyphs.image`), so IsItUI
+  names no topic and the widget, which links SnowKit, still links none of the app's screens. The
+  app now links IsItLogic (project.yml), generated with XcodeGen 2.46.0 built from source: the
+  targets' IDs, which the test plans name, are unchanged.
+- **Accessibility, as section 16 asks for these elements:** the question and answer are one
+  heading element labelled with the place; the strip is one element read as its summary; a
+  model's row reads its name and amount; at accessibility sizes the rows stack, the place name
+  wraps to two lines and the glyph stops growing at 160 points; every text uses a text style, the
+  answer `Font.custom("BricolageAnswer", size: 64, relativeTo: .largeTitle)`; the background and
+  glyph are left alone by Smart Invert; buttons and links use the system's styles, tinted in the
+  palette's ink. A model that disagrees has a lighter amount rather than fainter text, as on the
+  website, so it keeps its contrast; its dot on the strip is fainter.
+- **The fixture hook shows a fixture at its own moment** (its `_fixture.now`; first
+  `DebugHooks.launchMoment`, and since connecting the halves the model's clock, below), so a UI
+  test on any day sees the state the fixture was made for. The UI tests
+  changed where the page's structure did: the place is a button labelled "Place: Aberdeen. Change
+  place.", and the question and answer are one heading ("Aberdeen. Will it snow today? Yes."),
+  so they read those where they read the skeleton's place and answer texts, and still wait for
+  the verdict and check it. `durham-tomorrow` (tomorrow's answer at 6:05pm) and `old-forecast`
+  (no recent forecast, and no verdict) are new.
+- **Not here yet:** the flakes' drift (the glyph is drawn whole), the announcement when the
+  picked hour changes the answer (section 16, phase 5.4), pull to refresh (5.3), the
+  notifications card and the upgrade row (phases 8 and 7), and the ImageRenderer snapshots of
+  every page, band and text size (section 17.2).
+- **Not proven here:** IsItUI and the app compile only on the macOS jobs, so the views, their
+  layout, VoiceOver's reading of them and the UI tests are unproven until the first `ios` run;
+  only the presenters, their vectors and the lint ran here.
+
+## The iPhone app's home screen, connected (apps/ios, IsItCore; phase 5.1)
+
+PR 5.1's two halves, the data and the launch and the Today page, joined on `claude/ios-home` by
+ordinary merge commits that keep both sides, then connected: the app's root makes the model with
+the production services and runs the launch, and the home screen draws the model's state. The
+spec's 5.1 is "the Today page from the live API", the skeleton TestFlight build; Carl sees his
+own approximate place in it with no picker.
+
+- **The merges.** project.yml links IsItModel, IsItLogic and IsItState into the app (both halves
+  added to the same line). DebugHooks keeps the data half's fixture transport, `-apiOrigin` and
+  the unit-test host guard, and the page half's fixture moment; the page half's `launchAnswer`,
+  which fed the skeleton's model, went with that model.
+- **The root** (`WillItSnowApp`) makes `AppModel` with `APIClient` over `URLSessionTransport` at
+  `API_ORIGIN`, `SystemClock`, the App Group's `SharedStore` (`MemoryState` without one),
+  `WidgetCenterReloader` and `NoHooks`; `.task` runs `launch()` and the scene's phase drives the
+  background and foreground rules. With no `place.v1` the target is approximate IP location, so
+  the first launch asks `?ahead=snow` and the server places the phone (section 9.4, "Nothing
+  prompts on first launch").
+- **The view has no rules of its own.** `AppModel` gains `topBar`, `page(_:at:)`, `now` and
+  `placeName` (IsItState, tested on Linux), which hand the presenters the model's state, so
+  `HomeView.swift` only draws them and passes taps back. `HomePage.Phase(AppPhase)` drops the
+  error's details. The place's name is the target's own (a city page's, a searched place's),
+  else the answer's, and never an empty one; "approximate" is the IP target, so the line shows
+  from the first frame, beside "Finding you…".
+- **The minute tick came with 5.1,** not 5.2 as the spec has it: a `TimelineView(.everyMinute)`
+  draws the page at the model's clock, so an app left open never shows an old hour past
+  `usableUntil` (section 0.2's honest copy). The page is a child view whose body reads the model,
+  so it is drawn again when the model changes as well as each minute.
+- **Only the middle page.** `model.view` (Now from 6pm) isn't drawn until 5.2's pager binds it;
+  5.1 shows Today, or Tomorrow from 6pm.
+- **The states agree between the halves.** The page's presenter (vector-checked TypeScript) is
+  what is drawn; the model's `AnswerState` says the same, and `HomeScreenTests` holds the two
+  together for every fixture at its own moment, a millisecond before `usableUntil` and at it, in
+  every phase. Where they differed, offline with nothing saved, the page now says
+  `AppCopy.staleApp` ("No recent forecast. Connect to the internet to refresh."), as
+  `AnswerState` and section 9.5 do, rather than "Forecasts are unavailable right now. Try again
+  in a few minutes.", which blames the forecasts for the phone's connection; Retry stays. The
+  change is in packages/mobile `page.ts` first, then `HomePage`, and `pnpm mobile:generate`
+  rewrote the six cases of `page.json` it touches.
+- **Deviation: an error over an answer stays quiet** (reverted in review, below: the page now
+  follows section 4). Section 4 says a 503 keeps the saved answer
+  "and show[s] `COPY.unavailable` with Try again". The website keeps the answer and shows no
+  error ("a stale answer beats an error", `app.ts`), and so does the app: the answer shows while
+  it has hours, the model asks again at the next forecast hour, pull to refresh is there, and
+  past `usableUntil` the page says there is no recent forecast. Retry shows only with nothing to
+  show. Also as the website, the page words any failure as `CoreCopy.unavailable` rather than
+  the server's own message (`FetchError.message`); for a 503 they are the same text.
+- **Pull to refresh came with 5.1** (5.3 in the spec): `.refreshable` on the page, in
+  `HomeView.swift`, which the page's scroll view takes up, so IsItUI is unchanged. It calls
+  `refresh()`, which keeps what is on screen.
+- **Nearby loads in place** through `AppModel.select(_:)`, new: the place becomes the target and
+  is kept in `place.v1`; the last place's answer leaves the screen at once, so the page is
+  checking under the new name and never shows one place's answer under another's; a failure
+  then shows as with nothing saved (offline, no recent forecast and Retry). The saved answer
+  stays the last place's until the new one replaces it. The place on screen again only asks
+  again. Choosing a nearby place doesn't add it to the recent places, which come with the
+  picker (phase 6).
+- **The notice** (`AppCopy.slugGone`) shows in the top bar in the approximate line's place
+  (`HomeTopBar(placeName:approximate:notice:)`), where it explains itself, until a place is
+  chosen; it isn't kept between launches. No string was added.
+- **One clock for the model and the page.** `SystemClock(startingAt:)` (IsItState) runs from a
+  given moment, scheduling by its own time, which a Linux test checks ahead and behind the
+  system's. A Debug build launched with `-fixture` or `-network` starts it at the fixture's
+  `_fixture.now`, or at `-now <iso>` (spec 9.8). This replaces `DebugHooks.launchMoment`: before,
+  the page was drawn at the fixture's moment while the model decided at the real one, so from 2
+  December 2026 the model would have judged the fixtures stale. `-clock fixed` is still phase
+  5.4's.
+- **A launch test with no fixture hook.** `-network <name>` stubs the network beneath the app's
+  own `URLSessionTransport` (`URLProtocolStub`, spec 9.8's URLProtocol stub, added to a copy of
+  section 4's configuration, `URLSessionTransport.configuration()`), so the real client,
+  transport, decoding and store run; it answers only the request for approximate IP location
+  and errs on any other, so an answer on screen proves the request. `-network off` has no
+  connection, and `-resetStore` forgets the place, units and saved answer first. `LaunchTests`
+  uses them for the first launch, an offline relaunch over the saved answer, and offline with
+  nothing saved. `-fixture` keeps its own transport, so a stub that fails on CI fails only these
+  three tests. `check-archive.sh` looks for `-network` as a short literal too (13 hooks), with
+  a test that it finds one; `-now` and `-resetStore` were on its list already. A launch with
+  `-network` always launches, as with `-fixture`, in case the UI-tested app's environment has
+  XCTest's configuration.
+- **Not here yet:** Now and the week, the switcher and the pager (5.2); the VoiceOver
+  announcement and `-clock fixed` (5.4); the place picker, Settings and "Use my location"
+  (phase 6), whose buttons are drawn and do nothing until then.
+- **Not proven here:** everything Apple only: the root's wiring, `HomeView` (the tick, the
+  refresh, the actions), the hooks, the URLProtocol stub, and the five new or changed UI tests,
+  which first run on the macOS jobs. `DebugHooks.swift` (Debug and Release), IsItServices and
+  the root's environment were type-checked on Linux in Swift 5 mode against stub UIKit and
+  WidgetKit modules; whether `.refreshable` on the page reaches its inner scroll view, and
+  whether XCUITest can scroll to and tap a place under "Nearby:", are from Apple's documentation
+  and practice, unchecked.
+
+## The iPhone app's home screen, reviewed (phase 5.1)
+
+What the review of PR 5.1 found, and what changed for it.
+
+- **Every fixture UI test starts from a clean store.** `-fixture` forgets only the saved answer,
+  and `testNearbyLoadsInPlace` leaves Dundee as the place in the App Group, so `testOldForecast`,
+  which XCTest runs straight after it (methods in alphabetical order; the plan doesn't
+  randomise), would have read "Dundee. Will it snow tomorrow? …" over Durham's answer, since the
+  place's own name comes before the answer's. `FixtureLaunchTests` now launches with
+  `-resetStore` before `-fixture` (`prepare(store:)` runs first), so the place, the units and the
+  saved answer are forgotten; `-fixture` itself is unchanged, so a fixture tried by hand keeps
+  the place chosen. `testOldForecast` waits for the footer's Updated line, which only an answer
+  brings, rather than reading the heading that the loading state already has.
+- **A place chosen during the location fix stands.** Launch step 4 compared the fix with the
+  place as it was after the wait, so a place chosen while the fix was out (one under "Nearby:"
+  now, the picker's from phase 6) was replaced by the device's cell and saved to `place.v1`. The
+  model keeps the place the fix was for, and moves only while that is still the place. A Linux
+  test holds the fix (`RecordingHooks(holdingFix:)`) and loads Dundee meanwhile.
+- **Back in the foreground, section 9.5's rule, not the website's.** The return fetched whenever
+  the answer was more than 30 minutes old, however short the time away (the website's `wake`,
+  which counts from its last load), where section 9.5 says to refetch sooner than 30 minutes
+  away only when the answer is out of date. Now: after more than `CLIENT.refreshAfterMs` away,
+  the view for the time of day and a fetch; sooner, a fetch only when the answer is out of date,
+  and, kept beyond the spec, past `usableUntil`, missing, or fetched at an unknown time or after
+  now. A quick switch away and back with a current answer asks nothing; the hourly quiet refresh
+  keeps it current. Since the return asks less, what was due when the app left stays due: the
+  model keeps the quiet refresh's or the retry's time across the background and schedules it
+  again for then, at once if it has passed. Before, a return within half an hour of an offline
+  failure dropped the minute's retry for the next forecast hour, leaving "You're offline" on
+  screen for up to an hour after the connection came back.
+- **A 429 is never "offline".** Section 5.6 has the app treat a 429 like being offline, and
+  section 4 says to keep the saved answer and retry quietly. The app did both by making it the
+  offline phase, which told a phone that was connected but rate limited that it was offline
+  ("You're offline. Showing the forecast from …"; with nothing saved, "Connect to the internet"),
+  against section 0.2's honest copy, and at the moment section 5.6 expects 429s from carrier NAT.
+  Now a 429 is an error (`AppPhase.error(.rateLimited)`), retried as offline is, after
+  `CLIENT.retryAfterMs` plus the jitter. Over an answer the page adds nothing: no offline line,
+  no Retry. With nothing saved it says core's words for it ("Too many requests. Try again in a
+  minute.", `FetchError.rateLimited.message`), with Retry. The page has a phase of its own for
+  it, `limited`.
+- **An error says so, as section 4 asks.** 5.1 kept the website's way ("Deviation: an error over
+  an answer stays quiet", above), which overrode an explicit line of the spec without Carl's
+  word, so the page follows section 4 now. After a failed request, over an answer that shows,
+  the footer says `CoreCopy.unavailable` ("Forecasts are unavailable right now. Try again in a
+  few minutes.") with Retry under it, in place of the stale line; past `usableUntil` there is
+  still neither. With nothing saved the page says the server's own message
+  (`AppPhase.serverMessage`, the `ApiError` message), or `CoreCopy.unavailable` when it sent
+  none, as `AnswerState` already did; the test that held the two together used only a 503,
+  whose message is that same text, and now has a 400, a bodiless 500 and a 429 as well. Section
+  4's "Try again" is the app's Retry (`CoreCopy.retry`), as section 10.2 has it; no string was
+  added for it.
+- **The reference first.** packages/mobile `page.ts` takes the 429 phase and the server's
+  message (`PageInput.message`); `pnpm mobile:generate` rewrote `page.json` (255 page cases,
+  from 222: each failure over an answer, over a stale one, over a view with nothing to show and
+  past `usableUntil`, and with no answer the server's message, empty or not, and the 429); and
+  `HomePage(_:view:at:phase:message:placeName:)` ports it. Broken on purpose (the message
+  ignored, a 429 worded as offline over an answer), the Swift fails its cases, `HomePageTests`
+  and the test that holds the page to `AnswerState`.
+- **Retry goes where its line is.** IsItUI draws the page's Retry in the body with no answer, and
+  under the footer's line with one (`RetryButton`, in both places).
+- **The place button says what it does before the place is known.** VoiceOver read only "Finding
+  you…" for it, which also stays after a failed first launch. It now reads "Finding you…, change
+  place." (`AppCopy.placeButtonUnknown`, beside section 10.9's `placeButtonLabel`), as the
+  website's place button reads "…, change location" to a screen reader. The text on screen is
+  unchanged.
+- **Not proven here:** the UI tests' clean launches, the footer's Retry and the place button's
+  label are Apple only, so the macOS jobs prove them; IsItUI's changes were not compiled here.
+  Everything else ran on Linux.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,
@@ -1871,8 +2208,10 @@ checks it answers `text/plain` on all four hosts).
   `copy.ts`). The API's `attribution` carries them; the footer of every page on all the
   sites shows them, with Open-Meteo, NASA POWER and both licences linked, plus GeoNames. The
   About pages name the agencies behind the models (from `MODELS`, so dropping a model updates
-  them) and say that the sites combine and modify the data. The apps will need the same
-  visible credits, not only the JSON field.
+  them) and say that the sites combine and modify the data. The iPhone app's page footer shows
+  the API's `attribution` lines as they are, with the same phrases linked: the phrases and their
+  links are core's (`CREDIT_LINKS`, split by `creditParts`), which the website's `Credit.astro`
+  reads too.
 - **The answer font in the apps.** Bricolage Grotesque is under the SIL Open Font License 1.1,
   with no reserved font name. The iPhone app bundles the answer's subset as `BricolageAnswer.ttf`,
   renamed and so a modified version, which the OFL allows; its name table keeps the copyright

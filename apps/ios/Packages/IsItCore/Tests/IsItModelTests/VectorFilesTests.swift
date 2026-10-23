@@ -11,8 +11,8 @@ struct VectorFilesTests {
   func names() throws {
     #expect(
       try Vectors.names() == [
-        "alerts", "freshness", "grid", "hours", "links", "placeTime", "query", "questions",
-        "recent", "strip", "target", "tomorrow", "widget",
+        "alerts", "freshness", "grid", "hours", "links", "page", "placeTime", "query",
+        "questions", "recent", "strip", "target", "tomorrow", "widget",
       ])
   }
 

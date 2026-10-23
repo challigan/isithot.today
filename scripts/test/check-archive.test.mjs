@@ -126,6 +126,8 @@ const FIXTURE_AFTER_STUB = [
 ];
 // "-now", built in a 32-bit register: mov w8, #0x6e2d; movk w8, #0x776f, lsl #16.
 const NOW_CODE = [0x528dc5a8, 0x72aeede8];
+// "-network" (8 bytes), built in x19: mov x19, #0x6e2d; then movk "et", "wo" and "rk".
+const NETWORK_CODE = [0xd28dc5b3, 0xf2ae8cb3, 0xf2cdeef3, 0xf2ed6e53];
 
 const PRIVACY = plist({ NSPrivacyTracking: false, NSPrivacyCollectedDataTypes: [] });
 
@@ -266,7 +268,7 @@ describe('an archive that passes', () => {
         '',
         '- WillItSnow 1.0 (101)',
         `- ads test: Google's demo units (${DEMO_APP})`,
-        "- checked: privacy manifests, the icon, the answer font, 12 debug hooks in both binaries, the ad units, the widget's links, versions, encryption and fixtures",
+        "- checked: privacy manifests, the icon, the answer font, 13 debug hooks in both binaries, the ad units, the widget's links, versions, encryption and fixtures",
         '',
       ].join('\n'),
     );
@@ -290,7 +292,9 @@ describe('an archive that passes', () => {
 
   it('passes with "-now" and the like inside ordinary text', () => {
     const dir = archive({
-      files: { WillItSnow: binary(['right-now', 'the-clock-noads', 'unlocked-resetStore']) },
+      files: {
+        WillItSnow: binary(['right-now', 'the-clock-noads', 'unlocked-resetStore', 'ad-network']),
+      },
     });
     expect(check(dir).errors).toEqual([]);
   });
@@ -414,6 +418,10 @@ describe('an archive that fails', () => {
     const fixture = archive({ files: { WillItSnow: binary([], FIXTURE_AFTER_STUB) } });
     expect(check(fixture).errors).toEqual([
       'the app binary builds the debug hook -fixture as a short Swift literal',
+    ]);
+    const network = archive({ files: { WillItSnow: binary([], NETWORK_CODE) } });
+    expect(check(network).errors).toEqual([
+      'the app binary builds the debug hook -network as a short Swift literal',
     ]);
   });
 

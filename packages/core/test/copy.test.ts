@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   ANSWERS,
+  ATTRIBUTION,
+  CREDIT_LINKS,
   MODEL_AGENCIES,
+  creditParts,
   TOMORROW_LABEL,
   TOMORROW_VERDICTS,
   VERDICTS,
@@ -163,6 +166,42 @@ describe('copy', () => {
     expect(question('Leeds', 'now', 'wet', true)).toBe('Is it wet in Leeds right now?');
     expect(question(null, 'week', 'hot', true)).toBe('Is it hot this week?');
     expect(question('Leeds', 'today', 'wet', false)).toBe('Is it wet in Leeds today?');
+  });
+
+  it('splits each credit into its text and its linked phrases', () => {
+    expect(creditParts(COPY.forecastCredit)).toEqual([
+      { text: 'Weather data by Open-Meteo.com', url: 'https://open-meteo.com/' },
+      { text: ' (' },
+      { text: 'CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' },
+      { text: '), modified' },
+    ]);
+    expect(creditParts(COPY.metOfficeCredit)).toEqual([
+      { text: 'Contains Met Office data © Crown copyright, the Met Office, licensed under ' },
+      { text: 'CC BY-SA 4.0', url: 'https://creativecommons.org/licenses/by-sa/4.0/' },
+    ]);
+    expect(creditParts(COPY.climateCredit)).toEqual([
+      { text: 'Climate data: ' },
+      { text: 'NASA POWER', url: 'https://power.larc.nasa.gov/' },
+    ]);
+    // Every credit the API gives is whole again, and links at least one phrase.
+    for (const credit of ATTRIBUTION) {
+      const parts = creditParts(credit);
+      expect(parts.map((p) => p.text).join('')).toBe(credit);
+      expect(parts.some((p) => p.url)).toBe(true);
+      expect(parts.every((p) => p.text.length > 0)).toBe(true);
+    }
+    expect(creditParts('')).toEqual([]);
+    expect(creditParts('No links here')).toEqual([{ text: 'No links here' }]);
+    expect(creditParts('NASA POWERNASA POWER')).toEqual([
+      { text: 'NASA POWER', url: 'https://power.larc.nasa.gov/' },
+      { text: 'NASA POWER', url: 'https://power.larc.nasa.gov/' },
+    ]);
+    expect(CREDIT_LINKS.map((l) => l.phrase)).toEqual([
+      'Weather data by Open-Meteo.com',
+      'CC BY 4.0',
+      'CC BY-SA 4.0',
+      'NASA POWER',
+    ]);
   });
 
   it('names the agency behind every model, and no other', () => {

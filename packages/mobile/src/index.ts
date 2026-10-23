@@ -10,6 +10,7 @@ export * from './exportIcon';
 export * from './exportKeys';
 export * from './exportPalettes';
 export * from './exportQuestions';
+export * from './page';
 export * from './png';
 export * from './swift';
 export * from './vectors';

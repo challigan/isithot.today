@@ -34,7 +34,7 @@ DEMO_PUBLISHER=3940256099942544
 HOOKS=(-uitest -fixture -apiOrigin -route -umpGeography URLProtocolStub 127.0.0.1)
 # DebugHooks.swift's other launch arguments (section 9.8), too short or too ordinary to look
 # for inside longer strings, so matched only as whole short literals.
-LITERAL_HOOKS=(-now -clock -unlocked -noads -resetStore)
+LITERAL_HOOKS=(-now -clock -unlocked -noads -resetStore -network)
 
 PLUTIL="${PLUTIL:-plutil}"
 CODESIGN="${CODESIGN:-codesign}"
