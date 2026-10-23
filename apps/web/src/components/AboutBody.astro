@@ -6,7 +6,7 @@ import AboutSnow from './AboutSnow.astro';
 import AboutWet from './AboutWet.astro';
 import AboutWind from './AboutWind.astro';
 import Credit from './Credit.astro';
-import { COPY, MODELS, SITES, TOPICS, type Topic } from '@isithot/core';
+import { COPY, MODEL_AGENCIES, MODELS, SITES, TOPICS, type Topic } from '@isithot/core';
 import { siteNames } from '../lib/topics';
 
 interface Props {
@@ -30,16 +30,8 @@ const description: Record<Topic, string> = {
 const SECTIONS = { hot: AboutHot, wet: AboutWet, snow: AboutSnow, wind: AboutWind };
 const order = [topic, ...TOPICS.filter((t) => t !== topic)];
 /** Who runs each forecast model, for the credits: "NOAA (GFS)". */
-const AGENCIES: Record<string, string> = {
-  ecmwf_ifs025: 'ECMWF',
-  ncep_gfs_seamless: 'NOAA',
-  dwd_icon_seamless: 'DWD',
-  ukmo_seamless: 'the Met Office',
-  meteofrance_seamless: 'Météo-France',
-  cmc_gem_seamless: 'Environment and Climate Change Canada',
-};
 const agencies = MODELS.map((m) => {
-  const agency = AGENCIES[m.id] ?? m.name;
+  const agency = MODEL_AGENCIES[m.id] ?? m.name;
   return agency === m.name ? agency : `${agency} (${m.name})`;
 });
 const agencyList = `${agencies.slice(0, -1).join(', ')} and ${agencies.at(-1)}`;

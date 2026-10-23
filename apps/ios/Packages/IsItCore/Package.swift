@@ -14,14 +14,20 @@ let package = Package(
   targets: [
     .target(name: "IsItModel"),
     .target(name: "IsItLogic", dependencies: ["IsItModel"]),
-    // What pnpm mobile:generate writes for the tests (the fixtures; later the golden vectors),
-    // with its loader: one copy that every test target reads. Not a product, so no app links it.
+    // What pnpm mobile:generate writes for the tests (the fixtures and the golden vectors), with
+    // their loaders: one copy that every test target reads. Not a product, so no app links it.
     .target(
       name: "IsItTestSupport",
       path: "Tests/IsItTestSupport",
-      resources: [.copy("Resources/Fixtures")]
+      resources: [.copy("Resources/Fixtures"), .copy("Resources/Vectors")]
     ),
     .testTarget(name: "IsItModelTests", dependencies: ["IsItModel", "IsItTestSupport"]),
+    // The ports' golden tests (phase 3): each vector file checked by the ports of its functions,
+    // IsItModel's (3.2) as well as IsItLogic's, and the guard that every file is (PortedVectors).
+    .testTarget(
+      name: "IsItLogicTests",
+      dependencies: ["IsItLogic", "IsItModel", "IsItTestSupport"]
+    ),
   ],
   swiftLanguageModes: [.v6]
 )

@@ -9,3 +9,6 @@ functions/lib/server.mjs
 packages/providers/test/fixtures/
 packages/server/test/fixtures/
 apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources/
+apps/ios/Packages/IsItKit/Sources/SnowKit/Resources/
+apps/ios/Packages/IsItKit/Sources/SnowKit/Fallback/
+apps/ios/Apps/Snow/Resources/Assets.xcassets/

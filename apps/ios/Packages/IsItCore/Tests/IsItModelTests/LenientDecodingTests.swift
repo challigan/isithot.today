@@ -171,4 +171,22 @@ struct LenientDecodingTests {
     json["updatedAt"] = "2026-12-02T09:05:00Z"
     #expect(try decode(json).updatedAt == whole)
   }
+
+  @Test(
+    "a date is Date.parse's moment to the millisecond, finer digits dropped as it drops them",
+    arguments: [
+      // Each with what Node 22's Date.parse gives for it.
+      ("2026-10-25T00:30:00Z", 1_792_888_200_000),
+      ("2026-10-25T00:30:00.1Z", 1_792_888_200_100),
+      ("2026-10-25T00:30:00.12Z", 1_792_888_200_120),
+      ("2026-10-25T00:30:00.999Z", 1_792_888_200_999),
+      ("2026-10-25T00:30:00.9995Z", 1_792_888_200_999),
+      ("2026-10-25T00:30:00.999999Z", 1_792_888_200_999),
+      ("2026-10-25T00:30:00.0004Z", 1_792_888_200_000),
+      ("2026-10-25T00:30:00.123456789Z", 1_792_888_200_123),
+      ("2026-10-25T00:30:00.123+05:30", 1_792_868_400_123),
+    ])
+  func milliseconds(_ text: String, _ ms: Int) throws {
+    #expect(try #require(ApiJSON.parseDate(text)).epochMs == ms)
+  }
 }

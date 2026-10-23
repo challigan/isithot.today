@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { APP_GROUP_KEYS, APP_KEYS, STORE_VERSION } from '@isithot/client';
 import { KEYS_PATH, keysSwift } from '../src/exportKeys';
-import { generatedHeader, swiftIdentifier, swiftString } from '../src/swift';
+import {
+  generatedHeader,
+  swiftCall,
+  swiftCase,
+  swiftDouble,
+  swiftIdentifier,
+  swiftInt,
+  swiftLet,
+  swiftString,
+  swiftTemplate,
+  templateSlots,
+} from '../src/swift';
 
 describe('swiftString', () => {
   it('writes plain text, apostrophes, curly quotes and $ as they are', () => {
@@ -26,6 +37,98 @@ describe('swiftString', () => {
 
   it('keeps characters outside the Basic Multilingual Plane whole', () => {
     expect(swiftString('❄️ 🌨')).toBe('"❄️ 🌨"');
+  });
+});
+
+describe('swiftTemplate', () => {
+  it('interpolates each slot as the parameter of the same name', () => {
+    expect(swiftTemplate('Place: {place}. Change place.')).toBe(
+      '"Place: \\(place). Change place."',
+    );
+    expect(swiftTemplate('Version {version} ({build})')).toBe('"Version \\(version) (\\(build))"');
+    expect(swiftTemplate('{snowy} of {total}')).toBe('"\\(snowy) of \\(total)"');
+    expect(swiftTemplate('No slots')).toBe(swiftString('No slots'));
+  });
+
+  it('writes apostrophes, curly quotes and $ around the slots as they are', () => {
+    expect(swiftTemplate("You're offline since {time}.")).toBe('"You\'re offline since \\(time)."');
+    expect(swiftTemplate('It’s “{place}”')).toBe('"It’s “\\(place)”"');
+    expect(swiftTemplate('$1 or {price}, $&')).toBe('"$1 or \\(price), $&"');
+  });
+
+  it('escapes backslashes and quotes around the slots, so only a slot interpolates', () => {
+    // A backslash before a slot stays a backslash, and the slot still interpolates.
+    expect(swiftTemplate('a\\{place}')).toBe('"a\\\\\\(place)"');
+    expect(swiftTemplate('\\(not) {place}')).toBe('"\\\\(not) \\(place)"');
+    expect(swiftTemplate('say "{answer}"\n')).toBe('"say \\"\\(answer)\\"\\n"');
+  });
+
+  it('throws on a slot that is not a Swift name, or a brace outside a slot', () => {
+    for (const bad of ['{}', '{Place}', '{place name}', '{{place}}', 'a { b', 'b }']) {
+      expect(() => swiftTemplate(bad)).toThrow();
+    }
+    // A keyword is a name, in backticks.
+    expect(swiftTemplate('{in}x')).toBe('"\\(`in`)x"');
+  });
+
+  it('lists the slots once each, in order', () => {
+    expect(templateSlots('Time: {time}\nPlace: {place}, {time}')).toEqual(['time', 'place']);
+    expect(templateSlots('Settings')).toEqual([]);
+  });
+});
+
+describe('swiftInt and swiftDouble', () => {
+  it('writes integers grouped in threes from five digits', () => {
+    expect([0, 7, 250, 1000, 9999].map(swiftInt)).toEqual(['0', '7', '250', '1000', '9999']);
+    expect([10_000, 21_600, 600_000, 1_800_000].map(swiftInt)).toEqual([
+      '10_000',
+      '21_600',
+      '600_000',
+      '1_800_000',
+    ]);
+    expect(swiftInt(-90_000)).toBe('-90_000');
+  });
+
+  it('throws on anything but a safe integer', () => {
+    for (const bad of [0.5, NaN, Infinity, 2 ** 53]) expect(() => swiftInt(bad)).toThrow();
+  });
+
+  it('writes doubles as the shortest text that reads back the same', () => {
+    expect([0.05, 0.6, 5, 15, 1 / 3, 1e-7].map(swiftDouble)).toEqual([
+      '0.05',
+      '0.6',
+      '5',
+      '15',
+      '0.3333333333333333',
+      '1e-7',
+    ]);
+    expect(Number(swiftDouble(1 / 3))).toBe(1 / 3);
+    for (const bad of [NaN, Infinity, -Infinity]) expect(() => swiftDouble(bad)).toThrow();
+  });
+});
+
+describe('swiftLet, swiftCase and swiftCall', () => {
+  it('keep a line that fits in 100 columns whole', () => {
+    expect(swiftLet('  ', 'public static let a', '"b"')).toEqual(['  public static let a = "b"']);
+    expect(swiftCase('    ', '.now', '"Now"')).toEqual(['    case .now: "Now"']);
+    expect(swiftCall('    ', 'Model', ['id: "a"', 'name: "A"'], ',')).toEqual([
+      '    Model(id: "a", name: "A"),',
+    ]);
+  });
+
+  it('break a longer one as swift-format does', () => {
+    const long = swiftString('x'.repeat(90));
+    expect(swiftLet('  ', 'public static let a', long)).toEqual([
+      '  public static let a =',
+      `    ${long}`,
+    ]);
+    expect(swiftCase('    ', '.now', long)).toEqual(['    case .now:', `      ${long}`]);
+    const args = ['g1: 0xf6eef9', 'g2: 0xe1c9e8', 'g3: 0xffe3d3', 'ink: 0x341a3c'];
+    expect(swiftCall('    ', 'public static let nosnow = Palette', [...args, ...args])).toEqual([
+      '    public static let nosnow = Palette(',
+      ...[...args, ...args].map((a, i) => `      ${a}${i < 7 ? ',' : ''}`),
+      '    )',
+    ]);
   });
 });
 

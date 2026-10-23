@@ -16,7 +16,41 @@ func decode(_ name: String) throws -> TodayResponse {
 struct FixtureDecodingTests {
   @Test("every fixture pnpm mobile:generate writes is here")
   func names() throws {
-    #expect(try Fixtures.names() == ["aberdeen-snow", "leeds-dry"])
+    #expect(
+      try Fixtures.names() == [
+        "aberdeen-snow",
+        "adelaide-1030",
+        "denver-f",
+        "durham-tomorrow",
+        "forecast-ends",
+        "ip-first-launch",
+        "kathmandu-0545",
+        "kiritimati-14",
+        "kolkata-0530",
+        "leeds-dry",
+        "limited",
+        "london-dst-autumn-evening",
+        "london-dst-autumn-night",
+        "london-dst-spring-evening",
+        "london-dst-spring-night",
+        "no-now",
+        "no-week",
+        "old-forecast",
+        "reykjavik-mixed",
+        "shrewsbury-maybe",
+        "stale",
+      ])
+  }
+
+  @Test("every fixture says what it was asked, when, and why")
+  func info() throws {
+    for name in try Fixtures.names() {
+      let info = try Fixtures.info(name)
+      #expect(info.query.hasSuffix("ahead=snow"), "\(name)")
+      #expect(ApiJSON.parseDate(info.now) != nil, "\(name)")
+      #expect(!info.note.isEmpty, "\(name)")
+    }
+    #expect(try Fixtures.info("ip-first-launch").query == "ahead=snow")
   }
 
   // Only what every fixture has by definition. Some leave a block out on purpose (no-now,

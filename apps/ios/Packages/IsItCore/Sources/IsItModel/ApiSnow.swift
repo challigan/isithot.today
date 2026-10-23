@@ -81,8 +81,9 @@ public struct ApiSnowModel: Codable, Sendable, Equatable {
   public let agrees: Bool
 }
 
-/// "Is it snowing right now?" for the current hour. The answer's `series` isn't decoded: the
-/// next hours come from `ApiSnow.ahead` instead.
+/// "Is it snowing right now?" for the current hour. Of the answer's `series`, only the hours'
+/// moments and dates are decoded, for the clock rules (client `hourUntil` in an answer without
+/// rain): the next hours' answers come from `ApiSnow.ahead` instead.
 public struct ApiSnowNow: Codable, Sendable, Equatable {
   public let time: Date
   public let band: SnowBand
@@ -96,6 +97,9 @@ public struct ApiSnowNow: Codable, Sendable, Equatable {
   public let chance: Double
   /// The next 12 hours in 2-hour blocks.
   public let hours: [ApiSnowHour]
+  /// The answer's hourly series, as the clock rules read it; nil in an hour ahead's Now, which
+  /// has none.
+  @Lenient public var series: [ApiClockHour]?
 }
 
 /// The chance of snow in the two hours from `time`.

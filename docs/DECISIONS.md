@@ -1017,9 +1017,11 @@ read CI; this records where the build fills or differs from the spec.
   (the palettes; `UILaunchScreen` is empty), the app icon, the StoreKit configuration and the
   `FEATURE_*` switches. The privacy manifests declare UserDefaults (CA92.1 and 1C8F.1 for the
   app, 1C8F.1 for the widget) and no collected data, until location and notifications arrive.
+  Phase 2.3 added the font and the icon.
 - **XcodeGen's presets.** XcodeGen adds Xcode's template settings to each target unless a
   project xcconfig names the setting, so `Base.xcconfig` is what decides the device family
-  (iPhone only), the Swift version and the icon (none yet). Checked by generating the project on
+  (iPhone only), the Swift version and the icon (none; since phase 2.3 project.yml names the
+  app's). Checked by generating the project on
   Linux with XcodeGen 2.46.0 built from source.
 - **Test plans** name targets by their object IDs, which XcodeGen derives from the project's and
   target's names only (the same from any folder, on Linux or a Mac). `ci/xcodegen.sh` checks them
@@ -1122,6 +1124,531 @@ uploads it to TestFlight, and `scripts/check-archive.sh`, which checks a build f
   publish it on a public repo is a decision for then. Unproven until the first run: cloud signing
   of the archive (development signing may need a registered iPhone, and may add a certificate per
   run; the README's table says what to do), and altool on Xcode 26.6.
+
+## The iPhone app's fixtures and golden vectors (packages/mobile)
+
+The iOS build spec's PRs 2.1 and 2.4: every fixture in section 7.3 and every vector file in
+section 7.4, written by `pnpm mobile:generate` into IsItCore's test resources and checked by
+`pnpm mobile:check`. This records where they fill or differ from the spec.
+
+- **21 fixtures, each the real `handleToday`'s answer.** Where the synthetic data can't give a
+  state, the upstream is changed and the server does the rest: `relabelZone` for the offset
+  zones, `onlyModels` for `limited` (ECMWF and GFS answer, the other four send null), `endsAfter`
+  for a forecast that stops, and an upstream that is down for `stale`, which the server answers
+  from a forecast it cached two hours before. That makes `stale` and `limited` real answers
+  rather than edited ones, so `stale` has the old `updatedAt` with today worked out now, as the
+  server sends it. Only `no-week` and `no-now` edit the answer (deleting `snow.week` or
+  `snow.now`), and `old-forecast` is a real answer whose `_fixture.now` is 7 hours after it:
+  the server never answers with a copy past the stale limit, so that state exists only on the
+  phone. Each `_fixture.note` says how its file was made.
+- **Moments the synthetic data needed.** Durham on 1 December says No tomorrow, so
+  `durham-tomorrow` is 6:05pm on 16 December (Yes tomorrow from all 6 forecasts; its last hour
+  ahead is midnight, the 17th's). The spec gives no moment for `shrewsbury-maybe` (9:05am on 12
+  December), `denver-f` (9:05am MST on 28 January 2027: Denver seldom snows on the synthetic
+  data, and that day has Maybe tomorrow, in inches) or `kolkata-0530` (9:10pm, so the hours
+  ahead cross midnight). The searched places are at 5:30pm on 2 December, as the spec says.
+  Reykjavík and Denver keep the synthetic source's whole-hour zones (`Etc/GMT+1`, `Etc/GMT+7`);
+  only the offset zones are relabelled.
+- **`relabelZone` moves whole days too.** Kiritimati is UTC+14 and the synthetic zone for its
+  longitude UTC-10, a day behind, so with the hour strings left alone its forecast would start
+  the day before and its week would have six days. Where the two offsets are a whole day apart
+  the dates move by that day; the hours stay as they are, which is what puts them off the UTC
+  hour.
+- **The clock changes are four files** (`london-dst-autumn-night`, `-autumn-evening`,
+  `-spring-night`, `-spring-evening`), one per moment the spec gives. The forecast has one UTC
+  offset throughout, as Open-Meteo's `utc_offset_seconds` and the parser have it, so the hours
+  ahead are right (1am twice in October, none in March) but on those two nights tomorrow's
+  `from` is an hour out: 11pm GMT on 25 October, 1am BST on 29 March. The fixtures record the
+  server as it answers.
+- **One fixture more than the spec: `forecast-ends`.** Section 7.4's tomorrow cases need a
+  response with no `days[1]`, and section 6.5 one whose last hour ahead ends before the stale
+  cut-off; no real forecast does either. Leeds at 8:05pm with the upstream's forecast stopping at
+  midnight does both: no tomorrow, no week, three hours ahead.
+- **A vector file** is `{ fn, source, cases }`, with each case `{ fn, in, out }`, because most
+  files cover several functions; `fn` lists them and `source` says where each comes from
+  (`client@pickHour`). Moments are epoch milliseconds, as the client takes them. An answer is
+  named by its fixture (`in.fixture`), and where a function returns one of the answer's own snow
+  objects (pickHour's Now, today and week, the middle view's day, a widget entry's day) the vector
+  has its path in that fixture ("snow.ahead.2.today"), which the Swift test reads back: the same
+  object, compared whole, and the files stay under 1 MB. The generator refuses Infinity, NaN and
+  holes, which JSON would write as null, and a path that isn't the answer's own object.
+- **One case to a line,** so a changed answer is a changed line in review, and a mismatch can be
+  found by its index.
+- **Every output comes from the reference,** and a vitest test calls each function again from
+  each case's input alone and compares, so a case can't say one thing and test another.
+  `updatedLine`'s cases are also checked against core `updatedTime` at the same moment, as
+  section 6.4 asks. `query.json` has no `windUnits` (the apps never send it) and adds
+  `searchQuery`, which the picker needs. The vitest tests also check that each file covers what
+  section 7.4 lists for it.
+- **`IsItTestSupport` loads them:** `Vectors.cases(file, fn:, input:, output:)` decodes one
+  function's cases as that function's own types and skips the rest, and `Fixtures.info` reads
+  `_fixture`. The Swift tests check that every fixture decodes and shows its state, and that
+  every vector file is there and names fixtures that exist. IsItLogic is untouched: its ports
+  and their tests are phase 3.
+- **Found on the way, not changed here:** with a phone clock behind the server across 6pm
+  (planned at 5:59pm from a 6:05pm answer), `widgetEntries` has no entry at 6pm, since entries
+  start only at the hours ahead, so a widget would say Today until 7pm. The vectors pin today's
+  behaviour; whether to add the place's 6pm and midnight as boundaries is a client change for a
+  PR of its own.
+
+## The iPhone app's copy, constants and palettes (packages/mobile)
+
+The iOS build spec's PR 2.2: the Swift emitters of section 7.1. `pnpm mobile:generate` now writes
+`CoreCopy`, `Questions`, `AppCopy`, `Constants` and `Keys` into IsItModel's `Generated` folder,
+and `Palettes` into IsItUI's, which the generator owns too, so a stale file there fails the check.
+(Since the review of phases 2 and 3, `Palettes` is in IsItModel's too, and the App Shortcut's
+strings are not in `AppCopy`: see "The iPhone app's phases 2 and 3, reviewed".)
+
+- **The Swift is written as swift-format writes it,** so `swift format lint --strict` passes on
+  every generated file: a declaration that would pass 100 columns breaks after its `=` (or a
+  `case` after its colon), and a string literal too long for a line stays whole on a line of its
+  own, which swift-format accepts since it can't break one. A call that doesn't fit has an
+  argument on each line. Integers from five digits are grouped in threes (`1_800_000`;
+  swift-format asks from seven). Strings are escaped by one rule (`swiftString`), so apostrophes,
+  curly quotes and `$` are written as they are and a backslash can never start an
+  interpolation.
+- **`CoreCopy`** has the `COPY` keys the app uses (`CORE_COPY_KEYS`: section 10.9's list, plus
+  the picker's title and Close, "Finding you…", the switcher's label and the three credits), in
+  `COPY`'s order. `UNITS_LABELS.snow` is `snowUnitsLabel`, written once. The labels keyed by a
+  view, units, band, reason or error code are functions over the Swift type with a `case` per
+  key (`CoreCopy.viewLabel(_:)`, `snowUnitName(_:)`, `snowBandLabel(_:)`,
+  `snowReasonLabel(_:)`, `errorMessage(code:)`), so a key core adds that Swift lacks fails the
+  build; a band or reason the app doesn't know has no label (nil). `AppView` (now, today,
+  week) is new in IsItModel, with core's raw values.
+- **`Questions`** is core's `question()` itself, called for each view, with and without a place,
+  `tomorrow` false and true, asked for the place `{place}`: twelve templates the Swift picks
+  from and puts the place into, so it has no rules of its own. A nil or empty place asks without
+  one, as core does. The generator stops if a template doesn't have the slot exactly once.
+- **`appCopy.ts` is the one place app copy lives.** A string with `{name}` slots becomes a
+  function taking a `String` for each (`AppCopy.placeButtonLabel(place:)`), so a slot can't be
+  left unfilled. Three strings section 10 words but 10.9's table leaves out are added:
+  `upgradeSettings` (10.4's row), `reportAdSubject` and `reportAdMail` (10.7's email). Since
+  Carl's Q2 put "will it snow?" under the icon, the strings that said "willitsnow" for the app
+  now say "the app" ("Notifications are off for this app in Settings.", "Open the app to turn on
+  widgets."); the email's subject names willitsnow.today. The tests hold every string to the
+  spec's rules: no "alert", "warning" or "danger" outside the notifications footer, no stray
+  spaces, British spelling, sentence case (capitals only to start a sentence, or in a short list
+  of names: Apple Account, Family Sharing, Privacy choices, Settings, Safari, Met Office, Apple,
+  Google, UK, °C, °F), and no other weather type, website or app.
+- **`Constants`** keeps the TypeScript's names and units (`Constants.Client.refreshAfterMs`,
+  ms; `Constants.Cache.forecastStale`, seconds). The groups written whole (`SEARCH`, `AHEAD`,
+  `WIDGET`, `ALERTS`, `CLIENT`) gain a member when a key is added, and stop the generator when
+  the new value isn't a whole number, so a type is chosen rather than guessed; snow's shares and
+  thresholds are declared `Double`, whole numbers too. `ALERTS` has only `heartbeatDays` until
+  the notifications work adds the windows.
+- **The models' agencies move into core** (`MODEL_AGENCIES` in `copy.ts`) from the About page,
+  which now reads them there, unchanged: the spec's `MODELS (names and agencies)` assumed core had
+  them, and the app's credits must say the same. Data only, so core's coverage is unchanged;
+  `Constants.models` has each model's id, name and agency, and the generator stops on a model
+  without one.
+- **`Palettes`** are core's `SNOW_PALETTES` as plain data: colours as `0xRRGGBB` (`UInt32`), the
+  glow as 0 to 1, and ink's WCAG 2 contrast against `g1` and `g2`, worked out as
+  `scripts/palette-contrast.mjs` does and rounded down to two decimals, so a pair under 4.5:1 can
+  never read as 4.5. The file imports only IsItModel (for `SnowBand`; an unknown band draws as
+  `nosnow`), so it compiles anywhere: it was compiled and checked on Linux in a scratch package
+  beside IsItModel. IsItUI's `Color(rgb:)` is the only SwiftUI part. The contrast test
+  (`PaletteTests`) is in the app's unit tests, the only Apple tests CI runs, so
+  `WillItSnowTests` now links IsItUI; it checks the ratios against the colours and 4.5:1, as the
+  vitest test does.
+- **Not yet:** the widget's gallery name and description, and the strings the screens will need
+  that section 10 doesn't word yet (a Now row's "60% chance at 6pm", for example): each is added
+  to `appCopy.ts` by the phase that builds its screen.
+
+## The iPhone app's glyphs, icon and answer font (packages/mobile, apps/ios)
+
+The iOS build spec's PR 2.3: the snow glyphs as asset catalogues (V7), the app icon (Q9) and
+`BricolageAnswer.ttf`, all written by `pnpm mobile:generate` and checked by `pnpm mobile:check`.
+This records where the build fills or differs from the spec.
+
+- **The glyphs are template image sets.** `exportGlyphs.ts` takes `SNOW_GLYPHS` as strings (the
+  script imports them; the package reads nothing) and wraps each in an SVG drawn as the website
+  draws it (stroke 3, round caps and joins, on a group rather than the `<svg>`, where Core SVG is
+  surest to inherit it), with `currentColor` made black. The sets are marked
+  `template-rendering-intent: template` and `preserves-vector-representation`, so SwiftUI tints
+  them with the foreground style and keeps them sharp at any size. The generator refuses what a
+  template can't show as the website does: text, an element other than a shape or group, a
+  colour other than `currentColor`, a CSS variable or reference, a `style`, and any class but
+  a top-level `drift`. So a glyph drawn in two colours, as Hot's are, fails the generator rather than
+  drawing wrong.
+- **"Plus a drift layer" is two layers.** A drift layer alone can't move the flakes: drawn over
+  the whole glyph, they would be doubled. So a glyph with drifting flakes has three sets: the
+  whole glyph under the band's name (widgets, Reduce Motion, the resting state), `<band>-still`
+  (all but the flakes) and `<band>-drift` (the flakes). In one colour, painting order doesn't
+  change what is covered, so the still layer under the drift layer is the whole glyph exactly.
+  `nosnow` has nothing that drifts and only the whole set: 16 sets for 6 glyphs.
+- **The PNG fallback is a whole second catalogue.** `SnowKit/Fallback/Glyphs.xcassets` has the
+  same 16 sets as 1x, 2x and 3x PNGs rendered by resvg, also template images. IsItKit's
+  `Package.swift` excludes it; switching (V7) is processing it instead of
+  `Resources/Glyphs.xcassets`, two lines, with nothing to regenerate. PNGs sitting unassigned in
+  the SVG sets would have drawn actool warnings instead.
+- **`Glyphs` in SnowKit.** `Glyphs.image(band)` is the whole glyph and `Glyphs.layers(band)` the
+  two layers (nil for `nosnow`), as decorative images, as the website hides them from screen
+  readers. A band with no glyph (`unknown`) draws as `nosnow`. The set names come from the
+  generated `GlyphAssets.swift`, so nothing is retyped. SnowKit exists now (SwiftPM refuses an
+  empty target); the app, the widget and the unit tests link it.
+- **PNGs are byte for byte the same anywhere.** pngjs filters rows the same way every time and
+  deflates with Z_RLE. Node's zlib is Chromium's fork, whose default strategy gives other bytes
+  than canonical zlib (checked on 23 October 2026: 454,405 against 460,915 bytes for the same
+  input), but its Z_RLE output is identical, since RLE never uses the hash the forks change. So
+  `pnpm mobile:check` agrees with what any machine generated. The icons are 32 to 105 KB and the
+  48 fallback PNGs 159 KB in all.
+- **The icon** is the snow favicon, full bleed: its rounded rectangle becomes a square (iOS
+  rounds the corners) and nothing is transparent. Dark (iOS 18) keeps a quarter of each gradient
+  colour (`#271731` to `#170920`) with the flake its top colour half way to white (`#cdaee2`);
+  tinted is a white flake on black, for iOS to tint. Each is a 1024×1024 RGB PNG, with no alpha
+  channel (App Store Connect refuses one): rendering fails unless every pixel is opaque, and the
+  PNG's colour type is checked. The colours derive from the favicon's, so the icon follows it.
+  Carl approves it (Q9); the three PNGs show in the pull request's files.
+- **The font is the website's, renamed.** `make-answer-font.py --ttf` builds the same instance
+  and subset as the woff2, and refuses unless every table but the name table and head's
+  timestamps matches the committed woff2 as fontTools decodes it. Two subset options make the
+  script reproduce the committed woff2 with fontTools 4.66.1: `.notdef` keeps its outline and the
+  name table keeps the licence URL, as the committed file has (without them, 4.66.1 drops both).
+  The woff2 itself isn't rebuilt: with brotli 1.2 it would be 7,708 bytes rather than 7,680, the
+  same font. The TrueType font is named `BricolageAnswer` (family, full and PostScript name), the
+  name `Font.custom` asks for; the original names would have made it fall back silently. The
+  font has no reserved name, so the OFL allows that; its copyright stays, and the name table
+  gains the licence's description beside its URL. It keeps the source's timestamps, so two
+  builds are identical (15,740 bytes).
+- **The font is checked without Python.** CI's checks run Node alone. The font's version string
+  ends with its recipe, a SHA-256 of the script, the source font and the website's woff2, and
+  `exportFont.ts` compares it with the recipe of the files now, and checks every table's
+  checksum and the font's. So editing the script or the woff2, or upgrading the source font,
+  fails `pnpm mobile:check` until the font is rebuilt, and a damaged file fails it too.
+  `pnpm mobile:generate` runs the Python (fontTools 4.66.1 exactly, which the script insists on,
+  and brotli) only then, and checks the new font carries the recipe the TypeScript expects.
+- **Where they live.** The generator owns the app's whole `Assets.xcassets` (the icon now; the
+  `LaunchBackground` colour comes from the palettes, so it belongs there too), the `Fonts`
+  folder, both glyph catalogues and SnowKit's `Generated` folder, at any depth, and removes
+  folders a stale file leaves empty. Prettier leaves the catalogues alone.
+- **The project.** Only the app names `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`
+  (project.yml); `Base.xcconfig` keeps it empty for every other target. The font is a resource of
+  the app (through `Apps/Snow/Resources`) and of the widget (its own source entry), and both
+  Info.plists list it in `UIAppFonts`. Generated with XcodeGen 2.46.0 built from source: the
+  app's resources hold `Assets.xcassets` and the font, the widget's the same font file, and both
+  link SnowKit; the widget still links no IsItAds.
+- **Checks.** `check-archive.sh` now fails without the icon (`Assets.car`, and
+  `CFBundleIconName` `AppIcon` in the Info.plist) or without the font in either bundle and its
+  `UIAppFonts`. `GlyphSnapshotTests` draws every glyph, whole and as its layers, in its band's
+  ink on its band's gradient (the generated palettes) for the contact sheet, without forcing
+  template rendering, so a glyph that lost it shows black: the first macOS run settles V7. `AnswerFontTests` checks the app registers the font as
+  `BricolageAnswer`. On Linux, SnowKit's Swift was type-checked against a stub `Image` with
+  SwiftUI's `init(decorative:bundle:)`, and every band's names checked against the catalogue.
+
+## The iPhone app's ports and the vector guard (IsItCore, phase 3)
+
+Phase 3 ports the shared rules to Swift, each checked against its vector file (spec sections 7.4
+and 9.2), and its exit asks for a test that the set of vector files the tests load equals the set
+generated, so none is skipped. This is in place before the first port, so the porters can work in
+parallel against it.
+
+- **One test target holds every port's golden test.** `IsItLogicTests` depends on IsItLogic,
+  IsItModel and IsItTestSupport, and 3.2's ports (`Target`, `TodayQuery`, `GridRounding`, in
+  IsItModel) are checked there too, so one guard sees every file. The vectors stay in
+  IsItTestSupport's resources, beside the fixtures they name.
+- **The guard runs the ports rather than watching for them.** Swift Testing runs tests in
+  parallel, in any order, with no hook after the last, so no test can see which files the others
+  loaded. Instead each port is a `VectorPort` (a check given the whole file) listed in
+  `PortedVectors.all`, and `VectorCoverageTests` has a test case for each file pnpm
+  mobile:generate writes: it loads the file and runs its port. Listed and loaded are then the
+  same thing. It fails for a generated file that isn't listed, a listed file that isn't
+  generated, a file whose port is still nil, and a port that leaves a case of any function in
+  its file unchecked (`VectorFile.unchecked`), so the guard covers every case, not only every
+  file. (Until the review of phases 2 and 3 it counted a function whose cases were read as
+  covered, `VectorFile.unread`.)
+- **It fails until phase 3 lands,** with one issue per file not yet ported, naming the pull
+  request and the Swift that ports it; on 23 October 2026 that is all 13 files, listed in
+  `apps/ios/README.md`. So `swift test` in IsItCore exits non-zero meanwhile, and `ios.yml`'s
+  `swift-linux` job fails, which also keeps the macOS jobs that need it from running. Nothing is
+  skipped or marked as a known issue to hide that: each port turns its own files green. With
+  3.4, every file is ported, and the guard passes.
+- **Parallel porters change different lines.** Each `PortedVectors.all` entry is a comment and a
+  line, with a blank line after it, so ports of different files merge without conflicts, and each
+  port lives in a test file of its own.
+- **The loader.** `VectorFile` reads a file's `{ fn, source, cases }` once, decodes one
+  function's cases as that function's own types when a test asks for them, and notes each case a
+  check has run on (`forEachCase`). `file.compare(fn, input:, output:) { port }` checks the port
+  on each case, equal and with the same text code unit for code unit (`sameText`), and, on a
+  mismatch, names the file, the case's index, the function and its input, with both values. `Fixtures.decode(_:at:in:decoder:)` reads back an answer's object by the
+  path a vector names (`snow.ahead.2.today`), as `atPath` does in `vectors.ts`; a test checks it
+  against the decoded answer for every day, Now, week and hour ahead in all 21 fixtures.
+
+## The iPhone app's places and queries (IsItCore, phase 3.2)
+
+3.2 ports the client's targets and queries and core's grid rounding into IsItModel (spec sections
+6.1, 6.2 and 9.2): `Target` (`.key`, `.device(lat:lon:)`, `Target(search:)`, `Target(query:)`),
+`TodayQuery` (`.build(_:units:ahead:)`, `.fresh(_:now:)`, `.search(_:)`) and
+`GridRounding.round(_:step:)`, each checked against `target.json`, `query.json` and `grid.json`,
+and registered with the vector guard.
+
+- **JavaScript's arithmetic is ported, not approximated,** because a key or a query that differs
+  by one character is another cache entry, or another place. `String(n)` is written from Swift's
+  shortest digits (the same digits; Swift writes "53.0" and "1e-07" where JavaScript writes "53"
+  and "1e-7"). `Math.round` is the floor plus a look at what is left: the spec's
+  `((v / step) + 0.5).rounded(.down)` rounds 0.49999999999999994 up to 1, and an odd whole
+  number from 2^52 up to the even one above it, and new grid cases pin both.
+  `Number(x.toFixed(d))` is worked out from the double's own bits in 128-bit integers (halves
+  away from zero on the exact value, as `toFixed` rounds), not as `(x * 10^d).rounded() / 10^d`,
+  whose product can round first. The step's decimals come from JavaScript's own writing of it,
+  as core's `decimalsOf` counts them, so a step of 1e-7 has none there too.
+- **`URLSearchParams` is ported too** (the WHATWG form parser and serializer), with
+  `encodeURIComponent` for the search: one leading "?" dropped, empty pairs skipped, the first of
+  a repeated name read, "+" as a space, a broken %-escape kept and broken UTF-8 replaced by
+  U+FFFD; and `*-._`, letters and digits written as they are. Names and `source=search` are
+  compared byte for byte, as JavaScript compares strings, where Swift's `==` would treat
+  canonically equivalent text as equal. The server's checks on the numbers (`COORD`, `HEIGHT`,
+  `GEONAME_ID`) are written out by hand, since a Swift `Regex`'s `\d` matches any script's
+  digits.
+- **Null and absent are the same in Swift,** as they are to every rule in the client: it reads
+  a name, region or country only when it is a non-empty string. A searched place's `elevation`
+  is a `Double` in the target, because a query can carry a fraction (`elevation=-25.5`), which
+  the reference keeps; `SearchResult.elevation` is whole metres, as `ApiLocation`'s is.
+- **The types the port needed.** `SearchResponse` and `SearchResult` (section 9.2 puts them in
+  IsItModel; `Target(search:)` takes a result), and `Topic`, in core's order of topics, which is
+  the order `build` writes `ahead` in. `build` has no `windUnits`: the apps never send it, and a
+  vector with it would fail, since the reference's query would have it. `fresh` takes a `Date`;
+  its hour is `Math.floor(now / HOUR)` of the moment's nearest whole millisecond (`epochMs`), as
+  every ported rule reads a `Date` (see "IsItCore, put together" below).
+- **What `place.v1` holds** is the client's `Target` JSON, or nothing for approximate IP
+  location (section 9.6): `target.stored()` writes it and `Target(stored:)` reads it, falling back
+  to IP location for nothing, or for anything that isn't a target, as the website reads its
+  own. **The query contract** (sections 11.2 and 17.2) is `QueryContractTests`: for every target
+  in `query.json`'s `todayQuery` cases (all four forms, with the awkward names and numbers) and
+  units of °C, °F or none, the query the widget makes from the stored `place.v1` and `units.v1`
+  is the app's, and the stored target reads back equal, with the same key.
+- **More cases, from the reference.** `grid.json` gains `Math.round`'s edges and steps
+  JavaScript writes oddly (1e-7, 0.1 + 0.2), and values from 1e21 up; `target.json` gains how
+  `URLSearchParams` reads a query (above) and the server's patterns (ASCII digits only, the whole
+  value); `query.json` gains the order of topics (`ahead=hot%2Cwet%2Csnow%2Cwind`), what the
+  serializer escapes, and every form `String(n)` writes. JSON has no -0, so no case has one: the
+  generator's own test compares the reference's -0 with the file's 0.
+- **One quirk of the reference, kept.** A coordinate under 1e-6 in size is written with an
+  exponent (`lat=1e-7`), which the server's check and `targetFromQuery` both refuse. No target
+  the app makes has one (a coordinate on the grid is 0 or at least 0.05 in size), so the port
+  keeps the behaviour, and `query.json` pins it.
+
+## The iPhone app's clock rules (IsItCore, phase 3.3)
+
+PR 3.3 ports the rules for what the app shows when: `PlaceTime`, `MiddleDay`, `Freshness`,
+`HourPicker`, `UpdatedLine`, `Questions` and `StripGeometry`, each checked against its vector file
+case by case (`placeTime`, `tomorrow`, `freshness`, `hours`, `questions` and `strip`).
+
+- **The clock rules read the hot and rain answers' moments, so the model decodes them.** Client
+  `hourUntil` reads rain's today and Now before snow's, and `dayUntil`, `hold`, `outOfDate` and
+  core `showsTomorrow` read the hot answer's days and Now. The spec's model decodes neither
+  (section 9.2), so `TodayResponse` gains `hotDays` (`days`: their dates), `hotNow` (`now`: its
+  time and its series' hours) and `rain` (its days' `from` and its Now's hours), and
+  `ApiSnowNow` gains `series` (the hours' moments and dates), each lenient: a damaged block is nil
+  and the rest is kept. Nothing else of the hot and rain answers is decoded. Reading snow's
+  instead would agree on every fixture, whose answers share their moments, but not with the
+  TypeScript for an answer without rain, or with rain but without its Now; the port follows the
+  TypeScript.
+- **Moments are `Date` in the API and whole milliseconds inside.** The app, its `TimelineView`
+  and WidgetKit work in `Date`, so the ports take and return `Date`, but the rules compare and
+  add `epochMs` (IsItModel's `Date(epochMs:)` and `.epochMs`, to the nearest millisecond), as the
+  TypeScript does, so a hold's `at`, or a moment a millisecond before a boundary, agrees to the
+  millisecond rather than to a `Double`'s rounding.
+- **`PlaceTime` reads only `TimeZone(identifier:)` and `secondsFromGMT(for:)`** (V4), then a
+  Gregorian calendar in UTC reads the shifted clock: no `DateFormatter`, whose patterns and zone
+  names differ between Linux and iOS. The seconds are dropped, as core's formatter drops them,
+  and an unknown zone is UTC, as in core, down to the four-digit year `toISOString` writes.
+- **The fallbacks have vectors of their own.** Every fixture carries rain, snow, both Nows, the
+  hot Now and the hours ahead, so no case reached the rules' fallbacks. `vectors.ts` now also
+  takes blocks out of two fixtures (`withoutBlocks`: rain, rain's Now, snow's Now, snow, the
+  hours ahead or the hot Now), one whose hours start off the UTC hour (Kolkata), where the
+  fallbacks give other moments, and one on it (Aberdeen), and records the reference's answers,
+  with `in.without` naming what was taken out. The Swift tests take the same blocks out before
+  decoding. Each fallback, broken on purpose in the Swift, fails its cases.
+- **The strip's amounts are written as JavaScript writes numbers** (`JavaScriptNumber.string`,
+  ECMAScript `Number::toString`: Swift's shortest digits, laid out as JavaScript lays them out),
+  since core words "0.9cm" with a template string. Its positions are the same `Double` arithmetic
+  in the same order, so they are compared exactly.
+- **`Questions` needed no Swift of its own:** the generated `Questions.snow(view:place:tomorrow:)`
+  passes every case, places that would trip a replacement pattern or an interpolation included.
+
+## The iPhone app's widget plan, notification sync, links and recent places (IsItCore, phase 3.4)
+
+PR 3.4 ports client `widgetEntries`, the notification sync (`alertPlaceAllowed`,
+`registrationBody`, `fingerprint`, `alertAction`), the deep links (`parseDeepLink`,
+`notificationRoute`) and the recent places (`addRecent`, `removeRecent`) into IsItLogic, as
+`WidgetPlanner.entries`, `AlertSync`, `DeepLink` and `RecentPlaces`, each checked case by case
+against `widget.json`, `alerts.json`, `links.json` and `recent.json`. With 3.2's and 3.3's files,
+every vector file is now ported and the guard passes.
+
+- **Built on 3.2 and 3.3, not beside them.** The widget planner calls `HourPicker.pick`,
+  `MiddleDay` and `Freshness.usableUntil`, and the other three take 3.2's `Target`, so the branch
+  merges both porters' branches rather than carrying thin copies of their code: nothing is
+  duplicated, and the planner is checked against the same pick and middle day as `hours.json`.
+- **Moments are `Date` in the API and whole milliseconds inside,** as in 3.3, so a heartbeat
+  due to the millisecond, or an hour ahead a millisecond after `now`, agrees with the TypeScript.
+  A plan's reload is `WidgetPlan.Reload` (`.never` or `.after(Date)`), WidgetKit's
+  `TimelineReloadPolicy` in IsItCore's terms, and `WidgetEntry.date` is the `TimelineEntry` date.
+  A week day's `snowy` and `total` stay optional, as the answer's are. The reference's `pickHour`
+  non-null assertion becomes a stale entry that no moment reaches (each is before `usableUntil`),
+  rather than a crash in a widget.
+- **A fingerprint is written as `JSON.stringify` writes it,** keys sorted by UTF-16 code unit at
+  every level, numbers as JavaScript writes them (`JavaScriptNumber.string`), and only the quote,
+  the backslash and control characters escaped, by a small writer of its own: `JSONEncoder`
+  escapes "/" unless told not to, and its key order and number forms are its own, not
+  JavaScript's. The app only ever compares its own fingerprints, but the same bytes as the
+  reference keep the rule and the vectors exact. They are compared byte for byte, as JavaScript
+  compares strings (and so are recent places' keys), where Swift's `==` takes canonically
+  equivalent text as the same. `alerts.json` gains a token with every escape and the characters
+  written as they are (the slash, DEL, U+2028, accents and emoji).
+- **A registration's place is `RegistrationBody.Place`:** a city's slug, or coordinates with the
+  query's fields only (an empty name, region or country and a zero geonameId left out, the
+  elevation kept), a device's with only `lat`, `lon` and `source`. Swift's `Target` has IP
+  location among its cases where the client's `PlaceTarget` excludes it by type, so
+  `AlertSync.body` is nil for it, which `alertAction` never asks for (`placeAllowed` first).
+- **Links are matched as the reference's pattern matches them,** by hand rather than with
+  `NSRegularExpression` or `Regex`: JavaScript's `trim` (its white space and line terminators:
+  U+FEFF yes, U+0085 no, unlike Swift's `whitespacesAndNewlines`), lowercased with the same
+  Unicode mappings (a Kelvin sign is a k), then the scheme, a host and an optional path of `a` to
+  `z`, an optional slash, and the end, a query or a fragment. `links.json` gains the trim and
+  Kelvin cases.
+- **A notification's payload is `Any?`**, the `userInfo` dictionary (with its `aps`) or any JSON
+  as `JSONSerialization` reads it, and each field is read only as a string, as the reference reads
+  them with `typeof`. A place route's view is nil for the reference's `'default'`, the place's
+  view for the time of day (`MiddleDay.defaultView`); `DeepLink.Route` is `Codable` as the
+  client's JSON, for the vectors.
+- **Two date readings, as the reference has.** The payload's `date` must be a real calendar date
+  (`calendarDay`: `Date.parse`, kept only when `toISOString` gives it back). The place's date from
+  `placeToday` is read as V8's `Date.parse` reads YYYY-MM-DD: any day up to 31, rolling over
+  ("2026-11-31" is 1 December); anything else is NaN, never today or tomorrow. `Date.parse` also
+  reads date-times and other forms, which the port doesn't, so the port takes the place's time as
+  a `LocalDateTime` (`DeepLink.route(payload:placeNow:)`), the app's own `PlaceTime.local(_:in:)`,
+  whose date is always YYYY-MM-DD, rather than any text. `links.json` gains a leap day, a date
+  that isn't one, and the roll-over.
+- **Recent places** are `RecentPlaces.adding(_:name:to:max:)` and `.removing(_:from:)`, with
+  `slice(0, max)` ported whole: a negative `max` drops that many from the end, and `recent.json`
+  gains that case. `RecentPlace` is `Codable` as `recent.v1` keeps it, with 3.2's `Target` JSON.
+- **The pinned client findings stay pinned.** The planner reproduces the reference, so a widget
+  planned with the phone's clock behind the server across 6pm still has no 6pm entry (the
+  packages/mobile section above), and the vectors keep pinning it.
+- **Each rule, broken on purpose in the Swift, fails its cases:** the week's four days, a
+  heartbeat due exactly, a control character's escape, `trim`'s U+FEFF, the day roll-over, a
+  negative cap and an hour ahead at `now` exactly.
+
+## The iPhone app's IsItCore, put together (phase 3)
+
+The three porters' branches (3.2, 3.3 and 3.4) are merged into one with ordinary merge commits.
+Every vector file is ported, the guard passes with none left to port, and the package has no
+`XCTSkip`: phase 3's exit (spec section 19).
+
+- **One writer of JavaScript's numbers.** 3.2 wrote `JavaScriptNumber.string` in IsItModel, for
+  keys and queries, and 3.3 `JavaScript.string` in IsItLogic, for the strip's amounts, which 3.4's
+  fingerprint used too: two ports of ECMAScript `Number::toString`. They agreed on 2.5 million
+  doubles (random bit patterns, each power of ten from 1e-330 to 1e310 times a few mantissas,
+  amounts to the hundredth, -0, NaN and the infinities), so one is kept: 3.2's, in the lower
+  module, beside its `Math.round` and `toFixed`. It is `package`, so IsItLogic's ports use it
+  without it becoming the apps' API. 3.3's tests of it now test it, in IsItModelTests, unchanged
+  otherwise. Broken on purpose, it fails `query.json`, `target.json`, `strip.json` and
+  `alerts.json` cases.
+- **One hour.** Core `HOUR`, which `freshness.ts`, `query.ts` and `widget.ts` all import, is
+  `Date.hourMs` (`package`, beside `epochMs`), for `Freshness`, `WidgetPlanner` and
+  `TodayQuery.fresh`, where 3.3 and 3.4 each had a constant of their own and 3.2 counted in
+  seconds. The client's own `DAY` (in `alerts.ts` and `links.ts`) and `MINUTE` (`widget.ts`) are
+  each file's, and stay each port's.
+- **A fresh query reads the moment as the clock rules do.** 3.2's `fresh` floored the seconds
+  over 3,600, which agrees with the reference for every whole millisecond, so for every vector,
+  but not with the rest of IsItCore for a system clock's moment within half a millisecond before
+  the hour: `epochMs` rounds it up to the hour, so `Freshness` counts the hour begun, while the
+  fresh query asked for the hour before. It now floors `epochMs` over `Date.hourMs`, as
+  `Math.floor(now / HOUR)`; `FreshQueryTests` pins both sides of the half.
+- **Nothing else was written twice.** 3.4 built on 3.2's `Target` and 3.3's `HourPicker`,
+  `MiddleDay` and `Freshness`, and on 3.3's `FixtureAnswers` in its tests. The byte-for-byte
+  string comparisons are one line each, where each rule compares, and stay there.
+- **Not proven here:** no app or widget target links IsItLogic yet (`project.yml` links IsItModel
+  only), so IsItLogic is built only on Linux until phase 5 uses it; Darwin's Foundation
+  (`userInfo` bridging, `JSONDecoder`'s doubles, time zones) is proven only by the macOS jobs,
+  which run once `swift-linux` is green.
+
+## The iPhone app's phases 2 and 3, reviewed
+
+What the review of phases 2 and 3 found, and what changed for it.
+
+- **More vectors, from the reference.** Replaying every committed case through the client with
+  coverage left some of its branches unreached, so their Swift went unchecked. `alerts.json`
+  gains a searched place with an empty name, region and geonameId (as `searchTarget` keeps an
+  unnamed result) and one with no name, which a registration leaves out. `widget.json` cases can
+  take blocks out as the other files' do (`in.without`): Kolkata and Aberdeen without their hours
+  ahead, when fetched and at 6pm, and Durham's evening with no tomorrow in its snow answer while
+  the hot answer has one, so an `ok` entry with no middle day, its week from the first day and the
+  `nosnow` palette. `hours.json` gains the same evening and an answer whose snow has no days, and
+  `freshness.json` answers whose hot days, or whose hot Now's hours, are an empty list. Now every
+  branch of the client's `alerts.ts`, `freshness.ts`, `hours.ts` and `widget.ts` is reached by a
+  case; only `todayQuery`'s `windUnits` isn't, which the apps never send. Each fallback, broken
+  on purpose in the Swift, fails its cases.
+- **`withoutBlocks` takes items out of lists.** `snow.days.1` takes that day out (any after it
+  move up), and `now.series.*` empties the list, so an answer can lose tomorrow or every hour
+  rather than only a field; `FixtureAnswers` takes them out the same way. Where a vector names
+  one of the answer's objects by its path, the generator checks the path names the same object in
+  the whole fixture (`pathInWhole`), which the Swift reads it from, so taking an item out can't
+  move the one a vector names.
+- **Query inputs are checked against the URL standard.** Swift's `URLSearchParams` follows the
+  WHATWG urlencoded parser, as browsers do, and so the website. Node 22's, which runs the
+  reference when the vectors are made, doesn't always: in a pair with a %-escape that decodes to
+  broken UTF-8 it mangles raw non-ASCII characters too ("a=%FF€" gives two U+FFFD, where the
+  standard gives U+FFFD and €). A vector built on that would pin Node's bug, and the rule that the
+  Swift is fixed to match would then break the Swift. So `vectors.ts` reads each `targetFromQuery`
+  input and each notification's place with the standard's parser as well (`specFormPairs`), and
+  stops when Node reads it otherwise (`assertSpecParse`). Every input so far agrees. A new one
+  keeps non-ASCII %-encoded wherever an escape in the same pair is broken UTF-8.
+- **The guard counts cases checked, not functions read.** `VectorFile.cases` reads a function's
+  cases and checks none; `forEachCase` runs a check over them and notes each case after its check
+  has run; `compare` is built on it, and so are the hand-written loops in the hours and widget
+  ports. `VectorCoverageTests` fails a function with any case no check ran on, naming how many
+  were checked, so a port that read a function's cases and dropped them, or checked only some,
+  now fails (both were tried: `removeRecent`'s cases read and dropped, and `pickHour` over its
+  first three).
+- **Text is compared code unit for code unit.** Swift's `==` takes canonically equivalent text as
+  equal, where JavaScript's `===` compares code units, so `compare` also checks `sameText`: every
+  string in both values, at any depth and in order (as `Mirror` sees them), the same UTF-8. The
+  hours and widget loops check their objects' text the same way. A fingerprint written
+  decomposed, and a widget's place name, now fail their cases. Numbers are left to `==`, so a -0
+  where the file has 0 (JSON has no -0) doesn't fail.
+- **An hour beyond JavaScript's dates is damage.** `ApiClockHour` took any finite number as an
+  hour's start, and `epochMs`, an `Int`, trapped on one past `Int`'s range the first time a rule
+  read it: a crash in the app or the widget from a valid JSON number. An hour's start must now be
+  a moment JavaScript's `Date` can hold (finite, within ±8.64e15 ms, ECMAScript's time range), or
+  the series fails to decode and `@Lenient` drops it, as it drops other damage. The reference
+  would carry the number through; no server answer has one.
+- **A date's fraction is cut to milliseconds,** as `Date.parse` cuts it, rather than rounded
+  (".9995Z" is .999). For the forms the server writes, a "Z" and up to three digits, the two
+  agreed already. Elsewhere they still differ, and no answer has those forms: JavaScript reads a
+  time with no offset as the device's own, which the port refuses, and refuses "+00", which the
+  port reads.
+- **`PlaceTime` is exact for the zones the API sends,** Open-Meteo's IANA names as written,
+  aliases included, from 1582 on, which every vector and fixture is. `Intl` and Foundation differ
+  on names the API never sends: Intl reads any case and UTC offsets ("+05:30"), which Foundation
+  doesn't, and refuses "GMT+5", which Foundation reads; before 1582 Foundation's calendar is
+  Julian. Matching Intl in full would mean porting its parsing of names and ICU's table of
+  aliases, for names no answer has, so the boundary is documented on `PlaceTime` instead, and no
+  vector names such a zone.
+- **A notification's route takes the place's time, not text.** `DeepLink.route(payload:placeNow:)`
+  takes a `LocalDateTime` (`PlaceTime.local(_:in:)`) where it took a `String`, so a caller can't
+  pass a date-time, which `Date.parse` reads and the port doesn't.
+- **The palettes are in IsItModel** (`Generated/Palettes.swift`), not IsItUI as spec section 7.1
+  has it. The widget extension links IsItServices, IsItWidgetUI and SnowKit, none of which reached
+  IsItUI, so it couldn't have drawn its palette background (spec 11.1) or the locked state's
+  `nosnow` (11.3) without linking the app's screens. The file is plain data keyed by `SnowBand`,
+  so IsItModel is its natural home: every target reaches it, and it compiles and is tested on
+  Linux, where `GeneratedPaletteTests` checks the ratios as the app's `PaletteTests` does.
+  `Color(rgb:)` is in SnowKit, the one SwiftUI module the app, the widget and the unit tests all
+  link, beside the glyphs it colours. The generator no longer owns IsItUI's `Generated` folder,
+  which is gone; the project is unchanged.
+- **The App Shortcut's strings are not in `AppCopy`.** App Intents reads the intent's `title` and
+  the App Shortcut's phrase when the app is built: the title must be a `LocalizedStringResource`
+  literal in the intent's declaration, and the phrase an `AppShortcutPhrase` literal with the
+  app's name as `\(.applicationName)`. No `String` constant or function can become either, so
+  phase 7 would have had to type them in Swift. They stay in `appCopy.ts`, held to the copy rules,
+  as `APP_INTENT_KEYS`; `AppCopy.swift` leaves them out, and the phase that builds the intent
+  (spec 11.5) generates them as those literals, with `{app}` written as the token. The Swift
+  check of the generated `intentPhrase(app:)` went with the function; `copy.test.ts` still pins
+  both strings and the phrase's one slot.
+- **Not proven here:** SnowKit's `Color(rgb:)` and the app tests' imports build only on the macOS
+  jobs, and what App Intents reads at build time is from Apple's documentation, unchecked on
+  Xcode.
 
 ## API contract
 
@@ -1346,6 +1873,11 @@ checks it answers `text/plain` on all four hosts).
   About pages name the agencies behind the models (from `MODELS`, so dropping a model updates
   them) and say that the sites combine and modify the data. The apps will need the same
   visible credits, not only the JSON field.
+- **The answer font in the apps.** Bricolage Grotesque is under the SIL Open Font License 1.1,
+  with no reserved font name. The iPhone app bundles the answer's subset as `BricolageAnswer.ttf`,
+  renamed and so a modified version, which the OFL allows; its name table keeps the copyright
+  and carries the licence's description and URL. The app's credits screen (spec section 10.6)
+  gives the licence's full text.
 - **Fair use, not non-commercial.** ShareAlike attaches only to adapted material, and a verdict
   or a median of 8 models very likely is not (a reading, not legal advice). The per-model
   figures the pages and `models[]` show are the closest thing to passing on Met Office data,

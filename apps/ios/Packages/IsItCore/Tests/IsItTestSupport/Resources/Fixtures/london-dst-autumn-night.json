@@ -1,0 +1,3723 @@
+{
+  "_fixture": {
+    "query": "place=london-gb&units=c&ahead=snow",
+    "now": "2026-10-24T23:30:00.000Z",
+    "note": "12:30am BST on Sunday 25 October 2026, the night the clocks go back at 2am BST: the hours ahead cross the change, so 1am comes twice."
+  },
+  "location": {
+    "name": "London",
+    "region": "England",
+    "country": "GB",
+    "lat": 51.5,
+    "lon": -0.15,
+    "source": "city",
+    "slug": "london-gb",
+    "geonameId": 2643743,
+    "elevation": 25,
+    "timezone": "Europe/London"
+  },
+  "units": "c",
+  "days": [
+    {
+      "date": "2026-10-25",
+      "band": "mild",
+      "answer": "No.",
+      "verdict": "It's mild.",
+      "high": 18,
+      "feelsLike": 15,
+      "peakTime": "2pm",
+      "normalHigh": 13,
+      "anomaly": 5,
+      "detail": "High of 18°, feels like 15°. Warmest around 2pm. 5° warmer than usual for October.",
+      "consensus": {
+        "value": 17.8,
+        "agree": 5,
+        "total": 6,
+        "bandLow": 15.8,
+        "bandHigh": 19.8,
+        "confidence": "good"
+      },
+      "models": [
+        {
+          "id": "ecmwf_ifs025",
+          "name": "ECMWF",
+          "high": 18,
+          "value": 18,
+          "agrees": true
+        },
+        {
+          "id": "ncep_gfs_seamless",
+          "name": "GFS",
+          "high": 18,
+          "value": 17.9,
+          "agrees": true
+        },
+        {
+          "id": "dwd_icon_seamless",
+          "name": "ICON",
+          "high": 18,
+          "value": 17.7,
+          "agrees": true
+        },
+        {
+          "id": "ukmo_seamless",
+          "name": "UKMO",
+          "high": 18,
+          "value": 18.1,
+          "agrees": true
+        },
+        {
+          "id": "meteofrance_seamless",
+          "name": "Météo-France",
+          "high": 15,
+          "value": 15.4,
+          "agrees": false
+        },
+        {
+          "id": "cmc_gem_seamless",
+          "name": "GEM",
+          "high": 18,
+          "value": 17.6,
+          "agrees": true
+        }
+      ],
+      "month": "October",
+      "agreementText": "5 of 6 forecasts agree within 2°",
+      "limitedText": null,
+      "stripSummary": "Forecasts range from 15° to 18°; 5 of 6 agree near 18°.",
+      "scale": {
+        "min": 12,
+        "max": 21
+      },
+      "uv": {
+        "max": 1,
+        "level": "low",
+        "peak": "12pm"
+      }
+    },
+    {
+      "date": "2026-10-26",
+      "band": "mild",
+      "answer": "No.",
+      "verdict": "It'll be mild.",
+      "high": 17,
+      "feelsLike": 16,
+      "peakTime": "1pm",
+      "normalHigh": 13,
+      "anomaly": 4,
+      "detail": "High of 17°, feels like 16°. Warmest around 1pm. 4° warmer than usual for October.",
+      "consensus": {
+        "value": 17.4,
+        "agree": 4,
+        "total": 6,
+        "bandLow": 15.4,
+        "bandHigh": 19.4,
+        "confidence": "good"
+      },
+      "models": [
+        {
+          "id": "ecmwf_ifs025",
+          "name": "ECMWF",
+          "high": 15,
+          "value": 15.2,
+          "agrees": false
+        },
+        {
+          "id": "ncep_gfs_seamless",
+          "name": "GFS",
+          "high": 20,
+          "value": 19.6,
+          "agrees": false
+        },
+        {
+          "id": "dwd_icon_seamless",
+          "name": "ICON",
+          "high": 17,
+          "value": 17.3,
+          "agrees": true
+        },
+        {
+          "id": "ukmo_seamless",
+          "name": "UKMO",
+          "high": 17,
+          "value": 16.9,
+          "agrees": true
+        },
+        {
+          "id": "meteofrance_seamless",
+          "name": "Météo-France",
+          "high": 18,
+          "value": 18.1,
+          "agrees": true
+        },
+        {
+          "id": "cmc_gem_seamless",
+          "name": "GEM",
+          "high": 17,
+          "value": 17.2,
+          "agrees": true
+        }
+      ],
+      "month": "October",
+      "agreementText": "4 of 6 forecasts agree within 2°",
+      "limitedText": null,
+      "stripSummary": "Forecasts range from 15° to 20°; 4 of 6 agree near 17°.",
+      "scale": {
+        "min": 12,
+        "max": 23
+      },
+      "uv": {
+        "max": 2,
+        "level": "low",
+        "peak": "12pm"
+      }
+    }
+  ],
+  "updatedAt": "2026-10-24T23:30:00.000Z",
+  "updated": {
+    "date": "2026-10-25",
+    "clock": "12:30am BST"
+  },
+  "attribution": [
+    "Weather data by Open-Meteo.com (CC BY 4.0), modified",
+    "Contains Met Office data © Crown copyright, the Met Office, licensed under CC BY-SA 4.0",
+    "Climate data: NASA POWER"
+  ],
+  "links": [
+    {
+      "name": "BBC Weather",
+      "url": "https://www.bbc.co.uk/weather/2643743"
+    },
+    {
+      "name": "Met Office",
+      "url": "https://www.metoffice.gov.uk/weather/forecast/gcpuux6c0"
+    },
+    {
+      "name": "AccuWeather",
+      "url": "https://www.accuweather.com/en/search-locations?query=London"
+    }
+  ],
+  "nearby": [
+    {
+      "slug": "dagenham-gb",
+      "name": "Dagenham"
+    },
+    {
+      "slug": "watford-gb",
+      "name": "Watford"
+    },
+    {
+      "slug": "romford-gb",
+      "name": "Romford"
+    },
+    {
+      "slug": "st-albans-gb",
+      "name": "St Albans"
+    },
+    {
+      "slug": "slough-gb",
+      "name": "Slough"
+    },
+    {
+      "slug": "grays-gb",
+      "name": "Grays"
+    },
+    {
+      "slug": "woking-gb",
+      "name": "Woking"
+    },
+    {
+      "slug": "hemel-hempstead-gb",
+      "name": "Hemel Hempstead"
+    }
+  ],
+  "now": {
+    "time": "2026-10-24T23:30:00.000Z",
+    "band": "cold",
+    "answer": "No.",
+    "verdict": "It's cold.",
+    "temperature": 10,
+    "feelsLike": 9,
+    "detail": "10° now, feels like 9°. Rising to 18° around 12pm.",
+    "hours": [
+      {
+        "time": "2026-10-25T00:00:00.000Z",
+        "label": "1am",
+        "temperature": 10
+      },
+      {
+        "time": "2026-10-25T02:00:00.000Z",
+        "label": "2am",
+        "temperature": 10
+      },
+      {
+        "time": "2026-10-25T04:00:00.000Z",
+        "label": "4am",
+        "temperature": 11
+      },
+      {
+        "time": "2026-10-25T06:00:00.000Z",
+        "label": "6am",
+        "temperature": 13
+      },
+      {
+        "time": "2026-10-25T08:00:00.000Z",
+        "label": "8am",
+        "temperature": 15
+      },
+      {
+        "time": "2026-10-25T10:00:00.000Z",
+        "label": "10am",
+        "temperature": 17
+      }
+    ],
+    "series": [
+      {
+        "time": 1792882800000,
+        "date": "2026-10-25",
+        "hour": 0,
+        "temperature": 10.3,
+        "feelsLike": 9.2,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1792886400000,
+        "date": "2026-10-25",
+        "hour": 1,
+        "temperature": 9.9,
+        "feelsLike": 8.9,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1792890000000,
+        "date": "2026-10-25",
+        "hour": 1,
+        "temperature": 9.8,
+        "feelsLike": 8.8,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1792893600000,
+        "date": "2026-10-25",
+        "hour": 2,
+        "temperature": 9.9,
+        "feelsLike": 8.9,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1792897200000,
+        "date": "2026-10-25",
+        "hour": 3,
+        "temperature": 10.3,
+        "feelsLike": 9.2,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1792900800000,
+        "date": "2026-10-25",
+        "hour": 4,
+        "temperature": 11,
+        "feelsLike": 9.7,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1792904400000,
+        "date": "2026-10-25",
+        "hour": 5,
+        "temperature": 11.8,
+        "feelsLike": 10.3,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1792908000000,
+        "date": "2026-10-25",
+        "hour": 6,
+        "temperature": 12.8,
+        "feelsLike": 11,
+        "band": "mild",
+        "uv": 0
+      },
+      {
+        "time": 1792911600000,
+        "date": "2026-10-25",
+        "hour": 7,
+        "temperature": 13.8,
+        "feelsLike": 11.8,
+        "band": "mild",
+        "uv": 0
+      },
+      {
+        "time": 1792915200000,
+        "date": "2026-10-25",
+        "hour": 8,
+        "temperature": 14.8,
+        "feelsLike": 12.5,
+        "band": "mild",
+        "uv": 0
+      },
+      {
+        "time": 1792918800000,
+        "date": "2026-10-25",
+        "hour": 9,
+        "temperature": 15.8,
+        "feelsLike": 13.3,
+        "band": "mild",
+        "uv": 1
+      },
+      {
+        "time": 1792922400000,
+        "date": "2026-10-25",
+        "hour": 10,
+        "temperature": 16.6,
+        "feelsLike": 13.8,
+        "band": "mild",
+        "uv": 1
+      },
+      {
+        "time": 1792926000000,
+        "date": "2026-10-25",
+        "hour": 11,
+        "temperature": 17.3,
+        "feelsLike": 14.4,
+        "band": "mild",
+        "uv": 1
+      },
+      {
+        "time": 1792929600000,
+        "date": "2026-10-25",
+        "hour": 12,
+        "temperature": 17.7,
+        "feelsLike": 14.7,
+        "band": "mild",
+        "uv": 1
+      },
+      {
+        "time": 1792933200000,
+        "date": "2026-10-25",
+        "hour": 13,
+        "temperature": 17.8,
+        "feelsLike": 14.7,
+        "band": "mild",
+        "uv": 1
+      },
+      {
+        "time": 1792936800000,
+        "date": "2026-10-25",
+        "hour": 14,
+        "temperature": 17.7,
+        "feelsLike": 14.7,
+        "band": "mild",
+        "uv": 1
+      },
+      {
+        "time": 1792940400000,
+        "date": "2026-10-25",
+        "hour": 15,
+        "temperature": 17.3,
+        "feelsLike": 14.4,
+        "band": "mild",
+        "uv": 0
+      },
+      {
+        "time": 1792944000000,
+        "date": "2026-10-25",
+        "hour": 16,
+        "temperature": 16.6,
+        "feelsLike": 13.8,
+        "band": "mild",
+        "uv": 0
+      },
+      {
+        "time": 1792947600000,
+        "date": "2026-10-25",
+        "hour": 17,
+        "temperature": 15.8,
+        "feelsLike": 13.3,
+        "band": "mild",
+        "uv": 0
+      },
+      {
+        "time": 1792951200000,
+        "date": "2026-10-25",
+        "hour": 18,
+        "temperature": 14.8,
+        "feelsLike": 12.5,
+        "band": "mild",
+        "uv": 0
+      },
+      {
+        "time": 1792954800000,
+        "date": "2026-10-25",
+        "hour": 19,
+        "temperature": 13.8,
+        "feelsLike": 11.8,
+        "band": "mild",
+        "uv": 0
+      },
+      {
+        "time": 1792958400000,
+        "date": "2026-10-25",
+        "hour": 20,
+        "temperature": 12.8,
+        "feelsLike": 11,
+        "band": "mild",
+        "uv": 0
+      },
+      {
+        "time": 1792962000000,
+        "date": "2026-10-25",
+        "hour": 21,
+        "temperature": 11.8,
+        "feelsLike": 10.3,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1792965600000,
+        "date": "2026-10-25",
+        "hour": 22,
+        "temperature": 11,
+        "feelsLike": 9.7,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1792969200000,
+        "date": "2026-10-25",
+        "hour": 23,
+        "temperature": 9.5,
+        "feelsLike": 8.5,
+        "band": "cold",
+        "uv": 0
+      }
+    ],
+    "uv": {
+      "value": 0,
+      "level": "low"
+    }
+  },
+  "week": {
+    "from": "2026-10-25",
+    "to": "2026-10-31",
+    "band": "mild",
+    "answer": "No.",
+    "verdict": "A mild week.",
+    "high": 17,
+    "highs": {
+      "min": 16,
+      "max": 18
+    },
+    "feelsLike": 15,
+    "normalHigh": 13,
+    "anomaly": 4,
+    "detail": "Highs of 16–18°, averaging 17°. Hottest on Saturday, 18°. 4° warmer than usual for October.",
+    "hottest": {
+      "date": "2026-10-31",
+      "high": 18
+    },
+    "days": [
+      {
+        "date": "2026-10-25",
+        "label": "Today",
+        "high": 18,
+        "band": "mild",
+        "bandLabel": "Mild"
+      },
+      {
+        "date": "2026-10-26",
+        "label": "Mon",
+        "high": 17,
+        "band": "mild",
+        "bandLabel": "Mild"
+      },
+      {
+        "date": "2026-10-27",
+        "label": "Tue",
+        "high": 17,
+        "band": "mild",
+        "bandLabel": "Mild"
+      },
+      {
+        "date": "2026-10-28",
+        "label": "Wed",
+        "high": 16,
+        "band": "mild",
+        "bandLabel": "Mild"
+      },
+      {
+        "date": "2026-10-29",
+        "label": "Thu",
+        "high": 17,
+        "band": "mild",
+        "bandLabel": "Mild"
+      },
+      {
+        "date": "2026-10-30",
+        "label": "Fri",
+        "high": 16,
+        "band": "mild",
+        "bandLabel": "Mild"
+      },
+      {
+        "date": "2026-10-31",
+        "label": "Sat",
+        "high": 18,
+        "band": "mild",
+        "bandLabel": "Mild"
+      }
+    ]
+  },
+  "rain": {
+    "unit": "mm",
+    "days": [
+      {
+        "date": "2026-10-25",
+        "from": "2026-10-24T23:30:00.000Z",
+        "partial": true,
+        "band": "showers",
+        "answer": "Maybe.",
+        "verdict": "Showers possible.",
+        "detail": "Some forecasts say up to 2mm. On and off.",
+        "amount": 0,
+        "chance": 0.33,
+        "wet": 2,
+        "total": 6,
+        "confidence": "good",
+        "threshold": 1,
+        "snow": "none",
+        "likely": null,
+        "scale": {
+          "min": 0,
+          "max": 5
+        },
+        "models": [
+          {
+            "id": "ecmwf_ifs025",
+            "name": "ECMWF",
+            "amount": 0,
+            "value": 0,
+            "expectsRain": false,
+            "agrees": true
+          },
+          {
+            "id": "ncep_gfs_seamless",
+            "name": "GFS",
+            "amount": 0,
+            "value": 0,
+            "expectsRain": false,
+            "agrees": true
+          },
+          {
+            "id": "dwd_icon_seamless",
+            "name": "ICON",
+            "amount": 0,
+            "value": 0,
+            "expectsRain": false,
+            "agrees": true
+          },
+          {
+            "id": "ukmo_seamless",
+            "name": "UKMO",
+            "amount": 3,
+            "value": 3.2,
+            "expectsRain": true,
+            "agrees": true
+          },
+          {
+            "id": "meteofrance_seamless",
+            "name": "Météo-France",
+            "amount": 2,
+            "value": 1.6,
+            "expectsRain": true,
+            "agrees": true
+          },
+          {
+            "id": "cmc_gem_seamless",
+            "name": "GEM",
+            "amount": 0,
+            "value": 0,
+            "expectsRain": false,
+            "agrees": true
+          }
+        ],
+        "month": "October",
+        "agreementText": "2 of 6 forecasts expect rain",
+        "limitedText": null,
+        "stripSummary": "Forecasts range from 0mm to 3mm; 2 of 6 expect rain."
+      },
+      {
+        "date": "2026-10-26",
+        "from": "2026-10-25T23:00:00.000Z",
+        "partial": false,
+        "band": "dry",
+        "answer": "No.",
+        "verdict": "It'll be dry.",
+        "detail": "Dry in every forecast.",
+        "amount": 0,
+        "chance": 0,
+        "wet": 0,
+        "total": 6,
+        "confidence": "good",
+        "threshold": 1,
+        "snow": "none",
+        "likely": null,
+        "scale": {
+          "min": 0,
+          "max": 5
+        },
+        "models": [
+          {
+            "id": "ecmwf_ifs025",
+            "name": "ECMWF",
+            "amount": 0,
+            "value": 0,
+            "expectsRain": false,
+            "agrees": true
+          },
+          {
+            "id": "ncep_gfs_seamless",
+            "name": "GFS",
+            "amount": 0,
+            "value": 0,
+            "expectsRain": false,
+            "agrees": true
+          },
+          {
+            "id": "dwd_icon_seamless",
+            "name": "ICON",
+            "amount": 0,
+            "value": 0,
+            "expectsRain": false,
+            "agrees": true
+          },
+          {
+            "id": "ukmo_seamless",
+            "name": "UKMO",
+            "amount": 0,
+            "value": 0,
+            "expectsRain": false,
+            "agrees": true
+          },
+          {
+            "id": "meteofrance_seamless",
+            "name": "Météo-France",
+            "amount": 0,
+            "value": 0,
+            "expectsRain": false,
+            "agrees": true
+          },
+          {
+            "id": "cmc_gem_seamless",
+            "name": "GEM",
+            "amount": 0.1,
+            "value": 0.1,
+            "expectsRain": false,
+            "agrees": true
+          }
+        ],
+        "month": "October",
+        "agreementText": "0 of 6 forecasts expect rain",
+        "limitedText": null,
+        "stripSummary": "Forecasts range from 0mm to 0.1mm; none expect rain."
+      }
+    ],
+    "now": {
+      "time": "2026-10-24T23:30:00.000Z",
+      "band": "dry",
+      "answer": "No.",
+      "verdict": "It's dry.",
+      "detail": "Dry now. Dry for the next 12 hours.",
+      "amount": 0,
+      "chance": 0,
+      "snow": false,
+      "hours": [
+        {
+          "time": "2026-10-25T00:00:00.000Z",
+          "label": "1am",
+          "chance": 0
+        },
+        {
+          "time": "2026-10-25T02:00:00.000Z",
+          "label": "2am",
+          "chance": 0
+        },
+        {
+          "time": "2026-10-25T04:00:00.000Z",
+          "label": "4am",
+          "chance": 0
+        },
+        {
+          "time": "2026-10-25T06:00:00.000Z",
+          "label": "6am",
+          "chance": 0
+        },
+        {
+          "time": "2026-10-25T08:00:00.000Z",
+          "label": "8am",
+          "chance": 0
+        },
+        {
+          "time": "2026-10-25T10:00:00.000Z",
+          "label": "10am",
+          "chance": 20
+        }
+      ],
+      "series": [
+        {
+          "time": 1792882800000,
+          "date": "2026-10-25",
+          "hour": 0,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792886400000,
+          "date": "2026-10-25",
+          "hour": 1,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792890000000,
+          "date": "2026-10-25",
+          "hour": 1,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792893600000,
+          "date": "2026-10-25",
+          "hour": 2,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792897200000,
+          "date": "2026-10-25",
+          "hour": 3,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792900800000,
+          "date": "2026-10-25",
+          "hour": 4,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792904400000,
+          "date": "2026-10-25",
+          "hour": 5,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792908000000,
+          "date": "2026-10-25",
+          "hour": 6,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792911600000,
+          "date": "2026-10-25",
+          "hour": 7,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792915200000,
+          "date": "2026-10-25",
+          "hour": 8,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792918800000,
+          "date": "2026-10-25",
+          "hour": 9,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0.17,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792922400000,
+          "date": "2026-10-25",
+          "hour": 10,
+          "amount": 0,
+          "chance": 0.17,
+          "chance2h": 0.17,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792926000000,
+          "date": "2026-10-25",
+          "hour": 11,
+          "amount": 0,
+          "chance": 0.17,
+          "chance2h": 0.17,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792929600000,
+          "date": "2026-10-25",
+          "hour": 12,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792933200000,
+          "date": "2026-10-25",
+          "hour": 13,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792936800000,
+          "date": "2026-10-25",
+          "hour": 14,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792940400000,
+          "date": "2026-10-25",
+          "hour": 15,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792944000000,
+          "date": "2026-10-25",
+          "hour": 16,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792947600000,
+          "date": "2026-10-25",
+          "hour": 17,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792951200000,
+          "date": "2026-10-25",
+          "hour": 18,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0.17,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792954800000,
+          "date": "2026-10-25",
+          "hour": 19,
+          "amount": 0,
+          "chance": 0.17,
+          "chance2h": 0.17,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792958400000,
+          "date": "2026-10-25",
+          "hour": 20,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792962000000,
+          "date": "2026-10-25",
+          "hour": 21,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792965600000,
+          "date": "2026-10-25",
+          "hour": 22,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1792969200000,
+          "date": "2026-10-25",
+          "hour": 23,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        }
+      ]
+    },
+    "week": {
+      "from": "2026-10-25",
+      "to": "2026-10-31",
+      "band": "showers",
+      "answer": "Partly.",
+      "verdict": "Rain on Wed and Thu, heavy on Wed.",
+      "detail": "About 18mm across the week, most on Wednesday (12mm). About normal for October.",
+      "total": 18,
+      "normal": 21,
+      "rainDays": 2,
+      "showerDays": 1,
+      "wettest": {
+        "date": "2026-10-28",
+        "amount": 12
+      },
+      "days": [
+        {
+          "date": "2026-10-25",
+          "label": "Today",
+          "amount": 0,
+          "band": "showers",
+          "bandLabel": "Showers",
+          "snow": false,
+          "chance": 0.33,
+          "wet": 2,
+          "total": 6
+        },
+        {
+          "date": "2026-10-26",
+          "label": "Mon",
+          "amount": 0,
+          "band": "dry",
+          "bandLabel": "Dry",
+          "snow": false,
+          "chance": 0,
+          "wet": 0,
+          "total": 6
+        },
+        {
+          "date": "2026-10-27",
+          "label": "Tue",
+          "amount": 0,
+          "band": "dry",
+          "bandLabel": "Dry",
+          "snow": false,
+          "chance": 0,
+          "wet": 0,
+          "total": 6
+        },
+        {
+          "date": "2026-10-28",
+          "label": "Wed",
+          "amount": 12,
+          "band": "heavy",
+          "bandLabel": "Heavy rain",
+          "snow": false,
+          "chance": 1,
+          "wet": 6,
+          "total": 6
+        },
+        {
+          "date": "2026-10-29",
+          "label": "Thu",
+          "amount": 4,
+          "band": "rain",
+          "bandLabel": "Rain",
+          "snow": false,
+          "chance": 1,
+          "wet": 5,
+          "total": 5
+        },
+        {
+          "date": "2026-10-30",
+          "label": "Fri",
+          "amount": 0,
+          "band": "dry",
+          "bandLabel": "Dry",
+          "snow": false,
+          "chance": 0,
+          "wet": 0,
+          "total": 5
+        },
+        {
+          "date": "2026-10-31",
+          "label": "Sat",
+          "amount": 0,
+          "band": "spots",
+          "bandLabel": "Mostly dry",
+          "snow": false,
+          "chance": 0,
+          "wet": 0,
+          "total": 5
+        }
+      ]
+    }
+  },
+  "snow": {
+    "unit": "cm",
+    "days": [
+      {
+        "date": "2026-10-25",
+        "from": "2026-10-24T23:30:00.000Z",
+        "partial": true,
+        "band": "nosnow",
+        "answer": "No.",
+        "verdict": "Rain, not snow.",
+        "detail": "No lower than 10° for the rest of the day. Snow is rare here in October.",
+        "reason": "rain",
+        "bandLabel": "Rain",
+        "amount": 0,
+        "chance": 0,
+        "snowy": 0,
+        "total": 6,
+        "confidence": "good",
+        "threshold": 0.5,
+        "likely": null,
+        "scale": {
+          "min": 0,
+          "max": 5
+        },
+        "models": [
+          {
+            "id": "ecmwf_ifs025",
+            "name": "ECMWF",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "ncep_gfs_seamless",
+            "name": "GFS",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "dwd_icon_seamless",
+            "name": "ICON",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "ukmo_seamless",
+            "name": "UKMO",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "meteofrance_seamless",
+            "name": "Météo-France",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "cmc_gem_seamless",
+            "name": "GEM",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          }
+        ],
+        "month": "October",
+        "agreementText": "0 of 6 forecasts expect snow",
+        "limitedText": null,
+        "stripSummary": "All forecasts say 0cm; none expect snow."
+      },
+      {
+        "date": "2026-10-26",
+        "from": "2026-10-25T23:00:00.000Z",
+        "partial": false,
+        "band": "nosnow",
+        "answer": "No.",
+        "verdict": "Too warm for snow.",
+        "detail": "No lower than 9° all day. Snow is rare here in October.",
+        "reason": "warm",
+        "bandLabel": "Too warm",
+        "amount": 0,
+        "chance": 0,
+        "snowy": 0,
+        "total": 6,
+        "confidence": "good",
+        "threshold": 0.5,
+        "likely": null,
+        "scale": {
+          "min": 0,
+          "max": 5
+        },
+        "models": [
+          {
+            "id": "ecmwf_ifs025",
+            "name": "ECMWF",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "ncep_gfs_seamless",
+            "name": "GFS",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "dwd_icon_seamless",
+            "name": "ICON",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "ukmo_seamless",
+            "name": "UKMO",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "meteofrance_seamless",
+            "name": "Météo-France",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "cmc_gem_seamless",
+            "name": "GEM",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          }
+        ],
+        "month": "October",
+        "agreementText": "0 of 6 forecasts expect snow",
+        "limitedText": null,
+        "stripSummary": "All forecasts say 0cm; none expect snow."
+      }
+    ],
+    "now": {
+      "time": "2026-10-24T23:30:00.000Z",
+      "band": "nosnow",
+      "answer": "No.",
+      "verdict": "Too warm for snow.",
+      "detail": "Dry now. No snow for the next 12 hours.",
+      "amount": 0,
+      "chance": 0,
+      "hours": [
+        {
+          "time": "2026-10-25T00:00:00.000Z",
+          "label": "1am",
+          "chance": 0
+        },
+        {
+          "time": "2026-10-25T02:00:00.000Z",
+          "label": "2am",
+          "chance": 0
+        },
+        {
+          "time": "2026-10-25T04:00:00.000Z",
+          "label": "4am",
+          "chance": 0
+        },
+        {
+          "time": "2026-10-25T06:00:00.000Z",
+          "label": "6am",
+          "chance": 0
+        },
+        {
+          "time": "2026-10-25T08:00:00.000Z",
+          "label": "8am",
+          "chance": 0
+        },
+        {
+          "time": "2026-10-25T10:00:00.000Z",
+          "label": "10am",
+          "chance": 0
+        }
+      ],
+      "series": [
+        {
+          "time": 1792882800000,
+          "date": "2026-10-25",
+          "hour": 0,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792886400000,
+          "date": "2026-10-25",
+          "hour": 1,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792890000000,
+          "date": "2026-10-25",
+          "hour": 1,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792893600000,
+          "date": "2026-10-25",
+          "hour": 2,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792897200000,
+          "date": "2026-10-25",
+          "hour": 3,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792900800000,
+          "date": "2026-10-25",
+          "hour": 4,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792904400000,
+          "date": "2026-10-25",
+          "hour": 5,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792908000000,
+          "date": "2026-10-25",
+          "hour": 6,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792911600000,
+          "date": "2026-10-25",
+          "hour": 7,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792915200000,
+          "date": "2026-10-25",
+          "hour": 8,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792918800000,
+          "date": "2026-10-25",
+          "hour": 9,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792922400000,
+          "date": "2026-10-25",
+          "hour": 10,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792926000000,
+          "date": "2026-10-25",
+          "hour": 11,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792929600000,
+          "date": "2026-10-25",
+          "hour": 12,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792933200000,
+          "date": "2026-10-25",
+          "hour": 13,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792936800000,
+          "date": "2026-10-25",
+          "hour": 14,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792940400000,
+          "date": "2026-10-25",
+          "hour": 15,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792944000000,
+          "date": "2026-10-25",
+          "hour": 16,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792947600000,
+          "date": "2026-10-25",
+          "hour": 17,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792951200000,
+          "date": "2026-10-25",
+          "hour": 18,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792954800000,
+          "date": "2026-10-25",
+          "hour": 19,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792958400000,
+          "date": "2026-10-25",
+          "hour": 20,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792962000000,
+          "date": "2026-10-25",
+          "hour": 21,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792965600000,
+          "date": "2026-10-25",
+          "hour": 22,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1792969200000,
+          "date": "2026-10-25",
+          "hour": 23,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        }
+      ]
+    },
+    "week": {
+      "from": "2026-10-25",
+      "to": "2026-10-31",
+      "band": "nosnow",
+      "answer": "No.",
+      "verdict": "No snow this week.",
+      "detail": "No lower than 8° all week. Snow is rare here in October.",
+      "total": 0,
+      "normal": 0,
+      "snowDays": 0,
+      "maybeDays": 0,
+      "snowiest": {
+        "date": "2026-10-25",
+        "amount": 0
+      },
+      "days": [
+        {
+          "date": "2026-10-25",
+          "label": "Today",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Rain",
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "reason": "rain"
+        },
+        {
+          "date": "2026-10-26",
+          "label": "Mon",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Too warm",
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "reason": "warm"
+        },
+        {
+          "date": "2026-10-27",
+          "label": "Tue",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Too warm",
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "reason": "warm"
+        },
+        {
+          "date": "2026-10-28",
+          "label": "Wed",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Rain",
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "reason": "rain"
+        },
+        {
+          "date": "2026-10-29",
+          "label": "Thu",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Rain",
+          "chance": 0,
+          "snowy": 0,
+          "total": 5,
+          "reason": "rain"
+        },
+        {
+          "date": "2026-10-30",
+          "label": "Fri",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Too warm",
+          "chance": 0,
+          "snowy": 0,
+          "total": 5,
+          "reason": "warm"
+        },
+        {
+          "date": "2026-10-31",
+          "label": "Sat",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Too warm",
+          "chance": 0,
+          "snowy": 0,
+          "total": 5,
+          "reason": "warm"
+        }
+      ]
+    },
+    "ahead": [
+      {
+        "time": "2026-10-25T00:00:00.000Z",
+        "now": {
+          "time": "2026-10-25T00:00:00.000Z",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "Dry now. No snow for the next 12 hours.",
+          "amount": 0,
+          "chance": 0,
+          "hours": [
+            {
+              "time": "2026-10-25T01:00:00.000Z",
+              "label": "1am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T03:00:00.000Z",
+              "label": "3am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T05:00:00.000Z",
+              "label": "5am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T07:00:00.000Z",
+              "label": "7am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T09:00:00.000Z",
+              "label": "9am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T11:00:00.000Z",
+              "label": "11am",
+              "chance": 0
+            }
+          ]
+        },
+        "today": {
+          "date": "2026-10-25",
+          "from": "2026-10-25T00:00:00.000Z",
+          "partial": true,
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Rain, not snow.",
+          "detail": "No lower than 10° for the rest of the day. Snow is rare here in October.",
+          "reason": "rain",
+          "bandLabel": "Rain",
+          "amount": 0,
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "confidence": "good",
+          "threshold": 0.5,
+          "likely": null,
+          "scale": {
+            "min": 0,
+            "max": 5
+          },
+          "models": [
+            {
+              "id": "ecmwf_ifs025",
+              "name": "ECMWF",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ncep_gfs_seamless",
+              "name": "GFS",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "dwd_icon_seamless",
+              "name": "ICON",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ukmo_seamless",
+              "name": "UKMO",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "meteofrance_seamless",
+              "name": "Météo-France",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "cmc_gem_seamless",
+              "name": "GEM",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            }
+          ],
+          "month": "October",
+          "agreementText": "0 of 6 forecasts expect snow",
+          "limitedText": null,
+          "stripSummary": "All forecasts say 0cm; none expect snow."
+        },
+        "week": {
+          "from": "2026-10-25",
+          "to": "2026-10-31",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "No snow this week.",
+          "detail": "No lower than 8° all week. Snow is rare here in October.",
+          "total": 0,
+          "normal": 0,
+          "snowDays": 0,
+          "maybeDays": 0,
+          "snowiest": {
+            "date": "2026-10-25",
+            "amount": 0
+          },
+          "days": [
+            {
+              "date": "2026-10-25",
+              "label": "Today",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-10-26",
+              "label": "Mon",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-10-27",
+              "label": "Tue",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-10-28",
+              "label": "Wed",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-10-29",
+              "label": "Thu",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-10-30",
+              "label": "Fri",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-10-31",
+              "label": "Sat",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "warm"
+            }
+          ]
+        }
+      },
+      {
+        "time": "2026-10-25T01:00:00.000Z",
+        "now": {
+          "time": "2026-10-25T01:00:00.000Z",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "Dry now. No snow for the next 12 hours.",
+          "amount": 0,
+          "chance": 0,
+          "hours": [
+            {
+              "time": "2026-10-25T02:00:00.000Z",
+              "label": "2am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T04:00:00.000Z",
+              "label": "4am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T06:00:00.000Z",
+              "label": "6am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T08:00:00.000Z",
+              "label": "8am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T10:00:00.000Z",
+              "label": "10am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T12:00:00.000Z",
+              "label": "12pm",
+              "chance": 0
+            }
+          ]
+        },
+        "today": {
+          "date": "2026-10-25",
+          "from": "2026-10-25T01:00:00.000Z",
+          "partial": true,
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Rain, not snow.",
+          "detail": "No lower than 10° for the rest of the day. Snow is rare here in October.",
+          "reason": "rain",
+          "bandLabel": "Rain",
+          "amount": 0,
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "confidence": "good",
+          "threshold": 0.5,
+          "likely": null,
+          "scale": {
+            "min": 0,
+            "max": 5
+          },
+          "models": [
+            {
+              "id": "ecmwf_ifs025",
+              "name": "ECMWF",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ncep_gfs_seamless",
+              "name": "GFS",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "dwd_icon_seamless",
+              "name": "ICON",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ukmo_seamless",
+              "name": "UKMO",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "meteofrance_seamless",
+              "name": "Météo-France",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "cmc_gem_seamless",
+              "name": "GEM",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            }
+          ],
+          "month": "October",
+          "agreementText": "0 of 6 forecasts expect snow",
+          "limitedText": null,
+          "stripSummary": "All forecasts say 0cm; none expect snow."
+        },
+        "week": {
+          "from": "2026-10-25",
+          "to": "2026-10-31",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "No snow this week.",
+          "detail": "No lower than 8° all week. Snow is rare here in October.",
+          "total": 0,
+          "normal": 0,
+          "snowDays": 0,
+          "maybeDays": 0,
+          "snowiest": {
+            "date": "2026-10-25",
+            "amount": 0
+          },
+          "days": [
+            {
+              "date": "2026-10-25",
+              "label": "Today",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-10-26",
+              "label": "Mon",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-10-27",
+              "label": "Tue",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-10-28",
+              "label": "Wed",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-10-29",
+              "label": "Thu",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-10-30",
+              "label": "Fri",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-10-31",
+              "label": "Sat",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "warm"
+            }
+          ]
+        }
+      },
+      {
+        "time": "2026-10-25T02:00:00.000Z",
+        "now": {
+          "time": "2026-10-25T02:00:00.000Z",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "Dry now. No snow for the next 12 hours.",
+          "amount": 0,
+          "chance": 0,
+          "hours": [
+            {
+              "time": "2026-10-25T03:00:00.000Z",
+              "label": "3am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T05:00:00.000Z",
+              "label": "5am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T07:00:00.000Z",
+              "label": "7am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T09:00:00.000Z",
+              "label": "9am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T11:00:00.000Z",
+              "label": "11am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T13:00:00.000Z",
+              "label": "1pm",
+              "chance": 0
+            }
+          ]
+        },
+        "today": {
+          "date": "2026-10-25",
+          "from": "2026-10-25T02:00:00.000Z",
+          "partial": true,
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Rain, not snow.",
+          "detail": "No lower than 10° for the rest of the day. Snow is rare here in October.",
+          "reason": "rain",
+          "bandLabel": "Rain",
+          "amount": 0,
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "confidence": "good",
+          "threshold": 0.5,
+          "likely": null,
+          "scale": {
+            "min": 0,
+            "max": 5
+          },
+          "models": [
+            {
+              "id": "ecmwf_ifs025",
+              "name": "ECMWF",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ncep_gfs_seamless",
+              "name": "GFS",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "dwd_icon_seamless",
+              "name": "ICON",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ukmo_seamless",
+              "name": "UKMO",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "meteofrance_seamless",
+              "name": "Météo-France",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "cmc_gem_seamless",
+              "name": "GEM",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            }
+          ],
+          "month": "October",
+          "agreementText": "0 of 6 forecasts expect snow",
+          "limitedText": null,
+          "stripSummary": "All forecasts say 0cm; none expect snow."
+        },
+        "week": {
+          "from": "2026-10-25",
+          "to": "2026-10-31",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "No snow this week.",
+          "detail": "No lower than 8° all week. Snow is rare here in October.",
+          "total": 0,
+          "normal": 0,
+          "snowDays": 0,
+          "maybeDays": 0,
+          "snowiest": {
+            "date": "2026-10-25",
+            "amount": 0
+          },
+          "days": [
+            {
+              "date": "2026-10-25",
+              "label": "Today",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-10-26",
+              "label": "Mon",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-10-27",
+              "label": "Tue",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-10-28",
+              "label": "Wed",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-10-29",
+              "label": "Thu",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-10-30",
+              "label": "Fri",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-10-31",
+              "label": "Sat",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "warm"
+            }
+          ]
+        }
+      },
+      {
+        "time": "2026-10-25T03:00:00.000Z",
+        "now": {
+          "time": "2026-10-25T03:00:00.000Z",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "Dry now. No snow for the next 12 hours.",
+          "amount": 0,
+          "chance": 0,
+          "hours": [
+            {
+              "time": "2026-10-25T04:00:00.000Z",
+              "label": "4am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T06:00:00.000Z",
+              "label": "6am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T08:00:00.000Z",
+              "label": "8am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T10:00:00.000Z",
+              "label": "10am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T12:00:00.000Z",
+              "label": "12pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T14:00:00.000Z",
+              "label": "2pm",
+              "chance": 0
+            }
+          ]
+        },
+        "today": {
+          "date": "2026-10-25",
+          "from": "2026-10-25T03:00:00.000Z",
+          "partial": true,
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Rain, not snow.",
+          "detail": "No lower than 10° for the rest of the day. Snow is rare here in October.",
+          "reason": "rain",
+          "bandLabel": "Rain",
+          "amount": 0,
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "confidence": "good",
+          "threshold": 0.5,
+          "likely": null,
+          "scale": {
+            "min": 0,
+            "max": 5
+          },
+          "models": [
+            {
+              "id": "ecmwf_ifs025",
+              "name": "ECMWF",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ncep_gfs_seamless",
+              "name": "GFS",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "dwd_icon_seamless",
+              "name": "ICON",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ukmo_seamless",
+              "name": "UKMO",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "meteofrance_seamless",
+              "name": "Météo-France",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "cmc_gem_seamless",
+              "name": "GEM",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            }
+          ],
+          "month": "October",
+          "agreementText": "0 of 6 forecasts expect snow",
+          "limitedText": null,
+          "stripSummary": "All forecasts say 0cm; none expect snow."
+        },
+        "week": {
+          "from": "2026-10-25",
+          "to": "2026-10-31",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "No snow this week.",
+          "detail": "No lower than 8° all week. Snow is rare here in October.",
+          "total": 0,
+          "normal": 0,
+          "snowDays": 0,
+          "maybeDays": 0,
+          "snowiest": {
+            "date": "2026-10-25",
+            "amount": 0
+          },
+          "days": [
+            {
+              "date": "2026-10-25",
+              "label": "Today",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-10-26",
+              "label": "Mon",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-10-27",
+              "label": "Tue",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-10-28",
+              "label": "Wed",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-10-29",
+              "label": "Thu",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-10-30",
+              "label": "Fri",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-10-31",
+              "label": "Sat",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "warm"
+            }
+          ]
+        }
+      },
+      {
+        "time": "2026-10-25T04:00:00.000Z",
+        "now": {
+          "time": "2026-10-25T04:00:00.000Z",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "Dry now. No snow for the next 12 hours.",
+          "amount": 0,
+          "chance": 0,
+          "hours": [
+            {
+              "time": "2026-10-25T05:00:00.000Z",
+              "label": "5am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T07:00:00.000Z",
+              "label": "7am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T09:00:00.000Z",
+              "label": "9am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T11:00:00.000Z",
+              "label": "11am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T13:00:00.000Z",
+              "label": "1pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T15:00:00.000Z",
+              "label": "3pm",
+              "chance": 0
+            }
+          ]
+        },
+        "today": {
+          "date": "2026-10-25",
+          "from": "2026-10-25T04:00:00.000Z",
+          "partial": true,
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Rain, not snow.",
+          "detail": "No lower than 11° for the rest of the day. Snow is rare here in October.",
+          "reason": "rain",
+          "bandLabel": "Rain",
+          "amount": 0,
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "confidence": "good",
+          "threshold": 0.5,
+          "likely": null,
+          "scale": {
+            "min": 0,
+            "max": 5
+          },
+          "models": [
+            {
+              "id": "ecmwf_ifs025",
+              "name": "ECMWF",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ncep_gfs_seamless",
+              "name": "GFS",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "dwd_icon_seamless",
+              "name": "ICON",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ukmo_seamless",
+              "name": "UKMO",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "meteofrance_seamless",
+              "name": "Météo-France",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "cmc_gem_seamless",
+              "name": "GEM",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            }
+          ],
+          "month": "October",
+          "agreementText": "0 of 6 forecasts expect snow",
+          "limitedText": null,
+          "stripSummary": "All forecasts say 0cm; none expect snow."
+        },
+        "week": {
+          "from": "2026-10-25",
+          "to": "2026-10-31",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "No snow this week.",
+          "detail": "No lower than 8° all week. Snow is rare here in October.",
+          "total": 0,
+          "normal": 0,
+          "snowDays": 0,
+          "maybeDays": 0,
+          "snowiest": {
+            "date": "2026-10-25",
+            "amount": 0
+          },
+          "days": [
+            {
+              "date": "2026-10-25",
+              "label": "Today",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-10-26",
+              "label": "Mon",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-10-27",
+              "label": "Tue",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-10-28",
+              "label": "Wed",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-10-29",
+              "label": "Thu",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-10-30",
+              "label": "Fri",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-10-31",
+              "label": "Sat",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "warm"
+            }
+          ]
+        }
+      },
+      {
+        "time": "2026-10-25T05:00:00.000Z",
+        "now": {
+          "time": "2026-10-25T05:00:00.000Z",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "Dry now. No snow for the next 12 hours.",
+          "amount": 0,
+          "chance": 0,
+          "hours": [
+            {
+              "time": "2026-10-25T06:00:00.000Z",
+              "label": "6am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T08:00:00.000Z",
+              "label": "8am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T10:00:00.000Z",
+              "label": "10am",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T12:00:00.000Z",
+              "label": "12pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T14:00:00.000Z",
+              "label": "2pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-10-25T16:00:00.000Z",
+              "label": "4pm",
+              "chance": 0
+            }
+          ]
+        },
+        "today": {
+          "date": "2026-10-25",
+          "from": "2026-10-25T05:00:00.000Z",
+          "partial": true,
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Rain, not snow.",
+          "detail": "No lower than 11° for the rest of the day. Snow is rare here in October.",
+          "reason": "rain",
+          "bandLabel": "Rain",
+          "amount": 0,
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "confidence": "good",
+          "threshold": 0.5,
+          "likely": null,
+          "scale": {
+            "min": 0,
+            "max": 5
+          },
+          "models": [
+            {
+              "id": "ecmwf_ifs025",
+              "name": "ECMWF",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ncep_gfs_seamless",
+              "name": "GFS",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "dwd_icon_seamless",
+              "name": "ICON",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ukmo_seamless",
+              "name": "UKMO",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "meteofrance_seamless",
+              "name": "Météo-France",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "cmc_gem_seamless",
+              "name": "GEM",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            }
+          ],
+          "month": "October",
+          "agreementText": "0 of 6 forecasts expect snow",
+          "limitedText": null,
+          "stripSummary": "All forecasts say 0cm; none expect snow."
+        },
+        "week": {
+          "from": "2026-10-25",
+          "to": "2026-10-31",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "No snow this week.",
+          "detail": "No lower than 8° all week. Snow is rare here in October.",
+          "total": 0,
+          "normal": 0,
+          "snowDays": 0,
+          "maybeDays": 0,
+          "snowiest": {
+            "date": "2026-10-25",
+            "amount": 0
+          },
+          "days": [
+            {
+              "date": "2026-10-25",
+              "label": "Today",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-10-26",
+              "label": "Mon",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-10-27",
+              "label": "Tue",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-10-28",
+              "label": "Wed",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-10-29",
+              "label": "Thu",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-10-30",
+              "label": "Fri",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-10-31",
+              "label": "Sat",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "warm"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "wind": {
+    "unit": "mph",
+    "days": [
+      {
+        "date": "2026-10-25",
+        "from": "2026-10-24T23:30:00.000Z",
+        "partial": true,
+        "window": {
+          "from": 0,
+          "to": 21
+        },
+        "band": "breezy",
+        "answer": "A bit.",
+        "verdict": "Breezy, not windy.",
+        "detail": "Gusts up to 25mph from the west, wind up to 9mph. Windiest around 3pm.",
+        "still": false,
+        "gust": 25,
+        "mean": 9,
+        "peak": "3pm",
+        "direction": {
+          "degrees": 292,
+          "compass": "W",
+          "words": "from the west"
+        },
+        "agree": 6,
+        "total": 6,
+        "confidence": "good",
+        "zone": {
+          "from": 20,
+          "to": 30
+        },
+        "scale": {
+          "min": 0,
+          "max": 50
+        },
+        "models": [
+          {
+            "id": "ecmwf_ifs025",
+            "name": "ECMWF",
+            "gust": 25,
+            "mean": 9,
+            "value": 24.9,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 297,
+              "compass": "NW",
+              "words": "from the north-west"
+            }
+          },
+          {
+            "id": "ncep_gfs_seamless",
+            "name": "GFS",
+            "gust": 24,
+            "mean": 9,
+            "value": 23.6,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 290,
+              "compass": "W",
+              "words": "from the west"
+            }
+          },
+          {
+            "id": "dwd_icon_seamless",
+            "name": "ICON",
+            "gust": 25,
+            "mean": 9,
+            "value": 25.5,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 282,
+              "compass": "W",
+              "words": "from the west"
+            }
+          },
+          {
+            "id": "ukmo_seamless",
+            "name": "UKMO",
+            "gust": 25,
+            "mean": 9,
+            "value": 25.5,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 301,
+              "compass": "NW",
+              "words": "from the north-west"
+            }
+          },
+          {
+            "id": "meteofrance_seamless",
+            "name": "Météo-France",
+            "gust": 27,
+            "mean": 10,
+            "value": 26.7,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 287,
+              "compass": "W",
+              "words": "from the west"
+            }
+          },
+          {
+            "id": "cmc_gem_seamless",
+            "name": "GEM",
+            "gust": 22,
+            "mean": 9,
+            "value": 22.4,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 295,
+              "compass": "NW",
+              "words": "from the north-west"
+            }
+          }
+        ],
+        "month": "October",
+        "agreementText": "6 of 6 forecasts say breezy",
+        "limitedText": null,
+        "stripSummary": "Forecast gusts range from 22mph to 27mph; 6 of 6 say breezy.",
+        "dayMean": 7,
+        "normal": null
+      },
+      {
+        "date": "2026-10-26",
+        "from": "2026-10-26T06:00:00.000Z",
+        "partial": false,
+        "window": {
+          "from": 7,
+          "to": 21
+        },
+        "band": "breezy",
+        "answer": "A bit.",
+        "verdict": "Breezy, not windy.",
+        "detail": "Gusts up to 26mph from the south, wind up to 10mph. Windiest around 2pm.",
+        "still": false,
+        "gust": 26,
+        "mean": 10,
+        "peak": "2pm",
+        "direction": {
+          "degrees": 175,
+          "compass": "S",
+          "words": "from the south"
+        },
+        "agree": 6,
+        "total": 6,
+        "confidence": "good",
+        "zone": {
+          "from": 20,
+          "to": 30
+        },
+        "scale": {
+          "min": 0,
+          "max": 50
+        },
+        "models": [
+          {
+            "id": "ecmwf_ifs025",
+            "name": "ECMWF",
+            "gust": 26,
+            "mean": 10,
+            "value": 26.1,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 180,
+              "compass": "S",
+              "words": "from the south"
+            }
+          },
+          {
+            "id": "ncep_gfs_seamless",
+            "name": "GFS",
+            "gust": 25,
+            "mean": 9,
+            "value": 25.5,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 175,
+              "compass": "S",
+              "words": "from the south"
+            }
+          },
+          {
+            "id": "dwd_icon_seamless",
+            "name": "ICON",
+            "gust": 26,
+            "mean": 10,
+            "value": 26.1,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 175,
+              "compass": "S",
+              "words": "from the south"
+            }
+          },
+          {
+            "id": "ukmo_seamless",
+            "name": "UKMO",
+            "gust": 27,
+            "mean": 10,
+            "value": 26.7,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 171,
+              "compass": "S",
+              "words": "from the south"
+            }
+          },
+          {
+            "id": "meteofrance_seamless",
+            "name": "Météo-France",
+            "gust": 28,
+            "mean": 11,
+            "value": 28,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 177,
+              "compass": "S",
+              "words": "from the south"
+            }
+          },
+          {
+            "id": "cmc_gem_seamless",
+            "name": "GEM",
+            "gust": 24,
+            "mean": 9,
+            "value": 24.2,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 169,
+              "compass": "S",
+              "words": "from the south"
+            }
+          }
+        ],
+        "month": "October",
+        "agreementText": "6 of 6 forecasts say breezy",
+        "limitedText": null,
+        "stripSummary": "Forecast gusts range from 24mph to 28mph; 6 of 6 say breezy.",
+        "dayMean": 8,
+        "normal": null
+      }
+    ],
+    "now": {
+      "time": "2026-10-24T23:30:00.000Z",
+      "band": "calm",
+      "answer": "No.",
+      "verdict": "It's not windy.",
+      "detail": "Wind 6mph from the west, gusts 17mph right now. Breezier from about 8am.",
+      "mean": 6,
+      "gust": 17,
+      "still": false,
+      "direction": {
+        "degrees": 282,
+        "compass": "W",
+        "words": "from the west"
+      },
+      "hours": [
+        {
+          "time": "2026-10-25T00:00:00.000Z",
+          "label": "1am",
+          "gust": 16,
+          "direction": {
+            "degrees": 283,
+            "compass": "W",
+            "words": "from the west"
+          }
+        },
+        {
+          "time": "2026-10-25T02:00:00.000Z",
+          "label": "2am",
+          "gust": 16,
+          "direction": {
+            "degrees": 284,
+            "compass": "W",
+            "words": "from the west"
+          }
+        },
+        {
+          "time": "2026-10-25T04:00:00.000Z",
+          "label": "4am",
+          "gust": 17,
+          "direction": {
+            "degrees": 285,
+            "compass": "W",
+            "words": "from the west"
+          }
+        },
+        {
+          "time": "2026-10-25T06:00:00.000Z",
+          "label": "6am",
+          "gust": 19,
+          "direction": {
+            "degrees": 287,
+            "compass": "W",
+            "words": "from the west"
+          }
+        },
+        {
+          "time": "2026-10-25T08:00:00.000Z",
+          "label": "8am",
+          "gust": 22,
+          "direction": {
+            "degrees": 288,
+            "compass": "W",
+            "words": "from the west"
+          }
+        },
+        {
+          "time": "2026-10-25T10:00:00.000Z",
+          "label": "10am",
+          "gust": 24,
+          "direction": {
+            "degrees": 289,
+            "compass": "W",
+            "words": "from the west"
+          }
+        }
+      ],
+      "series": [
+        {
+          "time": 1792882800000,
+          "date": "2026-10-25",
+          "hour": 0,
+          "mean": 6,
+          "gust": 17,
+          "gust2h": 17,
+          "band": "calm",
+          "still": false,
+          "dir": 282
+        },
+        {
+          "time": 1792886400000,
+          "date": "2026-10-25",
+          "hour": 1,
+          "mean": 6,
+          "gust": 16,
+          "gust2h": 16,
+          "band": "calm",
+          "still": false,
+          "dir": 283
+        },
+        {
+          "time": 1792890000000,
+          "date": "2026-10-25",
+          "hour": 1,
+          "mean": 6,
+          "gust": 16,
+          "gust2h": 16,
+          "band": "calm",
+          "still": false,
+          "dir": 283
+        },
+        {
+          "time": 1792893600000,
+          "date": "2026-10-25",
+          "hour": 2,
+          "mean": 6,
+          "gust": 15,
+          "gust2h": 16,
+          "band": "calm",
+          "still": false,
+          "dir": 284
+        },
+        {
+          "time": 1792897200000,
+          "date": "2026-10-25",
+          "hour": 3,
+          "mean": 6,
+          "gust": 16,
+          "gust2h": 16,
+          "band": "calm",
+          "still": false,
+          "dir": 285
+        },
+        {
+          "time": 1792900800000,
+          "date": "2026-10-25",
+          "hour": 4,
+          "mean": 6,
+          "gust": 16,
+          "gust2h": 17,
+          "band": "calm",
+          "still": false,
+          "dir": 285
+        },
+        {
+          "time": 1792904400000,
+          "date": "2026-10-25",
+          "hour": 5,
+          "mean": 6,
+          "gust": 17,
+          "gust2h": 17,
+          "band": "calm",
+          "still": false,
+          "dir": 286
+        },
+        {
+          "time": 1792908000000,
+          "date": "2026-10-25",
+          "hour": 6,
+          "mean": 7,
+          "gust": 17,
+          "gust2h": 19,
+          "band": "calm",
+          "still": false,
+          "dir": 287
+        },
+        {
+          "time": 1792911600000,
+          "date": "2026-10-25",
+          "hour": 7,
+          "mean": 7,
+          "gust": 19,
+          "gust2h": 20,
+          "band": "calm",
+          "still": false,
+          "dir": 287
+        },
+        {
+          "time": 1792915200000,
+          "date": "2026-10-25",
+          "hour": 8,
+          "mean": 7,
+          "gust": 20,
+          "gust2h": 22,
+          "band": "breezy",
+          "still": false,
+          "dir": 288
+        },
+        {
+          "time": 1792918800000,
+          "date": "2026-10-25",
+          "hour": 9,
+          "mean": 8,
+          "gust": 22,
+          "gust2h": 22,
+          "band": "breezy",
+          "still": false,
+          "dir": 289
+        },
+        {
+          "time": 1792922400000,
+          "date": "2026-10-25",
+          "hour": 10,
+          "mean": 9,
+          "gust": 22,
+          "gust2h": 24,
+          "band": "breezy",
+          "still": false,
+          "dir": 289
+        },
+        {
+          "time": 1792926000000,
+          "date": "2026-10-25",
+          "hour": 11,
+          "mean": 9,
+          "gust": 24,
+          "gust2h": 24,
+          "band": "breezy",
+          "still": false,
+          "dir": 290
+        },
+        {
+          "time": 1792929600000,
+          "date": "2026-10-25",
+          "hour": 12,
+          "mean": 9,
+          "gust": 24,
+          "gust2h": 25,
+          "band": "breezy",
+          "still": false,
+          "dir": 291
+        },
+        {
+          "time": 1792933200000,
+          "date": "2026-10-25",
+          "hour": 13,
+          "mean": 9,
+          "gust": 25,
+          "gust2h": 25,
+          "band": "breezy",
+          "still": false,
+          "dir": 291
+        },
+        {
+          "time": 1792936800000,
+          "date": "2026-10-25",
+          "hour": 14,
+          "mean": 9,
+          "gust": 25,
+          "gust2h": 25,
+          "band": "breezy",
+          "still": false,
+          "dir": 292
+        },
+        {
+          "time": 1792940400000,
+          "date": "2026-10-25",
+          "hour": 15,
+          "mean": 9,
+          "gust": 25,
+          "gust2h": 25,
+          "band": "breezy",
+          "still": false,
+          "dir": 293
+        },
+        {
+          "time": 1792944000000,
+          "date": "2026-10-25",
+          "hour": 16,
+          "mean": 9,
+          "gust": 24,
+          "gust2h": 24,
+          "band": "breezy",
+          "still": false,
+          "dir": 293
+        },
+        {
+          "time": 1792947600000,
+          "date": "2026-10-25",
+          "hour": 17,
+          "mean": 9,
+          "gust": 24,
+          "gust2h": 24,
+          "band": "breezy",
+          "still": false,
+          "dir": 294
+        },
+        {
+          "time": 1792951200000,
+          "date": "2026-10-25",
+          "hour": 18,
+          "mean": 9,
+          "gust": 22,
+          "gust2h": 22,
+          "band": "breezy",
+          "still": false,
+          "dir": 295
+        },
+        {
+          "time": 1792954800000,
+          "date": "2026-10-25",
+          "hour": 19,
+          "mean": 8,
+          "gust": 22,
+          "gust2h": 22,
+          "band": "breezy",
+          "still": false,
+          "dir": 295
+        },
+        {
+          "time": 1792958400000,
+          "date": "2026-10-25",
+          "hour": 20,
+          "mean": 7,
+          "gust": 20,
+          "gust2h": 20,
+          "band": "breezy",
+          "still": false,
+          "dir": 296
+        },
+        {
+          "time": 1792962000000,
+          "date": "2026-10-25",
+          "hour": 21,
+          "mean": 7,
+          "gust": 19,
+          "gust2h": 19,
+          "band": "calm",
+          "still": false,
+          "dir": 297
+        },
+        {
+          "time": 1792965600000,
+          "date": "2026-10-25",
+          "hour": 22,
+          "mean": 7,
+          "gust": 17,
+          "gust2h": 17,
+          "band": "calm",
+          "still": false,
+          "dir": 297
+        },
+        {
+          "time": 1792969200000,
+          "date": "2026-10-25",
+          "hour": 23,
+          "mean": 7,
+          "gust": 17,
+          "gust2h": 17,
+          "band": "calm",
+          "still": false,
+          "dir": 153
+        }
+      ]
+    },
+    "week": {
+      "from": "2026-10-25",
+      "to": "2026-10-31",
+      "band": "windy",
+      "answer": "Partly.",
+      "verdict": "Windy on Tue and Sat, very windy on Sat.",
+      "detail": "Windiest on Saturday, gusts up to 45mph.",
+      "windyDays": 2,
+      "breezyDays": 4,
+      "windiest": {
+        "date": "2026-10-31",
+        "gust": 45
+      },
+      "mean": 9,
+      "normal": null,
+      "days": [
+        {
+          "date": "2026-10-25",
+          "label": "Today",
+          "gust": 25,
+          "mean": 9,
+          "band": "breezy",
+          "bandLabel": "Breezy",
+          "still": false
+        },
+        {
+          "date": "2026-10-26",
+          "label": "Mon",
+          "gust": 26,
+          "mean": 10,
+          "band": "breezy",
+          "bandLabel": "Breezy",
+          "still": false
+        },
+        {
+          "date": "2026-10-27",
+          "label": "Tue",
+          "gust": 33,
+          "mean": 14,
+          "band": "windy",
+          "bandLabel": "Windy",
+          "still": false
+        },
+        {
+          "date": "2026-10-28",
+          "label": "Wed",
+          "gust": 12,
+          "mean": 6,
+          "band": "calm",
+          "bandLabel": "Light winds",
+          "still": false
+        },
+        {
+          "date": "2026-10-29",
+          "label": "Thu",
+          "gust": 23,
+          "mean": 9,
+          "band": "breezy",
+          "bandLabel": "Breezy",
+          "still": false
+        },
+        {
+          "date": "2026-10-30",
+          "label": "Fri",
+          "gust": 27,
+          "mean": 10,
+          "band": "breezy",
+          "bandLabel": "Breezy",
+          "still": false
+        },
+        {
+          "date": "2026-10-31",
+          "label": "Sat",
+          "gust": 45,
+          "mean": 19,
+          "band": "verywindy",
+          "bandLabel": "Very windy",
+          "still": false
+        }
+      ]
+    }
+  }
+}
