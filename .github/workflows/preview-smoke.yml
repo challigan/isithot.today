@@ -3,7 +3,10 @@ name: Deploy preview smoke test
 # Waits for the Netlify deploy preview of this pull request, then checks the live API and
 # pages against the real upstream data. Also records fresh upstream fixtures as an artifact.
 on:
+  # Netlify builds deploy previews only for pull requests into main, so a pull request stacked on
+  # another branch has nothing to test.
   pull_request:
+    branches: [main]
 
 concurrency:
   group: smoke-${{ github.ref }}
