@@ -105,7 +105,7 @@ public final class AppModel {
     launchFinished = true
     if let pending = route {
       route = nil
-      await hooks.handle(pending)
+      await follow(pending)
     }
   }
 
@@ -168,6 +168,14 @@ public final class AppModel {
       self.route = route
       return
     }
+    await follow(route)
+  }
+
+  /// A route to a view (a widget's) puts that view on screen, over the view for the time of day
+  /// the launch chose (section 10.2: "unless a route says otherwise"); every route then goes to
+  /// the later phases' hooks.
+  private func follow(_ route: DeepLink.Route) async {
+    if case .view(let shown) = route { view = shown }
     await environment.hooks.handle(route)
   }
 

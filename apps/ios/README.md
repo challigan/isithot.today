@@ -4,12 +4,15 @@ The native SwiftUI app for willitsnow.today, built from the iOS build spec. This
 (phase 0, PRs 0.1 to 0.4): the project, the app and its widget, both entitlements, the debug
 hooks, their tests, the CI that builds and runs them, and the release job that signs the app and
 uploads it to TestFlight; with phase 2.3's generated assets: the snow glyphs, the app icon and
-the answer font; and phase 5.1, the skeleton TestFlight build: the app fetches the answer for
+the answer font; phase 5.1, the skeleton TestFlight build: the app fetches the answer for
 its place (approximate IP location until one is chosen, so the first launch shows the phone's
 own place with no picker), keeps it current, saves it in the App Group, where the widget reads
-it, and draws it on the home screen's top bar and Today page (below, "Phase 5.1"). A Debug build
-can be answered by a fixture or a stubbed network instead (below, "Debug hooks"). Everything else
-comes in later phases.
+it, and draws it on the home screen's top bar and Today page (below, "Phase 5.1"); and phases
+5.2 and 5.3: the switcher and the pager of Now, Today (Tomorrow from 6pm) and This week, with
+Now's next hours and the week's days, the 6pm flip at the minute's tick, the glyph's drift,
+changes announced once to VoiceOver, and every text size up to AX5 (below, "Phases 5.2 and
+5.3"). A Debug build can be answered by a fixture or a stubbed network instead (below, "Debug
+hooks"). Everything else comes in later phases.
 
 ## What is where
 
@@ -19,16 +22,18 @@ Package.resolved         the pinned package versions, copied into the project by
 Configs/                 Base (every target), Team (Carl's team ID, not a secret), Snow (identifiers,
                          API origin, ad units), CI-Simulator (signed to run locally, for CI)
 Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API models; generated CoreCopy,
-                         Questions, AppCopy, Constants, Keys and Palettes; the ports and the home screen's
-                         presenters (IsItLogic); AppModel, its API client and the launch and refresh rules
-                         (IsItState); in Tests/IsItTestSupport the fixtures and golden vectors with their
+                         Questions, AppCopy, Constants, Keys and Palettes; the ports, the home screen's
+                         presenters and the glyph's drift (IsItLogic); AppModel, its API client, the launch
+                         and refresh rules and what VoiceOver is told (IsItState); in
+                         Tests/IsItTestSupport the fixtures and golden vectors with their
                          loaders; in Tests/IsItLogicTests the ports' golden tests and the guard that every
                          vector file is ported (below); in Tests/IsItStateTests AppModel with fakes, and
                          the home screen drawn from it
 Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore, URLSessionTransport,
                          WidgetCenterReloader: AppModel's services), IsItAds (Google's SDKs),
-                         IsItUI (the home screen: HomeShell and ForecastPageView, drawing IsItLogic's
-                         HomePage and HomeTopBar, with HomeActions), IsItWidgetUI (the widget's entry,
+                         IsItUI (the home screen: HomeShell, ViewSwitcher, HomePager and ForecastPageView
+                         with its bodies and GlyphView, drawing IsItLogic's HomePage and HomeTopBar, with
+                         HomeActions), IsItWidgetUI (the widget's entry,
                          provider, view), SnowKit (Glyphs, Color(rgb:) for the palettes, and the glyph
                          catalogues, generated)
 Apps/Snow/App/           WillItSnowApp (the services and the scene's phases), HomeView (the home screen,
@@ -73,8 +78,9 @@ CI builds and tests everything, so this is only for trying the app by hand.
    is the Mac's). To see a fixture instead: Product, Scheme, Edit Scheme, Run, Arguments, and
    tick `-fixture aberdeen-snow` (or `leeds-dry`, or add `-fixture` with any other fixture's
    name, below). Then add the widget on the simulator's home screen: it shows the same answer.
-   Pull the page down to ask again; a place under "Nearby:" loads in place. The place and
-   Settings buttons and "Use my location" do nothing until phase 6 brings their sheets.
+   Tap Now, Today or This week, or swipe between them; pull a page down to ask again; a place
+   under "Nearby:" loads in place. The place and Settings buttons and "Use my location" do
+   nothing until phase 6 brings their sheets.
 4. Product, Test runs the Unit test plan; pick UI from the test plan menu for the UI tests.
 5. On your iPhone (Debug builds only): Xcode, Settings, Accounts needs your Apple Account, and
    the App IDs `today.willitsnow.app` and `today.willitsnow.app.widgets` need the App Group and,
@@ -380,8 +386,9 @@ The top bar and the Today page (spec section 10.2), drawn from plain values:
 - **The home screen** (`HomeView.swift`) draws `model.topBar`, and the Today page at the
   model's clock (`model.page(.today, at: model.now)`), with IsItUI's `HomeShell` and
   `ForecastPageView`, inside a `TimelineView(.everyMinute)`, so the hour picked, Tomorrow from
-  6pm and the stale state follow the clock while the app is open. Only the middle page is drawn in 5.1, whatever `model.view`
-  says; phase 5.2's pager binds it.
+  6pm and the stale state follow the clock while the app is open. Only the middle page was
+  drawn in 5.1, whatever `model.view` said; since phases 5.2 and 5.3 the pager draws all three
+  and binds it (below).
 - **The states**, as `HomePage` gives them from the model's phase (spec sections 4, 9.5 and
   10.2): loading ("Checking…"); ready; an error with nothing saved (the server's message, or
   `CoreCopy.unavailable` without one, and Retry); offline with nothing saved ("No recent
@@ -440,6 +447,62 @@ its file and line, and the contact sheet shows the screens each test attached):
   `-now` 15 minutes on, and reads the saved answer and the offline line;
   `testOfflineWithNothingSaved` reads "No recent forecast…" and Retry. Their screens are
   `app-first-launch`, `app-offline-saved` and `app-offline-nothing`.
+
+## Phases 5.2 and 5.3: the pages, the switcher and the pager
+
+What 5.1 had not already brought (DECISIONS, "The iPhone app's pages, switcher and pager"): 5.1
+brought forward the minute's tick, pull to refresh, the footer and the loading and error states.
+
+- **Now and This week** (spec section 10.2) come from the same presenter, `HomePage`, which now
+  has `hours` (Now: "Chance of snow, next 12 hours" and up to six `HourRow`s, "6pm" and "60%",
+  each read "60% chance at 6pm") and `week` (a `WeekRow` a day: "Tue", "2cm", "Snow", the
+  forecasts expecting snow of those with data, `snowy` of `total`, drawn as dots, and read
+  "Tuesday, 2cm, snow, 4 of 6 forecasts expect snow", never a percentage). Its reference,
+  packages/mobile `page.ts`, takes them from core (`viewDisplay`'s rows and their `sr`,
+  `snowAgreementLine`, `WEEKDAYS`), and `page.json` holds the Swift to them case by case; the
+  Swift words them with `AppCopy.percent`, `hourRowLabel`, `weekRowLabel`, `dayAgreement` and
+  `dayAgreementOne` and `CoreCopy.weekdays`, which a vitest proves say what core says.
+- **The switcher and the pager** (IsItUI): `ViewSwitcher`, a segmented picker of the pages'
+  labels (the middle one "Tomorrow" from 6pm), which at accessibility text sizes becomes a row
+  of buttons that wraps so no label is cut short; and `HomePager`, the three pages side by side
+  in a horizontal `ScrollView` paged with `.scrollTargetBehavior(.paging)` and
+  `.scrollPosition(id:)`. Both are bound to `AppModel.view` (`$model.view` in `HomeView`), so a
+  tap, a swipe, a widget's route (`.view`, which now sets the view) and the return after more
+  than 30 minutes away (the view for the time of day) move both. The app opens on
+  `MiddleDay.defaultView`, Today or Now from 6pm. Only the page on screen is in the accessibility
+  tree, so VoiceOver and the UI tests read that one.
+- **The 6pm flip** needs nothing new: the minute's tick draws every page at the model's clock,
+  so at 6pm at the place the middle tab reads Tomorrow and shows `snow.days[1]`, with no request.
+  `FlipTests` (IsItStateTests) prove it at 5:59pm and 6pm in Durham (GMT), minute by minute in
+  London's evening, and in Kathmandu (UTC+5:45).
+- **The glyph's drift**: `GlyphView` (IsItUI) draws SnowKit's two layers and moves the flakes
+  as the website's CSS does, twice in 3.2 s (`GlyphDrift`, IsItLogic), on first paint and when
+  the band changes (`GlyphMotion`); never with Reduce Motion, and never under `-now` or `-uitest`
+  (`DebugHooks.stillMotion()`).
+- **VoiceOver hears a change once**: `Announcements` (IsItState) takes the page on screen each
+  time it is drawn and gives its heading when it says something new on the same view (an answer
+  after "Checking…", a refresh's new answer, the hour picked, Tomorrow from 6pm, no recent
+  forecast); nothing on a tick that changed nothing, on moving to another view, or while
+  checking. `HomeView` posts it (`UIAccessibility.post(notification: .announcement, …)`).
+- **Text sizes up to AX5**: every text wraps rather than truncating, the answer word shrinks to
+  fit its line rather than breaking, the pages scroll, and Now's rows and the week's stack at
+  accessibility sizes, as the model list already did.
+
+**Tests.** On Linux: `PageVectorTests` (every row's strings, code unit for code unit),
+`HomePageTests` (the spec's examples, and an answer saved before the week's days had their
+agreement), `GlyphDriftTests`, `MinuteTickTests.swift` (`FlipTests` and `AnnouncementTests`:
+each announcement once, and only then) and `AppModelTests` (a route to a view). On the macOS CI:
+`FixtureLaunchTests`, whose Durham tests now open on Now and tap Tomorrow, and
+`testSwitcherAndSwipe`, which taps the tabs and swipes, attaching `app-aberdeen-snow-now` and
+`app-aberdeen-snow-week` for the contact sheet.
+
+**Accessibility identifiers** for phase 5.4's tests, besides 5.1's (`place`, `settings`,
+`use-my-location`, `heading`, `verdict`, `detail`, `agreement`, `strip`, `limited`, `retry`,
+`updated`, `notice`): `views` (the switcher; its segments are buttons labelled as the tabs read,
+"Now", "Today" or "Tomorrow", "This week"), `view-now`, `view-today` and `view-week` (its buttons
+at accessibility sizes), `page-now`, `page-today` and `page-week` (each page's scroll view, only
+the one on screen), `hours-heading` and `hour-0` to `hour-5` (Now's rows), and `day-0` to
+`day-6` (the week's rows).
 
 ## CI (`.github/workflows/ios.yml`)
 
@@ -562,7 +625,8 @@ Every test and debug hook is in `Apps/Snow/App/DebugHooks.swift`, inside `#if DE
 section 9.8). A Release build compiles a stub with the same names that does nothing and names no
 launch argument. So far there are these:
 
-- `-uitest` turns animations off;
+- `-uitest` turns animations off, and keeps the glyphs' flakes still (`stillMotion()`), as
+  `-now` does too;
 - `-resetStore` forgets the place, the units and the saved answer before the model reads them,
   for a first launch (not `unlock.v1`, which only StoreKit's code writes); every UI test's first
   launch passes it;
@@ -636,10 +700,9 @@ Each comes with the phase that needs it, so nothing in the skeleton is dormant:
 - the widget planner in the widget (ported in phase 3, used in phase 7), so the skeleton's
   widget shows one entry, whatever the hour: it may show an answer past its hours until the app
   saves another;
-- the switcher and the pager of Now, Today and This week, with the Now and week bodies (phase
-  5.2); the announcement when the picked hour changes the answer, `-clock fixed` and the home
-  screen's audits (5.4); the sheets behind the place and Settings buttons and "Use my location"
-  (phase 6), which do nothing until then;
+- `-clock fixed`, `HomeTests`, `OfflineTests`, the home screen's audits and the snapshots at
+  Large, XXXL and AX3 (5.4); the sheets behind the place and Settings buttons and "Use my
+  location" (phase 6), which do nothing until then;
 - the rest of `SnowKit`, location, StoreKit (`Snow.storekit`), notifications, `AdsService` and the
   banner, `SKAdNetworkItems`, and the privacy manifests' collected data types (coarse location,
   the push token);

@@ -9,10 +9,11 @@ extension VectorPort {
   /// rules, ported as `HomePage`, for every fixture and view at its own moment, at an hour ahead,
   /// the last minute before `usableUntil` and at it, across 6pm, after each kind of request (with
   /// the server's message, `in.message`), with blocks taken out (`in.without`) and with no answer
-  /// at all; and core `creditParts`, ported as `Credits.parts`. Where the page shows one of the
-  /// answer's own objects, the vector names its path in the fixture (`shown`), and the middle
-  /// page's strip is checked against `StripGeometry` for that day, which `strip.json` checks
-  /// against core.
+  /// at all; and core `creditParts`, ported as `Credits.parts`. Now's rows and the week's are
+  /// checked string by string, as they are drawn and as VoiceOver reads them. Where the page
+  /// shows one of the answer's own objects, the vector names its path in the fixture (`shown`),
+  /// and the middle page's strip is checked against `StripGeometry` for that day, which
+  /// `strip.json` checks against core.
   static let page = VectorPort { file in
     let answers = FixtureAnswers()
 
@@ -48,6 +49,27 @@ extension VectorPort {
       let updated: String?
       let notice: String?
     }
+    struct HourRow: Decodable, Sendable, Equatable {
+      let label: String
+      let value: String
+      let chance: Int
+      let spoken: String
+    }
+    struct Hours: Decodable, Sendable {
+      let heading: String
+      let rows: [HourRow]
+    }
+    struct WeekRow: Decodable, Sendable, Equatable {
+      let label: String
+      let amount: String
+      let bandLabel: String
+      let snowy: Int
+      let total: Int
+      let spoken: String
+    }
+    struct Week: Decodable, Sendable {
+      let rows: [WeekRow]
+    }
     struct Page: Decodable, Sendable {
       let view: AppView
       let state: HomePage.State
@@ -61,6 +83,8 @@ extension VectorPort {
       let detail: String?
       let shown: String?
       let day: Day?
+      let hours: Hours?
+      let week: Week?
       let retry: String?
       let footer: Footer?
     }
@@ -97,6 +121,31 @@ extension VectorPort {
       #expect(texts == want, "\(label): text")
       #expect(sameText(texts, want), "\(label): text code unit for code unit")
       #expect((page.day == nil) == (expected.day == nil), "\(label): day")
+      // Now's rows and the week's: every string, and the numbers they're drawn from.
+      #expect((page.hours == nil) == (expected.hours == nil), "\(label): hours")
+      let hourRows = page.hours?.rows.map {
+        HourRow(label: $0.label, value: $0.value, chance: $0.chance, spoken: $0.spoken)
+      }
+      #expect(hourRows == expected.hours?.rows, "\(label): hours' rows")
+      let hourTexts = (page.hours?.rows ?? []).flatMap { [$0.label, $0.value, $0.spoken] }
+      let wantHours = (expected.hours?.rows ?? []).flatMap { [$0.label, $0.value, $0.spoken] }
+      #expect(sameText([page.hours?.heading], [expected.hours?.heading]), "\(label): hours")
+      #expect(sameText(hourTexts, wantHours), "\(label): hours code unit for code unit")
+      #expect((page.week == nil) == (expected.week == nil), "\(label): week")
+      let weekRows = page.week?.rows.map {
+        WeekRow(
+          label: $0.label,
+          amount: $0.amount,
+          bandLabel: $0.bandLabel,
+          snowy: $0.snowy ?? -1,
+          total: $0.total ?? -1,
+          spoken: $0.spoken
+        )
+      }
+      #expect(weekRows == expected.week?.rows, "\(label): week's rows")
+      let weekTexts = (page.week?.rows ?? []).flatMap { [$0.label, $0.amount, $0.spoken] }
+      let wantWeek = (expected.week?.rows ?? []).flatMap { [$0.label, $0.amount, $0.spoken] }
+      #expect(sameText(weekTexts, wantWeek), "\(label): week code unit for code unit")
       #expect((page.footer == nil) == (expected.footer == nil), "\(label): footer")
       // The middle page's strip is the shown day's, and its rows are the strip's models.
       if let day = page.day, let name = input.fixture, let unit = res?.snow?.unit {

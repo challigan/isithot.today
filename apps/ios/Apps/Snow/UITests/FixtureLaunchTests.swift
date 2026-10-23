@@ -1,12 +1,14 @@
 import XCTest
 
 /// The app shows the fixture it is launched with (`-uitest -fixture <name>`, the Debug hooks in
-/// section 9.8), at the fixture's own moment, on the Today page: the place in the top bar, the
-/// question and answer as one heading with the place, as VoiceOver reads it (section 16), and the
-/// verdict; and a place nearby loading in place. Every launch starts from a clean store
-/// (`-resetStore`), so no test depends on another: the place a test leaves in the App Group
-/// (Dundee, after `testNearbyLoadsInPlace`) would otherwise name the next one's heading. The
-/// screen is attached to the result bundle for the contact sheet.
+/// section 9.8), at the fixture's own moment, on the view for the time of day (Today, or Now from
+/// 6pm, section 10.2): the place in the top bar, the question and answer as one heading with the
+/// place, as VoiceOver reads it (section 16), and the verdict; the switcher's tabs, the middle one
+/// "Tomorrow" from 6pm; and a place nearby loading in place. Only the page on screen is in the
+/// accessibility tree, so the heading and the verdict are that page's. Every launch starts from
+/// a clean store (`-resetStore`), so no test depends on another: the place a test leaves in the
+/// App Group (Dundee, after `testNearbyLoadsInPlace`) would otherwise name the next one's
+/// heading. The screen is attached to the result bundle for the contact sheet.
 final class FixtureLaunchTests: XCTestCase {
   override func setUpWithError() throws {
     continueAfterFailure = false
@@ -30,27 +32,56 @@ final class FixtureLaunchTests: XCTestCase {
     attachScreen(of: app, named: "app-leeds-dry")
   }
 
-  /// From 6pm at the place, the middle page answers for tomorrow.
+  /// From 6pm at the place, the app opens on Now, and the middle page, its tab reading Tomorrow,
+  /// answers for tomorrow.
   @MainActor
   func testDurhamTomorrow() throws {
     let app = launch(fixture: "durham-tomorrow")
     XCTAssertEqual(app.buttons["place"].label, "Place: Durham. Change place.")
-    XCTAssertEqual(heading(in: app).label, "Durham. Will it snow tomorrow? Yes.")
+    XCTAssertEqual(heading(in: app).label, "Durham. Is it snowing right now? No.")
+    XCTAssertFalse(app.buttons["Today"].exists, "The middle tab reads Today after 6pm")
+    show("Tomorrow", in: app, heading: "Durham. Will it snow tomorrow? Yes.")
     XCTAssertEqual(app.staticTexts["verdict"].label, "It'll snow.")
     attachScreen(of: app, named: "app-durham-tomorrow")
   }
 
-  /// Past the last hour it can be shown, the answer is never shown as current. There is no
-  /// verdict, so the launch waits for the footer's Updated line, which only an answer brings: the
-  /// loading state's heading is there before it.
+  /// Past the last hour it can be shown, the answer is never shown as current, on any page. There
+  /// is no verdict, so the launch waits for the footer's Updated line, which only an answer
+  /// brings: the loading state's heading is there before it. It is after 6pm in Durham, so the
+  /// app opens on Now.
   @MainActor
   func testOldForecast() throws {
     let app = launch(fixture: "old-forecast", waitingFor: "updated")
     XCTAssertEqual(
       heading(in: app).label,
-      "Durham. Will it snow tomorrow? No recent forecast. Connect to the internet to refresh.")
+      "Durham. Is it snowing right now? No recent forecast. Connect to the internet to refresh.")
+    show(
+      "Tomorrow", in: app,
+      heading:
+        "Durham. Will it snow tomorrow? No recent forecast. Connect to the internet to refresh.")
     XCTAssertFalse(app.staticTexts["verdict"].exists, "An old answer's verdict is on screen")
     attachScreen(of: app, named: "app-old-forecast")
+  }
+
+  /// The switcher's tabs and the pager agree: a tap on a tab shows its page, a swipe moves to the
+  /// next and back, and the screens of Now and This week go to the contact sheet.
+  @MainActor
+  func testSwitcherAndSwipe() throws {
+    let app = launch(fixture: "aberdeen-snow")
+    XCTAssertTrue(app.buttons["Now"].exists, "No Now tab")
+    XCTAssertTrue(app.buttons["Today"].exists, "No Today tab")
+    XCTAssertTrue(app.buttons["This week"].exists, "No This week tab")
+    show("Now", in: app, heading: "Aberdeen. Is it snowing right now? No.")
+    XCTAssertTrue(app.staticTexts["hours-heading"].exists, "No next hours on Now")
+    attachScreen(of: app, named: "app-aberdeen-snow-now")
+    show("This week", in: app, heading: "Aberdeen. Will it snow this week? Yes.")
+    attachScreen(of: app, named: "app-aberdeen-snow-week")
+    app.swipeRight()
+    waitForHeading("Aberdeen. Will it snow today? Yes.", in: app)
+    XCTAssertTrue(app.buttons["Today"].isSelected, "The Today tab isn't selected after a swipe")
+    app.swipeRight()
+    waitForHeading("Aberdeen. Is it snowing right now? No.", in: app)
+    XCTAssertTrue(app.buttons["Now"].isSelected, "The Now tab isn't selected after a swipe")
   }
 
   /// A place under "Nearby:" loads in place, with no navigation: it becomes the place in the top
@@ -90,6 +121,23 @@ final class FixtureLaunchTests: XCTestCase {
   @MainActor
   private func heading(in app: XCUIApplication) -> XCUIElement {
     app.descendants(matching: .any).matching(identifier: "heading").firstMatch
+  }
+
+  /// Taps the switcher's tab labelled `tab`, and waits for its page's heading.
+  @MainActor
+  private func show(_ tab: String, in app: XCUIApplication, heading label: String) {
+    let button = app.buttons[tab]
+    XCTAssertTrue(button.waitForExistence(timeout: 15), "No \(tab) tab")
+    button.tap()
+    waitForHeading(label, in: app)
+    XCTAssertTrue(button.isSelected, "The \(tab) tab isn't selected")
+  }
+
+  /// Waits for the page on screen's heading to read `label`.
+  @MainActor
+  private func waitForHeading(_ label: String, in app: XCUIApplication) {
+    let shown = NSPredicate(format: "label == %@", label)
+    wait(for: [expectation(for: shown, evaluatedWith: heading(in: app))], timeout: 15)
   }
 
   @MainActor

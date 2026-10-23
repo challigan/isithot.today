@@ -430,8 +430,34 @@ struct AppModelStepTests {
     #expect(h.model.route == nil)
     #expect(h.hooks.calls.last == "handle")
     #expect(h.hooks.routes == [.upgrade])
+    #expect(h.model.view == .today)
     await h.model.open(.view(.week))
     #expect(h.hooks.routes == [.upgrade, .view(.week)])
+    // A widget's route to a view puts it on screen.
+    #expect(h.model.view == .week)
+  }
+
+  @Test("a route to a view opened during the launch wins over the view for the time of day")
+  func viewRoute() async throws {
+    // 6:05pm in Durham: the launch's first answer opens on Now.
+    let h = Harness(
+      now: try fixtureNow("durham-tomorrow"),
+      store: .init(place: .city(slug: "durham-gb", name: "Durham"), units: .c),
+      replies: [try FakeTransport.fixture("durham-tomorrow")]
+    )
+    await h.model.open(.view(.week))
+    #expect(h.model.view == .today)
+    await h.model.launch()
+    #expect(h.model.view == .week)
+    #expect(h.hooks.routes == [.view(.week)])
+    // Without a route, the same launch opens on Now.
+    let plain = Harness(
+      now: try fixtureNow("durham-tomorrow"),
+      store: .init(place: .city(slug: "durham-gb", name: "Durham"), units: .c),
+      replies: [try FakeTransport.fixture("durham-tomorrow")]
+    )
+    await plain.model.launch()
+    #expect(plain.model.view == .now)
   }
 }
 

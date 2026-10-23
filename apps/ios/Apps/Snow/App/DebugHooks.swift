@@ -87,6 +87,13 @@ enum DebugHooks {
       value(after: "-apiOrigin", in: arguments).flatMap { URL(string: $0) }
     }
 
+    /// Whether the glyphs keep still, their flakes never drifting (section 10.2): in a test
+    /// launched at a set moment (`-now`), whose screens are compared as they are, and under
+    /// `-uitest`, which turns animations off.
+    static func stillMotion(arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+      arguments.contains("-now") || arguments.contains("-uitest")
+    }
+
     /// Whether the app launches (`AppModel.launch()`): not while it only hosts the unit tests,
     /// which own the App Group meanwhile (the hosted tests run in the app's process, with
     /// XCTest's configuration in its environment), unless it was launched on a stubbed server.
@@ -150,6 +157,8 @@ enum DebugHooks {
     static func clock() -> (any AppClock)? { nil }
 
     static func apiOrigin() -> URL? { nil }
+
+    static func stillMotion() -> Bool { false }
 
     nonisolated static func launches() -> Bool { true }
   #endif

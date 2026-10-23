@@ -1987,6 +1987,104 @@ What the review of PR 5.1 found, and what changed for it.
   label are Apple only, so the macOS jobs prove them; IsItUI's changes were not compiled here.
   Everything else ran on Linux.
 
+## The iPhone app's pages, switcher and pager (IsItCore, IsItKit, apps/ios; phases 5.2 and 5.3)
+
+The iOS build spec's PRs 5.2 and 5.3, less what 5.1 brought forward (the minute's tick, pull to
+refresh, the footer, the loading and error states, and the refresh rules, above): the Now and
+This week pages, the switcher and the pager, the 6pm flip, the glyph's drift, changes announced
+once to VoiceOver, and every text size up to AX5 (sections 9.5, 10.1, 10.2 and 16).
+
+- **The bodies are the presenter's, the TypeScript first.** packages/mobile `page.ts` gives each
+  page `hours` and `week`: Now's rows from core `viewDisplay` (the label, "60%", and its `sr`,
+  "60% chance at 6pm", the website's screen-reader line) with the hour's chance for the row's
+  bar; the week's rows from `viewDisplay` too ("Tue", "2cm", the band label) with the day's
+  `snowy` and `total` (S1) and what VoiceOver reads, built of core's words: the day in full
+  (`WEEKDAYS` of its date, or "Today", the server's label for the week's first day), the amount,
+  the band label starting in lower case as it is mid-sentence, and `snowAgreementLine` ("4 of 6
+  forecasts expect snow", "1 of 5 forecasts expects snow"); never a percentage.
+  `pnpm mobile:generate` rewrote `page.json` (the same 255 page cases, with the new fields),
+  and `HomePage` ports it: `HomePage.Hours`, `HourRow`, `Week` and `WeekRow`.
+- **The Swift's words are the app's copy, proven to be core's.** Core words the rows in
+  TypeScript only (`sr` is built inline in `display.ts`, `snowAgreementLine` is a function), so
+  appCopy.ts has six templates for the Swift: `percent`, `hourRowLabel`, `weekRowLabel`,
+  `weekRowLabelShort`, `dayAgreement` and `dayAgreementOne`; a vitest fills them for every row in
+  `page.json` and every agreement from 0 to 6 forecasts and compares them with core's, and the
+  vectors compare the Swift's code unit for code unit. `CoreCopy.weekdays` is core's `WEEKDAYS`,
+  generated. The generator now puts a parameter on each line when a function's signature would
+  pass 100 columns (`weekRowLabel`), as swift-format does.
+- **Beyond the reference: an answer saved before S1.** The Swift decodes the week's days without
+  `snowy` and `total`, as IsItModel always has; their rows have no dots and are read without
+  the agreement (`weekRowLabelShort`). The TypeScript's types always have them, so this is
+  `HomePageTests`', not a vector's.
+- **The dots are the forecasts with data.** Section 10.2 says six dots; a day a model has no
+  data for has `total` 5, so the row draws five, `snowy` of them filled, and says "of 5", rather
+  than an empty sixth that would read as a forecast saying no.
+- **`CivilDate`** (IsItLogic) is the links' date reading moved out of `DeepLink`, unchanged, so
+  the week's rows find a date's weekday the same way, with no calendar or locale.
+- **The switcher** (`ViewSwitcher`, IsItUI) is the segmented picker section 10.2 asks for, of the
+  pages' own labels, so the middle one reads Tomorrow from 6pm. At accessibility text sizes a
+  segment would cut "This week" short, and section 16 wants full labels, so there it is a row of
+  buttons that wraps, the one on screen underlined and marked selected.
+- **The pager** (`HomePager`, IsItUI) is a horizontal `ScrollView` of the three pages, each the
+  container's size, with `.scrollTargetBehavior(.paging)` and `.scrollPosition(id:)`, plus a
+  `ScrollViewReader` scroll on first appearance in case the initial position isn't applied.
+  Switcher and pager share one binding to `AppModel.view`, so a tap, a swipe, a route and the
+  return after 30 minutes away (5.1's rule, unchanged) always agree. A tap moves the pages
+  without animation: an animated programmatic scroll passes Today on its way from Now to the
+  week, and the position it reports on the way could set the view mid-scroll.
+- **Only the page on screen is in the accessibility tree.** The other two are hidden from
+  VoiceOver (which changes page with the switcher, as with a system page view) and so from the UI
+  tests, whose identifiers (`heading`, `verdict`, …) stay unique. Pull to refresh is on each
+  page's own scroll view, not the pager's.
+- **The view it opens on** is `MiddleDay.defaultView`, as 5.1 set it; 5.1 drew only the middle
+  page, so the app now opens on Now from 6pm. A route to a view (a widget's `.view`) now sets the
+  view in the model, at once or at the launch's end, and still goes to the later phases' hooks.
+  The view never moves by itself while the app is open: at 6pm the middle tab becomes Tomorrow
+  where it is.
+- **The 6pm flip is the minute's tick alone**: each minute every page is drawn at the model's
+  clock, so the middle page shows `snow.days[1]` from 6pm at the place with no request (the
+  quiet refresh is at the next forecast hour). `FlipTests` prove it at 5:59pm and 6pm in Durham
+  (with the clock 6 minutes behind its answer, as `page.json` has Durham across 6pm), minute by
+  minute from 5:30pm in London on the day the clocks went back, and in Kathmandu (UTC+5:45,
+  where 6pm is 12:15 UTC), each with no request and the view unmoved.
+- **The drift is the website's CSS** (`.glyph .drift`): `GlyphDrift` (IsItLogic) has its
+  keyframes (down 6 and right 3 as it fades by 45%, back in from 4 above and 2 left at 46%),
+  `ease-in-out` as CSS's `cubic-bezier(0.42, 0, 0.58, 1)`, 1.6 s twice: 3.2 s, under 5 s. The
+  app's flakes are one layer (SnowKit's `-drift` image), so they move together rather than a
+  little out of step. `GlyphMotion` says when: on the glyph's first paint (its first band, also
+  after a new place's loading state) and when the band changes, never with Reduce Motion, which
+  also stops a drift under way. `GlyphView` (IsItUI) draws it with `TimelineView(.animation)`,
+  paused when still. Under `-now` and, beyond the task, `-uitest` (which already turns
+  animations off) the glyphs never drift (`DebugHooks.stillMotion()`), so no attached screen
+  catches the flakes faded.
+- **Changes are announced once** (sections 9.5 and 16): `Announcements` (IsItState) is handed
+  the page on screen each time it is drawn, and gives its heading when it says something new on
+  the same view, which `HomeView` posts as an announcement: the answer arriving after
+  "Checking…", a refresh's new answer, a failure with nothing to show, the hour picked changing
+  the answer, Tomorrow from 6pm, and no recent forecast once the answer's hours run out. Nothing
+  for the first page drawn, a tick or refresh that changed nothing, the loading state, or a move
+  to another view (the user's, a route's, or the return's: VoiceOver reads the page from there).
+  `AnnouncementTests` drive the model through each, minute by minute where it matters, and
+  count one announcement for each change. The app posts it with UIKit's
+  `UIAccessibility.post(notification:argument:)` and `.announcement`: the same notification as
+  SwiftUI's `AccessibilityNotification`, which section 16 names, by an API certain on iOS 17.
+- **Text sizes up to AX5.** Every text wraps (`fixedSize(horizontal: false, vertical: true)`),
+  the question included; the answer word, one word in the answer font, keeps to its line and
+  shrinks to fit (to half) rather than break mid-word; the pages scroll. Now's rows put the bar
+  under the hour and chance, and the week's rows stack (the day and amount, wrapping if they
+  must, then the band, then the dots) at accessibility sizes, as the model list already did.
+- **The UI tests changed where the screen did.** `testDurhamTomorrow` and `testOldForecast`
+  launch at 6:05pm in Durham, so the app now opens on Now: each first reads Now's heading, then
+  taps Tomorrow and reads the middle page's heading and verdict, every 5.1 assertion kept. New:
+  `testSwitcherAndSwipe` (each tab, the next hours on Now, swipes back to Today and Now, each tab
+  selected), which attaches Now and This week for the contact sheet. Phase 5.4's `HomeTests`
+  will build on the identifiers listed in `apps/ios/README.md`.
+- **Not proven here:** IsItUI and the app compile only on the macOS jobs, so the switcher, the
+  pager and its initial position, the bodies' layouts at each text size, the drift, the
+  announcement and the three changed or new UI tests (whether a segment reports `isSelected`,
+  and whether `swipeRight()` on the app pages the outer scroll view) are unproven until the
+  first `ios` run. Everything in IsItCore ran on Linux, and every Swift file was linted.
+
 ## The app's support page and privacy notice (S8)
 
 App Store Connect needs a Support URL with real contact details and a Privacy Policy URL, so

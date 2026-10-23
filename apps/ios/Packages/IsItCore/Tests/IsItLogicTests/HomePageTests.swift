@@ -94,6 +94,74 @@ struct HomePageTests {
     #expect(try page("leeds-dry", .week).verdict == "A few flakes on Sat, nothing more.")
   }
 
+  @Test("aberdeen-snow: Now's next hours, each read as a chance at its hour")
+  func nextHours() throws {
+    let now = try page("aberdeen-snow", .now)
+    let hours = try #require(now.hours)
+    #expect(hours.heading == "Chance of snow, next 12 hours")
+    #expect(hours.rows.count == 6)
+    #expect(
+      hours.rows.first
+        == HomePage.HourRow(label: "10am", value: "20%", chance: 20, spoken: "20% chance at 10am"))
+    #expect(hours.rows.map(\.label) == ["10am", "12pm", "2pm", "4pm", "6pm", "8pm"])
+    #expect(hours.rows.allSatisfy { $0.spoken == "\($0.value) chance at \($0.label)" })
+    #expect(now.day == nil && now.week == nil)
+    // Only the Now page has the hours, and only the week page the days.
+    let today = try page("aberdeen-snow")
+    #expect(today.hours == nil && today.week == nil)
+    #expect(try page("aberdeen-snow", .week).hours == nil)
+    #expect(try page("no-now", .now).hours == nil)
+  }
+
+  @Test("durham-tomorrow: the week's days, each read with its agreement, never a percentage")
+  func weekDays() throws {
+    let week = try #require(try page("durham-tomorrow", .week).week)
+    #expect(week.rows.count == 7)
+    #expect(week.rows.map(\.label) == ["Today", "Thu", "Fri", "Sat", "Sun", "Mon", "Tue"])
+    #expect(
+      week.rows[1]
+        == HomePage.WeekRow(
+          label: "Thu", amount: "4cm", bandLabel: "Snow", snowy: 6, total: 6,
+          spoken: "Thursday, 4cm, snow, 6 of 6 forecasts expect snow"))
+    #expect(week.rows[0].spoken == "Today, 0cm, too warm, 0 of 6 forecasts expect snow")
+    #expect(week.rows[2].spoken == "Friday, 8cm, heavy snow, 6 of 6 forecasts expect snow")
+    // A day with a model short of data has fewer dots.
+    #expect(week.rows[4].total == 5)
+    #expect(week.rows[4].spoken == "Sunday, 0cm, dry, 0 of 5 forecasts expect snow")
+    #expect(week.rows.allSatisfy { !$0.spoken.contains("%") })
+    #expect(try page("durham-tomorrow", .week).day == nil)
+  }
+
+  @Test("leeds-dry and denver-f: one forecast in core's words for one, and inches")
+  func weekWords() throws {
+    let leeds = try #require(try page("leeds-dry", .week).week)
+    #expect(leeds.rows[1].spoken == "Wednesday, 0cm, dry, 0 of 6 forecasts expect snow")
+    #expect(
+      leeds.rows[4].spoken == "Saturday, 0.2cm, a few flakes, 1 of 5 forecasts expects snow")
+    let denver = try #require(try page("denver-f", .week).week)
+    #expect(denver.rows[1].amount == "0.2in")
+    #expect(
+      denver.rows[1].spoken == "Friday, 0.2in, snow possible, 3 of 6 forecasts expect snow")
+  }
+
+  @Test("an answer saved before the week's days had their agreement: no dots, read without it")
+  func weekWithoutAgreement() throws {
+    var json = try #require(
+      JSONSerialization.jsonObject(with: Fixtures.data("durham-tomorrow")) as? [String: Any])
+    var snow = try #require(json["snow"] as? [String: Any])
+    var week = try #require(snow["week"] as? [String: Any])
+    let days = try #require(week["days"] as? [[String: Any]])
+    week["days"] = days.map { day in day.filter { !["snowy", "total", "chance"].contains($0.key) } }
+    snow["week"] = week
+    json["snow"] = snow
+    let res = try TodayResponse.decode(from: JSONSerialization.data(withJSONObject: json))
+    let now = try #require(ApiJSON.parseDate(try Fixtures.info("durham-tomorrow").now))
+    let rows = try #require(HomePage(res, view: .week, at: now, phase: .ready).week).rows
+    #expect(rows[1].snowy == nil && rows[1].total == nil)
+    #expect(rows[1].spoken == "Thursday, 4cm, snow")
+    #expect(rows[0].spoken == "Today, 0cm, too warm")
+  }
+
   @Test("stale: the stale line, and offline, the offline line instead")
   func stale() throws {
     let stale = try page("stale")
