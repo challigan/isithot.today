@@ -62,6 +62,13 @@ export function sitePath(topic: Topic, path: string, hostname: string): string {
 }
 
 /**
+ * Where people reach us, on every site's privacy notice and later in the apps (Contact us,
+ * Report an ad, the store listings): a forward to Carl's inbox (ImprovMX, set up on 23 October
+ * 2026), so his own address is never published.
+ */
+export const CONTACT_EMAIL = 'support@willitsnow.today';
+
+/**
  * Links that make each site browsable, for visitors and search engines alike: every page links
  * to the places page (/places), city pages to their nearest city pages, and home pages to a few
  * popular ones.

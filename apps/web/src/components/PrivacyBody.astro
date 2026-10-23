@@ -1,7 +1,7 @@
 ---
 /** The privacy notice, the same for every site: they are one service. */
 import Content from '../layouts/Content.astro';
-import { SITES, type Topic } from '@isithot/core';
+import { CONTACT_EMAIL, SITES, type Topic } from '@isithot/core';
 import { siteNames } from '../lib/topics';
 
 interface Props {
@@ -75,6 +75,6 @@ const site = SITES[topic].name;
   <p>
     Under UK GDPR you can ask what we hold about you and ask us to delete it. Because we do not keep
     personal data tied to you, there is usually nothing to find. Contact:{' '}
-    <em>[contact email to be added]</em>.
+    <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
   </p>
 </Content>
