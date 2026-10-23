@@ -58,6 +58,31 @@ export class AscError extends Error {
   }
 }
 
+/**
+ * This project's bundle IDs all start `today.` (today.willitsnow.app, today.isitwindy.app…). The
+ * check names only those: the log is public, and the account's other apps and app IDs (anything
+ * registered under the team, sideloading tools' included) are Carl's business.
+ */
+export const OURS = 'today.';
+
+/** The check's report: counts of everything, names and identifiers of this project's only. */
+export function report(apps, ids) {
+  const ours = (id) => id.startsWith(OURS);
+  const ourApps = apps.filter((a) => ours(a.attributes.bundleId));
+  const ourIds = ids.filter((b) => ours(b.attributes.identifier));
+  const others = (n) => (n ? `, and ${n} other${n === 1 ? '' : 's'}, not named here` : '');
+  return [
+    `The key works. Apps on the account: ${apps.length}.`,
+    `This project's (${OURS}*): ${ourApps.length}${others(apps.length - ourApps.length)}.`,
+    ...ourApps.map((a) => `  ${a.attributes.name} (${a.attributes.bundleId})`),
+    `Registered app IDs: ${ids.length}.`,
+    `This project's (${OURS}*): ${ourIds.length}${others(ids.length - ourIds.length)}.`,
+    ...ourIds.map(
+      (b) => `  ${b.attributes.identifier} (${b.attributes.platform}, "${b.attributes.name}")`,
+    ),
+  ];
+}
+
 /** Every page of a GET (following `links.next`), their `data` items together. */
 export async function getAll(path, creds, fetchImpl = fetch) {
   const items = [];

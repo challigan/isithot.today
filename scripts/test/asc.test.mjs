@@ -1,6 +1,6 @@
 import { createPublicKey, generateKeyPairSync, verify } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { AscError, credentials, getAll, keyPem, token } from '../asc.mjs';
+import { AscError, credentials, getAll, keyPem, report, token } from '../asc.mjs';
 
 // A throwaway P-256 key, as App Store Connect's .p8 files are.
 const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
@@ -153,5 +153,43 @@ describe('getAll', () => {
     });
     const err = await getAll('/v1/apps', CREDS, fetchImpl).catch((e) => e);
     expect(err.message).toBe('App Store Connect answered 503');
+  });
+});
+
+describe('report', () => {
+  const app = (name, bundleId) => ({ attributes: { name, bundleId } });
+  const id = (identifier, name) => ({ attributes: { identifier, name, platform: 'IOS' } });
+
+  it("counts everything but names only this project's apps and app IDs", () => {
+    const apps = [
+      app('Something else', 'com.example.other'),
+      app('willitsnow.today', 'today.willitsnow.app'),
+    ];
+    const ids = [
+      id('com.example.other', 'Other'),
+      id('com.example.sideloaded.ABCDE12345', 'Sideloaded'),
+      id('today.willitsnow.app', 'willitsnow'),
+      id('today.willitsnow.app.widgets', 'willitsnow widgets'),
+    ];
+    const text = report(apps, ids).join('\n');
+    expect(report(apps, ids)).toEqual([
+      'The key works. Apps on the account: 2.',
+      "This project's (today.*): 1, and 1 other, not named here.",
+      '  willitsnow.today (today.willitsnow.app)',
+      'Registered app IDs: 4.',
+      "This project's (today.*): 2, and 2 others, not named here.",
+      '  today.willitsnow.app (IOS, "willitsnow")',
+      '  today.willitsnow.app.widgets (IOS, "willitsnow widgets")',
+    ]);
+    expect(text).not.toMatch(/example|Something else|Sideloaded/);
+  });
+
+  it('says so when there is nothing of this project yet', () => {
+    expect(report([app('Other', 'com.example.other')], [])).toEqual([
+      'The key works. Apps on the account: 1.',
+      "This project's (today.*): 0, and 1 other, not named here.",
+      'Registered app IDs: 0.',
+      "This project's (today.*): 0.",
+    ]);
   });
 });

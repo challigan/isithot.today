@@ -1,8 +1,8 @@
 name: App Store Connect check
 
-# Proves the App Store Connect API key in the protected `testflight` environment works: lists the
-# account's apps and registered app IDs, names and identifiers only, because the repo is public and
-# so is this log. Changes nothing. Runs once when it lands on main, then on demand. Like every job
+# Proves the App Store Connect API key in the protected `testflight` environment works: counts the
+# account's apps and registered app IDs and names only this project's (today.*), because the repo
+# is public and so is this log. Changes nothing. Runs once when it lands on main, then on demand. Like every job
 # in that environment, it waits for Carl's approval.
 on:
   push:
