@@ -1,0 +1,10 @@
+# Written by `pnpm mobile:generate` (OWNED_DIRS in packages/mobile/src/generate.ts), so GitHub
+# collapses them in pull requests. `pnpm mobile:check` fails if any of them is edited by hand.
+apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources/Fixtures/** linguist-generated
+apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources/Vectors/** linguist-generated
+apps/ios/Packages/IsItCore/Sources/IsItModel/Generated/** linguist-generated
+apps/ios/Packages/IsItKit/Sources/SnowKit/Generated/** linguist-generated
+apps/ios/Packages/IsItKit/Sources/SnowKit/Resources/Glyphs.xcassets/** linguist-generated
+apps/ios/Packages/IsItKit/Sources/SnowKit/Fallback/Glyphs.xcassets/** linguist-generated
+apps/ios/Apps/Snow/Resources/Assets.xcassets/** linguist-generated
+apps/ios/Apps/Snow/Resources/Fonts/** linguist-generated

@@ -1,0 +1,52 @@
+import Foundation
+import IsItModel
+import Testing
+
+/// The band palettes pnpm mobile:generate writes into IsItModel (iOS build spec, sections 10.1
+/// and 16), checked on Linux as the app's `PaletteTests` checks them on iOS: every band's ink
+/// meets WCAG AA for body text on both ends of its gradient, and the ratios the generator wrote
+/// are what the colours give.
+@Suite("Palettes: the bands' colours")
+struct GeneratedPaletteTests {
+  @Test(
+    "every ink meets AA for body text on both ends of its gradient", arguments: SnowBand.allCases)
+  func bodyText(_ band: SnowBand) {
+    let palette = Palettes.snow(band)
+    #expect(palette.inkOnG1 >= 4.5)
+    #expect(palette.inkOnG2 >= 4.5)
+    #expect(contrast(palette.ink, palette.g1) >= 4.5)
+    #expect(contrast(palette.ink, palette.g2) >= 4.5)
+  }
+
+  @Test("the ratios written are the colours' own, rounded down", arguments: SnowBand.allCases)
+  func ratios(_ band: SnowBand) {
+    let palette = Palettes.snow(band)
+    for (ratio, written) in [
+      (contrast(palette.ink, palette.g1), palette.inkOnG1),
+      (contrast(palette.ink, palette.g2), palette.inkOnG2),
+    ] {
+      #expect(written <= ratio + 1e-9)
+      #expect(ratio - written < 0.01)
+    }
+  }
+
+  @Test("a band the app doesn't know draws as nosnow")
+  func unknown() {
+    #expect(Palettes.snow(.unknown) == Palettes.snow(.nosnow))
+    #expect(Palettes.snow(.snow) == Palettes.Snow.snow)
+    #expect(Palettes.snow(.nosnow).ink == 0x341a3c)
+  }
+}
+
+/// WCAG 2's contrast ratio between two 0xRRGGBB colours, worked out as packages/mobile does.
+private func contrast(_ a: UInt32, _ b: UInt32) -> Double {
+  func luminance(_ rgb: UInt32) -> Double {
+    let channels = [rgb >> 16, rgb >> 8, rgb].map { channel -> Double in
+      let value = Double(channel & 0xff) / 255
+      return value <= 0.039_28 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+    }
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+  }
+  let (x, y) = (luminance(a), luminance(b))
+  return (max(x, y) + 0.05) / (min(x, y) + 0.05)
+}

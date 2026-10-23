@@ -25,6 +25,8 @@ jobs:
       - run: pnpm format:check
       - run: pnpm typecheck
       - run: pnpm test:coverage
+      # The files packages/mobile generates for the apps match what it writes now.
+      - run: pnpm mobile:check
       - run: pnpm build:netlify
         env:
           DATA_SOURCE: synthetic

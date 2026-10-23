@@ -1,0 +1,3719 @@
+{
+  "_fixture": {
+    "query": "place=durham-gb&units=c&ahead=snow",
+    "now": "2026-12-16T18:05:00.000Z",
+    "note": "Durham’s answer at 11:05am on 16 December, as the app finds it saved at 6:05pm (`now`), 7 hours later: past the stale cut-off at 5:05pm, 6 hours after `updatedAt`, so none of it may be shown."
+  },
+  "location": {
+    "name": "Durham",
+    "region": "England",
+    "country": "GB",
+    "lat": 54.8,
+    "lon": -1.6,
+    "source": "city",
+    "slug": "durham-gb",
+    "geonameId": 2650628,
+    "elevation": 52,
+    "timezone": "Europe/London"
+  },
+  "units": "c",
+  "days": [
+    {
+      "date": "2026-12-16",
+      "band": "cold",
+      "answer": "No.",
+      "verdict": "It's cold.",
+      "high": 11,
+      "feelsLike": 8,
+      "peakTime": "2pm",
+      "normalHigh": 8,
+      "anomaly": 3,
+      "detail": "High of 11°, feels like 8°. Warmest around 2pm. 3° warmer than usual for December.",
+      "consensus": {
+        "value": 10.8,
+        "agree": 6,
+        "total": 6,
+        "bandLow": 8.8,
+        "bandHigh": 12.8,
+        "confidence": "good"
+      },
+      "models": [
+        {
+          "id": "ecmwf_ifs025",
+          "name": "ECMWF",
+          "high": 12,
+          "value": 11.7,
+          "agrees": true
+        },
+        {
+          "id": "ncep_gfs_seamless",
+          "name": "GFS",
+          "high": 10,
+          "value": 10.1,
+          "agrees": true
+        },
+        {
+          "id": "dwd_icon_seamless",
+          "name": "ICON",
+          "high": 12,
+          "value": 11.8,
+          "agrees": true
+        },
+        {
+          "id": "ukmo_seamless",
+          "name": "UKMO",
+          "high": 9,
+          "value": 9.4,
+          "agrees": true
+        },
+        {
+          "id": "meteofrance_seamless",
+          "name": "Météo-France",
+          "high": 9,
+          "value": 9.4,
+          "agrees": true
+        },
+        {
+          "id": "cmc_gem_seamless",
+          "name": "GEM",
+          "high": 12,
+          "value": 11.8,
+          "agrees": true
+        }
+      ],
+      "month": "December",
+      "agreementText": "6 of 6 forecasts agree within 2°",
+      "limitedText": null,
+      "stripSummary": "Forecasts range from 9° to 12°; 6 of 6 agree near 11°.",
+      "scale": {
+        "min": 6,
+        "max": 15
+      },
+      "uv": {
+        "max": 0,
+        "level": "low",
+        "peak": null
+      }
+    },
+    {
+      "date": "2026-12-17",
+      "band": "freezing",
+      "answer": "No.",
+      "verdict": "It'll be freezing.",
+      "high": 3,
+      "feelsLike": 0,
+      "peakTime": "2pm",
+      "normalHigh": 8,
+      "anomaly": -4,
+      "detail": "High of 3°, feels like 0°. Warmest around 2pm. 4° colder than usual for December.",
+      "consensus": {
+        "value": 3.4,
+        "agree": 5,
+        "total": 6,
+        "bandLow": 1.3,
+        "bandHigh": 5.4,
+        "confidence": "good"
+      },
+      "models": [
+        {
+          "id": "ecmwf_ifs025",
+          "name": "ECMWF",
+          "high": 3,
+          "value": 2.5,
+          "agrees": true
+        },
+        {
+          "id": "ncep_gfs_seamless",
+          "name": "GFS",
+          "high": 4,
+          "value": 4.3,
+          "agrees": true
+        },
+        {
+          "id": "dwd_icon_seamless",
+          "name": "ICON",
+          "high": 2,
+          "value": 2.3,
+          "agrees": true
+        },
+        {
+          "id": "ukmo_seamless",
+          "name": "UKMO",
+          "high": 4,
+          "value": 4.3,
+          "agrees": true
+        },
+        {
+          "id": "meteofrance_seamless",
+          "name": "Météo-France",
+          "high": 2,
+          "value": 2.2,
+          "agrees": true
+        },
+        {
+          "id": "cmc_gem_seamless",
+          "name": "GEM",
+          "high": 6,
+          "value": 5.7,
+          "agrees": false
+        }
+      ],
+      "month": "December",
+      "agreementText": "5 of 6 forecasts agree within 2°",
+      "limitedText": null,
+      "stripSummary": "Forecasts range from 2° to 6°; 5 of 6 agree near 3°.",
+      "scale": {
+        "min": -1,
+        "max": 9
+      },
+      "uv": {
+        "max": 0,
+        "level": "low",
+        "peak": null
+      }
+    }
+  ],
+  "updatedAt": "2026-12-16T11:05:00.000Z",
+  "updated": {
+    "date": "2026-12-16",
+    "clock": "11:05am GMT"
+  },
+  "attribution": [
+    "Weather data by Open-Meteo.com (CC BY 4.0), modified",
+    "Contains Met Office data © Crown copyright, the Met Office, licensed under CC BY-SA 4.0",
+    "Climate data: NASA POWER"
+  ],
+  "links": [
+    {
+      "name": "BBC Weather",
+      "url": "https://www.bbc.co.uk/weather/2650628"
+    },
+    {
+      "name": "Met Office",
+      "url": "https://www.metoffice.gov.uk/weather/forecast/gcwzg84cj"
+    },
+    {
+      "name": "AccuWeather",
+      "url": "https://www.accuweather.com/en/search-locations?query=Durham"
+    }
+  ],
+  "nearby": [
+    {
+      "slug": "sunderland-gb",
+      "name": "Sunderland"
+    },
+    {
+      "slug": "newcastle-upon-tyne-gb",
+      "name": "Newcastle"
+    },
+    {
+      "slug": "south-shields-gb",
+      "name": "South Shields"
+    },
+    {
+      "slug": "hartlepool-gb",
+      "name": "Hartlepool"
+    },
+    {
+      "slug": "darlington-gb",
+      "name": "Darlington"
+    },
+    {
+      "slug": "stockton-on-tees-gb",
+      "name": "Stockton-on-Tees"
+    },
+    {
+      "slug": "middlesbrough-gb",
+      "name": "Middlesbrough"
+    },
+    {
+      "slug": "carlisle-gb",
+      "name": "Carlisle"
+    }
+  ],
+  "now": {
+    "time": "2026-12-16T11:05:00.000Z",
+    "band": "cold",
+    "answer": "No.",
+    "verdict": "It's cold.",
+    "temperature": 10,
+    "feelsLike": 7,
+    "detail": "10° now, feels like 7°. Rising to 11° around 1pm.",
+    "hours": [
+      {
+        "time": "2026-12-16T12:00:00.000Z",
+        "label": "12pm",
+        "temperature": 10
+      },
+      {
+        "time": "2026-12-16T14:00:00.000Z",
+        "label": "2pm",
+        "temperature": 11
+      },
+      {
+        "time": "2026-12-16T16:00:00.000Z",
+        "label": "4pm",
+        "temperature": 10
+      },
+      {
+        "time": "2026-12-16T18:00:00.000Z",
+        "label": "6pm",
+        "temperature": 9
+      },
+      {
+        "time": "2026-12-16T20:00:00.000Z",
+        "label": "8pm",
+        "temperature": 7
+      },
+      {
+        "time": "2026-12-16T22:00:00.000Z",
+        "label": "10pm",
+        "temperature": 5
+      }
+    ],
+    "series": [
+      {
+        "time": 1797415200000,
+        "date": "2026-12-16",
+        "hour": 10,
+        "temperature": 8.8,
+        "feelsLike": 6.3,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1797418800000,
+        "date": "2026-12-16",
+        "hour": 11,
+        "temperature": 9.6,
+        "feelsLike": 6.9,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1797422400000,
+        "date": "2026-12-16",
+        "hour": 12,
+        "temperature": 10.3,
+        "feelsLike": 7.5,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1797426000000,
+        "date": "2026-12-16",
+        "hour": 13,
+        "temperature": 10.6,
+        "feelsLike": 7.8,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1797429600000,
+        "date": "2026-12-16",
+        "hour": 14,
+        "temperature": 10.8,
+        "feelsLike": 7.8,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1797433200000,
+        "date": "2026-12-16",
+        "hour": 15,
+        "temperature": 10.6,
+        "feelsLike": 7.8,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1797436800000,
+        "date": "2026-12-16",
+        "hour": 16,
+        "temperature": 10.3,
+        "feelsLike": 7.5,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1797440400000,
+        "date": "2026-12-16",
+        "hour": 17,
+        "temperature": 9.6,
+        "feelsLike": 6.9,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1797444000000,
+        "date": "2026-12-16",
+        "hour": 18,
+        "temperature": 8.8,
+        "feelsLike": 6.3,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1797447600000,
+        "date": "2026-12-16",
+        "hour": 19,
+        "temperature": 7.8,
+        "feelsLike": 5.6,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1797451200000,
+        "date": "2026-12-16",
+        "hour": 20,
+        "temperature": 6.8,
+        "feelsLike": 4.8,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1797454800000,
+        "date": "2026-12-16",
+        "hour": 21,
+        "temperature": 5.8,
+        "feelsLike": 4.1,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1797458400000,
+        "date": "2026-12-16",
+        "hour": 22,
+        "temperature": 4.8,
+        "feelsLike": 3.3,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1797462000000,
+        "date": "2026-12-16",
+        "hour": 23,
+        "temperature": 4,
+        "feelsLike": 2.7,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1797465600000,
+        "date": "2026-12-17",
+        "hour": 0,
+        "temperature": -4.1,
+        "feelsLike": -5.3,
+        "band": "freezing",
+        "uv": 0
+      },
+      {
+        "time": 1797469200000,
+        "date": "2026-12-17",
+        "hour": 1,
+        "temperature": -4.5,
+        "feelsLike": -5.6,
+        "band": "freezing",
+        "uv": 0
+      },
+      {
+        "time": 1797472800000,
+        "date": "2026-12-17",
+        "hour": 2,
+        "temperature": -4.6,
+        "feelsLike": -5.6,
+        "band": "freezing",
+        "uv": 0
+      },
+      {
+        "time": 1797476400000,
+        "date": "2026-12-17",
+        "hour": 3,
+        "temperature": -4.5,
+        "feelsLike": -5.6,
+        "band": "freezing",
+        "uv": 0
+      },
+      {
+        "time": 1797480000000,
+        "date": "2026-12-17",
+        "hour": 4,
+        "temperature": -4.1,
+        "feelsLike": -5.3,
+        "band": "freezing",
+        "uv": 0
+      },
+      {
+        "time": 1797483600000,
+        "date": "2026-12-17",
+        "hour": 5,
+        "temperature": -3.4,
+        "feelsLike": -4.7,
+        "band": "freezing",
+        "uv": 0
+      },
+      {
+        "time": 1797487200000,
+        "date": "2026-12-17",
+        "hour": 6,
+        "temperature": -2.6,
+        "feelsLike": -4.2,
+        "band": "freezing",
+        "uv": 0
+      },
+      {
+        "time": 1797490800000,
+        "date": "2026-12-17",
+        "hour": 7,
+        "temperature": -1.6,
+        "feelsLike": -3.4,
+        "band": "freezing",
+        "uv": 0
+      },
+      {
+        "time": 1797494400000,
+        "date": "2026-12-17",
+        "hour": 8,
+        "temperature": -0.7,
+        "feelsLike": -2.8,
+        "band": "freezing",
+        "uv": 0
+      },
+      {
+        "time": 1797498000000,
+        "date": "2026-12-17",
+        "hour": 9,
+        "temperature": 0.4,
+        "feelsLike": -2,
+        "band": "freezing",
+        "uv": 0
+      },
+      {
+        "time": 1797501600000,
+        "date": "2026-12-17",
+        "hour": 10,
+        "temperature": 1.3,
+        "feelsLike": -1.3,
+        "band": "freezing",
+        "uv": 0
+      },
+      {
+        "time": 1797505200000,
+        "date": "2026-12-17",
+        "hour": 11,
+        "temperature": 2.2,
+        "feelsLike": -0.7,
+        "band": "freezing",
+        "uv": 0
+      }
+    ],
+    "uv": {
+      "value": 0,
+      "level": "low"
+    }
+  },
+  "week": {
+    "from": "2026-12-16",
+    "to": "2026-12-22",
+    "band": "cold",
+    "answer": "No.",
+    "verdict": "A cold week.",
+    "high": 9,
+    "highs": {
+      "min": 3,
+      "max": 11
+    },
+    "feelsLike": 7,
+    "normalHigh": 7,
+    "anomaly": 1,
+    "detail": "Highs of 3–11°, averaging 9°. Hottest on Monday, 11°. About normal for December.",
+    "hottest": {
+      "date": "2026-12-21",
+      "high": 11
+    },
+    "days": [
+      {
+        "date": "2026-12-16",
+        "label": "Today",
+        "high": 11,
+        "band": "cold",
+        "bandLabel": "Cold"
+      },
+      {
+        "date": "2026-12-17",
+        "label": "Thu",
+        "high": 3,
+        "band": "freezing",
+        "bandLabel": "Freezing"
+      },
+      {
+        "date": "2026-12-18",
+        "label": "Fri",
+        "high": 4,
+        "band": "cold",
+        "bandLabel": "Cold"
+      },
+      {
+        "date": "2026-12-19",
+        "label": "Sat",
+        "high": 10,
+        "band": "mild",
+        "bandLabel": "Mild"
+      },
+      {
+        "date": "2026-12-20",
+        "label": "Sun",
+        "high": 11,
+        "band": "cold",
+        "bandLabel": "Cold"
+      },
+      {
+        "date": "2026-12-21",
+        "label": "Mon",
+        "high": 11,
+        "band": "mild",
+        "bandLabel": "Mild"
+      },
+      {
+        "date": "2026-12-22",
+        "label": "Tue",
+        "high": 10,
+        "band": "cold",
+        "bandLabel": "Cold"
+      }
+    ]
+  },
+  "rain": {
+    "unit": "mm",
+    "days": [
+      {
+        "date": "2026-12-16",
+        "from": "2026-12-16T11:05:00.000Z",
+        "partial": true,
+        "band": "showers",
+        "answer": "Maybe.",
+        "verdict": "Showers possible.",
+        "detail": "Some forecasts say up to 4mm. Most likely around 2pm.",
+        "amount": 0.9,
+        "chance": 0.5,
+        "wet": 3,
+        "total": 6,
+        "confidence": "good",
+        "threshold": 1,
+        "snow": "none",
+        "likely": {
+          "from": 14,
+          "to": 15
+        },
+        "scale": {
+          "min": 0,
+          "max": 10
+        },
+        "models": [
+          {
+            "id": "ecmwf_ifs025",
+            "name": "ECMWF",
+            "amount": 0,
+            "value": 0,
+            "expectsRain": false,
+            "agrees": true
+          },
+          {
+            "id": "ncep_gfs_seamless",
+            "name": "GFS",
+            "amount": 0,
+            "value": 0,
+            "expectsRain": false,
+            "agrees": true
+          },
+          {
+            "id": "dwd_icon_seamless",
+            "name": "ICON",
+            "amount": 4,
+            "value": 4.1,
+            "expectsRain": true,
+            "agrees": true
+          },
+          {
+            "id": "ukmo_seamless",
+            "name": "UKMO",
+            "amount": 0,
+            "value": 0,
+            "expectsRain": false,
+            "agrees": true
+          },
+          {
+            "id": "meteofrance_seamless",
+            "name": "Météo-France",
+            "amount": 2,
+            "value": 1.7,
+            "expectsRain": true,
+            "agrees": true
+          },
+          {
+            "id": "cmc_gem_seamless",
+            "name": "GEM",
+            "amount": 5,
+            "value": 4.6,
+            "expectsRain": true,
+            "agrees": true
+          }
+        ],
+        "month": "December",
+        "agreementText": "3 of 6 forecasts expect rain",
+        "limitedText": null,
+        "stripSummary": "Forecasts range from 0mm to 5mm; 3 of 6 expect rain."
+      },
+      {
+        "date": "2026-12-17",
+        "from": "2026-12-17T00:00:00.000Z",
+        "partial": false,
+        "band": "rain",
+        "answer": "Yes.",
+        "verdict": "It'll snow.",
+        "detail": "Likely to fall as snow. Mostly between 2am and 9am.",
+        "amount": 7,
+        "chance": 1,
+        "wet": 6,
+        "total": 6,
+        "confidence": "good",
+        "threshold": 1,
+        "snow": "most",
+        "likely": {
+          "from": 2,
+          "to": 9
+        },
+        "scale": {
+          "min": 0,
+          "max": 10
+        },
+        "models": [
+          {
+            "id": "ecmwf_ifs025",
+            "name": "ECMWF",
+            "amount": 7,
+            "value": 7.2,
+            "expectsRain": true,
+            "agrees": true
+          },
+          {
+            "id": "ncep_gfs_seamless",
+            "name": "GFS",
+            "amount": 9,
+            "value": 8.6,
+            "expectsRain": true,
+            "agrees": true
+          },
+          {
+            "id": "dwd_icon_seamless",
+            "name": "ICON",
+            "amount": 5,
+            "value": 4.8,
+            "expectsRain": true,
+            "agrees": true
+          },
+          {
+            "id": "ukmo_seamless",
+            "name": "UKMO",
+            "amount": 7,
+            "value": 6.8,
+            "expectsRain": true,
+            "agrees": true
+          },
+          {
+            "id": "meteofrance_seamless",
+            "name": "Météo-France",
+            "amount": 5,
+            "value": 5.2,
+            "expectsRain": true,
+            "agrees": true
+          },
+          {
+            "id": "cmc_gem_seamless",
+            "name": "GEM",
+            "amount": 9,
+            "value": 8.6,
+            "expectsRain": true,
+            "agrees": true
+          }
+        ],
+        "month": "December",
+        "agreementText": "6 of 6 forecasts expect rain",
+        "limitedText": null,
+        "stripSummary": "Forecasts range from 5mm to 9mm; 6 of 6 expect rain."
+      }
+    ],
+    "now": {
+      "time": "2026-12-16T11:05:00.000Z",
+      "band": "dry",
+      "answer": "No.",
+      "verdict": "It's dry.",
+      "detail": "Dry now. Showers possible from about 2pm.",
+      "amount": 0,
+      "chance": 0,
+      "snow": false,
+      "hours": [
+        {
+          "time": "2026-12-16T12:00:00.000Z",
+          "label": "12pm",
+          "chance": 20
+        },
+        {
+          "time": "2026-12-16T14:00:00.000Z",
+          "label": "2pm",
+          "chance": 50
+        },
+        {
+          "time": "2026-12-16T16:00:00.000Z",
+          "label": "4pm",
+          "chance": 20
+        },
+        {
+          "time": "2026-12-16T18:00:00.000Z",
+          "label": "6pm",
+          "chance": 0
+        },
+        {
+          "time": "2026-12-16T20:00:00.000Z",
+          "label": "8pm",
+          "chance": 0
+        },
+        {
+          "time": "2026-12-16T22:00:00.000Z",
+          "label": "10pm",
+          "chance": 0
+        }
+      ],
+      "series": [
+        {
+          "time": 1797415200000,
+          "date": "2026-12-16",
+          "hour": 10,
+          "amount": 0,
+          "chance": 0.17,
+          "chance2h": 0.17,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1797418800000,
+          "date": "2026-12-16",
+          "hour": 11,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1797422400000,
+          "date": "2026-12-16",
+          "hour": 12,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0.17,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1797426000000,
+          "date": "2026-12-16",
+          "hour": 13,
+          "amount": 0,
+          "chance": 0.17,
+          "chance2h": 0.5,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1797429600000,
+          "date": "2026-12-16",
+          "hour": 14,
+          "amount": 0.6,
+          "chance": 0.5,
+          "chance2h": 0.5,
+          "band": "showers",
+          "snow": false,
+          "asSnow": false,
+          "light": false
+        },
+        {
+          "time": 1797433200000,
+          "date": "2026-12-16",
+          "hour": 15,
+          "amount": 0,
+          "chance": 0.17,
+          "chance2h": 0.17,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1797436800000,
+          "date": "2026-12-16",
+          "hour": 16,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0.17,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1797440400000,
+          "date": "2026-12-16",
+          "hour": 17,
+          "amount": 0,
+          "chance": 0.17,
+          "chance2h": 0.17,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1797444000000,
+          "date": "2026-12-16",
+          "hour": 18,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1797447600000,
+          "date": "2026-12-16",
+          "hour": 19,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1797451200000,
+          "date": "2026-12-16",
+          "hour": 20,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1797454800000,
+          "date": "2026-12-16",
+          "hour": 21,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1797458400000,
+          "date": "2026-12-16",
+          "hour": 22,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1797462000000,
+          "date": "2026-12-16",
+          "hour": 23,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0.17,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1797465600000,
+          "date": "2026-12-17",
+          "hour": 0,
+          "amount": 0,
+          "chance": 0.17,
+          "chance2h": 0.33,
+          "band": "dry",
+          "snow": true,
+          "asSnow": true,
+          "light": true
+        },
+        {
+          "time": 1797469200000,
+          "date": "2026-12-17",
+          "hour": 1,
+          "amount": 0,
+          "chance": 0.33,
+          "chance2h": 0.67,
+          "band": "showers",
+          "snow": true,
+          "asSnow": true,
+          "light": true
+        },
+        {
+          "time": 1797472800000,
+          "date": "2026-12-17",
+          "hour": 2,
+          "amount": 0.35,
+          "chance": 0.67,
+          "chance2h": 1,
+          "band": "rain",
+          "snow": true,
+          "asSnow": true,
+          "light": true
+        },
+        {
+          "time": 1797476400000,
+          "date": "2026-12-17",
+          "hour": 3,
+          "amount": 0.9,
+          "chance": 1,
+          "chance2h": 1,
+          "band": "rain",
+          "snow": true,
+          "asSnow": true,
+          "light": false
+        },
+        {
+          "time": 1797480000000,
+          "date": "2026-12-17",
+          "hour": 4,
+          "amount": 1.35,
+          "chance": 1,
+          "chance2h": 1,
+          "band": "rain",
+          "snow": true,
+          "asSnow": true,
+          "light": false
+        },
+        {
+          "time": 1797483600000,
+          "date": "2026-12-17",
+          "hour": 5,
+          "amount": 1.3,
+          "chance": 1,
+          "chance2h": 1,
+          "band": "rain",
+          "snow": true,
+          "asSnow": true,
+          "light": false
+        },
+        {
+          "time": 1797487200000,
+          "date": "2026-12-17",
+          "hour": 6,
+          "amount": 1.05,
+          "chance": 0.83,
+          "chance2h": 0.83,
+          "band": "rain",
+          "snow": true,
+          "asSnow": true,
+          "light": false
+        },
+        {
+          "time": 1797490800000,
+          "date": "2026-12-17",
+          "hour": 7,
+          "amount": 0.55,
+          "chance": 0.83,
+          "chance2h": 0.83,
+          "band": "rain",
+          "snow": true,
+          "asSnow": true,
+          "light": false
+        },
+        {
+          "time": 1797494400000,
+          "date": "2026-12-17",
+          "hour": 8,
+          "amount": 0.15,
+          "chance": 0.5,
+          "chance2h": 0.5,
+          "band": "showers",
+          "snow": true,
+          "asSnow": true,
+          "light": true
+        },
+        {
+          "time": 1797498000000,
+          "date": "2026-12-17",
+          "hour": 9,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": true,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1797501600000,
+          "date": "2026-12-17",
+          "hour": 10,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1797505200000,
+          "date": "2026-12-17",
+          "hour": 11,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        }
+      ]
+    },
+    "week": {
+      "from": "2026-12-16",
+      "to": "2026-12-22",
+      "band": "showers",
+      "answer": "Partly.",
+      "verdict": "Rain on Thu, Fri and Tue, heavy on Fri.",
+      "detail": "About 35mm across the week, most on Friday (18mm). Wetter than usual for December.",
+      "total": 35,
+      "normal": 19,
+      "rainDays": 3,
+      "showerDays": 1,
+      "wettest": {
+        "date": "2026-12-18",
+        "amount": 18
+      },
+      "days": [
+        {
+          "date": "2026-12-16",
+          "label": "Today",
+          "amount": 0.9,
+          "band": "showers",
+          "bandLabel": "Showers",
+          "snow": false,
+          "chance": 0.5,
+          "wet": 3,
+          "total": 6
+        },
+        {
+          "date": "2026-12-17",
+          "label": "Thu",
+          "amount": 7,
+          "band": "rain",
+          "bandLabel": "Snow",
+          "snow": true,
+          "chance": 1,
+          "wet": 6,
+          "total": 6
+        },
+        {
+          "date": "2026-12-18",
+          "label": "Fri",
+          "amount": 19,
+          "band": "heavy",
+          "bandLabel": "Snow",
+          "snow": true,
+          "chance": 1,
+          "wet": 6,
+          "total": 6
+        },
+        {
+          "date": "2026-12-19",
+          "label": "Sat",
+          "amount": 0.2,
+          "band": "spots",
+          "bandLabel": "Mostly dry",
+          "snow": false,
+          "chance": 0,
+          "wet": 0,
+          "total": 6
+        },
+        {
+          "date": "2026-12-20",
+          "label": "Sun",
+          "amount": 0,
+          "band": "dry",
+          "bandLabel": "Dry",
+          "snow": false,
+          "chance": 0,
+          "wet": 0,
+          "total": 5
+        },
+        {
+          "date": "2026-12-21",
+          "label": "Mon",
+          "amount": 0,
+          "band": "dry",
+          "bandLabel": "Dry",
+          "snow": false,
+          "chance": 0,
+          "wet": 0,
+          "total": 5
+        },
+        {
+          "date": "2026-12-22",
+          "label": "Tue",
+          "amount": 8,
+          "band": "rain",
+          "bandLabel": "Rain",
+          "snow": false,
+          "chance": 1,
+          "wet": 5,
+          "total": 5
+        }
+      ]
+    }
+  },
+  "snow": {
+    "unit": "cm",
+    "days": [
+      {
+        "date": "2026-12-16",
+        "from": "2026-12-16T11:05:00.000Z",
+        "partial": true,
+        "band": "nosnow",
+        "answer": "No.",
+        "verdict": "Rain, not snow.",
+        "detail": "No lower than 4° for the rest of the day. Snow is common here in December.",
+        "reason": "rain",
+        "bandLabel": "Rain",
+        "amount": 0,
+        "chance": 0,
+        "snowy": 0,
+        "total": 6,
+        "confidence": "good",
+        "threshold": 0.5,
+        "likely": null,
+        "scale": {
+          "min": 0,
+          "max": 5
+        },
+        "models": [
+          {
+            "id": "ecmwf_ifs025",
+            "name": "ECMWF",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "ncep_gfs_seamless",
+            "name": "GFS",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "dwd_icon_seamless",
+            "name": "ICON",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "ukmo_seamless",
+            "name": "UKMO",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "meteofrance_seamless",
+            "name": "Météo-France",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "cmc_gem_seamless",
+            "name": "GEM",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          }
+        ],
+        "month": "December",
+        "agreementText": "0 of 6 forecasts expect snow",
+        "limitedText": null,
+        "stripSummary": "All forecasts say 0cm; none expect snow."
+      },
+      {
+        "date": "2026-12-17",
+        "from": "2026-12-17T00:00:00.000Z",
+        "partial": false,
+        "band": "snow",
+        "answer": "Yes.",
+        "verdict": "It'll snow.",
+        "detail": "4 to 5cm of snow. Mostly between 2am and 8am.",
+        "reason": null,
+        "bandLabel": "Snow",
+        "amount": 4,
+        "chance": 1,
+        "snowy": 6,
+        "total": 6,
+        "confidence": "good",
+        "threshold": 0.5,
+        "likely": {
+          "from": 2,
+          "to": 8
+        },
+        "scale": {
+          "min": 0,
+          "max": 10
+        },
+        "models": [
+          {
+            "id": "ecmwf_ifs025",
+            "name": "ECMWF",
+            "amount": 5,
+            "value": 5.04,
+            "expectsSnow": true,
+            "agrees": true
+          },
+          {
+            "id": "ncep_gfs_seamless",
+            "name": "GFS",
+            "amount": 5,
+            "value": 5.11,
+            "expectsSnow": true,
+            "agrees": true
+          },
+          {
+            "id": "dwd_icon_seamless",
+            "name": "ICON",
+            "amount": 3,
+            "value": 3.34,
+            "expectsSnow": true,
+            "agrees": true
+          },
+          {
+            "id": "ukmo_seamless",
+            "name": "UKMO",
+            "amount": 4,
+            "value": 4.12,
+            "expectsSnow": true,
+            "agrees": true
+          },
+          {
+            "id": "meteofrance_seamless",
+            "name": "Météo-France",
+            "amount": 4,
+            "value": 3.63,
+            "expectsSnow": true,
+            "agrees": true
+          },
+          {
+            "id": "cmc_gem_seamless",
+            "name": "GEM",
+            "amount": 4,
+            "value": 3.99,
+            "expectsSnow": true,
+            "agrees": true
+          }
+        ],
+        "month": "December",
+        "agreementText": "6 of 6 forecasts expect snow",
+        "limitedText": null,
+        "stripSummary": "Forecasts range from 3cm to 5cm; 6 of 6 expect snow."
+      }
+    ],
+    "now": {
+      "time": "2026-12-16T11:05:00.000Z",
+      "band": "nosnow",
+      "answer": "No.",
+      "verdict": "Too warm for snow.",
+      "detail": "Dry now. No snow for the next 12 hours.",
+      "amount": 0,
+      "chance": 0,
+      "hours": [
+        {
+          "time": "2026-12-16T12:00:00.000Z",
+          "label": "12pm",
+          "chance": 0
+        },
+        {
+          "time": "2026-12-16T14:00:00.000Z",
+          "label": "2pm",
+          "chance": 0
+        },
+        {
+          "time": "2026-12-16T16:00:00.000Z",
+          "label": "4pm",
+          "chance": 0
+        },
+        {
+          "time": "2026-12-16T18:00:00.000Z",
+          "label": "6pm",
+          "chance": 0
+        },
+        {
+          "time": "2026-12-16T20:00:00.000Z",
+          "label": "8pm",
+          "chance": 0
+        },
+        {
+          "time": "2026-12-16T22:00:00.000Z",
+          "label": "10pm",
+          "chance": 0
+        }
+      ],
+      "series": [
+        {
+          "time": 1797415200000,
+          "date": "2026-12-16",
+          "hour": 10,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1797418800000,
+          "date": "2026-12-16",
+          "hour": 11,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1797422400000,
+          "date": "2026-12-16",
+          "hour": 12,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1797426000000,
+          "date": "2026-12-16",
+          "hour": 13,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1797429600000,
+          "date": "2026-12-16",
+          "hour": 14,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "rain",
+          "light": true
+        },
+        {
+          "time": 1797433200000,
+          "date": "2026-12-16",
+          "hour": 15,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1797436800000,
+          "date": "2026-12-16",
+          "hour": 16,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1797440400000,
+          "date": "2026-12-16",
+          "hour": 17,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1797444000000,
+          "date": "2026-12-16",
+          "hour": 18,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1797447600000,
+          "date": "2026-12-16",
+          "hour": 19,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1797451200000,
+          "date": "2026-12-16",
+          "hour": 20,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1797454800000,
+          "date": "2026-12-16",
+          "hour": 21,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1797458400000,
+          "date": "2026-12-16",
+          "hour": 22,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1797462000000,
+          "date": "2026-12-16",
+          "hour": 23,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0.17,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1797465600000,
+          "date": "2026-12-17",
+          "hour": 0,
+          "amount": 0,
+          "chance": 0.17,
+          "chance2h": 0.33,
+          "band": "nosnow",
+          "reason": "dry",
+          "light": true
+        },
+        {
+          "time": 1797469200000,
+          "date": "2026-12-17",
+          "hour": 1,
+          "amount": 0,
+          "chance": 0.33,
+          "chance2h": 0.67,
+          "band": "maybesnow",
+          "reason": null,
+          "light": true
+        },
+        {
+          "time": 1797472800000,
+          "date": "2026-12-17",
+          "hour": 2,
+          "amount": 0.25,
+          "chance": 0.67,
+          "chance2h": 1,
+          "band": "snow",
+          "reason": null,
+          "light": false
+        },
+        {
+          "time": 1797476400000,
+          "date": "2026-12-17",
+          "hour": 3,
+          "amount": 0.63,
+          "chance": 1,
+          "chance2h": 1,
+          "band": "snow",
+          "reason": null,
+          "light": false
+        },
+        {
+          "time": 1797480000000,
+          "date": "2026-12-17",
+          "hour": 4,
+          "amount": 0.94,
+          "chance": 1,
+          "chance2h": 1,
+          "band": "heavysnow",
+          "reason": null,
+          "light": false
+        },
+        {
+          "time": 1797483600000,
+          "date": "2026-12-17",
+          "hour": 5,
+          "amount": 0.91,
+          "chance": 1,
+          "chance2h": 1,
+          "band": "heavysnow",
+          "reason": null,
+          "light": false
+        },
+        {
+          "time": 1797487200000,
+          "date": "2026-12-17",
+          "hour": 6,
+          "amount": 0.71,
+          "chance": 0.83,
+          "chance2h": 0.83,
+          "band": "snow",
+          "reason": null,
+          "light": false
+        },
+        {
+          "time": 1797490800000,
+          "date": "2026-12-17",
+          "hour": 7,
+          "amount": 0.28,
+          "chance": 0.83,
+          "chance2h": 0.83,
+          "band": "snow",
+          "reason": null,
+          "light": false
+        },
+        {
+          "time": 1797494400000,
+          "date": "2026-12-17",
+          "hour": 8,
+          "amount": 0.02,
+          "chance": 0.33,
+          "chance2h": 0.33,
+          "band": "maybesnow",
+          "reason": null,
+          "light": true
+        },
+        {
+          "time": 1797498000000,
+          "date": "2026-12-17",
+          "hour": 9,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "dry",
+          "light": true
+        },
+        {
+          "time": 1797501600000,
+          "date": "2026-12-17",
+          "hour": 10,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "dry",
+          "light": true
+        },
+        {
+          "time": 1797505200000,
+          "date": "2026-12-17",
+          "hour": 11,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "dry",
+          "light": true
+        }
+      ]
+    },
+    "week": {
+      "from": "2026-12-16",
+      "to": "2026-12-22",
+      "band": "heavysnow",
+      "answer": "Yes.",
+      "verdict": "Snow on Thu and Fri, heavy on Fri.",
+      "detail": "About 10cm across the week, most on Friday (8cm). More snow than usual for December.",
+      "total": 12,
+      "normal": 7,
+      "snowDays": 2,
+      "maybeDays": 0,
+      "snowiest": {
+        "date": "2026-12-18",
+        "amount": 8
+      },
+      "days": [
+        {
+          "date": "2026-12-16",
+          "label": "Today",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Rain",
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "reason": "rain"
+        },
+        {
+          "date": "2026-12-17",
+          "label": "Thu",
+          "amount": 4,
+          "band": "snow",
+          "bandLabel": "Snow",
+          "chance": 1,
+          "snowy": 6,
+          "total": 6,
+          "reason": null
+        },
+        {
+          "date": "2026-12-18",
+          "label": "Fri",
+          "amount": 8,
+          "band": "heavysnow",
+          "bandLabel": "Heavy snow",
+          "chance": 1,
+          "snowy": 6,
+          "total": 6,
+          "reason": null
+        },
+        {
+          "date": "2026-12-19",
+          "label": "Sat",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Dry",
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "reason": "dry"
+        },
+        {
+          "date": "2026-12-20",
+          "label": "Sun",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Dry",
+          "chance": 0,
+          "snowy": 0,
+          "total": 5,
+          "reason": "dry"
+        },
+        {
+          "date": "2026-12-21",
+          "label": "Mon",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Dry",
+          "chance": 0,
+          "snowy": 0,
+          "total": 5,
+          "reason": "dry"
+        },
+        {
+          "date": "2026-12-22",
+          "label": "Tue",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Rain",
+          "chance": 0,
+          "snowy": 0,
+          "total": 5,
+          "reason": "rain"
+        }
+      ]
+    },
+    "ahead": [
+      {
+        "time": "2026-12-16T12:00:00.000Z",
+        "now": {
+          "time": "2026-12-16T12:00:00.000Z",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "Dry now. No snow for the next 12 hours.",
+          "amount": 0,
+          "chance": 0,
+          "hours": [
+            {
+              "time": "2026-12-16T13:00:00.000Z",
+              "label": "1pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T15:00:00.000Z",
+              "label": "3pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T17:00:00.000Z",
+              "label": "5pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T19:00:00.000Z",
+              "label": "7pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T21:00:00.000Z",
+              "label": "9pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T23:00:00.000Z",
+              "label": "11pm",
+              "chance": 20
+            }
+          ]
+        },
+        "today": {
+          "date": "2026-12-16",
+          "from": "2026-12-16T12:00:00.000Z",
+          "partial": true,
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Rain, not snow.",
+          "detail": "No lower than 4° for the rest of the day. Snow is common here in December.",
+          "reason": "rain",
+          "bandLabel": "Rain",
+          "amount": 0,
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "confidence": "good",
+          "threshold": 0.5,
+          "likely": null,
+          "scale": {
+            "min": 0,
+            "max": 5
+          },
+          "models": [
+            {
+              "id": "ecmwf_ifs025",
+              "name": "ECMWF",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ncep_gfs_seamless",
+              "name": "GFS",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "dwd_icon_seamless",
+              "name": "ICON",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ukmo_seamless",
+              "name": "UKMO",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "meteofrance_seamless",
+              "name": "Météo-France",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "cmc_gem_seamless",
+              "name": "GEM",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            }
+          ],
+          "month": "December",
+          "agreementText": "0 of 6 forecasts expect snow",
+          "limitedText": null,
+          "stripSummary": "All forecasts say 0cm; none expect snow."
+        },
+        "week": {
+          "from": "2026-12-16",
+          "to": "2026-12-22",
+          "band": "heavysnow",
+          "answer": "Yes.",
+          "verdict": "Snow on Thu and Fri, heavy on Fri.",
+          "detail": "About 10cm across the week, most on Friday (8cm). More snow than usual for December.",
+          "total": 12,
+          "normal": 7,
+          "snowDays": 2,
+          "maybeDays": 0,
+          "snowiest": {
+            "date": "2026-12-18",
+            "amount": 8
+          },
+          "days": [
+            {
+              "date": "2026-12-16",
+              "label": "Today",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-12-17",
+              "label": "Thu",
+              "amount": 4,
+              "band": "snow",
+              "bandLabel": "Snow",
+              "chance": 1,
+              "snowy": 6,
+              "total": 6,
+              "reason": null
+            },
+            {
+              "date": "2026-12-18",
+              "label": "Fri",
+              "amount": 8,
+              "band": "heavysnow",
+              "bandLabel": "Heavy snow",
+              "chance": 1,
+              "snowy": 6,
+              "total": 6,
+              "reason": null
+            },
+            {
+              "date": "2026-12-19",
+              "label": "Sat",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "dry"
+            },
+            {
+              "date": "2026-12-20",
+              "label": "Sun",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "dry"
+            },
+            {
+              "date": "2026-12-21",
+              "label": "Mon",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "dry"
+            },
+            {
+              "date": "2026-12-22",
+              "label": "Tue",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            }
+          ]
+        }
+      },
+      {
+        "time": "2026-12-16T13:00:00.000Z",
+        "now": {
+          "time": "2026-12-16T13:00:00.000Z",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "Dry now. Snow possible from about 12am.",
+          "amount": 0,
+          "chance": 0,
+          "hours": [
+            {
+              "time": "2026-12-16T14:00:00.000Z",
+              "label": "2pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T16:00:00.000Z",
+              "label": "4pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T18:00:00.000Z",
+              "label": "6pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T20:00:00.000Z",
+              "label": "8pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T22:00:00.000Z",
+              "label": "10pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-17T00:00:00.000Z",
+              "label": "12am",
+              "chance": 30
+            }
+          ]
+        },
+        "today": {
+          "date": "2026-12-16",
+          "from": "2026-12-16T13:00:00.000Z",
+          "partial": true,
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Rain, not snow.",
+          "detail": "No lower than 4° for the rest of the day. Snow is common here in December.",
+          "reason": "rain",
+          "bandLabel": "Rain",
+          "amount": 0,
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "confidence": "good",
+          "threshold": 0.5,
+          "likely": null,
+          "scale": {
+            "min": 0,
+            "max": 5
+          },
+          "models": [
+            {
+              "id": "ecmwf_ifs025",
+              "name": "ECMWF",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ncep_gfs_seamless",
+              "name": "GFS",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "dwd_icon_seamless",
+              "name": "ICON",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ukmo_seamless",
+              "name": "UKMO",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "meteofrance_seamless",
+              "name": "Météo-France",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "cmc_gem_seamless",
+              "name": "GEM",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            }
+          ],
+          "month": "December",
+          "agreementText": "0 of 6 forecasts expect snow",
+          "limitedText": null,
+          "stripSummary": "All forecasts say 0cm; none expect snow."
+        },
+        "week": {
+          "from": "2026-12-16",
+          "to": "2026-12-22",
+          "band": "heavysnow",
+          "answer": "Yes.",
+          "verdict": "Snow on Thu and Fri, heavy on Fri.",
+          "detail": "About 10cm across the week, most on Friday (8cm). More snow than usual for December.",
+          "total": 12,
+          "normal": 7,
+          "snowDays": 2,
+          "maybeDays": 0,
+          "snowiest": {
+            "date": "2026-12-18",
+            "amount": 8
+          },
+          "days": [
+            {
+              "date": "2026-12-16",
+              "label": "Today",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-12-17",
+              "label": "Thu",
+              "amount": 4,
+              "band": "snow",
+              "bandLabel": "Snow",
+              "chance": 1,
+              "snowy": 6,
+              "total": 6,
+              "reason": null
+            },
+            {
+              "date": "2026-12-18",
+              "label": "Fri",
+              "amount": 8,
+              "band": "heavysnow",
+              "bandLabel": "Heavy snow",
+              "chance": 1,
+              "snowy": 6,
+              "total": 6,
+              "reason": null
+            },
+            {
+              "date": "2026-12-19",
+              "label": "Sat",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "dry"
+            },
+            {
+              "date": "2026-12-20",
+              "label": "Sun",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "dry"
+            },
+            {
+              "date": "2026-12-21",
+              "label": "Mon",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "dry"
+            },
+            {
+              "date": "2026-12-22",
+              "label": "Tue",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            }
+          ]
+        }
+      },
+      {
+        "time": "2026-12-16T14:00:00.000Z",
+        "now": {
+          "time": "2026-12-16T14:00:00.000Z",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Raining, not snowing.",
+          "detail": "Rain now. Snow likely from about 2am.",
+          "amount": 0,
+          "chance": 0,
+          "hours": [
+            {
+              "time": "2026-12-16T15:00:00.000Z",
+              "label": "3pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T17:00:00.000Z",
+              "label": "5pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T19:00:00.000Z",
+              "label": "7pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T21:00:00.000Z",
+              "label": "9pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T23:00:00.000Z",
+              "label": "11pm",
+              "chance": 20
+            },
+            {
+              "time": "2026-12-17T01:00:00.000Z",
+              "label": "1am",
+              "chance": 70
+            }
+          ]
+        },
+        "today": {
+          "date": "2026-12-16",
+          "from": "2026-12-16T14:00:00.000Z",
+          "partial": true,
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Rain, not snow.",
+          "detail": "No lower than 4° for the rest of the day. Snow is common here in December.",
+          "reason": "rain",
+          "bandLabel": "Rain",
+          "amount": 0,
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "confidence": "good",
+          "threshold": 0.5,
+          "likely": null,
+          "scale": {
+            "min": 0,
+            "max": 5
+          },
+          "models": [
+            {
+              "id": "ecmwf_ifs025",
+              "name": "ECMWF",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ncep_gfs_seamless",
+              "name": "GFS",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "dwd_icon_seamless",
+              "name": "ICON",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ukmo_seamless",
+              "name": "UKMO",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "meteofrance_seamless",
+              "name": "Météo-France",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "cmc_gem_seamless",
+              "name": "GEM",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            }
+          ],
+          "month": "December",
+          "agreementText": "0 of 6 forecasts expect snow",
+          "limitedText": null,
+          "stripSummary": "All forecasts say 0cm; none expect snow."
+        },
+        "week": {
+          "from": "2026-12-16",
+          "to": "2026-12-22",
+          "band": "heavysnow",
+          "answer": "Yes.",
+          "verdict": "Snow on Thu and Fri, heavy on Fri.",
+          "detail": "About 10cm across the week, most on Friday (8cm). More snow than usual for December.",
+          "total": 12,
+          "normal": 7,
+          "snowDays": 2,
+          "maybeDays": 0,
+          "snowiest": {
+            "date": "2026-12-18",
+            "amount": 8
+          },
+          "days": [
+            {
+              "date": "2026-12-16",
+              "label": "Today",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2026-12-17",
+              "label": "Thu",
+              "amount": 4,
+              "band": "snow",
+              "bandLabel": "Snow",
+              "chance": 1,
+              "snowy": 6,
+              "total": 6,
+              "reason": null
+            },
+            {
+              "date": "2026-12-18",
+              "label": "Fri",
+              "amount": 8,
+              "band": "heavysnow",
+              "bandLabel": "Heavy snow",
+              "chance": 1,
+              "snowy": 6,
+              "total": 6,
+              "reason": null
+            },
+            {
+              "date": "2026-12-19",
+              "label": "Sat",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "dry"
+            },
+            {
+              "date": "2026-12-20",
+              "label": "Sun",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "dry"
+            },
+            {
+              "date": "2026-12-21",
+              "label": "Mon",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "dry"
+            },
+            {
+              "date": "2026-12-22",
+              "label": "Tue",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            }
+          ]
+        }
+      },
+      {
+        "time": "2026-12-16T15:00:00.000Z",
+        "now": {
+          "time": "2026-12-16T15:00:00.000Z",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "Dry now. Snow likely from about 2am.",
+          "amount": 0,
+          "chance": 0,
+          "hours": [
+            {
+              "time": "2026-12-16T16:00:00.000Z",
+              "label": "4pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T18:00:00.000Z",
+              "label": "6pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T20:00:00.000Z",
+              "label": "8pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T22:00:00.000Z",
+              "label": "10pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-17T00:00:00.000Z",
+              "label": "12am",
+              "chance": 30
+            },
+            {
+              "time": "2026-12-17T02:00:00.000Z",
+              "label": "2am",
+              "chance": 100
+            }
+          ]
+        },
+        "today": {
+          "date": "2026-12-16",
+          "from": "2026-12-16T15:00:00.000Z",
+          "partial": true,
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "No lower than 4° for the rest of the day. Snow is common here in December.",
+          "reason": "warm",
+          "bandLabel": "Too warm",
+          "amount": 0,
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "confidence": "good",
+          "threshold": 0.5,
+          "likely": null,
+          "scale": {
+            "min": 0,
+            "max": 5
+          },
+          "models": [
+            {
+              "id": "ecmwf_ifs025",
+              "name": "ECMWF",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ncep_gfs_seamless",
+              "name": "GFS",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "dwd_icon_seamless",
+              "name": "ICON",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ukmo_seamless",
+              "name": "UKMO",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "meteofrance_seamless",
+              "name": "Météo-France",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "cmc_gem_seamless",
+              "name": "GEM",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            }
+          ],
+          "month": "December",
+          "agreementText": "0 of 6 forecasts expect snow",
+          "limitedText": null,
+          "stripSummary": "All forecasts say 0cm; none expect snow."
+        },
+        "week": {
+          "from": "2026-12-16",
+          "to": "2026-12-22",
+          "band": "heavysnow",
+          "answer": "Yes.",
+          "verdict": "Snow on Thu and Fri, heavy on Fri.",
+          "detail": "About 10cm across the week, most on Friday (8cm). More snow than usual for December.",
+          "total": 12,
+          "normal": 7,
+          "snowDays": 2,
+          "maybeDays": 0,
+          "snowiest": {
+            "date": "2026-12-18",
+            "amount": 8
+          },
+          "days": [
+            {
+              "date": "2026-12-16",
+              "label": "Today",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-12-17",
+              "label": "Thu",
+              "amount": 4,
+              "band": "snow",
+              "bandLabel": "Snow",
+              "chance": 1,
+              "snowy": 6,
+              "total": 6,
+              "reason": null
+            },
+            {
+              "date": "2026-12-18",
+              "label": "Fri",
+              "amount": 8,
+              "band": "heavysnow",
+              "bandLabel": "Heavy snow",
+              "chance": 1,
+              "snowy": 6,
+              "total": 6,
+              "reason": null
+            },
+            {
+              "date": "2026-12-19",
+              "label": "Sat",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "dry"
+            },
+            {
+              "date": "2026-12-20",
+              "label": "Sun",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "dry"
+            },
+            {
+              "date": "2026-12-21",
+              "label": "Mon",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "dry"
+            },
+            {
+              "date": "2026-12-22",
+              "label": "Tue",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            }
+          ]
+        }
+      },
+      {
+        "time": "2026-12-16T16:00:00.000Z",
+        "now": {
+          "time": "2026-12-16T16:00:00.000Z",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "Dry now. Snow likely from about 2am.",
+          "amount": 0,
+          "chance": 0,
+          "hours": [
+            {
+              "time": "2026-12-16T17:00:00.000Z",
+              "label": "5pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T19:00:00.000Z",
+              "label": "7pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T21:00:00.000Z",
+              "label": "9pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T23:00:00.000Z",
+              "label": "11pm",
+              "chance": 20
+            },
+            {
+              "time": "2026-12-17T01:00:00.000Z",
+              "label": "1am",
+              "chance": 70
+            },
+            {
+              "time": "2026-12-17T03:00:00.000Z",
+              "label": "3am",
+              "chance": 100
+            }
+          ]
+        },
+        "today": {
+          "date": "2026-12-16",
+          "from": "2026-12-16T16:00:00.000Z",
+          "partial": true,
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "No lower than 4° for the rest of the day. Snow is common here in December.",
+          "reason": "warm",
+          "bandLabel": "Too warm",
+          "amount": 0,
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "confidence": "good",
+          "threshold": 0.5,
+          "likely": null,
+          "scale": {
+            "min": 0,
+            "max": 5
+          },
+          "models": [
+            {
+              "id": "ecmwf_ifs025",
+              "name": "ECMWF",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ncep_gfs_seamless",
+              "name": "GFS",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "dwd_icon_seamless",
+              "name": "ICON",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ukmo_seamless",
+              "name": "UKMO",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "meteofrance_seamless",
+              "name": "Météo-France",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "cmc_gem_seamless",
+              "name": "GEM",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            }
+          ],
+          "month": "December",
+          "agreementText": "0 of 6 forecasts expect snow",
+          "limitedText": null,
+          "stripSummary": "All forecasts say 0cm; none expect snow."
+        },
+        "week": {
+          "from": "2026-12-16",
+          "to": "2026-12-22",
+          "band": "heavysnow",
+          "answer": "Yes.",
+          "verdict": "Snow on Thu and Fri, heavy on Fri.",
+          "detail": "About 10cm across the week, most on Friday (8cm). More snow than usual for December.",
+          "total": 12,
+          "normal": 7,
+          "snowDays": 2,
+          "maybeDays": 0,
+          "snowiest": {
+            "date": "2026-12-18",
+            "amount": 8
+          },
+          "days": [
+            {
+              "date": "2026-12-16",
+              "label": "Today",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-12-17",
+              "label": "Thu",
+              "amount": 4,
+              "band": "snow",
+              "bandLabel": "Snow",
+              "chance": 1,
+              "snowy": 6,
+              "total": 6,
+              "reason": null
+            },
+            {
+              "date": "2026-12-18",
+              "label": "Fri",
+              "amount": 8,
+              "band": "heavysnow",
+              "bandLabel": "Heavy snow",
+              "chance": 1,
+              "snowy": 6,
+              "total": 6,
+              "reason": null
+            },
+            {
+              "date": "2026-12-19",
+              "label": "Sat",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "dry"
+            },
+            {
+              "date": "2026-12-20",
+              "label": "Sun",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "dry"
+            },
+            {
+              "date": "2026-12-21",
+              "label": "Mon",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "dry"
+            },
+            {
+              "date": "2026-12-22",
+              "label": "Tue",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            }
+          ]
+        }
+      },
+      {
+        "time": "2026-12-16T17:00:00.000Z",
+        "now": {
+          "time": "2026-12-16T17:00:00.000Z",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "Dry now. Snow likely from about 2am.",
+          "amount": 0,
+          "chance": 0,
+          "hours": [
+            {
+              "time": "2026-12-16T18:00:00.000Z",
+              "label": "6pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T20:00:00.000Z",
+              "label": "8pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-16T22:00:00.000Z",
+              "label": "10pm",
+              "chance": 0
+            },
+            {
+              "time": "2026-12-17T00:00:00.000Z",
+              "label": "12am",
+              "chance": 30
+            },
+            {
+              "time": "2026-12-17T02:00:00.000Z",
+              "label": "2am",
+              "chance": 100
+            },
+            {
+              "time": "2026-12-17T04:00:00.000Z",
+              "label": "4am",
+              "chance": 100
+            }
+          ]
+        },
+        "today": {
+          "date": "2026-12-16",
+          "from": "2026-12-16T17:00:00.000Z",
+          "partial": true,
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "No lower than 4° for the rest of the day. Snow is common here in December.",
+          "reason": "warm",
+          "bandLabel": "Too warm",
+          "amount": 0,
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "confidence": "good",
+          "threshold": 0.5,
+          "likely": null,
+          "scale": {
+            "min": 0,
+            "max": 5
+          },
+          "models": [
+            {
+              "id": "ecmwf_ifs025",
+              "name": "ECMWF",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ncep_gfs_seamless",
+              "name": "GFS",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "dwd_icon_seamless",
+              "name": "ICON",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ukmo_seamless",
+              "name": "UKMO",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "meteofrance_seamless",
+              "name": "Météo-France",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "cmc_gem_seamless",
+              "name": "GEM",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            }
+          ],
+          "month": "December",
+          "agreementText": "0 of 6 forecasts expect snow",
+          "limitedText": null,
+          "stripSummary": "All forecasts say 0cm; none expect snow."
+        },
+        "week": {
+          "from": "2026-12-16",
+          "to": "2026-12-22",
+          "band": "heavysnow",
+          "answer": "Yes.",
+          "verdict": "Snow on Thu and Fri, heavy on Fri.",
+          "detail": "About 10cm across the week, most on Friday (8cm). More snow than usual for December.",
+          "total": 12,
+          "normal": 6,
+          "snowDays": 2,
+          "maybeDays": 0,
+          "snowiest": {
+            "date": "2026-12-18",
+            "amount": 8
+          },
+          "days": [
+            {
+              "date": "2026-12-16",
+              "label": "Today",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2026-12-17",
+              "label": "Thu",
+              "amount": 4,
+              "band": "snow",
+              "bandLabel": "Snow",
+              "chance": 1,
+              "snowy": 6,
+              "total": 6,
+              "reason": null
+            },
+            {
+              "date": "2026-12-18",
+              "label": "Fri",
+              "amount": 8,
+              "band": "heavysnow",
+              "bandLabel": "Heavy snow",
+              "chance": 1,
+              "snowy": 6,
+              "total": 6,
+              "reason": null
+            },
+            {
+              "date": "2026-12-19",
+              "label": "Sat",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "dry"
+            },
+            {
+              "date": "2026-12-20",
+              "label": "Sun",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "dry"
+            },
+            {
+              "date": "2026-12-21",
+              "label": "Mon",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "dry"
+            },
+            {
+              "date": "2026-12-22",
+              "label": "Tue",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "wind": {
+    "unit": "mph",
+    "days": [
+      {
+        "date": "2026-12-16",
+        "from": "2026-12-16T11:05:00.000Z",
+        "partial": true,
+        "window": {
+          "from": 11,
+          "to": 21
+        },
+        "band": "calm",
+        "answer": "No.",
+        "verdict": "It won't be windy.",
+        "detail": "Light winds, gusts up to 11mph.",
+        "still": false,
+        "gust": 11,
+        "mean": 5,
+        "peak": null,
+        "direction": null,
+        "agree": 6,
+        "total": 6,
+        "confidence": "good",
+        "zone": {
+          "from": 0,
+          "to": 20
+        },
+        "scale": {
+          "min": 0,
+          "max": 50
+        },
+        "models": [
+          {
+            "id": "ecmwf_ifs025",
+            "name": "ECMWF",
+            "gust": 11,
+            "mean": 4,
+            "value": 10.6,
+            "band": "calm",
+            "agrees": true,
+            "direction": null
+          },
+          {
+            "id": "ncep_gfs_seamless",
+            "name": "GFS",
+            "gust": 10,
+            "mean": 4,
+            "value": 9.9,
+            "band": "calm",
+            "agrees": true,
+            "direction": null
+          },
+          {
+            "id": "dwd_icon_seamless",
+            "name": "ICON",
+            "gust": 12,
+            "mean": 5,
+            "value": 11.8,
+            "band": "calm",
+            "agrees": true,
+            "direction": null
+          },
+          {
+            "id": "ukmo_seamless",
+            "name": "UKMO",
+            "gust": 12,
+            "mean": 6,
+            "value": 11.8,
+            "band": "calm",
+            "agrees": true,
+            "direction": null
+          },
+          {
+            "id": "meteofrance_seamless",
+            "name": "Météo-France",
+            "gust": 12,
+            "mean": 5,
+            "value": 11.8,
+            "band": "calm",
+            "agrees": true,
+            "direction": null
+          },
+          {
+            "id": "cmc_gem_seamless",
+            "name": "GEM",
+            "gust": 10,
+            "mean": 4,
+            "value": 9.9,
+            "band": "calm",
+            "agrees": true,
+            "direction": null
+          }
+        ],
+        "month": "December",
+        "agreementText": "6 of 6 forecasts say light winds",
+        "limitedText": null,
+        "stripSummary": "Forecast gusts range from 10mph to 12mph; 6 of 6 say light winds.",
+        "dayMean": 4,
+        "normal": null
+      },
+      {
+        "date": "2026-12-17",
+        "from": "2026-12-17T07:00:00.000Z",
+        "partial": false,
+        "window": {
+          "from": 7,
+          "to": 21
+        },
+        "band": "breezy",
+        "answer": "A bit.",
+        "verdict": "Breezy, not windy.",
+        "detail": "Gusts up to 25mph from the west, wind up to 10mph. Windiest around 2pm.",
+        "still": false,
+        "gust": 25,
+        "mean": 10,
+        "peak": "2pm",
+        "direction": {
+          "degrees": 272,
+          "compass": "W",
+          "words": "from the west"
+        },
+        "agree": 6,
+        "total": 6,
+        "confidence": "good",
+        "zone": {
+          "from": 20,
+          "to": 30
+        },
+        "scale": {
+          "min": 0,
+          "max": 50
+        },
+        "models": [
+          {
+            "id": "ecmwf_ifs025",
+            "name": "ECMWF",
+            "gust": 27,
+            "mean": 10,
+            "value": 27.3,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 272,
+              "compass": "W",
+              "words": "from the west"
+            }
+          },
+          {
+            "id": "ncep_gfs_seamless",
+            "name": "GFS",
+            "gust": 21,
+            "mean": 8,
+            "value": 21.1,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 270,
+              "compass": "W",
+              "words": "from the west"
+            }
+          },
+          {
+            "id": "dwd_icon_seamless",
+            "name": "ICON",
+            "gust": 27,
+            "mean": 10,
+            "value": 26.7,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 273,
+              "compass": "W",
+              "words": "from the west"
+            }
+          },
+          {
+            "id": "ukmo_seamless",
+            "name": "UKMO",
+            "gust": 23,
+            "mean": 9,
+            "value": 23,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 275,
+              "compass": "W",
+              "words": "from the west"
+            }
+          },
+          {
+            "id": "meteofrance_seamless",
+            "name": "Météo-France",
+            "gust": 24,
+            "mean": 9,
+            "value": 24.2,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 275,
+              "compass": "W",
+              "words": "from the west"
+            }
+          },
+          {
+            "id": "cmc_gem_seamless",
+            "name": "GEM",
+            "gust": 28,
+            "mean": 11,
+            "value": 28,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 265,
+              "compass": "W",
+              "words": "from the west"
+            }
+          }
+        ],
+        "month": "December",
+        "agreementText": "6 of 6 forecasts say breezy",
+        "limitedText": null,
+        "stripSummary": "Forecast gusts range from 21mph to 28mph; 6 of 6 say breezy.",
+        "dayMean": 7,
+        "normal": null
+      }
+    ],
+    "now": {
+      "time": "2026-12-16T11:05:00.000Z",
+      "band": "calm",
+      "answer": "No.",
+      "verdict": "It's not windy.",
+      "detail": "Wind 5mph, gusts 10mph right now. Light winds for the next 12 hours.",
+      "mean": 5,
+      "gust": 10,
+      "still": false,
+      "direction": null,
+      "hours": [
+        {
+          "time": "2026-12-16T12:00:00.000Z",
+          "label": "12pm",
+          "gust": 11,
+          "direction": null
+        },
+        {
+          "time": "2026-12-16T14:00:00.000Z",
+          "label": "2pm",
+          "gust": 11,
+          "direction": null
+        },
+        {
+          "time": "2026-12-16T16:00:00.000Z",
+          "label": "4pm",
+          "gust": 11,
+          "direction": null
+        },
+        {
+          "time": "2026-12-16T18:00:00.000Z",
+          "label": "6pm",
+          "gust": 11,
+          "direction": null
+        },
+        {
+          "time": "2026-12-16T20:00:00.000Z",
+          "label": "8pm",
+          "gust": 9,
+          "direction": null
+        },
+        {
+          "time": "2026-12-16T22:00:00.000Z",
+          "label": "10pm",
+          "gust": 9,
+          "direction": null
+        }
+      ],
+      "series": [
+        {
+          "time": 1797415200000,
+          "date": "2026-12-16",
+          "hour": 10,
+          "mean": 4,
+          "gust": 9,
+          "gust2h": 10,
+          "band": "calm",
+          "still": false,
+          "dir": null
+        },
+        {
+          "time": 1797418800000,
+          "date": "2026-12-16",
+          "hour": 11,
+          "mean": 5,
+          "gust": 10,
+          "gust2h": 11,
+          "band": "calm",
+          "still": false,
+          "dir": null
+        },
+        {
+          "time": 1797422400000,
+          "date": "2026-12-16",
+          "hour": 12,
+          "mean": 5,
+          "gust": 11,
+          "gust2h": 11,
+          "band": "calm",
+          "still": false,
+          "dir": null
+        },
+        {
+          "time": 1797426000000,
+          "date": "2026-12-16",
+          "hour": 13,
+          "mean": 5,
+          "gust": 11,
+          "gust2h": 11,
+          "band": "calm",
+          "still": false,
+          "dir": null
+        },
+        {
+          "time": 1797429600000,
+          "date": "2026-12-16",
+          "hour": 14,
+          "mean": 5,
+          "gust": 11,
+          "gust2h": 11,
+          "band": "calm",
+          "still": false,
+          "dir": null
+        },
+        {
+          "time": 1797433200000,
+          "date": "2026-12-16",
+          "hour": 15,
+          "mean": 5,
+          "gust": 11,
+          "gust2h": 11,
+          "band": "calm",
+          "still": false,
+          "dir": null
+        },
+        {
+          "time": 1797436800000,
+          "date": "2026-12-16",
+          "hour": 16,
+          "mean": 5,
+          "gust": 11,
+          "gust2h": 11,
+          "band": "calm",
+          "still": false,
+          "dir": null
+        },
+        {
+          "time": 1797440400000,
+          "date": "2026-12-16",
+          "hour": 17,
+          "mean": 5,
+          "gust": 11,
+          "gust2h": 11,
+          "band": "calm",
+          "still": false,
+          "dir": null
+        },
+        {
+          "time": 1797444000000,
+          "date": "2026-12-16",
+          "hour": 18,
+          "mean": 5,
+          "gust": 11,
+          "gust2h": 11,
+          "band": "calm",
+          "still": false,
+          "dir": null
+        },
+        {
+          "time": 1797447600000,
+          "date": "2026-12-16",
+          "hour": 19,
+          "mean": 5,
+          "gust": 10,
+          "gust2h": 10,
+          "band": "calm",
+          "still": false,
+          "dir": null
+        },
+        {
+          "time": 1797451200000,
+          "date": "2026-12-16",
+          "hour": 20,
+          "mean": 4,
+          "gust": 9,
+          "gust2h": 9,
+          "band": "calm",
+          "still": false,
+          "dir": null
+        },
+        {
+          "time": 1797454800000,
+          "date": "2026-12-16",
+          "hour": 21,
+          "mean": 4,
+          "gust": 9,
+          "gust2h": 9,
+          "band": "calm",
+          "still": false,
+          "dir": null
+        },
+        {
+          "time": 1797458400000,
+          "date": "2026-12-16",
+          "hour": 22,
+          "mean": 4,
+          "gust": 9,
+          "gust2h": 9,
+          "band": "calm",
+          "still": false,
+          "dir": null
+        },
+        {
+          "time": 1797462000000,
+          "date": "2026-12-16",
+          "hour": 23,
+          "mean": 4,
+          "gust": 8,
+          "gust2h": 17,
+          "band": "calm",
+          "still": false,
+          "dir": null
+        },
+        {
+          "time": 1797465600000,
+          "date": "2026-12-17",
+          "hour": 0,
+          "mean": 7,
+          "gust": 17,
+          "gust2h": 17,
+          "band": "calm",
+          "still": false,
+          "dir": 265
+        },
+        {
+          "time": 1797469200000,
+          "date": "2026-12-17",
+          "hour": 1,
+          "mean": 6,
+          "gust": 16,
+          "gust2h": 16,
+          "band": "calm",
+          "still": false,
+          "dir": 265
+        },
+        {
+          "time": 1797472800000,
+          "date": "2026-12-17",
+          "hour": 2,
+          "mean": 6,
+          "gust": 16,
+          "gust2h": 16,
+          "band": "calm",
+          "still": false,
+          "dir": 266
+        },
+        {
+          "time": 1797476400000,
+          "date": "2026-12-17",
+          "hour": 3,
+          "mean": 6,
+          "gust": 16,
+          "gust2h": 16,
+          "band": "calm",
+          "still": false,
+          "dir": 266
+        },
+        {
+          "time": 1797480000000,
+          "date": "2026-12-17",
+          "hour": 4,
+          "mean": 6,
+          "gust": 16,
+          "gust2h": 16,
+          "band": "calm",
+          "still": false,
+          "dir": 267
+        },
+        {
+          "time": 1797483600000,
+          "date": "2026-12-17",
+          "hour": 5,
+          "mean": 6,
+          "gust": 16,
+          "gust2h": 17,
+          "band": "calm",
+          "still": false,
+          "dir": 267
+        },
+        {
+          "time": 1797487200000,
+          "date": "2026-12-17",
+          "hour": 6,
+          "mean": 7,
+          "gust": 17,
+          "gust2h": 18,
+          "band": "calm",
+          "still": false,
+          "dir": 268
+        },
+        {
+          "time": 1797490800000,
+          "date": "2026-12-17",
+          "hour": 7,
+          "mean": 7,
+          "gust": 18,
+          "gust2h": 19,
+          "band": "calm",
+          "still": false,
+          "dir": 268
+        },
+        {
+          "time": 1797494400000,
+          "date": "2026-12-17",
+          "hour": 8,
+          "mean": 7,
+          "gust": 19,
+          "gust2h": 21,
+          "band": "calm",
+          "still": false,
+          "dir": 269
+        },
+        {
+          "time": 1797498000000,
+          "date": "2026-12-17",
+          "hour": 9,
+          "mean": 8,
+          "gust": 21,
+          "gust2h": 22,
+          "band": "breezy",
+          "still": false,
+          "dir": 269
+        },
+        {
+          "time": 1797501600000,
+          "date": "2026-12-17",
+          "hour": 10,
+          "mean": 9,
+          "gust": 22,
+          "gust2h": 23,
+          "band": "breezy",
+          "still": false,
+          "dir": 270
+        },
+        {
+          "time": 1797505200000,
+          "date": "2026-12-17",
+          "hour": 11,
+          "mean": 9,
+          "gust": 23,
+          "gust2h": 24,
+          "band": "breezy",
+          "still": false,
+          "dir": 270
+        }
+      ]
+    },
+    "week": {
+      "from": "2026-12-16",
+      "to": "2026-12-22",
+      "band": "gale",
+      "answer": "Yes.",
+      "verdict": "Windy on Sat, Sun and Mon, gales on Sun.",
+      "detail": "Windiest on Sunday, gusts up to 60mph.",
+      "windyDays": 3,
+      "breezyDays": 3,
+      "windiest": {
+        "date": "2026-12-20",
+        "gust": 60
+      },
+      "mean": 11,
+      "normal": null,
+      "days": [
+        {
+          "date": "2026-12-16",
+          "label": "Today",
+          "gust": 11,
+          "mean": 5,
+          "band": "calm",
+          "bandLabel": "Light winds",
+          "still": false
+        },
+        {
+          "date": "2026-12-17",
+          "label": "Thu",
+          "gust": 25,
+          "mean": 10,
+          "band": "breezy",
+          "bandLabel": "Breezy",
+          "still": false
+        },
+        {
+          "date": "2026-12-18",
+          "label": "Fri",
+          "gust": 25,
+          "mean": 9,
+          "band": "breezy",
+          "bandLabel": "Breezy",
+          "still": false
+        },
+        {
+          "date": "2026-12-19",
+          "label": "Sat",
+          "gust": 45,
+          "mean": 19,
+          "band": "verywindy",
+          "bandLabel": "Very windy",
+          "still": false
+        },
+        {
+          "date": "2026-12-20",
+          "label": "Sun",
+          "gust": 60,
+          "mean": 29,
+          "band": "gale",
+          "bandLabel": "Gale",
+          "still": false
+        },
+        {
+          "date": "2026-12-21",
+          "label": "Mon",
+          "gust": 33,
+          "mean": 14,
+          "band": "windy",
+          "bandLabel": "Windy",
+          "still": false
+        },
+        {
+          "date": "2026-12-22",
+          "label": "Tue",
+          "gust": 25,
+          "mean": 9,
+          "band": "breezy",
+          "bandLabel": "Breezy",
+          "still": false
+        }
+      ]
+    }
+  }
+}

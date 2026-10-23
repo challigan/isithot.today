@@ -1,0 +1,22 @@
+// will it snow? (the snow app): the project's configuration file, for Debug and Release.
+// The identifiers are frozen (iOS build spec, section 1.2).
+#include "Base.xcconfig"
+#include "Team.xcconfig"
+
+SNOW_APP_ID = today.willitsnow.app
+SNOW_WIDGET_ID = today.willitsnow.app.widgets
+APP_GROUP_ID = group.today.willitsnow.app
+URL_SCHEME = willitsnow
+// "//" starts a comment in an xcconfig, so the URL is split with $().
+API_ORIGIN = https:/$()/willitsnow.today
+
+// Google's demo ad units in every build before the release candidate (section 14.3). The
+// release job passes ADS_UNITS = real with ADMOB_APP_ID and ADMOB_BANNER_ID, which are
+// repository variables, not secrets.
+ADS_UNITS = test
+GAD_APP_ID_test = ca-app-pub-3940256099942544~1458002511
+GAD_BANNER_test = ca-app-pub-3940256099942544/2435281174
+GAD_APP_ID_real = $(ADMOB_APP_ID)
+GAD_BANNER_real = $(ADMOB_BANNER_ID)
+GAD_APP_ID = $(GAD_APP_ID_$(ADS_UNITS))
+GAD_BANNER = $(GAD_BANNER_$(ADS_UNITS))

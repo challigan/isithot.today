@@ -22,12 +22,14 @@ decision).
 
 ```
 apps/web             Astro site: pages, components, styles, client script, OG images
+apps/ios             The iPhone app, will it snow? (SwiftUI, XcodeGen); see apps/ios/README.md
 functions/api        Netlify Functions serving /api/v1/* (thin adapters)
 netlify/             Edge function routing isitwet.today, willitsnow.today and isitwindy.today
 packages/core        Pure TS: blending, climate normals, verdict, copy, units. No I/O.
 packages/client      Pure TS client rules (queries, freshness, the hour picker, widgets, notifications). No DOM, no I/O.
 packages/providers   Open-Meteo forecast + geocoding and NASA POWER adapters
 packages/server      API handlers, caching (memory + Netlify Blobs), location resolution
+packages/mobile      Generators for the native apps: Swift copy, constants, keys and palettes, and fixtures from the real server (pnpm mobile:generate)
 data/cities.json     The 300 city pages (150 UK, 150 worldwide), generated from GeoNames
 data/places.json     Town list used to name a rounded device location (Open-Meteo has no reverse geocoding)
 reference/           prototype.html, the approved design
@@ -76,8 +78,10 @@ pnpm lint             # ESLint
 pnpm format:check     # Prettier
 pnpm typecheck        # tsc + astro check
 pnpm test:coverage    # Vitest; packages/core and packages/client must stay at 100% coverage
+pnpm mobile:check     # The files packages/mobile generates for apps/ios are current (pnpm mobile:generate writes them)
 pnpm test:e2e         # Playwright (phone + desktop), with synthetic data
 pnpm build:netlify    # The exact production build Netlify runs
+swift test --package-path apps/ios/Packages/IsItCore  # The app's Swift models (Swift 6.3; CI runs it in swift:6.3.3-noble)
 node scripts/smoke.mjs <url> --wet --snow --wind  # Smoke-test a deploy (and its /wet, /snow and /wind pages) against live data
 node scripts/smoke.mjs <url> --wet-site <url> --snow-site <url> --wind-site <url>  # Production: the other sites on their own domains
 pnpm test:e2e -g contrast                # Rendered text contrast, every band and view (WCAG AA)
@@ -89,6 +93,10 @@ GitHub Actions runs the checks and the e2e suite on every push and pull request.
 workflow waits for the Netlify deploy preview of each pull request and smoke-tests it against
 live data (`scripts/smoke.mjs`); it also records fresh upstream responses as a downloadable
 artifact.
+`ios.yml` checks the iPhone app when it, or anything it is built or generated from, changes: on
+Linux, the generated files are current, the Swift lints clean and IsItCore passes its tests; on
+macOS, the app and its widget build and their tests run on the iPhone 17 simulator, and the
+screens are tiled into a contact sheet. [apps/ios/README.md](apps/ios/README.md) has the details.
 
 The e2e server makes synthetic forecasts on the real clock, and pages change at 6pm at the place
 (Tomorrow in the middle tab), so the suite must pass at any time of day. CI runs it at whatever
