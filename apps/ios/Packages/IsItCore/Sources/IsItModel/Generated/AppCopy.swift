@@ -41,6 +41,10 @@ public enum AppCopy {
   }
 
   public static let recent = "Recent"
+  public static let searchOffline = "You're offline. Connect to the internet to search."
+  public static let locationUnavailable = "Couldn't find your location. Search for a place instead."
+  public static let locationPurpose =
+    "Your location shows whether it will snow where you are. It is rounded to about 5 km before it leaves your phone. If you turn on notifications for your location, that rounded location is kept so we can tell you when snow is likely."
   public static let upgradeTitle = "Remove ads and add widgets"
 
   public static func upgradeSettings(price: String) -> String {

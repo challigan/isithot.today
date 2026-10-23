@@ -1,3 +1,4 @@
+import IsItLocation
 import IsItServices
 import IsItState
 import SwiftUI
@@ -33,11 +34,11 @@ struct WillItSnowApp: App {
   }
 
   /// The app's services (section 9.3): the API over URLSession, the system's clock, the App
-  /// Group's store, which the widgets read, and WidgetKit's reloads. Without the App Group, a
-  /// Debug build keeps things in its own container; any other build keeps them in memory only,
-  /// and the widgets see nothing. The later phases' steps do nothing yet (`NoHooks`). A Debug
-  /// build's hooks may stand in for the server and the clock (`DebugHooks`); a Release build's
-  /// never do.
+  /// Group's store, which the widgets read, WidgetKit's reloads, Core Location, and the recent
+  /// places in the app's own defaults. Without the App Group, a Debug build keeps things in its
+  /// own container; any other build keeps them in memory only, and the widgets see nothing. The
+  /// later phases' steps do nothing yet (`NoHooks`). A Debug build's hooks may stand in for the
+  /// server, the clock and the location (`DebugHooks`); a Release build's never do.
   @MainActor
   private static func environment() -> AppEnvironment {
     let shared = SharedStore.appGroupID().flatMap {
@@ -56,7 +57,9 @@ struct WillItSnowApp: App {
       client: APIClient(origin: origin, transport: transport),
       clock: DebugHooks.clock() ?? SystemClock(),
       store: store,
-      widgets: WidgetCenterReloader()
+      widgets: WidgetCenterReloader(),
+      location: DebugHooks.location() ?? CoreLocationService(),
+      recents: RecentDefaults()
     )
   }
 }

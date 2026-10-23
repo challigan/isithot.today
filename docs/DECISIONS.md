@@ -1987,6 +1987,104 @@ What the review of PR 5.1 found, and what changed for it.
   label are Apple only, so the macOS jobs prove them; IsItUI's changes were not compiled here.
   Everything else ran on Linux.
 
+## The iPhone app's place picker (phase 6.1)
+
+The iOS build spec's PR 6.1: the full-screen picker behind the top bar's place button and the
+approximate line's "Use my location", with search, "Use my location" and the recent places
+(sections 4, 9.4 step 4, 10.3, 15.2 and 16). `apps/ios/README.md` ("Phase 6.1") lists the types.
+
+- **The search box's rules moved into the client, and the app ports them.** The website's
+  picker decided in `app.ts` what a search asks for (the text trimmed, at least `SEARCH.minChars`
+  long, else "Type at least 2 letters." or nothing) and wrote the line under a result (the region,
+  then the country's name or its code). Both moved to `packages/client/src/search.ts`
+  (`searchInput`, `resultDetail`), which `app.ts` imports; the website's behaviour is the same.
+  `search.json` (phase 6's vector file) holds the cases: JavaScript's `trim` (U+FEFF and the
+  space separators go, U+0085 and U+200B stay) and `length` in UTF-16 code units (one letter
+  outside the Basic Multilingual Plane is enough, as the server counts it), and each part of the
+  line missing or empty. `PlaceSearch.input` and `.detail` port them; JavaScript's `trim`, which
+  DeepLink had, is now `JavaScriptString` in IsItModel for both.
+- **The search, as section 4 has it, on the model's clock.** `PlacePickerModel` (IsItState)
+  waits `Constants.Search.debounceMs` after the last keystroke through `AppClock.schedule`, so
+  the Linux tests move a test clock rather than wait; a keystroke cancels the wait and the
+  request still out (its task is cancelled, which cancels URLSession's request), and a counter
+  drops any answer that comes anyway. The last search's results stay while a new one is waiting
+  or out, as the website's do, rather than flashing empty; with nothing typed the recent places
+  show instead. The keyboard's Search key chooses the first result, as Enter does on the
+  website. `APIClient.search` asks `/api/v1/search?q=` with `TodayQuery.search`, with the same
+  headers and timeout as the forecast.
+- **A failed search says why, without blaming the forecasts for the connection.** Offline
+  (`APIClient.offlineCodes`), it says "You're offline. Connect to the internet to search."
+  (`AppCopy.searchOffline`, new): the website's "Forecasts are unavailable right now…" isn't
+  true then, and "No recent forecast…" (the forecast's offline line) is about something else. A
+  429 says core's rate-limited message, and anything else the server's message, or
+  `CoreCopy.unavailable` without one (`FetchError.searchMessage`).
+- **Choosing a place** is `AppModel.choose(_:name:)`: the place is kept and loaded in place
+  (`select(_:)`, as a place under "Nearby:" is: `place.v1`, the loading state under its name,
+  the answer saved for the widgets and the widgets reloaded), then phase 8's `syncAlerts` hook is
+  called, so a notification place that follows the device's location can follow it; `AlertSync`
+  decides, and a chosen notification place never follows browsing (section 12.1). The sheet
+  closes as the place is chosen, not when its answer arrives.
+- **Recent places.** A search result or a recent place joins the list at once, under its name;
+  the device's place has no name of its own, so it joins under its answer's name when the answer
+  arrives (`RecentPlace`'s rule: "a device location's comes from its answer"), and not at all if
+  none comes. A place under "Nearby:" is browsing and doesn't join it. `recent.v1` is the
+  client's JSON in the app's own defaults (`RecentDefaults`; the widgets never read it);
+  `RecentPlaces.list(stored:)` reads it leniently, skipping an entry that isn't a place, IP
+  location or a second entry for a place, and cutting it to five. `-resetStore` forgets it. The
+  "Recent" heading is written as it is (`.textCase(nil)`), not capitalised.
+- **The location hook is filled with a service of its own.** `AppHooks.locate(_:)` is gone:
+  `LocationService` (IsItState: `access()`, `requestAccess()`, `fix()`) is in `AppEnvironment`,
+  with `NoLocation` (as if permission were off) by default. The rules are `AppModel`'s, tested on
+  Linux: launch step 4 reads the permission and takes a fix only when it is granted, never
+  asking; `locate()`, for "Use my location", asks only when permission was never asked
+  (restricted reads as denied), then takes one fix, rounded with `Target.device(lat:lon:)`. A
+  permission that went while the fix was out reads as denied, and a fix that never came says
+  "Couldn't find your location. Search for a place instead." (`AppCopy.locationUnavailable`,
+  new). The tests' recording hooks are the location too, so the launch's order of calls is still
+  checked whole. A tap while the fix is out does nothing.
+- **Deviation: Core Location is in IsItLocation, not IsItServices.** The widget links
+  IsItServices, and Xcode links a package target's code whole, Objective-C classes kept by dead
+  stripping, so `CoreLocationService` there would put `CLLocationManager` in the widget's
+  binary, which has no purpose string and asks for no location (App Store Connect's ITMS-90683
+  checks each bundle). It is a module of its own that only the app links, as IsItAds is.
+  `ci/release-check.sh` and `scripts/check-archive.sh` now fail a widget that names
+  `CLLocationManager`, as they fail one that links Google Mobile Ads.
+- **The approximate line's "Use my location" opens the picker finding the phone's place**, so
+  permission is still asked at that tap, and a refusal has somewhere to say so with Open
+  Settings and the search beside it. It starts in `onAppear`, not `.task`, which is cancelled as
+  the sheet closes and would cancel the chosen place's fetch with it.
+- **The purpose string is generated** (section 15.2's words, `AppCopy.locationPurpose`): the
+  generator writes it into `apps/ios/Configs/Generated/Copy.xcconfig` (a folder it owns) as
+  `LOCATION_PURPOSE`, which Snow.xcconfig includes and Info.plist reads as
+  `$(LOCATION_PURPOSE)`. An xcconfig reads `//` as a comment and `$(` as a setting, so the
+  emitter refuses either, and a line break or spaces at the ends. `InfoPlistTests`, hosted by
+  the app, checks the built Info.plist holds the copy, and no `NSLocationDefaultAccuracyReduced`.
+  The app's privacy manifest declares coarse location, linked, not tracking, for app
+  functionality (section 15.1); the widget's waits for phase 7, when it fetches.
+- **Search fixtures, from the real server.** `packages/mobile` asks `getSearch` on the synthetic
+  geocoder, at a fixed moment, as the picker asks: `search-leeds` (a city page),
+  `search-kathmandu` (no city page, so a point on the grid; the synthetic geocoder is given
+  GeoNames' Kathmandu besides the city list, as `data/places.json` has it) and `search-none`.
+  They are in `Fixtures/Search`, so they ship with the Debug fixtures and `Fixtures.names()`
+  doesn't list them among the answers.
+- **UI tests without the network or the prompt.** `-network` takes a list: the first fixture
+  answers approximate IP location as before, each other answers its own place (by its query: a
+  city by slug, coordinates by their point, whoever's they are), and the picker's searches are
+  answered by the search fixtures with the same query, so an answer on screen still means the
+  app asked for the right place. `-location <lat>,<lon>|denied|unavailable` stands in for Core
+  Location (a 14th hook in the archive checks, as a short literal). `PickerTests` covers section
+  17.2's list (stubbed search, too short, no results, a slug result and a coordinate result,
+  recents, "Use my location" denied), a fix chosen, and the sheet's accessibility audit with the
+  keyboard down.
+- **Not proven here:** IsItUI's `PlacePickerView`, `PickerSheet`, `HomeView`'s sheet, Core
+  Location's calls and the UI tests are Apple only, built and run only by the macOS jobs. On
+  Linux, IsItServices, IsItLocation and `DebugHooks.swift` (Debug and Release) were type-checked
+  in Swift 5 mode against stub `CoreLocation`, `UIKit` and `WidgetKit` modules, and the
+  `-network` stub's answers were run for the requests the picker's tests make. Unchecked: that
+  `.searchable` in the sheet's navigation bar is the only search field XCUITest finds, that a
+  swipe on a recent place's button shows the system's Delete, a section header's label with
+  `.textCase(nil)`, and that the audit passes with the system's search bar.
+
 ## The app's support page and privacy notice (S8)
 
 App Store Connect needs a Support URL with real contact details and a Privacy Policy URL, so

@@ -35,6 +35,8 @@ public final class AppModel {
   public private(set) var route: DeepLink.Route?
   /// When the next quiet refresh is due, or nil when none is (in the background, say).
   public private(set) var nextRefreshAt: Date?
+  /// The picker's recent places (`recent.v1`), newest first: the last five chosen there.
+  public private(set) var recents: [RecentPlace]
 
   @ObservationIgnored private let environment: AppEnvironment
   /// The launch's fetch (step 3), decided with the paint in `init`.
@@ -49,6 +51,9 @@ public final class AppModel {
   /// While the app is in the background, when the quiet refresh or the retry after a failure is
   /// due: on the return it is due then still, at once if that time has passed.
   @ObservationIgnored private var dueOnReturn: Date?
+  /// A place the picker chose without a name (the device's), which joins the recent places
+  /// under its answer's name when that answer arrives.
+  @ObservationIgnored private var unnamedChoice: Target?
 
   /// Step 1: reads what was stored, and paints the saved answer at once, in the view for the
   /// time of day, when it is for the place and still has an hour to show (`Launch.plan`);
@@ -68,17 +73,19 @@ public final class AppModel {
     fetchedAt = plan.paint?.savedAt
     phase = plan.paint == nil ? .loading : .ready
     view = MiddleDay.defaultView(plan.paint?.response, at: now)
+    recents = environment.recents.loadRecents()
   }
 
   // MARK: - What the views call
 
   /// Steps 2 to 7 of the launch, once. Step 2 starts the entitlement check (phase 7); step 3
   /// fetches, unless the saved answer is recent (`Launch.reuses`), then saves the answer,
-  /// writes the App Group and reloads the widgets; step 4 takes a location fix for "My
-  /// location" (phase 6), and fetches again only when the place's cell changed and the place is
-  /// still the one the fix was for, so a place chosen meanwhile stands; step 5 starts
-  /// the ads once the check has finished, only when not unlocked (phase 8); step 6 syncs the
-  /// notifications (phase 8); step 7 handles a pending route (phases 6 and 8).
+  /// writes the App Group and reloads the widgets; step 4, for "My location", takes one
+  /// location fix when permission is already granted, never asking (`fixMoved(from:)`), and
+  /// fetches again only when the place's 0.05° cell changed and the place is still the one the
+  /// fix was for, so a place chosen meanwhile stands; step 5 starts the ads once the check has
+  /// finished, only when not unlocked (phase 8); step 6 syncs the notifications (phase 8); step
+  /// 7 handles a pending route (phases 6 and 8).
   public func launch() async {
     guard !launched else { return }
     launched = true
@@ -91,11 +98,10 @@ public final class AppModel {
     }
     if case .coords(let place) = target, place.source == .device {
       let located = target
-      if let moved = await hooks.locate(located),
-        target.key.utf8.elementsEqual(located.key.utf8),
-        !moved.key.utf8.elementsEqual(located.key.utf8)
+      if let moved = await fixMoved(from: located),
+        target.key.utf8.elementsEqual(located.key.utf8)
       {
-        choose(moved)
+        keep(moved)
         await load(.plain)
       }
     }
@@ -176,6 +182,73 @@ public final class AppModel {
     notice = nil
   }
 
+  // MARK: - The place picker
+
+  /// A picker over this model (section 10.3), with the model's client and clock: the sheet makes
+  /// one each time it opens.
+  public func makePicker() -> PlacePickerModel {
+    PlacePickerModel(app: self, client: environment.client, clock: environment.clock)
+  }
+
+  /// Chooses `target` as the place, as the picker does (section 10.3): it is kept in
+  /// `place.v1`, loaded in place (`select(_:)`, which saves it for the widgets and reloads them),
+  /// and joins the recent places, under `name`, at once; a place without one (the device's)
+  /// joins them under its answer's name when the answer arrives. Then the notifications are
+  /// synced (phase 8's `syncAlerts`), as a notification place that follows the device's
+  /// location may have moved. The place on screen again only asks again.
+  public func choose(_ target: Target, name: String?) async {
+    if let name, !name.isEmpty {
+      unnamedChoice = nil
+      saveRecents(RecentPlaces.adding(target, name: name, to: recents))
+    } else {
+      unnamedChoice = target
+    }
+    await select(target)
+    await environment.hooks.syncAlerts(target: self.target, units: units)
+  }
+
+  /// Takes `place` off the recent places (a swipe in the picker).
+  public func removeRecent(_ place: RecentPlace) {
+    saveRecents(RecentPlaces.removing(place.target, from: recents))
+  }
+
+  /// "Use my location" (section 10.3): asks for When In Use permission only now, at the tap,
+  /// and only if it was never asked; then one fix, rounded to the 0.05° grid
+  /// (`Target.device(lat:lon:)`). Denied or restricted, nothing is asked again, and the picker
+  /// says so. It chooses nothing: the picker chooses the place it gives.
+  public func locate() async -> LocationOutcome {
+    let location = environment.location
+    var access = await location.access()
+    if access == .notDetermined { access = await location.requestAccess() }
+    guard access == .granted else { return .denied }
+    switch await location.fix() {
+    case .located(let latitude, let longitude):
+      return .located(.device(lat: latitude, lon: longitude))
+    case .denied:
+      return .denied
+    case .unavailable:
+      return .unavailable
+    }
+  }
+
+  /// Launch step 4: for the device's place `located`, one fix when permission is granted,
+  /// never asking; the device's new place when its 0.05° cell differs, else nil.
+  private func fixMoved(from located: Target) async -> Target? {
+    let location = environment.location
+    guard await location.access() == .granted,
+      case .located(let latitude, let longitude) = await location.fix()
+    else { return nil }
+    let moved = Target.device(lat: latitude, lon: longitude)
+    return moved.key.utf8.elementsEqual(located.key.utf8) ? nil : moved
+  }
+
+  private func saveRecents(_ list: [RecentPlace]) {
+    recents = list
+    environment.recents.saveRecents(list)
+  }
+
+  // MARK: - Loading a place
+
   /// Loads the answer for `target` in place, as a place under "Nearby:" does (section 10.2):
   /// it becomes the place, kept in `place.v1`, and the page shows the loading state for it
   /// until its own answer arrives, never the last place's answer under its name; a failure then
@@ -187,7 +260,7 @@ public final class AppModel {
       await refresh()
       return
     }
-    choose(target)
+    keep(target)
     response = nil
     fetchedAt = nil
     phase = .loading
@@ -260,7 +333,8 @@ public final class AppModel {
   }
 
   /// Shows `answer` for `target`, saves it as the last good answer, reloads the widgets, keeps
-  /// its units when none were chosen, and schedules the next refresh.
+  /// its units when none were chosen, schedules the next refresh, and when the picker chose
+  /// `target` without a name, adds it to the recent places under the answer's.
   private func show(_ answer: TodayResponse, for target: Target, holding: Bool) {
     let now = environment.clock.now
     if holding { holds = Freshness.hold(holds, answer, at: now) }
@@ -269,6 +343,13 @@ public final class AppModel {
     fetchedAt = now
     phase = .ready
     if first { view = MiddleDay.defaultView(answer, at: now) }
+    if let unnamed = unnamedChoice {
+      unnamedChoice = nil
+      let name = answer.location.name
+      if unnamed.key.utf8.elementsEqual(target.key.utf8), !name.isEmpty {
+        saveRecents(RecentPlaces.adding(target, name: name, to: recents))
+      }
+    }
     if units == nil {
       units = answer.units
       environment.store.saveUnits(answer.units)
@@ -287,7 +368,7 @@ public final class AppModel {
   /// location, which is fetched at once, and the user is told (section 4).
   private func failed(_ failure: FetchError) async {
     if case .failed(404?, "not_found"?, _) = failure, case .city = target {
-      choose(.ip)
+      keep(.ip)
       response = nil
       fetchedAt = nil
       notice = AppCopy.slugGone
@@ -306,7 +387,7 @@ public final class AppModel {
   }
 
   /// Makes `target` the place, and keeps it.
-  private func choose(_ target: Target) {
+  private func keep(_ target: Target) {
     self.target = target
     environment.store.savePlace(target)
   }

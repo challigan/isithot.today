@@ -48,3 +48,39 @@ public enum RecentPlaces {
     return Array(list[..<end])
   }
 }
+
+extension RecentPlaces {
+  /// `recent.v1` as the app keeps it in its own defaults (iOS build spec, section 9.6): the list
+  /// as the client's JSON.
+  public static func stored(_ list: [RecentPlace]) throws -> Data {
+    try JSONEncoder().encode(list)
+  }
+
+  /// The list `recent.v1` keeps: empty for nothing, or for anything that isn't a list. An entry
+  /// that doesn't read as a recent place is skipped, as is approximate IP location or a second
+  /// entry for a place, and the list is cut to `defaultMax`, so what is read back is always a
+  /// list `adding` could have made.
+  public static func list(stored data: Data?) -> [RecentPlace] {
+    guard let data, let entries = try? JSONDecoder().decode([Entry].self, from: data) else {
+      return []
+    }
+    var list: [RecentPlace] = []
+    for case let place? in entries.map(\.place) {
+      if case .ip = place.target { continue }
+      let key = Array(place.target.key.utf8)
+      guard !list.contains(where: { $0.target.key.utf8.elementsEqual(key) }) else { continue }
+      list.append(place)
+      if list.count == defaultMax { break }
+    }
+    return list
+  }
+
+  /// One entry of a stored list, nil when it isn't a recent place.
+  private struct Entry: Decodable {
+    let place: RecentPlace?
+
+    init(from decoder: any Decoder) throws {
+      place = try? RecentPlace(from: decoder)
+    }
+  }
+}

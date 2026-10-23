@@ -12,7 +12,7 @@ struct VectorFilesTests {
     #expect(
       try Vectors.names() == [
         "alerts", "freshness", "grid", "hours", "links", "page", "placeTime", "query",
-        "questions", "recent", "strip", "target", "tomorrow", "widget",
+        "questions", "recent", "search", "strip", "target", "tomorrow", "widget",
       ])
   }
 

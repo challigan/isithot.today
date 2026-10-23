@@ -32,6 +32,8 @@ import {
   pickHour,
   registrationBody,
   removeRecent,
+  resultDetail,
+  searchInput,
   searchQuery,
   searchTarget,
   targetFromQuery,
@@ -112,6 +114,8 @@ const replay: Record<string, (i: In) => unknown> = {
   notificationRoute: (i) => notificationRoute(i.payload, () => i.placeToday),
   addRecent: (i) => addRecent(i.list, i.target, i.name, i.max),
   removeRecent: (i) => removeRecent(i.list, i.target),
+  searchInput: (i) => searchInput(i.text),
+  resultDetail: (i) => resultDetail(i.result),
   homePage: (i) => homePage(i.fixture === null ? null : res(i), i),
   creditParts: (i) => creditParts(i.text),
 };
@@ -160,6 +164,9 @@ const SPEC_FILES = [
 /** Phase 5's, after section 7.4's: the app's page. */
 const PAGE_FILES = ['page'];
 
+/** Phase 6's: the picker's search box. */
+const PICKER_FILES = ['search'];
+
 /** The functions whose reference is core's; the rest are the client's. */
 const CORE = [
   'roundToGrid',
@@ -183,8 +190,8 @@ const local = (zone: string, now: number) => {
 };
 
 describe('vectorFiles', () => {
-  it('writes every file section 7.4 names, in its order, then the page', () => {
-    expect(files.map((f) => f.name)).toEqual([...SPEC_FILES, ...PAGE_FILES]);
+  it('writes every file section 7.4 names, in its order, then the page and the search box', () => {
+    expect(files.map((f) => f.name)).toEqual([...SPEC_FILES, ...PAGE_FILES, ...PICKER_FILES]);
   });
 
   it('gives every output the reference gives for its input', () => {
@@ -680,6 +687,28 @@ describe('the cases cover what section 7.4 asks for', () => {
     // Each credit the API gives, with something to link.
     const credits = casesFor('page', 'creditParts').map((c) => (c.in as In).text);
     for (const credit of ATTRIBUTION) expect(credits).toContain(credit);
+  });
+
+  it("search: JavaScript's trim and length, and each part of a result's line left out", () => {
+    const inputs = casesFor('search', 'searchInput');
+    const kinds = (kind: string) => inputs.filter((c) => (c.out as In).kind === kind);
+    expect(kinds('empty').length).toBeGreaterThan(2);
+    expect(kinds('tooShort').length).toBeGreaterThan(2);
+    // A search for text with JavaScript's spaces round it is for the text alone; U+0085 stays.
+    expect(inputs.some((c) => (c.in as In).text.startsWith('\ufeff'))).toBe(true);
+    expect(inputs.find((c) => (c.in as In).text === 'L\u0085')!.out).toEqual({
+      kind: 'search',
+      q: 'L\u0085',
+    });
+    // Two UTF-16 code units are enough, though one letter.
+    expect(inputs.find((c) => (c.in as In).text === '\u{1D538}')!.out).toEqual({
+      kind: 'search',
+      q: '\u{1D538}',
+    });
+    const details = casesFor('search', 'resultDetail').map((c) => c.out);
+    expect(details).toContain('England, United Kingdom');
+    expect(details).toContain('England, GB');
+    expect(details).toContain('');
   });
 
   it('recent: de-duplication, the cap and IP refused', () => {
