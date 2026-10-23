@@ -181,6 +181,89 @@ smoke (`alerts-smoke.yml`). To check a function can reach Apple: set `ALERTS_SMO
 **Deploy Previews** context only, open a deploy preview's Functions page, choose `alerts-run` and
 press **Run now**; its log should read `alerts-run: smoke passed: 400 BadDeviceToken…`.
 
+### The apps' notifications: switching them on
+
+The run (`alerts-run`, every 15 minutes) is off until `ALERTS_ENABLED` is `true`. Every switch is
+an environment variable in Netlify (**Site configuration → Environment variables**), scope
+**Functions**, and takes effect only after a redeploy (**Deploys → Trigger deploy → Deploy
+site**). The run's log is at **Logs → Functions → alerts-run**. It shows one summary line a run,
+after any lines about single registrations:
+
+```
+alerts-run: zones 0, records 0, groups 0, fetches 0, sent 0, deleted 0, errors 0; dry run, 0 logged; 140 ms
+```
+
+`errors` should be 0. A line starting `alerts-run: error:` or `alerts: error:` says what went
+wrong: tell me. Nothing in the log is a device token, a key or a place's coordinates.
+
+1. **Once the full run is merged: dry, in production.** Add `ALERTS_ENABLED` = `true` (all
+   contexts, or Production only). Leave `ALERTS_DRY_RUN` unset: production then logs each
+   notification instead of sending it. Redeploy, then check the log shows the line above every
+   15 minutes, saying `dry run`, with `errors 0`. Until the app registers, `zones` stays 0.
+2. **From the first TestFlight build with notifications (target Wed 4 Nov): on, for real.** In
+   that build, switch notifications on and open **Your privacy** for your registration's id. In
+   Netlify, for the **Production** context only, set `ALERTS_DRY_RUN` = `false` and
+   `ALERTS_FORCE_IDS` = your id (or its first 8 characters or more; several ids go
+   comma-separated). Redeploy. Your phone then gets one notification at about 6pm and one at about
+   7am at your place, for each switch you have on: the real one when snow is likely, otherwise
+   "Test notification". The log line says `sent 1` and `1 forced` for those runs. Everyone else
+   (TestFlight testers) gets only real notifications, when snow is likely.
+3. **By Thu 12 Nov:** it is already fully on. Press **Send a test notification** in the current
+   TestFlight build; it must arrive before submission.
+4. **Release day:** delete `ALERTS_FORCE_IDS` and redeploy. The log line no longer says
+   `forced`.
+
+To switch it all off at once, set `ALERTS_ENABLED` to `false` and redeploy: each run then logs
+`alerts-run: disabled (production, ALERTS_ENABLED is not true)` and does nothing else.
+
+**The end-to-end check without a phone (section 8.7 item 4).** Once the devices endpoints are
+merged. It uses a made-up device token, 64 `a`s, whose id starts `19fbad5f15a7`; Apple refuses
+it, so nothing reaches a phone. A deploy preview's store is new with every deploy, so the
+settings go in before the preview is built.
+
+1. For the **Deploy Previews** context only, set `ALERTS_ENABLED` = `true` and
+   `ALERTS_FORCE_IDS` = `19fbad5f15a7`, then open a pull request (or push to one) so a preview
+   builds with them.
+2. Register the made-up token on that preview at a place where it is now between 18:00 and
+   19:59, or 07:00 and 08:59: `london-gb` at 6 to 8pm UK time, `tokyo-jp` at 9 to 11am UK time
+   in winter, or `new-york-city-us` at 12 to 2pm UK time in winter. From a terminal (or any app
+   that sends a PUT), with the preview's address and the place:
+
+   ```
+   curl -X PUT https://deploy-preview-NN--SITE.netlify.app/api/v1/devices \
+     -H 'content-type: application/json' \
+     -d '{"app":"snow","platform":"ios","env":"sandbox","token":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","place":{"place":"tokyo-jp"},"units":"c","alerts":{"snow":{"evening":true,"morning":true,"possible":false}},"appVersion":"preview check"}'
+   ```
+
+3. On the preview's **Functions** page, choose `alerts-run` and press **Run now**. A preview is
+   always a dry run, whatever `ALERTS_DRY_RUN` says, so the log shows the notification instead of
+   sending it:
+
+   ```
+   alerts: dry run: snow.19fbad5f… sandbox evening 2026-11-05: Test notification / Notifications are working. We'll tell you when snow is likely in Tokyo.
+   alerts-run: zones 1, records 1, groups 1, fetches 1, sent 0, deleted 0, errors 0; dry run, 1 logged; 1 forced; 900 ms
+   ```
+
+   (or the real notification, if snow is likely there). **Run now** again in the same window logs
+   `zones 0`: the place is done for that window.
+
+4. Apple's half is the smoke: set `ALERTS_SMOKE` = `1` for Deploy Previews, rebuild the preview
+   and press **Run now**: `alerts-run: smoke passed: 400 BadDeviceToken…`. Then delete
+   `ALERTS_SMOKE` again, because while it is 1 a preview's run only smokes.
+5. The whole path to Apple, once production is no longer dry (step 2 above): register the same
+   token on production (`https://willitsnow.today/api/v1/devices`, the same body), add
+   `19fbad5f15a7` to `ALERTS_FORCE_IDS` after your id (comma-separated) and redeploy. The next
+   run in that place's window (the next day's, if the place was already done for this one) logs
+   `alerts: deleted snow.19fbad5f… (400 BadDeviceToken, sandbox, app preview check)`: Apple
+   refused the made-up device, and the registration is gone. Then take `19fbad5f15a7` out of
+   `ALERTS_FORCE_IDS` again.
+
+**Checking the words without Netlify:** `pnpm tsx scripts/alerts-dry-run.ts --now
+2026-10-18T18:05:00Z` registers every city page's place in °C and °F on synthetic forecasts and
+prints each notification the run would send at that moment. At that moment it prints the Durham
+example: "Snow likely in Durham tomorrow" / "1 to 2cm of snow. Mostly between 2am and 6am. 5 of 6
+forecasts expect snow."
+
 ## 6. Uptime monitor
 
 Any free monitor (UptimeRobot, Better Stack) on:

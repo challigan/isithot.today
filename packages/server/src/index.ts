@@ -9,3 +9,4 @@ export * from './search';
 export * from './handlers';
 export * from './alertStore';
 export * from './apns';
+export * from './alerts';

@@ -14,7 +14,6 @@ import {
   classifyApns,
   deliveryFinished,
   idsKey,
-  inQuietHours,
   jwtKey,
   providerToken,
   providerTokens,
@@ -304,43 +303,8 @@ describe('alertPush', () => {
   });
 });
 
-describe('inQuietHours', () => {
-  const quiet = { from: 21, to: 7 };
-  const at = (iso: string) => Date.parse(iso);
-
-  it('is quiet from 21:00 to 06:59 at the place, across the clock changes', () => {
-    // Winter (GMT) and summer (BST) in London.
-    expect(inQuietHours('Europe/London', at('2026-12-01T20:59:59Z'), quiet)).toBe(false);
-    expect(inQuietHours('Europe/London', at('2026-12-01T21:00:00Z'), quiet)).toBe(true);
-    expect(inQuietHours('Europe/London', at('2026-12-02T06:59:00Z'), quiet)).toBe(true);
-    expect(inQuietHours('Europe/London', at('2026-12-02T07:00:00Z'), quiet)).toBe(false);
-    expect(inQuietHours('Europe/London', at('2026-07-01T19:59:00Z'), quiet)).toBe(false);
-    expect(inQuietHours('Europe/London', at('2026-07-01T20:00:00Z'), quiet)).toBe(true);
-    expect(inQuietHours('Europe/London', at('2026-07-01T06:00:00Z'), quiet)).toBe(false);
-    // The clocks went back at 02:00 on 25 October 2026, so 07:00 that morning was 07:00 UTC.
-    expect(inQuietHours('Europe/London', at('2026-10-25T06:59:00Z'), quiet)).toBe(true);
-    expect(inQuietHours('Europe/London', at('2026-10-25T07:00:00Z'), quiet)).toBe(false);
-  });
-
-  it('follows quarter-hour zones and the date line', () => {
-    // Kathmandu is UTC+5:45: 21:00 there is 15:15 UTC.
-    expect(inQuietHours('Asia/Kathmandu', at('2026-12-01T15:14:00Z'), quiet)).toBe(false);
-    expect(inQuietHours('Asia/Kathmandu', at('2026-12-01T15:15:00Z'), quiet)).toBe(true);
-    // Kiritimati is UTC+14, Pago Pago UTC-11.
-    expect(inQuietHours('Pacific/Kiritimati', at('2026-12-01T17:00:00Z'), quiet)).toBe(false);
-    expect(inQuietHours('Pacific/Kiritimati', at('2026-12-01T16:59:00Z'), quiet)).toBe(true);
-    expect(inQuietHours('Pacific/Pago_Pago', at('2026-12-02T07:59:00Z'), quiet)).toBe(false);
-    expect(inQuietHours('Pacific/Pago_Pago', at('2026-12-02T08:00:00Z'), quiet)).toBe(true);
-  });
-
-  it('counts an unknown zone as quiet, and takes hours that do not cross midnight', () => {
-    expect(inQuietHours('Mars/Olympus_Mons', at('2026-12-01T12:00:00Z'), quiet)).toBe(true);
-    expect(inQuietHours('Mars/Olympus_Mons', at('2026-12-01T12:00:00Z'), quiet)).toBe(true);
-    expect(inQuietHours('UTC', at('2026-12-01T02:00:00Z'), { from: 1, to: 5 })).toBe(true);
-    expect(inQuietHours('UTC', at('2026-12-01T05:00:00Z'), { from: 1, to: 5 })).toBe(false);
-    expect(inQuietHours('UTC', at('2026-12-01T00:59:00Z'), { from: 1, to: 5 })).toBe(false);
-  });
-});
+// The quiet hours' own cases are core's (packages/core/test/alerts.test.ts): the sender uses
+// core's `inQuietHours`, so the run and the sender share one rule.
 
 describe('classifyApns', () => {
   const r = { updatedAt: '2026-11-20T19:02:11.000Z' };
@@ -977,15 +941,29 @@ describe('sendAlerts', () => {
       deliveries: records.map(delivery),
       log: (l) => lines.push(l),
     });
-    // London 18:05, Tokyo 03:05, New York 13:05, Kolkata 23:35, an unknown zone.
-    expect(results.map((x) => x.outcome)).toEqual(['sent', 'quiet', 'sent', 'quiet', 'quiet']);
-    expect(devicesSeen(seen)).toEqual([token('a0', 0), token('a0', 2)]);
-    expect(store.keys().filter((k) => k.startsWith('sent/'))).toHaveLength(2);
+    // London 18:05, Tokyo 03:05, New York 13:05, Kolkata 23:35; an unknown zone reads as UTC,
+    // 18:05, as the run's windows read it.
+    expect(results.map((x) => x.outcome)).toEqual(['sent', 'quiet', 'sent', 'quiet', 'sent']);
+    expect(devicesSeen(seen)).toEqual([token('a0', 0), token('a0', 2), token('a0', 4)]);
+    expect(store.keys().filter((k) => k.startsWith('sent/'))).toHaveLength(3);
     expect(lines).toEqual([
       `alerts: error: refused snow.${records[1]!.id.slice(0, 8)}…: quiet hours in Asia/Tokyo`,
       `alerts: error: refused snow.${records[3]!.id.slice(0, 8)}…: quiet hours in Asia/Kolkata`,
-      `alerts: error: refused snow.${records[4]!.id.slice(0, 8)}…: quiet hours in Mars/Olympus_Mons`,
     ]);
+
+    // At 22:05 UTC the unknown zone is in its quiet hours by UTC's clock, and is refused.
+    const late = record(token('a0', 5), { tz: 'Mars/Olympus_Mons' });
+    const night = await run(origin, {
+      store,
+      deliveries: [delivery(late)],
+      now: NOW + 4 * 60 * MINUTE,
+      log: (l) => lines.push(l),
+    });
+    expect(night.results.map((x) => x.outcome)).toEqual(['quiet']);
+    expect(lines.at(-1)).toBe(
+      `alerts: error: refused snow.${late.id.slice(0, 8)}…: quiet hours in Mars/Olympus_Mons`,
+    );
+    expect(seen).toHaveLength(3);
   });
 
   it('in a dry run logs each notification instead: no claim, no token, no push', async () => {
