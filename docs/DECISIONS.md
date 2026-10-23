@@ -908,6 +908,12 @@ The apps' snow notifications are sent by a Netlify scheduled function through Ap
 service (APNs). Two things were unverified on Carl's legacy Netlify plan, so a small probe lands
 first (iOS build spec, phase 1.5) and the full job follows.
 
+The notifications' decisions are in five sections, in the order a notification travels: this
+probe; when, whether and the words (core); the store and the sender; the devices endpoints, which
+register a phone for a place; and the run, which reads those registrations and sends. One
+record, one store, one sender, one quiet-hours rule and one dry-run rule run through all of them
+("Notifications: the run", how the parts fit). SETUP section 5 has the checks and the rollout.
+
 - **V8, does the schedule run?** `functions/api/alerts-run.mts` runs every 15 minutes (UTC) and,
   until the full job landed, only logged `alerts-run: disabled (production)`. The Netlify Functions
   page should list it as scheduled, with a log line every 15 minutes in production. About 2,900
@@ -1009,14 +1015,16 @@ The storage and sending half of the full job (iOS build spec, sections 8.3 and 8
 - **The sender.** One HTTP/2 session per APNs environment. The first push goes alone (Apple allows
   one stream until a valid provider token arrives), then up to min(`apnsConcurrency`, the
   session's `maxConcurrentStreams`) at once; Node itself queues requests past the server's limit,
-  so the test counts them on the sending side. Each push is claimed just before it goes. A 403,
-  a 429 `TooManyProviderTokenUpdates` or no answer stops that environment for the run, leaving the
-  rest unclaimed for the next. After a 429 or a 5xx it stays at one stream. A push that timed out
-  is released and retried by the next run, as Apple advises for 5xxs; if Apple had in fact taken
-  it, the same collapse id makes the second replace the first on the phone rather than stack.
+  so the test counts them on the sending side. Each of the run's pushes is claimed just before
+  it goes; a test send, already counted by its slot in the hour, goes unclaimed
+  (`claimKey: null`). A 403, a 429 `TooManyProviderTokenUpdates` or no answer stops that
+  environment for the run, leaving the rest unclaimed for the next. After a 429 or a 5xx it stays
+  at one stream. A push that timed out is released and retried by the next run, as Apple advises
+  for 5xxs; if Apple had in fact taken it, the same collapse id makes the second replace the first
+  on the phone rather than stack.
 - **Quiet hours are asserted in the sender,** with core's `inQuietHours`, the run's own rule:
-  nothing goes from 21:00 to 06:59 at the place, and a zone the runtime does not know reads as
-  UTC, as the windows read it ("Notifications: the run").
+  nothing goes from 21:00 to 06:59 at the place, test sends included, and a zone the runtime
+  does not know reads as UTC, as the windows read it ("Notifications: the run").
 - **The payload** is section 8.5's, key for key. It stays under 1,024 bytes for the longest city
   (Las Palmas de Gran Canaria) and for a searched place at the server's 80-character limits;
   80 three-byte characters for both name and region stay under Apple's 4,096, and `alertPush`
@@ -1078,9 +1086,16 @@ How the apps register for notifications (iOS build spec, sections 8.2 and 8.3): 
   202 `{ sent: true }`. It sends tomorrow's real evening notification when the rule sends one for
   the place (with the record's "possible" choice, whatever its evening switch says), and
   otherwise "Test notification".
-  - **The quiet hours (21:00 to 06:59 at the place) do not apply.** Someone pressed the button and
-    is looking at the phone; the quiet hours keep notifications nobody asked for out of the
-    night. App Review may press it at any hour, for a place anywhere.
+  - **It goes through the run's sender** (`sendAlerts`, with no claim key, since the hour's slot
+    has already counted it). So Apple's answers mean what they mean for the run, the provider
+    token is the run's, shared through the store and dropped on a 403, and the quiet hours are
+    asserted by the same code.
+  - **The quiet hours apply** (21:00 to 06:59 at the place, core's `inQuietHours`): 409
+    `quiet_hours`, with `Retry-After` to 07:00 there. They are checked before the slot is
+    claimed, so a test pressed at night costs none of the three. Section 8.6 has the sender never
+    send in those hours, and one rule for every push keeps that true. The cost is that App Review,
+    pressing the button at night at the place it chose, sees a failure, so the review notes say
+    so; the app shows `testFailed` until it has words of its own for this code.
   - Priority 10, and Apple stops trying after 15 minutes: a test that arrived hours later would
     only confuse, and a real evening notification's 21:00 would have passed for a late test.
   - The real notification keeps its collapse id (`snow-evening-<date>`), so the scheduled one
@@ -1089,17 +1104,20 @@ How the apps register for notifications (iOS build spec, sections 8.2 and 8.3): 
   - The forecast is waited for 3 s, and Apple 5 s. A forecast that is slow or fails gives the
     fixed words: the test is of notifications, not of the forecast.
   - The key is checked before the claim, so a missing key (503 `push_unavailable`; the log names
-    the missing settings, never a value) costs no test. The provider token is the run's, shared
-    through the store, and a 403 drops it.
-  - Apple's answer is read as the run reads it (`classifyApns`). A refused device is deleted, and
-    the answer is 404 `not_registered`. A 403, a 429, a 5xx or no answer is 503
-    `push_unavailable`; any other refusal 502 `push_refused`, and logged. A failed send still
-    counts towards the three.
-  - **`ALERTS_DRY_RUN` applies as for the run:** on previews, branch deploys and `netlify dev`
-    unless it is `false`, and in production only when it is `true`. The test then claims its slot
-    and decides its words as usual, logs them (id prefix, environment, title and body) and
-    answers 202 `{ sent: false, dryRun: true }`, with no key needed. So a preview sends nothing
-    to a phone unless `ALERTS_DRY_RUN=false` is set for Deploy Previews.
+    the missing settings, never a value) costs no test.
+  - Apple's answer is acted on as for the run. A refused device is deleted, and the answer is 404
+    `not_registered`. A 403, a 429, a 5xx or no answer is 503 `push_unavailable`; any other
+    refusal 502 `push_refused`. The sender logs Apple's answer as it does for the run
+    (`alerts: deleted …`, `alerts: error: …`), and the endpoint adds one line of its own:
+    `devices: test sent to snow.3f9c1a2b… (…)`, or `devices: test not sent to … (…): <outcome>`.
+    A failed send still counts towards the three.
+  - **`ALERTS_DRY_RUN` is read by the run's rule** (`alertsDryRun`): nothing is sent unless it is
+    `false`, in any context, so a production that is still a dry run sends no tests either.
+    Unlike the run, a test follows `false` on previews, branch deploys and `netlify dev` too:
+    that is how a preview checks the whole path to Apple with a made-up device (SETUP section 5).
+    A dry test claims its slot and decides its words as usual, the sender logs them
+    (`alerts: dry run: …`), and it answers 202 `{ sent: false, dryRun: true }`, with no key
+    needed.
   - `ALERTS_ENABLED`, the run's switch, does not apply to registrations or tests: registrations
     are kept whatever it says, so they are there when the run starts.
 - **The test endpoint has the same Netlify limit** (10 a minute per IP). The spec names one only
@@ -1120,9 +1138,10 @@ any other trigger could call it.
     why: `alerts-run: disabled (production, ALERTS_ENABLED unset)`, or on a preview
     `(deploy-preview, ALERTS_ENABLED unset, ALERTS_SMOKE unset)`. These are the probe's lines with
     the new switch named, so V8's check still reads the same.
-  - `ALERTS_DRY_RUN` is forced on by code in every context but production, whatever it says (the
-    run logs that it ignored a `false`). In production the run is dry until it is `false` (any
-    case), so a typo stays dry.
+  - `ALERTS_DRY_RUN` is read by `alertsDryRun`, one rule with the test endpoint's: nothing is
+    sent until it is `false` (any case), so unset or a typo stays dry. The run is also forced dry
+    by code in every context but production, whatever it says (it logs that it ignored a
+    `false`).
   - `ALERTS_SMOKE=1` still makes a preview's run send only the smoke push, as for V9. Production
     never smokes, whatever the setting.
   - `ALERTS_FORCE_IDS`: below.
@@ -1184,10 +1203,20 @@ any other trigger could call it.
 - **One quiet-hours rule.** Core's `inQuietHours` is the only one; it takes `ALERTS.quiet`, or the
   sender's `quiet`. An unknown zone reads as UTC there, as `alertWindows` reads it, so the run and
   the sender agree. The sender's own copy used to count an unknown zone as always quiet, which
-  could have refused every push in a zone the run thought was in its window.
-- **Records.** The run reads a registration as `AlertRecord` (section 8.2's record). It checks the
-  token (hex), `env`, `query`, `units`, `updatedAt` and `alerts`, and takes the zone, app and id
-  from the key.
+  could have refused every push in a zone the run thought was in its window. The test endpoint
+  checks it too, before it claims a slot, and its push goes through the same sender.
+- **One record.** The devices handlers write `DeviceRecord`, which is the run's `AlertRecord`
+  (section 8.2's record) narrowed, so the compiler keeps the two together. The run checks the
+  token (hex), `env`, `query`, `units`, `updatedAt` and `alerts` as it reads one, and takes the
+  zone, app and id from the key.
+- **How the parts fit** is tested end to end (`test/notifications.test.ts`), with the real
+  handlers and the real run on one memory store and the fake APNs. A registration made with
+  `PUT` gets one push at the place's 18:05, with section 8.5's payload and headers, and none at
+  18:20. After a `DELETE`, the next evening's run sends it nothing even when forced, while a
+  device still registered there gets its forced one. Every place form and both units go through
+  as the handler canonicalised them (the tap opens the place the `PUT` answered with); a move to
+  another zone is notified only in its new zone; and a test send and the run use one provider
+  token, whichever made it.
 - **The dry-run script,** `pnpm tsx scripts/alerts-dry-run.ts --now <ISO>`, registers every city
   page's place in °C and °F with every switch on (zones from `getToday`, as the devices handler
   reads them), on synthetic forecasts with the fixed clock, and prints each notification.
@@ -1195,10 +1224,12 @@ any other trigger could call it.
   tomorrow" / "1 to 2cm of snow. Mostly between 2am and 6am. 5 of 6 forecasts expect snow.",
   "About 0.5in of snow. …" in °F); the spec's 2026-12-01T18:05:00Z has no snow in Durham in
   synthetic data. A test pins that output.
-- **Preview checks are dry.** Because previews are always dry runs, the deploy-preview check of
-  section 8.7 item 4 shows a forced notification in the log rather than Apple's
-  `400 BadDeviceToken`. Apple's half is the preview smoke (V9), and the whole path with Apple is
-  checked on production once it is no longer dry, with the same made-up token (SETUP section 5).
+- **Preview checks.** A preview's run is always dry, so section 8.7 item 4's forced run shows the
+  notification in its log rather than Apple's `400 BadDeviceToken`. The test endpoint covers
+  Apple's half on the same preview: with `ALERTS_DRY_RUN=false` for Deploy Previews, a test to
+  the same made-up device goes through the same sender to Apple's sandbox, which refuses it, and
+  the registration is deleted (SETUP section 5). The run's own path to Apple can be checked on
+  production once it sends, with the same device.
 
 ## API contract
 

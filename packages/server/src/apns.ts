@@ -488,8 +488,12 @@ export function classifyApns(
 /** One notification to send: the registration as read, its claim key and its push. */
 export interface Delivery {
   record: PushRecord;
-  /** `sentKey(localDate, topic, kind, app, id)`, claimed with `onlyIfNew` just before the push. */
-  claimKey: string;
+  /**
+   * The run's `sentKey(localDate, topic, kind, app, id)`, claimed with `onlyIfNew` just before the
+   * push. Null for a push already counted where it was asked for (a test send, by its slot in the
+   * hour), which goes unclaimed.
+   */
+  claimKey: string | null;
   push: AlertPush;
 }
 
@@ -499,8 +503,8 @@ export interface Delivery {
  * - "deleted": Apple refused the device, and the registration is gone.
  * - "kept": Apple refused it, but the registration stays (it changed since it was read, the delete
  *   failed, or the refusal is not the device's fault); the claim stays.
- * - "released": Apple could not take it now (403, 429, 5xx, no answer); the claim was released for
- *   the next run.
+ * - "released": Apple could not take it now (403, 429, 5xx, no answer); its claim, if it had one,
+ *   was released for the next run.
  * - "held": as "released", but the release failed, so the claim stays: not retried today.
  * - "taken": another run holds the claim; nothing sent.
  * - "deferred": not tried in this run (the claim could not be written, there is no key or token
@@ -582,9 +586,10 @@ const answer = (status: number, reason: string | null): string =>
  * Sends the notifications: one HTTP/2 session per APNs environment, the first push alone (Apple
  * allows one stream until a push with a valid provider token), then up to
  * min(`apnsConcurrency`, the session's maximum concurrent streams) at once. Each push is claimed
- * just before it goes, and Apple's answer is acted on (`classifyApns`). Refuses any delivery in
- * quiet hours at its place. A 403, a token-update 429 or no answer at all stops that environment
- * for the run: what is left there is deferred, unclaimed.
+ * just before it goes (unless its claim key is null: a test send), and Apple's answer is acted on
+ * (`classifyApns`). Refuses any delivery in quiet hours at its place, the run's and a test's
+ * alike. A 403, a token-update 429 or no answer at all stops that environment for the run: what is
+ * left there is deferred, unclaimed.
  */
 export async function sendAlerts(input: SendAlertsInput): Promise<SendAlertsResult> {
   const { store, deliveries, now } = input;
@@ -620,8 +625,10 @@ export async function sendAlerts(input: SendAlertsInput): Promise<SendAlertsResu
   });
 
   const release = async (i: number): Promise<'released' | 'held'> => {
+    const { claimKey } = deliveries[i]!;
+    if (claimKey === null) return 'released';
     try {
-      await store.delete(deliveries[i]!.claimKey);
+      await store.delete(claimKey);
       return 'released';
     } catch {
       return 'held';
@@ -660,21 +667,23 @@ export async function sendAlerts(input: SendAlertsInput): Promise<SendAlertsResu
         settle(i, 'deferred');
         return false;
       }
-      let claimed: boolean;
-      try {
-        claimed = await store.set(
-          d.claimKey,
-          { at: new Date(now).toISOString(), apnsId: d.push.id },
-          { onlyIfNew: true },
-        );
-      } catch {
-        // Not a claim (the store has logged why): send nothing; the next run tries again.
-        settle(i, 'deferred');
-        return false;
-      }
-      if (!claimed) {
-        settle(i, 'taken');
-        return false;
+      if (d.claimKey !== null) {
+        let claimed: boolean;
+        try {
+          claimed = await store.set(
+            d.claimKey,
+            { at: new Date(now).toISOString(), apnsId: d.push.id },
+            { onlyIfNew: true },
+          );
+        } catch {
+          // Not a claim (the store has logged why): send nothing; the next run tries again.
+          settle(i, 'deferred');
+          return false;
+        }
+        if (!claimed) {
+          settle(i, 'taken');
+          return false;
+        }
       }
       let result: ApnsResult;
       try {
@@ -703,7 +712,8 @@ export async function sendAlerts(input: SendAlertsInput): Promise<SendAlertsResu
         say(
           status === 410
             ? `alerts: kept ${who(d)} (${answer(status, reason)}): it registered again since`
-            : `alerts: error: APNs refused ${who(d)}: ${answer(status, reason)}; kept the claim`,
+            : `alerts: error: APNs refused ${who(d)}: ${answer(status, reason)}` +
+                (d.claimKey === null ? '' : '; kept the claim'),
         );
         settle(i, 'kept', status, reason);
       } else if (verdict === 'reauth') {
@@ -714,7 +724,11 @@ export async function sendAlerts(input: SendAlertsInput): Promise<SendAlertsResu
       } else {
         const outcome = await release(i);
         const released =
-          outcome === 'released' ? 'released the claim' : 'could not release the claim';
+          d.claimKey === null
+            ? 'not sent'
+            : outcome === 'released'
+              ? 'released the claim'
+              : 'could not release the claim';
         say(`alerts: error: APNs ${answer(status, reason)} for ${who(d)}: ${released}`);
         settle(i, outcome, status, reason);
         // The token is too new for Apple: every push with it would fail the same way.

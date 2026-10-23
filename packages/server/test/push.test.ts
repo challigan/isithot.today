@@ -93,7 +93,8 @@ const pushFor = (r: PushRecord, over: Partial<AlertPushInput> = {}) =>
     ...over,
   });
 
-const delivery = (r: PushRecord): Delivery => ({
+/** A run's delivery: always with a claim key. */
+const delivery = (r: PushRecord): Delivery & { claimKey: string } => ({
   record: r,
   claimKey: sentKey(LOCAL_DATE, 'snow', 'evening', r.app, r.id),
   push: pushFor(r),
@@ -526,7 +527,7 @@ describe('sendAlerts', () => {
     expect(await store.get(idsKey('snow', dead.id))).toBeNull();
     expect(await store.get(regKey(reRegistered.tz, 'snow', reRegistered.id))).not.toBeNull();
     expect(await store.get(regKey(refreshed.tz, 'snow', refreshed.id))).not.toBeNull();
-    for (const x of results) expect(await store.get(x.delivery.claimKey)).not.toBeNull();
+    for (const x of results) expect(await store.get(x.delivery.claimKey!)).not.toBeNull();
   });
 
   it('deletes on BadDeviceToken and DeviceTokenNotForTopic, logging env and app version', async () => {
@@ -776,6 +777,56 @@ describe('sendAlerts', () => {
       `alerts: error: APNs 503 for snow.${r.id.slice(0, 8)}…: could not release the claim`,
     ]);
     expect(await inner.get(delivery(r).claimKey)).not.toBeNull();
+  });
+
+  it('sends a delivery with no claim key unclaimed, as a test send is, and acts on the answer', async () => {
+    const { origin, seen } = await fakeApns(
+      apple({
+        '59': { status: 503, body: { reason: 'ServiceUnavailable' } },
+        ba: { status: 400, body: { reason: 'BadCollapseId' } },
+        b4: { status: 400, body: { reason: 'BadDeviceToken' } },
+      }),
+    );
+    const inner = new MemoryAlertStore();
+    const records = ['a0', '59', 'ba', 'b4'].map((script) => record(token(script)));
+    await seed(inner, ...records);
+    // A claim or a release would fail here, so none may be tried.
+    const store: AlertStore = {
+      get: (key) => inner.get(key),
+      set: (key, value, options) =>
+        key.startsWith('sent/')
+          ? Promise.reject(new Error('no claims'))
+          : inner.set(key, value, options),
+      list: (prefix, options) => inner.list(prefix, options),
+      delete: (key) =>
+        key.startsWith('sent/') ? Promise.reject(new Error('no releases')) : inner.delete(key),
+    };
+    const lines: string[] = [];
+    const { results } = await run(origin, {
+      store,
+      deliveries: records.map((r) => ({ ...delivery(r), claimKey: null })),
+      apnsConcurrency: 1,
+      log: (l) => lines.push(l),
+    });
+    expect(results.map((x) => [x.outcome, x.status])).toEqual([
+      ['sent', 200],
+      ['released', 503],
+      ['kept', 400],
+      ['deleted', 400],
+    ]);
+    expect(seen).toHaveLength(4);
+    expect(inner.keys().filter((k) => k.startsWith('sent/'))).toEqual([]);
+    const who = (r: PushRecord) => `snow.${r.id.slice(0, 8)}…`;
+    // No claim, so no word of one.
+    expect(lines).toEqual([
+      `alerts: error: APNs 503 ServiceUnavailable for ${who(records[1]!)}: not sent`,
+      `alerts: error: APNs refused ${who(records[2]!)}: 400 BadCollapseId`,
+      `alerts: deleted ${who(records[3]!)} (400 BadDeviceToken, sandbox, app 1.0 (7))`,
+    ]);
+    expect(await inner.get(regKey(records[3]!.tz, 'snow', records[3]!.id))).toBeNull();
+    for (const r of records.slice(0, 3)) {
+      expect(await inner.get(regKey(r.tz, 'snow', r.id))).not.toBeNull();
+    }
   });
 
   it('sends nothing for a claim the store did not confirm', async () => {

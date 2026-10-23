@@ -29,8 +29,10 @@ import {
   ERROR_MESSAGES,
   SNOW_RELEVANCE,
   collapseId,
+  inQuietHours,
   isFiniteNumber,
   localDate,
+  localDateTime,
   snowAlert,
   testAlert,
   type ApiSnow,
@@ -38,12 +40,12 @@ import {
   type TopicAlertPrefs,
   type Units,
 } from '@isithot/core';
+import { alertsDryRun, type AlertRecord } from './alerts';
 import {
   AlertStoreError,
   SafeAlertStore,
   claimTestSend,
   createBlobsAlertStore,
-  forgetRegistration,
   idPrefix,
   idsKey,
   redact,
@@ -56,14 +58,11 @@ import {
   alertPush,
   apnsKey,
   apnsSender,
-  classifyApns,
-  providerTokens,
+  sendAlerts,
   type AlertPush,
   type ApnsEnv,
   type ApnsKey,
-  type ApnsResult,
   type ApnsSender,
-  type PushRecord,
 } from './apns';
 import { createDeps, type Platform, type ServerDeps } from './deps';
 import { NO_STORE } from './http';
@@ -139,8 +138,11 @@ export interface DeviceIdsEntry {
   from?: string[];
 }
 
-/** A registration, as `reg/v1/<tz>/<app>.<id>` holds it (section 8.2). */
-export interface DeviceRecord extends PushRecord {
+/**
+ * A registration, as `reg/v1/<tz>/<app>.<id>` holds it (section 8.2). It is the run's
+ * `AlertRecord`, narrowed, so what these handlers write is what the run reads.
+ */
+export interface DeviceRecord extends AlertRecord {
   v: 1;
   app: DeviceApp;
   platform: 'ios';
@@ -164,7 +166,10 @@ export interface DeviceResponse {
   seenAt: string;
 }
 
-/** `POST /api/v1/devices/test`'s answer. `dryRun` (with `sent: false`) only where ALERTS_DRY_RUN applies. */
+/**
+ * `POST /api/v1/devices/test`'s answer. `dryRun` (with `sent: false`) only in a dry run, until
+ * ALERTS_DRY_RUN is false (`alertsDryRun`).
+ */
 export interface DeviceTestResponse {
   sent: boolean;
   dryRun?: true;
@@ -179,6 +184,7 @@ export type DeviceErrorCode =
   | 'method_not_allowed'
   | 'rate_limited'
   | 'test_limited'
+  | 'quiet_hours'
   | 'upstream_unavailable'
   | 'store_unavailable'
   | 'push_unavailable'
@@ -656,15 +662,24 @@ export function handleDevices(request: Request, platform: DevicesPlatform): Prom
 
 // ---- The test send ----
 
+/** An hour of the day as the quiet hours' message says it: 21 is "9pm", 7 is "7am". */
+const hourName = (h: number): string => `${h % 12 || 12}${h < 12 ? 'am' : 'pm'}`;
+
 /**
- * Whether a test only logs its notification, as the run does with ALERTS_DRY_RUN: `true` or
- * `false` when set, and otherwise true everywhere but production.
+ * A test in the quiet hours at the place (21:00 to 06:59 by core's `inQuietHours`, the sender's
+ * own rule): 409 `quiet_hours`, with `Retry-After` to when they end there.
  */
-function testDryRun({ env, deployContext }: Platform): boolean {
-  const setting = env('ALERTS_DRY_RUN')?.trim().toLowerCase();
-  if (setting === 'true') return true;
-  if (setting === 'false') return false;
-  return deployContext !== 'production';
+function quietHours(r: Job, record: DeviceRecord, name: string): never {
+  const { from, to } = ALERTS.quiet;
+  const hours = localDateTime(record.tz, new Date(r.now)).hours;
+  r.log(`devices: test not sent to ${name}: quiet hours in ${record.tz}`);
+  const until = hourName(to);
+  return fail(
+    409,
+    'quiet_hours',
+    `Nothing is sent from ${hourName(from)} to ${until} at the place. Try again after ${until} there.`,
+    { 'Retry-After': String(Math.ceil(((to - hours + 24) % 24) * 3600)) },
+  );
 }
 
 /** The key for the record's APNs environment; a missing or unreadable one is a 503. */
@@ -728,14 +743,15 @@ async function testPush(
   return { push, real: real !== null };
 }
 
-const said = ({ status, reason }: ApnsResult): string => `${status}${reason ? ` ${reason}` : ''}`;
-
 /**
  * `POST /api/v1/devices/test` with `{ app, token }`: one notification now for the registered
- * place (202 `{ sent: true }`). 404 `not_registered` without a registration; 429 `test_limited`
- * after `ALERTS.testPerHour` in the hour (UTC) for the id; 503 `push_unavailable` without the
- * environment's key or when Apple can't take it now. A test is sent whatever the hour at the
- * place: someone asked for it, and the quiet hours are for notifications nobody asked for.
+ * place (202 `{ sent: true }`). It goes through the run's sender (`sendAlerts`), so Apple's
+ * answers are acted on as the run acts on them, and the provider token is the run's.
+ * - 404 `not_registered` without a registration, or once Apple has refused the device;
+ * - 409 `quiet_hours` from 21:00 to 06:59 at the place, when nothing is ever sent;
+ * - 429 `test_limited` after `ALERTS.testPerHour` in the hour (UTC) for the id;
+ * - 503 `push_unavailable` without the environment's key, or when Apple can't take it now;
+ * - 502 `push_refused` for any other refusal.
  */
 export function handleDeviceTest(request: Request, platform: DevicesPlatform): Promise<Response> {
   return answer(platform, async (r) => {
@@ -745,9 +761,13 @@ export function handleDeviceTest(request: Request, platform: DevicesPlatform): P
     const store = r.store();
     const { record } = await findRegistration(store, app, id);
     if (!record) return fail(404, 'not_registered', MESSAGES.notRegistered);
-    const dryRun = testDryRun(platform);
+    // Before the hour's slot is claimed, so a test pressed at night costs none of the three.
+    if (inQuietHours(record.tz, new Date(r.now))) quietHours(r, record, name);
+    const dryRun = alertsDryRun(platform.env, platform.deployContext, 'test');
+    const env = record.env;
     // Before the claim, so a missing key costs no test.
-    const key = dryRun ? null : pushKey(r, platform, record.env);
+    const keys: Partial<Record<ApnsEnv, ApnsKey>> = {};
+    if (!dryRun) keys[env] = pushKey(r, platform, env);
     if (!(await claimTestSend(store, id, r.now, ALERTS.testPerHour))) {
       const toNextHour = 3600 - Math.floor((r.now % 3_600_000) / 1000);
       return fail(
@@ -763,65 +783,48 @@ export function handleDeviceTest(request: Request, platform: DevicesPlatform): P
       platform.testForecastWaitMs ?? DEVICE_LIMITS.testForecastWaitMs,
     );
     const words = real ? 'the evening notification' : 'the test words';
-    if (!key) {
-      const { title, body } = push.payload.aps.alert;
-      r.log(`devices: test dry run: ${name} ${record.env}: ${title} / ${body}`);
-      return json(202, { sent: false, dryRun: true } satisfies DeviceTestResponse);
-    }
 
-    const env = record.env;
-    const tokens = providerTokens({ store, keys: { [env]: key }, now: r.now });
-    let jwt: string;
-    try {
-      jwt = await tokens.get(env);
-    } catch (err) {
-      r.log(`devices: error: no ${env} provider token (${(err as Error).message})`);
-      return pushDown();
-    }
-    let result: ApnsResult;
-    let sender: ApnsSender | undefined;
-    try {
-      sender = (
+    // The slot claimed above counts it, so the push itself goes unclaimed.
+    const { results } = await sendAlerts({
+      store,
+      deliveries: [{ record, claimKey: null, push }],
+      keys,
+      now: r.now,
+      apnsConcurrency: 1,
+      quiet: ALERTS.quiet,
+      log: r.log,
+      connect:
         platform.connect ??
-        ((e: ApnsEnv) => apnsSender(APNS_ORIGINS[e], DEVICE_LIMITS.testApnsTimeoutMs))
-      )(env);
-      result = await sender.send(jwt, push);
-    } catch (err) {
-      r.log(`devices: error: no answer from APNs for ${name}'s test: ${(err as Error).message}`);
-      return pushDown();
-    } finally {
-      sender?.close();
-    }
-
-    const verdict = classifyApns(result, record);
-    if (verdict === 'sent') {
-      r.log(`devices: test sent to ${name} (${env}, ${words})`);
-      return json(202, { sent: true } satisfies DeviceTestResponse);
-    }
-    const why = `${said(result)}, ${env}, app ${record.appVersion ?? 'unknown'}`;
-    if (verdict === 'forget') {
-      const forgot = await forgetRegistration(store, record);
-      if (forgot === 'deleted') {
-        r.log(`devices: deleted ${name} (${why})`);
+        ((e: ApnsEnv) => apnsSender(APNS_ORIGINS[e], DEVICE_LIMITS.testApnsTimeoutMs)),
+      dryRun,
+    });
+    const outcome = results[0]?.outcome;
+    // The sender has logged what Apple said, if it said anything worth a line.
+    const why = outcome === 'logged' ? 'a dry run' : String(outcome);
+    r.log(
+      outcome === 'sent'
+        ? `devices: test sent to ${name} (${env}, ${words})`
+        : `devices: test not sent to ${name} (${env}, ${words}): ${why}`,
+    );
+    switch (outcome) {
+      case 'sent':
+        return json(202, { sent: true } satisfies DeviceTestResponse);
+      case 'logged':
+        return json(202, { sent: false, dryRun: true } satisfies DeviceTestResponse);
+      case 'deleted':
         return fail(
           404,
           'not_registered',
           'Apple refused this device, so it is no longer registered.',
         );
-      }
-      r.log(`devices: error: APNs refused ${name}'s test (${why}); kept it (${forgot})`);
-      return fail(502, 'push_refused', 'Apple refused the test notification.');
+      case 'kept':
+        return fail(502, 'push_refused', 'Apple refused the test notification.');
+      case 'quiet':
+        // Checked above at the same moment, so never; the sender asserts it all the same.
+        return quietHours(r, record, name);
+      default:
+        // Released (403, 429, 5xx, no answer) or deferred (no provider token, no session).
+        return pushDown();
     }
-    if (verdict === 'reauth') {
-      await tokens.drop(env, jwt);
-      r.log(`devices: error: APNs refused the ${env} provider token (${said(result)})`);
-      return pushDown();
-    }
-    if (verdict === 'retry') {
-      r.log(`devices: error: APNs ${said(result)} for ${name}'s test`);
-      return pushDown();
-    }
-    r.log(`devices: error: APNs refused ${name}'s test (${why})`);
-    return fail(502, 'push_refused', 'Apple refused the test notification.');
   });
 }

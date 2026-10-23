@@ -728,6 +728,22 @@ export function runSummary(r: RunAlertsResult): string {
   return `alerts-run: ${counts.join(', ')}; ${notes.join('; ')}`;
 }
 
+/**
+ * Whether notifications are only logged, not sent (ALERTS_DRY_RUN, section 8.6). One rule for the
+ * run and the test endpoint: nothing is sent unless ALERTS_DRY_RUN is `false` (trimmed, any case),
+ * so unset is dry everywhere. The run also sends only in production, whatever the setting; a test
+ * send follows the setting in every context, so a deploy preview with it `false` can check the
+ * whole path to Apple with a made-up device, and nothing a preview's run reads ever reaches a phone.
+ */
+export function alertsDryRun(
+  env: EnvGetter,
+  deployContext: string | undefined,
+  sender: 'run' | 'test',
+): boolean {
+  if (env('ALERTS_DRY_RUN')?.trim().toLowerCase() !== 'false') return true;
+  return sender === 'run' && deployContext !== 'production';
+}
+
 /** ALERTS_FORCE_IDS: comma-separated id prefixes, 8 to 32 hex characters each. */
 export function forceIdsFrom(setting: string | undefined): { ids: string[]; ignored: number } {
   const entries = (setting ?? '').split(/[\s,]+/).filter(Boolean);
@@ -755,9 +771,9 @@ export interface AlertsRunInput {
 /**
  * The scheduled function's run, every 15 minutes: the switches (section 8.6), then `runAlerts`.
  * Returns its one line. Off unless ALERTS_ENABLED is true; a dry run everywhere but production,
- * and in production until ALERTS_DRY_RUN is false. On a deploy preview, ALERTS_SMOKE=1 makes the
- * run only send the smoke push (the probe's check that a function reaches Apple); production
- * never smokes, whatever the setting.
+ * and in production until ALERTS_DRY_RUN is false (`alertsDryRun`). On a deploy preview,
+ * ALERTS_SMOKE=1 makes the run only send the smoke push (the probe's check that a function reaches
+ * Apple); production never smokes, whatever the setting.
  */
 export async function alertsRun(input: AlertsRunInput): Promise<string> {
   const { env, deployContext, now } = input;
@@ -783,9 +799,8 @@ export async function alertsRun(input: AlertsRunInput): Promise<string> {
     log(scrub(line));
   };
   try {
-    const setting = env('ALERTS_DRY_RUN')?.trim().toLowerCase();
-    const dryRun = !production || setting !== 'false';
-    if (!production && setting === 'false') {
+    const dryRun = alertsDryRun(env, deployContext, 'run');
+    if (dryRun && !alertsDryRun(env, deployContext, 'test')) {
       log(`alerts-run: ALERTS_DRY_RUN is ignored on ${where}: only production sends`);
     }
     let store: AlertStore;

@@ -219,14 +219,15 @@ endpoints"). No accounts: the push token is the credential, and a registration's
 
 - `DELETE /api/v1/devices` with `{ "app": "snow", "token" }` deletes the registration: 204, whether
   or not there was one.
-- `POST /api/v1/devices/test` with `{ "app": "snow", "token" }` sends one notification now: 202
-  `{ "sent": true }`, at most 3 an hour per device. Where `ALERTS_DRY_RUN` applies (by default
-  everywhere but production) it only logs it, and answers 202 `{ "sent": false, "dryRun": true }`.
+- `POST /api/v1/devices/test` with `{ "app": "snow", "token" }` sends one notification now,
+  through the same sender as the scheduled run: 202 `{ "sent": true }`, at most 3 an hour per
+  device, and never from 9pm to 7am at the place (409 `quiet_hours`). Until `ALERTS_DRY_RUN` is
+  `false` it only logs it, and answers 202 `{ "sent": false, "dryRun": true }`.
 
 Their errors use the same envelope: `bad_request`, `app_not_live` and `bad_location` (400),
-`not_registered` (404), `too_large` (413), `rate_limited` and `test_limited` (429, with
-`Retry-After`), `push_refused` (502), and `upstream_unavailable`, `store_unavailable` and
-`push_unavailable` (503).
+`not_registered` (404), `quiet_hours` (409, with `Retry-After`), `too_large` (413), `rate_limited`
+and `test_limited` (429, with `Retry-After`), `push_refused` (502), and `upstream_unavailable`,
+`store_unavailable` and `push_unavailable` (503).
 
 Errors use `{ "error": { "code", "message" } }` with `bad_location` (400), `not_found` (404),
 `rate_limited` (429) and `upstream_unavailable` (503). When upstream is down but a cached

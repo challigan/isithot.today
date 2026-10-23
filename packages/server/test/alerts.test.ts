@@ -8,6 +8,7 @@ import {
   MemoryAlertStore,
   MemoryKV,
   PUSH_GRACE_MS,
+  alertsDryRun,
   alertsRun,
   apnsSender,
   cleanupKey,
@@ -953,6 +954,23 @@ describe('alertsRun: the switches', () => {
       );
       expect(run.seen).toHaveLength(0);
       expect(sentKeys(run.store)).toEqual([]);
+    }
+  });
+
+  it('reads ALERTS_DRY_RUN by one rule for the run and the test endpoint', () => {
+    const dry = (context: string | undefined, setting: string | undefined, by: 'run' | 'test') =>
+      alertsDryRun((name) => (name === 'ALERTS_DRY_RUN' ? setting : undefined), context, by);
+    for (const context of ['production', 'deploy-preview', 'branch-deploy', 'dev', undefined]) {
+      // Nothing is sent unless it is false, in any context and by either sender.
+      for (const setting of [undefined, '', 'true', 'TRUE', 'no', '0']) {
+        expect(dry(context, setting, 'run')).toBe(true);
+        expect(dry(context, setting, 'test')).toBe(true);
+      }
+      // A test follows false everywhere; the run sends only in production.
+      for (const setting of ['false', ' False ', 'FALSE']) {
+        expect(dry(context, setting, 'test')).toBe(false);
+        expect(dry(context, setting, 'run')).toBe(context !== 'production');
+      }
     }
   });
 

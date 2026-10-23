@@ -1166,14 +1166,43 @@ describe('POST /api/v1/devices/test', () => {
     expect(fake.seen).toHaveLength(5);
   });
 
-  it('sends in the quiet hours too: someone asked for it', async () => {
+  it('sends nothing in the quiet hours at the place (409 quiet_hours), and costs no test', async () => {
     const { w, fake } = await withApple();
     const t = token('aa', 270);
     await put(w, body({ token: t }));
     const late = Date.UTC(2026, 10, 11, 23, 30);
     w.at(late);
-    expect((await sendTest(w, { app: 'snow', token: t })).status).toBe(202);
-    expect(fake.seen[0]!.headers['apns-expiration']).toBe(String(late / 1000 + 900));
+    const r = await sendTest(w, { app: 'snow', token: t });
+    expect(r.status).toBe(409);
+    expect(await errorOf(r)).toEqual({
+      code: 'quiet_hours',
+      message: 'Nothing is sent from 9pm to 7am at the place. Try again after 7am there.',
+    });
+    // 23:30 GMT: seven and a half hours to 07:00.
+    expect(r.headers.get('retry-after')).toBe(String(7.5 * 3600));
+    expect(fake.seen).toEqual([]);
+    expect(w.store.keys().filter((k) => k.startsWith('test/'))).toEqual([]);
+    expect(w.lines).toContain(
+      `devices: test not sent to snow.${idOf(t).slice(0, 8)}…: quiet hours in Europe/London`,
+    );
+    // The edges, by the place's clock (London is on GMT in November).
+    const at = async (h: number, m: number) => {
+      w.at(Date.UTC(2026, 10, 12, h, m));
+      return (await sendTest(w, { app: 'snow', token: t })).status;
+    };
+    expect(await at(6, 59)).toBe(409);
+    expect(await at(7, 0)).toBe(202);
+    expect(await at(20, 59)).toBe(202);
+    expect(await at(21, 0)).toBe(409);
+    expect(fake.seen).toHaveLength(2);
+    expect(fake.seen[0]!.headers['apns-expiration']).toBe(
+      String(Date.UTC(2026, 10, 12, 7) / 1000 + 900),
+    );
+    // A place in another zone keeps its own hours: 21:00 in London is 16:00 in New York.
+    const ny = token('aa', 271);
+    await put(w, body({ token: ny, place: NEW_YORK }));
+    expect((await sendTest(w, { app: 'snow', token: ny })).status).toBe(202);
+    expect(fake.seen).toHaveLength(3);
   });
 
   it('a missing or unreadable key is a clear 503 that costs no test', async () => {
@@ -1201,13 +1230,13 @@ describe('POST /api/v1/devices/test', () => {
     expect(unreadable.w.lines.join('\n')).not.toContain('not a key at all');
   });
 
-  it('off production, a dry run logs the notification instead (ALERTS_DRY_RUN)', async () => {
+  it('is a dry run, logging the notification instead, until ALERTS_DRY_RUN is false', async () => {
     const noKeys = {
       ALERTS_DRY_RUN: undefined,
       APNS_KEY_SANDBOX: undefined,
       APNS_KEY_PRODUCTION: undefined,
     };
-    for (const deployContext of ['deploy-preview', 'branch-deploy', 'dev']) {
+    for (const deployContext of ['production', 'deploy-preview', 'branch-deploy', 'dev']) {
       const { w, fake } = await withApple({}, { deployContext, settings: noKeys });
       const t = token('aa', 290);
       await put(w, body({ token: t, place: DURHAM }));
@@ -1215,9 +1244,11 @@ describe('POST /api/v1/devices/test', () => {
       expect(r.status).toBe(202);
       expect(await r.json()).toEqual({ sent: false, dryRun: true });
       expect(fake.seen).toEqual([]);
-      expect(w.lines).toContain(
-        `devices: test dry run: snow.${idOf(t).slice(0, 8)}… sandbox: Snow likely in Durham tomorrow / 1 to 2cm of snow. Mostly between 2am and 7am. 5 of 6 forecasts expect snow.`,
-      );
+      // The sender's dry-run line, as the run logs it, then the endpoint's own.
+      expect(w.lines.slice(-2)).toEqual([
+        `alerts: dry run: snow.${idOf(t).slice(0, 8)}… sandbox evening 2026-11-12: Snow likely in Durham tomorrow / 1 to 2cm of snow. Mostly between 2am and 7am. 5 of 6 forecasts expect snow.`,
+        `devices: test not sent to snow.${idOf(t).slice(0, 8)}… (sandbox, the evening notification): a dry run`,
+      ]);
       // It still counts towards the hour's three.
       expect(w.store.keys().filter((k) => k.startsWith('test/'))).toHaveLength(1);
     }
@@ -1231,13 +1262,19 @@ describe('POST /api/v1/devices/test', () => {
       const reply = (await (await sendTest(w, { app: 'snow', token: t })).json()) as object;
       return { reply, pushes: fake.seen.length };
     };
-    expect(await decide('deploy-preview', 'false')).toEqual({ reply: { sent: true }, pushes: 1 });
+    // Unlike the run, a test follows the setting off production too, so a preview can reach Apple.
+    for (const context of ['production', 'deploy-preview', 'branch-deploy', 'dev']) {
+      expect(await decide(context, 'false')).toEqual({ reply: { sent: true }, pushes: 1 });
+    }
     expect(await decide('deploy-preview', ' FALSE ')).toEqual({ reply: { sent: true }, pushes: 1 });
     expect(await decide('production', 'true')).toEqual({
       reply: { sent: false, dryRun: true },
       pushes: 0,
     });
-    expect(await decide('production', undefined)).toEqual({ reply: { sent: true }, pushes: 1 });
+    expect(await decide('production', undefined)).toEqual({
+      reply: { sent: false, dryRun: true },
+      pushes: 0,
+    });
     expect(await decide('deploy-preview', 'yes')).toEqual({
       reply: { sent: false, dryRun: true },
       pushes: 0,
@@ -1333,7 +1370,12 @@ describe('POST /api/v1/devices/test', () => {
     expect(r.status).toBe(503);
     expect((await errorOf(r)).code).toBe('push_unavailable');
     expect(hung.seen).toHaveLength(1);
-    expect(w.lines.join('\n')).toMatch(/no answer from APNs for snow\.[0-9a-f]{8}…'s test/);
+    expect(w.lines.join('\n')).toMatch(
+      /^alerts: error: stopped sandbox for this run: no answer from APNs for snow\.[0-9a-f]{8}…: /m,
+    );
+    expect(w.lines.at(-1)).toBe(
+      `devices: test not sent to snow.${idOf(t).slice(0, 8)}… (sandbox, the test words): released`,
+    );
 
     // Nobody listening at all.
     const closed = await new Promise<number>((resolve) => {
@@ -1395,6 +1437,9 @@ describe('POST /api/v1/devices/test', () => {
     const failed = await withApple(
       {},
       {
+        // Registered seven hours before the test, so no cached forecast is young enough to stand
+        // in, and the test is at 18:05, outside the quiet hours.
+        now: SNOWY - 7 * HOUR,
         fetch: (synthetic) => async (url, init) =>
           down && new URL(url).pathname.endsWith('/forecast')
             ? new Response('down', { status: 500 })
@@ -1402,7 +1447,7 @@ describe('POST /api/v1/devices/test', () => {
       },
     );
     await put(failed.w, body({ token: t, place: DURHAM }));
-    failed.w.at(SNOWY + 7 * HOUR);
+    failed.w.at(SNOWY);
     down = true;
     expect((await sendTest(failed.w, { app: 'snow', token: t })).status).toBe(202);
     expect((failed.payloads()[0]!.aps as { alert: { title: string } }).alert.title).toBe(
@@ -1440,9 +1485,11 @@ describe('POST /api/v1/devices/test', () => {
     expect(changed.status).toBe(502);
     expect((await errorOf(changed)).code).toBe('push_refused');
     expect(await shared.get(regKey('Europe/London', 'snow', idOf(t)))).not.toBeNull();
-    expect(w.lines.at(-1)).toMatch(
-      /refused snow\.[0-9a-f]{8}…'s test \(400 BadDeviceToken, .*\); kept it \(changed\)$/,
-    );
+    const who = `snow.${idOf(t).slice(0, 8)}…`;
+    expect(w.lines.slice(-2)).toEqual([
+      `alerts: kept ${who} (400 BadDeviceToken, sandbox, app 1.0 (112)): it registered again since`,
+      `devices: test not sent to ${who} (sandbox, the test words): kept`,
+    ]);
 
     const inner = new MemoryAlertStore();
     const refusing = await withApple(
@@ -1464,7 +1511,10 @@ describe('POST /api/v1/devices/test', () => {
     expect(r.status).toBe(503);
     expect((await errorOf(r)).code).toBe('push_unavailable');
     expect(fake.seen).toEqual([]);
-    expect(w.lines.at(-1)).toMatch(/^devices: error: no sandbox provider token \(/);
+    expect(w.lines.at(-2)).toMatch(/^alerts: error: no sandbox provider token \(.*\): 1 deferred$/);
+    expect(w.lines.at(-1)).toBe(
+      `devices: test not sent to snow.${idOf(t).slice(0, 8)}… (sandbox, the test words): deferred`,
+    );
   });
 });
 
