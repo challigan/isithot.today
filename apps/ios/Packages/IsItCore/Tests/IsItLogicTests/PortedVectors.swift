@@ -53,15 +53,15 @@ enum PortedVectors {
     PortedVector("strip", by: "3.3: StripGeometry", port: .strip),
 
     // client widgetEntries
-    PortedVector("widget", by: "3.4: WidgetPlanner.entries", port: nil),
+    PortedVector("widget", by: "3.4: WidgetPlanner.entries", port: .widget),
 
     // client alertPlaceAllowed, registrationBody, fingerprint, alertAction
-    PortedVector("alerts", by: "3.4: AlertSync.action, .body, .fingerprint", port: nil),
+    PortedVector("alerts", by: "3.4: AlertSync.action, .body, .fingerprint", port: .alerts),
 
     // client parseDeepLink, notificationRoute
-    PortedVector("links", by: "3.4: DeepLink.parse, .route(payload:)", port: nil),
+    PortedVector("links", by: "3.4: DeepLink.parse, .route(payload:)", port: .links),
 
     // client addRecent, removeRecent
-    PortedVector("recent", by: "3.4: RecentPlaces", port: nil),
+    PortedVector("recent", by: "3.4: RecentPlaces", port: .recent),
   ]
 }

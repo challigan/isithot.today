@@ -1356,7 +1356,8 @@ parallel against it.
   request and the Swift that ports it; on 23 October 2026 that is all 13 files, listed in
   `apps/ios/README.md`. So `swift test` in IsItCore exits non-zero meanwhile, and `ios.yml`'s
   `swift-linux` job fails, which also keeps the macOS jobs that need it from running. Nothing is
-  skipped or marked as a known issue to hide that: each port turns its own files green.
+  skipped or marked as a known issue to hide that: each port turns its own files green. With
+  3.4, every file is ported, and the guard passes.
 - **Parallel porters change different lines.** Each `PortedVectors.all` entry is a comment and a
   line, with a blank line after it, so ports of different files merge without conflicts, and each
   port lives in a test file of its own.
@@ -1460,6 +1461,68 @@ case by case (`placeTime`, `tomorrow`, `freshness`, `hours`, `questions` and `st
   in the same order, so they are compared exactly.
 - **`Questions` needed no Swift of its own:** the generated `Questions.snow(view:place:tomorrow:)`
   passes every case, places that would trip a replacement pattern or an interpolation included.
+
+## The iPhone app's widget plan, notification sync, links and recent places (IsItCore, phase 3.4)
+
+PR 3.4 ports client `widgetEntries`, the notification sync (`alertPlaceAllowed`,
+`registrationBody`, `fingerprint`, `alertAction`), the deep links (`parseDeepLink`,
+`notificationRoute`) and the recent places (`addRecent`, `removeRecent`) into IsItLogic, as
+`WidgetPlanner.entries`, `AlertSync`, `DeepLink` and `RecentPlaces`, each checked case by case
+against `widget.json`, `alerts.json`, `links.json` and `recent.json`. With 3.2's and 3.3's files,
+every vector file is now ported and the guard passes.
+
+- **Built on 3.2 and 3.3, not beside them.** The widget planner calls `HourPicker.pick`,
+  `MiddleDay` and `Freshness.usableUntil`, and the other three take 3.2's `Target`, so the branch
+  merges both porters' branches rather than carrying thin copies of their code: nothing is
+  duplicated, and the planner is checked against the same pick and middle day as `hours.json`.
+- **Moments are `Date` in the API and whole milliseconds inside,** as in 3.3, so a heartbeat
+  due to the millisecond, or an hour ahead a millisecond after `now`, agrees with the TypeScript.
+  A plan's reload is `WidgetPlan.Reload` (`.never` or `.after(Date)`), WidgetKit's
+  `TimelineReloadPolicy` in IsItCore's terms, and `WidgetEntry.date` is the `TimelineEntry` date.
+  A week day's `snowy` and `total` stay optional, as the answer's are. The reference's `pickHour`
+  non-null assertion becomes a stale entry that no moment reaches (each is before `usableUntil`),
+  rather than a crash in a widget.
+- **A fingerprint is written as `JSON.stringify` writes it,** keys sorted by UTF-16 code unit at
+  every level, numbers as JavaScript writes them (3.3's `JavaScript.string`), and only the quote,
+  the backslash and control characters escaped, by a small writer of its own: `JSONEncoder`
+  escapes "/" unless told not to, and its key order and number forms are its own, not
+  JavaScript's. The app only ever compares its own fingerprints, but the same bytes as the
+  reference keep the rule and the vectors exact. They are compared byte for byte, as JavaScript
+  compares strings (and so are recent places' keys), where Swift's `==` takes canonically
+  equivalent text as the same. `alerts.json` gains a token with every escape and the characters
+  written as they are (the slash, DEL, U+2028, accents and emoji).
+- **A registration's place is `RegistrationBody.Place`:** a city's slug, or coordinates with the
+  query's fields only (an empty name, region or country and a zero geonameId left out, the
+  elevation kept), a device's with only `lat`, `lon` and `source`. Swift's `Target` has IP
+  location among its cases where the client's `PlaceTarget` excludes it by type, so
+  `AlertSync.body` is nil for it, which `alertAction` never asks for (`placeAllowed` first).
+- **Links are matched as the reference's pattern matches them,** by hand rather than with
+  `NSRegularExpression` or `Regex`: JavaScript's `trim` (its white space and line terminators:
+  U+FEFF yes, U+0085 no, unlike Swift's `whitespacesAndNewlines`), lowercased with the same
+  Unicode mappings (a Kelvin sign is a k), then the scheme, a host and an optional path of `a` to
+  `z`, an optional slash, and the end, a query or a fragment. `links.json` gains the trim and
+  Kelvin cases.
+- **A notification's payload is `Any?`**, the `userInfo` dictionary (with its `aps`) or any JSON
+  as `JSONSerialization` reads it, and each field is read only as a string, as the reference reads
+  them with `typeof`. A place route's view is nil for the reference's `'default'`, the place's
+  view for the time of day (`MiddleDay.defaultView`); `DeepLink.Route` is `Codable` as the
+  client's JSON, for the vectors.
+- **Two date readings, as the reference has.** The payload's `date` must be a real calendar date
+  (`calendarDay`: `Date.parse`, kept only when `toISOString` gives it back). The place's date from
+  `placeToday` is read as V8's `Date.parse` reads YYYY-MM-DD: any day up to 31, rolling over
+  ("2026-11-31" is 1 December); anything else is NaN, never today or tomorrow. `Date.parse` also
+  reads date-times and other forms, which the port doesn't: `placeToday` is the app's own
+  `PlaceTime.local(_:in:).date`, always YYYY-MM-DD. `links.json` gains a leap day, a date that
+  isn't one, and the roll-over.
+- **Recent places** are `RecentPlaces.adding(_:name:to:max:)` and `.removing(_:from:)`, with
+  `slice(0, max)` ported whole: a negative `max` drops that many from the end, and `recent.json`
+  gains that case. `RecentPlace` is `Codable` as `recent.v1` keeps it, with 3.2's `Target` JSON.
+- **The pinned client findings stay pinned.** The planner reproduces the reference, so a widget
+  planned with the phone's clock behind the server across 6pm still has no 6pm entry (the
+  packages/mobile section above), and the vectors keep pinning it.
+- **Each rule, broken on purpose in the Swift, fails its cases:** the week's four days, a
+  heartbeat due exactly, a control character's escape, `trim`'s U+FEFF, the day roll-over, a
+  negative cap and an hour ahead at `now` exactly.
 
 ## API contract
 

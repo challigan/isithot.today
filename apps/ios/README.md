@@ -142,7 +142,7 @@ docker run --rm -v "$PWD/apps/ios/Packages/IsItCore":/w -w /w swift:6.3.3-noble 
   bash -c 'apt-get update -qq && apt-get install -y -qq tzdata >/dev/null && swift test'
 ```
 
-Until phase 3 has ported every vector file, that `swift test` fails, for those files only
+That `swift test` runs the vector guard too, which checks every vector file with its port
 (below).
 
 **The answer font.** `pnpm mobile:check` never needs Python: it checks the font by the recipe
@@ -220,9 +220,9 @@ To port a file:
 
 3. In `PortedVectors.swift`, change the file's `port: nil` to the port (`port: .grid`).
 
-**Until phase 3 lands, `swift test` fails** in IsItCore, with one issue for each file not yet
-ported, and everything else passes. On 23 October 2026 no file was ported, so it failed for
-all 13; those marked done are ported since:
+**Every file is ported** (3.2, 3.3 and 3.4), so `swift test` passes in IsItCore, the guard
+included. Until the last port landed it failed, with one issue for each file not yet ported; on
+23 October 2026 that was all 13, each marked done here as its port landed:
 
 | Vector file      | Ported by | Swift                                               |
 | ---------------- | --------- | --------------------------------------------------- |
@@ -235,14 +235,14 @@ all 13; those marked done are ported since:
 | `hours.json`     | 3.3, done | `HourPicker.pick`, `UpdatedLine.text`               |
 | `questions.json` | 3.3, done | `Questions.snow`                                    |
 | `strip.json`     | 3.3, done | `StripGeometry`                                     |
-| `widget.json`    | 3.4       | `WidgetPlanner.entries`                             |
-| `alerts.json`    | 3.4       | `AlertSync.action`, `.body`, `.fingerprint`         |
-| `links.json`     | 3.4       | `DeepLink.parse`, `.route(payload:)`                |
-| `recent.json`    | 3.4       | `RecentPlaces`                                      |
+| `widget.json`    | 3.4, done | `WidgetPlanner.entries`                             |
+| `alerts.json`    | 3.4, done | `AlertSync.action`, `.body`, `.fingerprint`         |
+| `links.json`     | 3.4, done | `DeepLink.parse`, `.route(payload:)`                |
+| `recent.json`    | 3.4, done | `RecentPlaces`                                      |
 
-Meanwhile `ios.yml`'s `swift-linux` job fails at its Test step, and the jobs that need it
-(`ios`, `archive-check`, and so `contact-sheet`) don't run. Each porter checks that its own
-files' cases pass and that the issues left are only the files still to port.
+While a file was still to port, `ios.yml`'s `swift-linux` job failed at its Test step, and the
+jobs that need it (`ios`, `archive-check`, and so `contact-sheet`) didn't run. A new vector file
+fails the guard the same way until its port is listed.
 
 What the ports share (3.3; DECISIONS, "The iPhone app's clock rules"):
 
@@ -256,12 +256,27 @@ What the ports share (3.3; DECISIONS, "The iPhone app's clock rules"):
 - **`HourPicker.pick(_:at:)` and `MiddleDay(_:picked:at:)`** are what the widget planner (3.4)
   builds on, with `Freshness.usableUntil(_:)`.
 
+What 3.4's ports give the app (DECISIONS, "The iPhone app's widget plan, notification sync,
+links and recent places"):
+
+- **`WidgetPlanner.entries(_:fetchedAt:now:unlocked:placeName:)`** gives a `WidgetPlan`: the
+  entries (`WidgetEntry`, whose `date` is the timeline entry's) and `reloadAt`, `.never` or
+  `.after(Date)`, WidgetKit's reload policy.
+- **`AlertSync.action(...)`** says `put`, `delete`, `none`, `needsPlace` or `needsToken`;
+  `AlertSync.body(...)` is the `PUT /api/v1/devices` body (`RegistrationBody`, `Codable`), and
+  `AlertSync.fingerprint(_:)` what `alertSync.v1` keeps of it, with `AlertSync.Sent`.
+- **`DeepLink.parse(_:)`** reads a willitsnow:// link (a `String` or a `URL`), and
+  **`DeepLink.route(payload:placeToday:)`** a notification's `userInfo`; a place route's view is
+  nil for the place's view for the time of day.
+- **`RecentPlaces.adding(_:name:to:max:)` and `.removing(_:from:)`** keep `recent.v1`'s
+  `[RecentPlace]`, which is `Codable` as the client's JSON.
+
 ## CI (`.github/workflows/ios.yml`)
 
 | Job             | Runs on                     | What it proves                                                                                                                                                                                                                                                             |
 | --------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `generated`     | ubuntu                      | `pnpm mobile:check`                                                                                                                                                                                                                                                        |
-| `swift-linux`   | ubuntu, `swift:6.3.3-noble` | every Swift file lints; IsItCore's tests pass (with `tzdata`), the vector guard only once phase 3 has ported every file (above)                                                                                                                                            |
+| `swift-linux`   | ubuntu, `swift:6.3.3-noble` | every Swift file lints; IsItCore's tests pass (with `tzdata`), the vector guard included: every vector file checked by its port (above)                                                                                                                                    |
 | `ios`           | `macos-26`, Xcode 26.6      | the project generates; packages resolve to the pins; the app, widget and tests build for the iPhone 17 simulator (iOS 26.5), with the icon and glyph catalogues; the Unit and UI plans pass; a Release build has no debug hooks, no fixtures and no ads code in the widget |
 | `archive-check` | `macos-26`, Xcode 26.6      | an unsigned Release archive for iPhones builds and passes `scripts/check-archive.sh` with ads test: the release job's archive checks, on every pull request, with no key                                                                                                   |
 | `contact-sheet` | ubuntu                      | tiles every attached screen and widget into one PNG, whenever `ios` uploaded attachments (failed tests included); skipped when `ios` failed before its tests ran                                                                                                           |
@@ -424,8 +439,9 @@ Each comes with the phase that needs it, so nothing in the skeleton is dormant:
 - the launch screen's `LaunchBackground` colour, from the palettes, which belongs in the
   generated `Assets.xcassets`; the widget's gallery name and description (`AppCopy.widgetName`,
   `AppCopy.widgetDescription`);
-- the target keys, freshness, hour picker and widget planner (phase 3), so the skeleton's widget
-  shows one entry and never goes stale: the only answer it can find is a Debug fixture;
+- the target keys, freshness, hour picker and widget planner in the app and the widget (ported
+  in phase 3, used from phases 5 and 7), so the skeleton's widget shows one entry and never goes
+  stale: the only answer it can find is a Debug fixture;
 - the rest of `SnowKit`, `APIClient`, location, StoreKit (`Snow.storekit`), notifications, `AdsService` and the
   banner, `SKAdNetworkItems`, and the privacy manifests' collected data types (coarse location,
   the push token);

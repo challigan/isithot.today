@@ -1133,6 +1133,19 @@ function alertVectors(): VectorFile {
       bodies.push(body);
     }
   }
+  // A token with what JSON.stringify escapes (the quote, the backslash and the control
+  // characters) and what it writes as it is (the slash, DEL, U+2028, accents and emoji).
+  const awkward = {
+    token: 'q"b\\s/\b\t\n\f\r\u0001\u001f\u007f\u2028é😀',
+    env: 'sandbox',
+    place: PLACES[4]!,
+    units: 'c',
+    prefs: PREFS.all,
+    appVersion: '1.0 (42)',
+  } as const;
+  const awkwardBody = registrationBody(awkward);
+  add('registrationBody', awkward, awkwardBody);
+  bodies.push(awkwardBody);
   for (const body of bodies) add('fingerprint', { body }, fingerprint(body));
 
   const now = Date.parse('2026-12-16T18:05:00Z');
@@ -1255,6 +1268,11 @@ function linkVectors(): VectorFile {
     'https://willitsnow.today/view/now',
     'willitsnow://view/now willitsnow://upgrade',
     '',
+    // What JavaScript's trim takes off (no-break spaces, U+FEFF, U+2028) and doesn't (U+0085),
+    // and a Kelvin sign, which lowercases to k.
+    '\u00a0\ufeffwillitsnow://view/now\u2028',
+    '\u0085willitsnow://view/now',
+    'willitsnow://view/wee\u212a',
   ];
   for (const url of urls) add('parseDeepLink', { url }, parseDeepLink(url));
 
@@ -1294,6 +1312,12 @@ function linkVectors(): VectorFile {
   route({ ...durham, place: device, name: 'Leeds' }, '2026-12-17');
   route({ ...durham, place: denver, name: 'Somewhere else', date: '2027-01-29' }, '2027-01-28');
   route({ ...durham, place: 'place=leeds-gb&units=c&ahead=snow' }, '2026-12-17');
+  // A leap day; and the place's date as Date.parse reads it: not a date at all, and a day past
+  // the month's end, which rolls over ("2026-11-31" is 1 December).
+  route({ ...durham, date: '2028-02-29' }, '2028-02-28');
+  route(durham, 'not a date');
+  route({ ...durham, date: '2026-12-01' }, '2026-11-30');
+  route({ ...durham, date: '2026-12-01' }, '2026-11-31');
   // Malformed, for another topic, or for no place someone chose: the app opens as usual.
   for (const payload of [
     null,
@@ -1305,6 +1329,7 @@ function linkVectors(): VectorFile {
     { ...durham, topic: 'wet' },
     without(durham, 'topic'),
     { ...durham, date: '2026-02-30' },
+    { ...durham, date: '2027-02-29' },
     { ...durham, date: '2026-12-17T00:00:00Z' },
     { ...durham, date: '17/12/2026' },
     { ...durham, date: 20261217 },
@@ -1367,6 +1392,7 @@ function recentVectors(): VectorFile {
   addTo(more, denver.target, 'Denver', 3);
   addTo(more, denver.target, 'Denver', 1);
   addTo(more, denver.target, 'Denver', 0);
+  addTo(more, denver.target, 'Denver', -1);
   // Approximate IP location is never one, and a list longer than the cap is cut to it.
   addTo([leeds], { kind: 'ip' }, 'Your location');
   addTo([...more, leeds, durham], { kind: 'ip' }, 'Leeds');
