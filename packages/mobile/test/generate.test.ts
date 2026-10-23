@@ -1,8 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { SNOW_GLYPHS } from '../../../apps/web/src/lib/snowGlyphs';
 import { FIXTURES, fixtureJson, makeFixture, type Fixture } from '../src/fixtures';
 import { appCopySwift } from '../src/exportAppCopy';
 import { constantsSwift } from '../src/exportConstants';
 import { coreCopySwift } from '../src/exportCoreCopy';
+import { FONTS_DIR, FONT_PATH } from '../src/exportFont';
+import {
+  GLYPHS_DIR,
+  GLYPHS_FALLBACK_DIR,
+  SNOW_KIT_GENERATED_DIR,
+  glyphFiles,
+} from '../src/exportGlyphs';
+import { ASSETS_DIR, iconFiles } from '../src/exportIcon';
 import { keysSwift } from '../src/exportKeys';
 import { palettesSwift } from '../src/exportPalettes';
 import { questionsSwift } from '../src/exportQuestions';
@@ -14,17 +24,44 @@ import {
   VECTORS_DIR,
   drift,
   generatedFiles,
+  sameContents,
+  type GeneratedFile,
 } from '../src/generate';
 import { vectorFiles, vectorJson } from '../src/vectors';
 
+const sources = {
+  glyphs: SNOW_GLYPHS,
+  favicon: readFileSync(
+    new URL('../../../apps/web/public/snow/favicon.svg', import.meta.url),
+    'utf8',
+  ),
+};
+
+/** A text file's contents: every file but the PNGs and the font is text. */
+const text = (f: GeneratedFile): string => {
+  if (typeof f.contents !== 'string') throw new Error(`${f.path} is not text`);
+  return f.contents;
+};
+
 describe('generatedFiles', () => {
-  it("writes IsItModel's and IsItUI's Swift, then each fixture and vector file into the test resources", async () => {
-    const files = await generatedFiles();
+  // Every PNG is rendered here once for every test: a few seconds, more beside the whole suite.
+  let files: GeneratedFile[];
+  let assets: GeneratedFile[];
+  beforeAll(async () => {
+    files = await generatedFiles(sources);
+    assets = [...glyphFiles(sources.glyphs), ...iconFiles(sources.favicon)];
+  }, 120_000);
+
+  it("writes IsItModel's and IsItUI's Swift, each fixture and vector file, the glyph catalogues and the app icon", async () => {
     const model = 'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated';
     const resources = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources';
     const vectors = [
       ...['grid', 'target', 'query', 'placeTime', 'tomorrow', 'freshness', 'hours'],
       ...['questions', 'strip', 'widget', 'alerts', 'links', 'recent'],
+    ];
+    const resourcePaths = [
+      ...FIXTURES.map((s) => `${resources}/Fixtures/${s.name}.json`),
+      ...vectors.map((name) => `${resources}/Vectors/${name}.json`),
     ];
     expect(files.map((f) => f.path)).toEqual([
       `${model}/CoreCopy.swift`,
@@ -33,8 +70,8 @@ describe('generatedFiles', () => {
       `${model}/Constants.swift`,
       `${model}/Keys.swift`,
       'apps/ios/Packages/IsItKit/Sources/IsItUI/Generated/Palettes.swift',
-      ...FIXTURES.map((s) => `${resources}/Fixtures/${s.name}.json`),
-      ...vectors.map((name) => `${resources}/Vectors/${name}.json`),
+      ...resourcePaths,
+      ...assets.map((f) => f.path),
     ]);
     expect(files.slice(0, 6).map((f) => f.contents)).toEqual([
       coreCopySwift(),
@@ -45,15 +82,28 @@ describe('generatedFiles', () => {
       palettesSwift(),
     ]);
     expect(files[7]!.contents).toBe(fixtureJson(await makeFixture(FIXTURES[1]!)));
-    expect(OWNED_DIRS).toEqual([FIXTURES_DIR, VECTORS_DIR, MODEL_GENERATED_DIR, UI_GENERATED_DIR]);
+    const first = 6 + resourcePaths.length;
+    for (const [i, f] of assets.entries()) {
+      expect(sameContents(files[first + i]!.contents, f.contents)).toBe(true);
+    }
+    expect(OWNED_DIRS).toEqual([
+      FIXTURES_DIR,
+      VECTORS_DIR,
+      MODEL_GENERATED_DIR,
+      UI_GENERATED_DIR,
+      GLYPHS_DIR,
+      GLYPHS_FALLBACK_DIR,
+      SNOW_KIT_GENERATED_DIR,
+      ASSETS_DIR,
+      FONTS_DIR,
+    ]);
   });
 
-  it('works the vectors out from the fixtures exactly as their files have them', async () => {
-    const files = await generatedFiles();
+  it('works the vectors out from the fixtures exactly as their files have them', () => {
     const fixtures = new Map<string, Fixture>(
       FIXTURES.map((s) => [
         s.name,
-        JSON.parse(files.find((f) => f.path === `${FIXTURES_DIR}/${s.name}.json`)!.contents),
+        JSON.parse(text(files.find((f) => f.path === `${FIXTURES_DIR}/${s.name}.json`)!)),
       ]),
     );
     for (const { name, vectors } of vectorFiles(fixtures)) {
@@ -63,20 +113,31 @@ describe('generatedFiles', () => {
     }
   });
 
-  it('starts every Swift file with the header that names its source', async () => {
-    for (const f of await generatedFiles()) {
+  it('starts every Swift file with the header that names its source', () => {
+    for (const f of files) {
       if (!f.path.endsWith('.swift')) continue;
-      expect(f.contents.split('\n')[0], f.path).toMatch(
+      expect(text(f).split('\n')[0], f.path).toMatch(
         /^\/\/ Generated by pnpm mobile:generate from \S.*\. Do not edit\.$/,
       );
-      expect(f.contents.endsWith('}\n'), f.path).toBe(true);
+      expect(text(f).endsWith('}\n'), f.path).toBe(true);
     }
   });
 
-  it('puts every file it writes in a folder it owns, so a stale one is found', async () => {
-    for (const f of await generatedFiles()) {
-      expect(OWNED_DIRS.some((dir) => f.path.startsWith(`${dir}/`))).toBe(true);
+  it('puts every file it writes in a folder it owns, so a stale one is found', () => {
+    const paths = [...files.map((f) => f.path), FONT_PATH];
+    for (const path of paths) {
+      expect(OWNED_DIRS.some((dir) => path.startsWith(`${dir}/`))).toBe(true);
     }
+  });
+});
+
+describe('sameContents', () => {
+  it('compares text as its UTF-8 bytes, and bytes as they are', () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    expect(sameContents('A’\n', Buffer.from('A’\n', 'utf8'))).toBe(true);
+    expect(sameContents(png, Buffer.from(png))).toBe(true);
+    expect(sameContents(png, new Uint8Array([0x89, 0x50, 0x4e]))).toBe(false);
+    expect(sameContents('A\n', 'A')).toBe(false);
   });
 });
 
@@ -112,5 +173,16 @@ describe('drift', () => {
 
   it('counts a lost final newline as a change', () => {
     expect(drift([a], new Map([[a.path, 'A']]))).toEqual([{ path: a.path, problem: 'changed' }]);
+  });
+
+  it('compares binary files by their bytes, and text read as bytes', () => {
+    const png = { path: 'x/icon.png', contents: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0]) };
+    const same = new Map<string, Uint8Array>([
+      [png.path, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0])],
+      [a.path, Buffer.from('A\n')],
+    ]);
+    expect(drift([png, a], same)).toEqual([]);
+    const edited = new Map([[png.path, Buffer.from([0x89, 0x50, 0x4e, 0x47, 1])]]);
+    expect(drift([png], edited)).toEqual([{ path: png.path, problem: 'changed' }]);
   });
 });

@@ -19,5 +19,5 @@ CODE_SIGN_STYLE = Automatic
 DEAD_CODE_STRIPPING = YES
 ENABLE_USER_SCRIPT_SANDBOXING = YES
 
-// No icon until phase 2.3 generates AppIcon (section 7.1), which names it here.
+// Only the app has an icon: project.yml names it AppIcon, the set pnpm mobile:generate writes.
 ASSETCATALOG_COMPILER_APPICON_NAME =

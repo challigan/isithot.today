@@ -3,9 +3,10 @@
 The native SwiftUI app for willitsnow.today, built from the iOS build spec. This is the skeleton
 (phase 0, PRs 0.1 to 0.4): the project, the app and its widget, both entitlements, the debug
 hooks, their tests, the CI that builds and runs them, and the release job that signs the app and
-uploads it to TestFlight. The app shows a fixture when a Debug build is launched with
-`-fixture <name>`, and the widget shows the answer the app saved in the App Group. Fetching, the
-real home screen and everything else come in later phases.
+uploads it to TestFlight; with phase 2.3's generated assets: the snow glyphs, the app icon and
+the answer font. The app shows a fixture when a Debug build is launched with `-fixture <name>`,
+and the widget shows the answer the app saved in the App Group. Fetching, the real home screen
+and everything else come in later phases.
 
 ## What is where
 
@@ -19,11 +20,14 @@ Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API
                          and golden vectors with their loaders
 Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore), IsItAds (Google's SDKs),
                          IsItUI (the skeleton's answer view, generated Palettes, Color(rgb:)), IsItWidgetUI
-                         (the widget's entry, provider, view)
+                         (the widget's entry, provider, view), SnowKit (Glyphs, and the glyph catalogues,
+                         generated)
 Apps/Snow/App/           WillItSnowApp, AppModel, HomeView, DebugHooks (every test and debug hook)
-Apps/Snow/Resources/     the app's Info.plist, entitlements and privacy manifest
+Apps/Snow/Resources/     the app's Info.plist, entitlements and privacy manifest; generated: Assets.xcassets
+                         (the app icon) and Fonts/BricolageAnswer.ttf (the app's and the widget's)
 Apps/Snow/Widgets/       the widget extension, its Info.plist, entitlements and privacy manifest
-Apps/Snow/Tests/         app-hosted unit tests: the App Group round trip (V1), widget snapshots, palette contrast
+Apps/Snow/Tests/         app-hosted unit tests: the App Group round trip (V1), widget and glyph snapshots,
+                         palette contrast, the answer font
 Apps/Snow/UITests/       launches the aberdeen-snow and leeds-dry fixtures and attaches the screens
 TestPlans/               Unit and UI
 ci/                      xcodegen.sh, simulator.sh, test.sh, release-check.sh, xcresult-summary.mjs, contact-sheet.mjs;
@@ -33,16 +37,17 @@ ci/                      xcodegen.sh, simulator.sh, test.sh, release-check.sh, x
 The release checks are in the repo's `scripts/`: `check-archive.sh`, with `swift-small-strings.mjs`
 (below), and `asc-key.mjs` and `asc-notes.mjs` for the App Store Connect key and What to Test.
 
-| Target              | Bundle ID                      | Links                                         |
-| ------------------- | ------------------------------ | --------------------------------------------- |
-| `WillItSnow` (app)  | `today.willitsnow.app`         | IsItModel, IsItServices, IsItUI, IsItAds      |
-| `WillItSnowWidgets` | `today.willitsnow.app.widgets` | IsItModel, IsItServices, IsItWidgetUI         |
-| `WillItSnowTests`   | hosted by the app              | IsItModel, IsItServices, IsItUI, IsItWidgetUI |
-| `WillItSnowUITests` | drives the app                 |                                               |
+| Target              | Bundle ID                      | Links                                                  |
+| ------------------- | ------------------------------ | ------------------------------------------------------ |
+| `WillItSnow` (app)  | `today.willitsnow.app`         | IsItModel, IsItServices, IsItUI, IsItAds, SnowKit      |
+| `WillItSnowWidgets` | `today.willitsnow.app.widgets` | IsItModel, IsItServices, IsItWidgetUI, SnowKit         |
+| `WillItSnowTests`   | hosted by the app              | IsItModel, IsItServices, IsItUI, IsItWidgetUI, SnowKit |
+| `WillItSnowUITests` | drives the app                 |                                                        |
 
 The widget never links IsItAds. Both the app and the widget have the App Group
 `group.today.willitsnow.app`; only the app has `aps-environment`. The name under the icon is
-"will it snow?" (`CFBundleDisplayName`).
+"will it snow?" (`CFBundleDisplayName`). Both bundle the answer font and list it in `UIAppFonts`,
+since an extension can't load the app's fonts; only the app has an icon.
 
 ## Building on a Mac (Carl, optional)
 
@@ -96,7 +101,8 @@ reach the key.
   notes and the Xcode version;
 - **Archive, signed, ads test**: whether it built, and each compiler error or warning with its
   file and line;
-- **Archive checks**: both bundles have privacy manifests; the widget links no Google Mobile Ads;
+- **Archive checks**: both bundles have privacy manifests and the answer font; the app has its
+  icon; the widget links no Google Mobile Ads;
   neither binary names any of the 12 debug hooks; the ad units are Google's demo ones (test) or
   yours (real); the app and widget have the same version and build; `ITSAppUsesNonExemptEncryption`
   is false; no fixture is bundled. Each failure is named;
@@ -115,7 +121,7 @@ An `unsigned` run's summary has the build number, the archive and its checks.
 | ----------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Archive, signed   | Your team has no devices from which to generate a provisioning profile | Automatic signing signs the archive for development first, and Apple wants one registered iPhone for that. Add yours under Certificates, Identifiers & Profiles, Devices (Finder shows its UDID when it is plugged into your Mac), then run again. |
 | Archive or Export | Cloud signing permission error, or a 401 or 403                        | The key must be a Team key with the Admin role (C12). **App Store Connect check** (`asc-check.yml`) tests the key alone.                                                                                                                           |
-| Upload            | ITMS-90022, ITMS-90713 or another missing icon                         | Expected until phase 2.3 adds the app icon: App Store Connect refuses a build without one. Every step before the upload has been proven by then.                                                                                                   |
+| Upload            | ITMS-90022, ITMS-90713 or another missing icon                         | The app has had its icon since phase 2.3, and the archive checks fail without it, so App Store Connect wants something more of the icon set: an agent fixes the generator (`packages/mobile/src/exportIcon.ts`).                                   |
 | Upload            | The bundle version must be higher                                      | A re-run keeps its run's build number. Start a new run instead.                                                                                                                                                                                    |
 | Archive checks    | the check that failed                                                  | An agent fixes the app (or the check) in a pull request.                                                                                                                                                                                           |
 
@@ -128,12 +134,19 @@ don't depend on them.
 There is no Xcode here, so iOS code is only compiled on GitHub's macOS runners. What runs here:
 
 ```sh
-pnpm mobile:check                     # the generated Swift, the fixtures and the vectors are what packages/mobile writes
+pnpm mobile:check                     # the Swift, fixtures, vectors, glyphs, icon and font are as generated
 docker run --rm -v "$PWD/apps/ios":/w -w /w swift:6.3.3-noble \
   swift format lint --strict --recursive Packages Apps          # every Swift file, as CI lints it
 docker run --rm -v "$PWD/apps/ios/Packages/IsItCore":/w -w /w swift:6.3.3-noble \
   bash -c 'apt-get update -qq && apt-get install -y -qq tzdata >/dev/null && swift test'
 ```
+
+**The answer font.** `pnpm mobile:check` never needs Python: it checks the font by the recipe
+stamped in it (`packages/mobile/src/exportFont.ts`). `pnpm mobile:generate` runs
+`scripts/make-answer-font.py --ttf` only when the font is out of date, which needs python3 with
+fontTools 4.66.1 and brotli (`pip install fonttools==4.66.1 brotli`; the agents' container has
+them). After changing the woff2's instance or subset, build the woff2 first (the script with no
+arguments): `--ttf` refuses to build a font that differs from it.
 
 **XcodeGen on Linux.** XcodeGen is a Swift package and builds on Linux, so `project.yml` can be
 checked here. Build 2.46.0 once (`git clone --branch 2.46.0
@@ -153,17 +166,20 @@ ID from `project.pbxproj` (`<ID> /* <name> */ = { isa = PBXNativeTarget;`).
 
 IsItKit can't be built here (SwiftUI, WidgetKit and Google's binary SDKs), but plain-Foundation
 parts can be type-checked in a scratch package: `SharedStore` was, with a stub for
-`containerURL(forSecurityApplicationGroupIdentifier:)`, which Linux's Foundation lacks.
+`containerURL(forSecurityApplicationGroupIdentifier:)`, which Linux's Foundation lacks. SnowKit's
+`Glyphs` was, against a stub `SwiftUI` module declaring `Image(decorative:bundle:)` as SwiftUI
+does, with the glyph catalogue copied in as a resource and a test that every band names an image
+set that exists. `swift package dump-package` in IsItKit checks its manifest.
 
 ## CI (`.github/workflows/ios.yml`)
 
-| Job             | Runs on                     | What it proves                                                                                                                                                                                                                         |
-| --------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `generated`     | ubuntu                      | `pnpm mobile:check`                                                                                                                                                                                                                    |
-| `swift-linux`   | ubuntu, `swift:6.3.3-noble` | every Swift file lints; IsItCore's tests pass (with `tzdata`)                                                                                                                                                                          |
-| `ios`           | `macos-26`, Xcode 26.6      | the project generates; packages resolve to the pins; the app, widget and tests build for the iPhone 17 simulator (iOS 26.5); the Unit and UI plans pass; a Release build has no debug hooks, no fixtures and no ads code in the widget |
-| `archive-check` | `macos-26`, Xcode 26.6      | an unsigned Release archive for iPhones builds and passes `scripts/check-archive.sh` with ads test: the release job's archive checks, on every pull request, with no key                                                               |
-| `contact-sheet` | ubuntu                      | tiles every attached screen and widget into one PNG, whenever `ios` uploaded attachments (failed tests included); skipped when `ios` failed before its tests ran                                                                       |
+| Job             | Runs on                     | What it proves                                                                                                                                                                                                                                                             |
+| --------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generated`     | ubuntu                      | `pnpm mobile:check`                                                                                                                                                                                                                                                        |
+| `swift-linux`   | ubuntu, `swift:6.3.3-noble` | every Swift file lints; IsItCore's tests pass (with `tzdata`)                                                                                                                                                                                                              |
+| `ios`           | `macos-26`, Xcode 26.6      | the project generates; packages resolve to the pins; the app, widget and tests build for the iPhone 17 simulator (iOS 26.5), with the icon and glyph catalogues; the Unit and UI plans pass; a Release build has no debug hooks, no fixtures and no ads code in the widget |
+| `archive-check` | `macos-26`, Xcode 26.6      | an unsigned Release archive for iPhones builds and passes `scripts/check-archive.sh` with ads test: the release job's archive checks, on every pull request, with no key                                                                                                   |
+| `contact-sheet` | ubuntu                      | tiles every attached screen and widget into one PNG, whenever `ios` uploaded attachments (failed tests included); skipped when `ios` failed before its tests ran                                                                                                           |
 
 No job needs a secret. The `ios` job pins `macos-26` (never `macos-latest`, never `-xlarge`) and
 selects Xcode 26.6 explicitly. It caches `apps/ios/.spm` (the package checkouts and Google's
@@ -253,6 +269,23 @@ Xcode's as the `package-resolved` artefact. The next agent:
    downloaded, otherwise from the diff, which is short JSON);
 4. commits it, and pushes; `Resolve packages` must then pass.
 
+## Glyphs, icon and answer font
+
+`pnpm mobile:generate` writes all three from the website (spec section 7.1); never edit them.
+
+- **Glyphs:** `Packages/IsItKit/Sources/SnowKit/Resources/Glyphs.xcassets`, from
+  `apps/web/src/lib/snowGlyphs.ts`. Template images in SVG: `Glyphs.image(band)` is the whole
+  glyph, tinted by the foreground style, and `Glyphs.layers(band)` its still part and its flakes,
+  for the drift. `SnowKit/Fallback/Glyphs.xcassets` has the same sets as PNGs, built only if the
+  SVGs fail (V7, below).
+- **App icon:** `Apps/Snow/Resources/Assets.xcassets/AppIcon.appiconset`, from
+  `apps/web/public/snow/favicon.svg`: `any.png`, `dark.png` and `tinted.png`, each 1024×1024 with
+  no alpha channel. Xcode makes every size from them. Carl approves it (Q9): open the three PNGs
+  in the pull request.
+- **Answer font:** `Apps/Snow/Resources/Fonts/BricolageAnswer.ttf`, the website's answer font
+  (`apps/web/src/fonts/bricolage-answer.woff2`) as TrueType, named `BricolageAnswer` for
+  `Font.custom`.
+
 ## Debug hooks and Release builds
 
 Every test and debug hook is in `Apps/Snow/App/DebugHooks.swift`, inside `#if DEBUG` (spec
@@ -289,25 +322,26 @@ found by strings.
 
 ## Settled
 
-The early questions of spec section 26 that phase 0 settles.
+The early questions of spec section 26 that phases 0 and 2 settle.
 
-| #   | Question                                                                                                                                           | Status                                                       | What settles it                                                                                                                                                                                                                                                     | Evidence so far                                                                                                                                                                                                                                                                                                                                                                                     |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| V1  | Do App Group defaults and the group container work in CI's simulator builds, signed to run locally?                                                | Pending CI                                                   | `AppGroupTests` in the Unit plan (`ios` job): the group's container opens, its defaults round-trip, and the widget's provider reads the answer the app saved. If not, the Debug fallback is already there, and the test then also runs on Carl's device build.      | None yet: needs the first `ios` run.                                                                                                                                                                                                                                                                                                                                                                |
-| V4  | Do Foundation's time zones on Linux match core's `localDateTime` for every zone in the vectors?                                                    | Pending CI                                                   | `placeTime.json` in `swift-linux` (phase 3.3). PR 0.1's Linux run decodes fixtures only, so it doesn't cover time zones.                                                                                                                                            | A local probe on 23 October 2026 (`swift:6.3.3` with `tzdata`, Docker): a Gregorian calendar in `TimeZone(identifier:)`, falling back to UTC, matched core's `localDateTime` in all 126 cases: London, Kolkata (+5:30), Kathmandu (+5:45), Adelaide, Kiritimati (+14), Denver, Reykjavík, `Etc/GMT-5` and an unknown zone, at 14 instants across both UK clock changes and Adelaide's and Denver's. |
-| V11 | Do Google Mobile Ads 13.11.0 and UMP 3.1.0 resolve and cache through SPM on the runner? Is the demo app ID right? Does UMP's debug geography work? | Resolve and cache: pending CI. App ID and geography: phase 8 | The `ios` job's `Resolve packages` step (only the committed versions) and the `.spm` cache, whose hit or miss the run summary shows; the build then compiles IsItAds against both SDKs. Settled by the first green `ios` run and the cache hit on the run after it. | Only the pins so far: `swift package resolve` on Linux resolved both at their tags' revisions, which match `git ls-remote`, but stopped before the binary zips (dl.google.com is blocked here). The runner is the first to download, check and cache them.                                                                                                                                          |
-| V13 | Will `xcodebuild` run the iPhone-only app on an iPad simulator, in compatibility mode?                                                             | Pending CI                                                   | `ipad-compat` in `ios-nightly.yml` (spec section 18.2), which is still to be written. If not: `simctl install`, then `simctl io` screenshots for an agent to review.                                                                                                | None yet.                                                                                                                                                                                                                                                                                                                                                                                           |
+| #   | Question                                                                                                                                           | Status                                                       | What settles it                                                                                                                                                                                                                                                                                                                                                             | Evidence so far                                                                                                                                                                                                                                                                                                                                                                                     |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V1  | Do App Group defaults and the group container work in CI's simulator builds, signed to run locally?                                                | Pending CI                                                   | `AppGroupTests` in the Unit plan (`ios` job): the group's container opens, its defaults round-trip, and the widget's provider reads the answer the app saved. If not, the Debug fallback is already there, and the test then also runs on Carl's device build.                                                                                                              | None yet: needs the first `ios` run.                                                                                                                                                                                                                                                                                                                                                                |
+| V4  | Do Foundation's time zones on Linux match core's `localDateTime` for every zone in the vectors?                                                    | Pending CI                                                   | `placeTime.json` in `swift-linux` (phase 3.3). PR 0.1's Linux run decodes fixtures only, so it doesn't cover time zones.                                                                                                                                                                                                                                                    | A local probe on 23 October 2026 (`swift:6.3.3` with `tzdata`, Docker): a Gregorian calendar in `TimeZone(identifier:)`, falling back to UTC, matched core's `localDateTime` in all 126 cases: London, Kolkata (+5:30), Kathmandu (+5:45), Adelaide, Kiritimati (+14), Denver, Reykjavík, `Etc/GMT-5` and an unknown zone, at 14 instants across both UK clock changes and Adelaide's and Denver's. |
+| V7  | Do the generated SVG template glyphs render correctly?                                                                                             | Pending CI                                                   | The contact sheet: `GlyphSnapshotTests` (Unit plan) draws each glyph from SnowKit's catalogue, whole and as its still and drift layers, in white on blue, without forcing template rendering. If they don't render as the website draws them, or show black, SnowKit switches to `Fallback/Glyphs.xcassets`, the same sets as PNGs: two lines in IsItKit's `Package.swift`. | resvg renders all 16 SVGs as the website draws them (the PNG fallback is its output). Core SVG is unproven until the first `ios` run.                                                                                                                                                                                                                                                               |
+| V11 | Do Google Mobile Ads 13.11.0 and UMP 3.1.0 resolve and cache through SPM on the runner? Is the demo app ID right? Does UMP's debug geography work? | Resolve and cache: pending CI. App ID and geography: phase 8 | The `ios` job's `Resolve packages` step (only the committed versions) and the `.spm` cache, whose hit or miss the run summary shows; the build then compiles IsItAds against both SDKs. Settled by the first green `ios` run and the cache hit on the run after it.                                                                                                         | Only the pins so far: `swift package resolve` on Linux resolved both at their tags' revisions, which match `git ls-remote`, but stopped before the binary zips (dl.google.com is blocked here). The runner is the first to download, check and cache them.                                                                                                                                          |
+| V13 | Will `xcodebuild` run the iPhone-only app on an iPad simulator, in compatibility mode?                                                             | Pending CI                                                   | `ipad-compat` in `ios-nightly.yml` (spec section 18.2), which is still to be written. If not: `simctl install`, then `simctl io` screenshots for an agent to review.                                                                                                                                                                                                        | None yet.                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ## Not here yet
 
 Each comes with the phase that needs it, so nothing in the skeleton is dormant:
 
-- the glyphs, the app icon (`ASSETCATALOG_COMPILER_APPICON_NAME` is empty until then) and the
-  answer font (phase 2); the launch screen's `LaunchBackground` colour, from the palettes; the
-  widget's gallery name and description (`AppCopy.widgetName`, `AppCopy.widgetDescription`);
+- the launch screen's `LaunchBackground` colour, from the palettes, which belongs in the
+  generated `Assets.xcassets`; the widget's gallery name and description (`AppCopy.widgetName`,
+  `AppCopy.widgetDescription`);
 - the target keys, freshness, hour picker and widget planner (phase 3), so the skeleton's widget
   shows one entry and never goes stale: the only answer it can find is a Debug fixture;
-- `SnowKit`, `APIClient`, location, StoreKit (`Snow.storekit`), notifications, `AdsService` and the
+- the rest of `SnowKit`, `APIClient`, location, StoreKit (`Snow.storekit`), notifications, `AdsService` and the
   banner, `SKAdNetworkItems`, and the privacy manifests' collected data types (coarse location,
   the push token);
 - `FEATURE_UNLOCK` and `FEATURE_ADS` (spec section 9.8), with the purchase and the ads;

@@ -1017,9 +1017,11 @@ read CI; this records where the build fills or differs from the spec.
   (the palettes; `UILaunchScreen` is empty), the app icon, the StoreKit configuration and the
   `FEATURE_*` switches. The privacy manifests declare UserDefaults (CA92.1 and 1C8F.1 for the
   app, 1C8F.1 for the widget) and no collected data, until location and notifications arrive.
+  Phase 2.3 added the font and the icon.
 - **XcodeGen's presets.** XcodeGen adds Xcode's template settings to each target unless a
   project xcconfig names the setting, so `Base.xcconfig` is what decides the device family
-  (iPhone only), the Swift version and the icon (none yet). Checked by generating the project on
+  (iPhone only), the Swift version and the icon (none; since phase 2.3 project.yml names the
+  app's). Checked by generating the project on
   Linux with XcodeGen 2.46.0 built from source.
 - **Test plans** name targets by their object IDs, which XcodeGen derives from the project's and
   target's names only (the same from any folder, on Linux or a Mac). `ci/xcodegen.sh` checks them
@@ -1250,6 +1252,87 @@ and `Palettes` into IsItUI's, which the generator owns too, so a stale file ther
   that section 10 doesn't word yet (a Now row's "60% chance at 6pm", for example): each is added
   to `appCopy.ts` by the phase that builds its screen.
 
+## The iPhone app's glyphs, icon and answer font (packages/mobile, apps/ios)
+
+The iOS build spec's PR 2.3: the snow glyphs as asset catalogues (V7), the app icon (Q9) and
+`BricolageAnswer.ttf`, all written by `pnpm mobile:generate` and checked by `pnpm mobile:check`.
+This records where the build fills or differs from the spec.
+
+- **The glyphs are template image sets.** `exportGlyphs.ts` takes `SNOW_GLYPHS` as strings (the
+  script imports them; the package reads nothing) and wraps each in an SVG drawn as the website
+  draws it (stroke 3, round caps and joins, on a group rather than the `<svg>`, where Core SVG is
+  surest to inherit it), with `currentColor` made black. The sets are marked
+  `template-rendering-intent: template` and `preserves-vector-representation`, so SwiftUI tints
+  them with the foreground style and keeps them sharp at any size. The generator refuses what a
+  template can't show as the website does: text, an element other than a shape or group, a
+  colour other than `currentColor`, a CSS variable or reference, a `style`, and any class but
+  a top-level `drift`. So a glyph drawn in two colours, as Hot's are, fails the generator rather than
+  drawing wrong.
+- **"Plus a drift layer" is two layers.** A drift layer alone can't move the flakes: drawn over
+  the whole glyph, they would be doubled. So a glyph with drifting flakes has three sets: the
+  whole glyph under the band's name (widgets, Reduce Motion, the resting state), `<band>-still`
+  (all but the flakes) and `<band>-drift` (the flakes). In one colour, painting order doesn't
+  change what is covered, so the still layer under the drift layer is the whole glyph exactly.
+  `nosnow` has nothing that drifts and only the whole set: 16 sets for 6 glyphs.
+- **The PNG fallback is a whole second catalogue.** `SnowKit/Fallback/Glyphs.xcassets` has the
+  same 16 sets as 1x, 2x and 3x PNGs rendered by resvg, also template images. IsItKit's
+  `Package.swift` excludes it; switching (V7) is processing it instead of
+  `Resources/Glyphs.xcassets`, two lines, with nothing to regenerate. PNGs sitting unassigned in
+  the SVG sets would have drawn actool warnings instead.
+- **`Glyphs` in SnowKit.** `Glyphs.image(band)` is the whole glyph and `Glyphs.layers(band)` the
+  two layers (nil for `nosnow`), as decorative images, as the website hides them from screen
+  readers. A band with no glyph (`unknown`) draws as `nosnow`. The set names come from the
+  generated `GlyphAssets.swift`, so nothing is retyped. SnowKit exists now (SwiftPM refuses an
+  empty target); the app, the widget and the unit tests link it.
+- **PNGs are byte for byte the same anywhere.** pngjs filters rows the same way every time and
+  deflates with Z_RLE. Node's zlib is Chromium's fork, whose default strategy gives other bytes
+  than canonical zlib (checked on 23 October 2026: 454,405 against 460,915 bytes for the same
+  input), but its Z_RLE output is identical, since RLE never uses the hash the forks change. So
+  `pnpm mobile:check` agrees with what any machine generated. The icons are 32 to 105 KB and the
+  48 fallback PNGs 159 KB in all.
+- **The icon** is the snow favicon, full bleed: its rounded rectangle becomes a square (iOS
+  rounds the corners) and nothing is transparent. Dark (iOS 18) keeps a quarter of each gradient
+  colour (`#271731` to `#170920`) with the flake its top colour half way to white (`#cdaee2`);
+  tinted is a white flake on black, for iOS to tint. Each is a 1024×1024 RGB PNG, with no alpha
+  channel (App Store Connect refuses one): rendering fails unless every pixel is opaque, and the
+  PNG's colour type is checked. The colours derive from the favicon's, so the icon follows it.
+  Carl approves it (Q9); the three PNGs show in the pull request's files.
+- **The font is the website's, renamed.** `make-answer-font.py --ttf` builds the same instance
+  and subset as the woff2, and refuses unless every table but the name table and head's
+  timestamps matches the committed woff2 as fontTools decodes it. Two subset options make the
+  script reproduce the committed woff2 with fontTools 4.66.1: `.notdef` keeps its outline and the
+  name table keeps the licence URL, as the committed file has (without them, 4.66.1 drops both).
+  The woff2 itself isn't rebuilt: with brotli 1.2 it would be 7,708 bytes rather than 7,680, the
+  same font. The TrueType font is named `BricolageAnswer` (family, full and PostScript name), the
+  name `Font.custom` asks for; the original names would have made it fall back silently. The
+  font has no reserved name, so the OFL allows that; its copyright stays, and the name table
+  gains the licence's description beside its URL. It keeps the source's timestamps, so two
+  builds are identical (15,740 bytes).
+- **The font is checked without Python.** CI's checks run Node alone. The font's version string
+  ends with its recipe, a SHA-256 of the script, the source font and the website's woff2, and
+  `exportFont.ts` compares it with the recipe of the files now, and checks every table's
+  checksum and the font's. So editing the script or the woff2, or upgrading the source font,
+  fails `pnpm mobile:check` until the font is rebuilt, and a damaged file fails it too.
+  `pnpm mobile:generate` runs the Python (fontTools 4.66.1 exactly, which the script insists on,
+  and brotli) only then, and checks the new font carries the recipe the TypeScript expects.
+- **Where they live.** The generator owns the app's whole `Assets.xcassets` (the icon now; the
+  `LaunchBackground` colour comes from the palettes, so it belongs there too), the `Fonts`
+  folder, both glyph catalogues and SnowKit's `Generated` folder, at any depth, and removes
+  folders a stale file leaves empty. Prettier leaves the catalogues alone.
+- **The project.** Only the app names `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`
+  (project.yml); `Base.xcconfig` keeps it empty for every other target. The font is a resource of
+  the app (through `Apps/Snow/Resources`) and of the widget (its own source entry), and both
+  Info.plists list it in `UIAppFonts`. Generated with XcodeGen 2.46.0 built from source: the
+  app's resources hold `Assets.xcassets` and the font, the widget's the same font file, and both
+  link SnowKit; the widget still links no IsItAds.
+- **Checks.** `check-archive.sh` now fails without the icon (`Assets.car`, and
+  `CFBundleIconName` `AppIcon` in the Info.plist) or without the font in either bundle and its
+  `UIAppFonts`. `GlyphSnapshotTests` draws every glyph, whole and as its layers, in white on
+  blue for the contact sheet, without forcing template rendering, so a glyph that lost it shows
+  black: the first macOS run settles V7. `AnswerFontTests` checks the app registers the font as
+  `BricolageAnswer`. On Linux, SnowKit's Swift was type-checked against a stub `Image` with
+  SwiftUI's `init(decorative:bundle:)`, and every band's names checked against the catalogue.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,
@@ -1473,6 +1556,11 @@ checks it answers `text/plain` on all four hosts).
   About pages name the agencies behind the models (from `MODELS`, so dropping a model updates
   them) and say that the sites combine and modify the data. The apps will need the same
   visible credits, not only the JSON field.
+- **The answer font in the apps.** Bricolage Grotesque is under the SIL Open Font License 1.1,
+  with no reserved font name. The iPhone app bundles the answer's subset as `BricolageAnswer.ttf`,
+  renamed and so a modified version, which the OFL allows; its name table keeps the copyright
+  and carries the licence's description and URL. The app's credits screen (spec section 10.6)
+  gives the licence's full text.
 - **Fair use, not non-commercial.** ShareAlike attaches only to adapted material, and a verdict
   or a median of 8 models very likely is not (a reading, not legal advice). The per-model
   figures the pages and `models[]` show are the closest thing to passing on Met Office data,

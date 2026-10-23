@@ -138,6 +138,11 @@ function appInfo(over = {}) {
     GADApplicationIdentifier: DEMO_APP,
     ITSAppUsesNonExemptEncryption: false,
     IsItBannerUnitID: DEMO_BANNER,
+    // As actool adds it for the AppIcon set.
+    CFBundleIcons: {
+      CFBundlePrimaryIcon: { CFBundleIconFiles: ['AppIcon60x60'], CFBundleIconName: 'AppIcon' },
+    },
+    UIAppFonts: ['BricolageAnswer.ttf'],
     UIApplicationSceneManifest: { UIApplicationSupportsMultipleScenes: false },
     ...over,
   });
@@ -150,6 +155,7 @@ function widgetInfo(over = {}) {
     CFBundleShortVersionString: '1.0',
     CFBundleVersion: '101',
     NSExtension: { NSExtensionPointIdentifier: 'com.apple.widgetkit-extension' },
+    UIAppFonts: ['BricolageAnswer.ttf'],
     ...over,
   });
 }
@@ -167,9 +173,12 @@ function archive({ files = {}, omit = [] } = {}) {
   const all = {
     'Info.plist': appInfo(),
     'PrivacyInfo.xcprivacy': PRIVACY,
+    'Assets.car': 'compiled asset catalogue',
+    'BricolageAnswer.ttf': 'font',
     WillItSnow: binary(['will it snow?', 'today.willitsnow.app']),
     'PlugIns/WillItSnowWidgets.appex/Info.plist': widgetInfo(),
     'PlugIns/WillItSnowWidgets.appex/PrivacyInfo.xcprivacy': PRIVACY,
+    'PlugIns/WillItSnowWidgets.appex/BricolageAnswer.ttf': 'font',
     'PlugIns/WillItSnowWidgets.appex/WillItSnowWidgets': binary([
       '/usr/lib/swift/libswiftWidgetKit.dylib',
     ]),
@@ -257,7 +266,7 @@ describe('an archive that passes', () => {
         '',
         '- WillItSnow 1.0 (101)',
         `- ads test: Google's demo units (${DEMO_APP})`,
-        "- checked: privacy manifests, 12 debug hooks in both binaries, the ad units, the widget's links, versions, encryption and fixtures",
+        "- checked: privacy manifests, the icon, the answer font, 12 debug hooks in both binaries, the ad units, the widget's links, versions, encryption and fixtures",
         '',
       ].join('\n'),
     );
@@ -325,6 +334,36 @@ describe('an archive that fails', () => {
     const result = check(dir);
     expect(result.errors).toEqual(['the widget links Google Mobile Ads']);
     expect(result.status).toBe(1);
+  });
+
+  it('fails when the app has no icon: no Assets.car, or no AppIcon in its Info.plist', () => {
+    const noIcon =
+      'the app has no icon: no Assets.car, or no CFBundleIconName AppIcon in its Info.plist';
+    expect(check(archive({ omit: ['Assets.car'] })).errors).toEqual([noIcon]);
+    expect(
+      check(archive({ files: { 'Info.plist': appInfo({ CFBundleIcons: undefined }) } })).errors,
+    ).toEqual([noIcon]);
+    const other = { CFBundlePrimaryIcon: { CFBundleIconName: 'Icon' } };
+    expect(
+      check(archive({ files: { 'Info.plist': appInfo({ CFBundleIcons: other }) } })).errors,
+    ).toEqual([noIcon]);
+  });
+
+  it('fails when either bundle lacks the answer font, or UIAppFonts leaves it out', () => {
+    expect(check(archive({ omit: ['BricolageAnswer.ttf'] })).errors).toEqual([
+      'WillItSnow.app has no BricolageAnswer.ttf',
+    ]);
+    expect(check(archive({ omit: [`${WIDGET}/BricolageAnswer.ttf`] })).errors).toEqual([
+      'WillItSnowWidgets.appex has no BricolageAnswer.ttf',
+    ]);
+    expect(
+      check(archive({ files: { 'Info.plist': appInfo({ UIAppFonts: undefined }) } })).errors,
+    ).toEqual(["WillItSnow.app's UIAppFonts doesn't name BricolageAnswer.ttf"]);
+    expect(
+      check(
+        archive({ files: { [`${WIDGET}/Info.plist`]: widgetInfo({ UIAppFonts: ['Other.ttf'] }) } }),
+      ).errors,
+    ).toEqual(["WillItSnowWidgets.appex's UIAppFonts doesn't name BricolageAnswer.ttf"]);
   });
 
   it('fails when the widget embeds the Google Mobile Ads framework', () => {
@@ -489,6 +528,7 @@ describe('an archive that fails', () => {
       omit: [
         `${WIDGET}/Info.plist`,
         `${WIDGET}/PrivacyInfo.xcprivacy`,
+        `${WIDGET}/BricolageAnswer.ttf`,
         `${WIDGET}/WillItSnowWidgets`,
       ],
     });

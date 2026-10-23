@@ -3,10 +3,11 @@
 # sections 9.8 and 18.3, steps 3 and 4).
 #
 #   scripts/check-archive.sh <WillItSnow.xcarchive> <test|real>
-#       The archive, signed or not. It fails if either bundle lacks its privacy manifest, the
-#       widget links Google Mobile Ads, either binary names a debug hook, the ad units aren't
-#       Google's demo ones (test) or Carl's (real), the app and widget differ in version or build,
-#       ITSAppUsesNonExemptEncryption isn't false, or the fixtures are bundled.
+#       The archive, signed or not. It fails if either bundle lacks its privacy manifest or the
+#       answer font, the app has no icon, the widget links Google Mobile Ads, either binary names
+#       a debug hook, the ad units aren't Google's demo ones (test) or Carl's (real), the app and
+#       widget differ in version or build, ITSAppUsesNonExemptEncryption isn't false, or the
+#       fixtures are bundled.
 #   scripts/check-archive.sh --ipa <WillItSnow.ipa, or a folder holding its Payload>
 #       The exported app's signed entitlements. It fails unless the app has aps-environment
 #       production, both have the App Group, the widget has no aps-environment, and neither is
@@ -150,6 +151,31 @@ check_privacy() {
   fi
 }
 
+# The app at $1, whose Info.plist XML is $2, has its icon: App Store Connect refuses a build
+# without one (ITMS-90022). actool compiles the AppIcon set into Assets.car and names it in
+# CFBundleIcons, CFBundlePrimaryIcon, CFBundleIconName.
+check_icon() {
+  if [ ! -f "$1/Assets.car" ] || ! awk '
+    previous ~ /^\t*<key>CFBundleIconName<\/key>$/ && $0 ~ /^\t*<string>AppIcon<\/string>$/ { found = 1 }
+    { previous = $0 }
+    END { exit !found }
+  ' "$2"; then
+    fail "the app has no icon: no Assets.car, or no CFBundleIconName AppIcon in its Info.plist"
+  fi
+}
+
+# The bundle at $1, whose Info.plist XML is $2, carries the answer font and names it in
+# UIAppFonts: an extension can't load fonts from the app's bundle (spec section 9.7).
+check_font() {
+  local name
+  name="$(basename "$1")"
+  if [ ! -f "$1/BricolageAnswer.ttf" ]; then
+    fail "$name has no BricolageAnswer.ttf"
+  elif ! plist_get UIAppFonts <"$2" | grep -F -x -e BricolageAnswer.ttf >/dev/null; then
+    fail "$name's UIAppFonts doesn't name BricolageAnswer.ttf"
+  fi
+}
+
 # The executable of the bundle at $1, whose Info.plist XML is $2.
 executable() {
   local name
@@ -279,6 +305,8 @@ check_archive() {
     return 0
   fi
   check_privacy "$app"
+  check_icon "$app" "$info"
+  check_font "$app" "$info"
   read_binary "$(executable "$app" "$info")" "$work/app"
   check_hooks "$work/app" "the app binary"
   check_ads "$2" "$info" "$work/app.strings"
@@ -303,6 +331,7 @@ check_archive() {
     return 0
   fi
   check_privacy "$widget"
+  check_font "$widget" "$widget_info"
   read_binary "$(executable "$widget" "$widget_info")" "$work/widget"
   check_hooks "$work/widget" "the widget binary"
   # Linked dynamically, the framework's path is in the load commands; statically, its classes'
@@ -312,7 +341,7 @@ check_archive() {
     fail "the widget links Google Mobile Ads"
   fi
   check_versions "$info" "$widget_info"
-  facts+=("checked: privacy manifests, $((${#HOOKS[@]} + ${#LITERAL_HOOKS[@]})) debug hooks in both binaries, the ad units, the widget's links, versions, encryption and fixtures")
+  facts+=("checked: privacy manifests, the icon, the answer font, $((${#HOOKS[@]} + ${#LITERAL_HOOKS[@]})) debug hooks in both binaries, the ad units, the widget's links, versions, encryption and fixtures")
 }
 
 # --- The exported app --------------------------------------------------------------------------

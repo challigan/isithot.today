@@ -1,7 +1,7 @@
 // swift-tools-version:6.0
 // IsItKit: the apps' Apple-only code (iOS build spec, section 9.3): the services, the ads, the
-// views and the widget views. Swift 5 language mode in every target, with the minimal
-// concurrency checking the apps build with; only IsItCore is in Swift 6 mode.
+// views, the widget views and the snow topic's own code. Swift 5 language mode in every target,
+// with the minimal concurrency checking the apps build with; only IsItCore is in Swift 6 mode.
 //
 // The Google SDKs are pinned exactly, with the versions committed in apps/ios/Package.resolved.
 // Only IsItAds imports them, and the widget extension never links IsItAds.
@@ -18,6 +18,7 @@ let package = Package(
     .library(name: "IsItAds", targets: ["IsItAds"]),
     .library(name: "IsItUI", targets: ["IsItUI"]),
     .library(name: "IsItWidgetUI", targets: ["IsItWidgetUI"]),
+    .library(name: "SnowKit", targets: ["SnowKit"]),
   ],
   dependencies: [
     .package(path: "../IsItCore"),
@@ -56,6 +57,17 @@ let package = Package(
     .target(
       name: "IsItWidgetUI",
       dependencies: ["IsItServices", .product(name: "IsItModel", package: "IsItCore")],
+      swiftSettings: swift5
+    ),
+    // The snow topic, linked by the app and the widget. Its glyphs are generated (pnpm
+    // mobile:generate): Resources/Glyphs.xcassets as SVG, and Fallback/Glyphs.xcassets, the same
+    // image sets as PNGs, built only if the SVGs don't render correctly (V7). To switch, process
+    // Fallback/Glyphs.xcassets and exclude Resources instead.
+    .target(
+      name: "SnowKit",
+      dependencies: [.product(name: "IsItModel", package: "IsItCore")],
+      exclude: ["Fallback"],
+      resources: [.process("Resources/Glyphs.xcassets")],
       swiftSettings: swift5
     ),
   ]

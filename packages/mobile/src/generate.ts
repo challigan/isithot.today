@@ -6,6 +6,14 @@
 import { APP_COPY_PATH, appCopySwift } from './exportAppCopy';
 import { CONSTANTS_PATH, constantsSwift } from './exportConstants';
 import { CORE_COPY_PATH, coreCopySwift } from './exportCoreCopy';
+import { FONTS_DIR } from './exportFont';
+import {
+  GLYPHS_DIR,
+  GLYPHS_FALLBACK_DIR,
+  SNOW_KIT_GENERATED_DIR,
+  glyphFiles,
+} from './exportGlyphs';
+import { ASSETS_DIR, iconFiles } from './exportIcon';
 import { KEYS_PATH, keysSwift } from './exportKeys';
 import { PALETTES_PATH, palettesSwift } from './exportPalettes';
 import { QUESTIONS_PATH, questionsSwift } from './exportQuestions';
@@ -28,26 +36,42 @@ export const MODEL_GENERATED_DIR = 'apps/ios/Packages/IsItCore/Sources/IsItModel
 export const UI_GENERATED_DIR = 'apps/ios/Packages/IsItKit/Sources/IsItUI/Generated';
 
 /**
- * Folders the generator owns: every file in them is generated, so one it no longer writes is
- * stale. Hidden files (a Mac's `.DS_Store`) don't count.
+ * Folders the generator owns, with everything in them: every file there is generated, so one it
+ * no longer writes is stale. Hidden files (a Mac's `.DS_Store`) don't count. The answer font's
+ * folder is the script's to fill (`exportFont.ts`).
  */
 export const OWNED_DIRS: readonly string[] = [
   FIXTURES_DIR,
   VECTORS_DIR,
   MODEL_GENERATED_DIR,
   UI_GENERATED_DIR,
+  GLYPHS_DIR,
+  GLYPHS_FALLBACK_DIR,
+  SNOW_KIT_GENERATED_DIR,
+  ASSETS_DIR,
+  FONTS_DIR,
 ];
 
 export interface GeneratedFile {
   path: string;
-  contents: string;
+  /** Text, written as UTF-8, or bytes (the PNGs and the font). */
+  contents: string | Uint8Array;
+}
+
+/** What the asset generators take from the website, read by scripts/mobile-generate.ts. */
+export interface AssetSources {
+  /** `SNOW_GLYPHS` from apps/web/src/lib/snowGlyphs.ts: each band's SVG body. */
+  glyphs: Readonly<Record<string, string>>;
+  /** apps/web/public/snow/favicon.svg. */
+  favicon: string;
 }
 
 /**
- * Every file, in order: the Swift (IsItModel's, then the palettes), each fixture, then each vector
- * file, worked out from the fixtures exactly as their files have them.
+ * Every file but the answer font, in order: the Swift (IsItModel's, then the palettes), each
+ * fixture, each vector file, worked out from the fixtures exactly as their files have them, then
+ * the glyphs and the app icon.
  */
-export async function generatedFiles(): Promise<GeneratedFile[]> {
+export async function generatedFiles(sources: AssetSources): Promise<GeneratedFile[]> {
   const files: GeneratedFile[] = [
     { path: CORE_COPY_PATH, contents: coreCopySwift() },
     { path: QUESTIONS_PATH, contents: questionsSwift() },
@@ -65,6 +89,7 @@ export async function generatedFiles(): Promise<GeneratedFile[]> {
   for (const { name, vectors } of vectorFiles(fixtures)) {
     files.push({ path: `${VECTORS_DIR}/${name}.json`, contents: vectorJson(vectors) });
   }
+  files.push(...glyphFiles(sources.glyphs), ...iconFiles(sources.favicon));
   return files;
 }
 
@@ -74,20 +99,28 @@ export interface Drift {
   problem: 'missing' | 'changed' | 'stale';
 }
 
+const bytes = (contents: string | Uint8Array): Uint8Array =>
+  typeof contents === 'string' ? Buffer.from(contents, 'utf8') : contents;
+
+/** Whether two files' contents are the same bytes, text being UTF-8. */
+export function sameContents(a: string | Uint8Array, b: string | Uint8Array): boolean {
+  return Buffer.from(bytes(a)).equals(bytes(b));
+}
+
 /**
  * How the files on disk differ from `expected`, by path. `onDisk` holds the contents of every
  * expected file that exists, and of every file in the owned folders.
  */
 export function drift(
   expected: readonly GeneratedFile[],
-  onDisk: ReadonlyMap<string, string>,
+  onDisk: ReadonlyMap<string, string | Uint8Array>,
 ): Drift[] {
   const wanted = new Map(expected.map((f) => [f.path, f.contents]));
   const found: Drift[] = [];
   for (const [path, contents] of wanted) {
     const disk = onDisk.get(path);
     if (disk === undefined) found.push({ path, problem: 'missing' });
-    else if (disk !== contents) found.push({ path, problem: 'changed' });
+    else if (!sameContents(disk, contents)) found.push({ path, problem: 'changed' });
   }
   for (const path of onDisk.keys()) {
     if (!wanted.has(path)) found.push({ path, problem: 'stale' });
