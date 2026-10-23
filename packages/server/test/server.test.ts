@@ -1120,6 +1120,24 @@ describe('GET /api/v1/today', () => {
     expect(missing.status).toBe(404);
   });
 
+  it('answers with the dependencies it is given, on the platform’s config', async () => {
+    const env: Record<string, string> = { DATA_SOURCE: 'synthetic' };
+    const seen: unknown[] = [];
+    const res = await handleToday(
+      new Request('https://x.test/api/v1/today?place=london-gb&units=c'),
+      { env: (k) => env[k] },
+      (platform) => {
+        const { deps } = makeDeps({ config: resolveServerConfig(platform.env) });
+        seen.push(deps.config.dataSource);
+        return deps;
+      },
+    );
+    expect(seen).toEqual(['synthetic']);
+    expect(res.status).toBe(200);
+    // The fixed clock's answer: the forecast was fetched at NOW.
+    expect(((await res.json()) as TodayResponse).updatedAt).toBe(NOW.toISOString());
+  });
+
   it('turns unexpected errors into a 503 envelope', async () => {
     const platform = Object.defineProperty({ env: () => undefined }, 'geo', {
       get() {

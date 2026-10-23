@@ -1,0 +1,126 @@
+# will it snow? for iPhone (iOS build spec, section 9.1 and Appendix A), for XcodeGen 2.46.0.
+# ci/xcodegen.sh (or `xcodegen generate` on a Mac) writes WillItSnow.xcodeproj beside this file;
+# the project is never committed. Plain sources, not synced folders. XcodeGen never writes the
+# plists or entitlements: they are named through build settings, not its `info` or
+# `entitlements` keys, which would regenerate them.
+name: WillItSnow
+options:
+  minimumXcodeGenVersion: 2.46.0
+  deploymentTarget:
+    iOS: '17.0'
+  createIntermediateGroups: true
+  developmentLanguage: en-GB
+configFiles:
+  Debug: Configs/Snow.xcconfig
+  Release: Configs/Snow.xcconfig
+packages:
+  IsItCore:
+    path: Packages/IsItCore
+  IsItKit:
+    path: Packages/IsItKit
+targets:
+  WillItSnow:
+    type: application
+    platform: iOS
+    sources:
+      - path: Apps/Snow/App
+      # Also the generated Assets.xcassets (the app icon) and Fonts/BricolageAnswer.ttf.
+      - path: Apps/Snow/Resources
+        excludes: ['Info.plist', '*.entitlements']
+      # The fixtures pnpm mobile:generate writes, for -fixture (DebugHooks.swift). Release builds
+      # leave them out (EXCLUDED_SOURCE_FILE_NAMES below), so no archive carries them.
+      - path: Packages/IsItCore/Tests/IsItTestSupport/Resources/Fixtures
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(SNOW_APP_ID)
+        INFOPLIST_FILE: Apps/Snow/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Apps/Snow/Resources/WillItSnow.entitlements
+        # The generated set in Assets.xcassets. Base.xcconfig leaves every other target without.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      configs:
+        Release:
+          EXCLUDED_SOURCE_FILE_NAMES: Fixtures
+    dependencies:
+      - package: IsItCore
+        products: [IsItModel]
+      - package: IsItKit
+        products: [IsItServices, IsItUI, IsItAds, SnowKit]
+      - target: WillItSnowWidgets
+  WillItSnowWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Apps/Snow/Widgets
+        excludes: ['Info.plist', '*.entitlements']
+      # The answer font is a resource of both targets: an extension can't load fonts from the
+      # app's bundle (section 9.7).
+      - path: Apps/Snow/Resources/Fonts
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(SNOW_WIDGET_ID)
+        INFOPLIST_FILE: Apps/Snow/Widgets/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Apps/Snow/Widgets/Widgets.entitlements
+    dependencies:
+      - package: IsItCore
+        products: [IsItModel]
+      # Never IsItAds: the widget links no ads code (sections 9.1 and 18.3).
+      - package: IsItKit
+        products: [IsItServices, IsItWidgetUI, SnowKit]
+  WillItSnowTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Apps/Snow/Tests
+      - path: Packages/IsItCore/Tests/IsItTestSupport/Resources/Fixtures
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: today.willitsnow.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+    # Hosted by the app, so the tests run with its entitlements (the App Group, V1).
+    dependencies:
+      - target: WillItSnow
+      - package: IsItCore
+        products: [IsItModel]
+      - package: IsItKit
+        products: [IsItServices, IsItUI, IsItWidgetUI, SnowKit]
+  WillItSnowUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Apps/Snow/UITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: today.willitsnow.app.uitests
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: WillItSnow
+schemes:
+  WillItSnow:
+    build:
+      targets:
+        WillItSnow: all
+        WillItSnowTests: [test]
+        WillItSnowUITests: [test]
+    run:
+      config: Debug
+      # Off by default; tick one in Xcode's scheme editor to launch on a fixture.
+      commandLineArguments:
+        '-fixture aberdeen-snow': false
+        '-fixture leeds-dry': false
+    test:
+      config: Debug
+      testPlans:
+        - path: TestPlans/Unit.xctestplan
+          defaultPlan: true
+        - path: TestPlans/UI.xctestplan
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

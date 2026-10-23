@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ANSWERS,
+  MODEL_AGENCIES,
   TOMORROW_LABEL,
   TOMORROW_VERDICTS,
   VERDICTS,
@@ -162,6 +163,12 @@ describe('copy', () => {
     expect(question('Leeds', 'now', 'wet', true)).toBe('Is it wet in Leeds right now?');
     expect(question(null, 'week', 'hot', true)).toBe('Is it hot this week?');
     expect(question('Leeds', 'today', 'wet', false)).toBe('Is it wet in Leeds today?');
+  });
+
+  it('names the agency behind every model, and no other', () => {
+    expect(Object.keys(MODEL_AGENCIES)).toEqual(MODELS.map((m) => m.id));
+    expect(MODEL_AGENCIES.ncep_gfs_seamless).toBe('NOAA');
+    expect(MODEL_AGENCIES.ukmo_seamless).toBe('the Met Office');
   });
 
   it('formats hours as 12-hour clock', () => {

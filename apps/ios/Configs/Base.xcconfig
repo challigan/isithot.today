@@ -1,0 +1,23 @@
+// Every target's settings (iOS build spec, section 9.1 and Appendix A), through Snow.xcconfig.
+// XcodeGen leaves out its own preset for any setting a project xcconfig names, so these win.
+
+// iOS 17 or later, iPhone only (portrait only is in the app's Info.plist).
+IPHONEOS_DEPLOYMENT_TARGET = 17.0
+TARGETED_DEVICE_FAMILY = 1
+
+// Swift 5 language mode with minimal concurrency checking, everywhere but IsItCore (Swift 6 mode,
+// in its Package.swift). UI types are marked @MainActor; there is no default isolation.
+SWIFT_VERSION = 5.0
+SWIFT_STRICT_CONCURRENCY = minimal
+
+// The release job passes CURRENT_PROJECT_VERSION = 100 + the GitHub run number, the same for the
+// app and the widget.
+MARKETING_VERSION = 1.0
+CURRENT_PROJECT_VERSION = 1
+
+CODE_SIGN_STYLE = Automatic
+DEAD_CODE_STRIPPING = YES
+ENABLE_USER_SCRIPT_SANDBOXING = YES
+
+// Only the app has an icon: project.yml names it AppIcon, the set pnpm mobile:generate writes.
+ASSETCATALOG_COMPILER_APPICON_NAME =

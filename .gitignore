@@ -12,3 +12,14 @@ blob-report/
 .dev.vars
 *.log
 .DS_Store
+
+# iOS (apps/ios): the project XcodeGen generates, and Xcode's and SwiftPM's build output
+apps/ios/*.xcodeproj
+apps/ios/.build
+apps/ios/.spm
+apps/ios/build
+apps/ios/Packages/*/.build
+apps/ios/Packages/*/.swiftpm
+DerivedData
+# The committed copy is apps/ios/Package.resolved (apps/ios/README.md).
+apps/ios/Packages/*/Package.resolved
