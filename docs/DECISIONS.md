@@ -979,6 +979,69 @@ fixtures, and the Swift package that holds the app's API models, tested on Linux
   come with the app skeleton. Its paths add the synthetic upstream, the city list and the script
   to the spec's, since the fixtures are made from them.
 
+## The iPhone app's skeleton (apps/ios)
+
+The iOS build spec's PRs 0.2 and 0.3: the XcodeGen project, the app and its widget, the debug
+hooks, their tests and the macOS CI. `apps/ios/README.md` says how to build it and how agents
+read CI; this records where the build fills or differs from the spec.
+
+- **Keys are generated now.** `SharedStore` needs the App Group keys and the store version, and
+  the spec never retypes them, so `pnpm mobile:generate` writes `IsItModel/Generated/Keys.swift`
+  from the client's `keys.ts` (phase 2.2's first emitter, with the escaping and identifier rules
+  and their tests). The generator owns that folder too, so a stale file there fails the check.
+- **IsItKit has four modules so far:** `IsItServices` (`SharedStore`), `IsItAds` (Google Mobile
+  Ads 13.11.0 and UMP 3.1.0, exact; nothing runs yet), `IsItUI` (the skeleton's answer view) and
+  `IsItWidgetUI` (the widget's entry, provider and view, there so an app-hosted test can draw
+  it). `SnowKit` comes with the first snow-only code; SwiftPM refuses an empty target.
+- **The saved answer.** `SharedStore` writes `{ v, savedAt, key, response }` to
+  `Library/Caches/today.v1.json` in the group's container, and ignores a file from another store
+  version. Without the App Group, Debug builds of the app fall back to their own defaults and
+  caches (`DebugHooks.storeFallback`, so the conditional stays in `DebugHooks.swift`); the widget
+  never does, since only the app saves answers. A fixture is saved under the key
+  `fixture:<name>`: the place keys are ported in phase 3.
+- **The skeleton's widget** is the small family only, one entry with no reload: the app reloads
+  the timelines when it saves. With nothing saved it draws the shape of an answer with no words.
+  It has no gallery name or description yet, because those are app copy (phase 2.2). It can't
+  show an old answer as current, because until the app fetches, the only answer it can find is a
+  Debug fixture.
+- **Fixtures in the app.** Debug builds bundle the `Fixtures` folder IsItCore's tests read, as a
+  folder reference; `EXCLUDED_SOURCE_FILE_NAMES = Fixtures` leaves it out of Release. The unit
+  test bundle has its own copy.
+- **XCTest in the app's test bundles,** where IsItCore uses Swift Testing: UI tests need it, and
+  `XCTAttachment` with `lifetime = .keepAlways` is what `xcresulttool export attachments` is known
+  to export. The unit tests are hosted by the app, so they run with its entitlements, and they
+  read the App Group back through the widget's own provider. They link IsItWidgetUI themselves,
+  which the app doesn't.
+- **What the skeleton leaves out of the Info.plist,** each until the phase that brings what it
+  names: `UIAppFonts` (the font), `SKAdNetworkItems` (the ads), the `LaunchBackground` colour
+  (the palettes; `UILaunchScreen` is empty), the app icon, the StoreKit configuration and the
+  `FEATURE_*` switches. The privacy manifests declare UserDefaults (CA92.1 and 1C8F.1 for the
+  app, 1C8F.1 for the widget) and no collected data, until location and notifications arrive.
+- **XcodeGen's presets.** XcodeGen adds Xcode's template settings to each target unless a
+  project xcconfig names the setting, so `Base.xcconfig` is what decides the device family
+  (iPhone only), the Swift version and the icon (none yet). Checked by generating the project on
+  Linux with XcodeGen 2.46.0 built from source.
+- **Test plans** name targets by their object IDs, which XcodeGen derives from the project's and
+  target's names only (the same from any folder, on Linux or a Mac). `ci/xcodegen.sh` checks them
+  after generating.
+- **`Package.resolved`** was made on Linux by `swift package resolve`, which writes it before
+  failing to download Google's binary zips (dl.google.com is blocked in the agents' container).
+  Its `originHash` is IsItKit's manifest's, not the project's; that doesn't matter, because CI
+  builds with `-disableAutomaticPackageResolution`, which uses the file as a lock file and never
+  compares the hash. If CI can't use it, the job keeps the file Xcode writes, as an artefact and
+  as a diff in the log.
+- **CI additions to the spec's sketch.** `ci/simulator.sh` finds or makes the iPhone 17 on iOS
+  26.5. `ci/test.sh` also summarises the build-for-testing step, so compiler errors appear with
+  file and line. Every summary goes to the job log as well as the step summary, because the log
+  is what the GitHub MCP tools return. `ci/release-check.sh` builds Release on every run and
+  fails on a debug hook's name in a binary, a bundled fixture, or ads code in the widget;
+  phase 0.4's archive check covers the signed archive. The resolve step uses
+  `-onlyUsePackageVersionsFromResolvedFile`, the builds `-disableAutomaticPackageResolution`.
+- **The contact sheet** draws every attachment at a third of its pixels, so screens and widgets
+  appear at their true relative size, with labels in a 5×7 pixel font built into the script
+  (pngjs only; no system fonts on the runner to depend on). Agents can't download artefacts from
+  the container yet: GitHub serves them from Azure blob storage, which its network policy denies.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,

@@ -1,16 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { FIXTURES, fixtureJson, makeFixture } from '../src/fixtures';
-import { FIXTURES_DIR, OWNED_DIRS, drift, generatedFiles } from '../src/generate';
+import { keysSwift } from '../src/exportKeys';
+import {
+  FIXTURES_DIR,
+  MODEL_GENERATED_DIR,
+  OWNED_DIRS,
+  drift,
+  generatedFiles,
+} from '../src/generate';
 
 describe('generatedFiles', () => {
-  it('writes each fixture into the Swift package’s test resources', async () => {
+  it('writes Keys.swift into IsItModel and each fixture into the test resources', async () => {
     const files = await generatedFiles();
     expect(files.map((f) => f.path)).toEqual([
+      'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated/Keys.swift',
       'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources/Fixtures/aberdeen-snow.json',
       'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources/Fixtures/leeds-dry.json',
     ]);
-    expect(files[1]!.contents).toBe(fixtureJson(await makeFixture(FIXTURES[1]!)));
-    expect(OWNED_DIRS).toEqual([FIXTURES_DIR]);
+    expect(files[0]!.contents).toBe(keysSwift());
+    expect(files[2]!.contents).toBe(fixtureJson(await makeFixture(FIXTURES[1]!)));
+    expect(OWNED_DIRS).toEqual([FIXTURES_DIR, MODEL_GENERATED_DIR]);
+  });
+
+  it('puts every file it writes in a folder it owns, so a stale one is found', async () => {
+    for (const f of await generatedFiles()) {
+      expect(OWNED_DIRS.some((dir) => f.path.startsWith(`${dir}/`))).toBe(true);
+    }
   });
 });
 

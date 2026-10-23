@@ -1,0 +1,27 @@
+{
+  "configurations" : [
+    {
+      "id" : "3C7E0A51-9B42-4D7E-8E2A-5F1B6C0D9A11",
+      "name" : "Configuration 1",
+      "options" : {}
+    }
+  ],
+  "defaultOptions" : {
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:WillItSnow.xcodeproj",
+      "identifier" : "281CA4E46D65E50CC96A1F12",
+      "name" : "WillItSnow"
+    }
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : false,
+      "target" : {
+        "containerPath" : "container:WillItSnow.xcodeproj",
+        "identifier" : "A66D3A9B01FE0C670A497D21",
+        "name" : "WillItSnowTests"
+      }
+    }
+  ],
+  "version" : 1
+}
