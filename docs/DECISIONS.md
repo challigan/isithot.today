@@ -1022,6 +1022,90 @@ The storage and sending half of the full job (iOS build spec, sections 8.3 and 8
   never a device token, a provider token, a key, a full id or a place query (which can hold
   coordinates). A test checks every line the tests log.
 
+## Notifications: the devices endpoints (packages/server devices.ts)
+
+How the apps register for notifications (iOS build spec, sections 8.2 and 8.3): `PUT` and
+`DELETE /api/v1/devices` and `POST /api/v1/devices/test`, two thin functions over
+`@isithot/server`, each limited by Netlify to 10 requests a minute per IP on each domain.
+
+- **The body is checked whole before anything is read or written,** and is at most 2 KB (413
+  `too_large`). It has the app, the platform (`ios`), the environment, a hex token of 64 to 200
+  characters, the units, the three switches (booleans only), an optional app version, and the
+  place in one of its three forms.
+  - Only `snow` is live: `wet`, `wind`, `hot` and `all` are a 400 `app_not_live`.
+  - The token is lower-cased first, so a device has one id whichever case it sends.
+  - No place, or the IP location's empty one, is a 400 `bad_location`. So is a slug with no page:
+    where `/api/v1/today` says 404, a registration says the place is wrong.
+  - Fields it does not know are ignored.
+  - A contract test sends it every body the client's `registrationBody` makes: each place form,
+    unnamed searched places, both units and environments, and every switch combination.
+- **The place is canonicalised as `/api/v1/today` locates it,** with `locateCity` and
+  `locateFromCoords` (now exported from `today.ts`):
+  - a slug becomes its page's (`place=leeds-gb`);
+  - coordinates are rounded again to 0.05°;
+  - a searched place keeps its cleaned name, region, country, GeoNames id and height, and one sent
+    without a name takes the nearest town's, as the API names it;
+  - a device location is its point only (`lat=53.8&lon=-1.55&source=device`), whatever else it
+    carries.
+
+  The query is in the client's order, so a tap on the notification opens the app's own place
+  (the tests check that `notificationRoute` gives the same `targetKey`). The zone and the name
+  come from `getToday` on that query, with no wait for climate normals.
+
+- **Every switch off is a delete (204),** and so is "also when snow is possible" alone. That
+  switch only widens the other two, the app's sync already deletes then, and a record that can
+  never send is data kept for nothing.
+- **One write per id a minute** (429 `rate_limited`, with `Retry-After`), checked against the
+  stored record's `updatedAt`, so it needs no key of its own. A delete is never refused. Two
+  writes in the same instant both pass; Netlify's rule bounds those.
+- **Keys and moves.** Only these handlers write `reg/` and `ids/`, and each write replaces the
+  value whole.
+  - A new registration writes its ids key first, then the record, so a DELETE after a failure
+    between the two still finds it.
+  - A move between zones takes four steps: the ids key naming the new zone and the ones left
+    (`{ tz, from }`), the new record, deleting the old one, then the ids key naming the new zone
+    alone. Whichever step fails, a DELETE removes every copy, and the next PUT finishes the move.
+  - `createdAt` is kept; `updatedAt` and `seenAt` are set on every write.
+- **A store failure is a 503 `store_unavailable`** with the JSON error, never a 200 for a write
+  that did not land. No Blobs environment gives the same 503, not a crash. Production uses the
+  site-wide store; previews, branch deploys and `netlify dev` the deploy's own, decided from the
+  deploy context as for the run. A test against Netlify's local Blobs server checks each context.
+- **The test send.** 404 `not_registered` without a registration. 429 `test_limited` after 3 in
+  the hour (UTC) for the id, with `Retry-After` to the next hour. Otherwise one push at once, and
+  202 `{ sent: true }`. It sends tomorrow's real evening notification when the rule sends one for
+  the place (with the record's "possible" choice, whatever its evening switch says), and
+  otherwise "Test notification".
+  - **The quiet hours (21:00 to 06:59 at the place) do not apply.** Someone pressed the button and
+    is looking at the phone; the quiet hours keep notifications nobody asked for out of the
+    night. App Review may press it at any hour, for a place anywhere.
+  - Priority 10, and Apple stops trying after 15 minutes: a test that arrived hours later would
+    only confuse, and a real evening notification's 21:00 would have passed for a late test.
+  - The real notification keeps its collapse id (`snow-evening-<date>`), so the scheduled one
+    replaces it on the phone. The fixed words use `snow-test`, so tests replace each other rather
+    than pile up. They have relevance 0.3 (the lowest band's) and today's date at the place.
+  - The forecast is waited for 3 s, and Apple 5 s. A forecast that is slow or fails gives the
+    fixed words: the test is of notifications, not of the forecast.
+  - The key is checked before the claim, so a missing key (503 `push_unavailable`; the log names
+    the missing settings, never a value) costs no test. The provider token is the run's, shared
+    through the store, and a 403 drops it.
+  - Apple's answer is read as the run reads it (`classifyApns`). A refused device is deleted, and
+    the answer is 404 `not_registered`. A 403, a 429, a 5xx or no answer is 503
+    `push_unavailable`; any other refusal 502 `push_refused`, and logged. A failed send still
+    counts towards the three.
+  - **`ALERTS_DRY_RUN` applies as for the run:** on previews, branch deploys and `netlify dev`
+    unless it is `false`, and in production only when it is `true`. The test then claims its slot
+    and decides its words as usual, logs them (id prefix, environment, title and body) and
+    answers 202 `{ sent: false, dryRun: true }`, with no key needed. So a preview sends nothing
+    to a phone unless `ALERTS_DRY_RUN=false` is set for Deploy Previews.
+  - `ALERTS_ENABLED`, the run's switch, does not apply to registrations or tests: registrations
+    are kept whatever it says, so they are there when the run starts.
+- **The test endpoint has the same Netlify limit** (10 a minute per IP). The spec names one only
+  for `devices.mts`, but each test reads the store and may push.
+- **Logs** carry id prefixes, zones, Apple's answers and the app version; never a device token, a
+  key, a provider token, a full id, a place query or coordinates. `getToday`'s own lines name
+  forecast cache entries by grid cell ("forecast/v7/54.80,-1.60/50"), so the handlers scrub those
+  (`placeLess`). A test checks every line the tests log.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,

@@ -111,7 +111,8 @@ interface ClimateEntry {
 /** How long a response waits for NASA POWER before answering without normals, ms. */
 export const CLIMATE_WAIT_MS = 2000;
 
-type Located = Omit<ApiLocation, 'timezone'>;
+/** A place as the today query names it, without its time zone (which comes from the forecast). */
+export type Located = Omit<ApiLocation, 'timezone'>;
 
 const COORD = /^-?\d{1,3}(\.\d+)?$/;
 const HEIGHT = /^-?\d{1,4}(\.\d+)?$/;
@@ -157,7 +158,12 @@ function withOptional(
   return out;
 }
 
-async function locateFromCoords(params: URLSearchParams): Promise<Located | null> {
+/**
+ * The place a query's `lat` and `lon` name (with `name`, `region`, `country`, `geonameId`,
+ * `elevation` and `source`), rounded again to the forecast grid; null when the coordinates are
+ * malformed or out of range. The notification registrations canonicalise their places with it.
+ */
+export async function locateFromCoords(params: URLSearchParams): Promise<Located | null> {
   const lat = parseCoord(params.get('lat'));
   const lon = parseCoord(params.get('lon'));
   if (lat === null || lon === null || !isValidLatLon(lat, lon)) return null;
@@ -200,7 +206,8 @@ async function locateFromCoords(params: URLSearchParams): Promise<Located | null
   );
 }
 
-function locateCity(slug: string): Located | null {
+/** A city page's place, or null for a slug with no page. */
+export function locateCity(slug: string): Located | null {
   const city = cityBySlug(slug);
   if (!city) return null;
   return withOptional(
