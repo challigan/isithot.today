@@ -1327,9 +1327,9 @@ This records where the build fills or differs from the spec.
   link SnowKit; the widget still links no IsItAds.
 - **Checks.** `check-archive.sh` now fails without the icon (`Assets.car`, and
   `CFBundleIconName` `AppIcon` in the Info.plist) or without the font in either bundle and its
-  `UIAppFonts`. `GlyphSnapshotTests` draws every glyph, whole and as its layers, in white on
-  blue for the contact sheet, without forcing template rendering, so a glyph that lost it shows
-  black: the first macOS run settles V7. `AnswerFontTests` checks the app registers the font as
+  `UIAppFonts`. `GlyphSnapshotTests` draws every glyph, whole and as its layers, in its band's
+  ink on its band's gradient (the generated palettes) for the contact sheet, without forcing
+  template rendering, so a glyph that lost it shows black: the first macOS run settles V7. `AnswerFontTests` checks the app registers the font as
   `BricolageAnswer`. On Linux, SnowKit's Swift was type-checked against a stub `Image` with
   SwiftUI's `init(decorative:bundle:)`, and every band's names checked against the catalogue.
 
