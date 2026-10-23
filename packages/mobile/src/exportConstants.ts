@@ -106,7 +106,7 @@ export function constantsSwift(): string {
     ...group(
       ['Core `ALERTS`: how often an app registers for notifications again while it is used.'],
       'Alerts',
-      ints('    ', ALERTS),
+      ints('    ', { heartbeatDays: ALERTS.heartbeatDays }),
     ),
     ...group(
       [
