@@ -541,6 +541,57 @@ describe('quiet hours', () => {
     for (const [tz, iso, quiet] of cases) expect(inQuietHours(tz, new Date(iso)), iso).toBe(quiet);
   });
 
+  // The sender's own checks (packages/server), from when it had a helper of its own.
+  it('is quiet from 21:00 to 06:59 in London in winter and in summer', () => {
+    const cases: [string, boolean][] = [
+      // Winter (GMT).
+      ['2026-12-01T20:59:59Z', false],
+      ['2026-12-01T21:00:00Z', true],
+      ['2026-12-02T06:59:00Z', true],
+      ['2026-12-02T07:00:00Z', false],
+      // Summer (BST): 21:00 is 20:00 UTC, and 07:00 is 06:00 UTC.
+      ['2026-07-01T19:59:00Z', false],
+      ['2026-07-01T20:00:00Z', true],
+      ['2026-07-01T06:00:00Z', false],
+    ];
+    for (const [iso, quiet] of cases) {
+      expect(inQuietHours('Europe/London', new Date(iso)), iso).toBe(quiet);
+    }
+  });
+
+  it('follows quarter-hour zones and both sides of the date line', () => {
+    const cases: [string, string, boolean][] = [
+      // Kathmandu is UTC+5:45: 21:00 there is 15:15 UTC.
+      ['Asia/Kathmandu', '2026-12-01T15:14:00Z', false],
+      ['Asia/Kathmandu', '2026-12-01T15:15:00Z', true],
+      // Kiritimati is UTC+14 (07:00 is 17:00 UTC the day before), Pago Pago UTC-11.
+      ['Pacific/Kiritimati', '2026-12-01T16:59:00Z', true],
+      ['Pacific/Kiritimati', '2026-12-01T17:00:00Z', false],
+      ['Pacific/Pago_Pago', '2026-12-02T07:59:00Z', false],
+      ['Pacific/Pago_Pago', '2026-12-02T08:00:00Z', true],
+    ];
+    for (const [tz, iso, quiet] of cases) expect(inQuietHours(tz, new Date(iso)), iso).toBe(quiet);
+  });
+
+  it('reads an unknown zone as UTC, as the windows do', () => {
+    // So the run and the sender agree: in a window by UTC's clock, and quiet by it too.
+    const evening = new Date('2026-12-01T18:05:00Z');
+    expect(alertWindows('Mars/Olympus_Mons', evening).kind).toBe('evening');
+    expect(inQuietHours('Mars/Olympus_Mons', evening)).toBe(false);
+    expect(inQuietHours('Mars/Olympus_Mons', new Date('2026-12-01T22:00:00Z'))).toBe(true);
+    expect(inQuietHours('Mars/Olympus_Mons', new Date('2026-12-01T12:00:00Z'))).toBe(false);
+  });
+
+  it('takes other hours, including ones that do not cross midnight', () => {
+    const at = (iso: string) => new Date(iso);
+    expect(inQuietHours('UTC', at('2026-12-01T00:59:00Z'), { from: 1, to: 5 })).toBe(false);
+    expect(inQuietHours('UTC', at('2026-12-01T02:00:00Z'), { from: 1, to: 5 })).toBe(true);
+    expect(inQuietHours('UTC', at('2026-12-01T05:00:00Z'), { from: 1, to: 5 })).toBe(false);
+    // The default is ALERTS.quiet.
+    expect(inQuietHours('UTC', at('2026-12-01T22:00:00Z'), ALERTS.quiet)).toBe(true);
+    expect(inQuietHours('UTC', at('2026-12-01T22:00:00Z'), { from: 1, to: 5 })).toBe(false);
+  });
+
   it('never falls in a window', () => {
     for (const [tz, date] of DAYS) {
       const start = Date.parse(`${date}T00:00:00Z`) - 14 * HOUR;

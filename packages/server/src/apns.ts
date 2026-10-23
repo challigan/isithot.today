@@ -6,7 +6,7 @@
  */
 import { createPrivateKey, randomUUID, sign } from 'node:crypto';
 import { connect, type ClientHttp2Session } from 'node:http2';
-import { localDateTime } from '@isithot/core';
+import { inQuietHours, type QuietHours } from '@isithot/core';
 import {
   forgetRegistration,
   idPrefix,
@@ -247,37 +247,6 @@ export function smokeVerdict({ status, reason }: ApnsResult): SmokeResult {
   return { ok: false, line: `${answer}: Apple answered, so the path to it works, but ${hint}` };
 }
 
-export interface AlertsRunInput {
-  env: EnvGetter;
-  /** Netlify deploy context: "production", "deploy-preview", "branch-deploy" or "dev". */
-  deployContext: string | undefined;
-  now: number;
-  /** Where the smoke push goes; tests point it at a fake. */
-  origin?: string;
-}
-
-/**
- * The scheduled run, every 15 minutes, until the full job lands: one log line. On a deploy preview
- * with ALERTS_SMOKE=1 (never in production, whatever the setting) it also sends the smoke push,
- * so pressing "Run now" there shows whether a Netlify function can reach APNs.
- */
-export async function alertsRun({
-  env,
-  deployContext,
-  now,
-  origin,
-}: AlertsRunInput): Promise<string> {
-  // Says why, so a preview check that does not send shows what it saw.
-  if (deployContext === 'production') return 'alerts-run: disabled (production)';
-  const setting = env('ALERTS_SMOKE')?.trim();
-  if (setting !== '1') {
-    const where = deployContext ?? 'unknown context';
-    return `alerts-run: disabled (${where}, ALERTS_SMOKE ${setting ? 'is not 1' : 'unset'})`;
-  }
-  const smoke = await apnsSmoke(env, { now, ...(origin ? { origin } : {}) });
-  return `alerts-run: smoke ${smoke.ok ? 'passed' : 'failed'}: ${smoke.line}`;
-}
-
 // ---- The full job's push layer (iOS build spec, section 8.5) ----
 
 /**
@@ -385,39 +354,8 @@ export function providerTokens({
   };
 }
 
-/** The never-send hours at the place, end exclusive: `ALERTS.quiet` ({ from: 21, to: 7 }). */
-export interface QuietHours {
-  from: number;
-  to: number;
-}
-
-const zones = new Map<string, boolean>();
-
-function knownZone(tz: string): boolean {
-  let known = zones.get(tz);
-  if (known === undefined) {
-    try {
-      new Intl.DateTimeFormat('en-GB', { timeZone: tz });
-      known = true;
-    } catch {
-      known = false;
-    }
-    zones.set(tz, known);
-  }
-  return known;
-}
-
-/**
- * Whether it is quiet hours at the place (21:00 to 06:59 with `ALERTS.quiet`). The local time is
- * core's `localDateTime`; a zone Intl does not know counts as quiet, since its hour is unknown.
- */
-export function inQuietHours(tz: string, now: number, quiet: QuietHours): boolean {
-  if (!knownZone(tz)) return true;
-  const { hours } = localDateTime(tz, new Date(now));
-  return quiet.from > quiet.to
-    ? hours >= quiet.from || hours < quiet.to
-    : hours >= quiet.from && hours < quiet.to;
-}
+/** The never-send hours at the place: core's, which `sendAlerts` checks with core's `inQuietHours`. */
+export type { QuietHours };
 
 /** Apple's limit for a notification's payload, bytes. */
 export const APNS_PAYLOAD_LIMIT = 4096;
@@ -610,7 +548,10 @@ export interface SendAlertsInput {
   now: number;
   /** `ALERTS.apnsConcurrency`: at most this many pushes at once per session. */
   apnsConcurrency: number;
-  /** `ALERTS.quiet`. */
+  /**
+   * `ALERTS.quiet`: no push goes in these local hours at the place, by core's `inQuietHours` (an
+   * unknown zone reads as UTC, as the run's windows do).
+   */
   quiet: QuietHours;
   /** One line per event worth a line; ids are cut to a prefix, and no token or place query is ever in one. */
   log: (line: string) => void;
@@ -664,7 +605,7 @@ export async function sendAlerts(input: SendAlertsInput): Promise<SendAlertsResu
   const byEnv = new Map<ApnsEnv, number[]>();
   deliveries.forEach((d, i) => {
     const { push, record } = d;
-    if (inQuietHours(record.tz, now, input.quiet)) {
+    if (inQuietHours(record.tz, new Date(now), input.quiet)) {
       say(`alerts: error: refused ${who(d)}: quiet hours in ${record.tz}`);
       settle(i, 'quiet');
     } else if (input.dryRun) {

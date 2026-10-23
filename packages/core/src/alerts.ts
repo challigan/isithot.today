@@ -80,9 +80,19 @@ export function alertWindows(tz: string, now: Date): AlertClock {
   return { date, hours, kind };
 }
 
-/** Whether it is the quiet hours at the place (21:00 to 06:59), when nothing may be sent. */
-export function inQuietHours(tz: string, now: Date): boolean {
-  return within(localDateTime(tz, now).hours, ALERTS.quiet.from, ALERTS.quiet.to);
+/** Local hours when nothing may be sent, end exclusive, across midnight when `from` > `to`. */
+export interface QuietHours {
+  from: number;
+  to: number;
+}
+
+/**
+ * Whether it is the quiet hours at the place (`ALERTS.quiet`, 21:00 to 06:59), when nothing may
+ * be sent. The one rule for the run and the sender (packages/server): an unknown time zone reads
+ * as UTC, as it does for `alertWindows`, so the two never disagree about a place's hour.
+ */
+export function inQuietHours(tz: string, now: Date, quiet: QuietHours = ALERTS.quiet): boolean {
+  return within(localDateTime(tz, now).hours, quiet.from, quiet.to);
 }
 
 const HOUR = 3_600_000;

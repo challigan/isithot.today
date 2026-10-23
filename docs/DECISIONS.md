@@ -909,10 +909,12 @@ service (APNs). Two things were unverified on Carl's legacy Netlify plan, so a s
 first (iOS build spec, phase 1.5) and the full job follows.
 
 - **V8, does the schedule run?** `functions/api/alerts-run.mts` runs every 15 minutes (UTC) and,
-  until the full job lands, only logs `alerts-run: disabled (production)`. The Netlify Functions
+  until the full job landed, only logged `alerts-run: disabled (production)`. The Netlify Functions
   page should list it as scheduled, with a log line every 15 minutes in production. About 2,900
   invocations a month. Elsewhere the line says what it saw, for example
-  `(deploy-preview, ALERTS_SMOKE unset)`, so a preview check that sends nothing shows why.
+  `(deploy-preview, ALERTS_SMOKE unset)`, so a preview check that sends nothing shows why. (Yes,
+  on 23 October; the full run keeps these lines, naming `ALERTS_ENABLED` too: "Notifications: the
+  run".)
 - **V9, can a function reach APNs over HTTP/2?** On a deploy preview with `ALERTS_SMOKE=1`,
   **Run now** sends one push with the sandbox key to a made-up device (`apnsSmoke`). Apple's
   `400 BadDeviceToken` proves egress, TLS, HTTP/2 and that Apple took the key's token (a refused
@@ -1012,8 +1014,9 @@ The storage and sending half of the full job (iOS build spec, sections 8.3 and 8
   rest unclaimed for the next. After a 429 or a 5xx it stays at one stream. A push that timed out
   is released and retried by the next run, as Apple advises for 5xxs; if Apple had in fact taken
   it, the same collapse id makes the second replace the first on the phone rather than stack.
-- **Quiet hours are asserted in the sender,** from core's `localDateTime`: nothing goes from
-  21:00 to 06:59 at the place, and a zone the runtime does not know counts as quiet.
+- **Quiet hours are asserted in the sender,** with core's `inQuietHours`, the run's own rule:
+  nothing goes from 21:00 to 06:59 at the place, and a zone the runtime does not know reads as
+  UTC, as the windows read it ("Notifications: the run").
 - **The payload** is section 8.5's, key for key. It stays under 1,024 bytes for the longest city
   (Las Palmas de Gran Canaria) and for a searched place at the server's 80-character limits;
   80 three-byte characters for both name and region stay under Apple's 4,096, and `alertPush`
@@ -1105,6 +1108,97 @@ How the apps register for notifications (iOS build spec, sections 8.2 and 8.3): 
   key, a provider token, a full id, a place query or coordinates. `getToday`'s own lines name
   forecast cache entries by grid cell ("forecast/v7/54.80,-1.60/50"), so the handlers scrub those
   (`placeLess`). A test checks every line the tests log.
+
+## Notifications: the run (packages/server alerts.ts)
+
+The scheduled function `alerts-run` (every 15 minutes, UTC) calls `alertsRun`, which reads the
+switches and calls `runAlerts`, section 8.6's run. `runAlerts` takes no input but the clock, so
+any other trigger could call it.
+
+- **The switches** (Netlify, Functions scope; a change needs a redeploy):
+  - `ALERTS_ENABLED` must be `true` (any case), or the run returns at once with one line saying
+    why: `alerts-run: disabled (production, ALERTS_ENABLED unset)`, or on a preview
+    `(deploy-preview, ALERTS_ENABLED unset, ALERTS_SMOKE unset)`. These are the probe's lines with
+    the new switch named, so V8's check still reads the same.
+  - `ALERTS_DRY_RUN` is forced on by code in every context but production, whatever it says (the
+    run logs that it ignored a `false`). In production the run is dry until it is `false` (any
+    case), so a typo stays dry.
+  - `ALERTS_SMOKE=1` still makes a preview's run send only the smoke push, as for V9. Production
+    never smokes, whatever the setting.
+  - `ALERTS_FORCE_IDS`: below.
+- **Order.** As section 8.6, with one change: today's claims (`sent/`) for each due window are
+  listed before the zone's records are read, and a registration already notified is skipped
+  unread. The effect is the same, but a zone picked up again after a stop (the budget, the fetch
+  cap, a failure) reads only what it has left, so it gets through a big zone over several runs.
+  A record not seen for 90 days that was already notified today is deleted at its next window
+  instead.
+- **One moment.** `now` is read once and given to `getToday` as `deps.now`, with
+  `climateWaitMs: 0`: the normals only word a day without snow, which never sends.
+- **Groups** are `query` + `units`. Groups for one place in °C and °F share one forecast fetch.
+  `ALERTS.fetchConcurrency` (4) run at a time.
+- **The fetch cap** counts each distinct forecast URL requested (a hedged second request is the
+  same fetch), plus each group still running, so a run never goes over it: 300 a run
+  (`ALERTS.maxForecastFetchesPerRun.paid`) with `OPEN_METEO_API_KEY`, 60 without. Groups not
+  started are left, with their zones, for the next run.
+- **The budget** (`ALERTS.runBudgetMs`, 20 s) stops new record reads and new groups. Pushes for
+  groups already judged may start for 4 s more (`PUSH_GRACE_MS`), and each push waits at most
+  4 s for Apple (`APNS_RUN_TIMEOUT_MS`). A group started just before the budget can take about
+  7.5 s more (a 1.5 s cache read, then the 6 s forecast timeout), so even then the run ends
+  inside Netlify's 30 s; its pushes are left for the next run.
+- **Done markers** are written only when every due registration in the zone is finished with:
+  sent, refused for good, held, quiet, or with nothing to send. These leave the zone for the next
+  run: a failed listing or read, a forecast that failed (503), a released claim or a deferred
+  push. The claims stop the next run from sending twice. A place that no longer exists (404) and
+  a record the run cannot read are logged as errors and do not hold the zone up. A failed read
+  leaves its zone unfinished, but the zone's other registrations still go.
+- **Stale.** A record whose `seenAt` (else `updatedAt`) is more than 90 days old is deleted when
+  read, whatever its switches, through `forgetRegistration`, which keeps one refreshed since.
+- **ALERTS_FORCE_IDS** takes prefixes of 8 to 32 hex characters, in any case. A shorter one would
+  force many registrations at once, so it is ignored and counted as an error, without being
+  quoted. A forced registration gets one notification per window per day whatever the band: the
+  real one when the rule sends one, otherwise the test copy ("Test notification", relevance 0.3,
+  dated as the real one would be). Its own switches still apply: a window switched off gets
+  nothing.
+- **The dry run** logs each notification
+  (`alerts: dry run: snow.3f9c1a2b… sandbox evening 2026-10-19: <title> / <body>`). It claims
+  nothing, makes no provider token and sends nothing. It still writes done markers, so each
+  notification is logged once a window, and it still deletes stale records and cleans up.
+- **The cleanup** runs in the 03:00 UTC hour. The first run then claims
+  `done/v1/<UTC date>/cleanup` (`onlyIfNew`), lists `sent/v1/` and `done/v1/` by date and
+  `test/v1/` whole, and deletes the keys of dates more than 2 days before the UTC date: at 03:00
+  on 1 December, 27 and 28 November go, 29 November on stay. Cut short or failed, it releases its
+  marker, so the next run in the hour carries on. The marker goes with its day's `done/` keys.
+  That is at most four conditional writes a day, and no other run pays anything.
+- **The log line**, one a run:
+  `alerts-run: zones 1, records 2, groups 2, fetches 2, sent 1, deleted 0, errors 0; 812 ms`.
+  Notes follow when they apply: `dry run, 3 logged`, `2 forced`,
+  `1 zone left for the next run (out of time)` or `(fetch cap 60)`, and
+  `cleanup deleted 120 old keys`. `errors` counts the lines logged as errors
+  (`alerts-run: error: …` and the sender's `alerts: error: …`), each failure once. Those event
+  lines (deletions, refusals, errors, a dry run's notifications) come before it; a clean run that
+  sends logs only the summary.
+- **Public logs.** Every line goes through `redact` (ids and JWTs) and a scrub of coordinates (a
+  cache key's cell, `lat=`, `lon=`, `apikey=`). So do the forecast code's own messages
+  (`forecast unavailable for forecast/v7/<cell>/…`), through `createDeps`'s new `log` option. An
+  error about a group names its first registration's id prefix ("and 2 more"), never the place.
+- **One quiet-hours rule.** Core's `inQuietHours` is the only one; it takes `ALERTS.quiet`, or the
+  sender's `quiet`. An unknown zone reads as UTC there, as `alertWindows` reads it, so the run and
+  the sender agree. The sender's own copy used to count an unknown zone as always quiet, which
+  could have refused every push in a zone the run thought was in its window.
+- **Records.** The run reads a registration as `AlertRecord` (section 8.2's record). It checks the
+  token (hex), `env`, `query`, `units`, `updatedAt` and `alerts`, and takes the zone, app and id
+  from the key.
+- **The dry-run script,** `pnpm tsx scripts/alerts-dry-run.ts --now <ISO>`, registers every city
+  page's place in °C and °F with every switch on (zones from `getToday`, as the devices handler
+  reads them), on synthetic forecasts with the fixed clock, and prints each notification.
+  `--now 2026-10-18T18:05:00Z` gives section 8.5's Durham example exactly ("Snow likely in Durham
+  tomorrow" / "1 to 2cm of snow. Mostly between 2am and 6am. 5 of 6 forecasts expect snow.",
+  "About 0.5in of snow. …" in °F); the spec's 2026-12-01T18:05:00Z has no snow in Durham in
+  synthetic data. A test pins that output.
+- **Preview checks are dry.** Because previews are always dry runs, the deploy-preview check of
+  section 8.7 item 4 shows a forced notification in the log rather than Apple's
+  `400 BadDeviceToken`. Apple's half is the preview smoke (V9), and the whole path with Apple is
+  checked on production once it is no longer dry, with the same made-up token (SETUP section 5).
 
 ## API contract
 

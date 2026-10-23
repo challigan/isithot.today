@@ -264,18 +264,23 @@ describe('apnsSmoke', () => {
 });
 
 describe('alertsRun', () => {
-  it('logs one line and sends nothing until the full job lands', async () => {
+  it('logs one line and sends nothing while switched off', async () => {
     const { origin, seen } = await fakeApns(apple);
     const run = (deployContext: string | undefined, vars = ENV) =>
       alertsRun({ env: env(vars), deployContext, now: NOW, origin });
-    expect(await run('production')).toBe('alerts-run: disabled (production)');
+    expect(await run('production')).toBe('alerts-run: disabled (production, ALERTS_ENABLED unset)');
+    expect(await run('production', { ...ENV, ALERTS_ENABLED: 'yes' })).toBe(
+      'alerts-run: disabled (production, ALERTS_ENABLED is not true)',
+    );
     expect(await run('deploy-preview')).toBe(
-      'alerts-run: disabled (deploy-preview, ALERTS_SMOKE unset)',
+      'alerts-run: disabled (deploy-preview, ALERTS_ENABLED unset, ALERTS_SMOKE unset)',
     );
     expect(await run('branch-deploy', { ...ENV, ALERTS_SMOKE: 'yes' })).toBe(
-      'alerts-run: disabled (branch-deploy, ALERTS_SMOKE is not 1)',
+      'alerts-run: disabled (branch-deploy, ALERTS_ENABLED unset, ALERTS_SMOKE is not 1)',
     );
-    expect(await run(undefined)).toBe('alerts-run: disabled (unknown context, ALERTS_SMOKE unset)');
+    expect(await run(undefined)).toBe(
+      'alerts-run: disabled (unknown context, ALERTS_ENABLED unset, ALERTS_SMOKE unset)',
+    );
     expect(seen).toHaveLength(0);
   });
 
@@ -283,7 +288,12 @@ describe('alertsRun', () => {
     const { origin, seen } = await fakeApns(apple);
     const smokeOn = env({ ...ENV, ALERTS_SMOKE: '1' });
     expect(await alertsRun({ env: smokeOn, deployContext: 'production', now: NOW, origin })).toBe(
-      'alerts-run: disabled (production)',
+      'alerts-run: disabled (production, ALERTS_ENABLED unset)',
+    );
+    // Switched on, production runs the job instead (here without a Blobs store, so it stops).
+    const on = env({ ...ENV, ALERTS_SMOKE: '1', ALERTS_ENABLED: 'true' });
+    expect(await alertsRun({ env: on, deployContext: 'production', now: NOW, origin })).toMatch(
+      /^alerts-run: error: no alert store \(/,
     );
     expect(seen).toHaveLength(0);
   });
