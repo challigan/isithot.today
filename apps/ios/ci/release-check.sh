@@ -8,6 +8,7 @@
 set -euo pipefail
 
 ios="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo="$(cd "$ios/../.." && pwd)"
 data="$ios/build/ReleaseData"
 
 beautify() {
@@ -41,7 +42,9 @@ fail() {
 }
 [ -x "$widget/WillItSnowWidgets" ] || fail "the widget extension isn't embedded in the app"
 
-# DebugHooks.swift's launch arguments: Release compiles a stub that names none of them.
+# DebugHooks.swift's launch arguments: Release compiles a stub that names none of them. The
+# optimiser builds a literal of 15 bytes or fewer in instructions, where strings(1) can't see it,
+# so swift-small-strings.mjs reads those (as scripts/check-archive.sh does).
 binaries=("$app/WillItSnow" "$widget/WillItSnowWidgets")
 for framework in "$app"/Frameworks/*.framework; do
   if [ -d "$framework" ]; then
@@ -50,8 +53,9 @@ for framework in "$app"/Frameworks/*.framework; do
 done
 for binary in "${binaries[@]}"; do
   [ -f "$binary" ] || continue
+  text="$(strings -a "$binary" && node "$repo/scripts/swift-small-strings.mjs" "$binary")"
   for hook in -uitest -fixture; do
-    if strings -a "$binary" | contains "$hook"; then
+    if contains "$hook" <<<"$text"; then
       fail "$(basename "$binary") contains the debug hook $hook"
     fi
   done

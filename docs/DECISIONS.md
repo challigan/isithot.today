@@ -1042,6 +1042,73 @@ read CI; this records where the build fills or differs from the spec.
   (pngjs only; no system fonts on the runner to depend on). Agents can't download artefacts from
   the container yet: GitHub serves them from Azure blob storage, which its network policy denies.
 
+## The iPhone app's release job (apps/ios, scripts)
+
+The iOS build spec's PR 0.4: `ios-release.yml`, which signs the app through App Store Connect and
+uploads it to TestFlight, and `scripts/check-archive.sh`, which checks a build first.
+`apps/ios/README.md` says how Carl runs it; this records where it fills or differs from the spec.
+
+- **Debug hooks hide in short literals.** Swift keeps a string of up to 15 bytes inside the
+  String value, and with `-O` the compiler builds a literal one in registers. Checked on 23
+  October 2026: `swiftc -O` 6.3.3 IR for the hooks, compiled by its LLVM 21 for
+  `arm64-apple-ios17.0`, builds `-uitest` with `mov x19, #0x752d` and three `movk`s, and strings(1)
+  finds none of `-uitest`, `-fixture` or `-umpGeography` in the object (on x86-64 it does, because
+  `movabs` keeps the 8 bytes together). Every hook in the spec's list is 15 bytes or fewer, so a
+  strings-only check passes an optimised build with every hook compiled in. Long literals, type
+  names (`URLProtocolStub`) and literals stored as data (an array of them) are found. So
+  `scripts/swift-small-strings.mjs` rebuilds the short ASCII literals from arm64 `movz`/`movk`
+  sequences, joining a 9-to-15-byte literal's two words, and `check-archive.sh` and
+  `ci/release-check.sh` look in its output as well as in strings'. On the same probe it found
+  every hook, from `contains`, `switch` and `==`; the tests use LLVM's own instruction words.
+- **What `check-archive.sh` adds to the spec's list:** the fixtures (as `release-check.sh` checks
+  the simulator build); `CFBundleShortVersionString` as well as `CFBundleVersion`, and
+  `BUILD_NUMBER` when given; Google's consent SDK and an embedded framework as ways the widget
+  could link ads; `get-task-allow` on neither signed bundle; and the rest of section 9.8's launch
+  arguments (`-now`, `-clock`, `-unlocked`, `-noads`, `-resetStore`), matched only as whole short
+  literals, since as substrings they'd match ordinary text. With ads test it fails on any
+  publisher but Google's demo one, not only Carl's, so it needs no variable before C15; with
+  `ADMOB_APP_ID` set, his publisher ID's digits must appear nowhere. With ads real the units must
+  be well-formed and equal the variables. If Google's SDK, linked into the app, names its own
+  demo publisher, a real build would fail; a test build says so in a notice, so it shows long
+  before the release candidate.
+- **Testable on Linux.** The reads that need macOS go through `plutil -convert xml1` and
+  `codesign -d --entitlements - --xml` (the `:-` form the spec names is deprecated), named by
+  `PLUTIL` and `CODESIGN`, and a small awk reader takes values from plutil's XML, so the tests
+  stand in two short fakes and build archive and Payload trees in a temp folder. Each failure the
+  spec lists has a test, and so does a passing archive and a passing `.ipa`.
+- **The key** is written by `scripts/asc-key.mjs` with `asc.mjs` `keyPem`, the rule C12 needed
+  (the raw `.p8` text with any line breaks, or base64; the spec's 18.3 said base64 only), after
+  checking it is a usable key and that `ASC_KEY_ID` is 10 capital letters and digits, since the
+  file name is built from it. The folder is mode 700 and the file 600, and a step that always
+  runs deletes the folder. Each secret is given only to the steps that use it, and checkout keeps
+  no token.
+- **The release job resolves afresh.** No cache of `.spm` or XcodeGen: SwiftPM downloads Google's
+  SDKs and checks them against their manifests' checksums, and `xcodegen.sh` checks its zip, so
+  nothing restored from a cache goes into an App Store build.
+- **Unsigned, two ways.** Phase 0.4 planned to stop after an unsigned archive until C12 existed.
+  C12 exists, so the release job signs by default, and its `build: unsigned` input still builds
+  and checks an unsigned archive with no key or approval. `ios.yml`'s `archive-check` job does the
+  same on every pull request.
+- **ExportOptions** sets `manageAppVersionAndBuildNumber` to false, so Xcode can't renumber the
+  build the checks passed (its default for App Store Connect is true), and `uploadSymbols`.
+  `archive.sh` checks its `teamID` against `Configs/Team.xcconfig`, and `APPLE_TEAM_ID` against
+  both.
+- **The upload's fallbacks are automatic** (section 18.3, step 5): altool, then a second export
+  with destination upload, then fastlane 2.241.1's pilot, installed only when both of Apple's
+  ways fail (pinned; its own dependencies aren't). When App Store Connect refuses the build
+  itself (an ITMS or validation error, such as the missing icon until phase 2.3), it stops,
+  since every way would get the same answer. `scripts/test/upload.test.mjs` drives the order
+  with stand-ins.
+- **What to Test** (section 21.1) is set through the API: `scripts/asc-notes.mjs` waits up to 20
+  minutes for the build to be listed, then adds or updates its English (UK)
+  `betaBuildLocalizations`, retrying while App Store Connect refuses changes. It warns rather
+  than fails, since the build is uploaded by then.
+- **Not yet:** the `rc-archive` artefact (section 21.2), with the release candidate. The signed
+  archive embeds a development profile, which lists the team's registered devices, so whether to
+  publish it on a public repo is a decision for then. Unproven until the first run: cloud signing
+  of the archive (development signing may need a registered iPhone, and may add a certificate per
+  run; the README's table says what to do), and altool on Xcode 26.6.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,

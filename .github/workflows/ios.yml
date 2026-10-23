@@ -4,9 +4,10 @@ name: iOS
 # generates for apps/ios are current, every Swift file lints clean, and IsItCore builds and
 # passes its tests in the official Swift container. On macOS: the app, its widget and their tests
 # build for the iPhone 17 simulator, the Unit and UI test plans run, a Release build is checked
-# for debug hooks, and the screens and widgets the tests attach are tiled into a contact sheet.
-# No job needs a secret. Runs only when something the app is built or generated from changes
-# (the same paths twice).
+# for debug hooks, and the screens and widgets the tests attach are tiled into a contact sheet;
+# beside that, an unsigned Release archive for iPhones gets the release job's archive checks
+# (scripts/check-archive.sh). No job needs a secret. Runs only when something the app is built,
+# generated or checked from changes (the same paths twice).
 on:
   push:
     branches: [main]
@@ -20,6 +21,8 @@ on:
       - packages/providers/**
       - data/cities.json
       - scripts/mobile-generate.ts
+      - scripts/check-archive.sh
+      - scripts/swift-small-strings.mjs
       - apps/web/src/lib/snowGlyphs.ts
       - apps/web/public/snow/favicon.svg
       - .github/workflows/ios*.yml
@@ -34,6 +37,8 @@ on:
       - packages/providers/**
       - data/cities.json
       - scripts/mobile-generate.ts
+      - scripts/check-archive.sh
+      - scripts/swift-small-strings.mjs
       - apps/web/src/lib/snowGlyphs.ts
       - apps/web/public/snow/favicon.svg
       - .github/workflows/ios*.yml
@@ -192,6 +197,42 @@ jobs:
           path: apps/ios/build/attachments
           if-no-files-found: warn
           retention-days: 5
+
+  # The checks ios-release.yml makes before it signs (spec section 18.3, step 3), on an unsigned
+  # Release archive for iPhones, so a pull request finds a debug hook, a demo ad unit gone
+  # missing or a widget linking ads before a release does. The ios job's setup, with no
+  # simulator; it runs beside that job.
+  archive-check:
+    name: Release archive checks
+    needs: [generated, swift-linux]
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 26.6
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version
+      # The ios job's caches, under the same keys.
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: apps/ios/.spm
+          key: spm-${{ runner.os }}-xcode26.6-${{ hashFiles('apps/ios/Package.resolved') }}
+      - name: Cache XcodeGen
+        uses: actions/cache@v4
+        with:
+          path: ~/.xcodegen/2.46.0
+          key: xcodegen-2.46.0-4d9e34b6-${{ runner.os }}
+      - name: Generate the project
+        run: apps/ios/ci/xcodegen.sh
+      # Resolves exactly the versions in Package.resolved, then archives with no signing.
+      - name: Archive, unsigned
+        run: apps/ios/ci/archive.sh unsigned
+        env:
+          ADS_UNITS: test
+      - name: Check the archive
+        run: scripts/check-archive.sh apps/ios/build/WillItSnow.xcarchive test
 
   contact-sheet:
     name: Contact sheet

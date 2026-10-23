@@ -1,10 +1,11 @@
 # will it snow? for iPhone
 
 The native SwiftUI app for willitsnow.today, built from the iOS build spec. This is the skeleton
-(phase 0, PRs 0.1 to 0.3): the project, the app and its widget, both entitlements, the debug
-hooks, their tests and the CI that builds and runs them. The app shows a fixture when a Debug
-build is launched with `-fixture <name>`, and the widget shows the answer the app saved in the
-App Group. Fetching, the real home screen and everything else come in later phases.
+(phase 0, PRs 0.1 to 0.4): the project, the app and its widget, both entitlements, the debug
+hooks, their tests, the CI that builds and runs them, and the release job that signs the app and
+uploads it to TestFlight. The app shows a fixture when a Debug build is launched with
+`-fixture <name>`, and the widget shows the answer the app saved in the App Group. Fetching, the
+real home screen and everything else come in later phases.
 
 ## What is where
 
@@ -22,8 +23,12 @@ Apps/Snow/Widgets/       the widget extension, its Info.plist, entitlements and 
 Apps/Snow/Tests/         app-hosted unit tests: the App Group round trip (V1), widget snapshots
 Apps/Snow/UITests/       launches each fixture and attaches the screen
 TestPlans/               Unit and UI
-ci/                      xcodegen.sh, simulator.sh, test.sh, release-check.sh, xcresult-summary.mjs, contact-sheet.mjs
+ci/                      xcodegen.sh, simulator.sh, test.sh, release-check.sh, xcresult-summary.mjs, contact-sheet.mjs;
+                         for releases archive.sh, upload.sh and ExportOptions.plist
 ```
+
+The release checks are in the repo's `scripts/`: `check-archive.sh`, with `swift-small-strings.mjs`
+(below), and `asc-key.mjs` and `asc-notes.mjs` for the App Store Connect key and What to Test.
 
 | Target              | Bundle ID                      | Links                                    |
 | ------------------- | ------------------------------ | ---------------------------------------- |
@@ -52,7 +57,67 @@ CI builds and tests everything, so this is only for trying the app by hand.
 5. On your iPhone (Debug builds only): Xcode, Settings, Accounts needs your Apple Account, and
    the App IDs `today.willitsnow.app` and `today.willitsnow.app.widgets` need the App Group and,
    for the app, Push Notifications (section 24). Signing is automatic with team `MZPGUCY33H`.
-   Uploads to TestFlight come from CI, never from here.
+   Uploads to TestFlight come from CI (next section); Xcode is only the last way, if CI's fail.
+
+## Releasing to TestFlight (Carl)
+
+`.github/workflows/ios-release.yml` builds the app for the App Store, checks it, signs it through
+App Store Connect with the team key in the `testflight` environment, and uploads it to
+TestFlight. It runs only when you start it, and only from `main`.
+
+1. On GitHub: **Actions**, then **iOS release** on the left, then **Run workflow** on the right.
+2. Leave **Use workflow from** on `main`. Any other branch or tag fails at once.
+3. **build**: `testflight` (the default) signs, checks and uploads. `unsigned` only builds and
+   checks an unsigned Release archive, with no key and no approval: a way to try a build before
+   anything is signed.
+4. **ads**: `test`, Google's demo units, for every build before the release candidate. `real`
+   only for a release candidate, once the repository variables `ADMOB_APP_ID` and
+   `ADMOB_BANNER_ID` are set (C15).
+5. **notes** (optional): what testers should try. It becomes the build's What to Test in
+   TestFlight.
+6. **Run workflow**. Within a minute the run waits for you: open it, press **Review
+   deployments**, tick `testflight`, then **Approve and deploy**. GitHub emails you too. Until
+   you approve, the job hasn't started, and nothing can read the key.
+7. About half an hour later the build is in App Store Connect. TestFlight on your iPhone shows it
+   to the internal group once Apple has processed it, usually 5 to 30 minutes more.
+
+Two settings of the environment (Settings, Environments, `testflight`) matter: you as required
+reviewer, with **Prevent self-review** off, since you start and approve your own runs; and
+**Deployment branches and tags** limited to `main`, so a workflow edited on another branch can't
+reach the key.
+
+**The run's summary** (the run's page, under the jobs) shows, in order:
+
+- **TestFlight build N**: the build number (100 + the run number), the commit, the ad units, your
+  notes and the Xcode version;
+- **Archive, signed, ads test**: whether it built, and each compiler error or warning with its
+  file and line;
+- **Archive checks**: both bundles have privacy manifests; the widget links no Google Mobile Ads;
+  neither binary names any of the 12 debug hooks; the ad units are Google's demo ones (test) or
+  yours (real); the app and widget have the same version and build; `ITSAppUsesNonExemptEncryption`
+  is false; no fixture is bundled. Each failure is named;
+- **Export**: the `.ipa` and its size;
+- **Signed app checks**: the app gets notifications in production, both have the App Group, the
+  widget doesn't get notifications, and neither is debuggable;
+- **Upload**: which tool sent it (altool, then xcodebuild, then fastlane, each only if the one
+  before failed), or App Store Connect's reason for refusing the build;
+- **What to test**: set, or why not, in which case type it in App Store Connect.
+
+An `unsigned` run's summary has the build number, the archive and its checks.
+
+**If it fails**, the summary says at which step. What a first run may meet:
+
+| Step              | What it says                                                           | What to do                                                                                                                                                                                                                                         |
+| ----------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Archive, signed   | Your team has no devices from which to generate a provisioning profile | Automatic signing signs the archive for development first, and Apple wants one registered iPhone for that. Add yours under Certificates, Identifiers & Profiles, Devices (Finder shows its UDID when it is plugged into your Mac), then run again. |
+| Archive or Export | Cloud signing permission error, or a 401 or 403                        | The key must be a Team key with the Admin role (C12). **App Store Connect check** (`asc-check.yml`) tests the key alone.                                                                                                                           |
+| Upload            | ITMS-90022, ITMS-90713 or another missing icon                         | Expected until phase 2.3 adds the app icon: App Store Connect refuses a build without one. Every step before the upload has been proven by then.                                                                                                   |
+| Upload            | The bundle version must be higher                                      | A re-run keeps its run's build number. Start a new run instead.                                                                                                                                                                                    |
+| Archive checks    | the check that failed                                                  | An agent fixes the app (or the check) in a pull request.                                                                                                                                                                                           |
+
+Each signed run may add an Apple Development certificate to the team, since the runner keeps no
+keychain between runs. If they pile up under Certificates, revoke the old ones; TestFlight builds
+don't depend on them.
 
 ## Checking on Linux (agents)
 
@@ -93,6 +158,7 @@ parts can be type-checked in a scratch package: `SharedStore` was, with a stub f
 | `generated`     | ubuntu                      | `pnpm mobile:check`                                                                                                                                                                                                                    |
 | `swift-linux`   | ubuntu, `swift:6.3.3-noble` | every Swift file lints; IsItCore's tests pass (with `tzdata`)                                                                                                                                                                          |
 | `ios`           | `macos-26`, Xcode 26.6      | the project generates; packages resolve to the pins; the app, widget and tests build for the iPhone 17 simulator (iOS 26.5); the Unit and UI plans pass; a Release build has no debug hooks, no fixtures and no ads code in the widget |
+| `archive-check` | `macos-26`, Xcode 26.6      | an unsigned Release archive for iPhones builds and passes `scripts/check-archive.sh` with ads test: the release job's archive checks, on every pull request, with no key                                                               |
 | `contact-sheet` | ubuntu                      | tiles every attached screen and widget into one PNG, whenever `ios` uploaded attachments (failed tests included); skipped when `ios` failed before its tests ran                                                                       |
 
 No job needs a secret. The `ios` job pins `macos-26` (never `macos-latest`, never `-xlarge`) and
@@ -124,8 +190,9 @@ minutes, the macOS job in about 15.
 1. `actions_list` for the workflow runs of `ios.yml` on the branch, newest first; then the run's
    jobs and their steps' conclusions (`actions_get`).
 2. `get_job_logs` for a failed job (or only its failed steps). The step summaries are in the log
-   as well: search for `### Build:`, `### Unit:`, `### UI:` and `### Release build:`. Each
-   failure is a table row with the test, `File.swift:line` and the message.
+   as well: search for `### Build:`, `### Unit:`, `### UI:`, `### Release build:`,
+   `### Archive, unsigned` and `### Archive checks:`. Each failure is a table row with the test,
+   `File.swift:line` and the message, or for the archive checks a line naming the check.
 3. Compiler errors are in the `Build for testing` step: `### Build: failed, N errors` and a row
    per error with its path from `apps/ios/` and line.
 
@@ -197,8 +264,16 @@ builds bundle that folder; `EXCLUDED_SOURCE_FILE_NAMES = Fixtures` leaves it out
 Debug builds may also keep the last answer in the app's own container when the App Group can't
 open (`DebugHooks.storeFallback`, V1); Release can't. `ci/release-check.sh` builds Release on
 every run and fails if a binary names a hook, a fixture is bundled, or the widget links Google
-Mobile Ads. Phase 0.4's `scripts/check-archive.sh` checks the signed archive the same way, and
-more.
+Mobile Ads. `scripts/check-archive.sh` checks the unsigned Release archive on every run
+(`archive-check`) and the signed one before each upload, for the hooks of section 9.8 and the
+rest of section 18.3's list.
+
+**Short literals.** strings(1) can't find a hook's name in an optimised build: Swift keeps a
+string of 15 bytes or fewer inside the value, and the compiler builds such a literal in registers
+with `movz` and `movk`, 16 bits at a time, so `-uitest` never appears as text in the binary.
+Every hook's name is that short. `scripts/swift-small-strings.mjs` rebuilds those literals from
+the arm64 instructions, and both checks look in its output as well as in strings'. A literal
+stored as data (in an array, say) is still found by strings.
 
 ## Settled
 
@@ -224,4 +299,5 @@ Each comes with the phase that needs it, so nothing in the skeleton is dormant:
   banner, `SKAdNetworkItems`, and the privacy manifests' collected data types (coarse location,
   the push token);
 - `FEATURE_UNLOCK` and `FEATURE_ADS` (spec section 9.8), with the purchase and the ads;
-- the Screenshots test plan, `ios-nightly.yml` and `ios-release.yml`.
+- the Screenshots test plan and `ios-nightly.yml`;
+- the release job's `rc-archive` artefact (spec section 21.2), with the release candidate.
