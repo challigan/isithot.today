@@ -1,0 +1,37 @@
+# A GitHub Actions runner for this repository on your own Docker server, so CI does not use
+# GitHub's hosted minutes. Setup and removal: docs/SETUP.md, "CI on your own server".
+#
+#   RUNNER_TOKEN=<token from GitHub> docker compose up -d
+#
+# The token is only needed the first time (it registers the runner and expires after an hour);
+# the registration then lives in the volume, so later restarts need nothing.
+services:
+  runner:
+    # GitHub's own runner image (Ubuntu 24.04). The runner keeps itself up to date.
+    image: ghcr.io/actions/actions-runner:2.338.0
+    restart: unless-stopped
+    environment:
+      RUNNER_TOKEN: ${RUNNER_TOKEN:-}
+    # Chromium in the end-to-end tests needs more shared memory than Docker's 64 MB default.
+    shm_size: 1gb
+    volumes:
+      # The registration, the work folder and the tool caches (Node, pnpm, Chromium).
+      - runner-home:/home/runner
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        if [ ! -f .runner ]; then
+          if [ -z "$$RUNNER_TOKEN" ]; then
+            echo "First start: set RUNNER_TOKEN (docs/SETUP.md, CI on your own server)." >&2
+            exit 1
+          fi
+          ./config.sh --unattended --replace \
+            --url https://github.com/challigan/isithot.today \
+            --token "$$RUNNER_TOKEN" --name homelab --labels homelab --work _work
+        fi
+        exec ./run.sh
+
+volumes:
+  runner-home:

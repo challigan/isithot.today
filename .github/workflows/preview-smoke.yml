@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   smoke:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 20
     env:
       PREVIEW: https://deploy-preview-${{ github.event.number }}--isithotapp.netlify.app
