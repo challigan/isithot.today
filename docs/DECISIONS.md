@@ -927,6 +927,45 @@ first (iOS build spec, phase 1.5) and the full job follows.
 - **The topic is the app's bundle ID,** `today.willitsnow.app`. Until it is registered under the
   team, Apple may refuse it (a 400 naming the topic, or a 403); the smoke says so.
 
+## Notifications: when, whether and the words (core alerts.ts)
+
+The server's run decides and words every notification with core (iOS build spec, sections 8.4
+and 8.6), so the apps never judge or word one, and the constants are `ALERTS` in `config.ts`.
+
+- **No new thresholds.** The evening (18:00 to 19:59 at the place) reads tomorrow's whole day,
+  `snow.days[1]`; the morning (07:00 to 08:59) the rest of today from the run's moment,
+  `snow.days[0]`. Snow, heavy snow and deep snow always send; "Snow possible" only for those who
+  asked for it; a few flakes and no snow never. A notification never says more than the page.
+- **The page's words.** The title names the band and the day ("Heavy snow likely in Leeds
+  tomorrow", "Snow possible in Leeds today"); the body is the day's own detail and agreement, so
+  the Durham example reads "1 to 2cm of snow. Mostly between 2am and 6am. 5 of 6 forecasts expect
+  snow.", in inches with °F. In the morning, while Now is snow or more, the title is "Snowing in
+  Leeds now". A device location without a town's name (the API's "Your location") reads "near
+  you": "Snow likely near you tomorrow". Nothing says "warning", "danger" or "alert", or names
+  another weather type, app or website; a test checks every title and body the rule produces for
+  days of every band, at different times of day, in both units.
+- **Choices the spec left open.**
+  - `snowAlert` sends nothing when that kind's switch is off, so it decides from all three
+    switches. The test endpoint, which sends the evening's real notification whatever the
+    evening switch says (with the record's "possible" choice), passes `{ ...prefs, evening: true }`.
+  - "Snowing now" goes with any band that sends, though in practice Today is never less snowy
+    than Now.
+  - The result carries the date it is about (tomorrow's in the evening) as well as the title,
+    body, band and relevance, for the payload and the collapse id, so the run never picks the day
+    again.
+  - `expiresAt` is in Unix seconds, as `apns-expiration` takes it: 21:00 at the place for the
+    evening, 11:00 for the morning, on the day it is sent. It reads the zone's offset twice, so a
+    clock change between its first guess and the answer is allowed for (Adak in March is the
+    test).
+  - Relevance: deep snow 1, heavy 0.8, snow 0.6, possible 0.3 (`SNOW_RELEVANCE`).
+  - The windows and the quiet hours (21:00 to 06:59, `inQuietHours`, which the sender asserts) are
+    tested at their edges across the UK's clock changes on 25 October 2026 and 28 March 2027 and
+    Adelaide's, and in Kolkata, Kathmandu, Kiritimati and Pago Pago. An unknown time zone reads as
+    UTC, as everywhere in core.
+- **Other topics later.** A `TopicAlertRule<T>` picks its topic's answers from a response and
+  decides its notification from its own verdict. Only snow's exists (`SNOW_ALERT_RULE`).
+- **Size.** None of it reaches the website: the site's JavaScript is byte for byte the same.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,

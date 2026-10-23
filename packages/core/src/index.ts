@@ -28,4 +28,5 @@ export * from './windWeek';
 export * from './uv';
 export * from './display';
 export * from './places';
+export * from './alerts';
 export type * from './types';

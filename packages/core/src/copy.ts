@@ -939,6 +939,57 @@ export function snowPageTitle(args: {
   return `${question(args.city, 'today', 'snow')} ${args.answer} ${snowLabel(args.band, args.reason)} | ${SITES.snow.name}`;
 }
 
+/**
+ * The apps' snow notifications (core `snowAlert`): a title for when it is sent (the evening
+ * before, or the morning of) and the band of the day it is about, with `{where}` as "in Durham",
+ * or "near you" for a place without a town's name. The body is the day's own detail and
+ * agreement (`alertBody`). Snow only, and never "warning", "danger" or "alert": these are
+ * forecasts, not warnings (DECISIONS, "No warnings of ours").
+ */
+export const ALERT_COPY = {
+  titles: {
+    evening: {
+      maybesnow: 'Snow possible {where} tomorrow',
+      snow: 'Snow likely {where} tomorrow',
+      heavysnow: 'Heavy snow likely {where} tomorrow',
+      deepsnow: 'Deep snow likely {where} tomorrow',
+    },
+    morning: {
+      maybesnow: 'Snow possible {where} today',
+      snow: 'Snow likely {where} today',
+      heavysnow: 'Heavy snow likely {where} today',
+      deepsnow: 'Deep snow likely {where} today',
+    },
+  },
+  /** The morning's title while it is already snowing at the place. */
+  snowingNow: 'Snowing {where} now',
+  /** "Send a test notification", when there is no real one to send. */
+  test: {
+    title: 'Test notification',
+    body: "Notifications are working. We'll tell you when snow is likely {where}.",
+  },
+  nearYou: 'near you',
+} as const;
+
+/** "in Durham", or "near you" for a device location without a town's name ("Your location"). */
+export function alertWhere(name: string | null): string {
+  return name && name !== COPY.yourLocation ? `in ${name}` : ALERT_COPY.nearYou;
+}
+
+/** A notification's text with its place filled in. */
+export function alertText(text: string, name: string | null): string {
+  // A function, so a "$" in a searched place's name is never read as a replacement pattern.
+  return text.replace('{where}', () => alertWhere(name));
+}
+
+/**
+ * A notification's body: the day's detail and agreement, as the app shows them. "1 to 2cm of
+ * snow. Mostly between 2am and 6am. 5 of 6 forecasts expect snow."
+ */
+export function alertBody(detail: string, agreementText: string): string {
+  return `${detail} ${agreementText}.`;
+}
+
 // ---- Is it windy? -----------------------------------------------------------------
 
 /**
