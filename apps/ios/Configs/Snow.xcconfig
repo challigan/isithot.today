@@ -2,6 +2,8 @@
 // The identifiers are frozen (iOS build spec, section 1.2).
 #include "Base.xcconfig"
 #include "Team.xcconfig"
+// The Info.plist's strings (the location purpose string), generated from appCopy.ts.
+#include "Generated/Copy.xcconfig"
 
 SNOW_APP_ID = today.willitsnow.app
 SNOW_WIDGET_ID = today.willitsnow.app.widgets

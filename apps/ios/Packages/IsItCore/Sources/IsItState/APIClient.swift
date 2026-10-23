@@ -20,6 +20,14 @@ public enum FetchError: Error, Sendable, Equatable {
   /// a 200's body wasn't an answer.
   case failed(status: Int?, code: String?, message: String?)
 
+  /// What the picker tells the user when its search failed: offline, that it needs the
+  /// internet (`AppCopy.searchOffline`), not that there is no recent forecast; otherwise as
+  /// `message` says.
+  public var searchMessage: String {
+    if case .offline = self { return AppCopy.searchOffline }
+    return message
+  }
+
   /// What to tell the user: the server's own message, or `CoreCopy.unavailable` when it sent
   /// none. Offline, there is no recent forecast to show (`AppCopy.staleApp`).
   public var message: String {
@@ -34,9 +42,10 @@ public enum FetchError: Error, Sendable, Equatable {
   }
 }
 
-/// The app's one request, `GET /api/v1/today` (iOS build spec, section 4), over a transport the
-/// caller gives it: URLSession in the app, a fake in the tests. It builds the query with
-/// `TodayQuery`, always with the snow hours ahead, and decodes `TodayResponse`. It logs nothing.
+/// The app's requests (iOS build spec, section 4), over a transport the caller gives it:
+/// URLSession in the app, a fake in the tests. `GET /api/v1/today`, with the query `TodayQuery`
+/// builds, always with the snow hours ahead, decoded as `TodayResponse`; and the picker's `GET
+/// /api/v1/search`, decoded as `SearchResponse`. It logs nothing.
 public struct APIClient: Sendable {
   /// The topics whose hours ahead the app asks for (`ahead=snow`).
   public static let ahead: [Topic] = [.snow]
@@ -96,6 +105,47 @@ public struct APIClient: Sendable {
       throw Self.failure(for: error)
     }
     return try Self.answer(response)
+  }
+
+  /// The request for the picker's search for `q` (`GET /api/v1/search`, section 4), with
+  /// `TodayQuery.search`'s query, as the website asks; `q` is the search box's text as
+  /// `PlaceSearch.input` gives it. Nil only for an origin a URL can't be made from.
+  public func searchRequest(for q: String) -> HTTPRequest? {
+    var base = origin.absoluteString
+    while base.hasSuffix("/") { base.removeLast() }
+    let query = TodayQuery.search(q)
+    guard let url = URL(string: base + "/api/v1/search?" + query) else { return nil }
+    return HTTPRequest(
+      url: url,
+      headers: ["Accept": "application/json"],
+      timeout: TimeInterval(Constants.Client.requestTimeoutMs) / 1000
+    )
+  }
+
+  /// The places the server finds for `q` (see `searchRequest(for:)`). Throws a `FetchError`,
+  /// and only that: a 2xx whose body is a `SearchResponse` is the answer, as for `today`.
+  public func search(_ q: String) async throws -> SearchResponse {
+    guard let request = searchRequest(for: q) else {
+      throw FetchError.failed(status: nil, code: nil, message: nil)
+    }
+    let response: HTTPResponse
+    do {
+      response = try await transport.get(request)
+    } catch {
+      throw Self.failure(for: error)
+    }
+    if response.status == 429 { throw FetchError.rateLimited }
+    if (200..<300).contains(response.status),
+      let found = try? SearchResponse.decode(from: response.body)
+    {
+      return found
+    }
+    let error = try? ApiError.decode(from: response.body)
+    throw FetchError.failed(
+      status: response.status,
+      code: error?.error.code,
+      message: error?.error.message
+    )
   }
 
   /// The answer in what the server sent: a `TodayResponse` for a 2xx whose body is one, else

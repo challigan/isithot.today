@@ -30,8 +30,19 @@ export const APP_COPY = {
   headingLabel: '{place}. {question} {answer}',
   modelLine: '{name} · {value}',
 
-  // Place picker (10.3)
+  // Place picker (10.3). The rest of its words are core's: the title ("Search for a place"),
+  // the search box's prompt, "Use my location", "Finding you…", too short, no results, location
+  // access off, and Close. The two here are for a search the phone couldn't send and a location
+  // fix that found nothing with permission given: neither blames the forecasts.
   recent: 'Recent',
+  searchOffline: "You're offline. Connect to the internet to search.",
+  locationUnavailable: "Couldn't find your location. Search for a place instead.",
+  // The location permission's purpose string (15.2), `NSLocationWhenInUseUsageDescription`, which
+  // the app's Info.plist reads from the generated Configs/Generated/Copy.xcconfig.
+  locationPurpose:
+    'Your location shows whether it will snow where you are. It is rounded to about 5 km before ' +
+    'it leaves your phone. If you turn on notifications for your location, that rounded location ' +
+    'is kept so we can tell you when snow is likely.',
 
   // Upgrade (10.4, 10.5)
   upgradeTitle: 'Remove ads and add widgets',
@@ -119,6 +130,15 @@ export const APP_COPY = {
 } as const;
 
 export type AppCopyKey = keyof typeof APP_COPY;
+
+/**
+ * The strings the app's Info.plist carries, by the build setting it reads each from: Info.plist
+ * names `$(LOCATION_PURPOSE)`, which `Configs/Generated/Copy.xcconfig` sets (`exportConfigCopy.ts`).
+ * They are in `AppCopy.swift` too, so a test of the built app can hold its Info.plist to them.
+ */
+export const INFO_PLIST_SETTINGS: Readonly<Record<string, AppCopyKey>> = {
+  LOCATION_PURPOSE: 'locationPurpose',
+};
 
 /**
  * The strings App Intents reads when the app is built, not when it runs: the intent's `title`,

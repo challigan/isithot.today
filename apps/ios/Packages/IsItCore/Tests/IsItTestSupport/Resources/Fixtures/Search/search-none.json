@@ -1,0 +1,8 @@
+{
+  "_fixture": {
+    "query": "q=Xyzzy",
+    "now": "2026-12-01T12:05:00.000Z",
+    "note": "The picker’s search for \"Xyzzy\", a place nowhere: no results."
+  },
+  "results": []
+}

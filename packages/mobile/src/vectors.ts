@@ -59,6 +59,8 @@ import {
   pickHour,
   registrationBody,
   removeRecent,
+  resultDetail,
+  searchInput,
   searchQuery,
   searchTarget,
   targetFromQuery,
@@ -1650,9 +1652,91 @@ function recentVectors(): VectorFile {
   );
 }
 
+// ---- search.json -------------------------------------------------------------------------------
+
 /**
- * Every vector file, in the spec's order (section 7.4's, then phase 5's `page.json`), from
- * `fixtures` (each as its file has it). Throws when a fixture a vector needs is missing.
+ * The picker's search box (phase 6): what a search asks for (client `searchInput`, JavaScript's
+ * `trim` and string length), and the line under a result (client `resultDetail`).
+ */
+function searchVectors(): VectorFile {
+  const { cases, add } = collector();
+  for (const text of [
+    '',
+    ' ',
+    '   ',
+    'L',
+    ' L ',
+    'Le',
+    'Leeds',
+    '  Leeds ',
+    ' Newcastle  upon Tyne ',
+    'Bath & Wells',
+    'Zürich',
+    'Zu\u0308rich',
+    // One letter in two UTF-16 code units, which JavaScript counts as two; one with a
+    // combining mark, which is two too.
+    '\u{1D538}',
+    'e\u0301',
+    'é',
+    // JavaScript's white space and line terminators, trimmed: tab, line feed, vertical tab, form
+    // feed, carriage return, no-break space, the byte order mark, the line and paragraph
+    // separators, and the space separators (U+1680, U+2000 to U+200A, U+202F, U+205F, U+3000).
+    '\t\n\u000b\f\r',
+    '\u00a0Le\u00a0',
+    '\ufeffLe\ufeff',
+    '\u2028L\u2029',
+    '\u1680\u2000\u200a\u202f\u205f\u3000Le\u3000',
+    // Not white space to JavaScript: U+0085 (next line), U+200B (zero width space) and U+180E.
+    'L\u0085',
+    '\u0085',
+    '\u200bL',
+    '\u180e',
+  ]) {
+    add('searchInput', { text }, searchInput(text));
+  }
+  const leeds: SearchResult = {
+    name: 'Leeds',
+    region: 'England',
+    country: 'GB',
+    countryName: 'United Kingdom',
+    lat: 53.79648,
+    lon: -1.54785,
+    slug: 'leeds-gb',
+    geonameId: 2644688,
+    elevation: 63,
+  };
+  const results: SearchResult[] = [
+    leeds,
+    { ...leeds, countryName: null },
+    { ...leeds, region: null },
+    { ...leeds, region: '' },
+    { ...leeds, countryName: '' },
+    { ...leeds, region: null, countryName: null },
+    { ...leeds, region: null, countryName: null, country: null },
+    { ...leeds, region: '', countryName: '', country: '' },
+    {
+      name: 'Kathmandu',
+      region: 'Bagmati Province',
+      country: 'NP',
+      countryName: 'Nepal',
+      lat: 27.70169,
+      lon: 85.3206,
+    },
+  ];
+  for (const result of results) add('resultDetail', { result }, resultDetail(result));
+  return vectorFile(
+    [
+      ['client', 'searchInput'],
+      ['client', 'resultDetail'],
+    ],
+    cases,
+  );
+}
+
+/**
+ * Every vector file, in the spec's order (section 7.4's, then phase 5's `page.json` and phase 6's
+ * `search.json`), from `fixtures` (each as its file has it). Throws when a fixture a vector needs
+ * is missing.
  */
 export function vectorFiles(fixtures: FixtureSet): NamedVectors[] {
   return [
@@ -1670,6 +1754,7 @@ export function vectorFiles(fixtures: FixtureSet): NamedVectors[] {
     { name: 'links', vectors: linkVectors() },
     { name: 'recent', vectors: recentVectors() },
     { name: 'page', vectors: pageVectors(fixtures) },
+    { name: 'search', vectors: searchVectors() },
   ];
 }
 

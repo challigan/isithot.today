@@ -34,7 +34,7 @@ DEMO_PUBLISHER=3940256099942544
 HOOKS=(-uitest -fixture -apiOrigin -route -umpGeography URLProtocolStub 127.0.0.1)
 # DebugHooks.swift's other launch arguments (section 9.8), too short or too ordinary to look
 # for inside longer strings, so matched only as whole short literals.
-LITERAL_HOOKS=(-now -clock -unlocked -noads -resetStore -network)
+LITERAL_HOOKS=(-now -clock -unlocked -noads -resetStore -network -location)
 
 PLUTIL="${PLUTIL:-plutil}"
 CODESIGN="${CODESIGN:-codesign}"
@@ -339,6 +339,11 @@ check_archive() {
   if grep -E -e 'GoogleMobileAds|GADMobileAds|UserMessagingPlatform' "$work/widget.strings" \
     >/dev/null || [ -e "$widget/Frameworks/GoogleMobileAds.framework" ]; then
     fail "the widget links Google Mobile Ads"
+  fi
+  # Nor Core Location (IsItLocation is the app's alone): the widget has no purpose string, and a
+  # location API in its binary would want one.
+  if grep -E -e 'CLLocationManager|CoreLocationService' "$work/widget.strings" >/dev/null; then
+    fail "the widget links the app's location code"
   fi
   check_versions "$info" "$widget_info"
   facts+=("checked: privacy manifests, the icon, the answer font, $((${#HOOKS[@]} + ${#LITERAL_HOOKS[@]})) debug hooks in both binaries, the ad units, the widget's links, versions, encryption and fixtures")

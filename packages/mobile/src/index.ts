@@ -2,6 +2,7 @@ export * from './appCopy';
 export * from './fixtures';
 export * from './generate';
 export * from './exportAppCopy';
+export * from './exportConfigCopy';
 export * from './exportConstants';
 export * from './exportCoreCopy';
 export * from './exportFont';

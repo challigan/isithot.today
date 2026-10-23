@@ -47,8 +47,9 @@ targets:
       # the home screen's presenters.
       - package: IsItCore
         products: [IsItModel, IsItLogic, IsItState]
+      # IsItLocation (Core Location) is the app's alone, as IsItAds is: never the widget's.
       - package: IsItKit
-        products: [IsItServices, IsItUI, IsItAds, SnowKit]
+        products: [IsItServices, IsItLocation, IsItUI, IsItAds, SnowKit]
       - target: WillItSnowWidgets
   WillItSnowWidgets:
     type: app-extension
@@ -68,7 +69,8 @@ targets:
     dependencies:
       - package: IsItCore
         products: [IsItModel]
-      # Never IsItAds: the widget links no ads code (sections 9.1 and 18.3).
+      # Never IsItAds: the widget links no ads code (sections 9.1 and 18.3); nor IsItLocation,
+      # so no location API is in its binary.
       - package: IsItKit
         products: [IsItServices, IsItWidgetUI, SnowKit]
   WillItSnowTests:

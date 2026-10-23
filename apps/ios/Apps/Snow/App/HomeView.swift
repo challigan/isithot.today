@@ -11,14 +11,23 @@ import SwiftUI
 /// presenters) and drawn by IsItUI from those plain values and the actions. Only this file knows
 /// the model. The minute tick (section 9.5) draws the page again each minute at the model's
 /// clock, so the hour picked, Tomorrow from 6pm and the stale state follow the time while the
-/// app is open. The place and Settings buttons are here; their sheets come with phase 6, and the
-/// switcher and the pager of Now, Today and This week with phase 5.2.
+/// app is open. The place button and the approximate line's "Use my location" open the place
+/// picker, a full-screen sheet (phase 6.1, `PickerSheet`); the Settings sheet comes with phase
+/// 6.2, and the switcher and the pager of Now, Today and This week with phase 5.2.
 struct HomeView: View {
   let model: AppModel
+  /// The place picker, while it is open.
+  @State private var picker: PickerRequest?
 
   var body: some View {
     TimelineView(.everyMinute) { context in
-      HomeContent(model: model, tick: context.date)
+      HomeContent(model: model, tick: context.date) { locating in
+        picker = PickerRequest(locating: locating)
+      }
+    }
+    // Outside the page's colours: the sheet follows the system's, and Dark Mode.
+    .fullScreenCover(item: $picker) { request in
+      PickerSheet(model: model, request: request)
     }
   }
 }
@@ -29,6 +38,8 @@ private struct HomeContent: View {
   let model: AppModel
   /// The minute tick's date: a new one each minute, which draws the screen again.
   let tick: Date
+  /// Opens the place picker; with `true`, starting "Use my location".
+  let openPicker: (Bool) -> Void
 
   @Environment(\.openURL) private var openURL
 
@@ -47,16 +58,18 @@ private struct HomeContent: View {
     }
   }
 
-  /// What the screen's taps do: Retry asks again; a place under "Nearby:" loads in place;
-  /// links open in Safari; the place picker, Settings and "Use my location" wait for phase 6.
+  /// What the screen's taps do: Retry asks again; the place button opens the picker, and "Use
+  /// my location" opens it finding the phone's place; a place under "Nearby:" loads in place;
+  /// links open in Safari; Settings waits for phase 6.2.
   private var actions: HomeActions {
     let model = model
     let openURL = openURL
+    let openPicker = openPicker
     return HomeActions(
       retry: { Task { await model.refresh() } },
-      openPlacePicker: {},
+      openPlacePicker: { openPicker(false) },
       openSettings: {},
-      useMyLocation: {},
+      useMyLocation: { openPicker(true) },
       openLink: { openURL($0) },
       selectNearby: { city in
         Task { await model.select(.city(slug: city.slug, name: city.name)) }

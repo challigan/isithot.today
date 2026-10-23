@@ -67,6 +67,8 @@ import {
   hold,
   hourUntil,
   outOfDate,
+  resultDetail,
+  searchInput,
   searchQuery,
   searchTarget,
   targetKey,
@@ -931,7 +933,7 @@ function resultItem(r: SearchResult): HTMLLIElement {
   name.textContent = r.name;
   const sub = document.createElement('span');
   sub.className = 'sub';
-  sub.textContent = [r.region, r.countryName ?? r.country].filter(Boolean).join(', ');
+  sub.textContent = resultDetail(r);
   b.append(name, sub);
   b.addEventListener('click', () => choose(r));
   li.append(b);
@@ -955,14 +957,14 @@ async function runSearch(q: string): Promise<void> {
 }
 
 function onSearchInput(): void {
-  const q = $<HTMLInputElement>('search-input')?.value.trim() ?? '';
+  const input = searchInput($<HTMLInputElement>('search-input')?.value ?? '');
   clearTimeout(searchTimer);
   lastResults = [];
-  if (q.length < SEARCH.minChars) {
-    showResults(q.length ? [statusItem(COPY.searchTooShort)] : []);
+  if (input.kind !== 'search') {
+    showResults(input.kind === 'tooShort' ? [statusItem(COPY.searchTooShort)] : []);
     return;
   }
-  searchTimer = setTimeout(() => void runSearch(q), SEARCH.debounceMs);
+  searchTimer = setTimeout(() => void runSearch(input.q), SEARCH.debounceMs);
 }
 
 function choose(r: SearchResult): void {

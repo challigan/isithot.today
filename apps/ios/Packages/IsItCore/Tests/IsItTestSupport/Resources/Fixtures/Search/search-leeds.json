@@ -1,0 +1,20 @@
+{
+  "_fixture": {
+    "query": "q=Leeds",
+    "now": "2026-12-01T12:05:00.000Z",
+    "note": "The picker’s search for \"Leeds\": one result, Leeds in England, which has a city page (`slug`), so choosing it asks for `place=leeds-gb`, which leeds-dry answers."
+  },
+  "results": [
+    {
+      "name": "Leeds",
+      "region": "England",
+      "country": "GB",
+      "countryName": "United Kingdom",
+      "lat": 53.7965,
+      "lon": -1.5478,
+      "geonameId": 2644688,
+      "slug": "leeds-gb",
+      "elevation": 50
+    }
+  ]
+}

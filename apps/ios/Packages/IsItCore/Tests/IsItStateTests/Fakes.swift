@@ -207,21 +207,38 @@ final class Gate: Sendable {
   }
 }
 
-/// The later phases' steps, noting each call in order. With `holdingFix`, the location fix waits
-/// until the test releases it (`releaseFix()`).
-final class RecordingHooks: AppHooks {
-  private let state:
-    Locked<(calls: [String], routes: [DeepLink.Route], owned: Bool?, moved: Target?)>
-  private let fix: Gate?
+/// The later phases' steps and the phone's location, noting each call in order. The location's
+/// permission is `access` (granted unless said), and after `requestAccess()`, `answer`; its fix
+/// is at `moved`'s coordinates, or none without. With `holdingFix`, the fix waits until the test
+/// releases it (`releaseFix()`).
+final class RecordingHooks: AppHooks, LocationService {
+  private struct Record {
+    var calls: [String] = []
+    var routes: [DeepLink.Route] = []
+    var owned: Bool?
+    var moved: Target?
+    var access: LocationAccess
+  }
 
-  init(owned: Bool? = nil, moved: Target? = nil, holdingFix: Bool = false) {
-    state = Locked(([], [], owned, moved))
-    fix = holdingFix ? Gate() : nil
+  private let state: Locked<Record>
+  private let answer: LocationAccess
+  private let gate: Gate?
+
+  init(
+    owned: Bool? = nil,
+    moved: Target? = nil,
+    access: LocationAccess = .granted,
+    answer: LocationAccess = .granted,
+    holdingFix: Bool = false
+  ) {
+    state = Locked(Record(owned: owned, moved: moved, access: access))
+    self.answer = answer
+    gate = holdingFix ? Gate() : nil
   }
 
   /// Lets a held location fix through.
   func releaseFix() {
-    fix?.open()
+    gate?.open()
   }
 
   var calls: [String] { state.read(\.calls) }
@@ -239,10 +256,24 @@ final class RecordingHooks: AppHooks {
     return state.read(\.owned)
   }
 
-  func locate(_ target: Target) async -> Target? {
-    note("locate \(target.key)")
-    await fix?.wait()
-    return state.read(\.moved)
+  func access() async -> LocationAccess {
+    note("location access")
+    return state.read(\.access)
+  }
+
+  func requestAccess() async -> LocationAccess {
+    note("location request")
+    return state.change { state -> LocationAccess in
+      if state.access == .notDetermined { state.access = answer }
+      return state.access
+    }
+  }
+
+  func fix() async -> LocationFix {
+    note("location fix")
+    await gate?.wait()
+    guard case .coords(let place)? = state.read(\.moved) else { return .unavailable }
+    return .located(latitude: place.lat, longitude: place.lon)
   }
 
   func startAds() async { note("startAds") }
@@ -267,6 +298,8 @@ struct Harness {
   let store: FakeState
   let widgets = FakeWidgets()
   let hooks: RecordingHooks
+  /// The recent places kept (`recent.v1`).
+  let recents: MemoryRecents
   let model: AppModel
 
   /// The jitter every draw gives: half the range.
@@ -276,18 +309,22 @@ struct Harness {
     now: Date,
     store: FakeState.Contents = FakeState.Contents(),
     replies: [FakeTransport.Reply],
-    hooks: RecordingHooks = RecordingHooks()
+    hooks: RecordingHooks = RecordingHooks(),
+    recents: [RecentPlace] = []
   ) {
     transport = FakeTransport(replies)
     clock = TestClock(now)
     self.store = FakeState(store)
     self.hooks = hooks
+    self.recents = MemoryRecents(recents)
     model = AppModel(
       environment: AppEnvironment(
         client: APIClient(transport: transport),
         clock: clock,
         store: self.store,
         widgets: widgets,
+        location: hooks,
+        recents: self.recents,
         hooks: hooks,
         random: { range in
           precondition(range == 0...90_000, "the jitter is 0 to 90 s")

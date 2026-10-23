@@ -44,7 +44,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Your location shows whether it will snow where you are. It is rounded to about 5 km before it leaves your phone. If you turn on notifications for your location, that rounded location is kept so we can tell you when snow is likely.</string>
+	<string>$(LOCATION_PURPOSE)</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>BricolageAnswer.ttf</string>

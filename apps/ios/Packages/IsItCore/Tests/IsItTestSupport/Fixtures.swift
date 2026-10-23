@@ -37,6 +37,33 @@ public enum Fixtures {
     return try Data(contentsOf: url)
   }
 
+  /// Every search fixture's name, without `.json`, in order: the server's answers to the
+  /// picker's searches, in the `Search` folder.
+  public static func searchNames() throws -> [String] {
+    let files = try FileManager.default.contentsOfDirectory(
+      at: try folder().appendingPathComponent("Search", isDirectory: true),
+      includingPropertiesForKeys: nil
+    )
+    return files.filter { $0.pathExtension == "json" }
+      .map { $0.deletingPathExtension().lastPathComponent }
+      .sorted()
+  }
+
+  /// A search fixture's bytes, as the server sent them but for `_fixture`.
+  public static func search(_ name: String) throws -> Data {
+    let url = try folder().appendingPathComponent("Search", isDirectory: true)
+      .appendingPathComponent("\(name).json")
+    guard FileManager.default.fileExists(atPath: url.path) else {
+      throw LoadError.noFixture("Search/\(name)")
+    }
+    return try Data(contentsOf: url)
+  }
+
+  /// What a search fixture says about itself (`_fixture`): its query is `q=…`.
+  public static func searchInfo(_ name: String) throws -> Info {
+    try JSONDecoder().decode(WithInfo.self, from: search(name)).info
+  }
+
   /// What a fixture says about itself (`_fixture`).
   public struct Info: Decodable, Sendable, Equatable {
     /// The query the app asked with, without the "?".

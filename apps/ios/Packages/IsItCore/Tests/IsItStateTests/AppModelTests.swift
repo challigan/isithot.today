@@ -362,7 +362,7 @@ struct AppModelStepTests {
     )
     await same.model.launch()
     #expect(same.transport.requests.count == 1)
-    #expect(same.hooks.calls.contains("locate device:53.8,-1.55"))
+    #expect(same.hooks.calls.contains("location fix"))
 
     let h = Harness(
       now: made,
@@ -381,8 +381,8 @@ struct AppModelStepTests {
     #expect(h.store.today?.key == "device:53.9,-1.55")
     #expect(
       h.hooks.calls == [
-        "startEntitlementCheck", "locate device:53.8,-1.55", "entitlement", "startAds",
-        "syncAlerts device:53.9,-1.55 c",
+        "startEntitlementCheck", "location access", "location fix", "entitlement",
+        "startAds", "syncAlerts device:53.9,-1.55 c",
       ])
   }
 
@@ -397,7 +397,7 @@ struct AppModelStepTests {
     )
     let launch = Task { await h.model.launch() }
     try #require(
-      await yieldUntil { h.hooks.calls.contains("locate device:53.8,-1.55") },
+      await yieldUntil { h.hooks.calls.contains("location fix") },
       "the fix was never asked for")
     // A place under "Nearby:" (or, from phase 6, the picker's) while the fix is out.
     await h.model.select(dundeeTarget)

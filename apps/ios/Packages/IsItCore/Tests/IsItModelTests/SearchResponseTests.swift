@@ -1,5 +1,6 @@
 import Foundation
 import IsItModel
+import IsItTestSupport
 import Testing
 
 @Suite("Search results decode")
@@ -29,5 +30,35 @@ struct SearchResponseTests {
   @Test("no results")
   func none() throws {
     #expect(try SearchResponse.decode(from: Data(#"{"results":[]}"#.utf8)).results.isEmpty)
+  }
+}
+
+@Suite("The search fixtures decode")
+struct SearchFixtureTests {
+  @Test("every search fixture pnpm mobile:generate writes is here, and decodes")
+  func every() throws {
+    #expect(try Fixtures.searchNames() == ["search-kathmandu", "search-leeds", "search-none"])
+    for name in try Fixtures.searchNames() {
+      let info = try Fixtures.searchInfo(name)
+      #expect(info.query.hasPrefix("q="), "\(name)")
+      #expect(ApiJSON.parseDate(info.now) != nil, "\(name)")
+      #expect(!info.note.isEmpty, "\(name)")
+      _ = try SearchResponse.decode(from: Fixtures.search(name))
+    }
+    #expect(try Fixtures.searchInfo("search-leeds").query == "q=Leeds")
+  }
+
+  @Test("Leeds has a city page; Kathmandu is a point on the grid; Xyzzy is nowhere")
+  func places() throws {
+    let leeds = try SearchResponse.decode(from: Fixtures.search("search-leeds")).results
+    #expect(leeds.map(\.name) == ["Leeds"])
+    #expect(Target(search: leeds[0]) == .city(slug: "leeds-gb", name: "Leeds"))
+    let kathmandu = try SearchResponse.decode(from: Fixtures.search("search-kathmandu")).results
+    #expect(kathmandu.map(\.name) == ["Kathmandu"])
+    #expect(kathmandu[0].slug == nil)
+    #expect(Target(search: kathmandu[0]).key == "search:27.7,85.3")
+    // The point kathmandu-0545 answers.
+    #expect(try Target(query: Fixtures.info("kathmandu-0545").query)?.key == "search:27.7,85.3")
+    #expect(try SearchResponse.decode(from: Fixtures.search("search-none")).results.isEmpty)
   }
 }
