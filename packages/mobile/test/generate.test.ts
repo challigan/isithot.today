@@ -1,25 +1,47 @@
 import { describe, expect, it } from 'vitest';
-import { FIXTURES, fixtureJson, makeFixture } from '../src/fixtures';
+import { FIXTURES, fixtureJson, makeFixture, type Fixture } from '../src/fixtures';
 import { keysSwift } from '../src/exportKeys';
 import {
   FIXTURES_DIR,
   MODEL_GENERATED_DIR,
   OWNED_DIRS,
+  VECTORS_DIR,
   drift,
   generatedFiles,
 } from '../src/generate';
+import { vectorFiles, vectorJson } from '../src/vectors';
 
 describe('generatedFiles', () => {
-  it('writes Keys.swift into IsItModel and each fixture into the test resources', async () => {
+  it('writes Keys.swift into IsItModel, and each fixture and vector file into the test resources', async () => {
     const files = await generatedFiles();
+    const resources = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources';
+    const vectors = [
+      ...['grid', 'target', 'query', 'placeTime', 'tomorrow', 'freshness', 'hours'],
+      ...['questions', 'strip', 'widget', 'alerts', 'links', 'recent'],
+    ];
     expect(files.map((f) => f.path)).toEqual([
       'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated/Keys.swift',
-      'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources/Fixtures/aberdeen-snow.json',
-      'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources/Fixtures/leeds-dry.json',
+      ...FIXTURES.map((s) => `${resources}/Fixtures/${s.name}.json`),
+      ...vectors.map((name) => `${resources}/Vectors/${name}.json`),
     ]);
     expect(files[0]!.contents).toBe(keysSwift());
     expect(files[2]!.contents).toBe(fixtureJson(await makeFixture(FIXTURES[1]!)));
-    expect(OWNED_DIRS).toEqual([FIXTURES_DIR, MODEL_GENERATED_DIR]);
+    expect(OWNED_DIRS).toEqual([FIXTURES_DIR, VECTORS_DIR, MODEL_GENERATED_DIR]);
+  });
+
+  it('works the vectors out from the fixtures exactly as their files have them', async () => {
+    const files = await generatedFiles();
+    const fixtures = new Map<string, Fixture>(
+      FIXTURES.map((s) => [
+        s.name,
+        JSON.parse(files.find((f) => f.path === `${FIXTURES_DIR}/${s.name}.json`)!.contents),
+      ]),
+    );
+    for (const { name, vectors } of vectorFiles(fixtures)) {
+      expect(files.find((f) => f.path === `${VECTORS_DIR}/${name}.json`)!.contents).toBe(
+        vectorJson(vectors),
+      );
+    }
   });
 
   it('puts every file it writes in a folder it owns, so a stale one is found', async () => {

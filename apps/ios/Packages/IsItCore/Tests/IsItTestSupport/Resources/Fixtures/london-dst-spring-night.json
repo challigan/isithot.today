@@ -1,0 +1,3726 @@
+{
+  "_fixture": {
+    "query": "place=london-gb&units=c&ahead=snow",
+    "now": "2027-03-28T00:30:00.000Z",
+    "note": "12:30am GMT on Sunday 28 March 2027, the night the clocks go forward at 1am GMT: the hours ahead cross the change, so there is no 1am."
+  },
+  "location": {
+    "name": "London",
+    "region": "England",
+    "country": "GB",
+    "lat": 51.5,
+    "lon": -0.15,
+    "source": "city",
+    "slug": "london-gb",
+    "geonameId": 2643743,
+    "elevation": 25,
+    "timezone": "Europe/London"
+  },
+  "units": "c",
+  "days": [
+    {
+      "date": "2027-03-28",
+      "band": "mild",
+      "answer": "No.",
+      "verdict": "It's mild.",
+      "high": 15,
+      "feelsLike": 12,
+      "peakTime": "3pm",
+      "normalHigh": 12,
+      "anomaly": 3,
+      "detail": "High of 15°, feels like 12°. Warmest around 3pm. 3° warmer than usual for March.",
+      "consensus": {
+        "value": 14.9,
+        "agree": 6,
+        "total": 6,
+        "bandLow": 12.9,
+        "bandHigh": 16.9,
+        "confidence": "good"
+      },
+      "models": [
+        {
+          "id": "ecmwf_ifs025",
+          "name": "ECMWF",
+          "high": 16,
+          "value": 15.6,
+          "agrees": true
+        },
+        {
+          "id": "ncep_gfs_seamless",
+          "name": "GFS",
+          "high": 16,
+          "value": 16.4,
+          "agrees": true
+        },
+        {
+          "id": "dwd_icon_seamless",
+          "name": "ICON",
+          "high": 15,
+          "value": 15.2,
+          "agrees": true
+        },
+        {
+          "id": "ukmo_seamless",
+          "name": "UKMO",
+          "high": 14,
+          "value": 13.7,
+          "agrees": true
+        },
+        {
+          "id": "meteofrance_seamless",
+          "name": "Météo-France",
+          "high": 13,
+          "value": 13.3,
+          "agrees": true
+        },
+        {
+          "id": "cmc_gem_seamless",
+          "name": "GEM",
+          "high": 15,
+          "value": 15.2,
+          "agrees": true
+        }
+      ],
+      "month": "March",
+      "agreementText": "6 of 6 forecasts agree within 2°",
+      "limitedText": null,
+      "stripSummary": "Forecasts range from 13° to 16°; 6 of 6 agree near 15°.",
+      "scale": {
+        "min": 10,
+        "max": 19
+      },
+      "uv": {
+        "max": 3,
+        "level": "medium",
+        "peak": "12pm"
+      }
+    },
+    {
+      "date": "2027-03-29",
+      "band": "mild",
+      "answer": "No.",
+      "verdict": "It'll be mild.",
+      "high": 14,
+      "feelsLike": 14,
+      "peakTime": "2pm",
+      "normalHigh": 12,
+      "anomaly": 1,
+      "detail": "High of 14°, feels like 14°. Warmest around 2pm. About normal for March.",
+      "consensus": {
+        "value": 13.5,
+        "agree": 5,
+        "total": 6,
+        "bandLow": 11.5,
+        "bandHigh": 15.5,
+        "confidence": "good"
+      },
+      "models": [
+        {
+          "id": "ecmwf_ifs025",
+          "name": "ECMWF",
+          "high": 13,
+          "value": 13.3,
+          "agrees": true
+        },
+        {
+          "id": "ncep_gfs_seamless",
+          "name": "GFS",
+          "high": 13,
+          "value": 13.1,
+          "agrees": true
+        },
+        {
+          "id": "dwd_icon_seamless",
+          "name": "ICON",
+          "high": 14,
+          "value": 13.8,
+          "agrees": true
+        },
+        {
+          "id": "ukmo_seamless",
+          "name": "UKMO",
+          "high": 13,
+          "value": 13.3,
+          "agrees": true
+        },
+        {
+          "id": "meteofrance_seamless",
+          "name": "Météo-France",
+          "high": 14,
+          "value": 13.7,
+          "agrees": true
+        },
+        {
+          "id": "cmc_gem_seamless",
+          "name": "GEM",
+          "high": 19,
+          "value": 18.6,
+          "agrees": false
+        }
+      ],
+      "month": "March",
+      "agreementText": "5 of 6 forecasts agree within 2°",
+      "limitedText": null,
+      "stripSummary": "Forecasts range from 13° to 19°; 5 of 6 agree near 14°.",
+      "scale": {
+        "min": 10,
+        "max": 22
+      },
+      "uv": {
+        "max": 5,
+        "level": "medium",
+        "peak": "12pm"
+      }
+    }
+  ],
+  "updatedAt": "2027-03-28T00:30:00.000Z",
+  "updated": {
+    "date": "2027-03-28",
+    "clock": "12:30am GMT"
+  },
+  "attribution": [
+    "Weather data by Open-Meteo.com (CC BY 4.0), modified",
+    "Contains Met Office data © Crown copyright, the Met Office, licensed under CC BY-SA 4.0",
+    "Climate data: NASA POWER"
+  ],
+  "links": [
+    {
+      "name": "BBC Weather",
+      "url": "https://www.bbc.co.uk/weather/2643743"
+    },
+    {
+      "name": "Met Office",
+      "url": "https://www.metoffice.gov.uk/weather/forecast/gcpuux6c0"
+    },
+    {
+      "name": "AccuWeather",
+      "url": "https://www.accuweather.com/en/search-locations?query=London"
+    }
+  ],
+  "nearby": [
+    {
+      "slug": "dagenham-gb",
+      "name": "Dagenham"
+    },
+    {
+      "slug": "watford-gb",
+      "name": "Watford"
+    },
+    {
+      "slug": "romford-gb",
+      "name": "Romford"
+    },
+    {
+      "slug": "st-albans-gb",
+      "name": "St Albans"
+    },
+    {
+      "slug": "slough-gb",
+      "name": "Slough"
+    },
+    {
+      "slug": "grays-gb",
+      "name": "Grays"
+    },
+    {
+      "slug": "woking-gb",
+      "name": "Woking"
+    },
+    {
+      "slug": "hemel-hempstead-gb",
+      "name": "Hemel Hempstead"
+    }
+  ],
+  "now": {
+    "time": "2027-03-28T00:30:00.000Z",
+    "band": "cold",
+    "answer": "No.",
+    "verdict": "It's cold.",
+    "temperature": 8,
+    "feelsLike": 7,
+    "detail": "8° now, feels like 7°. Rising to 15° around 3pm.",
+    "hours": [
+      {
+        "time": "2027-03-28T01:00:00.000Z",
+        "label": "2am",
+        "temperature": 7
+      },
+      {
+        "time": "2027-03-28T03:00:00.000Z",
+        "label": "4am",
+        "temperature": 7
+      },
+      {
+        "time": "2027-03-28T05:00:00.000Z",
+        "label": "6am",
+        "temperature": 7
+      },
+      {
+        "time": "2027-03-28T07:00:00.000Z",
+        "label": "8am",
+        "temperature": 9
+      },
+      {
+        "time": "2027-03-28T09:00:00.000Z",
+        "label": "10am",
+        "temperature": 11
+      },
+      {
+        "time": "2027-03-28T11:00:00.000Z",
+        "label": "12pm",
+        "temperature": 13
+      }
+    ],
+    "series": [
+      {
+        "time": 1806192000000,
+        "date": "2027-03-28",
+        "hour": 0,
+        "temperature": 8.1,
+        "feelsLike": 6.9,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1806195600000,
+        "date": "2027-03-28",
+        "hour": 2,
+        "temperature": 7.4,
+        "feelsLike": 6.3,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1806199200000,
+        "date": "2027-03-28",
+        "hour": 3,
+        "temperature": 7,
+        "feelsLike": 6,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1806202800000,
+        "date": "2027-03-28",
+        "hour": 4,
+        "temperature": 6.9,
+        "feelsLike": 5.9,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1806206400000,
+        "date": "2027-03-28",
+        "hour": 5,
+        "temperature": 7,
+        "feelsLike": 6,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1806210000000,
+        "date": "2027-03-28",
+        "hour": 6,
+        "temperature": 7.4,
+        "feelsLike": 6.3,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1806213600000,
+        "date": "2027-03-28",
+        "hour": 7,
+        "temperature": 8.1,
+        "feelsLike": 6.9,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1806217200000,
+        "date": "2027-03-28",
+        "hour": 8,
+        "temperature": 8.9,
+        "feelsLike": 7.5,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1806220800000,
+        "date": "2027-03-28",
+        "hour": 9,
+        "temperature": 9.9,
+        "feelsLike": 8.3,
+        "band": "cold",
+        "uv": 1
+      },
+      {
+        "time": 1806224400000,
+        "date": "2027-03-28",
+        "hour": 10,
+        "temperature": 10.9,
+        "feelsLike": 9.2,
+        "band": "cold",
+        "uv": 2
+      },
+      {
+        "time": 1806228000000,
+        "date": "2027-03-28",
+        "hour": 11,
+        "temperature": 11.9,
+        "feelsLike": 10,
+        "band": "cold",
+        "uv": 3
+      },
+      {
+        "time": 1806231600000,
+        "date": "2027-03-28",
+        "hour": 12,
+        "temperature": 12.9,
+        "feelsLike": 10.8,
+        "band": "mild",
+        "uv": 3
+      },
+      {
+        "time": 1806235200000,
+        "date": "2027-03-28",
+        "hour": 13,
+        "temperature": 13.7,
+        "feelsLike": 11.4,
+        "band": "mild",
+        "uv": 3
+      },
+      {
+        "time": 1806238800000,
+        "date": "2027-03-28",
+        "hour": 14,
+        "temperature": 14.4,
+        "feelsLike": 12,
+        "band": "mild",
+        "uv": 3
+      },
+      {
+        "time": 1806242400000,
+        "date": "2027-03-28",
+        "hour": 15,
+        "temperature": 14.8,
+        "feelsLike": 12.3,
+        "band": "mild",
+        "uv": 2
+      },
+      {
+        "time": 1806246000000,
+        "date": "2027-03-28",
+        "hour": 16,
+        "temperature": 14.9,
+        "feelsLike": 12.4,
+        "band": "mild",
+        "uv": 1
+      },
+      {
+        "time": 1806249600000,
+        "date": "2027-03-28",
+        "hour": 17,
+        "temperature": 14.8,
+        "feelsLike": 12.3,
+        "band": "mild",
+        "uv": 0
+      },
+      {
+        "time": 1806253200000,
+        "date": "2027-03-28",
+        "hour": 18,
+        "temperature": 14.4,
+        "feelsLike": 12,
+        "band": "mild",
+        "uv": 0
+      },
+      {
+        "time": 1806256800000,
+        "date": "2027-03-28",
+        "hour": 19,
+        "temperature": 13.7,
+        "feelsLike": 11.4,
+        "band": "mild",
+        "uv": 0
+      },
+      {
+        "time": 1806260400000,
+        "date": "2027-03-28",
+        "hour": 20,
+        "temperature": 12.9,
+        "feelsLike": 10.8,
+        "band": "mild",
+        "uv": 0
+      },
+      {
+        "time": 1806264000000,
+        "date": "2027-03-28",
+        "hour": 21,
+        "temperature": 11.9,
+        "feelsLike": 10,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1806267600000,
+        "date": "2027-03-28",
+        "hour": 22,
+        "temperature": 10.9,
+        "feelsLike": 9.2,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1806271200000,
+        "date": "2027-03-28",
+        "hour": 23,
+        "temperature": 9.9,
+        "feelsLike": 8.3,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1806274800000,
+        "date": "2027-03-29",
+        "hour": 0,
+        "temperature": 8.9,
+        "feelsLike": 7.5,
+        "band": "cold",
+        "uv": 0
+      },
+      {
+        "time": 1806278400000,
+        "date": "2027-03-29",
+        "hour": 1,
+        "temperature": 6,
+        "feelsLike": 5.1,
+        "band": "cold",
+        "uv": 0
+      }
+    ],
+    "uv": {
+      "value": 0,
+      "level": "low"
+    }
+  },
+  "week": {
+    "from": "2027-03-28",
+    "to": "2027-04-03",
+    "band": "mild",
+    "answer": "No.",
+    "verdict": "A mild week.",
+    "high": 13,
+    "highs": {
+      "min": 11,
+      "max": 15
+    },
+    "feelsLike": 11,
+    "normalHigh": 13,
+    "anomaly": 1,
+    "detail": "Highs of 11–15°, averaging 13°. Hottest today, 15°. About normal for the time of year.",
+    "hottest": {
+      "date": "2027-03-28",
+      "high": 15
+    },
+    "days": [
+      {
+        "date": "2027-03-28",
+        "label": "Today",
+        "high": 15,
+        "band": "mild",
+        "bandLabel": "Mild"
+      },
+      {
+        "date": "2027-03-29",
+        "label": "Mon",
+        "high": 14,
+        "band": "mild",
+        "bandLabel": "Mild"
+      },
+      {
+        "date": "2027-03-30",
+        "label": "Tue",
+        "high": 14,
+        "band": "mild",
+        "bandLabel": "Mild"
+      },
+      {
+        "date": "2027-03-31",
+        "label": "Wed",
+        "high": 14,
+        "band": "mild",
+        "bandLabel": "Mild"
+      },
+      {
+        "date": "2027-04-01",
+        "label": "Thu",
+        "high": 11,
+        "band": "cold",
+        "bandLabel": "Cold"
+      },
+      {
+        "date": "2027-04-02",
+        "label": "Fri",
+        "high": 12,
+        "band": "cold",
+        "bandLabel": "Cold"
+      },
+      {
+        "date": "2027-04-03",
+        "label": "Sat",
+        "high": 13,
+        "band": "mild",
+        "bandLabel": "Mild"
+      }
+    ]
+  },
+  "rain": {
+    "unit": "mm",
+    "days": [
+      {
+        "date": "2027-03-28",
+        "from": "2027-03-28T00:30:00.000Z",
+        "partial": true,
+        "band": "rain",
+        "answer": "Yes.",
+        "verdict": "It'll rain.",
+        "detail": "About 2mm still to come. Mostly between 3pm and 5pm.",
+        "amount": 2,
+        "chance": 0.83,
+        "wet": 5,
+        "total": 6,
+        "confidence": "good",
+        "threshold": 1,
+        "snow": "none",
+        "likely": {
+          "from": 15,
+          "to": 17
+        },
+        "scale": {
+          "min": 0,
+          "max": 5
+        },
+        "models": [
+          {
+            "id": "ecmwf_ifs025",
+            "name": "ECMWF",
+            "amount": 2,
+            "value": 1.6,
+            "expectsRain": true,
+            "agrees": true
+          },
+          {
+            "id": "ncep_gfs_seamless",
+            "name": "GFS",
+            "amount": 2,
+            "value": 1.8,
+            "expectsRain": true,
+            "agrees": true
+          },
+          {
+            "id": "dwd_icon_seamless",
+            "name": "ICON",
+            "amount": 0,
+            "value": 0,
+            "expectsRain": false,
+            "agrees": false
+          },
+          {
+            "id": "ukmo_seamless",
+            "name": "UKMO",
+            "amount": 3,
+            "value": 3.2,
+            "expectsRain": true,
+            "agrees": true
+          },
+          {
+            "id": "meteofrance_seamless",
+            "name": "Météo-France",
+            "amount": 2,
+            "value": 1.8,
+            "expectsRain": true,
+            "agrees": true
+          },
+          {
+            "id": "cmc_gem_seamless",
+            "name": "GEM",
+            "amount": 1,
+            "value": 1.3,
+            "expectsRain": true,
+            "agrees": true
+          }
+        ],
+        "month": "March",
+        "agreementText": "5 of 6 forecasts expect rain",
+        "limitedText": null,
+        "stripSummary": "Forecasts range from 0mm to 3mm; 5 of 6 expect rain."
+      },
+      {
+        "date": "2027-03-29",
+        "from": "2027-03-29T00:00:00.000Z",
+        "partial": false,
+        "band": "dry",
+        "answer": "No.",
+        "verdict": "It'll be dry.",
+        "detail": "Dry in every forecast.",
+        "amount": 0,
+        "chance": 0,
+        "wet": 0,
+        "total": 6,
+        "confidence": "good",
+        "threshold": 1,
+        "snow": "none",
+        "likely": null,
+        "scale": {
+          "min": 0,
+          "max": 5
+        },
+        "models": [
+          {
+            "id": "ecmwf_ifs025",
+            "name": "ECMWF",
+            "amount": 0,
+            "value": 0,
+            "expectsRain": false,
+            "agrees": true
+          },
+          {
+            "id": "ncep_gfs_seamless",
+            "name": "GFS",
+            "amount": 0,
+            "value": 0,
+            "expectsRain": false,
+            "agrees": true
+          },
+          {
+            "id": "dwd_icon_seamless",
+            "name": "ICON",
+            "amount": 0.1,
+            "value": 0.1,
+            "expectsRain": false,
+            "agrees": true
+          },
+          {
+            "id": "ukmo_seamless",
+            "name": "UKMO",
+            "amount": 0,
+            "value": 0,
+            "expectsRain": false,
+            "agrees": true
+          },
+          {
+            "id": "meteofrance_seamless",
+            "name": "Météo-France",
+            "amount": 0,
+            "value": 0,
+            "expectsRain": false,
+            "agrees": true
+          },
+          {
+            "id": "cmc_gem_seamless",
+            "name": "GEM",
+            "amount": 0,
+            "value": 0,
+            "expectsRain": false,
+            "agrees": true
+          }
+        ],
+        "month": "March",
+        "agreementText": "0 of 6 forecasts expect rain",
+        "limitedText": null,
+        "stripSummary": "Forecasts range from 0mm to 0.1mm; none expect rain."
+      }
+    ],
+    "now": {
+      "time": "2027-03-28T00:30:00.000Z",
+      "band": "dry",
+      "answer": "No.",
+      "verdict": "It's dry.",
+      "detail": "Dry now. Dry for the next 12 hours.",
+      "amount": 0,
+      "chance": 0,
+      "snow": false,
+      "hours": [
+        {
+          "time": "2027-03-28T01:00:00.000Z",
+          "label": "2am",
+          "chance": 0
+        },
+        {
+          "time": "2027-03-28T03:00:00.000Z",
+          "label": "4am",
+          "chance": 0
+        },
+        {
+          "time": "2027-03-28T05:00:00.000Z",
+          "label": "6am",
+          "chance": 0
+        },
+        {
+          "time": "2027-03-28T07:00:00.000Z",
+          "label": "8am",
+          "chance": 0
+        },
+        {
+          "time": "2027-03-28T09:00:00.000Z",
+          "label": "10am",
+          "chance": 0
+        },
+        {
+          "time": "2027-03-28T11:00:00.000Z",
+          "label": "12pm",
+          "chance": 20
+        }
+      ],
+      "series": [
+        {
+          "time": 1806192000000,
+          "date": "2027-03-28",
+          "hour": 0,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806195600000,
+          "date": "2027-03-28",
+          "hour": 2,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806199200000,
+          "date": "2027-03-28",
+          "hour": 3,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806202800000,
+          "date": "2027-03-28",
+          "hour": 4,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806206400000,
+          "date": "2027-03-28",
+          "hour": 5,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806210000000,
+          "date": "2027-03-28",
+          "hour": 6,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806213600000,
+          "date": "2027-03-28",
+          "hour": 7,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806217200000,
+          "date": "2027-03-28",
+          "hour": 8,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806220800000,
+          "date": "2027-03-28",
+          "hour": 9,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806224400000,
+          "date": "2027-03-28",
+          "hour": 10,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806228000000,
+          "date": "2027-03-28",
+          "hour": 11,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806231600000,
+          "date": "2027-03-28",
+          "hour": 12,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0.17,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806235200000,
+          "date": "2027-03-28",
+          "hour": 13,
+          "amount": 0,
+          "chance": 0.17,
+          "chance2h": 0.33,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806238800000,
+          "date": "2027-03-28",
+          "hour": 14,
+          "amount": 0,
+          "chance": 0.33,
+          "chance2h": 0.33,
+          "band": "showers",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806242400000,
+          "date": "2027-03-28",
+          "hour": 15,
+          "amount": 0,
+          "chance": 0.17,
+          "chance2h": 0.67,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806246000000,
+          "date": "2027-03-28",
+          "hour": 16,
+          "amount": 0.65,
+          "chance": 0.67,
+          "chance2h": 0.83,
+          "band": "rain",
+          "snow": false,
+          "asSnow": false,
+          "light": false
+        },
+        {
+          "time": 1806249600000,
+          "date": "2027-03-28",
+          "hour": 17,
+          "amount": 0.2,
+          "chance": 0.5,
+          "chance2h": 0.5,
+          "band": "showers",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806253200000,
+          "date": "2027-03-28",
+          "hour": 18,
+          "amount": 0,
+          "chance": 0.17,
+          "chance2h": 0.17,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806256800000,
+          "date": "2027-03-28",
+          "hour": 19,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806260400000,
+          "date": "2027-03-28",
+          "hour": 20,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806264000000,
+          "date": "2027-03-28",
+          "hour": 21,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806267600000,
+          "date": "2027-03-28",
+          "hour": 22,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806271200000,
+          "date": "2027-03-28",
+          "hour": 23,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806274800000,
+          "date": "2027-03-29",
+          "hour": 0,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        },
+        {
+          "time": 1806278400000,
+          "date": "2027-03-29",
+          "hour": 1,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "dry",
+          "snow": false,
+          "asSnow": false,
+          "light": true
+        }
+      ]
+    },
+    "week": {
+      "from": "2027-03-28",
+      "to": "2027-04-03",
+      "band": "rain",
+      "answer": "Yes.",
+      "verdict": "A wet week.",
+      "detail": "About 18mm across the week, most on Friday (7mm). About normal for the time of year.",
+      "total": 18,
+      "normal": 13,
+      "rainDays": 4,
+      "showerDays": 0,
+      "wettest": {
+        "date": "2027-04-02",
+        "amount": 7
+      },
+      "days": [
+        {
+          "date": "2027-03-28",
+          "label": "Today",
+          "amount": 2,
+          "band": "rain",
+          "bandLabel": "Rain",
+          "snow": false,
+          "chance": 0.83,
+          "wet": 5,
+          "total": 6
+        },
+        {
+          "date": "2027-03-29",
+          "label": "Mon",
+          "amount": 0,
+          "band": "dry",
+          "bandLabel": "Dry",
+          "snow": false,
+          "chance": 0,
+          "wet": 0,
+          "total": 6
+        },
+        {
+          "date": "2027-03-30",
+          "label": "Tue",
+          "amount": 0,
+          "band": "spots",
+          "bandLabel": "Mostly dry",
+          "snow": false,
+          "chance": 0,
+          "wet": 0,
+          "total": 6
+        },
+        {
+          "date": "2027-03-31",
+          "label": "Wed",
+          "amount": 2,
+          "band": "rain",
+          "bandLabel": "Rain",
+          "snow": false,
+          "chance": 0.67,
+          "wet": 4,
+          "total": 6
+        },
+        {
+          "date": "2027-04-01",
+          "label": "Thu",
+          "amount": 7,
+          "band": "rain",
+          "bandLabel": "Rain",
+          "snow": false,
+          "chance": 1,
+          "wet": 5,
+          "total": 5
+        },
+        {
+          "date": "2027-04-02",
+          "label": "Fri",
+          "amount": 7,
+          "band": "rain",
+          "bandLabel": "Rain",
+          "snow": false,
+          "chance": 1,
+          "wet": 5,
+          "total": 5
+        },
+        {
+          "date": "2027-04-03",
+          "label": "Sat",
+          "amount": 0,
+          "band": "spots",
+          "bandLabel": "Mostly dry",
+          "snow": false,
+          "chance": 0,
+          "wet": 0,
+          "total": 5
+        }
+      ]
+    }
+  },
+  "snow": {
+    "unit": "cm",
+    "days": [
+      {
+        "date": "2027-03-28",
+        "from": "2027-03-28T00:30:00.000Z",
+        "partial": true,
+        "band": "nosnow",
+        "answer": "No.",
+        "verdict": "Rain, not snow.",
+        "detail": "No lower than 7° for the rest of the day. Snow is rare here in March.",
+        "reason": "rain",
+        "bandLabel": "Rain",
+        "amount": 0,
+        "chance": 0,
+        "snowy": 0,
+        "total": 6,
+        "confidence": "good",
+        "threshold": 0.5,
+        "likely": null,
+        "scale": {
+          "min": 0,
+          "max": 5
+        },
+        "models": [
+          {
+            "id": "ecmwf_ifs025",
+            "name": "ECMWF",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "ncep_gfs_seamless",
+            "name": "GFS",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "dwd_icon_seamless",
+            "name": "ICON",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "ukmo_seamless",
+            "name": "UKMO",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "meteofrance_seamless",
+            "name": "Météo-France",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "cmc_gem_seamless",
+            "name": "GEM",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          }
+        ],
+        "month": "March",
+        "agreementText": "0 of 6 forecasts expect snow",
+        "limitedText": null,
+        "stripSummary": "All forecasts say 0cm; none expect snow."
+      },
+      {
+        "date": "2027-03-29",
+        "from": "2027-03-29T00:00:00.000Z",
+        "partial": false,
+        "band": "nosnow",
+        "answer": "No.",
+        "verdict": "Too warm for snow.",
+        "detail": "No lower than 6° all day. Snow is rare here in March.",
+        "reason": "warm",
+        "bandLabel": "Too warm",
+        "amount": 0,
+        "chance": 0,
+        "snowy": 0,
+        "total": 6,
+        "confidence": "good",
+        "threshold": 0.5,
+        "likely": null,
+        "scale": {
+          "min": 0,
+          "max": 5
+        },
+        "models": [
+          {
+            "id": "ecmwf_ifs025",
+            "name": "ECMWF",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "ncep_gfs_seamless",
+            "name": "GFS",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "dwd_icon_seamless",
+            "name": "ICON",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "ukmo_seamless",
+            "name": "UKMO",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "meteofrance_seamless",
+            "name": "Météo-France",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          },
+          {
+            "id": "cmc_gem_seamless",
+            "name": "GEM",
+            "amount": 0,
+            "value": 0,
+            "expectsSnow": false,
+            "agrees": true
+          }
+        ],
+        "month": "March",
+        "agreementText": "0 of 6 forecasts expect snow",
+        "limitedText": null,
+        "stripSummary": "All forecasts say 0cm; none expect snow."
+      }
+    ],
+    "now": {
+      "time": "2027-03-28T00:30:00.000Z",
+      "band": "nosnow",
+      "answer": "No.",
+      "verdict": "Too warm for snow.",
+      "detail": "Dry now. No snow for the next 12 hours.",
+      "amount": 0,
+      "chance": 0,
+      "hours": [
+        {
+          "time": "2027-03-28T01:00:00.000Z",
+          "label": "2am",
+          "chance": 0
+        },
+        {
+          "time": "2027-03-28T03:00:00.000Z",
+          "label": "4am",
+          "chance": 0
+        },
+        {
+          "time": "2027-03-28T05:00:00.000Z",
+          "label": "6am",
+          "chance": 0
+        },
+        {
+          "time": "2027-03-28T07:00:00.000Z",
+          "label": "8am",
+          "chance": 0
+        },
+        {
+          "time": "2027-03-28T09:00:00.000Z",
+          "label": "10am",
+          "chance": 0
+        },
+        {
+          "time": "2027-03-28T11:00:00.000Z",
+          "label": "12pm",
+          "chance": 0
+        }
+      ],
+      "series": [
+        {
+          "time": 1806192000000,
+          "date": "2027-03-28",
+          "hour": 0,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806195600000,
+          "date": "2027-03-28",
+          "hour": 2,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806199200000,
+          "date": "2027-03-28",
+          "hour": 3,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806202800000,
+          "date": "2027-03-28",
+          "hour": 4,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806206400000,
+          "date": "2027-03-28",
+          "hour": 5,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806210000000,
+          "date": "2027-03-28",
+          "hour": 6,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806213600000,
+          "date": "2027-03-28",
+          "hour": 7,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806217200000,
+          "date": "2027-03-28",
+          "hour": 8,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806220800000,
+          "date": "2027-03-28",
+          "hour": 9,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806224400000,
+          "date": "2027-03-28",
+          "hour": 10,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806228000000,
+          "date": "2027-03-28",
+          "hour": 11,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806231600000,
+          "date": "2027-03-28",
+          "hour": 12,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806235200000,
+          "date": "2027-03-28",
+          "hour": 13,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806238800000,
+          "date": "2027-03-28",
+          "hour": 14,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "rain",
+          "light": true
+        },
+        {
+          "time": 1806242400000,
+          "date": "2027-03-28",
+          "hour": 15,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806246000000,
+          "date": "2027-03-28",
+          "hour": 16,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "rain",
+          "light": true
+        },
+        {
+          "time": 1806249600000,
+          "date": "2027-03-28",
+          "hour": 17,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "rain",
+          "light": true
+        },
+        {
+          "time": 1806253200000,
+          "date": "2027-03-28",
+          "hour": 18,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806256800000,
+          "date": "2027-03-28",
+          "hour": 19,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806260400000,
+          "date": "2027-03-28",
+          "hour": 20,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806264000000,
+          "date": "2027-03-28",
+          "hour": 21,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806267600000,
+          "date": "2027-03-28",
+          "hour": 22,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806271200000,
+          "date": "2027-03-28",
+          "hour": 23,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806274800000,
+          "date": "2027-03-29",
+          "hour": 0,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        },
+        {
+          "time": 1806278400000,
+          "date": "2027-03-29",
+          "hour": 1,
+          "amount": 0,
+          "chance": 0,
+          "chance2h": 0,
+          "band": "nosnow",
+          "reason": "warm",
+          "light": true
+        }
+      ]
+    },
+    "week": {
+      "from": "2027-03-28",
+      "to": "2027-04-03",
+      "band": "nosnow",
+      "answer": "No.",
+      "verdict": "No snow this week.",
+      "detail": "No lower than 3° all week. Snow is rare here at this time of year.",
+      "total": 0,
+      "normal": 0,
+      "snowDays": 0,
+      "maybeDays": 0,
+      "snowiest": {
+        "date": "2027-03-28",
+        "amount": 0
+      },
+      "days": [
+        {
+          "date": "2027-03-28",
+          "label": "Today",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Rain",
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "reason": "rain"
+        },
+        {
+          "date": "2027-03-29",
+          "label": "Mon",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Too warm",
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "reason": "warm"
+        },
+        {
+          "date": "2027-03-30",
+          "label": "Tue",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Too warm",
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "reason": "warm"
+        },
+        {
+          "date": "2027-03-31",
+          "label": "Wed",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Rain",
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "reason": "rain"
+        },
+        {
+          "date": "2027-04-01",
+          "label": "Thu",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Rain",
+          "chance": 0,
+          "snowy": 0,
+          "total": 5,
+          "reason": "rain"
+        },
+        {
+          "date": "2027-04-02",
+          "label": "Fri",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Rain",
+          "chance": 0,
+          "snowy": 0,
+          "total": 5,
+          "reason": "rain"
+        },
+        {
+          "date": "2027-04-03",
+          "label": "Sat",
+          "amount": 0,
+          "band": "nosnow",
+          "bandLabel": "Dry",
+          "chance": 0,
+          "snowy": 0,
+          "total": 5,
+          "reason": "dry"
+        }
+      ]
+    },
+    "ahead": [
+      {
+        "time": "2027-03-28T01:00:00.000Z",
+        "now": {
+          "time": "2027-03-28T01:00:00.000Z",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "Dry now. No snow for the next 12 hours.",
+          "amount": 0,
+          "chance": 0,
+          "hours": [
+            {
+              "time": "2027-03-28T02:00:00.000Z",
+              "label": "3am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T04:00:00.000Z",
+              "label": "5am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T06:00:00.000Z",
+              "label": "7am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T08:00:00.000Z",
+              "label": "9am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T10:00:00.000Z",
+              "label": "11am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T12:00:00.000Z",
+              "label": "1pm",
+              "chance": 0
+            }
+          ]
+        },
+        "today": {
+          "date": "2027-03-28",
+          "from": "2027-03-28T01:00:00.000Z",
+          "partial": true,
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Rain, not snow.",
+          "detail": "No lower than 7° for the rest of the day. Snow is rare here in March.",
+          "reason": "rain",
+          "bandLabel": "Rain",
+          "amount": 0,
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "confidence": "good",
+          "threshold": 0.5,
+          "likely": null,
+          "scale": {
+            "min": 0,
+            "max": 5
+          },
+          "models": [
+            {
+              "id": "ecmwf_ifs025",
+              "name": "ECMWF",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ncep_gfs_seamless",
+              "name": "GFS",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "dwd_icon_seamless",
+              "name": "ICON",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ukmo_seamless",
+              "name": "UKMO",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "meteofrance_seamless",
+              "name": "Météo-France",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "cmc_gem_seamless",
+              "name": "GEM",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            }
+          ],
+          "month": "March",
+          "agreementText": "0 of 6 forecasts expect snow",
+          "limitedText": null,
+          "stripSummary": "All forecasts say 0cm; none expect snow."
+        },
+        "week": {
+          "from": "2027-03-28",
+          "to": "2027-04-03",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "No snow this week.",
+          "detail": "No lower than 3° all week. Snow is rare here at this time of year.",
+          "total": 0,
+          "normal": 0,
+          "snowDays": 0,
+          "maybeDays": 0,
+          "snowiest": {
+            "date": "2027-03-28",
+            "amount": 0
+          },
+          "days": [
+            {
+              "date": "2027-03-28",
+              "label": "Today",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-03-29",
+              "label": "Mon",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2027-03-30",
+              "label": "Tue",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2027-03-31",
+              "label": "Wed",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-04-01",
+              "label": "Thu",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-04-02",
+              "label": "Fri",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-04-03",
+              "label": "Sat",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "dry"
+            }
+          ]
+        }
+      },
+      {
+        "time": "2027-03-28T02:00:00.000Z",
+        "now": {
+          "time": "2027-03-28T02:00:00.000Z",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "Dry now. No snow for the next 12 hours.",
+          "amount": 0,
+          "chance": 0,
+          "hours": [
+            {
+              "time": "2027-03-28T03:00:00.000Z",
+              "label": "4am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T05:00:00.000Z",
+              "label": "6am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T07:00:00.000Z",
+              "label": "8am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T09:00:00.000Z",
+              "label": "10am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T11:00:00.000Z",
+              "label": "12pm",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T13:00:00.000Z",
+              "label": "2pm",
+              "chance": 0
+            }
+          ]
+        },
+        "today": {
+          "date": "2027-03-28",
+          "from": "2027-03-28T02:00:00.000Z",
+          "partial": true,
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Rain, not snow.",
+          "detail": "No lower than 7° for the rest of the day. Snow is rare here in March.",
+          "reason": "rain",
+          "bandLabel": "Rain",
+          "amount": 0,
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "confidence": "good",
+          "threshold": 0.5,
+          "likely": null,
+          "scale": {
+            "min": 0,
+            "max": 5
+          },
+          "models": [
+            {
+              "id": "ecmwf_ifs025",
+              "name": "ECMWF",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ncep_gfs_seamless",
+              "name": "GFS",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "dwd_icon_seamless",
+              "name": "ICON",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ukmo_seamless",
+              "name": "UKMO",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "meteofrance_seamless",
+              "name": "Météo-France",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "cmc_gem_seamless",
+              "name": "GEM",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            }
+          ],
+          "month": "March",
+          "agreementText": "0 of 6 forecasts expect snow",
+          "limitedText": null,
+          "stripSummary": "All forecasts say 0cm; none expect snow."
+        },
+        "week": {
+          "from": "2027-03-28",
+          "to": "2027-04-03",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "No snow this week.",
+          "detail": "No lower than 3° all week. Snow is rare here at this time of year.",
+          "total": 0,
+          "normal": 0,
+          "snowDays": 0,
+          "maybeDays": 0,
+          "snowiest": {
+            "date": "2027-03-28",
+            "amount": 0
+          },
+          "days": [
+            {
+              "date": "2027-03-28",
+              "label": "Today",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-03-29",
+              "label": "Mon",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2027-03-30",
+              "label": "Tue",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2027-03-31",
+              "label": "Wed",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-04-01",
+              "label": "Thu",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-04-02",
+              "label": "Fri",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-04-03",
+              "label": "Sat",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "dry"
+            }
+          ]
+        }
+      },
+      {
+        "time": "2027-03-28T03:00:00.000Z",
+        "now": {
+          "time": "2027-03-28T03:00:00.000Z",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "Dry now. No snow for the next 12 hours.",
+          "amount": 0,
+          "chance": 0,
+          "hours": [
+            {
+              "time": "2027-03-28T04:00:00.000Z",
+              "label": "5am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T06:00:00.000Z",
+              "label": "7am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T08:00:00.000Z",
+              "label": "9am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T10:00:00.000Z",
+              "label": "11am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T12:00:00.000Z",
+              "label": "1pm",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T14:00:00.000Z",
+              "label": "3pm",
+              "chance": 0
+            }
+          ]
+        },
+        "today": {
+          "date": "2027-03-28",
+          "from": "2027-03-28T03:00:00.000Z",
+          "partial": true,
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Rain, not snow.",
+          "detail": "No lower than 7° for the rest of the day. Snow is rare here in March.",
+          "reason": "rain",
+          "bandLabel": "Rain",
+          "amount": 0,
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "confidence": "good",
+          "threshold": 0.5,
+          "likely": null,
+          "scale": {
+            "min": 0,
+            "max": 5
+          },
+          "models": [
+            {
+              "id": "ecmwf_ifs025",
+              "name": "ECMWF",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ncep_gfs_seamless",
+              "name": "GFS",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "dwd_icon_seamless",
+              "name": "ICON",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ukmo_seamless",
+              "name": "UKMO",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "meteofrance_seamless",
+              "name": "Météo-France",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "cmc_gem_seamless",
+              "name": "GEM",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            }
+          ],
+          "month": "March",
+          "agreementText": "0 of 6 forecasts expect snow",
+          "limitedText": null,
+          "stripSummary": "All forecasts say 0cm; none expect snow."
+        },
+        "week": {
+          "from": "2027-03-28",
+          "to": "2027-04-03",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "No snow this week.",
+          "detail": "No lower than 3° all week. Snow is rare here at this time of year.",
+          "total": 0,
+          "normal": 0,
+          "snowDays": 0,
+          "maybeDays": 0,
+          "snowiest": {
+            "date": "2027-03-28",
+            "amount": 0
+          },
+          "days": [
+            {
+              "date": "2027-03-28",
+              "label": "Today",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-03-29",
+              "label": "Mon",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2027-03-30",
+              "label": "Tue",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2027-03-31",
+              "label": "Wed",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-04-01",
+              "label": "Thu",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-04-02",
+              "label": "Fri",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-04-03",
+              "label": "Sat",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "dry"
+            }
+          ]
+        }
+      },
+      {
+        "time": "2027-03-28T04:00:00.000Z",
+        "now": {
+          "time": "2027-03-28T04:00:00.000Z",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "Dry now. No snow for the next 12 hours.",
+          "amount": 0,
+          "chance": 0,
+          "hours": [
+            {
+              "time": "2027-03-28T05:00:00.000Z",
+              "label": "6am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T07:00:00.000Z",
+              "label": "8am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T09:00:00.000Z",
+              "label": "10am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T11:00:00.000Z",
+              "label": "12pm",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T13:00:00.000Z",
+              "label": "2pm",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T15:00:00.000Z",
+              "label": "4pm",
+              "chance": 0
+            }
+          ]
+        },
+        "today": {
+          "date": "2027-03-28",
+          "from": "2027-03-28T04:00:00.000Z",
+          "partial": true,
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Rain, not snow.",
+          "detail": "No lower than 7° for the rest of the day. Snow is rare here in March.",
+          "reason": "rain",
+          "bandLabel": "Rain",
+          "amount": 0,
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "confidence": "good",
+          "threshold": 0.5,
+          "likely": null,
+          "scale": {
+            "min": 0,
+            "max": 5
+          },
+          "models": [
+            {
+              "id": "ecmwf_ifs025",
+              "name": "ECMWF",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ncep_gfs_seamless",
+              "name": "GFS",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "dwd_icon_seamless",
+              "name": "ICON",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ukmo_seamless",
+              "name": "UKMO",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "meteofrance_seamless",
+              "name": "Météo-France",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "cmc_gem_seamless",
+              "name": "GEM",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            }
+          ],
+          "month": "March",
+          "agreementText": "0 of 6 forecasts expect snow",
+          "limitedText": null,
+          "stripSummary": "All forecasts say 0cm; none expect snow."
+        },
+        "week": {
+          "from": "2027-03-28",
+          "to": "2027-04-03",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "No snow this week.",
+          "detail": "No lower than 3° all week. Snow is rare here at this time of year.",
+          "total": 0,
+          "normal": 0,
+          "snowDays": 0,
+          "maybeDays": 0,
+          "snowiest": {
+            "date": "2027-03-28",
+            "amount": 0
+          },
+          "days": [
+            {
+              "date": "2027-03-28",
+              "label": "Today",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-03-29",
+              "label": "Mon",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2027-03-30",
+              "label": "Tue",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2027-03-31",
+              "label": "Wed",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-04-01",
+              "label": "Thu",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-04-02",
+              "label": "Fri",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-04-03",
+              "label": "Sat",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "dry"
+            }
+          ]
+        }
+      },
+      {
+        "time": "2027-03-28T05:00:00.000Z",
+        "now": {
+          "time": "2027-03-28T05:00:00.000Z",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "Dry now. No snow for the next 12 hours.",
+          "amount": 0,
+          "chance": 0,
+          "hours": [
+            {
+              "time": "2027-03-28T06:00:00.000Z",
+              "label": "7am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T08:00:00.000Z",
+              "label": "9am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T10:00:00.000Z",
+              "label": "11am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T12:00:00.000Z",
+              "label": "1pm",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T14:00:00.000Z",
+              "label": "3pm",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T16:00:00.000Z",
+              "label": "5pm",
+              "chance": 0
+            }
+          ]
+        },
+        "today": {
+          "date": "2027-03-28",
+          "from": "2027-03-28T05:00:00.000Z",
+          "partial": true,
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Rain, not snow.",
+          "detail": "No lower than 7° for the rest of the day. Snow is rare here in March.",
+          "reason": "rain",
+          "bandLabel": "Rain",
+          "amount": 0,
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "confidence": "good",
+          "threshold": 0.5,
+          "likely": null,
+          "scale": {
+            "min": 0,
+            "max": 5
+          },
+          "models": [
+            {
+              "id": "ecmwf_ifs025",
+              "name": "ECMWF",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ncep_gfs_seamless",
+              "name": "GFS",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "dwd_icon_seamless",
+              "name": "ICON",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ukmo_seamless",
+              "name": "UKMO",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "meteofrance_seamless",
+              "name": "Météo-France",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "cmc_gem_seamless",
+              "name": "GEM",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            }
+          ],
+          "month": "March",
+          "agreementText": "0 of 6 forecasts expect snow",
+          "limitedText": null,
+          "stripSummary": "All forecasts say 0cm; none expect snow."
+        },
+        "week": {
+          "from": "2027-03-28",
+          "to": "2027-04-03",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "No snow this week.",
+          "detail": "No lower than 3° all week. Snow is rare here at this time of year.",
+          "total": 0,
+          "normal": 0,
+          "snowDays": 0,
+          "maybeDays": 0,
+          "snowiest": {
+            "date": "2027-03-28",
+            "amount": 0
+          },
+          "days": [
+            {
+              "date": "2027-03-28",
+              "label": "Today",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-03-29",
+              "label": "Mon",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2027-03-30",
+              "label": "Tue",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2027-03-31",
+              "label": "Wed",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-04-01",
+              "label": "Thu",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-04-02",
+              "label": "Fri",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-04-03",
+              "label": "Sat",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "dry"
+            }
+          ]
+        }
+      },
+      {
+        "time": "2027-03-28T06:00:00.000Z",
+        "now": {
+          "time": "2027-03-28T06:00:00.000Z",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Too warm for snow.",
+          "detail": "Dry now. No snow for the next 12 hours.",
+          "amount": 0,
+          "chance": 0,
+          "hours": [
+            {
+              "time": "2027-03-28T07:00:00.000Z",
+              "label": "8am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T09:00:00.000Z",
+              "label": "10am",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T11:00:00.000Z",
+              "label": "12pm",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T13:00:00.000Z",
+              "label": "2pm",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T15:00:00.000Z",
+              "label": "4pm",
+              "chance": 0
+            },
+            {
+              "time": "2027-03-28T17:00:00.000Z",
+              "label": "6pm",
+              "chance": 0
+            }
+          ]
+        },
+        "today": {
+          "date": "2027-03-28",
+          "from": "2027-03-28T06:00:00.000Z",
+          "partial": true,
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "Rain, not snow.",
+          "detail": "No lower than 8° for the rest of the day. Snow is rare here in March.",
+          "reason": "rain",
+          "bandLabel": "Rain",
+          "amount": 0,
+          "chance": 0,
+          "snowy": 0,
+          "total": 6,
+          "confidence": "good",
+          "threshold": 0.5,
+          "likely": null,
+          "scale": {
+            "min": 0,
+            "max": 5
+          },
+          "models": [
+            {
+              "id": "ecmwf_ifs025",
+              "name": "ECMWF",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ncep_gfs_seamless",
+              "name": "GFS",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "dwd_icon_seamless",
+              "name": "ICON",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "ukmo_seamless",
+              "name": "UKMO",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "meteofrance_seamless",
+              "name": "Météo-France",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            },
+            {
+              "id": "cmc_gem_seamless",
+              "name": "GEM",
+              "amount": 0,
+              "value": 0,
+              "expectsSnow": false,
+              "agrees": true
+            }
+          ],
+          "month": "March",
+          "agreementText": "0 of 6 forecasts expect snow",
+          "limitedText": null,
+          "stripSummary": "All forecasts say 0cm; none expect snow."
+        },
+        "week": {
+          "from": "2027-03-28",
+          "to": "2027-04-03",
+          "band": "nosnow",
+          "answer": "No.",
+          "verdict": "No snow this week.",
+          "detail": "No lower than 3° all week. Snow is rare here at this time of year.",
+          "total": 0,
+          "normal": 0,
+          "snowDays": 0,
+          "maybeDays": 0,
+          "snowiest": {
+            "date": "2027-03-28",
+            "amount": 0
+          },
+          "days": [
+            {
+              "date": "2027-03-28",
+              "label": "Today",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-03-29",
+              "label": "Mon",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2027-03-30",
+              "label": "Tue",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Too warm",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "warm"
+            },
+            {
+              "date": "2027-03-31",
+              "label": "Wed",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 6,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-04-01",
+              "label": "Thu",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-04-02",
+              "label": "Fri",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Rain",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "rain"
+            },
+            {
+              "date": "2027-04-03",
+              "label": "Sat",
+              "amount": 0,
+              "band": "nosnow",
+              "bandLabel": "Dry",
+              "chance": 0,
+              "snowy": 0,
+              "total": 5,
+              "reason": "dry"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "wind": {
+    "unit": "mph",
+    "days": [
+      {
+        "date": "2027-03-28",
+        "from": "2027-03-28T00:30:00.000Z",
+        "partial": true,
+        "window": {
+          "from": 0,
+          "to": 21
+        },
+        "band": "breezy",
+        "answer": "A bit.",
+        "verdict": "Breezy, not windy.",
+        "detail": "Gusts up to 27mph from the south, wind up to 10mph. Windiest around 1pm.",
+        "still": false,
+        "gust": 27,
+        "mean": 10,
+        "peak": "1pm",
+        "direction": {
+          "degrees": 171,
+          "compass": "S",
+          "words": "from the south"
+        },
+        "agree": 6,
+        "total": 6,
+        "confidence": "good",
+        "zone": {
+          "from": 20,
+          "to": 30
+        },
+        "scale": {
+          "min": 0,
+          "max": 50
+        },
+        "models": [
+          {
+            "id": "ecmwf_ifs025",
+            "name": "ECMWF",
+            "gust": 27,
+            "mean": 11,
+            "value": 27.3,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 165,
+              "compass": "S",
+              "words": "from the south"
+            }
+          },
+          {
+            "id": "ncep_gfs_seamless",
+            "name": "GFS",
+            "gust": 28,
+            "mean": 11,
+            "value": 28,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 178,
+              "compass": "S",
+              "words": "from the south"
+            }
+          },
+          {
+            "id": "dwd_icon_seamless",
+            "name": "ICON",
+            "gust": 21,
+            "mean": 8,
+            "value": 21.1,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 180,
+              "compass": "S",
+              "words": "from the south"
+            }
+          },
+          {
+            "id": "ukmo_seamless",
+            "name": "UKMO",
+            "gust": 27,
+            "mean": 10,
+            "value": 26.7,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 169,
+              "compass": "S",
+              "words": "from the south"
+            }
+          },
+          {
+            "id": "meteofrance_seamless",
+            "name": "Météo-France",
+            "gust": 26,
+            "mean": 10,
+            "value": 26.1,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 167,
+              "compass": "S",
+              "words": "from the south"
+            }
+          },
+          {
+            "id": "cmc_gem_seamless",
+            "name": "GEM",
+            "gust": 23,
+            "mean": 9,
+            "value": 23,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 170,
+              "compass": "S",
+              "words": "from the south"
+            }
+          }
+        ],
+        "month": "March",
+        "agreementText": "6 of 6 forecasts say breezy",
+        "limitedText": null,
+        "stripSummary": "Forecast gusts range from 21mph to 28mph; 6 of 6 say breezy.",
+        "dayMean": 8,
+        "normal": null
+      },
+      {
+        "date": "2027-03-29",
+        "from": "2027-03-29T07:00:00.000Z",
+        "partial": false,
+        "window": {
+          "from": 7,
+          "to": 21
+        },
+        "band": "breezy",
+        "answer": "A bit.",
+        "verdict": "Breezy, not windy.",
+        "detail": "Gusts up to 25mph from the north-east, wind up to 10mph. Windiest around 1pm.",
+        "still": false,
+        "gust": 25,
+        "mean": 10,
+        "peak": "1pm",
+        "direction": {
+          "degrees": 59,
+          "compass": "NE",
+          "words": "from the north-east"
+        },
+        "agree": 6,
+        "total": 6,
+        "confidence": "good",
+        "zone": {
+          "from": 20,
+          "to": 30
+        },
+        "scale": {
+          "min": 0,
+          "max": 50
+        },
+        "models": [
+          {
+            "id": "ecmwf_ifs025",
+            "name": "ECMWF",
+            "gust": 23,
+            "mean": 9,
+            "value": 23,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 51,
+              "compass": "NE",
+              "words": "from the north-east"
+            }
+          },
+          {
+            "id": "ncep_gfs_seamless",
+            "name": "GFS",
+            "gust": 25,
+            "mean": 9,
+            "value": 25.5,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 60,
+              "compass": "NE",
+              "words": "from the north-east"
+            }
+          },
+          {
+            "id": "dwd_icon_seamless",
+            "name": "ICON",
+            "gust": 25,
+            "mean": 9,
+            "value": 25.5,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 49,
+              "compass": "NE",
+              "words": "from the north-east"
+            }
+          },
+          {
+            "id": "ukmo_seamless",
+            "name": "UKMO",
+            "gust": 27,
+            "mean": 10,
+            "value": 27.3,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 65,
+              "compass": "NE",
+              "words": "from the north-east"
+            }
+          },
+          {
+            "id": "meteofrance_seamless",
+            "name": "Météo-France",
+            "gust": 25,
+            "mean": 10,
+            "value": 25.5,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 65,
+              "compass": "NE",
+              "words": "from the north-east"
+            }
+          },
+          {
+            "id": "cmc_gem_seamless",
+            "name": "GEM",
+            "gust": 27,
+            "mean": 10,
+            "value": 26.7,
+            "band": "breezy",
+            "agrees": true,
+            "direction": {
+              "degrees": 60,
+              "compass": "NE",
+              "words": "from the north-east"
+            }
+          }
+        ],
+        "month": "March",
+        "agreementText": "6 of 6 forecasts say breezy",
+        "limitedText": null,
+        "stripSummary": "Forecast gusts range from 23mph to 27mph; 6 of 6 say breezy.",
+        "dayMean": 7,
+        "normal": null
+      }
+    ],
+    "now": {
+      "time": "2027-03-28T00:30:00.000Z",
+      "band": "calm",
+      "answer": "No.",
+      "verdict": "It's not windy.",
+      "detail": "Wind 6mph from the south-east, gusts 16mph right now. Breezier from about 7am.",
+      "mean": 6,
+      "gust": 16,
+      "still": false,
+      "direction": {
+        "degrees": 145,
+        "compass": "SE",
+        "words": "from the south-east"
+      },
+      "hours": [
+        {
+          "time": "2027-03-28T01:00:00.000Z",
+          "label": "2am",
+          "gust": 16,
+          "direction": {
+            "degrees": 147,
+            "compass": "SE",
+            "words": "from the south-east"
+          }
+        },
+        {
+          "time": "2027-03-28T03:00:00.000Z",
+          "label": "4am",
+          "gust": 17,
+          "direction": {
+            "degrees": 151,
+            "compass": "SE",
+            "words": "from the south-east"
+          }
+        },
+        {
+          "time": "2027-03-28T05:00:00.000Z",
+          "label": "6am",
+          "gust": 20,
+          "direction": {
+            "degrees": 155,
+            "compass": "SE",
+            "words": "from the south-east"
+          }
+        },
+        {
+          "time": "2027-03-28T07:00:00.000Z",
+          "label": "8am",
+          "gust": 22,
+          "direction": {
+            "degrees": 159,
+            "compass": "S",
+            "words": "from the south"
+          }
+        },
+        {
+          "time": "2027-03-28T09:00:00.000Z",
+          "label": "10am",
+          "gust": 25,
+          "direction": {
+            "degrees": 163,
+            "compass": "S",
+            "words": "from the south"
+          }
+        },
+        {
+          "time": "2027-03-28T11:00:00.000Z",
+          "label": "12pm",
+          "gust": 26,
+          "direction": {
+            "degrees": 167,
+            "compass": "S",
+            "words": "from the south"
+          }
+        }
+      ],
+      "series": [
+        {
+          "time": 1806192000000,
+          "date": "2027-03-28",
+          "hour": 0,
+          "mean": 6,
+          "gust": 16,
+          "gust2h": 16,
+          "band": "calm",
+          "still": false,
+          "dir": 145
+        },
+        {
+          "time": 1806195600000,
+          "date": "2027-03-28",
+          "hour": 2,
+          "mean": 6,
+          "gust": 16,
+          "gust2h": 16,
+          "band": "calm",
+          "still": false,
+          "dir": 147
+        },
+        {
+          "time": 1806199200000,
+          "date": "2027-03-28",
+          "hour": 3,
+          "mean": 6,
+          "gust": 16,
+          "gust2h": 17,
+          "band": "calm",
+          "still": false,
+          "dir": 149
+        },
+        {
+          "time": 1806202800000,
+          "date": "2027-03-28",
+          "hour": 4,
+          "mean": 6,
+          "gust": 17,
+          "gust2h": 17,
+          "band": "calm",
+          "still": false,
+          "dir": 151
+        },
+        {
+          "time": 1806206400000,
+          "date": "2027-03-28",
+          "hour": 5,
+          "mean": 7,
+          "gust": 17,
+          "gust2h": 19,
+          "band": "calm",
+          "still": false,
+          "dir": 153
+        },
+        {
+          "time": 1806210000000,
+          "date": "2027-03-28",
+          "hour": 6,
+          "mean": 7,
+          "gust": 19,
+          "gust2h": 20,
+          "band": "calm",
+          "still": false,
+          "dir": 155
+        },
+        {
+          "time": 1806213600000,
+          "date": "2027-03-28",
+          "hour": 7,
+          "mean": 7,
+          "gust": 20,
+          "gust2h": 21,
+          "band": "breezy",
+          "still": false,
+          "dir": 157
+        },
+        {
+          "time": 1806217200000,
+          "date": "2027-03-28",
+          "hour": 8,
+          "mean": 8,
+          "gust": 21,
+          "gust2h": 22,
+          "band": "breezy",
+          "still": false,
+          "dir": 159
+        },
+        {
+          "time": 1806220800000,
+          "date": "2027-03-28",
+          "hour": 9,
+          "mean": 9,
+          "gust": 22,
+          "gust2h": 24,
+          "band": "breezy",
+          "still": false,
+          "dir": 161
+        },
+        {
+          "time": 1806224400000,
+          "date": "2027-03-28",
+          "hour": 10,
+          "mean": 9,
+          "gust": 24,
+          "gust2h": 25,
+          "band": "breezy",
+          "still": false,
+          "dir": 163
+        },
+        {
+          "time": 1806228000000,
+          "date": "2027-03-28",
+          "hour": 11,
+          "mean": 9,
+          "gust": 25,
+          "gust2h": 26,
+          "band": "breezy",
+          "still": false,
+          "dir": 165
+        },
+        {
+          "time": 1806231600000,
+          "date": "2027-03-28",
+          "hour": 12,
+          "mean": 10,
+          "gust": 26,
+          "gust2h": 26,
+          "band": "breezy",
+          "still": false,
+          "dir": 167
+        },
+        {
+          "time": 1806235200000,
+          "date": "2027-03-28",
+          "hour": 13,
+          "mean": 10,
+          "gust": 26,
+          "gust2h": 27,
+          "band": "breezy",
+          "still": false,
+          "dir": 169
+        },
+        {
+          "time": 1806238800000,
+          "date": "2027-03-28",
+          "hour": 14,
+          "mean": 10,
+          "gust": 27,
+          "gust2h": 27,
+          "band": "breezy",
+          "still": false,
+          "dir": 171
+        },
+        {
+          "time": 1806242400000,
+          "date": "2027-03-28",
+          "hour": 15,
+          "mean": 10,
+          "gust": 26,
+          "gust2h": 26,
+          "band": "breezy",
+          "still": false,
+          "dir": 173
+        },
+        {
+          "time": 1806246000000,
+          "date": "2027-03-28",
+          "hour": 16,
+          "mean": 10,
+          "gust": 26,
+          "gust2h": 26,
+          "band": "breezy",
+          "still": false,
+          "dir": 175
+        },
+        {
+          "time": 1806249600000,
+          "date": "2027-03-28",
+          "hour": 17,
+          "mean": 9,
+          "gust": 25,
+          "gust2h": 25,
+          "band": "breezy",
+          "still": false,
+          "dir": 177
+        },
+        {
+          "time": 1806253200000,
+          "date": "2027-03-28",
+          "hour": 18,
+          "mean": 9,
+          "gust": 24,
+          "gust2h": 24,
+          "band": "breezy",
+          "still": false,
+          "dir": 179
+        },
+        {
+          "time": 1806256800000,
+          "date": "2027-03-28",
+          "hour": 19,
+          "mean": 9,
+          "gust": 22,
+          "gust2h": 22,
+          "band": "breezy",
+          "still": false,
+          "dir": 181
+        },
+        {
+          "time": 1806260400000,
+          "date": "2027-03-28",
+          "hour": 20,
+          "mean": 8,
+          "gust": 21,
+          "gust2h": 21,
+          "band": "breezy",
+          "still": false,
+          "dir": 183
+        },
+        {
+          "time": 1806264000000,
+          "date": "2027-03-28",
+          "hour": 21,
+          "mean": 7,
+          "gust": 20,
+          "gust2h": 20,
+          "band": "breezy",
+          "still": false,
+          "dir": 185
+        },
+        {
+          "time": 1806267600000,
+          "date": "2027-03-28",
+          "hour": 22,
+          "mean": 7,
+          "gust": 19,
+          "gust2h": 19,
+          "band": "calm",
+          "still": false,
+          "dir": 187
+        },
+        {
+          "time": 1806271200000,
+          "date": "2027-03-28",
+          "hour": 23,
+          "mean": 7,
+          "gust": 17,
+          "gust2h": 17,
+          "band": "calm",
+          "still": false,
+          "dir": 189
+        },
+        {
+          "time": 1806274800000,
+          "date": "2027-03-29",
+          "hour": 0,
+          "mean": 6,
+          "gust": 17,
+          "gust2h": 17,
+          "band": "calm",
+          "still": false,
+          "dir": 191
+        },
+        {
+          "time": 1806278400000,
+          "date": "2027-03-29",
+          "hour": 1,
+          "mean": 6,
+          "gust": 16,
+          "gust2h": 16,
+          "band": "calm",
+          "still": false,
+          "dir": 45
+        }
+      ]
+    },
+    "week": {
+      "from": "2027-03-28",
+      "to": "2027-04-03",
+      "band": "gale",
+      "answer": "Yes.",
+      "verdict": "Windy on Tue, Wed and Thu, gales on Wed.",
+      "detail": "Windiest on Wednesday, gusts up to 57mph.",
+      "windyDays": 3,
+      "breezyDays": 3,
+      "windiest": {
+        "date": "2027-03-31",
+        "gust": 57
+      },
+      "mean": 11,
+      "normal": null,
+      "days": [
+        {
+          "date": "2027-03-28",
+          "label": "Today",
+          "gust": 27,
+          "mean": 10,
+          "band": "breezy",
+          "bandLabel": "Breezy",
+          "still": false
+        },
+        {
+          "date": "2027-03-29",
+          "label": "Mon",
+          "gust": 25,
+          "mean": 10,
+          "band": "breezy",
+          "bandLabel": "Breezy",
+          "still": false
+        },
+        {
+          "date": "2027-03-30",
+          "label": "Tue",
+          "gust": 44,
+          "mean": 19,
+          "band": "verywindy",
+          "bandLabel": "Very windy",
+          "still": false
+        },
+        {
+          "date": "2027-03-31",
+          "label": "Wed",
+          "gust": 57,
+          "mean": 27,
+          "band": "gale",
+          "bandLabel": "Gale",
+          "still": false
+        },
+        {
+          "date": "2027-04-01",
+          "label": "Thu",
+          "gust": 37,
+          "mean": 16,
+          "band": "windy",
+          "bandLabel": "Windy",
+          "still": false
+        },
+        {
+          "date": "2027-04-02",
+          "label": "Fri",
+          "gust": 24,
+          "mean": 9,
+          "band": "breezy",
+          "bandLabel": "Breezy",
+          "still": false
+        },
+        {
+          "date": "2027-04-03",
+          "label": "Sat",
+          "gust": 11,
+          "mean": 5,
+          "band": "calm",
+          "bandLabel": "Light winds",
+          "still": false
+        }
+      ]
+    }
+  }
+}

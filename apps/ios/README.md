@@ -14,14 +14,15 @@ project.yml              XcodeGen 2.46.0 spec; WillItSnow.xcodeproj is generated
 Package.resolved         the pinned package versions, copied into the project by ci/xcodegen.sh
 Configs/                 Base (every target), Team (Carl's team ID, not a secret), Snow (identifiers,
                          API origin, ad units), CI-Simulator (signed to run locally, for CI)
-Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API models, generated Keys
+Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API models, generated Keys,
+                         and in Tests/IsItTestSupport the fixtures and golden vectors with their loaders
 Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore), IsItAds (Google's SDKs),
                          IsItUI (the skeleton's answer view), IsItWidgetUI (the widget's entry, provider, view)
 Apps/Snow/App/           WillItSnowApp, AppModel, HomeView, DebugHooks (every test and debug hook)
 Apps/Snow/Resources/     the app's Info.plist, entitlements and privacy manifest
 Apps/Snow/Widgets/       the widget extension, its Info.plist, entitlements and privacy manifest
 Apps/Snow/Tests/         app-hosted unit tests: the App Group round trip (V1), widget snapshots
-Apps/Snow/UITests/       launches each fixture and attaches the screen
+Apps/Snow/UITests/       launches the aberdeen-snow and leeds-dry fixtures and attaches the screens
 TestPlans/               Unit and UI
 ci/                      xcodegen.sh, simulator.sh, test.sh, release-check.sh, xcresult-summary.mjs, contact-sheet.mjs;
                          for releases archive.sh, upload.sh and ExportOptions.plist
@@ -51,8 +52,9 @@ CI builds and tests everything, so this is only for trying the app by hand.
    after every pull: the project is generated, never committed, so new files only appear then.
 3. Choose the `WillItSnow` scheme and an iPhone 17 simulator, and run. With no fixture the
    app shows only a progress indicator, since it doesn't fetch yet. To see an answer: Product,
-   Scheme, Edit Scheme, Run, Arguments, and tick `-fixture aberdeen-snow` (or `leeds-dry`). Then
-   add the widget on the simulator's home screen: it shows the same answer.
+   Scheme, Edit Scheme, Run, Arguments, and tick `-fixture aberdeen-snow` (or `leeds-dry`, or
+   add `-fixture` with any other fixture's name, below). Then add the widget on the simulator's
+   home screen: it shows the same answer.
 4. Product, Test runs the Unit test plan; pick UI from the test plan menu for the UI tests.
 5. On your iPhone (Debug builds only): Xcode, Settings, Accounts needs your Apple Account, and
    the App IDs `today.willitsnow.app` and `today.willitsnow.app.widgets` need the App Group and,
@@ -124,7 +126,7 @@ don't depend on them.
 There is no Xcode here, so iOS code is only compiled on GitHub's macOS runners. What runs here:
 
 ```sh
-pnpm mobile:check                     # Keys.swift and the fixtures are what packages/mobile writes
+pnpm mobile:check                     # Keys.swift, the fixtures and the vectors are what packages/mobile writes
 docker run --rm -v "$PWD/apps/ios":/w -w /w swift:6.3.3-noble \
   swift format lint --strict --recursive Packages Apps          # every Swift file, as CI lints it
 docker run --rm -v "$PWD/apps/ios/Packages/IsItCore":/w -w /w swift:6.3.3-noble \
@@ -259,8 +261,13 @@ launch argument. So far there are two:
 - `-fixture <name>` shows that fixture as if just fetched, and saves it in the App Group for the
   widget. A name with no fixture stops the app, so a UI test can't pass on the wrong screen.
 
-The fixtures are the ones `pnpm mobile:generate` writes for IsItCore's tests. The app's Debug
-builds bundle that folder; `EXCLUDED_SOURCE_FILE_NAMES = Fixtures` leaves it out of Release.
+The fixtures are the ones `pnpm mobile:generate` writes for IsItCore's tests: 21 answers from
+the real server (two with a block deleted), each with a `_fixture` note saying what it shows
+(`durham-tomorrow`, `kathmandu-0545`, `london-dst-autumn-night`, `stale`, `old-forecast` and the
+rest; the list is in `packages/mobile/src/fixtures.ts`). The app's Debug builds bundle that
+folder; `EXCLUDED_SOURCE_FILE_NAMES = Fixtures` leaves it out of Release. The golden vectors
+beside them (`Resources/Vectors`, the files section 7.4 lists, one case to a line) are for
+IsItCore's tests only.
 Debug builds may also keep the last answer in the app's own container when the App Group can't
 open (`DebugHooks.storeFallback`, V1); Release can't. `ci/release-check.sh` builds Release on
 every run and fails if a binary names a hook, a fixture is bundled, or the widget links Google

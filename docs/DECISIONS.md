@@ -1123,6 +1123,72 @@ uploads it to TestFlight, and `scripts/check-archive.sh`, which checks a build f
   of the archive (development signing may need a registered iPhone, and may add a certificate per
   run; the README's table says what to do), and altool on Xcode 26.6.
 
+## The iPhone app's fixtures and golden vectors (packages/mobile)
+
+The iOS build spec's PRs 2.1 and 2.4: every fixture in section 7.3 and every vector file in
+section 7.4, written by `pnpm mobile:generate` into IsItCore's test resources and checked by
+`pnpm mobile:check`. This records where they fill or differ from the spec.
+
+- **21 fixtures, each the real `handleToday`'s answer.** Where the synthetic data can't give a
+  state, the upstream is changed and the server does the rest: `relabelZone` for the offset
+  zones, `onlyModels` for `limited` (ECMWF and GFS answer, the other four send null), `endsAfter`
+  for a forecast that stops, and an upstream that is down for `stale`, which the server answers
+  from a forecast it cached two hours before. That makes `stale` and `limited` real answers
+  rather than edited ones, so `stale` has the old `updatedAt` with today worked out now, as the
+  server sends it. Only `no-week` and `no-now` edit the answer (deleting `snow.week` or
+  `snow.now`), and `old-forecast` is a real answer whose `_fixture.now` is 7 hours after it:
+  the server never answers with a copy past the stale limit, so that state exists only on the
+  phone. Each `_fixture.note` says how its file was made.
+- **Moments the synthetic data needed.** Durham on 1 December says No tomorrow, so
+  `durham-tomorrow` is 6:05pm on 16 December (Yes tomorrow from all 6 forecasts; its last hour
+  ahead is midnight, the 17th's). The spec gives no moment for `shrewsbury-maybe` (9:05am on 12
+  December), `denver-f` (9:05am MST on 28 January 2027: Denver seldom snows on the synthetic
+  data, and that day has Maybe tomorrow, in inches) or `kolkata-0530` (9:10pm, so the hours
+  ahead cross midnight). The searched places are at 5:30pm on 2 December, as the spec says.
+  Reykjavík and Denver keep the synthetic source's whole-hour zones (`Etc/GMT+1`, `Etc/GMT+7`);
+  only the offset zones are relabelled.
+- **`relabelZone` moves whole days too.** Kiritimati is UTC+14 and the synthetic zone for its
+  longitude UTC-10, a day behind, so with the hour strings left alone its forecast would start
+  the day before and its week would have six days. Where the two offsets are a whole day apart
+  the dates move by that day; the hours stay as they are, which is what puts them off the UTC
+  hour.
+- **The clock changes are four files** (`london-dst-autumn-night`, `-autumn-evening`,
+  `-spring-night`, `-spring-evening`), one per moment the spec gives. The forecast has one UTC
+  offset throughout, as Open-Meteo's `utc_offset_seconds` and the parser have it, so the hours
+  ahead are right (1am twice in October, none in March) but on those two nights tomorrow's
+  `from` is an hour out: 11pm GMT on 25 October, 1am BST on 29 March. The fixtures record the
+  server as it answers.
+- **One fixture more than the spec: `forecast-ends`.** Section 7.4's tomorrow cases need a
+  response with no `days[1]`, and section 6.5 one whose last hour ahead ends before the stale
+  cut-off; no real forecast does either. Leeds at 8:05pm with the upstream's forecast stopping at
+  midnight does both: no tomorrow, no week, three hours ahead.
+- **A vector file** is `{ fn, source, cases }`, with each case `{ fn, in, out }`, because most
+  files cover several functions; `fn` lists them and `source` says where each comes from
+  (`client@pickHour`). Moments are epoch milliseconds, as the client takes them. An answer is
+  named by its fixture (`in.fixture`), and where a function returns one of the answer's own snow
+  objects (pickHour's Now, today and week, the middle view's day, a widget entry's day) the vector
+  has its path in that fixture ("snow.ahead.2.today"), which the Swift test reads back: the same
+  object, compared whole, and the files stay under 1 MB. The generator refuses Infinity, NaN and
+  holes, which JSON would write as null, and a path that isn't the answer's own object.
+- **One case to a line,** so a changed answer is a changed line in review, and a mismatch can be
+  found by its index.
+- **Every output comes from the reference,** and a vitest test calls each function again from
+  each case's input alone and compares, so a case can't say one thing and test another.
+  `updatedLine`'s cases are also checked against core `updatedTime` at the same moment, as
+  section 6.4 asks. `query.json` has no `windUnits` (the apps never send it) and adds
+  `searchQuery`, which the picker needs. The vitest tests also check that each file covers what
+  section 7.4 lists for it.
+- **`IsItTestSupport` loads them:** `Vectors.cases(file, fn:, input:, output:)` decodes one
+  function's cases as that function's own types and skips the rest, and `Fixtures.info` reads
+  `_fixture`. The Swift tests check that every fixture decodes and shows its state, and that
+  every vector file is there and names fixtures that exist. IsItLogic is untouched: its ports
+  and their tests are phase 3.
+- **Found on the way, not changed here:** with a phone clock behind the server across 6pm
+  (planned at 5:59pm from a 6:05pm answer), `widgetEntries` has no entry at 6pm, since entries
+  start only at the hours ahead, so a widget would say Today until 7pm. The vectors pin today's
+  behaviour; whether to add the place's 6pm and midnight as boundaries is a client change for a
+  PR of its own.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,
