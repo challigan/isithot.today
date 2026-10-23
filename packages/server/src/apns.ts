@@ -249,8 +249,12 @@ export async function alertsRun({
   now,
   origin,
 }: AlertsRunInput): Promise<string> {
-  if (deployContext === 'production' || env('ALERTS_SMOKE')?.trim() !== '1') {
-    return 'alerts-run: disabled';
+  // Says why, so a preview check that does not send shows what it saw.
+  if (deployContext === 'production') return 'alerts-run: disabled (production)';
+  const setting = env('ALERTS_SMOKE')?.trim();
+  if (setting !== '1') {
+    const where = deployContext ?? 'unknown context';
+    return `alerts-run: disabled (${where}, ALERTS_SMOKE ${setting ? 'is not 1' : 'unset'})`;
   }
   const smoke = await apnsSmoke(env, { now, ...(origin ? { origin } : {}) });
   return `alerts-run: smoke ${smoke.ok ? 'passed' : 'failed'}: ${smoke.line}`;

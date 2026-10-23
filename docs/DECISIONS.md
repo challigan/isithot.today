@@ -909,9 +909,10 @@ service (APNs). Two things were unverified on Carl's legacy Netlify plan, so a s
 first (iOS build spec, phase 1.5) and the full job follows.
 
 - **V8, does the schedule run?** `functions/api/alerts-run.mts` runs every 15 minutes (UTC) and,
-  until the full job lands, only logs `alerts-run: disabled`. The Netlify Functions page should
-  list it as scheduled, with a log line every 15 minutes in production. About 2,900 invocations
-  a month.
+  until the full job lands, only logs `alerts-run: disabled (production)`. The Netlify Functions
+  page should list it as scheduled, with a log line every 15 minutes in production. About 2,900
+  invocations a month. Elsewhere the line says what it saw, for example
+  `(deploy-preview, ALERTS_SMOKE unset)`, so a preview check that sends nothing shows why.
 - **V9, can a function reach APNs over HTTP/2?** On a deploy preview with `ALERTS_SMOKE=1`,
   **Run now** sends one push with the sandbox key to a made-up device (`apnsSmoke`). Apple's
   `400 BadDeviceToken` proves egress, TLS, HTTP/2 and that Apple took the key's token (a refused

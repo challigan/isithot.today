@@ -3,8 +3,9 @@ import { alertsRun } from '../lib/server.mjs';
 
 /**
  * The snow notifications' run, every 15 minutes. Until the full job lands it only logs one line
- * ("alerts-run: disabled"), which shows the schedule works; on a deploy preview with ALERTS_SMOKE=1,
- * "Run now" also checks that a function can reach Apple's push service (packages/server apns.ts).
+ * ("alerts-run: disabled (production)"), which shows the schedule works; on a deploy preview
+ * with ALERTS_SMOKE=1, "Run now" also checks that a function can reach Apple's push service
+ * (packages/server apns.ts).
  */
 export default async (_request: Request, context: Context): Promise<void> => {
   console.log(

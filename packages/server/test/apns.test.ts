@@ -304,11 +304,16 @@ describe('apnsSmoke', () => {
 describe('alertsRun', () => {
   it('logs one line and sends nothing until the full job lands', async () => {
     const { origin, seen } = await fakeApns(apple);
-    for (const deployContext of ['production', 'deploy-preview', 'branch-deploy', undefined]) {
-      expect(await alertsRun({ env: env(ENV), deployContext, now: NOW, origin })).toBe(
-        'alerts-run: disabled',
-      );
-    }
+    const run = (deployContext: string | undefined, vars = ENV) =>
+      alertsRun({ env: env(vars), deployContext, now: NOW, origin });
+    expect(await run('production')).toBe('alerts-run: disabled (production)');
+    expect(await run('deploy-preview')).toBe(
+      'alerts-run: disabled (deploy-preview, ALERTS_SMOKE unset)',
+    );
+    expect(await run('branch-deploy', { ...ENV, ALERTS_SMOKE: 'yes' })).toBe(
+      'alerts-run: disabled (branch-deploy, ALERTS_SMOKE is not 1)',
+    );
+    expect(await run(undefined)).toBe('alerts-run: disabled (unknown context, ALERTS_SMOKE unset)');
     expect(seen).toHaveLength(0);
   });
 
@@ -316,7 +321,7 @@ describe('alertsRun', () => {
     const { origin, seen } = await fakeApns(apple);
     const smokeOn = env({ ...ENV, ALERTS_SMOKE: '1' });
     expect(await alertsRun({ env: smokeOn, deployContext: 'production', now: NOW, origin })).toBe(
-      'alerts-run: disabled',
+      'alerts-run: disabled (production)',
     );
     expect(seen).toHaveLength(0);
   });
