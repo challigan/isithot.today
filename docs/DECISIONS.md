@@ -1650,6 +1650,100 @@ What the review of phases 2 and 3 found, and what changed for it.
   jobs, and what App Intents reads at build time is from Apple's documentation, unchecked on
   Xcode.
 
+## The iPhone app's Today page (IsItCore, IsItKit, apps/ios; phase 5.1, the page half)
+
+The iOS build spec's PR 5.1, its page half: the home screen's top bar and its Today page, from a
+`TodayResponse`, as section 10.2 lays them out. The model that fetches (`AppModel`, the launch
+order) is the other half, written beside it; the two meet in `HomeView.swift`.
+
+- **The content is a presenter in IsItLogic, tested on Linux.**
+  `HomePage(_:view:at:phase:placeName:)` makes one page as plain values: its state, band and
+  palette, the question, the answer, the heading VoiceOver reads with the place, the verdict and
+  detail, the middle page's agreement heading, strip (`StripGeometry`), strip summary, model list
+  and limited line, Retry, and the footer. It works out nothing of its own: it takes the hour
+  `HourPicker` picks, the middle day `MiddleDay` gives, `Questions.snow`, `MiddleDay.label`,
+  `UpdatedLine` and the generated copy. `HomeTopBar(placeName:approximate:)` is the top bar, with "Finding you…"
+  (`CoreCopy.locating`) while no place is known, as the website's header has it.
+- **Its reference is TypeScript, and so are its vectors.** packages/mobile `page.ts` (`homePage`)
+  is built only of core's and the client's functions: core `viewDisplay` of the answer client
+  `pickHour` picks at the moment, as the website shows that answer, with the hour's Now as
+  `snowNow`, its today in place of the answer's own and its week (the server's answer at the
+  start of that hour, by the `ahead` semantic test), and the middle view's day from client
+  `middleDay`; core `question` and `viewLabel`; client `updatedLine`; `COPY` and appCopy.ts.
+  `page.json` holds its answers for every fixture and view at the fixture's own moment, and for
+  eleven of them at an hour ahead, the last minute before `usableUntil` and at it; for Durham
+  across 6pm and without tomorrow; after each kind of request; with the place's name given or
+  empty; without `updated` or snow; and with no answer: 222 page cases, and core `creditParts`'
+  cases. The vitest replays each from its input, the vector guard holds the Swift to every case
+  (`PageVectorTests`), and `HomePageTests` reads the spec's fixtures as examples, their strings
+  taken from the file. Broken on purpose (the offline line's precedence, the 6pm flip a minute
+  out), the Swift fails its cases.
+- **The states.** Loading (no answer, asking): "Checking…" on `nosnow`'s palette, with shapes
+  holding the page's layout. Error (no answer, the request failed, offline or not): the
+  website's "Forecasts are unavailable right now…" with Retry. Not available (an answer without
+  snow, or without the view's block: no Now, no week, no tomorrow from 6pm): "Not available right
+  now.". No recent forecast (past `usableUntil`, on every view): `AppCopy.staleApp`, never the
+  old hour. An answer on screen stays while a request is out or after one failed. Without an
+  answer to show, the page has no band, so no glyph, and `nosnow`'s palette.
+- **The footer.** "Updated" and the `UpdatedLine` (at the place's date now, so "yesterday, …"
+  after midnight); then the offline line, which says when the forecast is from, or else the
+  stale line: offline, "It will refresh shortly" would not be true. Past `usableUntil` there is
+  no notice, since no forecast is showing, and the Updated line stays. The links out and the
+  places nearby are the answer's own (`links`, `nearby`), each hidden when there are none; the
+  website words the links into a sentence ("… on BBC Weather, Met Office or AccuWeather."), and
+  the app lays them out as a row of links under the intro, as section 10.2 has them, so it needs
+  no joining words of its own. The credits are the answer's `attribution` in pieces with their
+  links (`Credits.parts`, the port of core `creditParts`, matching phrases code unit for code
+  unit as `startsWith` does).
+- **The credits' links moved into core,** from `Credit.astro` (`CREDIT_LINKS`, and
+  `creditParts` in place of its regular expression), so the website and the apps link the same
+  phrases from one list; the generator writes it into `CoreCopy.creditLinks`. The website's
+  output is unchanged: the old split and the new give the same pieces for every credit.
+- **Two app strings.** `headingLabel` ("{place}. {question} {answer}", section 10.2's "Leeds.
+  Will it snow tomorrow? Yes.") and `modelLine` ("{name} · {value}", "ECMWF · 2cm"). Without a
+  place's name the heading is the website's own, the question and then the answer. The question
+  on screen asks without the place, as on the website's home page.
+- **No units input.** The task named the units among the presenter's inputs, but nothing on the
+  page depends on them: every amount is the answer's own, in `snow.unit`, worded by the server or
+  by `StripGeometry`, so a units input would have nothing to decide. The units a request asks
+  for are the model's.
+- **The views take plain values and actions** (IsItUI):
+  `HomeShell(topBar:theme:actions:content:)`, the background of the page on screen,
+  cross-fading in 0.9 s when the band changes (at once with Reduce Motion), with the top bar over
+  the pages; `ForecastPageView(page:theme:glyph:actions:)`, one page; `PageTheme`; and
+  `HomeActions` (retry, open the place picker, open Settings, use my location, open a link,
+  select a nearby place). They never see the app's model, which is written beside them; `HomeView.swift` connects the two, and for now gives the
+  skeleton's model, links opening in Safari through `openURL`, and actions that wait for the
+  model that fetches and for phase 6's sheets. Phase 5.2 puts the switcher and the pager in the
+  shell's content and adds the Now and week bodies to `HomePage`, so the shell isn't rewritten.
+- **IsItUI depends on IsItLogic, and not on SnowKit.** The app gives each page its colours
+  (`PageTheme(palette)`, with SnowKit's `Color(rgb:)`) and its glyph (`Glyphs.image`), so IsItUI
+  names no topic and the widget, which links SnowKit, still links none of the app's screens. The
+  app now links IsItLogic (project.yml), generated with XcodeGen 2.46.0 built from source: the
+  targets' IDs, which the test plans name, are unchanged.
+- **Accessibility, as section 16 asks for these elements:** the question and answer are one
+  heading element labelled with the place; the strip is one element read as its summary; a
+  model's row reads its name and amount; at accessibility sizes the rows stack, the place name
+  wraps to two lines and the glyph stops growing at 160 points; every text uses a text style, the
+  answer `Font.custom("BricolageAnswer", size: 64, relativeTo: .largeTitle)`; the background and
+  glyph are left alone by Smart Invert; buttons and links use the system's styles, tinted in the
+  palette's ink. A model that disagrees has a lighter amount rather than fainter text, as on the
+  website, so it keeps its contrast; its dot on the strip is fainter.
+- **The fixture hook shows a fixture at its own moment** (`DebugHooks.launchMoment`, its
+  `_fixture.now`), so a UI test on any day sees the state the fixture was made for. The UI tests
+  changed where the page's structure did: the place is a button labelled "Place: Aberdeen. Change
+  place.", and the question and answer are one heading ("Aberdeen. Will it snow today? Yes."),
+  so they read those where they read the skeleton's place and answer texts, and still wait for
+  the verdict and check it. `durham-tomorrow` (tomorrow's answer at 6:05pm) and `old-forecast`
+  (no recent forecast, and no verdict) are new.
+- **Not here yet:** the flakes' drift (the glyph is drawn whole), the announcement when the
+  picked hour changes the answer (section 16, phase 5.4), pull to refresh (5.3), the
+  notifications card and the upgrade row (phases 8 and 7), and the ImageRenderer snapshots of
+  every page, band and text size (section 17.2).
+- **Not proven here:** IsItUI and the app compile only on the macOS jobs, so the views, their
+  layout, VoiceOver's reading of them and the UI tests are unproven until the first `ios` run;
+  only the presenters, their vectors and the lint ran here.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,
@@ -1871,8 +1965,10 @@ checks it answers `text/plain` on all four hosts).
   `copy.ts`). The API's `attribution` carries them; the footer of every page on all the
   sites shows them, with Open-Meteo, NASA POWER and both licences linked, plus GeoNames. The
   About pages name the agencies behind the models (from `MODELS`, so dropping a model updates
-  them) and say that the sites combine and modify the data. The apps will need the same
-  visible credits, not only the JSON field.
+  them) and say that the sites combine and modify the data. The iPhone app's page footer shows
+  the API's `attribution` lines as they are, with the same phrases linked: the phrases and their
+  links are core's (`CREDIT_LINKS`, split by `creditParts`), which the website's `Credit.astro`
+  reads too.
 - **The answer font in the apps.** Bricolage Grotesque is under the SIL Open Font License 1.1,
   with no reserved font name. The iPhone app bundles the answer's subset as `BricolageAnswer.ttf`,
   renamed and so a modified version, which the OFL allows; its name table keeps the copyright

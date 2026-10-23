@@ -33,9 +33,39 @@ enum DebugHooks {
     static func launchAnswer(
       arguments: [String] = ProcessInfo.processInfo.arguments
     ) -> LaunchAnswer? {
+      guard let name = fixtureName(arguments) else { return nil }
+      do {
+        let response = try TodayResponse.decode(from: fixtureData(name))
+        return LaunchAnswer(key: "fixture:\(name)", savedAt: response.updatedAt, response: response)
+      } catch {
+        fatalError("-fixture: \(name).json doesn't decode: \(error)")
+      }
+    }
+
+    /// With `-fixture <name>`, the moment the fixture is for (`_fixture.now`), which the home
+    /// screen shows it at, so a fixture launched on any day shows the state it was made for (the
+    /// hour picked, Tomorrow from 6pm, no recent forecast). Nil without, for the system clock.
+    static let launchMoment: Date? = fixtureMoment(ProcessInfo.processInfo.arguments)
+
+    static func fixtureMoment(_ arguments: [String]) -> Date? {
+      guard let name = fixtureName(arguments) else { return nil }
+      guard
+        let fixture = try? JSONDecoder().decode(FixtureNote.self, from: fixtureData(name)),
+        let moment = ApiJSON.parseDate(fixture.note.now)
+      else { fatalError("-fixture: \(name).json has no moment") }
+      return moment
+    }
+
+    /// The fixture `-fixture` names, if any.
+    private static func fixtureName(_ arguments: [String]) -> String? {
       guard let flag = arguments.firstIndex(of: "-fixture"), arguments.indices.contains(flag + 1)
       else { return nil }
-      let name = arguments[flag + 1]
+      return arguments[flag + 1]
+    }
+
+    /// The fixture's file, from the copy only Debug builds bundle. A name with no fixture stops
+    /// the app.
+    private static func fixtureData(_ name: String) -> Data {
       guard
         let url = Bundle.main.url(
           forResource: name,
@@ -44,12 +74,7 @@ enum DebugHooks {
         ),
         let data = try? Data(contentsOf: url)
       else { fatalError("-fixture: the app has no Fixtures/\(name).json") }
-      do {
-        let response = try TodayResponse.decode(from: data)
-        return LaunchAnswer(key: "fixture:\(name)", savedAt: response.updatedAt, response: response)
-      } catch {
-        fatalError("-fixture: \(name).json doesn't decode: \(error)")
-      }
+      return data
     }
   #else
     static let storeFallback = false
@@ -57,5 +82,23 @@ enum DebugHooks {
     static func prepare() {}
 
     static func launchAnswer() -> LaunchAnswer? { nil }
+
+    static let launchMoment: Date? = nil
   #endif
 }
+
+#if DEBUG
+  /// What a fixture says about itself (`_fixture`), as far as the hooks read it: its moment.
+  private struct FixtureNote: Decodable {
+    struct Note: Decodable {
+      /// ISO 8601 UTC.
+      let now: String
+    }
+
+    let note: Note
+
+    enum CodingKeys: String, CodingKey {
+      case note = "_fixture"
+    }
+  }
+#endif

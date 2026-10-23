@@ -5,8 +5,9 @@ The native SwiftUI app for willitsnow.today, built from the iOS build spec. This
 hooks, their tests, the CI that builds and runs them, and the release job that signs the app and
 uploads it to TestFlight; with phase 2.3's generated assets: the snow glyphs, the app icon and
 the answer font. The app shows a fixture when a Debug build is launched with `-fixture <name>`,
-and the widget shows the answer the app saved in the App Group. Fetching, the real home screen
-and everything else come in later phases.
+and the widget shows the answer the app saved in the App Group. Phase 5.1 (the page half) brings
+the home screen's top bar and its Today page (below). Fetching and everything else come in later
+phases.
 
 ## What is where
 
@@ -20,16 +21,19 @@ Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API
                          fixtures and golden vectors with their loaders; in Tests/IsItLogicTests the ports'
                          golden tests and the guard that every vector file is ported (below)
 Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore), IsItAds (Google's SDKs),
-                         IsItUI (the skeleton's answer view), IsItWidgetUI (the widget's entry, provider,
-                         view), SnowKit (Glyphs, Color(rgb:) for the palettes, and the glyph catalogues,
-                         generated)
-Apps/Snow/App/           WillItSnowApp, AppModel, HomeView, DebugHooks (every test and debug hook)
+                         IsItUI (the home screen: HomeShell and ForecastPageView, drawing IsItLogic's
+                         HomePage and HomeTopBar, with HomeActions), IsItWidgetUI (the widget's entry,
+                         provider, view), SnowKit (Glyphs, Color(rgb:) for the palettes, and the glyph
+                         catalogues, generated)
+Apps/Snow/App/           WillItSnowApp, AppModel, HomeView (the home screen, from the model), DebugHooks
+                         (every test and debug hook)
 Apps/Snow/Resources/     the app's Info.plist, entitlements and privacy manifest; generated: Assets.xcassets
                          (the app icon) and Fonts/BricolageAnswer.ttf (the app's and the widget's)
 Apps/Snow/Widgets/       the widget extension, its Info.plist, entitlements and privacy manifest
 Apps/Snow/Tests/         app-hosted unit tests: the App Group round trip (V1), widget and glyph snapshots,
                          palette contrast, the answer font
-Apps/Snow/UITests/       launches the aberdeen-snow and leeds-dry fixtures and attaches the screens
+Apps/Snow/UITests/       launches the aberdeen-snow, leeds-dry, durham-tomorrow and old-forecast fixtures,
+                         checks the Today page, and attaches the screens
 TestPlans/               Unit and UI
 ci/                      xcodegen.sh, simulator.sh, test.sh, release-check.sh, xcresult-summary.mjs, contact-sheet.mjs;
                          for releases archive.sh, upload.sh and ExportOptions.plist
@@ -59,7 +63,7 @@ CI builds and tests everything, so this is only for trying the app by hand.
 2. `apps/ios/ci/xcodegen.sh`, then `open apps/ios/WillItSnow.xcodeproj`. Run the script again
    after every pull: the project is generated, never committed, so new files only appear then.
 3. Choose the `WillItSnow` scheme and an iPhone 17 simulator, and run. With no fixture the
-   app shows only a progress indicator, since it doesn't fetch yet. To see an answer: Product,
+   app shows the Today page's loading state, since it doesn't fetch yet. To see an answer: Product,
    Scheme, Edit Scheme, Run, Arguments, and tick `-fixture aberdeen-snow` (or `leeds-dry`, or
    add `-fixture` with any other fixture's name, below). Then add the widget on the simulator's
    home screen: it shows the same answer.
@@ -244,6 +248,7 @@ included. Until the last port landed it failed, with one issue for each file not
 | `alerts.json`    | 3.4, done | `AlertSync.action`, `.body`, `.fingerprint`         |
 | `links.json`     | 3.4, done | `DeepLink.parse`, `.route(payload:placeNow:)`       |
 | `recent.json`    | 3.4, done | `RecentPlaces`                                      |
+| `page.json`      | 5.1, done | `HomePage`, `Credits.parts`                         |
 
 While a file was still to port, `ios.yml`'s `swift-linux` job failed at its Test step, and the
 jobs that need it (`ios`, `archive-check`, and so `contact-sheet`) didn't run. A new vector file
@@ -404,7 +409,11 @@ launch argument. So far there are two:
 
 - `-uitest` turns animations off;
 - `-fixture <name>` shows that fixture as if just fetched, and saves it in the App Group for the
-  widget. A name with no fixture stops the app, so a UI test can't pass on the wrong screen.
+  widget. A name with no fixture stops the app, so a UI test can't pass on the wrong screen. The
+  home screen shows it at the fixture's own moment (`_fixture.now`, `DebugHooks.launchMoment`),
+  so on any day it shows the state it was made for: the hour picked, Tomorrow from 6pm at the
+  place, no recent forecast for `old-forecast`. Spec 9.8's `-now` and `-clock` come with the
+  model that has a clock.
 
 The fixtures are the ones `pnpm mobile:generate` writes for IsItCore's tests: 21 answers from
 the real server (two with a block deleted), each with a `_fixture` note saying what it shows
@@ -442,6 +451,27 @@ The early questions of spec section 26 that phases 0 and 2 settle.
 | V11 | Do Google Mobile Ads 13.11.0 and UMP 3.1.0 resolve and cache through SPM on the runner? Is the demo app ID right? Does UMP's debug geography work? | Resolve and cache: pending CI. App ID and geography: phase 8 | The `ios` job's `Resolve packages` step (only the committed versions) and the `.spm` cache, whose hit or miss the run summary shows; the build then compiles IsItAds against both SDKs. Settled by the first green `ios` run and the cache hit on the run after it.                                                                                                                          | Only the pins so far: `swift package resolve` on Linux resolved both at their tags' revisions, which match `git ls-remote`, but stopped before the binary zips (dl.google.com is blocked here). The runner is the first to download, check and cache them.                                                                                                                                          |
 | V13 | Will `xcodebuild` run the iPhone-only app on an iPad simulator, in compatibility mode?                                                             | Pending CI                                                   | `ipad-compat` in `ios-nightly.yml` (spec section 18.2), which is still to be written. If not: `simctl install`, then `simctl io` screenshots for an agent to review.                                                                                                                                                                                                                         | None yet.                                                                                                                                                                                                                                                                                                                                                                                           |
 
+## The home screen (phase 5.1, the page half)
+
+The top bar and the Today page (spec section 10.2), drawn from plain values:
+
+- **IsItLogic makes the content** (Linux-tested): `HomePage(_:view:at:phase:placeName:)` gives a
+  page's state, band and palette, question, answer, the heading VoiceOver reads with the place,
+  verdict and detail, the middle page's agreement, strip, model list and limited line, Retry, and
+  the footer (the Updated line, the stale or offline line, the links out, the places nearby and
+  the credits in pieces with their links); `HomeTopBar(placeName:approximate:)` the top bar. Its
+  reference is packages/mobile `page.ts`, made of core's and the client's rules, and `page.json`
+  checks it case by case (the table above).
+- **IsItUI draws it:** `HomeShell(topBar:theme:actions:content:)` (the background of the page on
+  screen and the top bar over the pages), `ForecastPageView(page:theme:glyph:actions:)` (one page),
+  `PageTheme` (a page's colours) and `HomeActions` (retry, open the place picker, open Settings,
+  use my location, open a link, select a nearby place). IsItUI doesn't know the app's model, and
+  doesn't link SnowKit: the app gives each page its theme (`PageTheme(palette)`, with SnowKit's
+  `Color(rgb:)`) and glyph (`Glyphs.image`).
+- **The app connects them** in `HomeView.swift` alone: today with the skeleton's model (the
+  fixture's answer, links opening in Safari, the other actions waiting for the model that fetches
+  and for phase 6's sheets). Phase 5.2 puts the switcher and the pager in `HomeShell`'s content.
+
 ## Not here yet
 
 Each comes with the phase that needs it, so nothing in the skeleton is dormant:
@@ -449,9 +479,10 @@ Each comes with the phase that needs it, so nothing in the skeleton is dormant:
 - the launch screen's `LaunchBackground` colour, from the palettes, which belongs in the
   generated `Assets.xcassets`; the widget's gallery name and description (`AppCopy.widgetName`,
   `AppCopy.widgetDescription`);
-- the target keys, freshness, hour picker and widget planner in the app and the widget (ported
-  in phase 3, used from phases 5 and 7), so the skeleton's widget shows one entry and never goes
-  stale: the only answer it can find is a Debug fixture;
+- the target keys, freshness and widget planner in the app and the widget (ported in phase 3,
+  used from phases 5 and 7), so the skeleton's widget shows one entry and never goes stale: the
+  only answer it can find is a Debug fixture. The home screen's Today page picks its hour already
+  (`HomePage`, below);
 - the rest of `SnowKit`, `APIClient`, location, StoreKit (`Snow.storekit`), notifications, `AdsService` and the
   banner, `SKAdNetworkItems`, and the privacy manifests' collected data types (coarse location,
   the push token);

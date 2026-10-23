@@ -1,0 +1,230 @@
+import Foundation
+import IsItLogic
+import IsItModel
+import IsItTestSupport
+import Testing
+
+/// The page the app shows for the spec's fixtures, at each one's own moment (`_fixture.now`), as
+/// `page.json` has it from the TypeScript (packages/mobile `homePage`, from core `viewDisplay`
+/// and the client's rules): the strings here are the vectors', so these read as the spec's
+/// examples, and `PageVectorTests` checks every case.
+@Suite("The home page, from the answer")
+struct HomePageTests {
+  let answers = FixtureAnswers()
+
+  /// The page for `fixture` at its own moment.
+  func page(
+    _ fixture: String,
+    _ view: AppView = .today,
+    phase: HomePage.Phase = .ready,
+    placeName: String? = nil
+  ) throws -> HomePage {
+    let now = try #require(ApiJSON.parseDate(try Fixtures.info(fixture).now))
+    return HomePage(try answers(fixture), view: view, at: now, phase: phase, placeName: placeName)
+  }
+
+  @Test("aberdeen-snow: Yes today from all six forecasts, though it isn't snowing now")
+  func aberdeen() throws {
+    let today = try page("aberdeen-snow")
+    #expect(today.state == .ready)
+    #expect(today.label == "Today")
+    #expect(today.band == .snow)
+    #expect(today.palette == Palettes.Snow.snow)
+    #expect(today.question == "Will it snow today?")
+    #expect(today.answer == "Yes.")
+    #expect(today.headingLabel == "Aberdeen. Will it snow today? Yes.")
+    #expect(today.verdict == "It'll snow.")
+    #expect(today.detail == "3 to 4cm still to come. Mostly between 5pm and midnight.")
+    let day = try #require(today.day)
+    #expect(day.heading == "6 of 6 forecasts expect snow")
+    #expect(day.summary == "Forecasts range from 0.9cm to 5cm; 6 of 6 expect snow.")
+    #expect(day.strip.min == "0cm")
+    #expect(day.strip.dots.count == 6)
+    #expect(
+      day.lines.map(\.text) == [
+        "ECMWF · 5cm", "GFS · 4cm", "ICON · 3cm", "UKMO · 4cm", "Météo-France · 3cm",
+        "GEM · 0.9cm",
+      ])
+    #expect(day.limited == nil)
+    #expect(today.retry == nil)
+    let footer = try #require(today.footer)
+    #expect(footer.updated == "Updated 9:05am GMT")
+    #expect(footer.notice == nil)
+    #expect(footer.outboundIntro == "Want the full picture? See the forecast on")
+    #expect(footer.links.map(\.name) == ["BBC Weather", "Met Office", "AccuWeather"])
+    #expect(footer.nearbyLabel == "Nearby:")
+    #expect(!footer.nearby.isEmpty)
+
+    let now = try page("aberdeen-snow", .now)
+    #expect(now.headingLabel == "Aberdeen. Is it snowing right now? No.")
+    #expect(now.verdict == "Raining, not snowing.")
+    #expect(now.band == .nosnow)
+    #expect(now.day == nil)
+    let week = try page("aberdeen-snow", .week)
+    #expect(week.headingLabel == "Aberdeen. Will it snow this week? Yes.")
+    #expect(week.label == "This week")
+    #expect(week.band == .heavysnow)
+  }
+
+  @Test("durham-tomorrow: from 6pm the middle page answers for tomorrow")
+  func durham() throws {
+    let tomorrow = try page("durham-tomorrow")
+    #expect(tomorrow.tomorrow)
+    #expect(tomorrow.label == "Tomorrow")
+    #expect(tomorrow.question == "Will it snow tomorrow?")
+    #expect(tomorrow.headingLabel == "Durham. Will it snow tomorrow? Yes.")
+    #expect(tomorrow.verdict == "It'll snow.")
+    #expect(tomorrow.detail == "4 to 5cm of snow. Mostly between 2am and 8am.")
+    #expect(tomorrow.day?.summary == "Forecasts range from 3cm to 5cm; 6 of 6 expect snow.")
+    #expect(tomorrow.footer?.updated == "Updated 6:05pm GMT")
+  }
+
+  @Test("leeds-dry: No, rain not snow, with every forecast at none")
+  func leeds() throws {
+    let today = try page("leeds-dry")
+    #expect(today.headingLabel == "Leeds. Will it snow today? No.")
+    #expect(today.verdict == "Rain, not snow.")
+    #expect(today.band == .nosnow)
+    #expect(today.palette == Palettes.Snow.nosnow)
+    #expect(today.day?.heading == "0 of 6 forecasts expect snow")
+    #expect(today.day?.summary == "All forecasts say 0cm; none expect snow.")
+    #expect(try page("leeds-dry", .week).verdict == "A few flakes on Sat, nothing more.")
+  }
+
+  @Test("stale: the stale line, and offline, the offline line instead")
+  func stale() throws {
+    let stale = try page("stale")
+    #expect(stale.state == .ready)
+    #expect(stale.footer?.updated == "Updated 7:05am GMT")
+    #expect(stale.footer?.notice == "Showing the last forecast we have. It will refresh shortly.")
+    let offline = try page("stale", phase: .offline)
+    #expect(offline.footer?.notice == "You're offline. Showing the forecast from 7:05am GMT.")
+  }
+
+  @Test("no-now: Now is not available, and the other pages are")
+  func noNow() throws {
+    let now = try page("no-now", .now)
+    #expect(now.state == .notAvailable)
+    #expect(now.answer == "Not available right now.")
+    #expect(now.headingLabel == "Aberdeen. Is it snowing right now? Not available right now.")
+    #expect(now.band == nil)
+    #expect(now.palette == Palettes.Snow.nosnow)
+    #expect(now.verdict == nil && now.detail == nil)
+    #expect(now.footer?.updated == "Updated 9:05am GMT")
+    #expect(try page("no-now").state == .ready)
+  }
+
+  @Test("limited: two forecasts, and the limited line")
+  func limited() throws {
+    let today = try page("limited")
+    #expect(today.day?.heading == "2 of 2 forecasts expect snow")
+    #expect(today.day?.limited == "Limited forecast data")
+    #expect(today.day?.lines.map(\.text) == ["ECMWF · 5cm", "GFS · 4cm"])
+    #expect(try page("limited", .week).state == .notAvailable)
+  }
+
+  @Test("denver-f: amounts in inches, and the server's clock without a zone")
+  func denver() throws {
+    let today = try page("denver-f")
+    #expect(today.headingLabel == "Denver. Will it snow today? No.")
+    #expect(today.day?.summary == "All forecasts say 0in; none expect snow.")
+    #expect(today.day?.lines.first?.text == "ECMWF · 0in")
+    #expect(today.day?.strip.max.hasSuffix("in") == true)
+    #expect(today.footer?.updated == "Updated 9:05am")
+    #expect(try page("denver-f", .week).headingLabel == "Denver. Will it snow this week? Maybe.")
+  }
+
+  @Test("kathmandu-0545: an offset zone, its own hour and date")
+  func kathmandu() throws {
+    let today = try page("kathmandu-0545")
+    #expect(!today.tomorrow)
+    #expect(today.headingLabel == "Kathmandu. Will it snow today? No.")
+    #expect(today.verdict == "Too warm for snow.")
+    #expect(today.footer?.updated == "Updated 5:30pm")
+  }
+
+  @Test("old-forecast: past usableUntil, no recent forecast, and the footer without a notice")
+  func oldForecast() throws {
+    let old = try page("old-forecast", phase: .offline)
+    #expect(old.state == .noRecent)
+    #expect(old.answer == "No recent forecast. Connect to the internet to refresh.")
+    #expect(old.band == nil && old.day == nil && old.verdict == nil)
+    #expect(old.footer?.updated == "Updated 11:05am GMT")
+    #expect(old.footer?.notice == nil)
+  }
+
+  @Test("with no answer: checking, then the error with Retry, and no footer")
+  func noAnswer() {
+    let moment = Date(epochMs: 1_796_202_300_000)
+    let loading = HomePage(nil, view: .today, at: moment, phase: .loading)
+    #expect(loading.state == .loading)
+    #expect(loading.answer == "Checking…")
+    #expect(loading.headingLabel == "Will it snow today? Checking…")
+    #expect(loading.palette == Palettes.Snow.nosnow)
+    #expect(loading.retry == nil && loading.footer == nil)
+    for phase in [HomePage.Phase.error, .offline] {
+      let error = HomePage(nil, view: .today, at: moment, phase: phase, placeName: "Leeds")
+      #expect(error.state == .error)
+      #expect(
+        error.headingLabel
+          == "Leeds. Will it snow today? Forecasts are unavailable right now. Try again in a few minutes."
+      )
+      #expect(error.retry == "Retry")
+      #expect(error.footer == nil)
+    }
+  }
+
+  @Test("the place: the top bar's name, else the answer's; an empty one leaves it out")
+  func place() throws {
+    #expect(
+      try page("aberdeen-snow", placeName: "Old Aberdeen").headingLabel
+        == "Old Aberdeen. Will it snow today? Yes.")
+    #expect(try page("aberdeen-snow", placeName: "").headingLabel == "Will it snow today? Yes.")
+  }
+
+  @Test("the credits: each line of the answer's attribution, with its phrases linked")
+  func credits() throws {
+    let credits = try #require(try page("aberdeen-snow").footer?.credits)
+    #expect(credits.count == 3)
+    #expect(credits.map { $0.map(\.text).joined() } == (try answers("aberdeen-snow").attribution))
+    let openMeteo = URL(string: "https://open-meteo.com/")
+    let licence = URL(string: "https://creativecommons.org/licenses/by/4.0/")
+    #expect(
+      credits[0] == [
+        CreditPart(text: "Weather data by Open-Meteo.com", url: openMeteo),
+        CreditPart(text: " ("),
+        CreditPart(text: "CC BY 4.0", url: licence),
+        CreditPart(text: "), modified"),
+      ])
+    let nasa = URL(string: "https://power.larc.nasa.gov/")
+    #expect(credits[2].last == CreditPart(text: "NASA POWER", url: nasa))
+  }
+}
+
+@Suite("The home screen's top bar")
+struct HomeTopBarTests {
+  @Test("the place, labelled to change it, and Settings")
+  func place() {
+    let bar = HomeTopBar(placeName: "Leeds", approximate: false)
+    #expect(bar.place == "Leeds")
+    #expect(bar.placeLabel == "Place: Leeds. Change place.")
+    #expect(bar.approximate == nil && bar.useMyLocation == nil)
+    #expect(bar.settings == "Settings")
+  }
+
+  @Test("on the approximate place, the line beneath and its button")
+  func approximate() {
+    let bar = HomeTopBar(placeName: "Leeds", approximate: true)
+    #expect(bar.approximate == "Using approximate location.")
+    #expect(bar.useMyLocation == "Use my location")
+  }
+
+  @Test("before the place is known, the website's line for it")
+  func unknown() {
+    for name in [nil, ""] as [String?] {
+      let bar = HomeTopBar(placeName: name, approximate: true)
+      #expect(bar.place == "Finding you…")
+      #expect(bar.placeLabel == "Finding you…")
+    }
+  }
+}

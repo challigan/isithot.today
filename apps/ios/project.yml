@@ -44,7 +44,7 @@ targets:
           EXCLUDED_SOURCE_FILE_NAMES: Fixtures
     dependencies:
       - package: IsItCore
-        products: [IsItModel]
+        products: [IsItModel, IsItLogic]
       - package: IsItKit
         products: [IsItServices, IsItUI, IsItAds, SnowKit]
       - target: WillItSnowWidgets

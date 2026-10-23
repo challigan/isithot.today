@@ -7,6 +7,7 @@
  */
 import {
   COPY,
+  CREDIT_LINKS,
   ERROR_MESSAGES,
   SNOW_BAND_LABELS,
   SNOW_REASON_LABELS,
@@ -16,7 +17,14 @@ import {
   VIEWS,
   VIEW_LABELS,
 } from '@isithot/core';
-import { generatedHeader, swiftCase, swiftIdentifier, swiftLet, swiftString } from './swift';
+import {
+  generatedHeader,
+  swiftCall,
+  swiftCase,
+  swiftIdentifier,
+  swiftLet,
+  swiftString,
+} from './swift';
 
 export const CORE_COPY_PATH =
   'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated/CoreCopy.swift';
@@ -72,6 +80,19 @@ function switchOver(
   ];
 }
 
+/** The credits' linked phrases as Swift, each an https link, or it throws. */
+function creditLinks(): string[] {
+  return CREDIT_LINKS.flatMap((link) => {
+    if (new URL(link.url).protocol !== 'https:') throw new Error(`Not an https link: ${link.url}`);
+    return swiftCall(
+      '    ',
+      'CreditLink',
+      [`phrase: ${swiftString(link.phrase)}`, `url: ${swiftString(link.url)}`],
+      ',',
+    );
+  });
+}
+
 export function coreCopySwift(): string {
   const wanted = new Set<string>(CORE_COPY_KEYS);
   const copy = Object.entries(COPY).filter(([key]) => wanted.has(key));
@@ -114,6 +135,18 @@ export function coreCopySwift(): string {
     '  public static func snowReasonLabel(_ reason: SnowReason) -> String? {',
     ...switchOver('reason', SNOW_REASON_LABELS, ['    case .unknown: nil']),
     '  }',
+    '',
+    '  /// A phrase of the credits that links out, and where to (core `CREDIT_LINKS`).',
+    '  public struct CreditLink: Sendable, Equatable {',
+    '    public let phrase: String',
+    '    public let url: String',
+    '  }',
+    '',
+    "  /// The credits' linked phrases, in core's order, which `Credits.parts(_:)` (IsItLogic) splits",
+    '  /// a credit by, as core `creditParts` does.',
+    '  public static let creditLinks: [CreditLink] = [',
+    ...creditLinks(),
+    '  ]',
     '',
     "  /// The API error envelope's message for its code (core `ERROR_MESSAGES`), or nil for a code",
     "  /// the app doesn't know.",
