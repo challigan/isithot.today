@@ -1,10 +1,11 @@
 /**
  * Credits and legal wording on all four sites (served here under '', /wet, /snow and /wind): every
  * page's footer carries the API's credits, with "Weather data by Open-Meteo.com" linked as
- * Open-Meteo's licence asks and both licences linked; About names the sources and licences; Terms
- * ask for fair use rather than non-commercial use; Cookies say what declining consent means.
+ * Open-Meteo's licence asks and both licences linked; About names the sources and licences; Privacy
+ * gives the contact address; Terms ask for fair use rather than non-commercial use; Cookies say
+ * what declining consent means.
  */
-import { MODELS } from '../packages/core/src/config';
+import { CONTACT_EMAIL, MODELS } from '../packages/core/src/config';
 import { ATTRIBUTION } from '../packages/core/src/copy';
 import { expect, test } from './helpers';
 
@@ -41,7 +42,7 @@ test('every page credits the data, with the sources and licences linked', async 
 
 test.describe('the legal pages', () => {
   for (const prefix of PREFIXES) {
-    test(`About, Terms and Cookies on ${prefix || '/'}`, async ({ page }) => {
+    test(`About, Privacy, Terms and Cookies on ${prefix || '/'}`, async ({ page }) => {
       await page.goto(`${prefix}/about`);
       const main = page.locator('main');
       await expect(main.getByRole('heading', { name: 'Data sources' })).toBeVisible();
@@ -63,6 +64,13 @@ test.describe('the legal pages', () => {
       await expect(main).toContainText(
         '"There are no restrictions on the use, access, and/or download of data from the NASA POWER Project."',
       );
+
+      await page.goto(`${prefix}/privacy`);
+      await expect(main.getByRole('link', { name: CONTACT_EMAIL })).toHaveAttribute(
+        'href',
+        `mailto:${CONTACT_EMAIL}`,
+      );
+      await expect(main).not.toContainText('to be added');
 
       await page.goto(`${prefix}/terms`);
       await expect(main).not.toContainText('non-commercial');

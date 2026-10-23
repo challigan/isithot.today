@@ -13,6 +13,8 @@
  *   --snow-site <url>  The same for willitsnow.today.
  *   --wind-site <url>  The same for isitwindy.today.
  */
+import { setTimeout as sleep } from 'node:timers/promises';
+
 const args = process.argv.slice(2);
 /** The value of `--name value` or `--name=value`, taken out of the arguments. */
 function option(name) {
@@ -88,22 +90,44 @@ function describe(err) {
 }
 
 /**
+ * Netlify's own "Not Found" page, which some of its servers still answer with for a few seconds
+ * after a new deploy goes live on others (and so after version.json shows its commit). The sites'
+ * own 404 pages never say this.
+ */
+const NOT_LIVE = /Not Found - Request ID/;
+const NOT_LIVE_TRIES = 6;
+const NOT_LIVE_WAIT_MS = 2000;
+
+const notLiveYet = ({ res, body }) =>
+  res.status === 404 && typeof body === 'string' && NOT_LIVE.test(body);
+
+/**
  * Redirects are not followed, so a page that should be served but redirects fails. A dropped
  * connection (fetch's TypeError, from the runner's network or the far end) is logged with its
- * cause and tried once more; a second one fails the run, naming the address.
+ * cause and tried once more; a second one fails the run, naming the address. Netlify's "Not
+ * Found" page for a deploy that has not reached every server yet is tried again every 2 s, up to
+ * 6 times, and then fails the check that asked.
  */
 async function get(path, options = {}) {
+  const where = `${options.origin ?? base}${path}`;
+  let result;
   try {
-    return await request(path, options);
+    result = await request(path, options);
   } catch (err) {
     if (!(err instanceof TypeError)) throw err;
-    console.log(`RETRY ${options.origin ?? base}${path}  (${describe(err)})`);
+    console.log(`RETRY ${where}  (${describe(err)})`);
     try {
-      return await request(path, options);
+      result = await request(path, options);
     } catch (again) {
-      throw new Error(`${options.origin ?? base}${path}: ${describe(again)}`, { cause: again });
+      throw new Error(`${where}: ${describe(again)}`, { cause: again });
     }
   }
+  for (let i = 0; i < NOT_LIVE_TRIES && notLiveYet(result); i++) {
+    console.log(`RETRY ${where}  (Netlify's "Not Found": the deploy is not on every server yet)`);
+    await sleep(NOT_LIVE_WAIT_MS);
+    result = await request(path, options);
+  }
+  return result;
 }
 
 async function request(path, { origin = base, headers = {} } = {}) {
