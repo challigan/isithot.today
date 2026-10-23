@@ -147,6 +147,6 @@ public struct StripGeometry: Codable, Sendable, Equatable {
 
   /// "2cm": the amount as JavaScript writes the number, then the unit (core `amountText`).
   private static func amountText(_ amount: Double, _ unit: SnowUnit) -> String {
-    JavaScript.string(amount) + unit.rawValue
+    JavaScriptNumber.string(amount) + unit.rawValue
   }
 }

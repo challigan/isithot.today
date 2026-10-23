@@ -1403,8 +1403,8 @@ and registered with the vector guard.
   IsItModel; `Target(search:)` takes a result), and `Topic`, in core's order of topics, which is
   the order `build` writes `ahead` in. `build` has no `windUnits`: the apps never send it, and a
   vector with it would fail, since the reference's query would have it. `fresh` takes a `Date`;
-  its hour is the floor of the seconds over 3,600, the same hour as `floor(now / HOUR)` in
-  milliseconds.
+  its hour is `Math.floor(now / HOUR)` of the moment's nearest whole millisecond (`epochMs`), as
+  every ported rule reads a `Date` (see "IsItCore, put together" below).
 - **What `place.v1` holds** is the client's `Target` JSON, or nothing for approximate IP
   location (section 9.6): `target.stored()` writes it and `Target(stored:)` reads it, falling back
   to IP location for nothing, or for anything that isn't a target, as the website reads its
@@ -1455,7 +1455,7 @@ case by case (`placeTime`, `tomorrow`, `freshness`, `hours`, `questions` and `st
   fallbacks give other moments, and one on it (Aberdeen), and records the reference's answers,
   with `in.without` naming what was taken out. The Swift tests take the same blocks out before
   decoding. Each fallback, broken on purpose in the Swift, fails its cases.
-- **The strip's amounts are written as JavaScript writes numbers** (`JavaScript.string`,
+- **The strip's amounts are written as JavaScript writes numbers** (`JavaScriptNumber.string`,
   ECMAScript `Number::toString`: Swift's shortest digits, laid out as JavaScript lays them out),
   since core words "0.9cm" with a template string. Its positions are the same `Double` arithmetic
   in the same order, so they are compared exactly.
@@ -1483,7 +1483,7 @@ every vector file is now ported and the guard passes.
   non-null assertion becomes a stale entry that no moment reaches (each is before `usableUntil`),
   rather than a crash in a widget.
 - **A fingerprint is written as `JSON.stringify` writes it,** keys sorted by UTF-16 code unit at
-  every level, numbers as JavaScript writes them (3.3's `JavaScript.string`), and only the quote,
+  every level, numbers as JavaScript writes them (`JavaScriptNumber.string`), and only the quote,
   the backslash and control characters escaped, by a small writer of its own: `JSONEncoder`
   escapes "/" unless told not to, and its key order and number forms are its own, not
   JavaScript's. The app only ever compares its own fingerprints, but the same bytes as the
@@ -1523,6 +1523,40 @@ every vector file is now ported and the guard passes.
 - **Each rule, broken on purpose in the Swift, fails its cases:** the week's four days, a
   heartbeat due exactly, a control character's escape, `trim`'s U+FEFF, the day roll-over, a
   negative cap and an hour ahead at `now` exactly.
+
+## The iPhone app's IsItCore, put together (phase 3)
+
+The three porters' branches (3.2, 3.3 and 3.4) are merged into one with ordinary merge commits.
+Every vector file is ported, the guard passes with none left to port, and the package has no
+`XCTSkip`: phase 3's exit (spec section 19).
+
+- **One writer of JavaScript's numbers.** 3.2 wrote `JavaScriptNumber.string` in IsItModel, for
+  keys and queries, and 3.3 `JavaScript.string` in IsItLogic, for the strip's amounts, which 3.4's
+  fingerprint used too: two ports of ECMAScript `Number::toString`. They agreed on 2.5 million
+  doubles (random bit patterns, each power of ten from 1e-330 to 1e310 times a few mantissas,
+  amounts to the hundredth, -0, NaN and the infinities), so one is kept: 3.2's, in the lower
+  module, beside its `Math.round` and `toFixed`. It is `package`, so IsItLogic's ports use it
+  without it becoming the apps' API. 3.3's tests of it now test it, in IsItModelTests, unchanged
+  otherwise. Broken on purpose, it fails `query.json`, `target.json`, `strip.json` and
+  `alerts.json` cases.
+- **One hour.** Core `HOUR`, which `freshness.ts`, `query.ts` and `widget.ts` all import, is
+  `Date.hourMs` (`package`, beside `epochMs`), for `Freshness`, `WidgetPlanner` and
+  `TodayQuery.fresh`, where 3.3 and 3.4 each had a constant of their own and 3.2 counted in
+  seconds. The client's own `DAY` (in `alerts.ts` and `links.ts`) and `MINUTE` (`widget.ts`) are
+  each file's, and stay each port's.
+- **A fresh query reads the moment as the clock rules do.** 3.2's `fresh` floored the seconds
+  over 3,600, which agrees with the reference for every whole millisecond, so for every vector,
+  but not with the rest of IsItCore for a system clock's moment within half a millisecond before
+  the hour: `epochMs` rounds it up to the hour, so `Freshness` counts the hour begun, while the
+  fresh query asked for the hour before. It now floors `epochMs` over `Date.hourMs`, as
+  `Math.floor(now / HOUR)`; `FreshQueryTests` pins both sides of the half.
+- **Nothing else was written twice.** 3.4 built on 3.2's `Target` and 3.3's `HourPicker`,
+  `MiddleDay` and `Freshness`, and on 3.3's `FixtureAnswers` in its tests. The byte-for-byte
+  string comparisons are one line each, where each rule compares, and stay there.
+- **Not proven here:** no app or widget target links IsItLogic yet (`project.yml` links IsItModel
+  only), so IsItLogic is built only on Linux until phase 5 uses it; Darwin's Foundation
+  (`userInfo` bridging, `JSONDecoder`'s doubles, time zones) is proven only by the macOS jobs,
+  which run once `swift-linux` is green.
 
 ## API contract
 

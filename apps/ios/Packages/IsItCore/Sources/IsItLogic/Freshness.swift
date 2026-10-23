@@ -130,9 +130,7 @@ public enum Freshness {
     Date(epochMs: hourAfter(hourly(res)?.series, now.epochMs) + jitterMs)
   }
 
-  // MARK: - In milliseconds, as the TypeScript counts
-
-  static let hourMs = 3_600_000
+  // MARK: - In milliseconds, as the TypeScript counts (core `HOUR` is `Date.hourMs`)
 
   static func hourUntilMs(_ res: TodayResponse) -> Int? {
     guard let block = hourly(res), let from = block.from else { return nil }
@@ -147,7 +145,7 @@ public enum Freshness {
   static func usableUntilMs(_ res: TodayResponse) -> Int {
     let end: Int?
     if let last = res.snow?.ahead?.last {
-      end = last.time.epochMs + hourMs
+      end = last.time.epochMs + Date.hourMs
     } else {
       end = hourUntilMs(res)
     }
@@ -180,7 +178,7 @@ public enum Freshness {
     if let next = series?.first(where: { $0.time.epochMs > at }) {
       return next.time.epochMs
     }
-    return Int((Double(at) / Double(hourMs)).rounded(.down)) * hourMs + hourMs
+    return Int((Double(at) / Double(Date.hourMs)).rounded(.down)) * Date.hourMs + Date.hourMs
   }
 
   /// The local date of the hour core `computeNow` reads at `time`, or nil where it has no answer:
@@ -194,14 +192,16 @@ public enum Freshness {
     let a: ApiClockHour
     if i >= 0 {
       a = series[i]
-    } else if time > first.time.epochMs - hourMs {
+    } else if time > first.time.epochMs - Date.hourMs {
       a = first
     } else {
       return nil
     }
-    if i >= 0, i + 1 < series.count, series[i + 1].time.epochMs - a.time.epochMs <= 3 * hourMs {
+    if i >= 0, i + 1 < series.count,
+      series[i + 1].time.epochMs - a.time.epochMs <= 3 * Date.hourMs
+    {
       return a.date
     }
-    return time - a.time.epochMs < hourMs ? a.date : nil
+    return time - a.time.epochMs < Date.hourMs ? a.date : nil
   }
 }

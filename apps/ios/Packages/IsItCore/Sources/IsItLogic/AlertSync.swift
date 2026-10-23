@@ -296,7 +296,7 @@ private enum JSONValue {
     case .bool(let value):
       return value ? "true" : "false"
     case .number(let value):
-      return JavaScript.string(value)
+      return JavaScriptNumber.string(value)
     case .string(let value):
       return Self.quoted(value)
     case .object(let fields):

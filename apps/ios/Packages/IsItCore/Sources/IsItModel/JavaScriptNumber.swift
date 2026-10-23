@@ -1,11 +1,13 @@
 /// JavaScript's own arithmetic, where the TypeScript reference relies on it: how it writes a
 /// number (`String(n)`), `Math.round`, and `Number(x.toFixed(digits))`. The ports use these, so a
-/// key, a query and a rounded coordinate come out exactly as the website's.
-enum JavaScriptNumber {
+/// key, a query, a rounded coordinate, the strip's amounts and a registration's fingerprint come
+/// out exactly as the TypeScript's. `package`, so IsItLogic's ports share this one copy without
+/// it becoming the apps' API.
+package enum JavaScriptNumber {
   /// `String(n)` (ECMAScript Number::toString): the shortest digits that read back as `n`,
   /// written out from 1e-6 up to 1e21 and with an exponent outside that ("1e-7", "1.5e+21"), and
   /// "0" for -0. Swift's `description` would write "53.0" and "1e-07".
-  static func string(_ n: Double) -> String {
+  package static func string(_ n: Double) -> String {
     if n.isNaN { return "NaN" }
     if n == 0 { return "0" }
     if n < 0 { return "-" + string(-n) }
@@ -31,7 +33,7 @@ enum JavaScriptNumber {
   /// (where `rounded()` gives -3) and 0.49999999999999994 gives 0 (where
   /// `(x + 0.5).rounded(.down)` gives 1). `x` less its floor is exact from 1 up and from -1 down,
   /// and between them is never wrong about the half.
-  static func round(_ x: Double) -> Double {
+  package static func round(_ x: Double) -> Double {
     let down = x.rounded(.down)
     let nearest = x - down >= 0.5 ? down + 1 : down
     // As JavaScript, -0 for anything from -0.5 up to -0.
@@ -41,7 +43,7 @@ enum JavaScriptNumber {
   /// `Number(x.toFixed(digits))`: `x` to `digits` decimal places (rounding its exact value, half
   /// away from zero, as `toFixed` does), read back as the nearest double. `digits` is at most 22,
   /// the most decimals `String(n)` writes.
-  static func fixed(_ x: Double, digits: Int) -> Double {
+  package static func fixed(_ x: Double, digits: Int) -> Double {
     // toFixed writes NaN, the infinities and anything from 1e21 up as String(x) does, which reads
     // back as x; and zero as "0.00", which reads back as +0.
     guard x.isFinite, x.magnitude < 1e21, (0...22).contains(digits) else { return x }

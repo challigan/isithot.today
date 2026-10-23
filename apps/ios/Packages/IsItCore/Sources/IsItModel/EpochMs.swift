@@ -1,6 +1,10 @@
 import Foundation
 
 extension Date {
+  /// Core `HOUR`: an hour in milliseconds, which the rules ported from the TypeScript add to
+  /// moments and divide them by. `package`, so IsItModel's ports and IsItLogic's share it.
+  package static let hourMs = 3_600_000
+
   /// The moment `epochMs` milliseconds after 1 January 1970 UTC: how the API's hourly series,
   /// the client's rules and the golden vectors give moments.
   public init(epochMs: Int) {

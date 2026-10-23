@@ -162,7 +162,7 @@ public enum WidgetPlanner {
     // Without an answer there is no limit to reload by, as JavaScript's -Infinity: a retry.
     let until = res.map { Freshness.usableUntil($0).epochMs }
     let reload = until.map {
-      Swift.min(fetchedAt.epochMs + Constants.Widget.refreshHours * hourMs, $0)
+      Swift.min(fetchedAt.epochMs + Constants.Widget.refreshHours * Date.hourMs, $0)
     }
     let reloadAt = Date(
       epochMs: reload.flatMap { $0 > start ? $0 : nil }
@@ -199,5 +199,4 @@ public enum WidgetPlanner {
   }
 
   private static let minuteMs = 60 * 1000
-  private static let hourMs = 60 * minuteMs
 }

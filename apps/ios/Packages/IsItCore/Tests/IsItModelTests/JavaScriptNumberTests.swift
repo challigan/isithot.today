@@ -1,9 +1,10 @@
 import Testing
 
-@testable import IsItLogic
+@testable import IsItModel
 
-/// The strip words amounts as JavaScript's `String(number)` does ("5cm", "0.9in"). Each text
-/// here is what Node prints for `String(n)`.
+/// Keys, queries, the strip's amounts ("5cm", "0.9in") and a registration's fingerprint write
+/// numbers as JavaScript's `String(number)` does, with `JavaScriptNumber.string`. Each text here
+/// is what Node prints for `String(n)`.
 @Suite("Numbers are written as JavaScript writes them")
 struct JavaScriptNumberTests {
   @Test(
@@ -31,13 +32,13 @@ struct JavaScriptNumberTests {
     ]
   )
   func string(_ number: Double, _ text: String) {
-    #expect(JavaScript.string(number) == text)
+    #expect(JavaScriptNumber.string(number) == text)
   }
 
   @Test("NaN and the infinities")
   func special() {
-    #expect(JavaScript.string(.nan) == "NaN")
-    #expect(JavaScript.string(.infinity) == "Infinity")
-    #expect(JavaScript.string(-.infinity) == "-Infinity")
+    #expect(JavaScriptNumber.string(.nan) == "NaN")
+    #expect(JavaScriptNumber.string(.infinity) == "Infinity")
+    #expect(JavaScriptNumber.string(-.infinity) == "-Infinity")
   }
 }

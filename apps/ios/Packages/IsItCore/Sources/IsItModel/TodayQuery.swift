@@ -40,8 +40,9 @@ public enum TodayQuery {
   /// The same query past the phone's and the CDN's caches, with a new address each hour (UTC)
   /// (client `freshQuery`): for an answer that is out of date already when it arrives.
   public static func fresh(_ query: String, now: Date) -> String {
-    // The hours since 1970 (core HOUR is an hour in milliseconds).
-    let hour = (now.timeIntervalSince1970 / 3600).rounded(.down)
+    // The hours since 1970, `Math.floor(now / HOUR)`, from the moment's whole milliseconds, as
+    // every ported rule reads a `Date`, so this hour is the one `Freshness` counts as begun.
+    let hour = (Double(now.epochMs) / Double(Date.hourMs)).rounded(.down)
     return (query.isEmpty ? "" : query + "&") + "t=" + JavaScriptNumber.string(hour)
   }
 

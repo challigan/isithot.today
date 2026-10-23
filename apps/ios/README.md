@@ -244,11 +244,15 @@ While a file was still to port, `ios.yml`'s `swift-linux` job failed at its Test
 jobs that need it (`ios`, `archive-check`, and so `contact-sheet`) didn't run. A new vector file
 fails the guard the same way until its port is listed.
 
-What the ports share (3.3; DECISIONS, "The iPhone app's clock rules"):
+What the ports share (DECISIONS, "The iPhone app's clock rules" and "The iPhone app's IsItCore,
+put together"):
 
 - **Moments are `Date`,** in and out, and the rules count them in whole milliseconds inside,
-  as the TypeScript does: `Date(epochMs:)` and `.epochMs` (IsItModel) convert, and the vectors'
-  moments are epoch milliseconds.
+  as the TypeScript does: `Date(epochMs:)` and `.epochMs` (IsItModel) convert, `Date.hourMs` is
+  core's `HOUR`, and the vectors' moments are epoch milliseconds.
+- **JavaScript's arithmetic is one copy,** `JavaScriptNumber` in IsItModel (`package`, so
+  IsItLogic shares it): `String(n)` for keys, queries, the strip's amounts and fingerprints, and
+  `Math.round` and `toFixed` for the grid.
 - **The clock rules read more than snow.** `Freshness` and `MiddleDay.showsTomorrow` read the
   hot answer's days and Now and the rain answer's today and Now, as the client does, so
   `TodayResponse` decodes their moments and dates (`hotDays`, `hotNow`, `rain`) and snow's Now
