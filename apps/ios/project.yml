@@ -80,7 +80,7 @@ targets:
       - package: IsItCore
         products: [IsItModel]
       - package: IsItKit
-        products: [IsItServices, IsItWidgetUI]
+        products: [IsItServices, IsItUI, IsItWidgetUI]
   WillItSnowUITests:
     type: bundle.ui-testing
     platform: iOS

@@ -1189,6 +1189,67 @@ section 7.4, written by `pnpm mobile:generate` into IsItCore's test resources an
   behaviour; whether to add the place's 6pm and midnight as boundaries is a client change for a
   PR of its own.
 
+## The iPhone app's copy, constants and palettes (packages/mobile)
+
+The iOS build spec's PR 2.2: the Swift emitters of section 7.1. `pnpm mobile:generate` now writes
+`CoreCopy`, `Questions`, `AppCopy`, `Constants` and `Keys` into IsItModel's `Generated` folder,
+and `Palettes` into IsItUI's, which the generator owns too, so a stale file there fails the check.
+
+- **The Swift is written as swift-format writes it,** so `swift format lint --strict` passes on
+  every generated file: a declaration that would pass 100 columns breaks after its `=` (or a
+  `case` after its colon), and a string literal too long for a line stays whole on a line of its
+  own, which swift-format accepts since it can't break one. A call that doesn't fit has an
+  argument on each line. Integers from five digits are grouped in threes (`1_800_000`;
+  swift-format asks from seven). Strings are escaped by one rule (`swiftString`), so apostrophes,
+  curly quotes and `$` are written as they are and a backslash can never start an
+  interpolation.
+- **`CoreCopy`** has the `COPY` keys the app uses (`CORE_COPY_KEYS`: section 10.9's list, plus
+  the picker's title and Close, "Finding you…", the switcher's label and the three credits), in
+  `COPY`'s order. `UNITS_LABELS.snow` is `snowUnitsLabel`, written once. The labels keyed by a
+  view, units, band, reason or error code are functions over the Swift type with a `case` per
+  key (`CoreCopy.viewLabel(_:)`, `snowUnitName(_:)`, `snowBandLabel(_:)`,
+  `snowReasonLabel(_:)`, `errorMessage(code:)`), so a key core adds that Swift lacks fails the
+  build; a band or reason the app doesn't know has no label (nil). `AppView` (now, today,
+  week) is new in IsItModel, with core's raw values.
+- **`Questions`** is core's `question()` itself, called for each view, with and without a place,
+  `tomorrow` false and true, asked for the place `{place}`: twelve templates the Swift picks
+  from and puts the place into, so it has no rules of its own. A nil or empty place asks without
+  one, as core does. The generator stops if a template doesn't have the slot exactly once.
+- **`appCopy.ts` is the one place app copy lives.** A string with `{name}` slots becomes a
+  function taking a `String` for each (`AppCopy.placeButtonLabel(place:)`), so a slot can't be
+  left unfilled. Three strings section 10 words but 10.9's table leaves out are added:
+  `upgradeSettings` (10.4's row), `reportAdSubject` and `reportAdMail` (10.7's email). Since
+  Carl's Q2 put "will it snow?" under the icon, the strings that said "willitsnow" for the app
+  now say "the app" ("Notifications are off for this app in Settings.", "Open the app to turn on
+  widgets."); the email's subject names willitsnow.today. The tests hold every string to the
+  spec's rules: no "alert", "warning" or "danger" outside the notifications footer, no stray
+  spaces, British spelling, sentence case (capitals only to start a sentence, or in a short list
+  of names: Apple Account, Family Sharing, Privacy choices, Settings, Safari, Met Office, Apple,
+  Google, UK, °C, °F), and no other weather type, website or app.
+- **`Constants`** keeps the TypeScript's names and units (`Constants.Client.refreshAfterMs`,
+  ms; `Constants.Cache.forecastStale`, seconds). The groups written whole (`SEARCH`, `AHEAD`,
+  `WIDGET`, `ALERTS`, `CLIENT`) gain a member when a key is added, and stop the generator when
+  the new value isn't a whole number, so a type is chosen rather than guessed; snow's shares and
+  thresholds are declared `Double`, whole numbers too. `ALERTS` has only `heartbeatDays` until
+  the notifications work adds the windows.
+- **The models' agencies move into core** (`MODEL_AGENCIES` in `copy.ts`) from the About page,
+  which now reads them there, unchanged: the spec's `MODELS (names and agencies)` assumed core had
+  them, and the app's credits must say the same. Data only, so core's coverage is unchanged;
+  `Constants.models` has each model's id, name and agency, and the generator stops on a model
+  without one.
+- **`Palettes`** are core's `SNOW_PALETTES` as plain data: colours as `0xRRGGBB` (`UInt32`), the
+  glow as 0 to 1, and ink's WCAG 2 contrast against `g1` and `g2`, worked out as
+  `scripts/palette-contrast.mjs` does and rounded down to two decimals, so a pair under 4.5:1 can
+  never read as 4.5. The file imports only IsItModel (for `SnowBand`; an unknown band draws as
+  `nosnow`), so it compiles anywhere: it was compiled and checked on Linux in a scratch package
+  beside IsItModel. IsItUI's `Color(rgb:)` is the only SwiftUI part. The contrast test
+  (`PaletteTests`) is in the app's unit tests, the only Apple tests CI runs, so
+  `WillItSnowTests` now links IsItUI; it checks the ratios against the colours and 4.5:1, as the
+  vitest test does.
+- **Not yet:** the widget's gallery name and description, and the strings the screens will need
+  that section 10 doesn't word yet (a Now row's "60% chance at 6pm", for example): each is added
+  to `appCopy.ts` by the phase that builds its screen.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,

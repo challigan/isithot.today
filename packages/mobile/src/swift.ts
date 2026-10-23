@@ -15,7 +15,12 @@ export function generatedHeader(source: string): string {
  * as it is, since the files are UTF-8.
  */
 export function swiftString(text: string): string {
-  let out = '"';
+  return `"${escaped(text)}"`;
+}
+
+/** `text` escaped for the inside of a Swift string literal, by `swiftString`'s rules. */
+function escaped(text: string): string {
+  let out = '';
   for (const ch of text) {
     const code = ch.codePointAt(0)!;
     if (ch === '\\') out += '\\\\';
@@ -27,7 +32,91 @@ export function swiftString(text: string): string {
       out += `\\u{${code.toString(16)}}`;
     else out += ch;
   }
-  return `${out}"`;
+  return out;
+}
+
+/** A copy template's `{name}` slots, as `swiftTemplate` reads them. */
+const SLOT = /\{([^{}]*)\}/g;
+
+/** The slots in `template` ("Version {version} ({build})" has version and build), in order. */
+export function templateSlots(template: string): string[] {
+  const names: string[] = [];
+  for (const [, name] of template.matchAll(SLOT)) {
+    if (!names.includes(name!)) names.push(name!);
+  }
+  return names;
+}
+
+/**
+ * `template` as a Swift string literal that interpolates each `{name}` slot as `\(name)`, a
+ * parameter of the same name: "Place: {place}." becomes `"Place: \(place)."`. The text around
+ * the slots is escaped as `swiftString` escapes it, so nothing in it can start an interpolation.
+ * A slot that isn't a Swift name, or a brace outside a slot, throws.
+ */
+export function swiftTemplate(template: string): string {
+  const text = (part: string) => {
+    if (/[{}]/.test(part)) throw new Error(`A brace outside a slot: ${JSON.stringify(template)}`);
+    return escaped(part);
+  };
+  let out = '';
+  let last = 0;
+  for (const match of template.matchAll(SLOT)) {
+    out += `${text(template.slice(last, match.index))}\\(${swiftIdentifier(match[1]!)})`;
+    last = match.index + match[0].length;
+  }
+  return `"${out}${text(template.slice(last))}"`;
+}
+
+/**
+ * An integer as a Swift literal, grouped in threes from five digits ("21_600"), as swift-format's
+ * GroupNumericLiterals asks from seven. Anything but a safe integer throws.
+ */
+export function swiftInt(value: number): string {
+  if (!Number.isSafeInteger(value)) throw new Error(`Not an integer: ${value}`);
+  const digits = String(Math.abs(value));
+  const grouped = digits.length < 5 ? digits : digits.replace(/\B(?=(\d{3})+$)/g, '_');
+  return value < 0 ? `-${grouped}` : grouped;
+}
+
+/**
+ * A number as a Swift `Double` literal: the shortest text that reads back as the same double
+ * (JavaScript's and Swift's rule alike), so 1 / 3 survives the trip. Written where the type is
+ * declared `Double`, so a whole number needs no ".0". NaN and the infinities throw.
+ */
+export function swiftDouble(value: number): string {
+  if (!Number.isFinite(value)) throw new Error(`Not a finite number: ${value}`);
+  return String(value);
+}
+
+/**
+ * `  public static let name = value`, or with the value on its own line when the whole would pass
+ * 100 columns, as swift-format breaks it. A string literal can't be broken, so a long one stays
+ * whole on its own line, which swift-format accepts.
+ */
+export function swiftLet(indent: string, declaration: string, value: string): string[] {
+  const line = `${indent}${declaration} = ${value}`;
+  return line.length <= 100 ? [line] : [`${indent}${declaration} =`, `${indent}  ${value}`];
+}
+
+/**
+ * A call, `Palette(g1: 0xf6eef9, …)`, on one line when it fits in 100 columns, and otherwise with
+ * an argument on each line and the closing parenthesis on its own, as swift-format lays it out.
+ * `head` is what comes before the arguments' parenthesis, and `tail` what follows the call.
+ */
+export function swiftCall(indent: string, head: string, args: string[], tail = ''): string[] {
+  const line = `${indent}${head}(${args.join(', ')})${tail}`;
+  if (line.length <= 100) return [line];
+  return [
+    `${indent}${head}(`,
+    ...args.map((arg, i) => `${indent}  ${arg}${i < args.length - 1 ? ',' : ''}`),
+    `${indent})${tail}`,
+  ];
+}
+
+/** `    case pattern: value` in a `switch`, broken after the colon as `swiftLet` breaks. */
+export function swiftCase(indent: string, pattern: string, value: string): string[] {
+  const line = `${indent}case ${pattern}: ${value}`;
+  return line.length <= 100 ? [line] : [`${indent}case ${pattern}:`, `${indent}  ${value}`];
 }
 
 // The lower case words Swift reserves (The Swift Programming Language, "Lexical structure"). None
