@@ -8,3 +8,4 @@ data/
 functions/lib/server.mjs
 packages/providers/test/fixtures/
 packages/server/test/fixtures/
+apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources/

@@ -19,6 +19,8 @@
     "test:e2e": "playwright test",
     "cities": "node scripts/build-cities.mjs",
     "fixtures": "tsx scripts/record-fixtures.ts",
+    "mobile:generate": "tsx scripts/mobile-generate.ts",
+    "mobile:check": "tsx scripts/mobile-generate.ts --check",
     "build:netlify": "pnpm build:functions && pnpm --filter @isithot/web build && node scripts/netlify-postbuild.mjs",
     "build:functions": "node scripts/build-functions.mjs"
   },

@@ -1,5 +1,5 @@
 import { COPY, ERROR_MESSAGES, type TodayResponse, type WindUnit } from '@isithot/core';
-import { createDeps, type Platform } from './deps';
+import { createDeps, type Platform, type ServerDeps } from './deps';
 import { errorResult, toResponse, type HandlerResult } from './http';
 import { getSearch } from './search';
 import { getToday, type VisitorGeo } from './today';
@@ -15,10 +15,17 @@ function failed(what: string, err: unknown): Response {
   return toResponse(errorResult('upstream_unavailable', COPY.unavailable));
 }
 
-/** GET /api/v1/today */
-export async function handleToday(request: Request, platform: RequestPlatform): Promise<Response> {
+/**
+ * GET /api/v1/today. Every platform takes the default `makeDeps`; the native apps' fixtures
+ * (packages/mobile) pass one that fixes the clock, so they are this handler's own answers.
+ */
+export async function handleToday(
+  request: Request,
+  platform: RequestPlatform,
+  makeDeps: (platform: Platform) => ServerDeps = createDeps,
+): Promise<Response> {
   try {
-    const deps = createDeps(platform);
+    const deps = makeDeps(platform);
     const params = new URL(request.url).searchParams;
     return toResponse(await getToday(params, platform.geo ?? null, deps));
   } catch (err) {
