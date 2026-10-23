@@ -35,6 +35,30 @@ public enum Fixtures {
     return try Data(contentsOf: url)
   }
 
+  /// What a fixture says about itself (`_fixture`).
+  public struct Info: Decodable, Sendable, Equatable {
+    /// The query the app asked with, without the "?".
+    public let query: String
+    /// The moment the fixture is for, ISO 8601 UTC: when the server answered, or for an answer
+    /// the app saved earlier (old-forecast), when the app looks at it.
+    public let now: String
+    /// What the answer shows, and how the fixture was made.
+    public let note: String
+  }
+
+  /// The fixture's `_fixture`.
+  public static func info(_ name: String) throws -> Info {
+    try JSONDecoder().decode(WithInfo.self, from: data(name)).info
+  }
+
+  private struct WithInfo: Decodable {
+    let info: Info
+
+    enum CodingKeys: String, CodingKey {
+      case info = "_fixture"
+    }
+  }
+
   private static func folder() throws -> URL {
     guard let url = Bundle.module.url(forResource: "Fixtures", withExtension: nil) else {
       throw LoadError.noFolder

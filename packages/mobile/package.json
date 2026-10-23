@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Generators that feed the native apps: fixtures from the real server, written into apps/ios by scripts/mobile-generate.ts.",
+  "description": "Generators that feed the native apps: fixtures from the real server, and golden vectors from the TypeScript rules, written into apps/ios by scripts/mobile-generate.ts.",
   "exports": {
     ".": "./src/index.ts"
   },

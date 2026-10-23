@@ -4,13 +4,17 @@
  * build the app without Node, and the check stops a hand edit or a stale copy.
  */
 import { KEYS_PATH, keysSwift } from './exportKeys';
-import { FIXTURES, fixtureJson, makeFixture } from './fixtures';
+import { FIXTURES, fixtureJson, makeFixture, type Fixture } from './fixtures';
+import { vectorFiles, vectorJson } from './vectors';
 
 /**
  * The Swift package's test resources, read by every test target through `IsItTestSupport`, and
  * bundled into the app's Debug builds for its `-fixture` launch argument.
  */
 export const FIXTURES_DIR = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources/Fixtures';
+
+/** The golden vectors, beside the fixtures they name, for IsItLogic's tests (phase 3). */
+export const VECTORS_DIR = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources/Vectors';
 
 /** IsItModel's generated Swift: `Keys` now, then the copy and the constants. */
 export const MODEL_GENERATED_DIR = 'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated';
@@ -19,20 +23,27 @@ export const MODEL_GENERATED_DIR = 'apps/ios/Packages/IsItCore/Sources/IsItModel
  * Folders the generator owns: every file in them is generated, so one it no longer writes is
  * stale. Hidden files (a Mac's `.DS_Store`) don't count.
  */
-export const OWNED_DIRS: readonly string[] = [FIXTURES_DIR, MODEL_GENERATED_DIR];
+export const OWNED_DIRS: readonly string[] = [FIXTURES_DIR, VECTORS_DIR, MODEL_GENERATED_DIR];
 
 export interface GeneratedFile {
   path: string;
   contents: string;
 }
 
+/**
+ * Every file, in order: `Keys.swift`, each fixture, then each vector file, worked out from the
+ * fixtures exactly as their files have them.
+ */
 export async function generatedFiles(): Promise<GeneratedFile[]> {
   const files: GeneratedFile[] = [{ path: KEYS_PATH, contents: keysSwift() }];
+  const fixtures = new Map<string, Fixture>();
   for (const spec of FIXTURES) {
-    files.push({
-      path: `${FIXTURES_DIR}/${spec.name}.json`,
-      contents: fixtureJson(await makeFixture(spec)),
-    });
+    const contents = fixtureJson(await makeFixture(spec));
+    files.push({ path: `${FIXTURES_DIR}/${spec.name}.json`, contents });
+    fixtures.set(spec.name, JSON.parse(contents) as Fixture);
+  }
+  for (const { name, vectors } of vectorFiles(fixtures)) {
+    files.push({ path: `${VECTORS_DIR}/${name}.json`, contents: vectorJson(vectors) });
   }
   return files;
 }
