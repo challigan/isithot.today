@@ -249,7 +249,13 @@ describe('APP_COPY', () => {
       reportAdSubject: ['version'],
       reportAdMail: ['time', 'place'],
       reportAdBody: ['email'],
+      contactUsBody: ['email'],
       version: ['version', 'build'],
+      howModels: ['count', 'depth', 'day', 'hour'],
+      howChance: ['likely', 'maybe'],
+      howWarm: ['warm'],
+      howWeek: ['height'],
+      forecastModels: ['count', 'agencies'],
       agreementShort: ['snowy', 'total'],
       intentPhrase: ['app'],
     });
@@ -287,6 +293,8 @@ describe('APP_COPY', () => {
       'Apple',
       'Google',
       'UK',
+      'iPhone',
+      'ID',
       '°C',
       '°F',
     ];

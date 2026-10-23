@@ -13,6 +13,7 @@ import { appCopySwift } from '../src/exportAppCopy';
 import { CONFIGS_GENERATED_DIR, configCopy } from '../src/exportConfigCopy';
 import { constantsSwift } from '../src/exportConstants';
 import { coreCopySwift } from '../src/exportCoreCopy';
+import { creditsSwift } from '../src/exportCredits';
 import { FONTS_DIR, FONT_PATH } from '../src/exportFont';
 import {
   GLYPHS_DIR,
@@ -77,26 +78,28 @@ describe('generatedFiles', () => {
       `${model}/Questions.swift`,
       `${model}/AppCopy.swift`,
       `${model}/Constants.swift`,
+      `${model}/AppCredits.swift`,
       `${model}/Keys.swift`,
       `${model}/Palettes.swift`,
       'apps/ios/Configs/Generated/Copy.xcconfig',
       ...resourcePaths,
       ...assets.map((f) => f.path),
     ]);
-    expect(files.slice(0, 7).map((f) => f.contents)).toEqual([
+    expect(files.slice(0, 8).map((f) => f.contents)).toEqual([
       coreCopySwift(),
       questionsSwift(),
       appCopySwift(),
       constantsSwift(),
+      creditsSwift(),
       keysSwift(),
       palettesSwift(),
       configCopy(),
     ]);
-    expect(files[8]!.contents).toBe(fixtureJson(await makeFixture(FIXTURES[1]!)));
+    expect(files[9]!.contents).toBe(fixtureJson(await makeFixture(FIXTURES[1]!)));
     const search = files.find((f) => f.path.endsWith('/Fixtures/Search/search-leeds.json'))!;
     expect(search.contents).toBe(fixtureJson(await makeSearchFixture(SEARCH_FIXTURES[0]!)));
     expect(SEARCH_FIXTURES_DIR).toBe(`${FIXTURES_DIR}/Search`);
-    const first = 7 + resourcePaths.length;
+    const first = 8 + resourcePaths.length;
     for (const [i, f] of assets.entries()) {
       expect(sameContents(files[first + i]!.contents, f.contents)).toBe(true);
     }

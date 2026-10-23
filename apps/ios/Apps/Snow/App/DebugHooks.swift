@@ -2,6 +2,8 @@ import Foundation
 import IsItModel
 import IsItServices
 import IsItState
+import Observation
+import SwiftUI
 import UIKit
 
 /// Every test and debug hook in the app (iOS build spec, section 9.8), here and nowhere else.
@@ -42,9 +44,10 @@ enum DebugHooks {
     /// The server the app asks instead of willitsnow.today's, from the fixtures `pnpm
     /// mobile:generate` wrote (packages/mobile), which only Debug builds bundle:
     ///
-    /// - `-fixture <name>` answers every request with that fixture, as if fetched now, after
-    ///   forgetting the saved answer, so the launch fetches the fixture rather than painting what
-    ///   an earlier launch saved; the fixture is then saved, for the widget, as any answer is.
+    /// - `-fixture <name>` answers every request for an answer with that fixture, as if fetched
+    ///   now, after forgetting the saved answer, so the launch fetches the fixture rather than
+    ///   painting what an earlier launch saved; the fixture is then saved, for the widget, as any
+    ///   answer is. The picker's searches are answered as `-network` answers them (`SearchStub`).
     /// - `-network <name>[,<name>…]` leaves the app's own transport, URLSession and section 4's
     ///   settings in place and stubs the network beneath them (`URLProtocolStub`): it answers
     ///   the request for approximate IP location with the first fixture, a request for another
@@ -62,7 +65,7 @@ enum DebugHooks {
       if let name = value(after: "-fixture", in: arguments) {
         let data = answerData(name)
         try? store?.removeToday()
-        return FixtureTransport(body: data)
+        return FixtureTransport(body: data, searches: SearchStub())
       }
       guard value(after: "-network", in: arguments) != nil else { return nil }
       // Read now, on the main thread, so a bad name stops the launch rather than a request.
@@ -118,6 +121,26 @@ enum DebugHooks {
     /// `-apiOrigin <url>`: a deploy preview's API instead of willitsnow.today's (section 4).
     static func apiOrigin(arguments: [String] = ProcessInfo.processInfo.arguments) -> URL? {
       value(after: "-apiOrigin", in: arguments).flatMap { URL(string: $0) }
+    }
+
+    /// What `-openURLs` asks for: Settings records each web page and email it would open, on
+    /// screen (`debugRecorder()`), instead of leaving the app; with `nomail` it also refuses
+    /// every email, as a phone with no mail app does, so the fallback sheet shows.
+    enum OpenURLs: String {
+      case record
+      case nomail
+    }
+
+    /// `-openURLs record|nomail`, for SettingsTests; nil without it, when links open as they do
+    /// for real. Any other value stops the app, so a test can't pass on the wrong screen.
+    nonisolated static func openURLs(
+      arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> OpenURLs? {
+      guard let mode = value(after: "-openURLs", in: arguments) else { return nil }
+      guard let known = OpenURLs(rawValue: mode) else {
+        fatalError("-openURLs: \(mode) is neither record nor nomail")
+      }
+      return known
     }
 
     /// Whether the app launches (`AppModel.launch()`): not while it only hosts the unit tests,
@@ -217,12 +240,38 @@ enum DebugHooks {
 }
 
 #if DEBUG
-  /// `-fixture`'s server: every request answered with the same fixture, with status 200.
+  /// `-fixture`'s server: every request for an answer answered with the same fixture, with
+  /// status 200, and the picker's searches as `-network` answers them. The units each request
+  /// asked in are noted for the recorder (`DebugRecorder`).
   private struct FixtureTransport: HTTPTransport {
     let body: Data
+    let searches: SearchStub
 
     func get(_ request: HTTPRequest) async throws -> HTTPResponse {
-      HTTPResponse(status: 200, body: body)
+      DebugRecorder.requested(request.url)
+      if let found = searches.reply(to: request.url) {
+        return HTTPResponse(status: found.status, body: found.body)
+      }
+      return HTTPResponse(status: 200, body: body)
+    }
+  }
+
+  /// The picker's searches, under `-fixture` and `-network` alike: `GET /api/v1/search` with a
+  /// search fixture's query gets that fixture (`Fixtures/Search`), and any other search a 404
+  /// with no body.
+  private struct SearchStub {
+    /// The search fixtures, by their queries.
+    let answers = DebugHooks.searchAnswers()
+
+    /// The reply to `url` when it is a search; nil for any other request.
+    func reply(to url: URL) -> (status: Int, body: Data)? {
+      guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+        components.path == "/api/v1/search"
+      else { return nil }
+      guard let found = answers[components.percentEncodedQuery ?? ""] else {
+        return (404, Data())
+      }
+      return (200, found)
     }
   }
 
@@ -238,8 +287,8 @@ enum DebugHooks {
     let fixture: Data?
     /// The other fixtures, each for its own place (`place(_:)`).
     let places: [String: Data]
-    /// The search fixtures, by their queries.
-    let searches: [String: Data]
+    /// The picker's searches.
+    let searches: SearchStub
 
     /// The server `-network` names in `arguments`, or nil without it.
     init?(arguments: [String]) {
@@ -247,7 +296,7 @@ enum DebugHooks {
       guard mode != "off" else {
         fixture = nil
         places = [:]
-        searches = [:]
+        searches = SearchStub()
         return
       }
       let names = mode.split(separator: ",").map(String.init)
@@ -260,7 +309,7 @@ enum DebugHooks {
         places[Self.place(target)] = DebugHooks.answerData(name)
       }
       self.places = places
-      searches = DebugHooks.searchAnswers()
+      searches = SearchStub()
     }
 
     /// A place as the stub tells places apart: a city by its slug, coordinates by their point
@@ -285,11 +334,10 @@ enum DebugHooks {
       guard request.httpMethod == "GET", let url = request.url,
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
       else { return .answer(status: 404, body: Data()) }
-      let query = components.percentEncodedQuery ?? ""
-      if components.path == "/api/v1/search" {
-        guard let found = searches[query] else { return .answer(status: 404, body: Data()) }
-        return .answer(status: 200, body: found)
+      if let found = searches.reply(to: url) {
+        return .answer(status: found.status, body: found.body)
       }
+      let query = components.percentEncodedQuery ?? ""
       guard components.path == "/api/v1/today" else { return .answer(status: 404, body: Data()) }
       let items = components.queryItems ?? []
       let names = Set(items.map(\.name))
@@ -330,6 +378,7 @@ enum DebugHooks {
 
     override func startLoading() {
       guard let client else { return }
+      if let url = request.url { DebugRecorder.requested(url) }
       switch Self.server?.reply(to: request) ?? .failure(.notConnectedToInternet) {
       case .failure(let code):
         client.urlProtocol(self, didFailWithError: URLError(code))
@@ -371,4 +420,79 @@ enum DebugHooks {
       case note = "_fixture"
     }
   }
+
+  /// What `-openURLs` shows (`debugRecorder()`): the last web page or email the app would have
+  /// opened, and the units the last request to the server asked in, so a UI test reads both on
+  /// screen. Only the units of a request, never its place.
+  @MainActor
+  @Observable
+  final class DebugRecorder {
+    static let shared = DebugRecorder()
+
+    /// The last URL `openURL` was given, as text; "none" before the first.
+    var opened = none
+    /// The `units` the last request asked in: "c", "f", or "none" without, or before the first.
+    var units = none
+
+    /// What a line says with nothing to show, so that it is on screen from the start.
+    private nonisolated static let none = "none"
+
+    /// Notes the units `url`, a request to the server, asks in; from any thread.
+    nonisolated static func requested(_ url: URL) {
+      let units =
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+        .first { $0.name == "units" }?.value ?? none
+      Task { @MainActor in shared.units = units }
+    }
+  }
+
+  /// Under `-openURLs`: every URL the view opens is recorded instead of opened, a mail URL
+  /// refused too under `nomail`, and the recorder's two lines show below the content.
+  @MainActor
+  private struct URLRecorder: ViewModifier {
+    let mode: DebugHooks.OpenURLs
+
+    func body(content: Content) -> some View {
+      let recorder = DebugRecorder.shared
+      content
+        .environment(
+          \.openURL,
+          OpenURLAction { url in
+            recorder.opened = url.absoluteString
+            return mode == .nomail && url.scheme == "mailto" ? .discarded : .handled
+          }
+        )
+        .safeAreaInset(edge: .bottom) {
+          VStack(alignment: .leading, spacing: 2) {
+            Text(verbatim: recorder.opened)
+              .accessibilityIdentifier("debug-opened")
+            Text(verbatim: recorder.units)
+              .accessibilityIdentifier("debug-units")
+          }
+          .font(.caption2)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.horizontal, 16)
+          .padding(.vertical, 4)
+          .background(.bar)
+        }
+    }
+  }
 #endif
+
+extension View {
+  #if DEBUG
+    /// Under `-openURLs`, the URL recorder (`DebugHooks.openURLs`); otherwise the view as it is.
+    @MainActor
+    @ViewBuilder
+    func debugRecorder() -> some View {
+      if let mode = DebugHooks.openURLs() {
+        modifier(URLRecorder(mode: mode))
+      } else {
+        self
+      }
+    }
+  #else
+    /// A Release build records nothing: the view as it is.
+    func debugRecorder() -> some View { self }
+  #endif
+}

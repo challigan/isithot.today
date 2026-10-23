@@ -22,7 +22,16 @@ public enum Credits {
   /// and the text between them, never empty. Phrases are matched code unit for code unit, as
   /// JavaScript's `startsWith` matches them.
   public static func parts(_ text: String) -> [CreditPart] {
-    let links = CoreCopy.creditLinks.compactMap { link -> (phrase: [UInt16], url: URL)? in
+    parts(text, adding: [])
+  }
+
+  /// `text` in pieces as `parts(_:)` splits it, with `links` linked too, after core's: the
+  /// credits screen's own (`AppCredits.DataCredit.links`, GeoNames, say).
+  public static func parts(_ text: String, adding extra: [AppCredits.Link]) -> [CreditPart] {
+    let all =
+      CoreCopy.creditLinks.map { (phrase: $0.phrase, url: $0.url) }
+      + extra.map { (phrase: $0.phrase, url: $0.url) }
+    let links = all.compactMap { link -> (phrase: [UInt16], url: URL)? in
       guard !link.phrase.isEmpty, let url = URL(string: link.url) else { return nil }
       return (Array(link.phrase.utf16), url)
     }

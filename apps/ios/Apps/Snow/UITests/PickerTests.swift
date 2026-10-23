@@ -128,6 +128,27 @@ final class PickerTests: XCTestCase {
     XCTAssertTrue(app.buttons["use-my-location"].waitForExistence(timeout: 10))
   }
 
+  /// Open Settings, with location access off, asks for the app's own page in Settings
+  /// (`UIApplication.openSettingsURLString`), read from the Debug recorder (`-openURLs record`,
+  /// as SettingsTests reads Settings' rows) instead of leaving the app; the picker stays open.
+  @MainActor
+  func testOpenSettingsOpensTheAppsPage() throws {
+    let app = launch([
+      "-resetStore", "-network", "ip-first-launch", "-location", "denied", "-openURLs", "record",
+    ])
+    _ = openPicker(in: app, focusing: false)
+    let opened = app.staticTexts["debug-opened"]
+    XCTAssertTrue(opened.waitForExistence(timeout: 10), "No Debug recorder on the picker")
+    XCTAssertEqual(opened.label, "none")
+    app.buttons["picker-use-my-location"].tap()
+    let open = app.buttons["open-settings"]
+    XCTAssertTrue(open.waitForExistence(timeout: 10), "No Open Settings")
+    open.tap()
+    let settingsPage = NSPredicate(format: "label BEGINSWITH %@", "app-settings:")
+    wait(for: [expectation(for: settingsPage, evaluatedWith: opened)], timeout: 10)
+    XCTAssertTrue(app.searchFields.firstMatch.exists, "The picker closed")
+  }
+
   /// With a fix, the sheet closes and the phone's place loads, rounded to the grid.
   @MainActor
   func testUseMyLocation() throws {

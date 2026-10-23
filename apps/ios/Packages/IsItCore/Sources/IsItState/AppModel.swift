@@ -268,6 +268,19 @@ public final class AppModel {
     await load(.plain)
   }
 
+  /// Settings' snow units control (section 10.4): `units` become the units every request asks
+  /// in, kept in `units.v1`, and the answer is asked for again in them (`refresh()`), keeping
+  /// what is on screen meanwhile, as the website's units pill does; then the notifications
+  /// follow (launch step 6's sync, phase 8), since their registration carries the units. The
+  /// units already in use ask nothing.
+  public func setUnits(_ units: Units) async {
+    guard units != self.units else { return }
+    self.units = units
+    environment.store.saveUnits(units)
+    await refresh()
+    await environment.hooks.syncAlerts(target: target, units: units)
+  }
+
   // MARK: - What the home screen draws
 
   /// The time now by the model's clock, which the home screen draws the answer at with the

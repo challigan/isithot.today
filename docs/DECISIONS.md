@@ -1991,7 +1991,7 @@ What the review of PR 5.1 found, and what changed for it.
 
 The iOS build spec's PR 6.1: the full-screen picker behind the top bar's place button and the
 approximate line's "Use my location", with search, "Use my location" and the recent places
-(sections 4, 9.4 step 4, 10.3, 15.2 and 16). `apps/ios/README.md` ("Phase 6.1") lists the types.
+(sections 4, 9.4 step 4, 10.3, 15.2 and 16). `apps/ios/README.md` ("Phase 6", "6.1") lists the types.
 
 - **The search box's rules moved into the client, and the app ports them.** The website's
   picker decided in `app.ts` what a search asks for (the text trimmed, at least `SEARCH.minChars`
@@ -2072,7 +2072,7 @@ approximate line's "Use my location", with search, "Use my location" and the rec
   city by slug, coordinates by their point, whoever's they are), and the picker's searches are
   answered by the search fixtures with the same query, so an answer on screen still means the
   app asked for the right place. `-location <lat>,<lon>|denied|unavailable` stands in for Core
-  Location (a 14th hook in the archive checks, as a short literal). `PickerTests` covers section
+  Location (a hook in the archive checks, as a short literal; 15 with 6.2's `-openURLs`). `PickerTests` covers section
   17.2's list (stubbed search, too short, no results, a slug result and a coordinate result,
   recents, "Use my location" denied), a fix chosen, and the sheet's accessibility audit with the
   keyboard down.
@@ -2117,11 +2117,12 @@ the website carries both for the snow app (iOS build spec, section 5.8 and 15.5)
     last PUT, and with nothing changed it puts again only every `ALERTS.heartbeatDays` (7), so a
     registration can go about 83 days after the app was last opened: "about 90 days" in the
     notice, "about three months" on the support page.
-  - **Not yet in the app's copy.** Section 15.5's text and `APP_COPY.privacyNotifications` (the
-    app's summary, above the live data and the link to this notice) have the shorter list and
-    "90 days after you last open the app". Phase 6 should give the app's line the notice's
-    "about" and "main things", or the app could refresh `seenAt` on every open (a client change,
-    with a vector update).
+  - **In the app's copy since phase 6.2.** Section 15.5's text and `APP_COPY.privacyNotifications`
+    (the app's summary, above the live data and the link to this notice) had the shorter list and
+    "90 days after you last open the app". Phase 6.2 gave the app's lines the notice's facts:
+    "an ID made from it", "a few details such as the app's version and when it last checked
+    in", "about 90 days", "no longer installed" and the iPhone Settings case ("The iPhone app's
+    Settings", below), and a vitest test holds them to this notice.
 - **`/support` on every site** (`SupportBody.astro`; `support.astro` and `snow/`, `wet/`, `wind/`),
   built like Privacy: the contact address (`CONTACT_EMAIL`) as a `mailto:` link and no postal
   address (Q7), then short answers on restoring the purchase, adding a widget, why a
@@ -2156,6 +2157,138 @@ the website carries both for the snow app (iOS build spec, section 5.8 and 15.5)
   change there must change these pages, and their tests, by hand. The test takes the two times
   from the app's switches (`APP_COPY.evening` and `morning`); once `ALERTS.windows`, `quiet` and
   `staleAfterDays` reach main, it should check the numbers against them as well.
+
+## The iPhone app's Settings (apps/ios, IsItCore, packages/mobile; phase 6.2 and 6.3)
+
+The iOS build spec's PRs 6.2 and 6.3: the Settings sheet behind the gear, How it works, Credits
+and licences, the static lines of Your privacy, and Report an ad (sections 10.4, 10.6 and 10.7).
+`apps/ios/README.md` ("Phase 6", "6.2 and 6.3") lists the types.
+
+- **The shell has only what works now.** Section 10.4's order stands, with three sections left to
+  the phases that make them work, rather than rows that do nothing (section 0.2: nothing
+  dormant, no placeholder): Notifications (12.1) is phase 8's and goes after the units; the
+  upgrade row and "Restore purchase" are phase 7's and go after that, since there is no product
+  to price or restore until StoreKit is in (10.4 says "Restore purchase, always visible": from
+  phase 7 on); "Privacy choices" shows only while the ads are on and Google's form is required,
+  which only phase 8's consent code can say, so the app passes false. `SettingsScreen` takes
+  that flag already, `YourPrivacy` the lines kept for notifications (nil until a registration),
+  and `SettingsActions` the form and the delete button, both nil.
+- **"Ads on" is the free version** (`!unlocked`), as section 14.2 starts the ads only when not
+  unlocked: Report an ad shows in the free version (10.7) and Your privacy's ads line with it,
+  though phase 6 builds no banner yet. Bought, neither shows.
+- **Your privacy says what the privacy notice says.** Section 10.6's lines were shorter than PR
+  #28's notice and PR #30's server (`devices.ts`): the place is "a town, or your location
+  rounded to about 5 km" (a town isn't rounded); until a place is chosen the server estimates
+  one from the connection; besides the token, the place, zone, units and switches, the server
+  keeps an ID made from the token and a few details (the app's version, the developer-build
+  flag, when notifications were turned on and when the app last checked in); deletion is "when
+  you turn notifications off in the app, when Apple tells us the app is no longer installed, or
+  about 90 days after you last open it" (the 90 days count from the last PUT, at most a week
+  old while the app is used), and "If you turn notifications off in your iPhone's Settings
+  instead, we delete them the next time you open the app." `credits.test.ts` holds each fact to
+  the notice's own words, and the 90 to the notice's. The 90 is written out: `ALERTS.staleAfterDays`
+  is on the notifications branch, not main, so once it lands the test should check it too.
+- **"See Privacy choices." is a line of its own** (`APP_COPY.seePrivacyChoices`), shown after the
+  ads line only while the Privacy choices row is in Settings: outside the UK and the EEA,
+  Google's form isn't required and there is no row to see. Section 10.6 had it in the ads line.
+- **Report an ad (10.7).** The subject is `reportAdSubject` with the marketing version
+  ("Report an ad (willitsnow.today 1.0)"), the body section 10.7's with the phone's time in
+  figures and its own zone ("2026-10-23 15:05 Europe/London", which matches logs whatever the
+  phone's language) and the place on screen (empty while none is known). The email is written
+  at the tap. The `mailto:` URL encodes the subject and body as `encodeURIComponent` does
+  (RFC 6068: a space is `%20`, never `+`, which a mail app would show). When the open's
+  completion says false, the fallback sheet shows the address with "Copy address" and "Copied.",
+  announced to VoiceOver. Contact us falls back the same way, with one new string,
+  `contactUsBody` ("Email {email}. Tell us what happened, and the version number at the end of
+  Settings.", as the support page asks).
+- **Addresses come from core.** `Constants.Site` (generated) has willitsnow.today's privacy,
+  terms and support pages and `CONTACT_EMAIL`; the pages' paths are packages/mobile's
+  `SITE_PAGES`, and a test finds each in `apps/web/src/pages/snow/` with the body that renders
+  at that path. No URL or address is typed in Swift.
+- **How it works** is the About page's snow section and its location and data paragraphs,
+  rewritten for an app about snow alone: no four-sites paragraph, no "Wet and Snow agree"
+  sentence (another weather type), and "rounded to about 5 km before it leaves your phone". Its
+  numbers are slots the app fills from the generated constants, written as the About page
+  writes them (`String(n)`, `Math.round`): `Constants.models.count`, `Snow.likelyFrom`,
+  `maybeFrom`, `Day.snow`, and, newly generated, `Snow.cmPerMm`, `warmAboveC`, `Snow.Hour` and
+  `Snow.Normals` (core `SNOW.hour` and `SNOW.normals`, whole). The answer words are lower case
+  ("the answer is yes"), so the copy keeps the sentence-case rule without making Yes, Maybe and
+  No names; "the climate records" stand for NASA POWER, which the credits name.
+- **Credits are data, beside core's.** Core's credits (`COPY.forecastCredit`, `metOfficeCredit`)
+  are shown as the footer splits and links them; packages/mobile `credits.ts` adds the models'
+  agencies, listed as the About page lists them, the climate records' credit (core's
+  `climateCredit`, then NASA's project, for snowfall only) and the place names', with GeoNames
+  linked, and the typeface and Google's two SDKs, each with its notice. `pnpm mobile:generate`
+  writes them into `AppCredits.swift`. They are names and licence titles as their owners write
+  them ("SIL Open Font License", "NASA Langley Research Center"), so they aren't in `APP_COPY`,
+  whose British spelling and sentence-case tests they couldn't pass; they have tests of their
+  own (no other weather type, https links, the files).
+- **The notices are bundled whole** in `Apps/Snow/Resources/Licences/`, which the app target's
+  resources already take (XcodeGen 2.46.0 built from source puts the three files in the app's
+  resources phase, not the widget's; project.yml is unchanged). Bricolage Grotesque's is its
+  npm package's LICENSE (the font's source, `exportFont.ts`), and a test holds the copy to it
+  byte for byte. Google's are the LICENSE files of the two Swift packages at the revisions
+  `Package.resolved` pins (Apache 2.0, "Copyright 2021 Google LLC", SHA-256 `fd112c8…`), and a
+  test fails when a pin moves, so they are copied again. Those notices cover the packages; the
+  binary SDKs they fetch are Google's, under Google's terms, and whether the zips carry notices
+  of their own was not checked here (dl.google.com is blocked).
+- **The units** (`AppModel.setUnits(_:)`): kept in `units.v1`, then `refresh()` in them,
+  keeping what is on screen, as the website's units pill reloads quietly; then
+  `syncAlerts(target:units:)`, since a registration carries the units (a no-op until phase 8).
+  Offline, the choice stays and the answer on screen stays in the old units, with the offline
+  line; the next launch never paints it (`Launch.paints` checks the units).
+- **A Debug hook for the rows, `-openURLs record|nomail`.** A UI test can't follow Safari or the
+  mail app, so under it the sheet's `openURL` records each URL and shows the last one at its
+  bottom, with the units the last request asked in (only the units, never the place); `nomail`
+  refuses `mailto:` as a phone without a mail app does. It is in `DebugHooks.swift` under
+  `#if DEBUG`, and `check-archive.sh` looks for it in Release binaries (15 hooks, with 6.1's
+  `-location`). Since phase 6 was put together it records the picker's Open Settings too (below).
+- **The literal-strings guard** (section 10, phase 6's exit) is a vitest test,
+  `packages/mobile/test/swiftLiterals.test.ts`: it reads every Swift file the app and its
+  packages compile, and fails on a view or modifier given a string literal (`Text("…")`,
+  `Button("…")`, `.navigationTitle("…")`, `.accessibilityLabel("…")`, a `prompt:` or `title:`
+  with words of its own). `Text(verbatim:)`, identifiers and SF Symbols' names pass.
+- **The copy test's names** gain "iPhone" and "ID" (in "your iPhone's Settings" and "an ID made
+  from it"), proper nouns as section 10.9's word list allows.
+- **Not proven here:** IsItUI's Settings views, the sheet, the recorder, the pasteboard,
+  `openURL`'s completion saying false for a refused `mailto:` and `SettingsTests` (with its
+  accessibility audits) are Apple only, so the macOS jobs prove them first; whether XCUITest
+  finds the segmented control's segments by "cm" and "in", and whether the audit passes the
+  system's own Form and navigation bar, are from practice, unchecked. The presenters, the
+  model, the copy and the generated files ran here.
+
+## The iPhone app's phase 6, put together (apps/ios, packages/mobile)
+
+Phase 6.1 (the picker) and 6.2 with 6.3 (Settings) were built side by side from the same home
+screen, then merged into `claude/ios-picker` with ordinary merge commits, keeping both. What
+had to be made to agree:
+
+- **One sheet at a time, presented in one place.** Both builds put their sheet on `HomeView`'s
+  `TimelineView` with a state of their own. Now one state, `HomeSheet?` (`.picker(PickerRequest)`
+  or `.settings`), drives both: the picker as a full-screen cover (section 10.3) and Settings as
+  a sheet (10.4), each closing only itself, so two can never be asked for at once. The top bar's
+  place button and the approximate line's "Use my location" open the picker (the second finding
+  the phone's place), and the gear opens Settings; `HomeContent` takes one `open` closure for
+  both. Both sheets are outside the page's colours and follow the system's, and Dark Mode.
+- **One URL recorder.** 6.2's `-openURLs` recorder was applied inside `SettingsSheet`. It is now
+  applied where `HomeView` presents each sheet, to both, so the picker's Open Settings
+  (`UIApplication.openSettingsURLString`) is recorded as Settings' rows are, and
+  `PickerTests.testOpenSettingsOpensTheAppsPage` reads it. The home screen's own links are left
+  as they were (phase 5.4's HomeTests own them).
+- **One search stub.** 6.1's `-network` answered the picker's searches from the search fixtures;
+  `-fixture` answered every request, searches included, with its forecast, which doesn't decode
+  as a search. Both now share `SearchStub` in `DebugHooks.swift`: a search fixture's query gets
+  that fixture, any other search a 404, whichever hook is on. The units each request asks in
+  are still noted for the recorder by both transports.
+- **The hooks are counted once.** Each build added one hook (`-location`, `-openURLs`) and
+  counted 14; there are 15, in `check-archive.sh`'s summary and its test.
+- **Generated files were regenerated, not merged.** `pnpm mobile:generate` after the merge wrote
+  nothing new: git's merge of `AppCopy.swift` was already what the merged `appCopy.ts` generates.
+  The generator's file list has both builds' additions (`AppCredits.swift` after `Constants.swift`,
+  `Copy.xcconfig` after the palettes), and its test the shifted indices.
+- **Not proven here:** `HomeView`'s one-state presentation (the `Optional<HomeSheet>` bindings),
+  the recorder on the picker and the new UI test are Apple only, so the macOS jobs prove them
+  first.
 
 ## API contract
 

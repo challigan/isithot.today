@@ -85,15 +85,19 @@ public enum AppCopy {
     "These are forecasts, not official warnings. Times are at the place. Open the app at least every few months to keep notifications on."
   public static let notifyDenied = "Notifications are off for this app in Settings."
   public static let openSettings = "Open Settings"
+  public static let settingsPrivacy = "Privacy"
+  public static let settingsAbout = "About"
+  public static let settingsHelp = "Help"
   public static let privacyChoices = "Privacy choices"
   public static let yourPrivacy = "Your privacy"
   public static let privacyPolicy = "Privacy policy"
   public static let privacyForecast =
-    "To get the forecast, the app sends the place (rounded to about 5 km) and your units to our server."
+    "To get the forecast, the app sends the place (a town, or your location rounded to about 5 km) and your units to our server. Until you choose a place, our server estimates a rough one from your internet connection."
   public static let privacyNotifications =
-    "Only while notifications are on, we keep your device's notification token, the place, its time zone, your units and which notifications you chose. We delete them when you turn notifications off, when Apple tells us the app is gone, or 90 days after you last open the app."
+    "Only while notifications are on, we keep your device's notification token, an ID made from it, the place, its time zone, your units and which notifications you chose, with a few details such as the app's version and when it last checked in. We delete them when you turn notifications off in the app, when Apple tells us the app is no longer installed, or about 90 days after you last open it. If you turn notifications off in your iPhone's Settings instead, we delete them the next time you open the app."
   public static let privacyAds =
-    "In the free version, Google shows the ads and may collect device and usage data. See Privacy choices."
+    "In the free version, Google shows the ads and may collect device and usage data."
+  public static let seePrivacyChoices = "See Privacy choices."
   public static let privacyPurchases = "Apple handles purchases. We never see your payment details."
   public static let privacyAccounts = "There are no accounts."
   public static let keptForNotifications = "What we keep for notifications"
@@ -117,12 +121,50 @@ public enum AppCopy {
   public static let credits = "Credits and licences"
   public static let terms = "Terms"
   public static let contactUs = "Contact us"
+
+  public static func contactUsBody(email: String) -> String {
+    "Email \(email). Tell us what happened, and the version number at the end of Settings."
+  }
+
   public static let support = "Support"
 
   public static func version(version: String, build: String) -> String {
     "Version \(version) (\(build))"
   }
 
+  public static let howIntro =
+    "The app answers one question: will it snow where you are? Here is how it gets from a pile of forecasts to one answer."
+  public static let howAnswer = "The answer"
+
+  public static func howModels(count: String, depth: String, day: String, hour: String) -> String {
+    "We ask \(count) forecast models how much snow they expect, hour by hour, as a depth of fresh snow: \(depth) cm for every 10 mm of water, the usual ratio. A model expects snow when it forecasts at least \(day) cm for the day. For a shorter stretch, like the rest of an evening, less is enough: \(hour) cm for each hour that is left."
+  }
+
+  public static func howChance(likely: String, maybe: String) -> String {
+    "The share of models expecting snow is the chance. When \(likely)% or more of them do, the answer is yes; from \(maybe)%, it is maybe. How much snow comes from the middle forecast (the median)."
+  }
+
+  public static func howWarm(warm: String) -> String {
+    "In an hour warmer than \(warm)°C, nothing counts as snow, whatever a model says. When the answer is no, it says why, with the lowest temperature expected."
+  }
+
+  public static func howWeek(height: String) -> String {
+    "The week's answer is yes when any day brings snow. Where long-term climate records cover the place, we also say whether snow is rare or common there at this time of year, and compare the week with normal. Snow depends so much on height that we only do this where the records' 50 km grid cell is within \(height) m of the place's height. Amounts are fresh snowfall, not what will be lying on the ground: some of it may melt as it lands."
+  }
+
+  public static let howLocation = "Your location"
+  public static let howLocationBody =
+    "Until you choose a place, the app uses an approximate location from your internet connection. If you allow it, your phone's location is used instead, rounded to about 5 km before it leaves your phone. You can also search for any place."
+  public static let howData = "Data sources"
+
+  public static func forecastModels(count: String, agencies: String) -> String {
+    "The forecasts come from \(count) models run by \(agencies). We combine and modify them: the blended figures and the answers are our own work, not the weather services'."
+  }
+
+  public static let howEstimates =
+    "Forecasts are estimates. For anything that matters, check your national weather service."
+  public static let creditsData = "Forecasts and data"
+  public static let creditsSoftware = "Typeface and software"
   public static let widgetName = "Snow forecast"
   public static let widgetDescription = "Today's snow answer, then tomorrow's from 6pm."
   public static let widgetLocked = "Open the app to turn on widgets."

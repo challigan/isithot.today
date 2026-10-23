@@ -28,6 +28,7 @@ const HOOKS = [
   '-apiOrigin',
   '-route',
   '-umpGeography',
+  '-openURLs',
   'URLProtocolStub',
   '127.0.0.1',
 ];
@@ -270,7 +271,7 @@ describe('an archive that passes', () => {
         '',
         '- WillItSnow 1.0 (101)',
         `- ads test: Google's demo units (${DEMO_APP})`,
-        "- checked: privacy manifests, the icon, the answer font, 14 debug hooks in both binaries, the ad units, the widget's links, versions, encryption and fixtures",
+        "- checked: privacy manifests, the icon, the answer font, 15 debug hooks in both binaries, the ad units, the widget's links, versions, encryption and fixtures",
         '',
       ].join('\n'),
     );

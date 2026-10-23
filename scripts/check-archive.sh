@@ -31,7 +31,7 @@ APP_GROUP=group.today.willitsnow.app
 DEMO_PUBLISHER=3940256099942544
 # The debug hooks' names (section 18.3), looked for anywhere in strings' output and as whole
 # short literals.
-HOOKS=(-uitest -fixture -apiOrigin -route -umpGeography URLProtocolStub 127.0.0.1)
+HOOKS=(-uitest -fixture -apiOrigin -route -umpGeography -openURLs URLProtocolStub 127.0.0.1)
 # DebugHooks.swift's other launch arguments (section 9.8), too short or too ordinary to look
 # for inside longer strings, so matched only as whole short literals.
 LITERAL_HOOKS=(-now -clock -unlocked -noads -resetStore -network -location)
