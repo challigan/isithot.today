@@ -12,6 +12,9 @@
 export const APP_COPY = {
   // Home (10.2)
   placeButtonLabel: 'Place: {place}. Change place.',
+  // The same button while no place is known, after what it shows (core's "Finding you…"), as
+  // the website's place button reads it ("…, change location").
+  placeButtonUnknown: '{status}, change place.',
   settings: 'Settings',
   slugGone: 'That place is no longer available. Showing your approximate location.',
   offline: "You're offline. Showing the forecast from {time}.",
@@ -22,6 +25,10 @@ export const APP_COPY = {
   notNow: 'Not now',
   search: 'Search',
   upgradeRow: 'No ads, plus widgets for your home and lock screen · {price}',
+  // The page's question and answer as VoiceOver reads them, one heading with the place (10.2,
+  // 16), and a row of the model list under the strip (10.2).
+  headingLabel: '{place}. {question} {answer}',
+  modelLine: '{name} · {value}',
 
   // Place picker (10.3)
   recent: 'Recent',

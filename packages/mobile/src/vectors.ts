@@ -1,7 +1,8 @@
 /**
  * The golden vectors (iOS build spec, section 7.4): inputs, and what the TypeScript reference in
  * packages/core and packages/client gives for them, which the Swift ports in IsItCore must give
- * too. Every output here comes from calling the reference; none is written by hand. Pure: the
+ * too, and for the app's page (`page.json`), what `page.ts` here makes of core's and the client's.
+ * Every output here comes from calling the reference; none is written by hand. Pure: the
  * fixtures are passed in, and `scripts/mobile-generate.ts` writes the files.
  *
  * A file is `{ fn, source, cases: [{ fn, in, out }] }`: `fn` lists the functions it covers,
@@ -19,10 +20,13 @@
  * - A field a function leaves out (`undefined`) is left out here too; `null` is kept.
  */
 import {
+  ATTRIBUTION,
   ELEVATION,
+  ERROR_MESSAGES,
   GRID,
   HOUR,
   VIEWS,
+  creditParts,
   defaultView,
   localDateTime,
   question,
@@ -73,6 +77,7 @@ import {
   type WidgetEntry,
 } from '@isithot/client';
 import type { Fixture } from './fixtures';
+import { homePage, type PageInput, type PagePhase } from './page';
 
 export interface VectorCase {
   /** The function this case is for. */
@@ -117,7 +122,7 @@ function collector() {
 }
 
 function vectorFile(
-  fns: readonly (readonly ['core' | 'client', string])[],
+  fns: readonly (readonly ['core' | 'client' | 'mobile', string])[],
   cases: VectorCase[],
 ): VectorFile {
   const names = fns.map(([, fn]) => fn);
@@ -1055,6 +1060,126 @@ function stripVectors(fixtures: FixtureSet): VectorFile {
   return vectorFile([['core', 'viewDisplay']], cases);
 }
 
+// ---- page.json ---------------------------------------------------------------------------------
+
+/** Credits with something to split, or nothing: the API's own come first. */
+const CREDITS = [
+  ...ATTRIBUTION,
+  '',
+  'No links here',
+  'NASA POWERNASA POWER',
+  'CC BY-SA 4.0 and CC BY 4.0, then Weather data by Open-Meteo.com.',
+  'Météo-France · NASA POWER ©',
+];
+
+/** The fixtures the page is checked at more moments than their own, for each state they show. */
+const PAGE_FIXTURES = [
+  'aberdeen-snow',
+  'durham-tomorrow',
+  'leeds-dry',
+  'stale',
+  'no-now',
+  'no-week',
+  'limited',
+  'denver-f',
+  'kathmandu-0545',
+  'old-forecast',
+  'forecast-ends',
+] as const;
+
+const PHASES: readonly PagePhase[] = ['loading', 'ready', 'error', 'offline', 'limited'];
+
+function pageVectors(fixtures: FixtureSet): VectorFile {
+  const { cases, add } = collector();
+  for (const text of CREDITS) add('creditParts', { text }, creditParts(text));
+
+  /** The page for every view, for the fixture `name` (or no answer) without `without`. */
+  const page = (
+    name: string | null,
+    o: Omit<PageInput, 'view'>,
+    without?: readonly string[],
+  ): void => {
+    const whole = name === null ? null : fixtures.get(name);
+    if (whole === undefined) throw new Error(`No fixture ${name}`);
+    const f = whole && without ? withoutBlocks(whole, without) : whole;
+    for (const view of VIEWS) {
+      const input: PageInput = { ...o, view };
+      const content = homePage(f, input);
+      add(
+        'homePage',
+        { fixture: name, ...(without ? { without } : {}), ...input },
+        { ...content, shown: whole && f ? pathInWhole(whole, f, content.shown) : null },
+      );
+    }
+  };
+  // Every answer at its own moment.
+  for (const [name, f] of fixtures) page(name, { now: Date.parse(f._fixture.now), phase: 'ready' });
+  // An hour ahead, the last minute it can be shown, and past it.
+  for (const name of PAGE_FIXTURES) {
+    const f = fixtures.get(name);
+    if (!f) throw new Error(`No fixture ${name}`);
+    const until = usableUntil(f);
+    const first = f.snow?.ahead?.[0];
+    const moments = [until - MINUTE, until];
+    if (first) moments.unshift(Date.parse(first.time) + 30 * MINUTE);
+    for (const now of moments) page(name, { now, phase: 'ready' });
+  }
+  // Durham across 6pm, when the middle view turns to tomorrow, and without a tomorrow then.
+  const durham = fixtures.get('durham-tomorrow');
+  if (!durham) throw new Error('No fixture durham-tomorrow');
+  const evening = [17 * 60 + 59, 18 * 60].map((m) =>
+    localMoment(zoneOf(durham), dateOf(durham), Math.floor(m / 60), m % 60),
+  );
+  for (const now of evening) page('durham-tomorrow', { now, phase: 'ready' });
+  page('durham-tomorrow', { now: Date.parse(durham._fixture.now), phase: 'ready' }, [
+    'snow.days.1',
+  ]);
+  // How the last request went, the place's name given or empty, and blocks taken out.
+  const aberdeen = fixtures.get('aberdeen-snow');
+  if (!aberdeen) throw new Error('No fixture aberdeen-snow');
+  const at = Date.parse(aberdeen._fixture.now);
+  for (const phase of PHASES) page('aberdeen-snow', { now: at, phase });
+  // The server's own message, which differs from COPY.unavailable: over an answer the page still
+  // says forecasts are unavailable; with none it says the message.
+  const message = ERROR_MESSAGES.bad_location;
+  page('aberdeen-snow', { now: at, phase: 'error', message });
+  page('aberdeen-snow', { now: at, phase: 'ready', placeName: 'Old Aberdeen' });
+  page('aberdeen-snow', { now: at, phase: 'ready', placeName: '' });
+  page('aberdeen-snow', { now: at, phase: 'offline' }, ['updated']);
+  page('aberdeen-snow', { now: at, phase: 'ready' }, ['snow']);
+  const stale = fixtures.get('stale');
+  if (!stale) throw new Error('No fixture stale');
+  // A stale answer after each kind of failure: the offline and unavailable lines beat the stale
+  // line; rate limited keeps it.
+  for (const phase of ['offline', 'error', 'limited'] as const) {
+    page('stale', { now: Date.parse(stale._fixture.now), phase });
+  }
+  // A view with nothing to show after a failure keeps the footer's line and Retry.
+  const noNow = fixtures.get('no-now');
+  if (!noNow) throw new Error('No fixture no-now');
+  page('no-now', { now: Date.parse(noNow._fixture.now), phase: 'error' });
+  // Past usableUntil, no line and no Retry, whatever the failure.
+  const old = fixtures.get('old-forecast');
+  if (!old) throw new Error('No fixture old-forecast');
+  for (const phase of ['offline', 'error', 'limited'] as const) {
+    page('old-forecast', { now: Date.parse(old._fixture.now), phase });
+  }
+  // No answer yet: asking, or failed; with the server's message, or an empty one.
+  for (const phase of PHASES) {
+    page(null, { now: at, phase });
+    page(null, { now: at, phase, placeName: 'Leeds' });
+  }
+  page(null, { now: at, phase: 'error', message, placeName: 'Leeds' });
+  page(null, { now: at, phase: 'error', message: '' });
+  return vectorFile(
+    [
+      ['mobile', 'homePage'],
+      ['core', 'creditParts'],
+    ],
+    cases,
+  );
+}
+
 // ---- widget.json -------------------------------------------------------------------------------
 
 function widgetVectors(fixtures: FixtureSet): VectorFile {
@@ -1526,8 +1651,8 @@ function recentVectors(): VectorFile {
 }
 
 /**
- * Every vector file, in the spec's order, from `fixtures` (each as its file has it). Throws
- * when a fixture a vector needs is missing.
+ * Every vector file, in the spec's order (section 7.4's, then phase 5's `page.json`), from
+ * `fixtures` (each as its file has it). Throws when a fixture a vector needs is missing.
  */
 export function vectorFiles(fixtures: FixtureSet): NamedVectors[] {
   return [
@@ -1544,6 +1669,7 @@ export function vectorFiles(fixtures: FixtureSet): NamedVectors[] {
     { name: 'alerts', vectors: alertVectors() },
     { name: 'links', vectors: linkVectors() },
     { name: 'recent', vectors: recentVectors() },
+    { name: 'page', vectors: pageVectors(fixtures) },
   ];
 }
 

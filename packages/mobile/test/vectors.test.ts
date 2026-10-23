@@ -1,6 +1,10 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
+  ATTRIBUTION,
+  COPY,
+  ERROR_MESSAGES,
   GRID,
+  creditParts,
   defaultView,
   localDateTime,
   question,
@@ -37,7 +41,9 @@ import {
   usableUntil,
   widgetEntries,
 } from '@isithot/client';
+import { APP_COPY } from '../src/appCopy';
 import { FIXTURES, fixtureJson, makeFixture, type Fixture } from '../src/fixtures';
+import { homePage } from '../src/page';
 import {
   addDays,
   assertSpecParse,
@@ -106,6 +112,8 @@ const replay: Record<string, (i: In) => unknown> = {
   notificationRoute: (i) => notificationRoute(i.payload, () => i.placeToday),
   addRecent: (i) => addRecent(i.list, i.target, i.name, i.max),
   removeRecent: (i) => removeRecent(i.list, i.target),
+  homePage: (i) => homePage(i.fixture === null ? null : res(i), i),
+  creditParts: (i) => creditParts(i.text),
 };
 
 /** A path in a case's output, read back from its fixture. */
@@ -122,6 +130,7 @@ function expected(c: VectorCase): unknown {
     return { ...out, now: read(f, out.now), today: read(f, out.today), week: read(f, out.week) };
   }
   if (c.fn === 'middleDay') return { ...out, day: read(f, out.day) };
+  if (c.fn === 'homePage') return { ...out, shown: read(f, out.shown) };
   if (c.fn === 'widgetEntries') {
     return { ...out, entries: out.entries.map((e: any) => ({ ...e, day: read(f, e.day) })) };
   }
@@ -148,6 +157,9 @@ const SPEC_FILES = [
   'recent',
 ];
 
+/** Phase 5's, after section 7.4's: the app's page. */
+const PAGE_FILES = ['page'];
+
 /** The functions whose reference is core's; the rest are the client's. */
 const CORE = [
   'roundToGrid',
@@ -157,7 +169,11 @@ const CORE = [
   'viewLabel',
   'question',
   'viewDisplay',
+  'creditParts',
 ];
+
+/** The functions whose reference is packages/mobile's own, built on core's and the client's. */
+const MOBILE = ['homePage'];
 
 const file = (name: string) => files.find((f) => f.name === name)!.vectors;
 const casesFor = (name: string, fn: string) => file(name).cases.filter((c) => c.fn === fn);
@@ -167,8 +183,8 @@ const local = (zone: string, now: number) => {
 };
 
 describe('vectorFiles', () => {
-  it('writes every file section 7.4 names, in its order', () => {
-    expect(files.map((f) => f.name)).toEqual(SPEC_FILES);
+  it('writes every file section 7.4 names, in its order, then the page', () => {
+    expect(files.map((f) => f.name)).toEqual([...SPEC_FILES, ...PAGE_FILES]);
   });
 
   it('gives every output the reference gives for its input', () => {
@@ -188,7 +204,12 @@ describe('vectorFiles', () => {
     for (const { name, vectors } of files) {
       const fns = vectors.fn.split(', ');
       expect(vectors.source, name).toBe(
-        fns.map((fn) => `${CORE.includes(fn) ? 'core' : 'client'}@${fn}`).join(', '),
+        fns
+          .map((fn) => {
+            const pkg = CORE.includes(fn) ? 'core' : MOBILE.includes(fn) ? 'mobile' : 'client';
+            return `${pkg}@${fn}`;
+          })
+          .join(', '),
       );
       expect(new Set(vectors.cases.map((c) => c.fn)), name).toEqual(new Set(fns));
       const keys = vectors.cases.map((c) => JSON.stringify([c.fn, c.in]));
@@ -562,6 +583,103 @@ describe('the cases cover what section 7.4 asks for', () => {
       new Set(['view', 'upgrade', 'settings', 'place', null]),
     );
     expect(routes.some((r) => r?.view === 'default')).toBe(true);
+  });
+
+  it('page: every fixture and view, each state, and the footer’s lines', () => {
+    const cases = casesFor('page', 'homePage');
+    const outs = cases.map((c) => c.out as any);
+    // Every fixture at its own moment, for each view.
+    for (const name of fixtures.keys()) {
+      const own = Date.parse(fixtures.get(name)!._fixture.now);
+      const views = cases
+        .filter((c) => (c.in as In).fixture === name && (c.in as In).now === own)
+        .map((c) => (c.in as In).view);
+      expect(new Set(views), name).toEqual(new Set(['now', 'today', 'week']));
+    }
+    expect(new Set(outs.map((o) => o.state))).toEqual(
+      new Set(['ready', 'loading', 'error', 'notAvailable', 'noRecent']),
+    );
+    const find = (fixture: string | null, view: string, test: (o: any) => boolean) =>
+      cases.some(
+        (c) => (c.in as In).fixture === fixture && (c.in as In).view === view && test(c.out),
+      );
+    // The spec's examples, from the answers themselves.
+    expect(
+      find('durham-tomorrow', 'today', (o) => o.heading === 'Durham. Will it snow tomorrow? Yes.'),
+    ).toBe(true);
+    expect(find('leeds-dry', 'today', (o) => o.heading === 'Leeds. Will it snow today? No.')).toBe(
+      true,
+    );
+    expect(find('no-now', 'now', (o) => o.state === 'notAvailable')).toBe(true);
+    expect(find('no-week', 'week', (o) => o.state === 'notAvailable')).toBe(true);
+    expect(find('limited', 'today', (o) => o.day?.limited === COPY.limited)).toBe(true);
+    expect(find('denver-f', 'today', (o) => o.day?.lines[0].text.endsWith('in'))).toBe(true);
+    expect(find('old-forecast', 'today', (o) => o.answer === APP_COPY.staleApp)).toBe(true);
+    expect(find(null, 'today', (o) => o.answer === COPY.checking && o.footer === null)).toBe(true);
+    expect(find(null, 'today', (o) => o.retry === COPY.retry)).toBe(true);
+    // With no answer, a failed request is the error, in the server's words when it sent some
+    // (section 4); one that couldn't connect says so, and one rate limited says that; all with
+    // Retry.
+    const failed = (phase: string) =>
+      cases.filter((c) => (c.in as In).fixture === null && (c.in as In).phase === phase);
+    expect(failed('error').length).toBeGreaterThan(0);
+    for (const c of failed('error')) {
+      expect((c.out as any).state).toBe('error');
+      expect((c.out as any).answer).toBe((c.in as In).message || COPY.unavailable);
+      expect((c.out as any).retry).toBe(COPY.retry);
+    }
+    // A message that isn't COPY.unavailable, so a port that drops it fails.
+    expect(failed('error').some((c) => (c.out as any).answer === ERROR_MESSAGES.bad_location)).toBe(
+      true,
+    );
+    expect(ERROR_MESSAGES.bad_location).not.toBe(COPY.unavailable);
+    expect(failed('offline').length).toBeGreaterThan(0);
+    for (const c of failed('offline')) {
+      expect((c.out as any).state).toBe('error');
+      expect((c.out as any).answer).toBe(APP_COPY.staleApp);
+      expect((c.out as any).retry).toBe(COPY.retry);
+    }
+    expect(failed('limited').length).toBeGreaterThan(0);
+    for (const c of failed('limited')) {
+      expect((c.out as any).state).toBe('error');
+      expect((c.out as any).answer).toBe(ERROR_MESSAGES.rate_limited);
+      expect((c.out as any).retry).toBe(COPY.retry);
+    }
+    // Over an answer that shows: after a failure, forecasts are unavailable, with Retry; offline,
+    // the offline line, and rate limited, nothing new: neither has Retry. Past usableUntil,
+    // neither line nor Retry.
+    const over = (phase: string) =>
+      cases.filter((c) => (c.in as In).fixture !== null && (c.in as In).phase === phase);
+    for (const phase of ['error', 'offline', 'limited']) {
+      expect(over(phase).length, phase).toBeGreaterThan(0);
+      for (const c of over(phase)) {
+        const o = c.out as any;
+        const shows = o.state !== 'noRecent';
+        expect(o.retry, `${phase} ${o.state}`).toBe(phase === 'error' && shows ? COPY.retry : null);
+        if (phase === 'error') expect(o.footer.notice).toBe(shows ? COPY.unavailable : null);
+        if (phase === 'limited' && shows) {
+          const ready = homePage(res(c.in as In), { ...(c.in as In), phase: 'ready' });
+          expect(o.footer.notice).toBe(ready.footer?.notice);
+        }
+      }
+    }
+    expect(over('limited').some((c) => (c.out as any).footer.notice === COPY.stale)).toBe(true);
+    expect(over('error').some((c) => (c.out as any).state === 'notAvailable')).toBe(true);
+    // The footer: the stale line, and offline, its own line, which beats it.
+    expect(find('stale', 'today', (o) => o.footer.notice === COPY.stale)).toBe(true);
+    expect(
+      find('stale', 'today', (o) => o.footer.notice?.startsWith("You're offline. Showing")),
+    ).toBe(true);
+    // "Updated 9:05am GMT" with an answer, but for one without `updated`, which has none.
+    for (const c of cases.filter((c) => (c.in as In).fixture !== null)) {
+      const noUpdated = JSON.stringify((c.in as In).without) === '["updated"]';
+      expect((c.out as any).footer.updated?.startsWith(`${COPY.updated} `) ?? null).toBe(
+        noUpdated ? null : true,
+      );
+    }
+    // Each credit the API gives, with something to link.
+    const credits = casesFor('page', 'creditParts').map((c) => (c.in as In).text);
+    for (const credit of ATTRIBUTION) expect(credits).toContain(credit);
   });
 
   it('recent: de-duplication, the cap and IP refused', () => {

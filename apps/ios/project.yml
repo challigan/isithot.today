@@ -43,8 +43,10 @@ targets:
         Release:
           EXCLUDED_SOURCE_FILE_NAMES: Fixtures
     dependencies:
+      # IsItState holds AppModel; IsItLogic the rules whose types it shows (the picked hour) and
+      # the home screen's presenters.
       - package: IsItCore
-        products: [IsItModel]
+        products: [IsItModel, IsItLogic, IsItState]
       - package: IsItKit
         products: [IsItServices, IsItUI, IsItAds, SnowKit]
       - target: WillItSnowWidgets

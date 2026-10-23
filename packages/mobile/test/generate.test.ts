@@ -56,7 +56,7 @@ describe('generatedFiles', () => {
     const resources = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources';
     const vectors = [
       ...['grid', 'target', 'query', 'placeTime', 'tomorrow', 'freshness', 'hours'],
-      ...['questions', 'strip', 'widget', 'alerts', 'links', 'recent'],
+      ...['questions', 'strip', 'widget', 'alerts', 'links', 'recent', 'page'],
     ];
     const resourcePaths = [
       ...FIXTURES.map((s) => `${resources}/Fixtures/${s.name}.json`),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   COPY,
+  CREDIT_LINKS,
   ERROR_MESSAGES,
   SNOW_BAND_LABELS,
   SNOW_REASON_LABELS,
@@ -80,6 +81,20 @@ describe('coreCopySwift', () => {
       `  public static let metOfficeCredit =\n    ${swiftString(COPY.metOfficeCredit)}\n`,
     );
     fitsColumns(swift);
+  });
+
+  it("writes the credits' linked phrases, in core's order", () => {
+    expect(block(swift, '  public static let creditLinks: [CreditLink] = [', '  ]')).toEqual(
+      CREDIT_LINKS.map(
+        (l) => `    CreditLink(phrase: ${swiftString(l.phrase)}, url: ${swiftString(l.url)}),`,
+      ),
+    );
+    expect(swift).toContain(
+      '  public struct CreditLink: Sendable, Equatable {\n' +
+        '    public let phrase: String\n' +
+        '    public let url: String\n' +
+        '  }\n',
+    );
   });
 
   it("writes the snow units' label once, from UNITS_LABELS", () => {
@@ -223,8 +238,11 @@ describe('APP_COPY', () => {
     );
     expect(slotted).toEqual({
       placeButtonLabel: ['place'],
+      placeButtonUnknown: ['status'],
       offline: ['time'],
       upgradeRow: ['price'],
+      headingLabel: ['place', 'question', 'answer'],
+      modelLine: ['name', 'value'],
       upgradeSettings: ['price'],
       notifyPlaceOnScreen: ['place'],
       reportAdSubject: ['version'],

@@ -78,6 +78,21 @@ public enum CoreCopy {
     }
   }
 
+  /// A phrase of the credits that links out, and where to (core `CREDIT_LINKS`).
+  public struct CreditLink: Sendable, Equatable {
+    public let phrase: String
+    public let url: String
+  }
+
+  /// The credits' linked phrases, in core's order, which `Credits.parts(_:)` (IsItLogic) splits
+  /// a credit by, as core `creditParts` does.
+  public static let creditLinks: [CreditLink] = [
+    CreditLink(phrase: "Weather data by Open-Meteo.com", url: "https://open-meteo.com/"),
+    CreditLink(phrase: "CC BY 4.0", url: "https://creativecommons.org/licenses/by/4.0/"),
+    CreditLink(phrase: "CC BY-SA 4.0", url: "https://creativecommons.org/licenses/by-sa/4.0/"),
+    CreditLink(phrase: "NASA POWER", url: "https://power.larc.nasa.gov/"),
+  ]
+
   /// The API error envelope's message for its code (core `ERROR_MESSAGES`), or nil for a code
   /// the app doesn't know.
   public static func errorMessage(code: String) -> String? {

@@ -65,6 +65,54 @@ final class AppGroupTests: XCTestCase {
     XCTAssertEqual(entry.answer?.label, "Snow")
   }
 
+  func testTheWidgetShowsEachHourAheadAndNothingOnceTheHoursRunOut() throws {
+    let response = try TestFixtures.response("aberdeen-snow")
+    let store = try XCTUnwrap(SharedStore.open(appGroup: group, fallback: false))
+    try store.saveToday(response, key: "city:aberdeen-gb", savedAt: response.updatedAt)
+
+    let entries = SavedAnswerProvider(store: { store }).entries(from: response.updatedAt)
+    // Now, the six hours ahead (10am to 3pm), then 3:05pm, six hours after the forecast.
+    let ahead = try XCTUnwrap(response.snow?.ahead).map(\.time)
+    XCTAssertEqual(entries.count, 8)
+    XCTAssertEqual(Array(entries.map(\.date).dropLast()), [response.updatedAt] + ahead)
+    XCTAssertEqual(entries.last?.date, response.updatedAt.addingTimeInterval(6 * 3600))
+    XCTAssertTrue(entries.dropLast().allSatisfy { $0.answer?.place == "Aberdeen" })
+    XCTAssertNil(entries.last?.answer)
+    let past = try XCTUnwrap(entries.last?.date)
+    XCTAssertNil(SavedAnswerProvider(store: { store }).entry(at: past).answer)
+  }
+
+  func testTheStoreKeepsThePlaceTheUnitsAndReadsTheUnlock() throws {
+    let store = try XCTUnwrap(SharedStore.open(appGroup: group, fallback: false))
+    let keys = [Keys.AppGroup.place, Keys.AppGroup.units, Keys.AppGroup.unlock]
+    let before = keys.map { store.defaults.object(forKey: $0) }
+    defer {
+      for (key, value) in zip(keys, before) {
+        if let value {
+          store.defaults.set(value, forKey: key)
+        } else {
+          store.defaults.removeObject(forKey: key)
+        }
+      }
+    }
+
+    store.savePlace(.city(slug: "leeds-gb", name: "Leeds"))
+    XCTAssertEqual(store.loadPlace(), .city(slug: "leeds-gb", name: "Leeds"))
+    store.savePlace(.ip)
+    XCTAssertNil(store.defaults.object(forKey: Keys.AppGroup.place))
+    XCTAssertEqual(store.loadPlace(), .ip)
+
+    store.saveUnits(.f)
+    XCTAssertEqual(store.defaults.string(forKey: Keys.AppGroup.units), "f")
+    XCTAssertEqual(store.loadUnits(), .f)
+
+    store.defaults.removeObject(forKey: Keys.AppGroup.unlock)
+    XCTAssertFalse(store.loadUnlocked())
+    let unlock = StoredUnlock(unlocked: true, checkedAt: Date(), productID: "unlock")
+    store.defaults.set(try unlock.stored(), forKey: Keys.AppGroup.unlock)
+    XCTAssertTrue(store.loadUnlocked())
+  }
+
   func testAnAnswerFromAnotherStoreVersionIsIgnored() throws {
     let response = try TestFixtures.response("leeds-dry")
     let store = try XCTUnwrap(SharedStore.open(appGroup: group, fallback: false))

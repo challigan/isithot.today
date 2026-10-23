@@ -4,9 +4,12 @@ The native SwiftUI app for willitsnow.today, built from the iOS build spec. This
 (phase 0, PRs 0.1 to 0.4): the project, the app and its widget, both entitlements, the debug
 hooks, their tests, the CI that builds and runs them, and the release job that signs the app and
 uploads it to TestFlight; with phase 2.3's generated assets: the snow glyphs, the app icon and
-the answer font. The app shows a fixture when a Debug build is launched with `-fixture <name>`,
-and the widget shows the answer the app saved in the App Group. Fetching, the real home screen
-and everything else come in later phases.
+the answer font; and phase 5.1, the skeleton TestFlight build: the app fetches the answer for
+its place (approximate IP location until one is chosen, so the first launch shows the phone's
+own place with no picker), keeps it current, saves it in the App Group, where the widget reads
+it, and draws it on the home screen's top bar and Today page (below, "Phase 5.1"). A Debug build
+can be answered by a fixture or a stubbed network instead (below, "Debug hooks"). Everything else
+comes in later phases.
 
 ## What is where
 
@@ -16,20 +19,27 @@ Package.resolved         the pinned package versions, copied into the project by
 Configs/                 Base (every target), Team (Carl's team ID, not a secret), Snow (identifiers,
                          API origin, ad units), CI-Simulator (signed to run locally, for CI)
 Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API models; generated CoreCopy,
-                         Questions, AppCopy, Constants, Keys and Palettes; in Tests/IsItTestSupport the
-                         fixtures and golden vectors with their loaders; in Tests/IsItLogicTests the ports'
-                         golden tests and the guard that every vector file is ported (below)
-Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore), IsItAds (Google's SDKs),
-                         IsItUI (the skeleton's answer view), IsItWidgetUI (the widget's entry, provider,
-                         view), SnowKit (Glyphs, Color(rgb:) for the palettes, and the glyph catalogues,
-                         generated)
-Apps/Snow/App/           WillItSnowApp, AppModel, HomeView, DebugHooks (every test and debug hook)
+                         Questions, AppCopy, Constants, Keys and Palettes; the ports and the home screen's
+                         presenters (IsItLogic); AppModel, its API client and the launch and refresh rules
+                         (IsItState); in Tests/IsItTestSupport the fixtures and golden vectors with their
+                         loaders; in Tests/IsItLogicTests the ports' golden tests and the guard that every
+                         vector file is ported (below); in Tests/IsItStateTests AppModel with fakes, and
+                         the home screen drawn from it
+Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore, URLSessionTransport,
+                         WidgetCenterReloader: AppModel's services), IsItAds (Google's SDKs),
+                         IsItUI (the home screen: HomeShell and ForecastPageView, drawing IsItLogic's
+                         HomePage and HomeTopBar, with HomeActions), IsItWidgetUI (the widget's entry,
+                         provider, view), SnowKit (Glyphs, Color(rgb:) for the palettes, and the glyph
+                         catalogues, generated)
+Apps/Snow/App/           WillItSnowApp (the services and the scene's phases), HomeView (the home screen,
+                         from the model), DebugHooks (every test and debug hook)
 Apps/Snow/Resources/     the app's Info.plist, entitlements and privacy manifest; generated: Assets.xcassets
                          (the app icon) and Fonts/BricolageAnswer.ttf (the app's and the widget's)
 Apps/Snow/Widgets/       the widget extension, its Info.plist, entitlements and privacy manifest
 Apps/Snow/Tests/         app-hosted unit tests: the App Group round trip (V1), widget and glyph snapshots,
                          palette contrast, the answer font
-Apps/Snow/UITests/       launches the aberdeen-snow and leeds-dry fixtures and attaches the screens
+Apps/Snow/UITests/       FixtureLaunchTests (fixtures at their own moments, and a place nearby) and
+                         LaunchTests (the real launch over a stubbed network); both attach the screens
 TestPlans/               Unit and UI
 ci/                      xcodegen.sh, simulator.sh, test.sh, release-check.sh, xcresult-summary.mjs, contact-sheet.mjs;
                          for releases archive.sh, upload.sh and ExportOptions.plist
@@ -38,12 +48,12 @@ ci/                      xcodegen.sh, simulator.sh, test.sh, release-check.sh, x
 The release checks are in the repo's `scripts/`: `check-archive.sh`, with `swift-small-strings.mjs`
 (below), and `asc-key.mjs` and `asc-notes.mjs` for the App Store Connect key and What to Test.
 
-| Target              | Bundle ID                      | Links                                                  |
-| ------------------- | ------------------------------ | ------------------------------------------------------ |
-| `WillItSnow` (app)  | `today.willitsnow.app`         | IsItModel, IsItServices, IsItUI, IsItAds, SnowKit      |
-| `WillItSnowWidgets` | `today.willitsnow.app.widgets` | IsItModel, IsItServices, IsItWidgetUI, SnowKit         |
-| `WillItSnowTests`   | hosted by the app              | IsItModel, IsItServices, IsItUI, IsItWidgetUI, SnowKit |
-| `WillItSnowUITests` | drives the app                 |                                                        |
+| Target              | Bundle ID                      | Links                                                                   |
+| ------------------- | ------------------------------ | ----------------------------------------------------------------------- |
+| `WillItSnow` (app)  | `today.willitsnow.app`         | IsItModel, IsItLogic, IsItState, IsItServices, IsItUI, IsItAds, SnowKit |
+| `WillItSnowWidgets` | `today.willitsnow.app.widgets` | IsItModel, IsItServices, IsItWidgetUI, SnowKit                          |
+| `WillItSnowTests`   | hosted by the app              | IsItModel, IsItServices, IsItUI, IsItWidgetUI, SnowKit                  |
+| `WillItSnowUITests` | drives the app                 |                                                                         |
 
 The widget never links IsItAds. Both the app and the widget have the App Group
 `group.today.willitsnow.app`; only the app has `aps-environment`. The name under the icon is
@@ -59,10 +69,12 @@ CI builds and tests everything, so this is only for trying the app by hand.
 2. `apps/ios/ci/xcodegen.sh`, then `open apps/ios/WillItSnow.xcodeproj`. Run the script again
    after every pull: the project is generated, never committed, so new files only appear then.
 3. Choose the `WillItSnow` scheme and an iPhone 17 simulator, and run. With no fixture the
-   app shows only a progress indicator, since it doesn't fetch yet. To see an answer: Product,
-   Scheme, Edit Scheme, Run, Arguments, and tick `-fixture aberdeen-snow` (or `leeds-dry`, or
-   add `-fixture` with any other fixture's name, below). Then add the widget on the simulator's
-   home screen: it shows the same answer.
+   app asks willitsnow.today for the answer by approximate IP location (the simulator's network
+   is the Mac's). To see a fixture instead: Product, Scheme, Edit Scheme, Run, Arguments, and
+   tick `-fixture aberdeen-snow` (or `leeds-dry`, or add `-fixture` with any other fixture's
+   name, below). Then add the widget on the simulator's home screen: it shows the same answer.
+   Pull the page down to ask again; a place under "Nearby:" loads in place. The place and
+   Settings buttons and "Use my location" do nothing until phase 6 brings their sheets.
 4. Product, Test runs the Unit test plan; pick UI from the test plan menu for the UI tests.
 5. On your iPhone (Debug builds only): Xcode, Settings, Accounts needs your Apple Account, and
    the App IDs `today.willitsnow.app` and `today.willitsnow.app.widgets` need the App Group and,
@@ -104,7 +116,7 @@ reach the key.
   file and line;
 - **Archive checks**: both bundles have privacy manifests and the answer font; the app has its
   icon; the widget links no Google Mobile Ads;
-  neither binary names any of the 12 debug hooks; the ad units are Google's demo ones (test) or
+  neither binary names any of the 13 debug hooks; the ad units are Google's demo ones (test) or
   yours (real); the app and widget have the same version and build; `ITSAppUsesNonExemptEncryption`
   is false; no fixture is bundled. Each failure is named;
 - **Export**: the `.ipa` and its size;
@@ -170,7 +182,12 @@ ID from `project.pbxproj` (`<ID> /* <name> */ = { isa = PBXNativeTarget;`).
 
 IsItKit can't be built here (SwiftUI, WidgetKit and Google's binary SDKs), but plain-Foundation
 parts can be type-checked in a scratch package: `SharedStore` was, with a stub for
-`containerURL(forSecurityApplicationGroupIdentifier:)`, which Linux's Foundation lacks. SnowKit's
+`containerURL(forSecurityApplicationGroupIdentifier:)`, which Linux's Foundation lacks. So were
+IsItServices and `DebugHooks.swift`, built twice (with `DEBUG` defined, and without, as Release),
+in Swift 5 mode, with `import FoundationNetworking` added to copies of the files (URLSession and
+`URLProtocol` live there on Linux) and stub `UIKit` and `WidgetKit` modules declaring the one
+call each makes (`UIView.setAnimationsEnabled(_:)`, `WidgetCenter.shared.reloadAllTimelines()`),
+beside a copy of `WillItSnowApp.environment()`. SnowKit's
 `Glyphs` was, against a stub `SwiftUI` module declaring `Image(decorative:bundle:)` as SwiftUI
 does, with the glyph catalogue copied in as a resource and a test that every band names an image
 set that exists. `swift package dump-package` in IsItKit checks its manifest.
@@ -244,6 +261,7 @@ included. Until the last port landed it failed, with one issue for each file not
 | `alerts.json`    | 3.4, done | `AlertSync.action`, `.body`, `.fingerprint`         |
 | `links.json`     | 3.4, done | `DeepLink.parse`, `.route(payload:placeNow:)`       |
 | `recent.json`    | 3.4, done | `RecentPlaces`                                      |
+| `page.json`      | 5.1, done | `HomePage`, `Credits.parts`                         |
 
 While a file was still to port, `ios.yml`'s `swift-linux` job failed at its Test step, and the
 jobs that need it (`ios`, `archive-check`, and so `contact-sheet`) didn't run. A new vector file
@@ -280,6 +298,148 @@ links and recent places"):
   the time of day.
 - **`RecentPlaces.adding(_:name:to:max:)` and `.removing(_:from:)`** keep `recent.v1`'s
   `[RecentPlace]`, which is `Codable` as the client's JSON.
+
+## Phase 5.1: the data, the launch and the home screen
+
+PR 5.1 came in two halves, built side by side and then connected: the data and the launch, and
+the Today page. DECISIONS has each half's choices, and how they were connected ("The iPhone app's
+data and launch", "The iPhone app's Today page" and "The iPhone app's home screen, connected").
+
+### The data and the launch
+
+`IsItState`, in IsItCore, is the app's state and its one request, with every decision about them
+pure and tested on Linux (`Tests/IsItStateTests`); IsItServices fills its protocols on iOS (spec
+sections 4 and 9.4 to 9.6).
+
+- **`AppModel`** (`@MainActor @Observable`) holds the place, the units, the answer on screen
+  and when it was fetched, the phase (loading, ready, offline, or an error: rate limited, or
+  with the server's code and message), the holds, the unlock, the view on screen, a one-off notice and a pending
+  route. `init(environment:)` is step 1 of the launch: it reads what is stored and paints the
+  saved answer at once when it is for the place and still has an hour to show. `launch()` runs
+  steps 2 to 7 once; `refresh()` is pull to refresh and "Try again"; `didEnterBackground()` and
+  `willEnterForeground()` follow the scene's phase; `select(_:)` loads a place under "Nearby:"
+  in place; `now` is its clock's time, and `topBar` and `page(_:at:)` what the home screen
+  draws (below); `answer(at:)` and `offlineLine(at:)` say the same of the answer, and a test
+  holds the page to them.
+- **`AppEnvironment`** gives it `APIClient` (over an `HTTPTransport`), an `AppClock` (the time,
+  and work at a time: `SystemClock`, which a Debug build can start at a fixture's moment), a `StoredState`, a `WidgetReloader`, the later phases' `AppHooks`
+  (`NoHooks` until phases 6, 7 and 8 fill them: the entitlement check, the location fix, the
+  ads, the notifications and routes) and the random jitter.
+- **The decisions** are `Launch` (paint, reuse under 10 minutes, the launch's fetch), `Refresh`
+  (how to ask again, the hourly refresh with 0 to 90 s of jitter, the retry after a failure,
+  and the return to the foreground) and `AnswerState` (the picked hour, the stale state past
+  `usableUntil`, offline or the error with nothing saved, and the footer's offline line).
+- **`APIClient`** builds `TodayQuery.build`'s query with `ahead=snow` (byte for byte the query
+  vectors'), decodes `TodayResponse` and maps failures to `FetchError`: offline for
+  `URLError.notConnectedToInternet` and its kin (`APIClient.offlineCodes`), rate limited for 429,
+  and failed otherwise, with the status and the `ApiError` code and message when the server sent
+  them. It never logs, and a `FetchError` never carries the URL.
+- **What is stored**: `SavedToday` (IsItModel) is the codec of `today.v1.json`,
+  `{ v, savedAt, key, response }`, which is ignored when `v` is another store version;
+  `StoredUnlock` reads `unlock.v1`.
+  `SharedStore` is the App Group's `StoredState`: `place.v1`, `units.v1`, `unlock.v1` (read
+  only) and the saved answer; `MemoryState` stands in without an App Group.
+- **Apple only, and so proven only by CI's macOS jobs**: `URLSessionTransport` (section 4's
+  settings), `SharedStore`'s defaults, `WidgetCenterReloader`, the app's wiring in
+  `WillItSnowApp.swift` and the debug hooks. IsItServices and the widget's provider were
+  type-checked on Linux against stubs of WidgetKit and `containerURL` (above).
+
+### The home screen
+
+The top bar and the Today page (spec section 10.2), drawn from plain values:
+
+- **IsItLogic makes the content** (Linux-tested): `HomePage(_:view:at:phase:message:placeName:)`
+  gives a page's state, band and palette, question, answer, the heading VoiceOver reads with the
+  place, verdict and detail, the middle page's agreement, strip, model list and limited line,
+  Retry, and the footer (the Updated line, the offline, unavailable or stale line, the links out,
+  the places nearby and the credits in pieces with their links);
+  `HomeTopBar(placeName:approximate:notice:)` the top bar. Its
+  reference is packages/mobile `page.ts`, made of core's and the client's rules, and `page.json`
+  checks it case by case (the table above).
+- **IsItUI draws it:** `HomeShell(topBar:theme:actions:content:)` (the background of the page on
+  screen and the top bar over the pages), `ForecastPageView(page:theme:glyph:actions:)` (one page),
+  `PageTheme` (a page's colours) and `HomeActions` (retry, open the place picker, open Settings,
+  use my location, open a link, select a nearby place). IsItUI doesn't know the app's model, and
+  doesn't link SnowKit: the app gives each page its theme (`PageTheme(palette)`, with SnowKit's
+  `Color(rgb:)`) and glyph (`Glyphs.image`).
+- **The app connects them** in `HomeView.swift` alone (next).
+
+### How they meet
+
+- **The root** (`WillItSnowApp.swift`) makes `AppModel` with the production `AppEnvironment`:
+  `APIClient` over `URLSessionTransport` at `API_ORIGIN`, `SystemClock`, the App Group's
+  `SharedStore` (a Debug build falls back to its own container, any other build to
+  `MemoryState`), `WidgetCenterReloader` and `NoHooks`. The model paints the saved answer as it
+  is made (step 1); `.task` runs `launch()` (steps 2 to 7, spec section 9.4), and the scene's
+  phase calls `didEnterBackground()` and `willEnterForeground()`.
+- **The first launch** has no `place.v1`, so the target is approximate IP location: the app asks
+  `/api/v1/today?ahead=snow`, the server places the phone and chooses the units, which the app
+  then keeps. The top bar shows "Finding you…" (which VoiceOver reads as "Finding you…, change
+  place.") until the answer names the place, then the place with "Using approximate location."
+  beneath it. No picker, and no prompt.
+- **The home screen** (`HomeView.swift`) draws `model.topBar`, and the Today page at the
+  model's clock (`model.page(.today, at: model.now)`), with IsItUI's `HomeShell` and
+  `ForecastPageView`, inside a `TimelineView(.everyMinute)`, so the hour picked, Tomorrow from
+  6pm and the stale state follow the clock while the app is open. Only the middle page is drawn in 5.1, whatever `model.view`
+  says; phase 5.2's pager binds it.
+- **The states**, as `HomePage` gives them from the model's phase (spec sections 4, 9.5 and
+  10.2): loading ("Checking…"); ready; an error with nothing saved (the server's message, or
+  `CoreCopy.unavailable` without one, and Retry); offline with nothing saved ("No recent
+  forecast. Connect to the internet to refresh." and Retry); rate limited (429) with nothing
+  saved ("Too many requests. Try again in a minute." and Retry); offline with an answer (the
+  answer, and "You're offline. Showing the forecast from …" in the footer); an error with an
+  answer (the answer stays, with "Forecasts are unavailable right now…" and Retry under the
+  footer's Updated line); rate limited with an answer (the answer, quietly: the model asks again
+  a minute later, and never says it is offline); and past `usableUntil`, no recent forecast,
+  never the old hour.
+- **The actions:** Retry calls `refresh()`; pulling the page down (`.refreshable`, on the page's
+  scroll view) calls it too, keeping what is on screen; a place under "Nearby:" calls
+  `select(.city(slug:name:))`, which keeps it as the place and shows the loading state under its
+  name until its answer arrives; links open in Safari. The place picker, Settings and "Use my
+  location" do nothing until phase 6.
+- **The notice** (`AppCopy.slugGone`, when a city page's place has gone and the app fell back to
+  approximate location) takes the approximate line's place in the top bar until a place is
+  chosen.
+
+### Reading 5.1's tests
+
+**On Linux** (`swift test` in IsItCore; each test's name says what it proves):
+
+- `Tests/IsItStateTests/AppModelTests.swift`, `LaunchTests.swift`, `RefreshTests.swift` and
+  `APIClientTests.swift`: the launch order, the refresh rules and the request, with a fake
+  server, clock, store, widgets and hooks (`Fakes.swift`'s `Harness`).
+- `Tests/IsItStateTests/HomeScreenTests.swift`: what the home screen draws from the model. "The
+  home screen, from the model" goes through the first launch with nothing stored (asked by IP,
+  then "Leeds" on approximate location), an error then Retry, offline with and without a saved
+  answer, past `usableUntil`, an error over an answer, a 429 with and without one, and the
+  server's message with nothing saved; it also holds the page to `AnswerState` for every
+  fixture at its own moment, a millisecond before `usableUntil` and at it, in each phase (a 400
+  with its message, a bodiless 500 and a 429 among them). "A nearby place, loaded in place"
+  covers `select(_:)`: the request, the
+  place kept, the loading state under the new name meanwhile (never the last answer), offline,
+  the same place again, and the notice going. "The system's clock" proves that a clock started
+  at another moment schedules by its own time, ahead or behind.
+- `Tests/IsItLogicTests/HomePageTests.swift` and `PageVectorTests.swift`: the page's content,
+  against `page.json` (the TypeScript in packages/mobile `page.ts`).
+
+**On the macOS CI** (the UI test plan; `### UI:` in the `ios` job's log names each failure with
+its file and line, and the contact sheet shows the screens each test attached):
+
+- `FixtureLaunchTests`: `-uitest -resetStore -fixture <name>`, each launch from a clean store (so
+  no test sees the place another left), every request answered with that fixture, the model's
+  clock started at the fixture's moment. aberdeen-snow, leeds-dry, durham-tomorrow (Tomorrow
+  from 6pm) and old-forecast (no recent forecast; it waits for the Updated line, as it has no
+  verdict) read the place button, the one heading and the verdict; `testNearbyLoadsInPlace` taps
+  "Dundee" under "Nearby:" and waits for "Dundee. Will it snow today? Yes." (the fixture's server
+  answers every place alike).
+- `LaunchTests`: no fixture hook. The app's own client, URLSession transport and store run, with
+  only the network stubbed (`-network`): `ip-first-launch` answers the request for approximate IP
+  location and nothing else. `testFirstLaunchShowsTheApproximatePlace` (`-resetStore`) proves the
+  first launch asks by IP and shows Leeds on approximate location;
+  `testOfflineRelaunchKeepsTheSavedAnswer` launches, then relaunches with `-network off` and
+  `-now` 15 minutes on, and reads the saved answer and the offline line;
+  `testOfflineWithNothingSaved` reads "No recent forecast…" and Retry. Their screens are
+  `app-first-launch`, `app-offline-saved` and `app-offline-nothing`.
 
 ## CI (`.github/workflows/ios.yml`)
 
@@ -400,11 +560,35 @@ Xcode's as the `package-resolved` artefact. The next agent:
 
 Every test and debug hook is in `Apps/Snow/App/DebugHooks.swift`, inside `#if DEBUG` (spec
 section 9.8). A Release build compiles a stub with the same names that does nothing and names no
-launch argument. So far there are two:
+launch argument. So far there are these:
 
 - `-uitest` turns animations off;
-- `-fixture <name>` shows that fixture as if just fetched, and saves it in the App Group for the
-  widget. A name with no fixture stops the app, so a UI test can't pass on the wrong screen.
+- `-resetStore` forgets the place, the units and the saved answer before the model reads them,
+  for a first launch (not `unlock.v1`, which only StoreKit's code writes); every UI test's first
+  launch passes it;
+- `-fixture <name>` answers every request with that fixture (a transport of its own), after
+  forgetting the saved answer, so the launch fetches it rather than painting an earlier one; it
+  is then saved in the App Group for the widget, as any answer is;
+- `-network <name>` keeps the app's own `URLSessionTransport`, with section 4's settings, and
+  stubs the network beneath it (`URLProtocolStub`, section 9.8's URLProtocol stub): the request
+  for approximate IP location (`/api/v1/today` with `ahead=snow`, and `units` or `t`, but no
+  place) gets that fixture, a request for any other place a 400, and another path a 404, so an
+  answer on screen means the app asked for the right place. Nothing is forgotten, so a relaunch
+  paints and reuses what was saved. `-network off` has no connection
+  (`URLError.notConnectedToInternet`);
+- with `-fixture` or `-network <name>`, the model's clock starts at the fixture's own moment
+  (`_fixture.now`) and runs on (`SystemClock(startingAt:)`), so on any day the fixture shows the
+  state it was made for: the hour picked, Tomorrow from 6pm at the place, no recent forecast for
+  `old-forecast`. `-now <iso>` starts it at that moment instead. Spec 9.8's `-clock fixed` comes
+  with phase 5.4; the clock always runs;
+- `-apiOrigin <url>` asks a deploy preview's API instead of willitsnow.today's (spec section 4);
+- the unit tests' host: when the app only hosts the unit tests (XCTest's
+  `XCTestConfigurationFilePath` in its environment), it doesn't launch (`AppModel.launch()`), so
+  the hosted tests have the App Group to themselves; a launch with `-fixture` or `-network`
+  always launches.
+
+A fixture name that doesn't exist or doesn't decode, a `-now` that isn't a moment, or a saved
+answer `-resetStore` can't remove stops the app, so a UI test can't pass on the wrong screen.
 
 The fixtures are the ones `pnpm mobile:generate` writes for IsItCore's tests: 21 answers from
 the real server (two with a block deleted), each with a `_fixture` note saying what it shows
@@ -417,8 +601,8 @@ Debug builds may also keep the last answer in the app's own container when the A
 open (`DebugHooks.storeFallback`, V1); Release can't. `ci/release-check.sh` builds Release on
 every run and fails if a binary names a hook, a fixture is bundled, or the widget links Google
 Mobile Ads. `scripts/check-archive.sh` checks the unsigned Release archive on every run
-(`archive-check`) and the signed one before each upload, for the hooks of section 9.8 and the
-rest of section 18.3's list.
+(`archive-check`) and the signed one before each upload, for the hooks of section 9.8 (`-network`
+among them, as a short literal) and the rest of section 18.3's list.
 
 **Short literals.** strings(1) can't find a hook's name in an optimised build: Swift keeps a
 string of 15 bytes or fewer inside the value, and the compiler builds such a literal in registers
@@ -449,10 +633,14 @@ Each comes with the phase that needs it, so nothing in the skeleton is dormant:
 - the launch screen's `LaunchBackground` colour, from the palettes, which belongs in the
   generated `Assets.xcassets`; the widget's gallery name and description (`AppCopy.widgetName`,
   `AppCopy.widgetDescription`);
-- the target keys, freshness, hour picker and widget planner in the app and the widget (ported
-  in phase 3, used from phases 5 and 7), so the skeleton's widget shows one entry and never goes
-  stale: the only answer it can find is a Debug fixture;
-- the rest of `SnowKit`, `APIClient`, location, StoreKit (`Snow.storekit`), notifications, `AdsService` and the
+- the widget planner in the widget (ported in phase 3, used in phase 7), so the skeleton's
+  widget shows one entry, whatever the hour: it may show an answer past its hours until the app
+  saves another;
+- the switcher and the pager of Now, Today and This week, with the Now and week bodies (phase
+  5.2); the announcement when the picked hour changes the answer, `-clock fixed` and the home
+  screen's audits (5.4); the sheets behind the place and Settings buttons and "Use my location"
+  (phase 6), which do nothing until then;
+- the rest of `SnowKit`, location, StoreKit (`Snow.storekit`), notifications, `AdsService` and the
   banner, `SKAdNetworkItems`, and the privacy manifests' collected data types (coarse location,
   the push token);
 - `FEATURE_UNLOCK` and `FEATURE_ADS` (spec section 9.8), with the purchase and the ads;
