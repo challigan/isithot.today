@@ -83,6 +83,10 @@ jobs:
     # public repo.
     runs-on: macos-26
     timeout-minutes: 45
+    # The attachments' artefact ID, set only when they were uploaded. The runner evaluates job
+    # outputs after the last step whatever the result, so failed tests still set it.
+    outputs:
+      attachments: ${{ steps.attachments.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode 26.6
@@ -146,9 +150,16 @@ jobs:
           name: package-resolved
           path: apps/ios/build/resolved/Package.resolved
           retention-days: 5
+      # Assigned first, so that a failure in simulator.sh fails this step, not the next one.
       - name: Boot the iPhone 17 simulator
         id: simulator
-        run: echo "udid=$(apps/ios/ci/simulator.sh)" >> "$GITHUB_OUTPUT"
+        run: |
+          udid="$(apps/ios/ci/simulator.sh)"
+          if [ -z "$udid" ]; then
+            echo "::error::simulator.sh printed no UDID"
+            exit 1
+          fi
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
       - name: Build for testing
         id: build
         run: apps/ios/ci/test.sh build "${{ steps.simulator.outputs.udid }}"
@@ -173,6 +184,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 5
       - name: Upload the attachments
+        id: attachments
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
@@ -184,8 +196,10 @@ jobs:
   contact-sheet:
     name: Contact sheet
     needs: ios
-    # Also after failed tests: a failing screen is the one most worth seeing.
-    if: ${{ !cancelled() && needs.ios.result != 'skipped' }}
+    # Also after failed tests: a failing screen is the one most worth seeing. Skipped when ios
+    # uploaded no attachments (it failed before its tests ran, or no test attached any), so the
+    # only red job is the one to read.
+    if: ${{ !cancelled() && needs.ios.outputs.attachments }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

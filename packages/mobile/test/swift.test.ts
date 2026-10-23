@@ -37,6 +37,27 @@ describe('swiftIdentifier', () => {
     expect(swiftIdentifier('default')).toBe('`default`');
   });
 
+  it('backticks every word swiftc 6.3.3 rejects as a member name', () => {
+    // Each fails `swiftc -parse` in `public enum K { public static let <word> = "x" }`.
+    const reserved = [
+      ...['associatedtype', 'class', 'deinit', 'enum', 'extension', 'fileprivate', 'func'],
+      ...['import', 'init', 'inout', 'internal', 'let', 'operator', 'precedencegroup'],
+      ...['private', 'protocol', 'public', 'rethrows', 'static', 'struct', 'subscript'],
+      ...['typealias', 'var', 'break', 'case', 'catch', 'continue', 'default', 'defer', 'do'],
+      ...['else', 'fallthrough', 'for', 'guard', 'if', 'in', 'repeat', 'return', 'throw'],
+      ...['switch', 'where', 'while', 'as', 'false', 'is', 'nil', 'self', 'super', 'throws'],
+      ...['true', 'try'],
+    ];
+    expect(new Set(reserved).size).toBe(51);
+    for (const word of reserved) expect(swiftIdentifier(word)).toBe(`\`${word}\``);
+  });
+
+  it('leaves contextual keywords, which can name a member, as they are', () => {
+    for (const word of ['get', 'set', 'open', 'some', 'async', 'await', 'package', 'willSet']) {
+      expect(swiftIdentifier(word)).toBe(word);
+    }
+  });
+
   it('throws on anything else', () => {
     for (const name of ['', 'Place', 'last-view', 'ui.card', '1st', 'naïve', 'a b']) {
       expect(() => swiftIdentifier(name)).toThrow(/Not a lower camel case Swift name/);
