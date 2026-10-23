@@ -966,6 +966,62 @@ and 8.6), so the apps never judge or word one, and the constants are `ALERTS` in
   decides its notification from its own verdict. Only snow's exists (`SNOW_ALERT_RULE`).
 - **Size.** None of it reaches the website: the site's JavaScript is byte for byte the same.
 
+## Notifications: the alert store and the push layer (packages/server alertStore.ts, apns.ts)
+
+The storage and sending half of the full job (iOS build spec, sections 8.3 and 8.5). The run
+(`runAlerts`), the devices handlers and core's rules build on it.
+
+- **One store, `isithot-alerts`, strongly consistent.** Production uses the site-wide store;
+  previews, branch deploys and `netlify dev` get a deploy-scoped one, chosen as the cache's is, so
+  a preview never reads or writes a real registration. Unlike the cache, it never falls back to
+  memory when Blobs is missing: two instances with their own memory would both send.
+- **Every call either answers or fails, within 1.5 s.** `get` gives null only when Blobs said the
+  key is absent; `set` with `onlyIfNew` gives false only when Blobs said the key exists. A failure
+  or a timeout rejects (and is logged once, with ids cut to 8 characters). A call that times out
+  may still land later, so callers do only what is safe either way: a claim that fails is not a
+  claim, so nothing is sent; a read that fails is not "absent", so nothing is deleted and no zone
+  is marked done; a release that fails keeps its claim, so that push is not retried today. A
+  failure can cost a notification, but never sends one twice or deletes a registration wrongly.
+- **What `@netlify/blobs` 11.1.3 does,** read from its source: `getStore` and `getDeployStore` both
+  take `consistency`, and set on the store it sends every get, list, set and delete through the
+  uncached edge (a test against Netlify's own local Blobs server proves it: with a dead cached
+  edge, every call still works). A conditional write sends `if-none-match: *` and reports
+  `modified: false` for a 412, but `modified: true` for any other answer, errors included, so a
+  claim is believed only with the etag a real write returns, and otherwise read back. `list` with
+  `directories` gives full paths without a trailing slash. The client retries 429s, 5xxs and
+  network failures five times, 5 s apart, hence the timeout.
+- **Keys.** As in section 8.3, with the zone `encodeURIComponent`'d wherever it appears (in `done/`
+  keys too), so a zone is always one path segment. A test send claims one of the hour's slots,
+  `test/v1/<id>/<yyyy-mm-ddThh>.<n>`, because one key an hour would allow one send an hour, not
+  three, and a counter would be a read-modify-write. Unverified: that Netlify's service keeps
+  `%2F` in a key as it is. Netlify's local server does (`Europe%2FLondon` is one directory); a
+  deploy preview check (register, then list `reg/v1/`) settles it.
+- **Deleting a registration re-reads it first.** A record written or refreshed since the run read
+  it (a new `updatedAt` or `seenAt`) is kept, and the `ids` key goes only while it still names the
+  same zone.
+- **The provider token is shared through the store** (`apns/v1/jwt/<env>`), reused under 50
+  minutes and only when it was made with the current key for the current team, so a rotated key
+  takes effect at once. A 403 drops it, unless another run has already made a new one. No copy is
+  kept in module memory: one strong read per run is cheap, and a copy could outlive a token Apple
+  refused.
+- **The sender.** One HTTP/2 session per APNs environment. The first push goes alone (Apple allows
+  one stream until a valid provider token arrives), then up to min(`apnsConcurrency`, the
+  session's `maxConcurrentStreams`) at once; Node itself queues requests past the server's limit,
+  so the test counts them on the sending side. Each push is claimed just before it goes. A 403,
+  a 429 `TooManyProviderTokenUpdates` or no answer stops that environment for the run, leaving the
+  rest unclaimed for the next. After a 429 or a 5xx it stays at one stream. A push that timed out
+  is released and retried by the next run, as Apple advises for 5xxs; if Apple had in fact taken
+  it, the same collapse id makes the second replace the first on the phone rather than stack.
+- **Quiet hours are asserted in the sender,** from core's `localDateTime`: nothing goes from
+  21:00 to 06:59 at the place, and a zone the runtime does not know counts as quiet.
+- **The payload** is section 8.5's, key for key. It stays under 1,024 bytes for the longest city
+  (Las Palmas de Gran Canaria) and for a searched place at the server's 80-character limits;
+  80 three-byte characters for both name and region stay under Apple's 4,096, and `alertPush`
+  refuses anything over 4,096 before a claim is written.
+- **Logs** carry id prefixes, statuses, reasons, zones, the APNs environment and the app version;
+  never a device token, a provider token, a key, a full id or a place query (which can hold
+  coordinates). A test checks every line the tests log.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,
