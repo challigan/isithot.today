@@ -181,6 +181,14 @@ smoke (`alerts-smoke.yml`). To check a function can reach Apple: set `ALERTS_SMO
 **Deploy Previews** context only, open a deploy preview's Functions page, choose `alerts-run` and
 press **Run now**; its log should read `alerts-run: smoke passed: 400 BadDeviceToken…`.
 
+To check registrations on a deploy preview (they go to that deploy's own store, never
+production's): `PUT` a made-up 64-hex token with `"env": "sandbox"` to the preview's
+`/api/v1/devices` (the body is in README, "API"), then look in the preview's Blobs store
+`isithot-alerts`. The record should be one folder per zone, `reg/v1/Europe%2FLondon/`. A test
+notification there (`POST /api/v1/devices/test`) only logs its words unless `ALERTS_DRY_RUN=false`
+is set for the **Deploy Previews** context; with it, Apple answers the made-up token
+`400 BadDeviceToken` and the registration is deleted.
+
 ## 6. Uptime monitor
 
 Any free monitor (UptimeRobot, Better Stack) on:

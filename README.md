@@ -189,6 +189,45 @@ sends no CORS headers, so other websites' pages cannot read it (DECISIONS, "API 
 `GET /api/v1/search?q=` returns up to 8 places, with `slug` when the place has a city page and
 `elevation` (whole metres) when its height is known.
 
+The apps' notifications (iOS build spec, section 8.2; DECISIONS, "Notifications: the devices
+endpoints"). No accounts: the push token is the credential, and a registration's `id` is the first
+32 hex characters of sha256(`app` + ":" + token). Each takes a JSON body of at most 2 KB and allows
+10 requests a minute per IP on each domain.
+
+- `PUT /api/v1/devices` registers the device:
+
+  ```json
+  {
+    "app": "snow",
+    "platform": "ios",
+    "env": "production",
+    "token": "<64 to 200 hex>",
+    "place": { "place": "leeds-gb" },
+    "units": "c",
+    "alerts": { "snow": { "evening": true, "morning": false, "possible": false } },
+    "appVersion": "1.0 (112)"
+  }
+  ```
+
+  `env` is `sandbox` or `production`. The place takes the forms `/api/v1/today` takes:
+  `{ "place": "<slug>" }`, a searched place (`lat`, `lon`, optional `name`, `region`, `country`,
+  `geonameId` and `elevation`, and `"source": "search"`) or a device location (`lat`, `lon` and
+  `"source": "device"`). It answers 200 with
+  `{ "id", "place": { "name", "timezone", "query" }, "alerts", "seenAt" }`, where `query` is the
+  place's canonical today query (`place=leeds-gb`). With the evening and morning switches both off
+  it deletes instead (204). One write per device a minute.
+
+- `DELETE /api/v1/devices` with `{ "app": "snow", "token" }` deletes the registration: 204, whether
+  or not there was one.
+- `POST /api/v1/devices/test` with `{ "app": "snow", "token" }` sends one notification now: 202
+  `{ "sent": true }`, at most 3 an hour per device. Where `ALERTS_DRY_RUN` applies (by default
+  everywhere but production) it only logs it, and answers 202 `{ "sent": false, "dryRun": true }`.
+
+Their errors use the same envelope: `bad_request`, `app_not_live` and `bad_location` (400),
+`not_registered` (404), `too_large` (413), `rate_limited` and `test_limited` (429, with
+`Retry-After`), `push_refused` (502), and `upstream_unavailable`, `store_unavailable` and
+`push_unavailable` (503).
+
 Errors use `{ "error": { "code", "message" } }` with `bad_location` (400), `not_found` (404),
 `rate_limited` (429) and `upstream_unavailable` (503). When upstream is down but a cached
 forecast under 6 hours old exists, the API answers 200 with that result and `"stale": true`.
