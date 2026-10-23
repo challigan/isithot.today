@@ -1,0 +1,14 @@
+{
+  "name": "@isithot/client",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Pure client rules for the website and the native apps: queries, freshness, the hour picker, widgets, notifications, links. No DOM, no I/O.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@isithot/core": "workspace:*"
+  }
+}

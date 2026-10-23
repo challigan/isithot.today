@@ -60,6 +60,22 @@ import {
   type WeekDisplay,
   type WindUnit,
 } from '@isithot/core';
+import {
+  CLIENT,
+  deviceTarget,
+  freshQuery,
+  hold,
+  hourUntil,
+  outOfDate,
+  searchQuery,
+  searchTarget,
+  targetKey,
+  todayQuery,
+  type CoordsTarget,
+  type Holds,
+  type Stale,
+  type Target,
+} from '@isithot/client';
 // Types only: the preview module itself loads on demand, and only with ?preview=1.
 import type * as PreviewKit from '@isithot/core/preview';
 import { HOURLY, TOPIC_DAYS, lastKey } from '../lib/topics';
@@ -82,23 +98,7 @@ declare global {
   }
 }
 
-// ---- Types and storage ------------------------------------------------------
-
-type Target =
-  | { kind: 'ip' }
-  | { kind: 'city'; slug: string; name?: string }
-  | {
-      kind: 'coords';
-      source: 'device' | 'search';
-      lat: number;
-      lon: number;
-      name?: string | undefined;
-      region?: string | null | undefined;
-      country?: string | null | undefined;
-      geonameId?: number | undefined;
-      /** A searched place's height, whole metres, when the search knew it. */
-      elevation?: number | undefined;
-    };
+// ---- Storage ------------------------------------------------------------------
 
 /**
  * The place and units, shared by every question (°C goes with millimetres and centimetres, °F
@@ -177,10 +177,6 @@ let windNowShown: ApiWindNow | null = null;
 /** When the current answer arrived (client clock), for refreshing after a long absence. */
 let loadedAt = 0;
 let requestSeq = 0;
-
-/** Refresh the answer when the page comes back after this long. */
-const REFRESH_AFTER_MS = 30 * 60 * 1000;
-const HOUR = 60 * 60 * 1000;
 
 function setState(state: 'loading' | 'ready' | 'error'): void {
   app.dataset.state = state;
@@ -584,73 +580,14 @@ function windNowFor(res: TodayResponse): ApiWindNow | null {
 }
 
 /**
- * When today's rain, snow and wind answers go out of date. All cover the rest of the day from
- * when they were worked out (the same moment), so they hold until the next forecast hour.
+ * What a clock running fast waits for (client `Holds`): set by each answer asked for past the
+ * caches that is out of date already when it arrives.
  */
-function hourUntil(res: TodayResponse): number | null {
-  const from = res.rain?.days[0]?.from;
-  if (!from) return null;
-  const at = Date.parse(from);
-  return (
-    res.rain?.now?.series.find((p) => p.time > at)?.time ?? Math.floor(at / HOUR) * HOUR + HOUR
-  );
-}
+let holds: Holds = {};
 
-/** When today's answer goes out of date: the place's midnight (the next day's first hour). */
-function dayUntil(res: TodayResponse): number | null {
-  const date = res.days[0]?.date ?? '';
-  return res.now?.series.find((p) => p.date > date)?.time ?? null;
-}
-
-type Stale = 'day' | 'hour';
-
-/**
- * A clock running fast makes the answer look out of date before the server has a newer one: past
- * the hour today's rain, snow and wind hold for, or past the place's midnight. When a fresh answer
- * is out of date already, it is good until the server reaches that moment: at the latest, as long
- * from now as the server had left when working it out. So a fast clock costs at most one extra
- * request per server hour, and one at midnight.
- */
-const holds: Partial<Record<Stale, { until: number; at: number }>> = {};
-
-function hold(res: TodayResponse): void {
-  // `made`: when the server worked that part of the answer out.
-  const set = (reason: Stale, until: number | null, made = ''): void => {
-    const from = Date.parse(made);
-    if (until !== null && Date.now() >= until && from < until) {
-      holds[reason] = { until, at: Date.now() + until - from };
-    }
-  };
-  set('day', dayUntil(res), res.now?.time);
-  set('hour', hourUntil(res), res.rain?.days[0]?.from);
-}
-
-/** Whether the clock has passed `until` for `reason` (or the hold on it). */
-function past(reason: Stale, until: number): boolean {
-  const held = holds[reason];
-  return Date.now() >= (held?.until === until ? held.at : until);
-}
-
-/**
- * Whether the answer is out of date: past local midnight (today's answer is yesterday's) or
- * past the end of the hourly series it carries ("day"), or past the hour today's rain, snow and
- * wind answers hold for ("hour"). A clock running far behind is not a reason, and one running fast
- * waits for the server (`hold`).
- */
-function outOfDate(res: TodayResponse): Stale | null {
-  if (preview) return null;
-  if (res.now) {
-    const series = res.now.series;
-    const now = computeNow(series, Date.now());
-    const old = now
-      ? now.date > (res.days[0]?.date ?? '')
-      : Date.now() > (series.at(-1)?.time ?? Infinity);
-    const midnight = dayUntil(res);
-    if (old && (midnight === null || past('day', midnight))) return 'day';
-  }
-  const until = hourUntil(res);
-  return until !== null && past('hour', until) ? 'hour' : null;
-}
+/** Whether the answer is out of date now (client `outOfDate`). The preview never is. */
+const outdated = (res: TodayResponse): Stale | null =>
+  preview ? null : outOfDate(res, Date.now(), holds);
 
 /**
  * The Today view: answer lines, then the models strip and list. The answer pops before the
@@ -764,32 +701,6 @@ function setNote(kind: 'none' | 'exact' | 'approximate'): void {
 
 // ---- Data ---------------------------------------------------------------------
 
-function targetKey(t: Target): string {
-  if (t.kind === 'ip') return 'ip';
-  if (t.kind === 'city') return `city:${t.slug}`;
-  return `${t.source}:${t.lat},${t.lon}`;
-}
-
-function apiUrl(t: Target, u: Units | null, w: WindUnit | null): string {
-  const p = new URLSearchParams();
-  if (t.kind === 'city') p.set('place', t.slug);
-  if (t.kind === 'coords') {
-    p.set('lat', String(t.lat));
-    p.set('lon', String(t.lon));
-    if (t.name) p.set('name', t.name);
-    if (t.region) p.set('region', t.region);
-    if (t.country) p.set('country', t.country);
-    if (t.geonameId) p.set('geonameId', String(t.geonameId));
-    // The forecast is then for the place's own height (only a searched place has one).
-    if (t.elevation !== undefined) p.set('elevation', String(t.elevation));
-    p.set('source', t.source);
-  }
-  if (u) p.set('units', u);
-  if (w) p.set('windUnits', w);
-  const qs = p.toString();
-  return `/api/v1/today${qs ? `?${qs}` : ''}`;
-}
-
 function saveLast(res: TodayResponse): void {
   // Each site's snapshot answers its own question, which the page opens on.
   if (mode !== 'home' || preview || topic !== pageTopic) return;
@@ -848,14 +759,13 @@ async function load(
   if (!opts.quiet) renderLoading();
   const preferred = storage.get<Units>(KEYS.units);
   const ip = t.kind === 'ip';
-  const url = apiUrl(
-    t,
-    preferred ?? (ip ? null : units),
-    parseWindUnit(storage.get<string>(KEYS.windUnits)) ?? (ip ? null : windUnit),
-  );
+  const query = todayQuery(t, preferred ?? (ip ? null : units), {
+    windUnits: parseWindUnit(storage.get<string>(KEYS.windUnits)) ?? (ip ? null : windUnit),
+  });
+  const url = `/api/v1/today${query ? `?${query}` : ''}`;
   // An out-of-date answer (past midnight, or past the hour today's rain, snow and wind hold for)
   // may still be in the browser and CDN caches: ask past them, with a new address each hour.
-  const freshUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Math.floor(Date.now() / HOUR)}`;
+  const freshUrl = `/api/v1/today?${freshQuery(query, Date.now())}`;
   const early = window.__isithotPrefetch?.url === url ? window.__isithotPrefetch : undefined;
   window.__isithotPrefetch = undefined;
   const get = async (r: Promise<Response>) => {
@@ -870,9 +780,9 @@ async function load(
     // The page's own early request answers a fresh load too, unless it is out of date as well
     // (a saved answer from an earlier hour usually is not: the request is new).
     let body = await (early ? get(early.response) : ask(opts.fresh ? freshUrl : url));
-    if (early && opts.fresh && outOfDate(body)) body = await ask(freshUrl);
+    if (early && opts.fresh && outdated(body)) body = await ask(freshUrl);
     if (seq !== requestSeq) return false; // A newer request won.
-    if (opts.fresh) hold(body);
+    if (opts.fresh) holds = hold(holds, body, Date.now());
     target = t;
     loadedAt = Date.now();
     render(body, opts.animate ?? true);
@@ -918,16 +828,12 @@ function dropParams(...names: string[]): void {
   if (url.href !== location.href) history.replaceState(history.state, '', url.href);
 }
 
-function position(prompt: boolean): Promise<{ lat: number; lon: number }> {
+function position(prompt: boolean): Promise<CoordsTarget> {
   return new Promise((resolve, reject) => {
     if (!('geolocation' in navigator)) return reject(new Error('unsupported'));
     navigator.geolocation.getCurrentPosition(
-      (p) =>
-        resolve({
-          // Rounded to the 0.05° grid before it leaves the browser.
-          lat: roundToGrid(p.coords.latitude, GRID.forecast),
-          lon: roundToGrid(p.coords.longitude, GRID.forecast),
-        }),
+      // Rounded to the 0.05° grid before it leaves the browser.
+      (p) => resolve(deviceTarget(p.coords.latitude, p.coords.longitude)),
       reject,
       { enableHighAccuracy: false, maximumAge: 10 * 60 * 1000, timeout: prompt ? 20000 : 10000 },
     );
@@ -946,8 +852,7 @@ async function permissionState(): Promise<PermissionState | 'unknown'> {
 async function useDeviceLocation(prompted: boolean): Promise<void> {
   if (prompted) setText('place', COPY.locating);
   try {
-    const p = await position(prompted);
-    const t: Target = { kind: 'coords', source: 'device', ...p };
+    const t = await position(prompted);
     rememberPlace(t);
     setNote('none');
     if (mode === 'home') {
@@ -958,8 +863,8 @@ async function useDeviceLocation(prompted: boolean): Promise<void> {
       // Home, on the site of the question on screen. Another domain has neither this storage
       // nor the permission, so the place goes in the address.
       const query = new URLSearchParams({
-        lat: String(p.lat),
-        lon: String(p.lon),
+        lat: String(t.lat),
+        lon: String(t.lon),
         source: 'device',
       });
       location.href = siteLink(topic, crosses(topic) ? `/?${query}` : '/');
@@ -1037,9 +942,7 @@ async function runSearch(q: string): Promise<void> {
   searchAbort?.abort();
   searchAbort = new AbortController();
   try {
-    const res = await fetch(`/api/v1/search?q=${encodeURIComponent(q)}`, {
-      signal: searchAbort.signal,
-    });
+    const res = await fetch(`/api/v1/search?${searchQuery(q)}`, { signal: searchAbort.signal });
     const body = (await res.json()) as SearchResponse | ApiError;
     if ('error' in body) throw new Error(body.error.code);
     lastResults = body.results;
@@ -1066,24 +969,13 @@ function choose(r: SearchResult): void {
   // To a city's own page, or from a city page to the home page.
   leaving = !!r.slug || mode !== 'home';
   $<HTMLDialogElement>('search')?.close();
-  if (r.slug) {
-    rememberPlace({ kind: 'city', slug: r.slug, name: r.name });
+  const t = searchTarget(r);
+  rememberPlace(t);
+  if (t.kind === 'city') {
     // The city's page on the site of the question on screen.
-    location.href = siteLink(topic, `/in/${r.slug}`);
+    location.href = siteLink(topic, `/in/${t.slug}`);
     return;
   }
-  const t: Target = {
-    kind: 'coords',
-    source: 'search',
-    lat: roundToGrid(r.lat, GRID.forecast),
-    lon: roundToGrid(r.lon, GRID.forecast),
-    name: r.name,
-    region: r.region,
-    country: r.country,
-    geonameId: r.geonameId,
-    elevation: r.elevation,
-  };
-  rememberPlace(t);
   setNote('none');
   // The address carries the country (for the wind unit and warnings link) and the height too, so
   // a reload or a shared link has the same answer.
@@ -1233,7 +1125,7 @@ let lastRefetch = 0;
 
 function refreshNow(): void {
   if (!current) return;
-  const old = outOfDate(current);
+  const old = outdated(current);
   if (old && Date.now() - lastRefetch > 5 * 60 * 1000) {
     lastRefetch = Date.now();
     void load(target, { quiet: true, animate: false, fresh: true });
@@ -1261,14 +1153,14 @@ function wireRefresh(): void {
     }
     // Back after a long time away: start again on the page's own question, on its view for the
     // time of day (Today, or Now in the evening).
-    if (hiddenAt && Date.now() - hiddenAt > REFRESH_AFTER_MS) {
+    if (hiddenAt && Date.now() - hiddenAt > CLIENT.refreshAfterMs) {
       views?.go(defaultView(preview ? null : current, Date.now()), { instant: true });
       setTopic(pageTopic);
     }
     if (preview || !current) return;
-    if (Date.now() - loadedAt > REFRESH_AFTER_MS) {
+    if (Date.now() - loadedAt > CLIENT.refreshAfterMs) {
       lastRefetch = Date.now();
-      void load(target, { quiet: true, animate: false, fresh: !!outOfDate(current) });
+      void load(target, { quiet: true, animate: false, fresh: !!outdated(current) });
     } else refreshNow();
   };
   document.addEventListener('visibilitychange', wake);
@@ -1412,7 +1304,7 @@ export function start(): void {
   }
   // An out-of-date paint (past midnight, or rain, snow and wind past their hour) asks past the
   // caches.
-  const old = current && outOfDate(current);
+  const old = current && outdated(current);
   if (current && old !== 'day') {
     renderNow(current);
     // The paint is for this slot of the day (HomePage.astro checks), so this changes nothing

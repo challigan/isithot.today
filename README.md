@@ -25,6 +25,7 @@ apps/web             Astro site: pages, components, styles, client script, OG im
 functions/api        Netlify Functions serving /api/v1/* (thin adapters)
 netlify/             Edge function routing isitwet.today, willitsnow.today and isitwindy.today
 packages/core        Pure TS: blending, climate normals, verdict, copy, units. No I/O.
+packages/client      Pure TS client rules (queries, freshness, the hour picker, widgets, notifications). No DOM, no I/O.
 packages/providers   Open-Meteo forecast + geocoding and NASA POWER adapters
 packages/server      API handlers, caching (memory + Netlify Blobs), location resolution
 data/cities.json     The 300 city pages (150 UK, 150 worldwide), generated from GeoNames
@@ -36,7 +37,10 @@ scripts/             Data generation, fixture recording, smoke test, build helpe
 
 `packages/core` holds every decision (blending, verdict bands, copy strings, colours) with no
 network or framework code, so the native apps can reuse or mirror it exactly. All tunable
-constants live in `packages/core/src/config.ts`.
+constants live in `packages/core/src/config.ts`. `packages/client` holds what a client decides
+for itself: the query it sends, how long an answer holds, which hour ahead to show, what a
+widget plans and when to register for notifications. The website's script imports it, and the
+apps port it (`docs/DECISIONS.md`, "The client package").
 
 ## Getting started
 
@@ -71,7 +75,7 @@ Useful pages while developing:
 pnpm lint             # ESLint
 pnpm format:check     # Prettier
 pnpm typecheck        # tsc + astro check
-pnpm test:coverage    # Vitest; packages/core must stay at 100% branch coverage
+pnpm test:coverage    # Vitest; packages/core and packages/client must stay at 100% coverage
 pnpm test:e2e         # Playwright (phone + desktop), with synthetic data
 pnpm build:netlify    # The exact production build Netlify runs
 node scripts/smoke.mjs <url> --wet --snow --wind  # Smoke-test a deploy (and its /wet, /snow and /wind pages) against live data

@@ -855,6 +855,52 @@ Carl wants to save places in the native apps. Nothing is built for it on the web
   on isitwet.today or willitsnow.today. A web version would need the same address-carrying
   approach as F8 above (clumsier for a list than for one place) or the sites on one shared
   domain.
+- The iPhone app's recent places (the last five, newest first, one per place) are a rule in
+  `packages/client` (`addRecent`), below.
+
+## The client package (packages/client)
+
+The iOS build spec (section 6) puts every rule a client follows in one pure TypeScript package,
+at 100% coverage: the reference the Swift app ports, checked later by golden vectors generated
+from it. The website adopts it in the same change, so the rules exist once.
+
+- **Moved out of `app.ts`, not rewritten:** `Target` and `targetKey`; `todayQuery` (the
+  parameter half of `apiUrl`, in the same order, so the website's requests are byte for byte
+  the same), `freshQuery` (the hourly `t=`) and `searchQuery`; `hourUntil`, `dayUntil`, `hold`
+  and `outOfDate`; the device and search targets (`deviceTarget`, `searchTarget`); and
+  `CLIENT.refreshAfterMs`, the half hour away. Every function takes the moment as an argument.
+  `app.ts` keeps its holds and passes them in and out, and keeps the preview's exemption.
+- **New, for the apps:** `usableUntil`, `nextRefreshAt`, the hour picker (`pickHour`),
+  `middleDay`, `updatedLine`, the widget planner (`widgetEntries`), the notification sync
+  (`alertAction`, `registrationBody`, `fingerprint`), deep links and notification taps,
+  recent places, and the apps' storage keys. `WIDGET` and `ALERTS.heartbeatDays` are in core's
+  `config.ts`, as the spec places them; `ALERTS` gains the rest with the notifications work.
+- **Where the repo differs from the spec.** A city `Target`'s name stays optional (a city page's
+  target has none) and a searched place's region and country may be null, as the website has
+  always stored them. The home page's head script (`HomePage.astro`) still builds its own copy
+  of the query: it runs before any module has loaded, so it cannot import one. The e2e suites
+  check that the app takes its answer rather than asking again.
+- **Core's types throughout.** The snow week's agreement on each day and the hours ahead
+  (`ahead=snow`), which the spec types for the client, are in the API now ("API contract",
+  below), so the client reads `TodayResponse` as the website does and has no types of its own.
+- **Choices the spec left open.** `pickHour`'s `end` is also never later than `usableUntil`, so
+  an app that picks again at `end` never shows an old hour. The notification sync's "every
+  switch off" means the evening and morning switches: "also when snow is possible" only widens
+  those two, so alone it would keep a registration that never sends anything, and it is deleted
+  instead. A notification tap whose place has no answer on the phone yet (so no date there to
+  compare) opens on the notification's view; one whose date is more than a day ahead there (a
+  phone's clock far behind) opens on the place's view for the time of day, as a past date does.
+  Without a middle day, a widget's list of days starts with the week's first. `hourUntil` falls
+  back to snow's answer without rain's, which the server never sends (snow comes exactly with
+  rain). Two topics ahead are written as a form writes them, `ahead=snow%2Cwind`.
+- **Size.** The site's app chunk went from 24.78 to 24.94 KB gzipped on the base it was built
+  on (24.96 KB with the API additions merged; all site JavaScript 25.08 KB, budget 25.6 KB).
+  Estimated by taking each part out of the built chunk and gzipping it again: about 40 B is
+  `CLIENT` (the bundler keeps the whole object when one timing is read, so the apps' four come
+  too), 25 B `ahead` in the query and 3 B the fallback to snow. The other
+  90 B or so is the functions' new shape: they take the moment and the holds as arguments,
+  `hold` returns a copy, the device and search targets are functions of their own, and the
+  address is built in two places.
 
 ## API contract
 
