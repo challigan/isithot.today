@@ -1,6 +1,7 @@
 import { createPublicKey, generateKeyPairSync, verify, type KeyObject } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import type { IncomingHttpHeaders } from 'node:http2';
+import { createServer as createHttpServer } from 'node:http';
 import { createServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -317,6 +318,19 @@ describe('PUT /api/v1/devices: the body', () => {
     ['appVersion as a number', body({ appVersion: 112 }), 400, 'bad_request'],
     ['appVersion too long', body({ appVersion: 'x'.repeat(41) }), 400, 'bad_request'],
     ['appVersion with a line break', body({ appVersion: '1.0\n(112)' }), 400, 'bad_request'],
+    [
+      'appVersion with a line separator',
+      body({ appVersion: '1.0\u2028(112)' }),
+      400,
+      'bad_request',
+    ],
+    ['appVersion with a C1 control', body({ appVersion: '1.0\u0085(112)' }), 400, 'bad_request'],
+    [
+      'appVersion with a direction override',
+      body({ appVersion: '1.0 \u202e(112)' }),
+      400,
+      'bad_request',
+    ],
     ['no place', body({ place: undefined }), 400, 'bad_location'],
     ['a null place', body({ place: null }), 400, 'bad_location'],
     ["the IP location's empty place", body({ place: {} }), 400, 'bad_location'],
@@ -475,6 +489,13 @@ describe('PUT /api/v1/devices: handling', () => {
     [
       'a searched place, cleaned as /api/v1/today cleans it',
       { ...HEXHAM, name: '  Hexham\u0007 ', country: 'gb', elevation: 50.4 },
+      HEXHAM_QUERY,
+      'Hexham',
+      'Europe/London',
+    ],
+    [
+      'a searched place whose name and region hide line separators and direction overrides',
+      { ...HEXHAM, name: '\u2028Hex\u202eham\u0085', region: 'Eng\u2029land\u200b' },
       HEXHAM_QUERY,
       'Hexham',
       'Europe/London',
@@ -1656,6 +1677,120 @@ describe('the functions', () => {
     expect(text).toContain('handleDeviceTest(request, {');
     expect(text).toContain('deployContext: context.deploy?.context,');
   });
+});
+
+// ---- The functions' own dependencies ----
+
+describe('the handlers on their own dependencies', () => {
+  /** A Blobs edge slower than the cache's 1.5 s, and an Open-Meteo and NASA POWER that are down. */
+  let edge: ReturnType<typeof createHttpServer>;
+  let upstream: ReturnType<typeof createHttpServer>;
+  const SETTINGS_DOWN: Record<string, string> = {};
+  const listen = async (server: ReturnType<typeof createHttpServer>) => {
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  };
+  /** The edge's requests not yet answered, so the test can wait for all of them. */
+  let open = 0;
+  const quiet: (() => void)[] = [];
+  const answered = () =>
+    open === 0 ? Promise.resolve() : new Promise<void>((resolve) => quiet.push(resolve));
+
+  beforeAll(async () => {
+    edge = createHttpServer((_request, response) => {
+      open++;
+      setTimeout(() => {
+        response.writeHead(404).end();
+        open--;
+        if (open === 0) for (const resolve of quiet.splice(0)) resolve();
+      }, 3000);
+    });
+    upstream = createHttpServer((_request, response) => {
+      response.writeHead(503, { 'content-type': 'application/json' }).end('{"reason":"busy"}');
+    });
+    const slow = await listen(edge);
+    const down = await listen(upstream);
+    setEnvironmentContext({
+      siteID: 'site1',
+      token: 'local-test-token',
+      deployID: 'deploy1',
+      edgeURL: slow,
+      uncachedEdgeURL: slow,
+    });
+    SETTINGS_DOWN.OPEN_METEO_FORECAST_URL = `${down}/v1/forecast`;
+    SETTINGS_DOWN.NASA_POWER_URL = `${down}/power`;
+  });
+
+  afterAll(async () => {
+    delete process.env.NETLIFY_BLOBS_CONTEXT;
+    for (const server of [edge, upstream]) {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
+  it("scrub the coordinates from the forecast cache's own lines when it is slow", async () => {
+    const lines: string[] = [];
+    const later: Promise<unknown>[] = [];
+    const store = new MemoryAlertStore();
+    const platform: DevicesPlatform = {
+      env: (name) => SETTINGS_DOWN[name],
+      deployContext: 'production',
+      waitUntil: (promise) => void later.push(promise.catch(() => {})),
+      log: (line) => {
+        lines.push(line);
+        logged.push(line);
+      },
+      store,
+      testForecastWaitMs: 5000,
+    };
+    const place = { lat: 54.7761, lon: -1.5733, source: 'device' };
+    const registered = await handleDevicePut(
+      send('PUT', body({ token: token('aa', 500), place })),
+      platform,
+    );
+    // Open-Meteo is down and nothing is cached, so the place has no zone yet.
+    expect(registered.status).toBe(503);
+
+    // A registration there, in a zone where it is now midday, so the test is not in quiet hours.
+    const t = token('aa', 501);
+    const offset = new Date().getUTCHours() - 12;
+    const tz = offset === 0 ? 'Etc/GMT' : `Etc/GMT${offset > 0 ? '+' : '-'}${Math.abs(offset)}`;
+    const at = new Date().toISOString();
+    const record: DeviceRecord = {
+      v: 1,
+      id: idOf(t),
+      app: 'snow',
+      platform: 'ios',
+      env: 'sandbox',
+      token: t,
+      query: 'lat=54.8&lon=-1.55&source=device',
+      name: 'Durham',
+      tz,
+      units: 'c',
+      alerts: { snow: EVENING },
+      createdAt: at,
+      updatedAt: at,
+      seenAt: at,
+    };
+    await store.set(regKey(tz, 'snow', record.id), record);
+    await store.set(idsKey('snow', record.id), { tz });
+    const tested = await handleDeviceTest(send('POST', { app: 'snow', token: t }), platform);
+    expect(tested.status).toBe(202);
+    // Every request to the edge answered, so none is left to retry once the test is over.
+    await Promise.all(later);
+    await answered();
+
+    // The cache's own lines were logged, with the cell scrubbed.
+    expect(
+      lines.filter((l) => /^blobs: .*read of forecast\/v7\/<cell>\/dem timed out/.test(l)),
+    ).toHaveLength(2);
+    const text = lines.join('\n');
+    expect(text).not.toMatch(/\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?/);
+    for (const coordinate of ['54.8', '54.7', '1.55', '1.57', '55.0', '1.25']) {
+      expect(text).not.toContain(coordinate);
+    }
+  }, 20_000);
 });
 
 // ---- The logs (last: it reads what every test above logged) ----

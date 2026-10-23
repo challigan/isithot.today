@@ -12,6 +12,13 @@ directory, functions directory and Node 22, so the UI settings can stay at their
   root). If Netlify ever asks which monorepo package to build, pick the root.
 - **Deploy previews**: on by default; every pull request gets
   `https://deploy-preview-<n>--isithotapp.netlify.app`.
+- **Pull requests from outside the team (before notifications go live, section 5).** The
+  repository is public, so anyone can open a pull request, and its preview would run their code
+  with this site's Netlify Blobs, where the notifications' store keeps every device token and
+  place. In **Site configuration → Build & deploy → Continuous deployment**, set the **Sensitive
+  variable policy** to **Require approval**, so Netlify builds a pull request from a fork only
+  once you approve it. Approve only one whose changes you have read. (If Netlify has moved or
+  renamed the setting, its docs call these "untrusted deploys".)
 - **Netlify Blobs** (the API cache) needs no setup. Production uses one shared store;
   previews get their own.
 - **Rate limiting**: the API functions declare a 60 requests/minute per-IP rule in code. If
@@ -263,11 +270,12 @@ preview's store is new with every deploy, so the settings go in before the previ
 
 **Then the rollout:**
 
-1. **Once the full run is merged (by Fri 30 Oct): dry, in production.** Add `ALERTS_ENABLED` =
-   `true` (all contexts, or Production only). Leave `ALERTS_DRY_RUN` unset: production then logs
-   each notification instead of sending it, and so does a test send. Redeploy, then check the log
-   shows the line above every 15 minutes, saying `dry run`, with `errors 0`. Until the app
-   registers, `zones` stays 0.
+1. **Once the full run is merged (by Fri 30 Oct): dry, in production.** First check that Netlify
+   asks for your approval before it builds a pull request from outside the team (section 1).
+   Then add `ALERTS_ENABLED` = `true` (all contexts, or Production only). Leave `ALERTS_DRY_RUN`
+   unset: production then logs each notification instead of sending it, and so does a test send.
+   Redeploy, then check the log shows the line above every 15 minutes, saying `dry run`, with
+   `errors 0`. Until the app registers, `zones` stays 0.
 2. **From the first build with notifications on your phone (TestFlight, target Wed 4 Nov): on,
    for real.** In that build, switch notifications on and open **Your privacy** for your
    registration's id. In Netlify, for the **Production** context only, set `ALERTS_DRY_RUN` =

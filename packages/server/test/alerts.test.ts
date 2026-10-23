@@ -15,6 +15,7 @@ import {
   doneKey,
   forceIdsFrom,
   idsKey,
+  judgedKey,
   jwtKey,
   providerToken,
   regKey,
@@ -180,6 +181,33 @@ function runAt(iso: string, { store, origin, cache, fetch, lines, ...over }: Run
 
 const sentKeys = (store: MemoryAlertStore) => store.keys().filter((k) => k.startsWith('sent/'));
 
+type Op = 'get' | 'set' | 'list' | 'delete';
+
+/**
+ * A store as one run sees it: `before(op, key)` may hold a call until what it returns resolves, and
+ * `after(op, key)` hears of each call that has landed.
+ */
+function view(
+  inner: AlertStore,
+  hooks: {
+    before?: (op: Op, key: string) => Promise<unknown> | undefined;
+    after?: (op: Op, key: string) => void;
+  },
+): AlertStore {
+  const call = async <T>(op: Op, key: string, run: () => Promise<T>): Promise<T> => {
+    await hooks.before?.(op, key);
+    const out = await run();
+    hooks.after?.(op, key);
+    return out;
+  };
+  return {
+    get: <T>(key: string) => call('get', key, () => inner.get<T>(key)),
+    set: (key, value, options) => call('set', key, () => inner.set(key, value, options)),
+    list: (prefix, options) => call('list', prefix, () => inner.list(prefix, options)),
+    delete: (key) => call('delete', key, () => inner.delete(key)),
+  };
+}
+
 describe('runAlerts: the evening', () => {
   it('sends once at 18:05 and not again at 18:20, with the payload and headers of section 8.5', async () => {
     const { origin, seen } = await fakeApns(apple());
@@ -264,6 +292,78 @@ describe('runAlerts: the evening', () => {
     const outcomes = [...a.notifications, ...b.notifications].map((n) => n.outcome).sort();
     expect(outcomes).toEqual(['sent', 'sent', 'sent', 'taken', 'taken', 'taken']);
   });
+
+  /** Apple keeps the first push waiting and then cannot take it; it takes every later one. */
+  const slowThen503 = () => {
+    let answers = 0;
+    return fakeApns(
+      apple({
+        '53': () =>
+          answers++ === 0
+            ? { status: 503, body: { reason: 'ServiceUnavailable' } }
+            : { status: 200 },
+      }),
+      { delayMs: 100 },
+    );
+  };
+  const DONE = doneKey('2026-10-18', 'evening', 'Europe/London');
+
+  it('sends what one of two overlapping runs claimed and then released, which the other found taken', async () => {
+    const { origin, seen } = await slowThen503();
+    const store = new MemoryAlertStore();
+    await seed(store, registration(token('53')));
+    const [a, b] = await Promise.all([
+      runAt(EVENING, { store, origin }),
+      runAt(EVENING, { store, origin }),
+    ]);
+    const outcomes = [...a.notifications, ...b.notifications].map((n) => n.outcome).sort();
+    expect(outcomes).toEqual(['released', 'taken']);
+    // The run that found it taken marked the zone done; the release took the marker back.
+    expect(a.done + b.done).toBe(1);
+    expect(await store.get(DONE)).toBeNull();
+    const next = await runAt(LATER, { store, origin });
+    expect(next).toMatchObject({ zones: 1, records: 1, sent: 1, done: 1 });
+    expect(seen).toHaveLength(2);
+  });
+
+  it.each([
+    ['before the release, which takes the marker back', false],
+    ['after the release, and takes its marker back itself', true],
+  ])(
+    'sends what a run claimed and then released, when a run that skipped it marked the zone done %s',
+    async (_when, late) => {
+      const { origin, seen } = await slowThen503();
+      const store = new MemoryAlertStore();
+      await seed(store, registration(token('53')));
+      let claimed!: () => void;
+      const claim = new Promise<void>((resolve) => {
+        claimed = resolve;
+      });
+      const a = runAt(EVENING, {
+        store: view(store, {
+          after: (op, key) => {
+            if (op === 'set' && key.startsWith('sent/')) claimed();
+          },
+        }),
+        origin,
+      });
+      // B starts while A holds the claim and waits for Apple, so it skips the registration unread.
+      await claim;
+      const b = await runAt(EVENING, {
+        store: late
+          ? view(store, { before: (op, key) => (op === 'set' && key === DONE ? a : undefined) })
+          : store,
+        origin,
+      });
+      const first = await a;
+      expect(first.notifications.map((n) => n.outcome)).toEqual(['released']);
+      expect(b).toMatchObject({ zones: 1, records: 0, done: late ? 0 : 1 });
+      expect(await store.get(DONE)).toBeNull();
+      const next = await runAt(LATER, { store, origin });
+      expect(next).toMatchObject({ zones: 1, records: 1, sent: 1, done: 1 });
+      expect(seen).toHaveLength(2);
+    },
+  );
 
   it('reads °F as the page does, and fetches a place once for both units', async () => {
     const { origin, seen } = await fakeApns(apple());
@@ -593,6 +693,66 @@ describe('runAlerts: limits', () => {
     expect(seen).toHaveLength(6);
   });
 
+  it('judges each registration once a window, so a zone past the cap still finishes in it', async () => {
+    const { origin, seen } = await fakeApns(apple());
+    const store = new MemoryAlertStore();
+    const cache = new MemoryKV(5000);
+    // More places with no snow than four runs at the cap can judge in the hour the forecast cache
+    // keeps a forecast, and Durham, where snow is likely, read last.
+    const slugs = [...DRY, 'liverpool-gb', 'nottingham-gb', 'sheffield-gb', 'glasgow-gb'];
+    const dry = slugs.map((slug, i) => registration(token('a0', i), place(slug)));
+    const highest = dry.map((r) => r.id).sort()[dry.length - 1]!;
+    let n = dry.length;
+    let durham = registration(token('a0', n));
+    while (durham.id < highest) durham = registration(token('a0', ++n));
+    await seed(store, ...dry, durham);
+    const runs = [];
+    // Every run of the evening window, 18:05 to 19:50.
+    for (let k = 0; k < 8; k++) {
+      const iso = new Date(Date.parse(EVENING) + k * 15 * MINUTE).toISOString();
+      runs.push(await runAt(iso, { store, origin, cache, maxFetches: 2 }));
+    }
+    expect(runs.map((r) => [r.zones, r.records, r.groups, r.sent, r.done])).toEqual([
+      [1, 11, 2, 0, 0],
+      [1, 9, 2, 0, 0],
+      [1, 7, 2, 0, 0],
+      [1, 5, 2, 0, 0],
+      [1, 3, 2, 0, 0],
+      [1, 1, 1, 1, 1],
+      [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+    ]);
+    expect(devices(seen)).toEqual([durham.token]);
+    expect(store.keys().filter((k) => k.startsWith('judged/'))).toEqual(
+      dry.map((r) => judgedKey('2026-10-18', 'snow', 'evening', 'snow', r.id)).sort(),
+    );
+  });
+
+  it('logs each notification once a window in a dry run, though the cap leaves the zone for later', async () => {
+    const { origin, seen } = await fakeApns(apple());
+    const store = new MemoryAlertStore();
+    const cache = new MemoryKV(5000);
+    const { forceIds } = await sixPlaces(store);
+    const lines: string[] = [];
+    const runs = [];
+    for (const iso of [EVENING, LATER, '2026-10-18T17:35:00Z', '2026-10-18T17:50:00Z']) {
+      runs.push(
+        await runAt(iso, { store, origin, cache, forceIds, maxFetches: 2, dryRun: true, lines }),
+      );
+    }
+    expect(runs.map((r) => [r.records, r.logged, r.done])).toEqual([
+      [6, 2, 0],
+      [4, 2, 0],
+      [2, 2, 1],
+      [0, 0, 0],
+    ]);
+    const logs = lines.filter((l) => l.startsWith('alerts: dry run:'));
+    expect(new Set(logs).size).toBe(6);
+    expect(logs).toHaveLength(6);
+    expect(seen).toHaveLength(0);
+    expect(sentKeys(store)).toEqual([]);
+  });
+
   it('allows 60 fetches a run on the free API and 300 with a key', async () => {
     const store = new MemoryAlertStore();
     const at = Date.parse(EVENING);
@@ -715,6 +875,8 @@ describe('runAlerts: the cleanup', () => {
   const KEYS_BY_DATE = (date: string) => [
     sentKey(date, 'snow', 'evening', 'snow', id),
     sentKey(date, 'snow', 'morning', 'snow', id),
+    judgedKey(date, 'snow', 'evening', 'snow', id),
+    judgedKey(date, 'snow', 'morning', 'snow', id),
     doneKey(date, 'evening', 'Europe/London'),
     doneKey(date, 'morning', 'Pacific/Kiritimati'),
     `test/v1/${id}/${date}T10.1`,
@@ -725,15 +887,15 @@ describe('runAlerts: the cleanup', () => {
     for (const date of DATES) for (const key of KEYS_BY_DATE(date)) await store.set(key, {});
   }
 
-  it('deletes sent/, done/ and test/ keys over 2 days old, in the first run after 03:00 UTC', async () => {
+  it('deletes sent/, judged/, done/ and test/ keys over 2 days old, in the first run after 03:00 UTC', async () => {
     const { origin } = await fakeApns(apple());
     const store = new MemoryAlertStore();
     await oldKeys(store);
     // Not before 03:00.
     expect((await runAt('2026-12-01T02:45:00Z', { store, origin })).cleaned).toBeNull();
     const first = await runAt('2026-12-01T03:00:00Z', { store, origin });
-    expect(first.cleaned).toBe(10);
-    expect(runSummary(first)).toContain('; cleanup deleted 10 old keys;');
+    expect(first.cleaned).toBe(14);
+    expect(runSummary(first)).toContain('; cleanup deleted 14 old keys;');
     expect(store.keys()).toEqual(
       [
         ...['2026-11-29', '2026-11-30', '2026-12-01'].flatMap(KEYS_BY_DATE),
@@ -755,7 +917,7 @@ describe('runAlerts: the cleanup', () => {
     expect(cut.cleaned).toBe(0);
     expect(await store.get(cleanupKey('2026-12-01'))).toBeNull();
     const next = await runAt('2026-12-01T03:15:00Z', { store, origin });
-    expect(next.cleaned).toBe(10);
+    expect(next.cleaned).toBe(14);
     expect(await store.get(cleanupKey('2026-12-01'))).not.toBeNull();
   });
 });

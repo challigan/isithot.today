@@ -118,14 +118,17 @@ const COORD = /^-?\d{1,3}(\.\d+)?$/;
 const HEIGHT = /^-?\d{1,4}(\.\d+)?$/;
 const COUNTRY = /^[A-Za-z]{2}$/;
 
+/**
+ * What a user-supplied name never needs: angle brackets, controls (C0 and C1), line and paragraph
+ * separators, and the invisible format characters (direction overrides, zero-width spaces), all
+ * but the zero-width non-joiner and joiner that some scripts spell with. A name reaches pages,
+ * notifications and logs, where any of these could break a line or reverse how it reads.
+ */
+const UNWANTED = /[<>\p{Cc}\p{Zl}\p{Zp}]|(?![\u200c\u200d])\p{Cf}/gu;
+
 function clean(value: string | null, max = 80): string | null {
   if (!value) return null;
-  const text = value
-    // Strip control characters and angle brackets from user-supplied names.
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u001f\u007f<>]/g, '')
-    .trim()
-    .slice(0, max);
+  const text = value.replace(UNWANTED, '').trim().slice(0, max);
   return text.length > 0 ? text : null;
 }
 

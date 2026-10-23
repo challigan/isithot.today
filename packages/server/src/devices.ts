@@ -40,7 +40,7 @@ import {
   type TopicAlertPrefs,
   type Units,
 } from '@isithot/core';
-import { alertsDryRun, type AlertRecord } from './alerts';
+import { alertsDryRun, scrub, type AlertRecord } from './alerts';
 import {
   AlertStoreError,
   SafeAlertStore,
@@ -48,7 +48,6 @@ import {
   createBlobsAlertStore,
   idPrefix,
   idsKey,
-  redact,
   regKey,
   registrationId,
   type AlertStore,
@@ -315,13 +314,17 @@ function checkPrefs(alerts: unknown): TopicAlertPrefs {
   return { evening, morning, possible };
 }
 
-// eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u001f\u007f]/;
+/**
+ * What an app version may hold ("1.0 (112)"). It is logged with Apple's refusals, so nothing else
+ * gets in: not a control, a line separator or a direction override, which could forge a log line
+ * or reverse how one reads.
+ */
+const APP_VERSION = /^[0-9A-Za-z .()_+-]*$/;
 
 function checkAppVersion(value: unknown): string | undefined {
   if (value === undefined || value === null) return undefined;
-  if (typeof value !== 'string' || value.length > 40 || CONTROL.test(value)) {
-    return bad('appVersion must be text of at most 40 characters.');
+  if (typeof value !== 'string' || value.length > 40 || !APP_VERSION.test(value)) {
+    return bad('appVersion must be a version such as 1.0 (112), at most 40 characters.');
   }
   return value.trim() || undefined;
 }
@@ -488,29 +491,39 @@ async function saveRegistration(
 // ---- Each request ----
 
 interface Job {
-  /** For `getToday`: its log lines lose the grid cells in its cache keys (`placeLess`). */
+  /** For `getToday`, logging through `log`. */
   deps: ServerDeps;
   /** The request's one moment, ms. */
   now: number;
+  /** Every line the request logs, the forecast code's and the cache's included (`placeLess`). */
   log: (line: string) => void;
   store(): AlertStore;
 }
 
 /**
- * A line without the coordinates in it: `getToday` names a forecast or climate cache entry by its
- * grid cell ("forecast/v7/54.80,-1.60/50"), which here is a registration's place.
+ * A line fit for a public log: the run's `scrub` (ids cut short, no provider token, no grid
+ * cell, no `lat=`, `lon=` or `apikey=`), and no other pair of numbers either ("54,-1"). The
+ * forecast code and the cache name an entry by its grid cell ("forecast/v7/54.80,-1.60/50"),
+ * which here is a registration's place.
  */
 export function placeLess(line: string): string {
-  return line.replace(/-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?/g, '<place>');
+  return scrub(line).replace(/-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?/g, '<place>');
+}
+
+/** Where a request's lines go: the given dependencies' log, the platform's, or the console. */
+function sinkOf(platform: DevicesPlatform): (line: string) => void {
+  return platform.deps?.log ?? platform.log ?? ((line) => console.log(`[isithot] ${line}`));
 }
 
 function begin(platform: DevicesPlatform): Job {
-  const deps = platform.deps ?? { ...createDeps(platform), climateWaitMs: 0 };
-  const log = (line: string): void => deps.log(redact(line));
+  const sink = sinkOf(platform);
+  const log = (line: string): void => sink(placeLess(line));
+  // `createDeps`'s own lines go through `log` too: a slow cache read names its key's grid cell.
+  const deps = platform.deps ?? { ...createDeps({ ...platform, log }), climateWaitMs: 0 };
   const onError = (err: AlertStoreError): void => log(err.message);
   let store: AlertStore | undefined;
   return {
-    deps: { ...deps, log: (line) => log(placeLess(line)) },
+    deps: { ...deps, log },
     now: deps.now().getTime(),
     log,
     store() {
@@ -536,7 +549,7 @@ async function answer(
   platform: DevicesPlatform,
   run: (r: Job) => Promise<Response>,
 ): Promise<Response> {
-  let log = (line: string): void => console.log(`[isithot] ${redact(line)}`);
+  let log = (line: string): void => sinkOf(platform)(placeLess(line));
   try {
     const r = begin(platform);
     log = r.log;
@@ -547,7 +560,7 @@ async function answer(
       // Already logged by the store, once.
       return errorReply(new DeviceError(503, 'store_unavailable', MESSAGES.storeDown));
     }
-    log(placeLess(`devices: error: ${(err as Error)?.message ?? String(err)}`));
+    log(`devices: error: ${(err as Error)?.message ?? String(err)}`);
     return errorReply(
       new DeviceError(500, 'server_error', 'Something went wrong. Try again later.'),
     );

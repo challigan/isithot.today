@@ -983,6 +983,13 @@ The storage and sending half of the full job (iOS build spec, sections 8.3 and 8
   previews, branch deploys and `netlify dev` get a deploy-scoped one, chosen as the cache's is, so
   a preview never reads or writes a real registration. Unlike the cache, it never falls back to
   memory when Blobs is missing: two instances with their own memory would both send.
+  - That choice is this code's, not Netlify's: any deploy of the site can open the site-wide
+    store. It holds every device token, each place (a device location as its 0.05° point) and,
+    for up to 50 minutes, the provider token, which together could send to every device. The
+    repository is public and every pull request gets a preview, so Netlify must not build one
+    from outside the team until Carl has read it (SETUP section 1, before notifications go
+    live). Encrypting the tokens and places with a key only production holds would be a second
+    guard; it is not built.
 - **Every call either answers or fails, within 1.5 s.** `get` gives null only when Blobs said the
   key is absent; `set` with `onlyIfNew` gives false only when Blobs said the key exists. A failure
   or a timeout rejects (and is logged once, with ids cut to 8 characters). A call that times out
@@ -999,7 +1006,8 @@ The storage and sending half of the full job (iOS build spec, sections 8.3 and 8
   `directories` gives full paths without a trailing slash. The client retries 429s, 5xxs and
   network failures five times, 5 s apart, hence the timeout.
 - **Keys.** As in section 8.3, with the zone `encodeURIComponent`'d wherever it appears (in `done/`
-  keys too), so a zone is always one path segment. A test send claims one of the hour's slots,
+  keys too), so a zone is always one path segment, and one more key, the run's `judged/`
+  ("Notifications: the run"). A test send claims one of the hour's slots,
   `test/v1/<id>/<yyyy-mm-ddThh>.<n>`, because one key an hour would allow one send an hour, not
   three, and a counter would be a read-modify-write. Unverified: that Netlify's service keeps
   `%2F` in a key as it is. Netlify's local server does (`Europe%2FLondon` is one directory); a
@@ -1043,6 +1051,10 @@ How the apps register for notifications (iOS build spec, sections 8.2 and 8.3): 
   `too_large`). It has the app, the platform (`ios`), the environment, a hex token of 64 to 200
   characters, the units, the three switches (booleans only), an optional app version, and the
   place in one of its three forms.
+  - Anything but letters, digits, spaces and `. ( ) _ + -` in the app version ("1.0 (112)", at
+    most 40 characters) is a 400 `bad_request`. It is logged with Apple's refusals, and a line
+    separator (U+2028), a C1 control (U+0085) or a direction override (U+202E) in it could forge
+    a log line or reverse how one reads.
   - Only `snow` is live: `wet`, `wind`, `hot` and `all` are a 400 `app_not_live`.
   - The token is lower-cased first, so a device has one id whichever case it sends.
   - No place, or the IP location's empty one, is a 400 `bad_location`. So is a slug with no page:
@@ -1055,7 +1067,11 @@ How the apps register for notifications (iOS build spec, sections 8.2 and 8.3): 
   - a slug becomes its page's (`place=leeds-gb`);
   - coordinates are rounded again to 0.05°;
   - a searched place keeps its cleaned name, region, country, GeoNames id and height, and one sent
-    without a name takes the nearest town's, as the API names it;
+    without a name takes the nearest town's, as the API names it. Cleaning (`/api/v1/today`'s
+    too) strips angle brackets, every control (C0 and C1), line and paragraph separators and the
+    invisible format characters, direction overrides and zero-width spaces among them, but keeps
+    the zero-width joiner and non-joiner that some scripts spell with. A name reaches logs and
+    notifications as well as pages;
   - a device location is its point only (`lat=53.8&lon=-1.55&source=device`), whatever else it
     carries.
 
@@ -1123,9 +1139,23 @@ How the apps register for notifications (iOS build spec, sections 8.2 and 8.3): 
 - **The test endpoint has the same Netlify limit** (10 a minute per IP). The spec names one only
   for `devices.mts`, but each test reads the store and may push.
 - **Logs** carry id prefixes, zones, Apple's answers and the app version; never a device token, a
-  key, a provider token, a full id, a place query or coordinates. `getToday`'s own lines name
-  forecast cache entries by grid cell ("forecast/v7/54.80,-1.60/50"), so the handlers scrub those
-  (`placeLess`). A test checks every line the tests log.
+  key, a provider token, a full id, a place query or coordinates. The forecast code and the cache
+  name an entry by its grid cell ("forecast/v7/54.80,-1.60/50"), so every line the handlers log
+  goes through `placeLess` (the run's `scrub`, and any other pair of numbers). That includes
+  `createDeps`'s own: a cache read slower than 1.5 s logs its key, and the handlers used to leave
+  those to the plain console. A test checks every line the tests log, and one runs a PUT and a
+  test send on the functions' own dependencies with a slow Blobs edge.
+- **Junk registrations. Needs a decision before the public launch.** A made-up token is a new id,
+  so the one-write-a-minute rule never applies to it, and only Netlify's 10 a minute per IP on
+  each domain bounds them. Junk at a place with no snow is never pushed, so Apple never refuses
+  it, and it stays for 90 days. Since the run judges each registration once a window, each costs
+  at most one forecast a window (and none where it shares a place), the run's cap still bounds a
+  run (60 forecasts free, 300 with the key), and a zone gets through 480 or 2,400 places a window.
+  Past that, junk padding one zone would push real registrations out. Two ways to close it, both
+  Carl's call: App Attest or DeviceCheck (an app change, the real fix), or a daily limit of new
+  registrations per IP, which means keeping a keyed hash of the IP for a day (research section
+  11 promises the IP is never stored, so the privacy notice would change) and could refuse people
+  behind one mobile network's address.
 
 ## Notifications: the run (packages/server alerts.ts)
 
@@ -1145,15 +1175,29 @@ any other trigger could call it.
   - `ALERTS_SMOKE=1` still makes a preview's run send only the smoke push, as for V9. Production
     never smokes, whatever the setting.
   - `ALERTS_FORCE_IDS`: below.
-- **Order.** As section 8.6, with one change: today's claims (`sent/`) for each due window are
-  listed before the zone's records are read, and a registration already notified is skipped
-  unread. The effect is the same, but a zone picked up again after a stop (the budget, the fetch
-  cap, a failure) reads only what it has left, so it gets through a big zone over several runs.
-  A record not seen for 90 days that was already notified today is deleted at its next window
-  instead.
+- **Order.** As section 8.6, with one change: today's claims (`sent/`) and judgements
+  (`judged/`, below) for each due window are listed before the zone's records are read, and a
+  registration already notified or judged is skipped unread. A record not seen for 90 days that
+  was already notified or judged today is deleted at its next window instead.
+- **Each registration is judged once a window, a key of its own (`judged/`).** Section 8.3 keeps
+  no record of a registration judged with nothing to send, and only a claim or the zone's done
+  marker showed progress. A zone too big for one run (the budget, the fetch cap) was then judged
+  again from its first group every run: free while the forecasts were cached, but the cache keeps
+  one for an hour, so the first groups cost the cap again and the last were never reached, for any
+  band, all window, every day (about 4 × the cap distinct forecasts: 240 a window on the free API).
+  So a run that leaves a zone unfinished writes
+  `judged/v1/<localDate>/snow.<kind>/<app>.<id>` (`{ at }`, a plain write: every writer writes the
+  same) for each of its registrations judged with nothing to send, or logged by a dry run. A
+  zone picked up again after a stop then reads only what it has left, so it gets through a big
+  zone over several runs: at most 8 runs a window, so 480 forecasts on the free API and 2,400 with
+  the key. A run that finishes its zone writes none (its done marker says it all), so a normal
+  evening costs no more writes than before. They are the first thing a short run gives up (none
+  once the pushes' 4 s of grace are over), since they only save the next run work, and a listing
+  of them that fails only means judging again.
 - **One moment.** `now` is read once and given to `getToday` as `deps.now`, with
   `climateWaitMs: 0`: the normals only word a day without snow, which never sends.
-- **Groups** are `query` + `units`. Groups for one place in °C and °F share one forecast fetch.
+- **Groups** are `query` + `units`, the biggest first, so a run stopped by its cap or budget has
+  notified the most it could. Groups for one place in °C and °F share one forecast fetch.
   `ALERTS.fetchConcurrency` (4) run at a time.
 - **The fetch cap** counts each distinct forecast URL requested (a hedged second request is the
   same fetch), plus each group still running, so a run never goes over it: 300 a run
@@ -1165,11 +1209,22 @@ any other trigger could call it.
   7.5 s more (a 1.5 s cache read, then the 6 s forecast timeout), so even then the run ends
   inside Netlify's 30 s; its pushes are left for the next run.
 - **Done markers** are written only when every due registration in the zone is finished with:
-  sent, refused for good, held, quiet, or with nothing to send. These leave the zone for the next
-  run: a failed listing or read, a forecast that failed (503), a released claim or a deferred
-  push. The claims stop the next run from sending twice. A place that no longer exists (404) and
-  a record the run cannot read are logged as errors and do not hold the zone up. A failed read
-  leaves its zone unfinished, but the zone's other registrations still go.
+  sent, refused for good, held, quiet, judged, or with nothing to send. These leave the zone for
+  the next run: a failed listing or read, a forecast that failed (503), a released claim or a
+  deferred push. The claims stop the next run from sending twice. A place that no longer exists
+  (404) and a record the run cannot read are logged as errors and do not hold the zone up. A
+  failed read leaves its zone unfinished, but the zone's other registrations still go.
+- **Overlapping runs** (a late scheduled run, or **Run now** during one) send once, by the claims,
+  and no longer lose a notification. A run counts another run's claim as finished, whether it
+  found the claim in its listing or found it taken, but that run may yet get a 429, a 5xx, a 403
+  or no answer and release it. Marking the zone done on it lost the notification for the day: the
+  marker stood, the claim was gone, and Apple never had the push. So both sides act. A run that
+  marked a zone done counting on others' claims lists the window's claims again once the marker
+  is written, and takes the marker back if one has gone. A run that releases a claim deletes its
+  zone's done marker. Whichever order the two runs' steps fall in, one of them sees the other's
+  (the tests hold each order). A lease that stopped a second run starting was the other way, but
+  **Run now** in the same quarter of an hour, the preview check in SETUP section 5, would then do
+  nothing.
 - **Stale.** A record whose `seenAt` (else `updatedAt`) is more than 90 days old is deleted when
   read, whatever its switches, through `forgetRegistration`, which keeps one refreshed since.
 - **ALERTS_FORCE_IDS** takes prefixes of 8 to 32 hex characters, in any case. A shorter one would
@@ -1180,14 +1235,15 @@ any other trigger could call it.
   nothing.
 - **The dry run** logs each notification
   (`alerts: dry run: snow.3f9c1a2b… sandbox evening 2026-10-19: <title> / <body>`). It claims
-  nothing, makes no provider token and sends nothing. It still writes done markers, so each
-  notification is logged once a window, and it still deletes stale records and cleans up.
+  nothing, makes no provider token and sends nothing. It still writes done markers, and judged
+  markers where a zone is left unfinished, so each notification is logged once a window, and it
+  still deletes stale records and cleans up.
 - **The cleanup** runs in the 03:00 UTC hour. The first run then claims
-  `done/v1/<UTC date>/cleanup` (`onlyIfNew`), lists `sent/v1/` and `done/v1/` by date and
-  `test/v1/` whole, and deletes the keys of dates more than 2 days before the UTC date: at 03:00
-  on 1 December, 27 and 28 November go, 29 November on stay. Cut short or failed, it releases its
-  marker, so the next run in the hour carries on. The marker goes with its day's `done/` keys.
-  That is at most four conditional writes a day, and no other run pays anything.
+  `done/v1/<UTC date>/cleanup` (`onlyIfNew`), lists `sent/v1/`, `judged/v1/` and `done/v1/` by
+  date and `test/v1/` whole, and deletes the keys of dates more than 2 days before the UTC date:
+  at 03:00 on 1 December, 27 and 28 November go, 29 November on stay. Cut short or failed, it
+  releases its marker, so the next run in the hour carries on. The marker goes with its day's
+  `done/` keys. That is at most four conditional writes a day, and no other run pays anything.
 - **The log line**, one a run:
   `alerts-run: zones 1, records 2, groups 2, fetches 2, sent 1, deleted 0, errors 0; 812 ms`.
   Notes follow when they apply: `dry run, 3 logged`, `2 forced`,

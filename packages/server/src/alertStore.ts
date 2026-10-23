@@ -1,9 +1,11 @@
 /**
  * The notifications' storage (iOS build spec, section 8.3): registrations, the once-a-day claims,
- * the zones' done markers, the shared provider token and the test sends' limit, all in the Netlify
- * Blobs store `isithot-alerts`. Production uses the one site-wide store; previews and branch
- * deploys get a deploy-scoped store, chosen as the cache's is (blobs.ts), so a preview never reads
- * or writes a real registration.
+ * the registrations judged with nothing to send, the zones' done markers, the shared provider
+ * token and the test sends' limit, all in the Netlify Blobs store `isithot-alerts`. Production
+ * uses the one site-wide store; previews and branch deploys get a deploy-scoped store, chosen as
+ * the cache's is (blobs.ts), so a preview's own code never reads or writes a real registration.
+ * (The store is the site's, so code built from someone else's pull request could open it: SETUP
+ * section 1 has Netlify require approval before it builds one.)
  *
  * **Failure rules.** Every call takes at most `ALERT_STORE_TIMEOUT_MS` and either resolves with
  * what the store confirmed or rejects with an `AlertStoreError`; nothing resolves with a guess.
@@ -256,6 +258,7 @@ export function idPrefix(id: string): string {
 export const REG_PREFIX = 'reg/v1/';
 export const IDS_PREFIX = 'ids/v1/';
 export const SENT_PREFIX = 'sent/v1/';
+export const JUDGED_PREFIX = 'judged/v1/';
 export const DONE_PREFIX = 'done/v1/';
 export const TEST_PREFIX = 'test/v1/';
 
@@ -310,6 +313,27 @@ export function sentKey(
   id: string,
 ): string {
   return `${sentPrefix(localDate, topic, kind)}${app}.${id}`;
+}
+
+/** One day's judged registrations for a topic and kind: `judged/v1/<localDate>/<topic>.<kind>/`. */
+export function judgedPrefix(localDate: string, topic: string, kind: string): string {
+  return `${JUDGED_PREFIX}${localDate}/${topic}.${kind}/`;
+}
+
+/**
+ * A registration finished with for the window without a claim, `{ at }`: judged with nothing to
+ * send, or logged by a dry run. Written by a run that leaves the registration's zone unfinished,
+ * so later runs skip it unread, as they skip a claimed one. Plain writes: every writer writes the
+ * same thing.
+ */
+export function judgedKey(
+  localDate: string,
+  topic: string,
+  kind: string,
+  app: string,
+  id: string,
+): string {
+  return `${judgedPrefix(localDate, topic, kind)}${app}.${id}`;
 }
 
 /** One day's done markers: `done/v1/<localDate>/`. */

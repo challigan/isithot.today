@@ -7,15 +7,22 @@
  * Each run, from one moment:
  * 1. lists the zones that hold a registration;
  * 2. keeps those in a window at the place (core's `alertWindows`) with no done marker for it today;
- * 3. lists today's claims for those windows, then each zone's registrations, and strong-reads
- *    each one not already notified, deleting any not seen for `ALERTS.staleAfterDays` and skipping
- *    any whose switch for this window is off;
- * 4. groups the rest by place and units, and asks `getToday` once per group (`climateWaitMs` 0),
- *    starting no group after the budget or the forecast-fetch cap;
+ * 3. lists today's claims and judgements for those windows, then each zone's registrations, and
+ *    strong-reads each one neither notified nor judged today, deleting any not seen for
+ *    `ALERTS.staleAfterDays` and skipping any whose switch for this window is off;
+ * 4. groups the rest by place and units, the biggest groups first, and asks `getToday` once per
+ *    group (`climateWaitMs` 0), starting no group after the budget or the forecast-fetch cap;
  * 5. decides with core's `snowAlert` (ALERTS_FORCE_IDS: the test copy when it says no);
  * 6. claims and sends through `sendAlerts`, which acts on Apple's answers;
- * 7. marks done each zone whose every registration is finished with;
- * 8. in the 03:00 UTC hour, deletes `sent/`, `done/` and `test/` keys more than 2 days old.
+ * 7. marks done each zone whose every registration is finished with, and in each zone it leaves
+ *    unfinished, marks judged each registration finished with but unclaimed, so the next run
+ *    reads only what is left;
+ * 8. in the 03:00 UTC hour, deletes `sent/`, `judged/`, `done/` and `test/` keys more than 2 days
+ *    old.
+ *
+ * **Overlapping runs** send once, by the claims. They also never lose a notification: a run that
+ * counts another run's claim as finished checks, after marking the zone done, that the claim is
+ * still there, and a run that releases a claim deletes its zone's done marker.
  *
  * What it logs is fit for a public log: id prefixes, zones and counts, never a device token, a
  * provider token, a full id, a place query or coordinates.
@@ -37,6 +44,7 @@ import {
 } from '@isithot/core';
 import {
   DONE_PREFIX,
+  JUDGED_PREFIX,
   REG_PREFIX,
   SENT_PREFIX,
   TEST_PREFIX,
@@ -45,6 +53,8 @@ import {
   donePrefix,
   forgetRegistration,
   idPrefix,
+  judgedKey,
+  judgedPrefix,
   parseRegKey,
   redact,
   regZonePrefix,
@@ -131,7 +141,7 @@ export interface RunAlertsResult {
   dryRun: boolean;
   /** Zones in a window with no done marker for it today. */
   zones: number;
-  /** Due registrations read (those already notified today are skipped unread). */
+  /** Due registrations read (those already notified or judged today are skipped unread). */
   records: number;
   /** Forecast groups judged (place and units). */
   groups: number;
@@ -148,7 +158,7 @@ export interface RunAlertsResult {
   errors: number;
   /** Notifications for ALERTS_FORCE_IDS. */
   forced: number;
-  /** Zones marked done. */
+  /** Zones marked done (and still so when the run ended). */
   done: number;
   /** Why the run left work for the next one, if it did: its budget or the fetch cap. */
   stopped: 'budget' | 'fetches' | null;
@@ -188,9 +198,10 @@ const errorText = (err: unknown): string => (err instanceof Error ? err.message 
 
 /**
  * Text fit for a public log: ids cut to a prefix, no provider token (`redact`), and no
- * coordinates, whether a cache key's cell ("53.80,-1.55") or a query's lat, lon or key.
+ * coordinates, whether a cache key's cell ("53.80,-1.55") or a query's lat, lon or key. The
+ * devices handlers' lines go through it too.
  */
-function scrub(text: string): string {
+export function scrub(text: string): string {
   return redact(text)
     .replace(/-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+/g, '<cell>')
     .replace(/\b(lat|lon|latitude|longitude|apikey)=[^&\s]*/gi, '$1=…');
@@ -257,6 +268,14 @@ interface Zone {
   /** Registrations listed in the zone. */
   count: number;
   unfinished: boolean;
+  /**
+   * Registrations ("<app>.<id>") counted as finished on another run's claim: claimed in the
+   * listing, or found taken. That run may yet release the claim, so a done marker that counts on
+   * them is checked once written.
+   */
+  relied: Set<string>;
+  /** Whether this run released a claim in the zone, which takes back any done marker for it. */
+  released: boolean;
 }
 
 interface Entry {
@@ -280,6 +299,12 @@ interface Pending {
 
 const who = (record: Pick<AlertRecord, 'app' | 'id'>): string =>
   `${record.app}.${idPrefix(record.id)}`;
+
+/** A zone's window for the day, as the claims and judgements are kept: "2026-10-18.evening". */
+const windowOf = (z: Pick<Zone, 'date' | 'kind'>): string => `${z.date}.${z.kind}`;
+
+/** The last segment of a key: a claim's or judgement's "<app>.<id>". */
+const lastSegment = (key: string): string => key.slice(key.lastIndexOf('/') + 1);
 
 /**
  * One run. Never rejects for a store, forecast or APNs failure: each is logged once, counted,
@@ -324,6 +349,9 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
     options.log?.(safe);
   };
   const store = watched(options.store, (err) => say(`alerts-run: error: ${errorText(err)}`));
+  /** The "<app>.<id>" of each claim or judgement under the prefix. */
+  const namesIn = async (prefix: string): Promise<Set<string>> =>
+    new Set((await store.list(prefix)).keys.map(lastSegment));
   const budgetLeft = (): boolean => {
     if (clock() < deadline) return true;
     result.stopped ??= 'budget';
@@ -362,7 +390,17 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
     for (const tz of directories.map(zoneOfDirectory)) {
       if (tz === null) continue;
       const { kind, date } = alertWindows(tz, at);
-      if (kind) open.push({ tz, kind, date, count: 0, unfinished: false });
+      if (kind) {
+        open.push({
+          tz,
+          kind,
+          date,
+          count: 0,
+          unfinished: false,
+          relied: new Set(),
+          released: false,
+        });
+      }
     }
     const doneByDate = new Map<string, Set<string> | null>();
     await Promise.all(
@@ -383,16 +421,26 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
     }
     result.zones = zones.length;
 
-    // 4. Today's claims for each window, so registrations already notified are not read again.
-    const sentByWindow = new Map<string, Set<string> | null>();
-    const windowOf = (z: Zone): string => sentPrefix(z.date, 'snow', z.kind);
+    // 4. Today's claims and judgements for each window, so registrations already notified or
+    //    judged are not read again. Without the claims a zone is left alone; without the
+    //    judgements its registrations are only judged again.
+    const byWindow = new Map<string, { claimed: Set<string>; judged: Set<string> } | null>();
+    const windows = new Map(zones.filter((z) => !z.unfinished).map((z) => [windowOf(z), z]));
     await Promise.all(
-      [...new Set(zones.filter((z) => !z.unfinished).map(windowOf))].map(async (prefix) => {
-        try {
-          sentByWindow.set(prefix, new Set((await store.list(prefix)).keys));
-        } catch {
-          sentByWindow.set(prefix, null);
-        }
+      [...windows].map(async ([window, { date, kind }]) => {
+        const [claimed, judged] = await Promise.allSettled([
+          namesIn(sentPrefix(date, 'snow', kind)),
+          namesIn(judgedPrefix(date, 'snow', kind)),
+        ]);
+        byWindow.set(
+          window,
+          claimed.status === 'rejected'
+            ? null
+            : {
+                claimed: claimed.value,
+                judged: judged.status === 'fulfilled' ? judged.value : new Set(),
+              },
+        );
       }),
     );
 
@@ -402,8 +450,8 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
       zones.filter((z) => !z.unfinished),
       READ_CONCURRENCY,
       async (zone) => {
-        const sent = sentByWindow.get(windowOf(zone));
-        if (!sent) {
+        const listed = byWindow.get(windowOf(zone));
+        if (!listed) {
           zone.unfinished = true;
           return;
         }
@@ -418,7 +466,12 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
         for (const key of keys) {
           const reg = parseRegKey(key);
           if (!reg) continue;
-          if (sent.has(sentKey(zone.date, 'snow', zone.kind, reg.app, reg.id))) continue;
+          const name = `${reg.app}.${reg.id}`;
+          if (listed.judged.has(name)) continue;
+          if (listed.claimed.has(name)) {
+            zone.relied.add(name);
+            continue;
+          }
           reads.push({ zone, key, reg });
         }
       },
@@ -468,9 +521,14 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
   };
 
   const pending: Pending[] = [];
+  /**
+   * Registrations finished with but unclaimed: judged with nothing to send, or logged by a dry
+   * run. Where their zone is left unfinished, they are marked judged for the next run (step 7).
+   */
+  const unclaimed: Entry[] = [];
 
-  /** Step 5: the notification for one registration from its place's answer, if one is due. */
-  const decide = (entry: Entry, body: TodayResponse): void => {
+  /** Step 5: the notification for one registration from its place's answer; false if none. */
+  const decide = (entry: Entry, body: TodayResponse): boolean => {
     const { zone, record, prefs, forced } = entry;
     const real = body.snow ? snowAlert(body.snow, zone.kind, prefs, record.name) : null;
     const alert: AlertContent | null =
@@ -483,7 +541,7 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
             date: zone.kind === 'evening' ? addDays(zone.date, 1) : zone.date,
           }
         : null);
-    if (!alert) return;
+    if (!alert) return false;
     if (forced) result.forced++;
     let push: AlertPush;
     try {
@@ -500,10 +558,11 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
     } catch (err) {
       // A push that cannot go is a bug to fix, not one to retry every 15 minutes.
       say(`alerts-run: error: no push for ${who(record)}: ${errorText(err)}`);
-      return;
+      return false;
     }
     const claimKey = sentKey(zone.date, 'snow', zone.kind, record.app, record.id);
     pending.push({ entry, alert, delivery: { record, claimKey, push } });
+    return true;
   };
 
   /** Steps 4 and 5: each group's answer, once, then each of its registrations decided. */
@@ -521,7 +580,8 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
       }
       group.entries.push(entry);
     }
-    const list = [...groups.values()];
+    // The biggest first: a run stopped by its cap or budget has then notified the most it could.
+    const list = [...groups.values()].sort((a, b) => b.entries.length - a.entries.length);
     const leave = (group: Group): void => {
       for (const e of group.entries) e.zone.unfinished = true;
     };
@@ -548,7 +608,9 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
         if (retry) leave(group);
         return;
       }
-      for (const entry of group.entries) decide(entry, answer.body as TodayResponse);
+      for (const entry of group.entries) {
+        if (!decide(entry, answer.body as TodayResponse)) unclaimed.push(entry);
+      }
     };
     let next = 0;
     let running = 0;
@@ -593,11 +655,16 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
     });
     results.forEach(({ outcome }, i) => {
       const { entry, alert } = pending[i]!;
-      if (!deliveryFinished(outcome)) entry.zone.unfinished = true;
-      if (outcome === 'sent') result.sent++;
-      if (outcome === 'logged') result.logged++;
-      if (outcome === 'deleted') result.deleted++;
       const { record, zone } = entry;
+      if (!deliveryFinished(outcome)) zone.unfinished = true;
+      if (outcome === 'sent') result.sent++;
+      if (outcome === 'logged') {
+        result.logged++;
+        unclaimed.push(entry);
+      }
+      if (outcome === 'deleted') result.deleted++;
+      if (outcome === 'taken') zone.relied.add(`${record.app}.${record.id}`);
+      if (outcome === 'released') zone.released = true;
       result.notifications.push({
         app: record.app,
         id: record.id,
@@ -614,29 +681,70 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
     });
   };
 
-  /** Step 7: each zone whose every due registration is finished with, marked done for the day. */
-  const markDone = async (): Promise<void> => {
-    await pool(
-      zones.filter((z) => !z.unfinished),
-      READ_CONCURRENCY,
-      async (zone) => {
-        try {
-          await store.set(doneKey(zone.date, zone.kind, zone.tz), {
-            at: at.toISOString(),
-            count: zone.count,
-          });
-          result.done++;
-        } catch {
+  /**
+   * Step 7: each zone whose every due registration is finished with, marked done for the day;
+   * in each zone left unfinished, its unclaimed registrations marked judged; and the done marker
+   * taken back from each zone where this run released a claim, since another run may have marked
+   * it done counting on that claim.
+   */
+  const finish = async (): Promise<void> => {
+    const marked: Zone[] = [];
+    const markDone = (zone: Zone): Promise<void> =>
+      store
+        .set(doneKey(zone.date, zone.kind, zone.tz), { at: at.toISOString(), count: zone.count })
+        .then(
+          () => void marked.push(zone),
           // The next run finds nothing left to send and tries the marker again.
-        }
-      },
-    );
+          () => {},
+        );
+    /** True once the marker is gone. A failure is logged: that zone may then miss one today. */
+    const takeBack = (zone: Zone): Promise<boolean> =>
+      store.delete(doneKey(zone.date, zone.kind, zone.tz)).then(
+        () => true,
+        () => false,
+      );
+    const judged = (entry: Entry): Promise<void> => {
+      const { zone, record } = entry;
+      // Only saves the next run work, so it is the first thing to go when time is short.
+      if (clock() >= pushDeadline) return Promise.resolve();
+      return store
+        .set(judgedKey(zone.date, 'snow', zone.kind, record.app, record.id), {
+          at: at.toISOString(),
+        })
+        .then(
+          () => {},
+          () => {},
+        );
+    };
+    const tasks: (() => Promise<void>)[] = [
+      ...zones.filter((z) => z.released).map((z) => async () => void (await takeBack(z))),
+      ...zones.filter((z) => !z.unfinished).map((z) => () => markDone(z)),
+      ...unclaimed.filter((e) => e.zone.unfinished).map((e) => () => judged(e)),
+    ];
+    await pool(tasks, READ_CONCURRENCY, (task) => task());
+
+    // A marker that counted on other runs' claims stands only while every one of them does: read
+    // after the marker was written, so a claim released before then is seen to be gone, and one
+    // released after is the releasing run's to take back.
+    const checks = new Map<string, Zone[]>();
+    for (const zone of marked.filter((z) => z.relied.size > 0)) {
+      checks.set(windowOf(zone), [...(checks.get(windowOf(zone)) ?? []), zone]);
+    }
+    for (const list of checks.values()) {
+      const { date, kind } = list[0]!;
+      const claimed = await namesIn(sentPrefix(date, 'snow', kind)).catch(() => null);
+      for (const zone of list) {
+        if (claimed && [...zone.relied].every((name) => claimed.has(name))) continue;
+        if (await takeBack(zone)) marked.splice(marked.indexOf(zone), 1);
+      }
+    }
+    result.done = marked.length;
   };
 
   /**
-   * Step 8: once a day, in the 03:00 UTC hour, the `sent/`, `done/` and `test/` keys more than
-   * 2 days old. Its marker is claimed first, so one run cleans; a cleanup cut short or failed
-   * releases it, so the next run in the hour carries on.
+   * Step 8: once a day, in the 03:00 UTC hour, the `sent/`, `judged/`, `done/` and `test/` keys
+   * more than 2 days old. Its marker is claimed first, so one run cleans; a cleanup cut short or
+   * failed releases it, so the next run in the hour carries on.
    */
   const clean = async (): Promise<void> => {
     if (at.getUTCHours() !== CLEANUP_HOUR) return;
@@ -651,7 +759,7 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
     const old: string[] = [];
     let complete = true;
     try {
-      for (const prefix of [SENT_PREFIX, DONE_PREFIX]) {
+      for (const prefix of [SENT_PREFIX, JUDGED_PREFIX, DONE_PREFIX]) {
         const { directories } = await store.list(prefix, { directories: true });
         for (const dir of directories) {
           const date = dir.slice(prefix.length);
@@ -692,7 +800,7 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
   await gather();
   await judge();
   await send();
-  await markDone();
+  await finish();
   await clean();
   result.fetches = fetched.size;
   result.ms = clock() - started;
