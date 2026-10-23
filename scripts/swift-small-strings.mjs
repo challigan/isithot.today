@@ -11,17 +11,22 @@
  *
  * It reads every aligned 32-bit word of the file as an instruction (each slice's code is
  * aligned), rebuilds each constant a MOVZ starts and the MOVKs after it complete, on the same
- * register within the next few instructions, and keeps those that are the first word of an ASCII
- * small string: printable bytes, then only zeros. A string of more than 8 bytes goes on in a
- * second word, whose top byte is 0xE0 plus its length, which is looked for among the constants
- * nearby. Literals under 4 bytes are left out, as strings(1) leaves them out. Checked against
- * LLVM 21's arm64 code for a probe of the debug hooks (docs/DECISIONS.md).
+ * register within the next CHAIN instructions, and keeps those that are the first word of an
+ * ASCII small string: printable bytes, then only zeros. The scheduler can spread one constant's
+ * moves among others' (26 instructions apart in docs/DECISIONS.md's probes), so the window is
+ * wide, and a constant ends sooner only at another move to its register or a MOVK for a 16-bit
+ * piece it already has. A string of more than 8 bytes goes on in a second word, whose top byte
+ * is 0xE0 plus its length, which is looked for among the constants nearby. That pairing is a
+ * guess: the nearest second word can be another string's, and one the compiler derives from
+ * another (add x1, x21, #0x23) isn't seen at all, so scripts/check-archive.sh matches a hook of
+ * 8 bytes or more by its first 8. Literals under 4 bytes are left out, as strings(1) leaves them
+ * out. Checked against LLVM 21's arm64 code for probes of the debug hooks (docs/DECISIONS.md).
  */
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 /** How many instructions after a MOVZ the MOVKs that complete its constant may come. */
-export const CHAIN = 8;
+export const CHAIN = 64;
 /** How many instructions apart a small string's two words may be built. */
 export const PAIR = 16;
 /** The shortest literal kept. */
@@ -46,7 +51,11 @@ export function moveWide(word) {
   return { kind, wide, rd: word & 31, shift: BigInt(hw * 16), imm: BigInt((word >>> 5) & 0xffff) };
 }
 
-/** Each constant a MOVZ starts, with the MOVKs that follow it on its register: `{ at, value }`. */
+/**
+ * Each constant a MOVZ starts, with the MOVKs that follow it on its register: `{ at, value }`.
+ * Each MOVK sets one of the register's 16-bit pieces (four, or two in a 32-bit register), so the
+ * constant is finished once it has them all, or at a MOVK for a piece it already has.
+ */
 export function constants(bytes) {
   const count = Math.floor(bytes.length / 4);
   const word = (i) => bytes.readUInt32LE(i * 4);
@@ -55,11 +64,14 @@ export function constants(bytes) {
     const start = moveWide(word(i));
     if (start?.kind !== 'movz') continue;
     let value = start.imm << start.shift;
-    for (let j = i + 1; j < Math.min(count, i + 1 + CHAIN); j++) {
+    const pieces = new Set([start.shift]);
+    const all = start.wide ? 4 : 2;
+    for (let j = i + 1; j < Math.min(count, i + 1 + CHAIN) && pieces.size < all; j++) {
       const next = moveWide(word(j));
       if (next?.rd !== start.rd) continue;
-      // Another constant for the same register: this one is finished.
-      if (next.kind !== 'movk' || next.wide !== start.wide) break;
+      // Another constant for the same register, or a piece this one has: this one is finished.
+      if (next.kind !== 'movk' || next.wide !== start.wide || pieces.has(next.shift)) break;
+      pieces.add(next.shift);
       value = (value & ~(0xffffn << next.shift)) | (next.imm << next.shift);
     }
     found.push({ at: i, value });
@@ -119,8 +131,8 @@ function pairOf(found, n) {
 
 /**
  * Every ASCII small-string literal the binary's instructions build, in order and each once. A
- * first word of 8 bytes is joined to its second word when one is near it; otherwise its 8 bytes
- * stand alone.
+ * first word of 8 bytes is joined to the nearest second word when one is near it, which may be
+ * another string's; otherwise its 8 bytes stand alone.
  */
 export function smallStrings(bytes) {
   const found = constants(bytes);

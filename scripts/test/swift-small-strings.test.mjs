@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import {
+  CHAIN,
   PAIR,
   constants,
   firstWord,
@@ -67,6 +68,61 @@ const FIXTURE = [
   0x52800036, // mov  w22, #0x1
   0xd2fd0018, // mov  x24, #-0x1800000000000000   second word: 0xE8, nothing more
 ];
+// The same "-uitest" scheduled for LLVM's generic CPU, its moves among others': the MOVKs come 3,
+// 6 and 9 instructions after the MOVZ.
+const UITEST_SPREAD = [
+  0xd28ea5b5, // mov  x21, #0x752d
+  0xf9400817, // ldr  x23, [x0, #0x10]
+  0xaa0003f4, // mov  x20, x0
+  0xf2ae8d35, // movk x21, #0x7469, lsl #16
+  0x9100a016, // add  x22, x0, #0x28
+  0x52800033, // mov  w19, #0x1
+  0xf2ce6cb5, // movk x21, #0x7365, lsl #32
+  0x910006f8, // add  x24, x23, #0x1
+  0xd2fce019, // mov  x25, #-0x1900000000000000
+  0xf2e00e95, // movk x21, #0x74, lsl #48
+];
+// Six literals passed to one function, for the generic CPU: their words are built side by side,
+// so "-uitest" (x0) takes 26 instructions, and the second words sit nearer other strings than
+// their own ("raphy", -umpGeography's, is next to -resetStore's first word).
+const SIX_ARGUMENTS = [
+  0xd2864628, // mov  x8, #0x3231
+  0xd28c25aa, // mov  x10, #0x612d
+  0xd28ea5a0, // mov  x0, #0x752d
+  0xd28ea5a2, // mov  x2, #0x752d
+  0xd28c2e43, // mov  x3, #0x6172
+  0xd28e45a4, // mov  x4, #0x722d
+  0xf2a5c6e8, // movk x8, #0x2e37, lsl #16
+  0xf2ad2e0a, // movk x10, #0x6970, lsl #16
+  0xf2ae8d20, // movk x0, #0x7469, lsl #16
+  0xf2ae0da2, // movk x2, #0x706d, lsl #16
+  0xf2ad0e03, // movk x3, #0x6870, lsl #16
+  0xf2ae6ca4, // movk x4, #0x7365, lsl #16
+  0xd28e4de5, // mov  x5, #0x726f
+  0xd28e45a6, // mov  x6, #0x722d
+  0xd2800634, // mov  x20, #0x31
+  0xf2c5c608, // movk x8, #0x2e30, lsl #32
+  0xd28dcd29, // mov  x9, #0x6e69
+  0xf2ce49ea, // movk x10, #0x724f, lsl #32
+  0xf2ce6ca0, // movk x0, #0x7365, lsl #32
+  0xf2cca8e2, // movk x2, #0x6547, lsl #32
+  0xf2c00f23, // movk x3, #0x79, lsl #32
+  0xf2ce8ca4, // movk x4, #0x7465, lsl #32
+  0xf2a00ca5, // movk x5, #0x65, lsl #16
+  0xf2aeade6, // movk x6, #0x756f, lsl #16
+  0xf2fd2014, // movk x20, #0xe900, lsl #48
+  0xf2e5c608, // movk x8, #0x2e30, lsl #48
+  0xf2fd4009, // movk x9, #0xea00, lsl #48
+  0xf2eced2a, // movk x10, #0x6769, lsl #48
+  0xf2e00e80, // movk x0, #0x74, lsl #48
+  0xf2ecede2, // movk x2, #0x676f, lsl #48
+  0xf2fda003, // movk x3, #0xed00, lsl #48
+  0xf2ee8a64, // movk x4, #0x7453, lsl #48
+  0xf2fd6005, // movk x5, #0xeb00, lsl #48
+  0xf2ccae86, // movk x6, #0x6574, lsl #32
+  0xd2fce001, // mov  x1, #-0x1900000000000000
+  0xd2fcc007, // mov  x7, #-0x1a00000000000000
+];
 const JSON_SUFFIX = [
   0xd28d45c0, // mov  x0, #0x6a2e           ".json"
   0xf2adee60, // movk x0, #0x6f73, lsl #16
@@ -100,18 +156,31 @@ describe('moveWide', () => {
 describe('constants', () => {
   it('joins the MOVKs to the MOVZ that starts them, on its register only', () => {
     expect(constants(code(...UITEST))).toEqual([{ at: 0, value: 0x007473657469752dn }]);
+    expect(constants(code(...UITEST_SPREAD))).toEqual([
+      { at: 0, value: 0x007473657469752dn },
+      { at: 5, value: 1n },
+      { at: 8, value: 0xe700000000000000n },
+    ]);
     // Another register's moves in between change nothing.
     const interleaved = code(movz(3, 0x4142), movz(4, 0xffff), movk(3, 0x4344, 1), movk(4, 1, 1));
     expect(constants(interleaved).map((c) => c.value)).toEqual([0x43444142n, 0x1ffffn]);
   });
 
-  it('stops at the next constant for the same register, and after a few instructions', () => {
+  it('stops at the next constant for the same register, or a piece it already has', () => {
     const restarted = code(movz(5, 0x6161), movz(5, 0x6262), movk(5, 0x6363, 1));
     expect(constants(restarted).map((c) => c.value)).toEqual([0x6161n, 0x63636262n]);
-    const late = code(movz(6, 0x6161), ...Array(8).fill(NOP), movk(6, 0x6262, 1));
-    expect(constants(late).map((c) => c.value)).toEqual([0x6161n]);
+    const again = code(movz(6, 0x6161), movk(6, 0x6262, 1), movk(6, 0x6363, 1));
+    expect(constants(again).map((c) => c.value)).toEqual([0x62626161n]);
     const narrowed = code(movz(7, 0x6161), movk(7, 0x6262, 1, false));
     expect(constants(narrowed).map((c) => c.value)).toEqual([0x6161n]);
+  });
+
+  it('joins MOVKs up to CHAIN instructions on, and no further', () => {
+    const late = (gap) => code(movz(6, 0x6161), ...Array(gap).fill(NOP), movk(6, 0x6262, 1));
+    expect(constants(late(8)).map((c) => c.value)).toEqual([0x62626161n]);
+    expect(constants(late(26)).map((c) => c.value)).toEqual([0x62626161n]);
+    expect(constants(late(CHAIN - 1)).map((c) => c.value)).toEqual([0x62626161n]);
+    expect(constants(late(CHAIN)).map((c) => c.value)).toEqual([0x6161n]);
   });
 
   it('reads only whole words', () => {
@@ -159,6 +228,20 @@ describe('smallStrings', () => {
       '127.0.0.1',
       '-fixture',
       '.json',
+    ]);
+  });
+
+  it("finds literals whose moves the scheduler spread among other constants'", () => {
+    expect(smallStrings(code(...UITEST_SPREAD))).toEqual(['-uitest']);
+    // Each first word whole. The 8-byte ones are joined to the nearest second word, which here
+    // is mostly the wrong one, so scripts/check-archive.sh matches them by their first 8 bytes.
+    expect(smallStrings(code(...SIX_ARGUMENTS))).toEqual([
+      '127.0.0.raphy',
+      '-apiOrigraphy',
+      '-uitest',
+      '-umpGeography',
+      '-resetStraphy',
+      '-route',
     ]);
   });
 

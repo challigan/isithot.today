@@ -272,8 +272,11 @@ rest of section 18.3's list.
 string of 15 bytes or fewer inside the value, and the compiler builds such a literal in registers
 with `movz` and `movk`, 16 bits at a time, so `-uitest` never appears as text in the binary.
 Every hook's name is that short. `scripts/swift-small-strings.mjs` rebuilds those literals from
-the arm64 instructions, and both checks look in its output as well as in strings'. A literal
-stored as data (in an array, say) is still found by strings.
+the arm64 instructions, and both checks look in its output as well as in strings'. The compiler
+can spread a literal's instructions among others' and build its two halves apart, so the reader
+follows each register for up to 64 instructions, and `check-archive.sh` matches a hook of 8 bytes
+or more by its first 8 (docs/DECISIONS.md). A literal stored as data (in an array, say) is still
+found by strings.
 
 ## Settled
 

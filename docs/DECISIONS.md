@@ -1058,8 +1058,22 @@ uploads it to TestFlight, and `scripts/check-archive.sh`, which checks a build f
   names (`URLProtocolStub`) and literals stored as data (an array of them) are found. So
   `scripts/swift-small-strings.mjs` rebuilds the short ASCII literals from arm64 `movz`/`movk`
   sequences, joining a 9-to-15-byte literal's two words, and `check-archive.sh` and
-  `ci/release-check.sh` look in its output as well as in strings'. On the same probe it found
-  every hook, from `contains`, `switch` and `==`; the tests use LLVM's own instruction words.
+  `ci/release-check.sh` look in its output as well as in strings'. The tests use LLVM's own
+  instruction words.
+- **A literal's moves needn't be together** (found in review). With Apple's CPU models (apple-a7
+  to apple-a17, apple-m1) each constant's `movz` and `movk`s sat side by side in the probes, but
+  LLVM's generic model schedules them among other constants': 9 instructions apart for
+  `contains("-uitest")`, 26 for six literals passed to one call. The first reader followed a
+  register for 8 instructions, so it read `-uites`, and an archive with that hook compiled in
+  passed. It now follows it for 64, until another move to that register or a `movk` for a 16-bit
+  piece the constant already has. Joining a first word to the nearest second word is a guess,
+  too: in the probes the nearest was often another string's, under every model, and the compiler
+  can derive one second word from another (`add x1, x21, #0x23` turns `-forceEEA`'s into
+  `-unlocked`'s, which the reader can't follow, so it reads `-unlockeA`). So `check-archive.sh`
+  matches a hook of 8 bytes or more by its first 8, whatever follows them. Checked on 23 October 2026 with probes naming all twelve
+  hooks through `contains`, `firstIndex(of:)`, `switch`, `==`, dictionary lookups and call
+  arguments, for each of those CPU models: the reader recovers every hook's first word whole, and
+  the check reports all twelve.
 - **What `check-archive.sh` adds to the spec's list:** the fixtures (as `release-check.sh` checks
   the simulator build); `CFBundleShortVersionString` as well as `CFBundleVersion`, and
   `BUILD_NUMBER` when given; Google's consent SDK and an embedded framework as ways the widget

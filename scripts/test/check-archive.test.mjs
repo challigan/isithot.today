@@ -98,6 +98,32 @@ function binary(strings = [], words = []) {
 
 // "-uitest" as LLVM builds it for arm64 (scripts/test/swift-small-strings.test.mjs).
 const UITEST_CODE = [0xd28ea5b3, 0xf2ae8d33, 0xf2ce6cb3, 0xf2e00e93];
+// The same for LLVM's generic CPU: its MOVKs come 3, 6 and 9 instructions after the MOVZ.
+const UITEST_SPREAD = [
+  0xd28ea5b5, 0xf9400817, 0xaa0003f4, 0xf2ae8d35, 0x9100a016, 0x52800033, 0xf2ce6cb5, 0x910006f8,
+  0xd2fce019, 0xf2e00e95,
+];
+// From LLVM's code for a switch over "-forceEEA" and "-unlocked": the first builds its second
+// word ("A", 0xE9), and the second word of -unlocked is that plus 0x23 (add x1, x21, #0x23),
+// which the reader can't follow, so it reads "-unlockeA".
+const UNLOCKED_DERIVED = [
+  0xd2800835, // mov  x21, #0x41
+  0xf2fd2015, // movk x21, #0xe900, lsl #48
+  0xd28cc5a0, // mov  x0, #0x662d           "-forceEE"
+  0xf2ae4de0, // movk x0, #0x726f, lsl #16
+  0xf2ccac60, // movk x0, #0x6563, lsl #32
+  0xf2e8a8a0, // movk x0, #0x4545, lsl #48
+  0xd28ea5a0, // mov  x0, #0x752d           "-unlocke"
+  0xf2ad8dc0, // movk x0, #0x6c6e, lsl #16
+  0xf2cc6de0, // movk x0, #0x636f, lsl #32
+  0xf2ecad60, // movk x0, #0x656b, lsl #48
+  0x91008ea1, // add  x1, x21, #0x23
+];
+// "-fixture" (8 bytes) just after URLProtocolStub's second word, so the reader reads
+// "-fixturecolStub".
+const FIXTURE_AFTER_STUB = [
+  0xd28dec61, 0xf2aa6d81, 0xf2ceae81, 0xf2fdec41, 0xd28cc5b3, 0xf2af0d33, 0xf2ceae93, 0xf2ecae53,
+];
 // "-now", built in a 32-bit register: mov w8, #0x6e2d; movk w8, #0x776f, lsl #16.
 const NOW_CODE = [0x528dc5a8, 0x72aeede8];
 
@@ -331,9 +357,24 @@ describe('an archive that fails', () => {
     expect(check(app).errors).toEqual([
       'the app binary builds the debug hook -uitest as a short Swift literal',
     ]);
+    const spread = archive({ files: { WillItSnow: binary(['will it snow?'], UITEST_SPREAD) } });
+    expect(check(spread).errors).toEqual([
+      'the app binary builds the debug hook -uitest as a short Swift literal',
+    ]);
     const widget = archive({ files: { [`${WIDGET}/WillItSnowWidgets`]: binary([], NOW_CODE) } });
     expect(check(widget).errors).toEqual([
       'the widget binary builds the debug hook -now as a short Swift literal',
+    ]);
+  });
+
+  it("fails on a hook of 8 bytes or more joined to another string's second word", () => {
+    const unlocked = archive({ files: { WillItSnow: binary([], UNLOCKED_DERIVED) } });
+    expect(check(unlocked).errors).toEqual([
+      'the app binary builds the debug hook -unlocked as a short Swift literal',
+    ]);
+    const fixture = archive({ files: { WillItSnow: binary([], FIXTURE_AFTER_STUB) } });
+    expect(check(fixture).errors).toEqual([
+      'the app binary builds the debug hook -fixture as a short Swift literal',
     ]);
   });
 

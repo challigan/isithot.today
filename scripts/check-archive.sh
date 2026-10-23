@@ -158,11 +158,12 @@ executable() {
   echo "$1/$name"
 }
 
-# Whether the short literals in $2 include the hook $1: whole, or its first 8 bytes alone, when
-# the rest of a longer one wasn't found beside them.
+# Whether the short literals in $2 include the hook $1. A hook of 8 bytes or more is matched by
+# its first 8, the literal's first word, whatever follows them: swift-small-strings.mjs joins
+# that word to the nearest second word, which can be another string's, or finds none.
 is_literal() {
-  if [ "${#1}" -gt 8 ]; then
-    grep -F -x -e "$1" -e "${1:0:8}" "$2" >/dev/null
+  if [ "${#1}" -ge 8 ]; then
+    cut -c 1-8 "$2" | grep -F -x -e "${1:0:8}" >/dev/null
   else
     grep -F -x -e "$1" "$2" >/dev/null
   fi
