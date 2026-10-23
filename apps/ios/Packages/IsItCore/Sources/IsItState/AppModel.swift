@@ -161,6 +161,56 @@ public final class AppModel {
     notice = nil
   }
 
+  /// Loads the answer for `target` in place, as a place under "Nearby:" does (section 10.2):
+  /// it becomes the place, kept in `place.v1`, and the page shows the loading state for it
+  /// until its own answer arrives, never the last place's answer under its name; a failure then
+  /// shows as it would with nothing saved. The notice, about the last place, goes. The place on
+  /// screen again only asks again (`refresh()`).
+  public func select(_ target: Target) async {
+    notice = nil
+    guard !target.key.utf8.elementsEqual(self.target.key.utf8) else {
+      await refresh()
+      return
+    }
+    choose(target)
+    response = nil
+    fetchedAt = nil
+    phase = .loading
+    cancelRefresh()
+    await load(.plain)
+  }
+
+  // MARK: - What the home screen draws
+
+  /// The time now by the model's clock, which the home screen draws the answer at with the
+  /// minute tick: the system's, or in a Debug build launched on a fixture, the fixture's.
+  public var now: Date { environment.clock.now }
+
+  /// The place as the top bar names it: the place's own name (a city page's, a searched
+  /// place's), else the answer's; nil while neither is known (approximate IP location before
+  /// the first answer).
+  public var placeName: String? {
+    let own: String?
+    switch target {
+    case .ip: own = nil
+    case .city(_, let name): own = name
+    case .coords(let place): own = place.name
+    }
+    return [own, response?.location.name].compactMap { $0 }.first { !$0.isEmpty }
+  }
+
+  /// The top bar (`HomeTopBar`): the place, and on approximate IP location the line beneath
+  /// it, which says why while there is a notice (`AppCopy.slugGone`).
+  public var topBar: HomeTopBar {
+    HomeTopBar(placeName: placeName, approximate: target == .ip, notice: notice)
+  }
+
+  /// The page for `view` at `now` (`HomePage`), from the answer on screen and how the last
+  /// fetch went, with the top bar's place.
+  public func page(_ view: AppView, at now: Date) -> HomePage {
+    HomePage(response, view: view, at: now, phase: HomePage.Phase(phase), placeName: placeName)
+  }
+
   // MARK: - Fetching
 
   /// Fetches the answer for the place, as `fetch` says, and shows it, or what went wrong. With

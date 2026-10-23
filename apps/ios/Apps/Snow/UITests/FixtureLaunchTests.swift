@@ -3,7 +3,8 @@ import XCTest
 /// The app shows the fixture it is launched with (`-uitest -fixture <name>`, the Debug hooks in
 /// section 9.8), at the fixture's own moment, on the Today page: the place in the top bar, the
 /// question and answer as one heading with the place, as VoiceOver reads it (section 16), and the
-/// verdict. The screen is attached to the result bundle for the contact sheet.
+/// verdict; and a place nearby loading in place. The screen is attached to the result bundle for
+/// the contact sheet.
 final class FixtureLaunchTests: XCTestCase {
   override func setUpWithError() throws {
     continueAfterFailure = false
@@ -46,6 +47,26 @@ final class FixtureLaunchTests: XCTestCase {
       "Durham. Will it snow tomorrow? No recent forecast. Connect to the internet to refresh.")
     XCTAssertFalse(app.staticTexts["verdict"].exists, "An old answer's verdict is on screen")
     attachScreen(of: app, named: "app-old-forecast")
+  }
+
+  /// A place under "Nearby:" loads in place, with no navigation: it becomes the place in the top
+  /// bar and the heading. (The fixture's server answers every place with the same fixture.)
+  @MainActor
+  func testNearbyLoadsInPlace() throws {
+    let app = launch(fixture: "aberdeen-snow")
+    let dundee = app.buttons["Dundee"]
+    var swipes = 0
+    while !dundee.isHittable && swipes < 8 {
+      app.swipeUp()
+      swipes += 1
+    }
+    XCTAssertTrue(dundee.isHittable, "No Dundee under Nearby")
+    dundee.tap()
+    let moved = NSPredicate(format: "label == %@", "Dundee. Will it snow today? Yes.")
+    let loaded = expectation(for: moved, evaluatedWith: heading(in: app))
+    wait(for: [loaded], timeout: 15)
+    XCTAssertEqual(app.buttons["place"].label, "Place: Dundee. Change place.")
+    XCTAssertEqual(app.staticTexts["verdict"].label, "It'll snow.")
   }
 
   /// Launches the app on `fixture` and waits for its heading and, unless `waitingFor` is nil,

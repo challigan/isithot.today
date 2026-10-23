@@ -35,8 +35,9 @@ export type PagePhase = 'loading' | 'ready' | 'error' | 'offline';
 
 /**
  * What the page shows: an answer; "Checking…" while the first is on its way; the error, with
- * Retry, when there is none; "Not available right now." when the answer has no block for the
- * view; or, past `usableUntil`, that there is no recent forecast.
+ * Retry, when there is none (offline, that there is no recent forecast); "Not available right
+ * now." when the answer has no block for the view; or, past `usableUntil`, that there is no recent
+ * forecast.
  */
 export type PageState = 'ready' | 'loading' | 'error' | 'notAvailable' | 'noRecent';
 
@@ -153,7 +154,13 @@ export function homePage(res: TodayResponse | null, o: PageInput): HomePage {
   const ready = state === 'ready' ? seen!.display : null;
   // The same question `viewDisplay` asks, with or without an answer to show.
   const ask = question(null, o.view, 'snow', tomorrow);
-  const answer = ready ? ready.answer : NO_ANSWER[state as Exclude<PageState, 'ready'>];
+  // With no answer at all for want of a connection, the forecasts aren't what is unavailable: as
+  // past `usableUntil`, there is no recent forecast, and a connection brings one (Retry stays).
+  const answer = ready
+    ? ready.answer
+    : state === 'error' && o.phase === 'offline'
+      ? APP_COPY.staleApp
+      : NO_ANSWER[state as Exclude<PageState, 'ready'>];
   const place = o.placeName ?? res?.location.name ?? '';
   const models = ready?.view === 'today' ? ready.models : null;
   const when = res?.updated

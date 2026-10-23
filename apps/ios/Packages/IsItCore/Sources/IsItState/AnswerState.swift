@@ -23,6 +23,19 @@ public enum AppPhase: Sendable, Equatable {
   }
 }
 
+extension HomePage.Phase {
+  /// How the last fetch went, as the home page's presenter takes it: the error without its
+  /// details, since the page says what the website says for any failure (`CoreCopy.unavailable`).
+  public init(_ phase: AppPhase) {
+    switch phase {
+    case .loading: self = .loading
+    case .ready: self = .ready
+    case .offline: self = .offline
+    case .error: self = .error
+    }
+  }
+}
+
 /// What the answer views show at a moment (iOS build spec, section 9.5): the hour picked from
 /// the answer, the stale state once it has none, or why there is no answer.
 public enum AnswerState: Sendable, Equatable {

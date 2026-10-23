@@ -57,15 +57,28 @@ public struct ScheduledWork: Sendable {
 /// The system's clock. The app cancels what it scheduled when it goes to the background, and
 /// decides again when it comes back, so a wait never has to outlast the phone's sleep.
 public struct SystemClock: AppClock {
-  public init() {}
+  /// How far this clock is ahead of the system's, seconds (behind when negative): none in the
+  /// app. A Debug build launched on a fixture runs from the fixture's moment
+  /// (`init(startingAt:)`), so the fixture shows what it was made for on any day.
+  public let offset: TimeInterval
 
-  public var now: Date { Date() }
+  public init() {
+    offset = 0
+  }
+
+  /// A clock that reads `start` now and runs on from there, as the system's does.
+  public init(startingAt start: Date) {
+    offset = start.timeIntervalSinceNow
+  }
+
+  public var now: Date { Date().addingTimeInterval(offset) }
 
   public func schedule(at date: Date, _ work: @escaping @MainActor @Sendable () async -> Void)
     -> ScheduledWork
   {
-    let task = Task { @MainActor in
-      let wait = date.timeIntervalSinceNow
+    let task = Task { @MainActor [offset] in
+      // Counted on this clock, which may run apart from the system's.
+      let wait = date.timeIntervalSinceNow - offset
       if wait > 0 {
         do {
           try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))

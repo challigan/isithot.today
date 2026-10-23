@@ -616,6 +616,22 @@ describe('the cases cover what section 7.4 asks for', () => {
     expect(find('old-forecast', 'today', (o) => o.answer === APP_COPY.staleApp)).toBe(true);
     expect(find(null, 'today', (o) => o.answer === COPY.checking && o.footer === null)).toBe(true);
     expect(find(null, 'today', (o) => o.retry === COPY.retry)).toBe(true);
+    // With no answer, a failed request is the error, and one that couldn't connect says so; both
+    // with Retry.
+    const failed = (phase: string) =>
+      cases.filter((c) => (c.in as In).fixture === null && (c.in as In).phase === phase);
+    expect(failed('error').length).toBeGreaterThan(0);
+    for (const c of failed('error')) {
+      expect((c.out as any).state).toBe('error');
+      expect((c.out as any).answer).toBe(COPY.unavailable);
+      expect((c.out as any).retry).toBe(COPY.retry);
+    }
+    expect(failed('offline').length).toBeGreaterThan(0);
+    for (const c of failed('offline')) {
+      expect((c.out as any).state).toBe('error');
+      expect((c.out as any).answer).toBe(APP_COPY.staleApp);
+      expect((c.out as any).retry).toBe(COPY.retry);
+    }
     // The footer: the stale line, and offline, its own line, which beats it.
     expect(find('stale', 'today', (o) => o.footer.notice === COPY.stale)).toBe(true);
     expect(

@@ -162,16 +162,23 @@ struct HomePageTests {
     #expect(loading.headingLabel == "Will it snow today? Checking…")
     #expect(loading.palette == Palettes.Snow.nosnow)
     #expect(loading.retry == nil && loading.footer == nil)
-    for phase in [HomePage.Phase.error, .offline] {
-      let error = HomePage(nil, view: .today, at: moment, phase: phase, placeName: "Leeds")
-      #expect(error.state == .error)
-      #expect(
-        error.headingLabel
-          == "Leeds. Will it snow today? Forecasts are unavailable right now. Try again in a few minutes."
-      )
-      #expect(error.retry == "Retry")
-      #expect(error.footer == nil)
-    }
+    let error = HomePage(nil, view: .today, at: moment, phase: .error, placeName: "Leeds")
+    #expect(error.state == .error)
+    #expect(
+      error.headingLabel
+        == "Leeds. Will it snow today? Forecasts are unavailable right now. Try again in a few minutes."
+    )
+    #expect(error.retry == "Retry")
+    #expect(error.footer == nil)
+    // Offline, it isn't the forecasts that are unavailable.
+    let offline = HomePage(nil, view: .today, at: moment, phase: .offline, placeName: "Leeds")
+    #expect(offline.state == .error)
+    #expect(
+      offline.headingLabel
+        == "Leeds. Will it snow today? No recent forecast. Connect to the internet to refresh.")
+    #expect(offline.palette == Palettes.Snow.nosnow)
+    #expect(offline.retry == "Retry")
+    #expect(offline.footer == nil)
   }
 
   @Test("the place: the top bar's name, else the answer's; an empty one leaves it out")
@@ -217,6 +224,18 @@ struct HomeTopBarTests {
     let bar = HomeTopBar(placeName: "Leeds", approximate: true)
     #expect(bar.approximate == "Using approximate location.")
     #expect(bar.useMyLocation == "Use my location")
+  }
+
+  @Test("a notice says why, in the approximate line's place, or on its own")
+  func notice() {
+    let gone = HomeTopBar(placeName: "Leeds", approximate: true, notice: AppCopy.slugGone)
+    #expect(
+      gone.approximate
+        == "That place is no longer available. Showing your approximate location.")
+    #expect(gone.useMyLocation == "Use my location")
+    let chosen = HomeTopBar(placeName: "Leeds", approximate: false, notice: AppCopy.slugGone)
+    #expect(chosen.approximate == AppCopy.slugGone)
+    #expect(chosen.useMyLocation == nil)
   }
 
   @Test("before the place is known, the website's line for it")

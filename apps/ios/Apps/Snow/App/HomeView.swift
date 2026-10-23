@@ -7,50 +7,60 @@ import SnowKit
 import SwiftUI
 
 /// The home screen (iOS build spec, section 10.2): the top bar over the Today page, both made by
-/// IsItLogic's presenters (`HomeTopBar`, `HomePage`) from the answer on screen and drawn by IsItUI
-/// from those plain values and the actions. Only this file knows the app's model. For now that is
-/// the skeleton's, which shows the answer it is launched with; phase 5.1's data half brings the
-/// model that fetches, with its clock, phase, place and actions, and connecting it changes this
-/// file alone. The place and Settings buttons are here; their sheets come with phase 6.
+/// the app's model from its state (`AppModel.topBar`, `AppModel.page(_:at:)`, IsItLogic's
+/// presenters) and drawn by IsItUI from those plain values and the actions. Only this file knows
+/// the model. The minute tick (section 9.5) draws the page again each minute at the model's
+/// clock, so the hour picked, Tomorrow from 6pm and the stale state follow the time while the
+/// app is open. The place and Settings buttons are here; their sheets come with phase 6, and the
+/// switcher and the pager of Now, Today and This week with phase 5.2.
 struct HomeView: View {
   let model: AppModel
+
+  var body: some View {
+    TimelineView(.everyMinute) { context in
+      HomeContent(model: model, tick: context.date)
+    }
+  }
+}
+
+/// The screen at one minute's tick. Its body reads the model, so it is drawn again whenever the
+/// model changes as well as each minute, always at the model's clock.
+private struct HomeContent: View {
+  let model: AppModel
+  /// The minute tick's date: a new one each minute, which draws the screen again.
+  let tick: Date
 
   @Environment(\.openURL) private var openURL
 
   var body: some View {
-    let response = model.response
-    let page = HomePage(
-      response,
-      view: .today,
-      at: DebugHooks.launchMoment ?? Date(),
-      phase: response == nil ? .loading : .ready
-    )
-    let topBar = HomeTopBar(
-      placeName: response?.location.name,
-      approximate: response?.location.source == .ip
-    )
+    let page = model.page(.today, at: model.now)
     let theme = PageTheme(page.palette)
-    HomeShell(topBar: topBar, theme: theme, actions: actions) {
+    HomeShell(topBar: model.topBar, theme: theme, actions: actions) {
       ForecastPageView(
         page: page,
         theme: theme,
         glyph: page.band.map { Glyphs.image($0) },
         actions: actions
       )
+      // Pull to refresh (section 10.2), on the page's scroll view, keeping what is on screen.
+      .refreshable { await model.refresh() }
     }
   }
 
-  /// What the screen's taps do, as far as the skeleton can: links open in Safari; the rest wait
-  /// for the model that fetches (phase 5.1's data half) and for the sheets (phase 6).
+  /// What the screen's taps do: Retry asks again; a place under "Nearby:" loads in place;
+  /// links open in Safari; the place picker, Settings and "Use my location" wait for phase 6.
   private var actions: HomeActions {
+    let model = model
     let openURL = openURL
     return HomeActions(
-      retry: {},
+      retry: { Task { await model.refresh() } },
       openPlacePicker: {},
       openSettings: {},
       useMyLocation: {},
       openLink: { openURL($0) },
-      selectNearby: { _ in }
+      selectNearby: { city in
+        Task { await model.select(.city(slug: city.slug, name: city.name)) }
+      }
     )
   }
 }

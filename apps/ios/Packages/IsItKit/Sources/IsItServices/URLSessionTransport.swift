@@ -15,12 +15,18 @@ public struct URLSessionTransport: HTTPTransport {
 
   /// A session with section 4's settings.
   public static func session() -> URLSession {
+    URLSession(configuration: configuration())
+  }
+
+  /// Section 4's settings, as a new configuration each time; a Debug build's `-network` hook
+  /// adds its stub to them, so its requests go out as Release's do.
+  public static func configuration() -> URLSessionConfiguration {
     let configuration = URLSessionConfiguration.default
     configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
     configuration.urlCache = nil
     configuration.timeoutIntervalForRequest =
       TimeInterval(Constants.Client.requestTimeoutMs) / 1000
-    return URLSession(configuration: configuration)
+    return configuration
   }
 
   public func get(_ request: HTTPRequest) async throws -> HTTPResponse {

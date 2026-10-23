@@ -15,8 +15,9 @@ public struct HomePage: Sendable, Equatable {
   }
 
   /// What the page shows: an answer; "Checking…" while the first is on its way; the error, with
-  /// Retry, when there is no answer at all; "Not available right now." when the answer has no
-  /// block for the view; or, past `Freshness.usableUntil`, that there is no recent forecast.
+  /// Retry, when there is no answer at all (offline, that there is no recent forecast); "Not
+  /// available right now." when the answer has no block for the view; or, past
+  /// `Freshness.usableUntil`, that there is no recent forecast.
   public enum State: String, Codable, Sendable, CaseIterable {
     case ready, loading, error, notAvailable, noRecent
   }
@@ -178,7 +179,7 @@ public struct HomePage: Sendable, Equatable {
       state = phase == .error || phase == .offline ? .error : .loading
     }
     let question = Questions.snow(view: view, place: nil, tomorrow: tomorrow)
-    let answer = shown?.answer ?? Self.noAnswer(state)
+    let answer = shown?.answer ?? Self.noAnswer(state, phase: phase)
     let place = placeName ?? res?.location.name ?? ""
     self.view = view
     self.state = state
@@ -251,11 +252,13 @@ public struct HomePage: Sendable, Equatable {
   }
 
   /// What the page says in the answer's place, without one to show (`ready` always has one).
-  private static func noAnswer(_ state: State) -> String {
+  /// With no answer at all for want of a connection, the forecasts aren't what is unavailable:
+  /// as past `usableUntil`, there is no recent forecast, and a connection brings one.
+  private static func noAnswer(_ state: State, phase: Phase) -> String {
     switch state {
     case .ready, .notAvailable: CoreCopy.notAvailable
     case .loading: CoreCopy.checking
-    case .error: CoreCopy.unavailable
+    case .error: phase == .offline ? AppCopy.staleApp : CoreCopy.unavailable
     case .noRecent: AppCopy.staleApp
     }
   }

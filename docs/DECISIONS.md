@@ -1719,7 +1719,8 @@ Linux; IsItKit only fills its protocols. `apps/ios/README.md` lists the types.
   `fixture:<name>`). `-apiOrigin <url>` asks a deploy preview. The unit tests' host doesn't
   launch (XCTest's `XCTestConfigurationFilePath`), so a live fetch can't write the App Group
   under `AppGroupTests`; a fixture launch always launches. All three are in `DebugHooks.swift`
-  under `#if DEBUG`.
+  under `#if DEBUG`. (Connecting the halves started the model's clock at the fixture's moment
+  too: "The iPhone app's home screen, connected", below.)
 - **The skeleton's widget can't show an old hour.** It now finds real answers, so its provider
   shows the hour `HourPicker.pick` gives (an entry now and at each hour ahead), and nothing from
   `usableUntil` on, until phase 7's planner replaces it.
@@ -1758,8 +1759,9 @@ order) is the other half, written beside it; the two meet in `HomeView.swift`.
   taken from the file. Broken on purpose (the offline line's precedence, the 6pm flip a minute
   out), the Swift fails its cases.
 - **The states.** Loading (no answer, asking): "Checking…" on `nosnow`'s palette, with shapes
-  holding the page's layout. Error (no answer, the request failed, offline or not): the
-  website's "Forecasts are unavailable right now…" with Retry. Not available (an answer without
+  holding the page's layout. Error (no answer, the request failed): the website's "Forecasts
+  are unavailable right now…" with Retry; offline, since connecting the halves, "No recent
+  forecast. Connect to the internet to refresh." with Retry (below). Not available (an answer without
   snow, or without the view's block: no Now, no week, no tomorrow from 6pm): "Not available right
   now.". No recent forecast (past `usableUntil`, on every view): `AppCopy.staleApp`, never the
   old hour. An answer on screen stays while a request is out or after one failed. Without an
@@ -1808,8 +1810,9 @@ order) is the other half, written beside it; the two meet in `HomeView.swift`.
   glyph are left alone by Smart Invert; buttons and links use the system's styles, tinted in the
   palette's ink. A model that disagrees has a lighter amount rather than fainter text, as on the
   website, so it keeps its contrast; its dot on the strip is fainter.
-- **The fixture hook shows a fixture at its own moment** (`DebugHooks.launchMoment`, its
-  `_fixture.now`), so a UI test on any day sees the state the fixture was made for. The UI tests
+- **The fixture hook shows a fixture at its own moment** (its `_fixture.now`; first
+  `DebugHooks.launchMoment`, and since connecting the halves the model's clock, below), so a UI
+  test on any day sees the state the fixture was made for. The UI tests
   changed where the page's structure did: the place is a button labelled "Place: Aberdeen. Change
   place.", and the question and answer are one heading ("Aberdeen. Will it snow today? Yes."),
   so they read those where they read the skeleton's place and answer texts, and still wait for
@@ -1822,6 +1825,95 @@ order) is the other half, written beside it; the two meet in `HomeView.swift`.
 - **Not proven here:** IsItUI and the app compile only on the macOS jobs, so the views, their
   layout, VoiceOver's reading of them and the UI tests are unproven until the first `ios` run;
   only the presenters, their vectors and the lint ran here.
+
+## The iPhone app's home screen, connected (apps/ios, IsItCore; phase 5.1)
+
+PR 5.1's two halves, the data and the launch and the Today page, joined on `claude/ios-home` by
+ordinary merge commits that keep both sides, then connected: the app's root makes the model with
+the production services and runs the launch, and the home screen draws the model's state. The
+spec's 5.1 is "the Today page from the live API", the skeleton TestFlight build; Carl sees his
+own approximate place in it with no picker.
+
+- **The merges.** project.yml links IsItModel, IsItLogic and IsItState into the app (both halves
+  added to the same line). DebugHooks keeps the data half's fixture transport, `-apiOrigin` and
+  the unit-test host guard, and the page half's fixture moment; the page half's `launchAnswer`,
+  which fed the skeleton's model, went with that model.
+- **The root** (`WillItSnowApp`) makes `AppModel` with `APIClient` over `URLSessionTransport` at
+  `API_ORIGIN`, `SystemClock`, the App Group's `SharedStore` (`MemoryState` without one),
+  `WidgetCenterReloader` and `NoHooks`; `.task` runs `launch()` and the scene's phase drives the
+  background and foreground rules. With no `place.v1` the target is approximate IP location, so
+  the first launch asks `?ahead=snow` and the server places the phone (section 9.4, "Nothing
+  prompts on first launch").
+- **The view has no rules of its own.** `AppModel` gains `topBar`, `page(_:at:)`, `now` and
+  `placeName` (IsItState, tested on Linux), which hand the presenters the model's state, so
+  `HomeView.swift` only draws them and passes taps back. `HomePage.Phase(AppPhase)` drops the
+  error's details. The place's name is the target's own (a city page's, a searched place's),
+  else the answer's, and never an empty one; "approximate" is the IP target, so the line shows
+  from the first frame, beside "Finding you…".
+- **The minute tick came with 5.1,** not 5.2 as the spec has it: a `TimelineView(.everyMinute)`
+  draws the page at the model's clock, so an app left open never shows an old hour past
+  `usableUntil` (section 0.2's honest copy). The page is a child view whose body reads the model,
+  so it is drawn again when the model changes as well as each minute.
+- **Only the middle page.** `model.view` (Now from 6pm) isn't drawn until 5.2's pager binds it;
+  5.1 shows Today, or Tomorrow from 6pm.
+- **The states agree between the halves.** The page's presenter (vector-checked TypeScript) is
+  what is drawn; the model's `AnswerState` says the same, and `HomeScreenTests` holds the two
+  together for every fixture at its own moment, a millisecond before `usableUntil` and at it, in
+  every phase. Where they differed, offline with nothing saved, the page now says
+  `AppCopy.staleApp` ("No recent forecast. Connect to the internet to refresh."), as
+  `AnswerState` and section 9.5 do, rather than "Forecasts are unavailable right now. Try again
+  in a few minutes.", which blames the forecasts for the phone's connection; Retry stays. The
+  change is in packages/mobile `page.ts` first, then `HomePage`, and `pnpm mobile:generate`
+  rewrote the six cases of `page.json` it touches.
+- **Deviation: an error over an answer stays quiet.** Section 4 says a 503 keeps the saved answer
+  "and show[s] `COPY.unavailable` with Try again". The website keeps the answer and shows no
+  error ("a stale answer beats an error", `app.ts`), and so does the app: the answer shows while
+  it has hours, the model asks again at the next forecast hour, pull to refresh is there, and
+  past `usableUntil` the page says there is no recent forecast. Retry shows only with nothing to
+  show. Also as the website, the page words any failure as `CoreCopy.unavailable` rather than
+  the server's own message (`FetchError.message`); for a 503 they are the same text.
+- **Pull to refresh came with 5.1** (5.3 in the spec): `.refreshable` on the page, in
+  `HomeView.swift`, which the page's scroll view takes up, so IsItUI is unchanged. It calls
+  `refresh()`, which keeps what is on screen.
+- **Nearby loads in place** through `AppModel.select(_:)`, new: the place becomes the target and
+  is kept in `place.v1`; the last place's answer leaves the screen at once, so the page is
+  checking under the new name and never shows one place's answer under another's; a failure
+  then shows as with nothing saved (offline, no recent forecast and Retry). The saved answer
+  stays the last place's until the new one replaces it. The place on screen again only asks
+  again. Choosing a nearby place doesn't add it to the recent places, which come with the
+  picker (phase 6).
+- **The notice** (`AppCopy.slugGone`) shows in the top bar in the approximate line's place
+  (`HomeTopBar(placeName:approximate:notice:)`), where it explains itself, until a place is
+  chosen; it isn't kept between launches. No string was added.
+- **One clock for the model and the page.** `SystemClock(startingAt:)` (IsItState) runs from a
+  given moment, scheduling by its own time, which a Linux test checks ahead and behind the
+  system's. A Debug build launched with `-fixture` or `-network` starts it at the fixture's
+  `_fixture.now`, or at `-now <iso>` (spec 9.8). This replaces `DebugHooks.launchMoment`: before,
+  the page was drawn at the fixture's moment while the model decided at the real one, so from 2
+  December 2026 the model would have judged the fixtures stale. `-clock fixed` is still phase
+  5.4's.
+- **A launch test with no fixture hook.** `-network <name>` stubs the network beneath the app's
+  own `URLSessionTransport` (`URLProtocolStub`, spec 9.8's URLProtocol stub, added to a copy of
+  section 4's configuration, `URLSessionTransport.configuration()`), so the real client,
+  transport, decoding and store run; it answers only the request for approximate IP location
+  and errs on any other, so an answer on screen proves the request. `-network off` has no
+  connection, and `-resetStore` forgets the place, units and saved answer first. `LaunchTests`
+  uses them for the first launch, an offline relaunch over the saved answer, and offline with
+  nothing saved. `-fixture` keeps its own transport, so a stub that fails on CI fails only these
+  three tests. `check-archive.sh` looks for `-network` as a short literal too (13 hooks), with
+  a test that it finds one; `-now` and `-resetStore` were on its list already. A launch with
+  `-network` always launches, as with `-fixture`, in case the UI-tested app's environment has
+  XCTest's configuration.
+- **Not here yet:** Now and the week, the switcher and the pager (5.2); the VoiceOver
+  announcement and `-clock fixed` (5.4); the place picker, Settings and "Use my location"
+  (phase 6), whose buttons are drawn and do nothing until then.
+- **Not proven here:** everything Apple only: the root's wiring, `HomeView` (the tick, the
+  refresh, the actions), the hooks, the URLProtocol stub, and the five new or changed UI tests,
+  which first run on the macOS jobs. `DebugHooks.swift` (Debug and Release), IsItServices and
+  the root's environment were type-checked on Linux in Swift 5 mode against stub UIKit and
+  WidgetKit modules; whether `.refreshable` on the page reaches its inner scroll view, and
+  whether XCUITest can scroll to and tap a place under "Nearby:", are from Apple's documentation
+  and practice, unchecked.
 
 ## API contract
 
