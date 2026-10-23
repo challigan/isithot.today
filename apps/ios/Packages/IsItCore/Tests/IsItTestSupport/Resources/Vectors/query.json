@@ -80,6 +80,17 @@
     {"fn":"todayQuery","in":{"target":{"kind":"coords","source":"search","lat":1.85,"lon":-157.4,"name":"Kiritimati","country":"KI"},"units":"f","ahead":["snow"]},"out":"lat=1.85&lon=-157.4&name=Kiritimati&country=KI&source=search&units=f&ahead=snow"},
     {"fn":"todayQuery","in":{"target":{"kind":"coords","source":"search","lat":1.85,"lon":-157.4,"name":"Kiritimati","country":"KI"},"units":null,"ahead":[]},"out":"lat=1.85&lon=-157.4&name=Kiritimati&country=KI&source=search"},
     {"fn":"todayQuery","in":{"target":{"kind":"coords","source":"search","lat":1.85,"lon":-157.4,"name":"Kiritimati","country":"KI"},"units":null,"ahead":["snow"]},"out":"lat=1.85&lon=-157.4&name=Kiritimati&country=KI&source=search&ahead=snow"},
+    {"fn":"todayQuery","in":{"target":{"kind":"city","slug":"leeds-gb"},"units":"c","ahead":["wind","snow","hot","wet"]},"out":"place=leeds-gb&units=c&ahead=hot%2Cwet%2Csnow%2Cwind"},
+    {"fn":"todayQuery","in":{"target":{"kind":"city","slug":"leeds-gb"},"units":"c","ahead":["snow","snow"]},"out":"place=leeds-gb&units=c&ahead=snow"},
+    {"fn":"todayQuery","in":{"target":{"kind":"city","slug":"leeds-gb"},"units":"c","ahead":["wet","hot"]},"out":"place=leeds-gb&units=c&ahead=hot%2Cwet"},
+    {"fn":"todayQuery","in":{"target":{"kind":"city","slug":"a b&c=d"},"units":"f","ahead":[]},"out":"place=a+b%26c%3Dd&units=f"},
+    {"fn":"todayQuery","in":{"target":{"kind":"coords","source":"search","lat":1e-7,"lon":-0.00005,"name":"a*b-c.d_e~f!g'h(i)j k","region":"","country":"","geonameId":0,"elevation":-25.5},"units":"f","ahead":[]},"out":"lat=1e-7&lon=-0.00005&name=a*b-c.d_e%7Ef%21g%27h%28i%29j+k&elevation=-25.5&source=search&units=f"},
+    {"fn":"todayQuery","in":{"target":{"kind":"coords","source":"device","lat":53.8,"lon":-1.55,"name":"❄️ ⛄ 🏔","elevation":0},"units":"f","ahead":[]},"out":"lat=53.8&lon=-1.55&name=%E2%9D%84%EF%B8%8F+%E2%9B%84+%F0%9F%8F%94&elevation=0&source=device&units=f"},
+    {"fn":"todayQuery","in":{"target":{"kind":"coords","source":"search","lat":0.000001,"lon":-1.5e-7,"name":"Line\nbreak\ttab"},"units":"f","ahead":[]},"out":"lat=0.000001&lon=-1.5e-7&name=Line%0Abreak%09tab&source=search&units=f"},
+    {"fn":"todayQuery","in":{"target":{"kind":"coords","source":"search","lat":0.30000000000000004,"lon":5e-324,"geonameId":9999999999},"units":"f","ahead":[]},"out":"lat=0.30000000000000004&lon=5e-324&geonameId=9999999999&source=search&units=f"},
+    {"fn":"todayQuery","in":{"target":{"kind":"coords","source":"search","lat":123456789012345680000,"lon":1e+21},"units":"f","ahead":[]},"out":"lat=123456789012345680000&lon=1e%2B21&source=search&units=f"},
+    {"fn":"todayQuery","in":{"target":{"kind":"coords","source":"device","lat":-1.5e+21,"lon":1.7976931348623157e+308},"units":"f","ahead":[]},"out":"lat=-1.5e%2B21&lon=1.7976931348623157e%2B308&source=device&units=f"},
+    {"fn":"todayQuery","in":{"target":{"kind":"coords","source":"device","lat":100,"lon":-0.000001,"elevation":1234.5678},"units":"f","ahead":[]},"out":"lat=100&lon=-0.000001&elevation=1234.5678&source=device&units=f"},
     {"fn":"freshQuery","in":{"query":"","now":0},"out":"t=0"},
     {"fn":"freshQuery","in":{"query":"","now":1796202300000},"out":"t=498945"},
     {"fn":"freshQuery","in":{"query":"","now":1796205599999},"out":"t=498945"},
@@ -109,6 +120,8 @@
     {"fn":"searchQuery","in":{"q":"!*'()~-_."},"out":"q=!*'()~-_."},
     {"fn":"searchQuery","in":{"q":"❄ Snow"},"out":"q=%E2%9D%84%20Snow"},
     {"fn":"searchQuery","in":{"q":"a=b&c=d"},"out":"q=a%3Db%26c%3Dd"},
-    {"fn":"searchQuery","in":{"q":"#1?"},"out":"q=%231%3F"}
+    {"fn":"searchQuery","in":{"q":"#1?"},"out":"q=%231%3F"},
+    {"fn":"searchQuery","in":{"q":"🏔 Ben Nevis"},"out":"q=%F0%9F%8F%94%20Ben%20Nevis"},
+    {"fn":"searchQuery","in":{"q":"tab\tnew\nline"},"out":"q=tab%09new%0Aline"}
   ]
 }

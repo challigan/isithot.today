@@ -12,6 +12,12 @@ public enum SnowUnit: String, Codable, Sendable, CaseIterable {
   case `in`
 }
 
+/// What the API answers about (core `Topic`), in core's order (`TOPICS`), which is the order
+/// `TodayQuery.build` writes `ahead` in. The snow app asks only about `snow`.
+public enum Topic: String, Codable, Sendable, CaseIterable {
+  case hot, wet, snow, wind
+}
+
 /// The three views, left to right (core `View`): Now, Today (Tomorrow from 6pm) and This week.
 /// The raw values are core's, as deep links and the saved last view write them.
 public enum AppView: String, Codable, Sendable, CaseIterable {
