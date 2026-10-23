@@ -184,9 +184,9 @@ press **Run now**; its log should read `alerts-run: smoke passed: 400 BadDeviceT
 The app's listing in App Store Connect names two pages on the snow site's own domain: the
 **Support URL** https://willitsnow.today/support (on the version's page) and the **Privacy Policy
 URL** https://willitsnow.today/privacy (App Privacy). Every site serves both (`/support` and
-`/privacy`), and the production smoke test checks `/support` on all four. The support page gives
-support@willitsnow.today and no postal address; App Review's contact (name, phone and that
-address) is entered separately.
+`/privacy`), every copy of `/support` is canonical on willitsnow.today, and the production smoke
+test checks `/support` on all four. The support page gives support@willitsnow.today and no postal
+address; App Review's contact (name, phone and that address) is entered separately.
 
 ## 6. Uptime monitor
 

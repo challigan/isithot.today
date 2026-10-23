@@ -2,7 +2,8 @@
 /**
  * Help with the snow app, the same on every site: the support address and short answers. It is
  * the App Store listing's Support URL (willitsnow.today/support), so it is about that app alone
- * and names no other app, site or weather.
+ * and names no other app, site or weather, and every copy is canonical there. The app's own
+ * labels it quotes are APP_COPY's (packages/mobile), checked by e2e/credits.spec.ts.
  */
 import Content from '../layouts/Content.astro';
 import { CONTACT_EMAIL, type Topic } from '@isithot/core';
@@ -18,6 +19,7 @@ const { topic } = Astro.props;
   path="/support"
   description="Help with the willitsnow.today app for iPhone: restoring a purchase, adding a widget, notifications and deleting your data."
   topic={topic}
+  canonicalTopic="snow"
 >
   <h1>Support</h1>
   <p>Help with the willitsnow.today app for iPhone.</p>
@@ -40,9 +42,11 @@ const { topic } = Astro.props;
   <h2>Adding a widget</h2>
   <p>
     Widgets come with the one-off purchase, and show the place you chose in the app. On the Home
-    Screen, touch and hold an empty part of it until the apps jiggle, tap Edit, then Add Widget, and
-    choose the app's Snow forecast widget. On the Lock Screen, touch and hold it, tap Customise,
-    then Lock Screen, tap the space below the time and choose Snow forecast.
+    Screen, touch and hold an empty part of it until the apps jiggle, then tap Edit and Add Widget
+    (on iOS 17, tap + at the top left). Find "will it snow?", choose "Snow forecast", swipe to pick
+    a size and tap Add Widget. On the Lock Screen, touch and hold it, tap Customise, then Lock
+    Screen. Tap the space below the time (or the date above it, for a one-line widget), find "will
+    it snow?" and choose "Snow forecast".
   </p>
 
   <h2>If a notification didn't come</h2>
@@ -55,34 +59,42 @@ const { topic } = Astro.props;
     <li>
       <strong>It isn't time yet.</strong> The evening notification comes at about 6pm and the
       morning one at about 7am, in the place's own time, not your phone's. Each comes at most once a
-      day.
+      day. If your iPhone was off or offline, Apple keeps the evening one until 9pm and the morning
+      one until 11am, then drops it.
     </li>
     <li>
-      <strong>Notifications are off on your iPhone.</strong> Check that they're allowed in your
-      iPhone's Settings → Notifications, and that no Focus is holding them back.
+      <strong>Notifications are off on your iPhone.</strong> In your iPhone's Settings →
+      Notifications, check that "will it snow?" is allowed to send them, and that no Focus is
+      holding them back.
     </li>
     <li>
       <strong>It's for another place.</strong> Notifications are for the place in the app's Settings
       → Notifications, not the one on screen. "Use my location" moves it only when you open the app.
     </li>
     <li>
-      <strong>The app hasn't been opened for 90 days.</strong> Notifications then stop. Opening the
-      app starts them again.
+      <strong>The app hasn't been opened for about three months.</strong> Notifications then stop.
+      Opening the app starts them again.
     </li>
   </ul>
   <p>
     "Send a test notification" in the app's Settings → Notifications checks that they reach your
-    iPhone.
+    iPhone. Tests, like notifications, are never sent between 9pm and 7am at the place, so try one
+    in the daytime there.
   </p>
 
   <h2>Turning notifications off and deleting your data</h2>
   <p>
     In the app, open Settings → Your privacy and tap "Turn off notifications and delete my data".
     That turns every notification off and deletes what we keep for them: your device's notification
-    token, the place, its time zone, your units and which notifications you chose. The same screen
-    shows what we keep while notifications are on. Turning every notification off in Settings →
-    Notifications deletes it too. If you delete the app, we delete it when Apple tells us the app is
-    no longer installed, or 90 days after you last opened it.
+    token and an ID made from it, the place, its time zone, your units, which notifications you
+    chose, the app's version and whether it is a developer build, and when you turned notifications
+    on and when the app last checked in with us. Our notes that a notification or a test was sent,
+    which hold no token or place, go a few days later. The same screen shows the ID and the main
+    things we keep while notifications are on. Turning every notification off in the app's Settings
+    → Notifications deletes it too. If you turn notifications off in your iPhone's Settings instead,
+    we delete it the next time you open the app. If you delete the app, we delete it when Apple
+    tells us the app is no longer installed. Either way, it goes once the app hasn't been opened for
+    about three months.
   </p>
 
   <h2>Privacy and terms</h2>

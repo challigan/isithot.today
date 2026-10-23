@@ -162,7 +162,10 @@ test.describe('isitwet.today pages', () => {
       const res = await request.get(`/wet/${name}`);
       expect(res.status(), name).toBe(200);
       const html = await res.text();
-      expect(html).toContain(`<link rel="canonical" href="https://isitwet.today/${name}">`);
+      // Support is the snow app's page: every site's copy is canonical on willitsnow.today.
+      const canonical =
+        name === 'support' ? 'https://willitsnow.today/support' : `https://isitwet.today/${name}`;
+      expect(html).toContain(`<link rel="canonical" href="${canonical}">`);
       expect(html).toMatch(/<title>[^<]+ \| isitwet\.today<\/title>/);
       expect(html).toContain(WET_BRAND);
       expect(html).toContain('<link rel="icon" href="/wet/favicon.svg" type="image/svg+xml">');
@@ -223,7 +226,9 @@ test.describe('isithot.today pages are unchanged', () => {
   test('content pages and the 404', async ({ request }) => {
     for (const name of CONTENT) {
       const html = await (await request.get(`/${name}`)).text();
-      expect(html).toContain(`<link rel="canonical" href="https://isithot.today/${name}">`);
+      const canonical =
+        name === 'support' ? 'https://willitsnow.today/support' : `https://isithot.today/${name}`;
+      expect(html).toContain(`<link rel="canonical" href="${canonical}">`);
       expect(html).toMatch(/<title>[^<]+ \| isithot\.today<\/title>/);
       expect(html).toContain('isithot<span>.today</span>');
       expect(html).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml">');

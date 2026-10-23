@@ -225,7 +225,10 @@ test.describe('isitwindy.today pages', () => {
       const res = await request.get(`/wind/${name}`);
       expect(res.status(), name).toBe(200);
       const html = await res.text();
-      expect(html).toContain(`<link rel="canonical" href="https://isitwindy.today/${name}">`);
+      // Support is the snow app's page: every site's copy is canonical on willitsnow.today.
+      const canonical =
+        name === 'support' ? 'https://willitsnow.today/support' : `https://isitwindy.today/${name}`;
+      expect(html).toContain(`<link rel="canonical" href="${canonical}">`);
       expect(html).toMatch(/<title>[^<]+ \| isitwindy\.today<\/title>/);
       expect(html).toContain(WIND_BRAND);
       expect(html).toContain(ICON);
@@ -261,12 +264,13 @@ test.describe('isitwindy.today pages', () => {
     const robots = await (await request.get('/wind/robots.txt')).text();
     expect(robots).toContain('Sitemap: https://isitwindy.today/sitemap.xml');
     const xml = await (await request.get('/wind/sitemap.xml')).text();
-    // Home, About, places, support and every city page: the wind blows everywhere.
+    // Home, About, places and every city page: the wind blows everywhere. Not the snow app's
+    // support page, which is willitsnow.today's.
     const shown = CITIES.filter((c) => listed(c, 'wind'));
     expect(shown.length).toBe(CITIES.length);
-    expect((xml.match(/<loc>/g) ?? []).length).toBe(4 + shown.length);
+    expect((xml.match(/<loc>/g) ?? []).length).toBe(3 + shown.length);
     expect(xml).toContain('<loc>https://isitwindy.today/places</loc>');
-    expect(xml).toContain('<loc>https://isitwindy.today/support</loc>');
+    expect(xml).not.toContain('/support<');
     expect(xml).toContain('<loc>https://isitwindy.today/in/london-gb</loc>');
     expect(xml).toContain('<loc>https://isitwindy.today/in/singapore-sg</loc>');
     expect(xml).not.toContain('isithot.today');

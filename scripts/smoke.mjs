@@ -29,10 +29,10 @@ function option(name) {
 // under their prefix on any deploy, and at the root on a preview sent their header (the edge
 // function, netlify/edge-functions/lib/route.ts); their pages ask their own question.
 const HOT = 'https://isithot.today';
-// Each sitemap lists home, About, the places page, the support page and the city pages the site
-// lists: all 300 on isithot.today, isitwet.today and isitwindy.today; willitsnow.today leaves out
-// the places where it never snows (SNOWLESS in packages/core/src/config.ts, 63 of them), such as
-// Singapore.
+// Each sitemap lists home, About, the places page and the city pages the site lists: all 300 on
+// isithot.today, isitwet.today and isitwindy.today; willitsnow.today leaves out the places where
+// it never snows (SNOWLESS in packages/core/src/config.ts, 63 of them), such as Singapore, and
+// alone lists the snow app's support page.
 const SITES = {
   wet: {
     url: 'https://isitwet.today',
@@ -40,7 +40,7 @@ const SITES = {
     header: 'x-isitwet-host',
     home: 'Is it wet today?',
     city: 'Is it wet in Newcastle today?',
-    minUrls: 304,
+    minUrls: 303,
   },
   snow: {
     url: 'https://willitsnow.today',
@@ -57,13 +57,14 @@ const SITES = {
     header: 'x-isitwindy-host',
     home: 'Is it windy today?',
     city: 'Is it windy in Newcastle today?',
-    minUrls: 304,
+    minUrls: 303,
   },
 };
 const CITY = 'newcastle-upon-tyne-gb';
-// The support page's address (CONTACT_EMAIL in packages/core/src/config.ts), on every site: App
-// Store Connect's Support URL is willitsnow.today/support.
+// The support page's address (CONTACT_EMAIL in packages/core/src/config.ts), on every site, and
+// where every site's copy is canonical: App Store Connect's Support URL.
 const SUPPORT_MAILTO = 'href="mailto:support@willitsnow.today"';
+const SUPPORT_URL = 'https://willitsnow.today/support';
 /** A title with an answer in it ("… today? Yes. 24° | …"): titles must never carry one. */
 const ANSWERED = / (Yes|No|Almost|Maybe|A bit|Partly)\. /;
 
@@ -232,7 +233,7 @@ async function checkSite(t, label, { origin = base, prefix = '', headers = {} } 
       urls.every((u) => u.startsWith(`${own}/`)) &&
       urls.includes(`${own}/in/${CITY}`) &&
       urls.includes(`${own}/places`) &&
-      urls.includes(`${own}/support`) &&
+      urls.includes(`${own}/support`) === (`${own}/support` === SUPPORT_URL) &&
       (!unlisted || !urls.includes(`${own}/in/${unlisted}`)),
     name('/sitemap.xml'),
     `${urls.length} urls, first ${urls[0]}`,
@@ -248,7 +249,7 @@ async function checkSite(t, label, { origin = base, prefix = '', headers = {} } 
   const support = await at('/support');
   check(
     support.res.status === 200 &&
-      canonicalOf(support.body) === `${own}/support` &&
+      canonicalOf(support.body) === SUPPORT_URL &&
       String(support.body).includes(SUPPORT_MAILTO),
     name('/support'),
     `${support.res.status} ${support.ms}ms ${canonicalOf(support.body)}`,
@@ -597,10 +598,10 @@ try {
   const urls = locs(sitemap.body);
   check(
     sitemap.res.status === 200 &&
-      urls.length >= 304 &&
+      urls.length >= 303 &&
       urls.every((u) => u.startsWith(`${HOT}/`)) &&
       urls.includes(`${HOT}/places`) &&
-      urls.includes(`${HOT}/support`),
+      !urls.includes(`${HOT}/support`),
     'GET /sitemap.xml',
     `${urls.length} urls`,
   );
@@ -615,7 +616,7 @@ try {
   const support = await get('/support');
   check(
     support.res.status === 200 &&
-      canonicalOf(support.body) === `${HOT}/support` &&
+      canonicalOf(support.body) === SUPPORT_URL &&
       String(support.body).includes(SUPPORT_MAILTO),
     'GET /support',
     `${support.res.status} ${support.ms}ms ${canonicalOf(support.body)}`,

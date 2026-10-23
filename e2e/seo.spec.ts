@@ -4,9 +4,9 @@
  * that keep their loading placeholder out of snippets and say what the site does, a places page
  * per site, city pages that link on (nearby, the same city on the other sites, the places page),
  * titles that never carry the answer, the "Updated" line, headings that hold the question and its
- * answer, valid structured data, the app's support page on every site, and snow pages kept out of
- * search where it never snows (core `listed`). The real domains' routing of the same links is in
- * domains.spec.ts.
+ * answer, valid structured data, the app's support page on every site (indexed on willitsnow.today
+ * alone), and snow pages kept out of search where it never snows (core `listed`). The real
+ * domains' routing of the same links is in domains.spec.ts.
  */
 import type { Page } from '@playwright/test';
 import { LINKS, MODELS, SITES, TOPICS, sitePath, type Topic } from '../packages/core/src/config';
@@ -243,7 +243,7 @@ test.describe('places pages', () => {
 
 test.describe('support pages', () => {
   for (const topic of TOPICS) {
-    test(`${prefix(topic)}/support: found by search engines, like the legal pages`, async ({
+    test(`${prefix(topic)}/support: found by search engines on willitsnow.today`, async ({
       page,
       request,
     }) => {
@@ -252,15 +252,18 @@ test.describe('support pages', () => {
       const html = await res.text();
       const { name, url } = SITES[topic];
       expect(html).toContain(`<title>Support | ${name}</title>`);
-      expect(html).toContain(`<link rel="canonical" href="${url}/support">`);
+      // The snow app's page, the same on every site: each copy is canonical on willitsnow.today,
+      // the App Store listing's Support URL, so search engines index that one.
+      expect(html).toContain(`<link rel="canonical" href="${SITES.snow.url}/support">`);
       expect(html).toMatch(
         /<meta name="description" content="Help with the willitsnow\.today app for iPhone: [^"]+">/,
       );
       expect(html).not.toContain('<meta name="robots"');
       expect(structuredData(html)).toEqual([]);
-      // In the site's sitemap, as the places page is.
+      // In willitsnow.today's sitemap alone; the other sites leave it out, as they do Privacy.
       const xml = await (await request.get(`${prefix(topic)}/sitemap.xml`)).text();
-      expect(xml).toContain(`<loc>${url}/support</loc>`);
+      if (topic === 'snow') expect(xml).toContain(`<loc>${url}/support</loc>`);
+      else expect(xml).not.toContain('/support<');
 
       // Every page's footer links to it.
       await page.goto(`${prefix(topic)}/places`);
@@ -494,7 +497,7 @@ test.describe('wind pages', () => {
       expect(await (await request.get(path)).text(), path).not.toContain(robots);
     }
     const sitemap = await (await request.get('/wind/sitemap.xml')).text();
-    expect((sitemap.match(/<loc>/g) ?? []).length).toBe(4 + CITIES.length);
+    expect((sitemap.match(/<loc>/g) ?? []).length).toBe(3 + CITIES.length);
     const places = await (await request.get('/wind/places')).text();
     expect(places).not.toContain(COPY.snowlessNote);
     expect(places).toContain('/in/singapore-sg"');
