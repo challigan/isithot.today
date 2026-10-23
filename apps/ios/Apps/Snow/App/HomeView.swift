@@ -11,14 +11,21 @@ import SwiftUI
 /// presenters) and drawn by IsItUI from those plain values and the actions. Only this file knows
 /// the model. The minute tick (section 9.5) draws the page again each minute at the model's
 /// clock, so the hour picked, Tomorrow from 6pm and the stale state follow the time while the
-/// app is open. The place and Settings buttons are here; their sheets come with phase 6, and the
-/// switcher and the pager of Now, Today and This week with phase 5.2.
+/// app is open. The place and Settings buttons are here: the gear opens the Settings sheet
+/// (`SettingsSheet`, phase 6.2); the picker's sheet comes with phase 6.1, and the switcher and
+/// the pager of Now, Today and This week with phase 5.2.
 struct HomeView: View {
   let model: AppModel
 
+  /// Whether the Settings sheet is open (section 10.4).
+  @State private var settingsOpen = false
+
   var body: some View {
     TimelineView(.everyMinute) { context in
-      HomeContent(model: model, tick: context.date)
+      HomeContent(model: model, tick: context.date, openSettings: { settingsOpen = true })
+    }
+    .sheet(isPresented: $settingsOpen) {
+      SettingsSheet(model: model)
     }
   }
 }
@@ -29,6 +36,8 @@ private struct HomeContent: View {
   let model: AppModel
   /// The minute tick's date: a new one each minute, which draws the screen again.
   let tick: Date
+  /// The gear: opens the Settings sheet.
+  let openSettings: () -> Void
 
   @Environment(\.openURL) private var openURL
 
@@ -48,14 +57,15 @@ private struct HomeContent: View {
   }
 
   /// What the screen's taps do: Retry asks again; a place under "Nearby:" loads in place;
-  /// links open in Safari; the place picker, Settings and "Use my location" wait for phase 6.
+  /// links open in Safari; the gear opens Settings; the place picker and "Use my location" wait
+  /// for phase 6.1.
   private var actions: HomeActions {
     let model = model
     let openURL = openURL
     return HomeActions(
       retry: { Task { await model.refresh() } },
       openPlacePicker: {},
-      openSettings: {},
+      openSettings: openSettings,
       useMyLocation: {},
       openLink: { openURL($0) },
       selectNearby: { city in

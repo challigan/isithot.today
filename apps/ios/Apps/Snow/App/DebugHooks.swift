@@ -2,6 +2,8 @@ import Foundation
 import IsItModel
 import IsItServices
 import IsItState
+import Observation
+import SwiftUI
 import UIKit
 
 /// Every test and debug hook in the app (iOS build spec, section 9.8), here and nowhere else.
@@ -87,6 +89,26 @@ enum DebugHooks {
       value(after: "-apiOrigin", in: arguments).flatMap { URL(string: $0) }
     }
 
+    /// What `-openURLs` asks for: Settings records each web page and email it would open, on
+    /// screen (`debugRecorder()`), instead of leaving the app; with `nomail` it also refuses
+    /// every email, as a phone with no mail app does, so the fallback sheet shows.
+    enum OpenURLs: String {
+      case record
+      case nomail
+    }
+
+    /// `-openURLs record|nomail`, for SettingsTests; nil without it, when links open as they do
+    /// for real. Any other value stops the app, so a test can't pass on the wrong screen.
+    nonisolated static func openURLs(
+      arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> OpenURLs? {
+      guard let mode = value(after: "-openURLs", in: arguments) else { return nil }
+      guard let known = OpenURLs(rawValue: mode) else {
+        fatalError("-openURLs: \(mode) is neither record nor nomail")
+      }
+      return known
+    }
+
     /// Whether the app launches (`AppModel.launch()`): not while it only hosts the unit tests,
     /// which own the App Group meanwhile (the hosted tests run in the app's process, with
     /// XCTest's configuration in its environment), unless it was launched on a stubbed server.
@@ -156,12 +178,14 @@ enum DebugHooks {
 }
 
 #if DEBUG
-  /// `-fixture`'s server: every request answered with the same fixture, with status 200.
+  /// `-fixture`'s server: every request answered with the same fixture, with status 200. The
+  /// units each asked in are noted for the recorder (`DebugRecorder`).
   private struct FixtureTransport: HTTPTransport {
     let body: Data
 
     func get(_ request: HTTPRequest) async throws -> HTTPResponse {
-      HTTPResponse(status: 200, body: body)
+      DebugRecorder.requested(request.url)
+      return HTTPResponse(status: 200, body: body)
     }
   }
 
@@ -214,6 +238,7 @@ enum DebugHooks {
 
     override func startLoading() {
       guard let client else { return }
+      if let url = request.url { DebugRecorder.requested(url) }
       switch Self.server?.reply(to: request) ?? .failure(.notConnectedToInternet) {
       case .failure(let code):
         client.urlProtocol(self, didFailWithError: URLError(code))
@@ -252,4 +277,79 @@ enum DebugHooks {
       case note = "_fixture"
     }
   }
+
+  /// What `-openURLs` shows (`debugRecorder()`): the last web page or email the app would have
+  /// opened, and the units the last request to the server asked in, so a UI test reads both on
+  /// screen. Only the units of a request, never its place.
+  @MainActor
+  @Observable
+  final class DebugRecorder {
+    static let shared = DebugRecorder()
+
+    /// The last URL `openURL` was given, as text; "none" before the first.
+    var opened = none
+    /// The `units` the last request asked in: "c", "f", or "none" without, or before the first.
+    var units = none
+
+    /// What a line says with nothing to show, so that it is on screen from the start.
+    private nonisolated static let none = "none"
+
+    /// Notes the units `url`, a request to the server, asks in; from any thread.
+    nonisolated static func requested(_ url: URL) {
+      let units =
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+        .first { $0.name == "units" }?.value ?? none
+      Task { @MainActor in shared.units = units }
+    }
+  }
+
+  /// Under `-openURLs`: every URL the view opens is recorded instead of opened, a mail URL
+  /// refused too under `nomail`, and the recorder's two lines show below the content.
+  @MainActor
+  private struct URLRecorder: ViewModifier {
+    let mode: DebugHooks.OpenURLs
+
+    func body(content: Content) -> some View {
+      let recorder = DebugRecorder.shared
+      content
+        .environment(
+          \.openURL,
+          OpenURLAction { url in
+            recorder.opened = url.absoluteString
+            return mode == .nomail && url.scheme == "mailto" ? .discarded : .handled
+          }
+        )
+        .safeAreaInset(edge: .bottom) {
+          VStack(alignment: .leading, spacing: 2) {
+            Text(verbatim: recorder.opened)
+              .accessibilityIdentifier("debug-opened")
+            Text(verbatim: recorder.units)
+              .accessibilityIdentifier("debug-units")
+          }
+          .font(.caption2)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.horizontal, 16)
+          .padding(.vertical, 4)
+          .background(.bar)
+        }
+    }
+  }
 #endif
+
+extension View {
+  #if DEBUG
+    /// Under `-openURLs`, the URL recorder (`DebugHooks.openURLs`); otherwise the view as it is.
+    @MainActor
+    @ViewBuilder
+    func debugRecorder() -> some View {
+      if let mode = DebugHooks.openURLs() {
+        modifier(URLRecorder(mode: mode))
+      } else {
+        self
+      }
+    }
+  #else
+    /// A Release build records nothing: the view as it is.
+    func debugRecorder() -> some View { self }
+  #endif
+}

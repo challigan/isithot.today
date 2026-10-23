@@ -5,6 +5,7 @@ import { FIXTURES, fixtureJson, makeFixture, type Fixture } from '../src/fixture
 import { appCopySwift } from '../src/exportAppCopy';
 import { constantsSwift } from '../src/exportConstants';
 import { coreCopySwift } from '../src/exportCoreCopy';
+import { creditsSwift } from '../src/exportCredits';
 import { FONTS_DIR, FONT_PATH } from '../src/exportFont';
 import {
   GLYPHS_DIR,
@@ -67,21 +68,23 @@ describe('generatedFiles', () => {
       `${model}/Questions.swift`,
       `${model}/AppCopy.swift`,
       `${model}/Constants.swift`,
+      `${model}/AppCredits.swift`,
       `${model}/Keys.swift`,
       `${model}/Palettes.swift`,
       ...resourcePaths,
       ...assets.map((f) => f.path),
     ]);
-    expect(files.slice(0, 6).map((f) => f.contents)).toEqual([
+    expect(files.slice(0, 7).map((f) => f.contents)).toEqual([
       coreCopySwift(),
       questionsSwift(),
       appCopySwift(),
       constantsSwift(),
+      creditsSwift(),
       keysSwift(),
       palettesSwift(),
     ]);
-    expect(files[7]!.contents).toBe(fixtureJson(await makeFixture(FIXTURES[1]!)));
-    const first = 6 + resourcePaths.length;
+    expect(files[8]!.contents).toBe(fixtureJson(await makeFixture(FIXTURES[1]!)));
+    const first = 7 + resourcePaths.length;
     for (const [i, f] of assets.entries()) {
       expect(sameContents(files[first + i]!.contents, f.contents)).toBe(true);
     }

@@ -7,9 +7,11 @@ uploads it to TestFlight; with phase 2.3's generated assets: the snow glyphs, th
 the answer font; and phase 5.1, the skeleton TestFlight build: the app fetches the answer for
 its place (approximate IP location until one is chosen, so the first launch shows the phone's
 own place with no picker), keeps it current, saves it in the App Group, where the widget reads
-it, and draws it on the home screen's top bar and Today page (below, "Phase 5.1"). A Debug build
-can be answered by a fixture or a stubbed network instead (below, "Debug hooks"). Everything else
-comes in later phases.
+it, and draws it on the home screen's top bar and Today page (below, "Phase 5.1"); and phase
+6.2 and 6.3, the Settings sheet behind the gear: the snow units, the privacy rows, Report an ad,
+About and Help, the version, How it works, Credits and licences and Your privacy's lines (below,
+"Phase 6.2 and 6.3"). A Debug build can be answered by a fixture or a stubbed network instead
+(below, "Debug hooks"). Everything else comes in later phases.
 
 ## What is where
 
@@ -19,8 +21,9 @@ Package.resolved         the pinned package versions, copied into the project by
 Configs/                 Base (every target), Team (Carl's team ID, not a secret), Snow (identifiers,
                          API origin, ad units), CI-Simulator (signed to run locally, for CI)
 Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API models; generated CoreCopy,
-                         Questions, AppCopy, Constants, Keys and Palettes; the ports and the home screen's
-                         presenters (IsItLogic); AppModel, its API client and the launch and refresh rules
+                         Questions, AppCopy, AppCredits, Constants, Keys and Palettes; the ports and the home
+                         screen's and Settings' presenters (IsItLogic); AppModel, its API client and the
+                         launch and refresh rules
                          (IsItState); in Tests/IsItTestSupport the fixtures and golden vectors with their
                          loaders; in Tests/IsItLogicTests the ports' golden tests and the guard that every
                          vector file is ported (below); in Tests/IsItStateTests AppModel with fakes, and
@@ -28,18 +31,22 @@ Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API
 Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore, URLSessionTransport,
                          WidgetCenterReloader: AppModel's services), IsItAds (Google's SDKs),
                          IsItUI (the home screen: HomeShell and ForecastPageView, drawing IsItLogic's
-                         HomePage and HomeTopBar, with HomeActions), IsItWidgetUI (the widget's entry,
+                         HomePage and HomeTopBar, with HomeActions; Settings: SettingsView and its pages,
+                         with SettingsActions), IsItWidgetUI (the widget's entry,
                          provider, view), SnowKit (Glyphs, Color(rgb:) for the palettes, and the glyph
                          catalogues, generated)
 Apps/Snow/App/           WillItSnowApp (the services and the scene's phases), HomeView (the home screen,
-                         from the model), DebugHooks (every test and debug hook)
-Apps/Snow/Resources/     the app's Info.plist, entitlements and privacy manifest; generated: Assets.xcassets
+                         from the model), SettingsSheet (Settings, from the model), DebugHooks (every test
+                         and debug hook)
+Apps/Snow/Resources/     the app's Info.plist, entitlements and privacy manifest; Licences/ (the notices
+                         Credits and licences shows in full, copied whole); generated: Assets.xcassets
                          (the app icon) and Fonts/BricolageAnswer.ttf (the app's and the widget's)
 Apps/Snow/Widgets/       the widget extension, its Info.plist, entitlements and privacy manifest
 Apps/Snow/Tests/         app-hosted unit tests: the App Group round trip (V1), widget and glyph snapshots,
                          palette contrast, the answer font
-Apps/Snow/UITests/       FixtureLaunchTests (fixtures at their own moments, and a place nearby) and
-                         LaunchTests (the real launch over a stubbed network); both attach the screens
+Apps/Snow/UITests/       FixtureLaunchTests (fixtures at their own moments, and a place nearby),
+                         LaunchTests (the real launch over a stubbed network) and SettingsTests (every
+                         row, the units, Report an ad's fallback, Your privacy); all attach the screens
 TestPlans/               Unit and UI
 ci/                      xcodegen.sh, simulator.sh, test.sh, release-check.sh, xcresult-summary.mjs, contact-sheet.mjs;
                          for releases archive.sh, upload.sh and ExportOptions.plist
@@ -73,8 +80,9 @@ CI builds and tests everything, so this is only for trying the app by hand.
    is the Mac's). To see a fixture instead: Product, Scheme, Edit Scheme, Run, Arguments, and
    tick `-fixture aberdeen-snow` (or `leeds-dry`, or add `-fixture` with any other fixture's
    name, below). Then add the widget on the simulator's home screen: it shows the same answer.
-   Pull the page down to ask again; a place under "Nearby:" loads in place. The place and
-   Settings buttons and "Use my location" do nothing until phase 6 brings their sheets.
+   Pull the page down to ask again; a place under "Nearby:" loads in place. The gear opens
+   Settings. The place button and "Use my location" do nothing until phase 6.1 brings the
+   picker.
 4. Product, Test runs the Unit test plan; pick UI from the test plan menu for the UI tests.
 5. On your iPhone (Debug builds only): Xcode, Settings, Accounts needs your Apple Account, and
    the App IDs `today.willitsnow.app` and `today.willitsnow.app.widgets` need the App Group and,
@@ -116,7 +124,7 @@ reach the key.
   file and line;
 - **Archive checks**: both bundles have privacy manifests and the answer font; the app has its
   icon; the widget links no Google Mobile Ads;
-  neither binary names any of the 13 debug hooks; the ad units are Google's demo ones (test) or
+  neither binary names any of the 14 debug hooks; the ad units are Google's demo ones (test) or
   yours (real); the app and widget have the same version and build; `ITSAppUsesNonExemptEncryption`
   is false; no fixture is bundled. Each failure is named;
 - **Export**: the `.ipa` and its size;
@@ -395,8 +403,8 @@ The top bar and the Today page (spec section 10.2), drawn from plain values:
 - **The actions:** Retry calls `refresh()`; pulling the page down (`.refreshable`, on the page's
   scroll view) calls it too, keeping what is on screen; a place under "Nearby:" calls
   `select(.city(slug:name:))`, which keeps it as the place and shows the loading state under its
-  name until its answer arrives; links open in Safari. The place picker, Settings and "Use my
-  location" do nothing until phase 6.
+  name until its answer arrives; links open in Safari. The place picker and "Use my location" do
+  nothing until phase 6.1; the gear opens Settings since phase 6.2 (below).
 - **The notice** (`AppCopy.slugGone`, when a city page's place has gone and the app fell back to
   approximate location) takes the approximate line's place in the top bar until a place is
   chosen.
@@ -440,6 +448,54 @@ its file and line, and the contact sheet shows the screens each test attached):
   `-now` 15 minutes on, and reads the saved answer and the offline line;
   `testOfflineWithNothingSaved` reads "No recent forecast…" and Retry. Their screens are
   `app-first-launch`, `app-offline-saved` and `app-offline-nothing`.
+
+## Phase 6.2 and 6.3: Settings
+
+The gear opens the Settings sheet (spec sections 10.4, 10.6 and 10.7), a native `Form` in system
+materials. As on the home screen, IsItLogic makes the content as plain values (Linux-tested),
+IsItUI draws it, and the app connects them in one file (`SettingsSheet.swift`). DECISIONS has
+the choices ("The iPhone app's Settings").
+
+- **The rows, in order:** Snow units (cm | in, the footnote beneath); Privacy ("Your privacy",
+  "Privacy policy"); "Report an ad", in the free version only; About ("How it works", "Credits
+  and licences", "Terms"); Help ("Contact us", "Support"); and "Version 1.0 (112)" from the
+  bundle. willitsnow.today's pages open in Safari and the emails in the mail app, through
+  `openURL`; every address is `Constants.Site` (core `SITES.snow` and `CONTACT_EMAIL`).
+- **Not yet, by design:** the Notifications section (phase 8 puts it after the units), the
+  upgrade row and "Restore purchase" (phase 7, after it), "Privacy choices" (phase 8, while the
+  ads are on and Google's form is required) and, in Your privacy, what is kept for notifications
+  with "Turn off notifications and delete my data" (phase 8). None shows as a row that does
+  nothing; `SettingsScreen` and `YourPrivacy` already take the flags and lines they need, and
+  `SettingsActions` the two actions, nil until then.
+- **IsItLogic:** `SettingsScreen(units:unlocked:privacyChoices:version:)` (the sections and
+  rows, each with its action: a page, a web page, an email, Report an ad, Google's form),
+  `AppVersion`, `MailDraft` (`contactUs()`, `reportAd(version:place:at:zone:)`, its `mailto:` URL
+  encoded as `encodeURIComponent` encodes, and the `MailFallback` to show without a mail app),
+  `HowItWorks()`, `CreditsPage()` and `YourPrivacy(adsOn:privacyChoices:kept:)`.
+- **IsItUI:** `SettingsView(screen:privacy:actions:)`, with the pages on its own stack
+  (`YourPrivacyView`, `HowItWorksView`, `CreditsView`, `NoticeView`) and `MailFallbackView`.
+- **The units** go through `AppModel.setUnits(_:)` (IsItState): kept in `units.v1`, the answer
+  asked for again in them with what is on screen kept meanwhile, then the notifications' sync
+  hook (phase 8), since a registration carries the units.
+- **The notices** in `Apps/Snow/Resources/Licences/` are copied whole: Bricolage Grotesque's SIL
+  OFL 1.1 from the font's npm package, and the two Google packages' LICENSE files at the pinned
+  revisions. A vitest test holds each to its source (`packages/mobile/test/credits.test.ts`).
+
+**On Linux:** `Tests/IsItLogicTests/SettingsScreenTests.swift`, `MailDraftTests.swift` and
+`InfoPagesTests.swift` (every row and its action, the free and bought versions, the emails'
+subject, body and encoded URL, the phone's time, How it works word for word with the
+constants' numbers, the credits and their links, Your privacy's lines, and no word naming another
+app, site or weather), `Tests/IsItStateTests/UnitsTests.swift` (the units kept, asked for and
+saved, the answer kept meanwhile, offline, the same units), and in packages/mobile the copy,
+the credits, the constants, Your privacy against the website's privacy notice, and the guard
+that no Swift view or label is given a string literal (`swiftLiterals.test.ts`).
+
+**On the macOS CI:** `SettingsTests` (UI plan), with `-openURLs`: the units switch, the refetch
+in inches and the choice kept at the next launch; every row's URL or page; Report an ad's and
+Contact us's fallback with "Copied."; Your privacy's lines; the version line; no word naming
+another weather type on screen; and `performAccessibilityAudit()` on Settings, How it works,
+Credits and licences, Your privacy and the fallback. The screens are `app-settings`,
+`app-how-it-works`, `app-credits`, `app-your-privacy` and `app-report-ad-fallback`.
 
 ## CI (`.github/workflows/ios.yml`)
 
@@ -582,6 +638,11 @@ launch argument. So far there are these:
   `old-forecast`. `-now <iso>` starts it at that moment instead. Spec 9.8's `-clock fixed` comes
   with phase 5.4; the clock always runs;
 - `-apiOrigin <url>` asks a deploy preview's API instead of willitsnow.today's (spec section 4);
+- `-openURLs record` (SettingsTests): the Settings sheet records each web page and email it would
+  open instead of leaving the app, and shows the last one at the bottom of the sheet
+  (`debug-opened`), with the units the last request to the server asked in (`debug-units`: `c`,
+  `f`, or `none`); `-openURLs nomail` also refuses every `mailto:` URL, as a phone with no mail
+  app does, so the fallback sheet shows. Any other value stops the app;
 - the unit tests' host: when the app only hosts the unit tests (XCTest's
   `XCTestConfigurationFilePath` in its environment), it doesn't launch (`AppModel.launch()`), so
   the hosted tests have the App Group to themselves; a launch with `-fixture` or `-network`
@@ -638,8 +699,10 @@ Each comes with the phase that needs it, so nothing in the skeleton is dormant:
   saves another;
 - the switcher and the pager of Now, Today and This week, with the Now and week bodies (phase
   5.2); the announcement when the picked hour changes the answer, `-clock fixed` and the home
-  screen's audits (5.4); the sheets behind the place and Settings buttons and "Use my location"
-  (phase 6), which do nothing until then;
+  screen's audits (5.4); the picker behind the place button and "Use my location" (phase 6.1),
+  which do nothing until then; in Settings, the notifications section (phase 8), the upgrade
+  and "Restore purchase" (phase 7), "Privacy choices" and the data kept for notifications with
+  its delete button (phase 8);
 - the rest of `SnowKit`, location, StoreKit (`Snow.storekit`), notifications, `AdsService` and the
   banner, `SKAdNetworkItems`, and the privacy manifests' collected data types (coarse location,
   the push token);

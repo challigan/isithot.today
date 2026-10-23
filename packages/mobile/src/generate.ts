@@ -6,6 +6,7 @@
 import { APP_COPY_PATH, appCopySwift } from './exportAppCopy';
 import { CONSTANTS_PATH, constantsSwift } from './exportConstants';
 import { CORE_COPY_PATH, coreCopySwift } from './exportCoreCopy';
+import { CREDITS_PATH, creditsSwift } from './exportCredits';
 import { FONTS_DIR } from './exportFont';
 import {
   GLYPHS_DIR,
@@ -30,8 +31,8 @@ export const FIXTURES_DIR = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Re
 export const VECTORS_DIR = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources/Vectors';
 
 /**
- * IsItModel's generated Swift: the copy, the questions, the constants, the keys and the
- * palettes.
+ * IsItModel's generated Swift: the copy, the questions, the constants, the credits, the keys
+ * and the palettes.
  */
 export const MODEL_GENERATED_DIR = 'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated';
 
@@ -76,6 +77,7 @@ export async function generatedFiles(sources: AssetSources): Promise<GeneratedFi
     { path: QUESTIONS_PATH, contents: questionsSwift() },
     { path: APP_COPY_PATH, contents: appCopySwift() },
     { path: CONSTANTS_PATH, contents: constantsSwift() },
+    { path: CREDITS_PATH, contents: creditsSwift() },
     { path: KEYS_PATH, contents: keysSwift() },
     { path: PALETTES_PATH, contents: palettesSwift() },
   ];
