@@ -1,0 +1,74 @@
+name: iOS
+
+# The iPhone app's checks that run on Linux (iOS build spec, section 18.1): the files
+# packages/mobile generates for apps/ios are current, and IsItCore builds, passes its tests and
+# lints clean in the official Swift container. The macOS build and tests join in the next phase.
+# Runs only when something the app is built or generated from changes (the same paths twice).
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/ios/**
+      - packages/mobile/**
+      - packages/client/**
+      - packages/core/**
+      - packages/server/**
+      # The fixtures are the synthetic upstream's answers, for the listed cities.
+      - packages/providers/**
+      - data/cities.json
+      - scripts/mobile-generate.ts
+      - apps/web/src/lib/snowGlyphs.ts
+      - apps/web/public/snow/favicon.svg
+      - .github/workflows/ios*.yml
+  pull_request:
+    paths:
+      - apps/ios/**
+      - packages/mobile/**
+      - packages/client/**
+      - packages/core/**
+      - packages/server/**
+      # The fixtures are the synthetic upstream's answers, for the listed cities.
+      - packages/providers/**
+      - data/cities.json
+      - scripts/mobile-generate.ts
+      - apps/web/src/lib/snowGlyphs.ts
+      - apps/web/public/snow/favicon.svg
+      - .github/workflows/ios*.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generated:
+    name: Generated files
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm mobile:check
+
+  swift-linux:
+    name: Swift on Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: swift:6.3.3-noble
+    steps:
+      - uses: actions/checkout@v4
+      # Foundation reads the zone data for the places' local times (V4 in the spec).
+      - name: Install tzdata
+        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tzdata
+      - run: swift --version
+      - name: Lint
+        run: swift format lint --strict --recursive apps/ios/Packages/IsItCore
+      - name: Test
+        run: swift test --package-path apps/ios/Packages/IsItCore

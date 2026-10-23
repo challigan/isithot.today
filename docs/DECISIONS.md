@@ -927,6 +927,58 @@ first (iOS build spec, phase 1.5) and the full job follows.
 - **The topic is the app's bundle ID,** `today.willitsnow.app`. Until it is registered under the
   team, Apple may refuse it (a 400 naming the topic, or a 403); the smoke says so.
 
+## The iPhone app's foundations (packages/mobile, apps/ios)
+
+The first iOS step (iOS build spec, phase 0.1): the generator that feeds the app, its first two
+fixtures, and the Swift package that holds the app's API models, tested on Linux.
+
+- **Fixtures are the server's own answers.** `packages/mobile` asks the real `handleToday` with
+  the app's query (`todayQuery` with `ahead=snow`), `DATA_SOURCE=synthetic`, the clock fixed, and
+  the synthetic upstream on the same clock. `handleToday` gains an optional third argument for
+  that, the function that makes its dependencies; every platform takes the default, `createDeps`,
+  so the website is unchanged. Each fixture has a memory cache of its own, so none depends on one
+  made before it. A file is the response as sent, in the server's key order and two-space
+  indented, with `_fixture` (the query, the moment and a note) first.
+- **The two fixtures.** `aberdeen-snow` is the spec's: 9:05am on 2 December 2026, snow today and
+  for the rest of the day in every hour ahead, though it is raining at the time, so Now says No.
+  `leeds-dry` is 9:05am on 1 December 2026, chosen because the synthetic forecast for Leeds then
+  says No today (rain, not snow), No tomorrow (dry) and No for the week (a few flakes on
+  Saturday), so every reason appears; in the hours ahead the rest of the day turns from rain to
+  dry at 2pm. The vitest tests assert those answers, not only that the files exist.
+- **`pnpm mobile:generate` and `pnpm mobile:check`.** The script does the reading and writing;
+  the package is pure but for the synthetic upstream, which runs in memory. The generator owns
+  its output folders: generating removes a file it no longer writes, and the check fails on a
+  missing, changed or stale file and names each one. The check runs in `ci.yml`'s check job and
+  in `ios.yml`.
+- **Where the fixtures live.** The spec puts them in `IsItLogicTests/Resources/Fixtures`, but the
+  model tests decode them first, and the spec's model tests read the query and grid vectors too.
+  So they are in one test-only target, `IsItTestSupport` (`Tests/IsItTestSupport`, with the
+  loader `Fixtures`), which every test target depends on; the vectors will join them there. It is
+  not a product, so no app links it. Prettier leaves the folder alone, as it does the other
+  fixtures.
+- **`IsItModel`** has Appendix C's types, as `Codable`, `Sendable` and `Equatable` value types
+  (the app will save the response it decoded). Decoding is lenient where section 4 asks:
+  `@Lenient` turns a block that is missing, null or malformed into `nil` instead of failing the
+  response, for `snow`, `snow.now`, `snow.week`, `snow.ahead`, `links` and `updated`, and for
+  `nearby`, the other optional block the app can do without. Bands, reasons, confidence and
+  location sources decode a value the app doesn't know as `.unknown`. What the app can't do
+  without (the place, units, `updatedAt`, the credits, the snow days) still fails. Dates are ISO
+  8601 with or without fractional seconds, parsed with `Date.ISO8601FormatStyle`, a value type,
+  so there is no shared formatter. Now's `series` isn't decoded: the next hours come from
+  `ahead`. The memberwise initialisers stay internal until something outside needs them.
+- **`IsItLogic` is a placeholder** that compiles: one file and no public API until phase 3's first
+  port, which brings `IsItLogicTests` with it.
+- **Swift Testing**, not XCTest: parameterised cases suit the golden vectors, and both `swift test`
+  on Linux and Xcode 26 run it.
+- **Lint.** `apps/ios/.swift-format` is swift-format's defaults written out in full, so a newer
+  toolchain can't change them quietly, with Prettier's two-space indent and 100 columns. On top of
+  the defaults: no `try!`, no implicitly unwrapped optionals, literals for empty collections, and
+  no blank lines just inside braces.
+- **`ios.yml`** has the two Linux jobs for now: `generated` (`pnpm mobile:check`) and
+  `swift-linux` (`swift:6.3.3-noble` with `tzdata`; the lint, then `swift test`). The macOS jobs
+  come with the app skeleton. Its paths add the synthetic upstream, the city list and the script
+  to the spec's, since the fixtures are made from them.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,

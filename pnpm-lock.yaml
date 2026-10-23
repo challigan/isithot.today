@@ -117,6 +117,21 @@ importers:
 
   packages/core: {}
 
+  packages/mobile:
+    dependencies:
+      '@isithot/client':
+        specifier: workspace:*
+        version: link:../client
+      '@isithot/core':
+        specifier: workspace:*
+        version: link:../core
+      '@isithot/providers':
+        specifier: workspace:*
+        version: link:../providers
+      '@isithot/server':
+        specifier: workspace:*
+        version: link:../server
+
   packages/providers:
     dependencies:
       '@isithot/core':
