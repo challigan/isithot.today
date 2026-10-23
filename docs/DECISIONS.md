@@ -927,6 +927,35 @@ first (iOS build spec, phase 1.5) and the full job follows.
 - **The topic is the app's bundle ID,** `today.willitsnow.app`. Until it is registered under the
   team, Apple may refuse it (a 400 naming the topic, or a 403); the smoke says so.
 
+## The app's support page and privacy notice (S8)
+
+App Store Connect needs a Support URL with real contact details and a Privacy Policy URL, so
+the website carries both for the snow app (iOS build spec, section 5.8 and 15.5).
+
+- **The privacy notice gains "Our apps"**, the text of section 15.5: what the app sends (the
+  place, rounded to about 5 km, and the units), what notifications keep and when it is deleted,
+  AdMob in the free version, and Apple handling purchases. The heading stands for the section's
+  first label, so its first paragraph has none. It sits after the website's sections and before
+  "Your rights", which covers both. Every website paragraph is as it was ("No accounts" is still
+  true); "Last updated" moves to 23 October. One notice on all four sites, as before.
+- **`/support` on every site** (`SupportBody.astro`; `support.astro` and `snow/`, `wet/`, `wind/`),
+  built like Privacy: the contact address (`CONTACT_EMAIL`) as a `mailto:` link and no postal
+  address (Q7), then short answers on restoring the purchase, adding a widget, why a
+  notification didn't come, and turning notifications off to delete your data (Settings → Your
+  privacy → "Turn off notifications and delete my data"), and links to the privacy notice and
+  terms. It is about the snow app alone, wherever it is served: it names no other app, site or
+  weather, so it leaves out the legal pages' "one service" line (an e2e test checks both).
+- **Search engines:** like the legal pages, each site's copy is canonical on its own domain and
+  not `noindex`. Every footer links it, after Terms. Unlike them it is in every sitemap (the
+  spec asks for it, and people search for help with an app); Privacy, Cookies and Terms stay out
+  as before.
+- **The address wraps.** At 320px with text at 200%, support@willitsnow.today is wider than the
+  page, and Privacy (which has carried it since the contact PR) scrolled sideways. A `mailto:`
+  link in a content page may now break anywhere; an e2e test checks both pages on every site.
+- **Written out, not generated:** the notice's 90 days and the support page's "about 6pm" and
+  "about 7am" are the notification rules' `ALERTS.staleAfterDays` and `windows` (phase 4.1). A
+  change there changes these pages too.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,
@@ -1221,9 +1250,9 @@ in Leeds today"), with pages that are plainly original, easy to browse and hones
 - **Structured data**: WebSite (name, alternateName, url) on each home page, one per domain as
   Google's site names need; BreadcrumbList (site › Places › city) on city pages and the places
   page. No FAQPage or HowTo: Google no longer shows either.
-- **Sitemaps** list home, About, the places page and the city pages the site lists. No
-  `lastmod` (nothing knows when a page last changed), `changefreq` or `priority` (Google
-  ignores both).
+- **Sitemaps** list home, About, the places page, the support page (since S8) and the city pages
+  the site lists. No `lastmod` (nothing knows when a page last changed), `changefreq` or
+  `priority` (Google ignores both).
 - **Snow pages where it never snows** would say No all year. They get `noindex`, are left out of
   willitsnow.today's sitemap and places page, and the other sites' pages for those places do
   not link to them. The pages still work, and search on the site still finds them. The rule

@@ -181,6 +181,13 @@ smoke (`alerts-smoke.yml`). To check a function can reach Apple: set `ALERTS_SMO
 **Deploy Previews** context only, open a deploy preview's Functions page, choose `alerts-run` and
 press **Run now**; its log should read `alerts-run: smoke passed: 400 BadDeviceToken…`.
 
+The app's listing in App Store Connect names two pages on the snow site's own domain: the
+**Support URL** https://willitsnow.today/support (on the version's page) and the **Privacy Policy
+URL** https://willitsnow.today/privacy (App Privacy). Every site serves both (`/support` and
+`/privacy`), and the production smoke test checks `/support` on all four. The support page gives
+support@willitsnow.today and no postal address; App Review's contact (name, phone and that
+address) is entered separately.
+
 ## 6. Uptime monitor
 
 Any free monitor (UptimeRobot, Better Stack) on:
@@ -230,7 +237,9 @@ Each month, per site (about 15 minutes):
 
 ## 8. Before launch
 
-- Review the Privacy, Cookies and Terms drafts and add a contact email (Privacy page).
+- Review the Privacy, Cookies and Terms drafts (the contact email is in) and the Support page.
+  Take "Draft for review" off them before the app is submitted: its listing links Privacy and
+  Support.
 - Decide on the items marked **Needs a decision** in [DECISIONS.md](DECISIONS.md).
 - Try the place picker on a real iPhone and Android phone (open it, type, hide the keyboard,
   pick a result), and look at the Tomorrow tab with text at 200% (the word should break with a

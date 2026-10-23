@@ -2,10 +2,11 @@
  * Credits and legal wording on all four sites (served here under '', /wet, /snow and /wind): every
  * page's footer carries the API's credits, with "Weather data by Open-Meteo.com" linked as
  * Open-Meteo's licence asks and both licences linked; About names the sources and licences; Privacy
- * gives the contact address; Terms ask for fair use rather than non-commercial use; Cookies say
- * what declining consent means.
+ * gives the contact address and covers the app; Terms ask for fair use rather than non-commercial
+ * use; Cookies say what declining consent means; Support gives the contact address and answers
+ * about the snow app alone.
  */
-import { CONTACT_EMAIL, MODELS } from '../packages/core/src/config';
+import { CONTACT_EMAIL, MODELS, SITES } from '../packages/core/src/config';
 import { ATTRIBUTION } from '../packages/core/src/copy';
 import { expect, test } from './helpers';
 
@@ -42,7 +43,7 @@ test('every page credits the data, with the sources and licences linked', async 
 
 test.describe('the legal pages', () => {
   for (const prefix of PREFIXES) {
-    test(`About, Privacy, Terms and Cookies on ${prefix || '/'}`, async ({ page }) => {
+    test(`About, Privacy, Terms, Cookies and Support on ${prefix || '/'}`, async ({ page }) => {
       await page.goto(`${prefix}/about`);
       const main = page.locator('main');
       await expect(main.getByRole('heading', { name: 'Data sources' })).toBeVisible();
@@ -71,6 +72,40 @@ test.describe('the legal pages', () => {
         `mailto:${CONTACT_EMAIL}`,
       );
       await expect(main).not.toContainText('to be added');
+      // The app's part of the notice, after the website's and before the rights that cover both.
+      await expect(main.locator('h2')).toHaveText([
+        'Location',
+        'What stays on your device',
+        'Who else processes data',
+        'Our apps',
+        'Your rights',
+      ]);
+      await expect(main.locator('h2:text-is("Our apps") + p')).toHaveText(
+        'The willitsnow.today app for iPhone works like this website: it sends the place you ask about (a town, or your location rounded to about 5 km) and your units to our server to get the forecast. It has no accounts.',
+      );
+      const items = main.locator('h2:text-is("Our apps") + p + ul > li');
+      await expect(items.locator('strong')).toHaveText([
+        'Notifications.',
+        'Ads in the app.',
+        'Purchases.',
+      ]);
+      await expect(items.nth(0)).toContainText(
+        'We delete them when you turn notifications off, when Apple tells us the app is no longer installed, or 90 days after you last opened the app.',
+      );
+      await expect(items.nth(0)).toContainText(
+        'In the app, Settings → Your privacy shows what we keep, and "Turn off notifications and delete my data" deletes it.',
+      );
+      await expect(items.nth(1)).toContainText(
+        'The free version shows ads from Google AdMob. In the UK and the EEA,',
+      );
+      await expect(
+        items.nth(1).getByRole('link', { name: "Google's privacy policy" }),
+      ).toHaveAttribute('href', 'https://policies.google.com/privacy');
+      await expect(items.nth(2)).toHaveText(
+        'Purchases. Apple handles purchases. We never see your payment details.',
+      );
+      // The website's own paragraphs stay as they were.
+      await expect(main).toContainText('There are no accounts and we do not sell personal data.');
 
       await page.goto(`${prefix}/terms`);
       await expect(main).not.toContainText('non-commercial');
@@ -82,6 +117,56 @@ test.describe('the legal pages', () => {
       await expect(main).toContainText(
         'If you decline, Google shows a limited advert, which uses no cookies, or no advert at all.',
       );
+
+      // Support, the App Store listing's Support URL, from every page's footer: the address, then
+      // the four answers.
+      await page.locator('.site-footer').getByRole('link', { name: 'Support' }).click();
+      await expect(page).toHaveURL(new RegExp(`${prefix}/support$`));
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText('Support');
+      await expect(main.getByRole('link', { name: CONTACT_EMAIL })).toHaveAttribute(
+        'href',
+        `mailto:${CONTACT_EMAIL}`,
+      );
+      await expect(main.locator('h2')).toHaveText([
+        'Contact us',
+        'Restoring a purchase',
+        'Adding a widget',
+        "If a notification didn't come",
+        'Turning notifications off and deleting your data',
+        'Privacy and terms',
+      ]);
+      const answer = (heading: string) => main.locator(`h2:text-is("${heading}") + :is(p, ul)`);
+      await expect(answer('Restoring a purchase')).toContainText('tap "Restore purchase"');
+      await expect(answer('Adding a widget')).toContainText(
+        'Widgets come with the one-off purchase',
+      );
+      await expect(answer('Adding a widget')).toContainText('Snow forecast');
+      await expect(answer("If a notification didn't come").locator('li strong')).toHaveText([
+        "Snow wasn't likely enough.",
+        "It isn't time yet.",
+        'Notifications are off on your iPhone.',
+        "It's for another place.",
+        "The app hasn't been opened for 90 days.",
+      ]);
+      await expect(answer('Turning notifications off and deleting your data')).toContainText(
+        'In the app, open Settings → Your privacy and tap "Turn off notifications and delete my data".',
+      );
+      // No postal address: the email is the contact (Q7).
+      await expect(main).not.toContainText(/PO box|postcode|street/i);
+      const terms = answer('Privacy and terms');
+      await expect(
+        terms.getByRole('link', { name: 'privacy notice', exact: true }),
+      ).toHaveAttribute('href', `${prefix}/privacy`);
+      await expect(terms.getByRole('link', { name: 'terms', exact: true })).toHaveAttribute(
+        'href',
+        `${prefix}/terms`,
+      );
+      // About the snow app alone: no other site or weather, whichever site serves it.
+      const text = (await main.textContent())!;
+      for (const { name } of Object.values(SITES)) {
+        if (name !== SITES.snow.name) expect(text).not.toContain(name);
+      }
+      expect(text).not.toMatch(/\b(hot|heat|rain|wet|wind|windy)\b/i);
     });
   }
 });

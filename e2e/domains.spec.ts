@@ -373,3 +373,31 @@ test("the apps' app-ads.txt is the same file on every domain", async ({ browser,
   }
   await context.close();
 });
+
+test("the app's listing addresses: willitsnow.today/support and /privacy", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await allSites(browser, baseURL!);
+  const page = await context.newPage();
+  // App Store Connect's Support URL and Privacy Policy URL, on the snow site's own domain.
+  for (const [path, heading] of [
+    ['/support', 'Support'],
+    ['/privacy', 'Privacy'],
+  ] as const) {
+    const res = await page.goto(`${SNOW}${path}`);
+    expect(res!.status(), path).toBe(200);
+    await expect(page.locator('link[rel=canonical]')).toHaveAttribute('href', `${SNOW}${path}`);
+    await expect(page.locator('.brand')).toHaveText('willitsnow.today');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(heading);
+  }
+  await expect(page.getByRole('heading', { name: 'Our apps' })).toBeVisible();
+  // The support page's links stay on willitsnow.today, where its pages are at the root.
+  await page.goBack();
+  await expect(page).toHaveURL(`${SNOW}/support`);
+  await expect(page.locator('main a[href^="mailto:"]')).toHaveCount(1);
+  await page.locator('main').getByRole('link', { name: 'terms', exact: true }).click();
+  await expect(page).toHaveURL(`${SNOW}/terms`);
+  await expect(page.locator('.brand')).toHaveText('willitsnow.today');
+  await context.close();
+});

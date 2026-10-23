@@ -4,15 +4,16 @@ import { CITIES } from '@isithot/server';
 
 /**
  * A site's pages for search engines, with URLs on the site's own domain (never the deploy URL):
- * home, About, the places page and every city page the site lists (core `listed`). No `lastmod`
- * (nothing here knows when a page last changed), `changefreq` or `priority` (Google ignores
- * both).
+ * home, About, the places page, the app's support page and every city page the site lists (core
+ * `listed`). No `lastmod` (nothing here knows when a page last changed), `changefreq` or
+ * `priority` (Google ignores both).
  */
 export const sitemapXml = (topic: Topic): Response => {
   const paths = [
     '/',
     '/about',
     '/places',
+    '/support',
     ...CITIES.filter((c) => listed(c, topic)).map((c) => `/in/${c.slug}`),
   ];
   const body =

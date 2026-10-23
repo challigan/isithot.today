@@ -11,7 +11,7 @@ import { CITIES, cityAt, expect, keepToday, test, toggle } from './helpers';
 // isitwindy.today the edge function serves the same pages at the root (smoke.mjs checks that on
 // the preview).
 const CITY = '/wind/in/london-gb';
-const CONTENT = ['about', 'privacy', 'cookies', 'terms'] as const;
+const CONTENT = ['about', 'privacy', 'cookies', 'terms', 'support'] as const;
 /** The footer's links: the places page, then the content pages. */
 const FOOTER = ['places', ...CONTENT] as const;
 const WIND_BRAND = 'isitwindy<span>.today</span>';
@@ -185,7 +185,7 @@ test.describe('isitwindy.today pages', () => {
     await page.goto(CITY);
     await expect(page.locator('.brand')).toHaveAttribute('href', '/wind');
     const footer = page.locator('.site-footer nav a');
-    await expect(footer).toHaveCount(5);
+    await expect(footer).toHaveCount(FOOTER.length);
     for (const [i, name] of FOOTER.entries()) {
       await expect(footer.nth(i)).toHaveAttribute('href', `/wind/${name}`);
     }
@@ -220,7 +220,7 @@ test.describe('isitwindy.today pages', () => {
     expect((await request.get('/wind/og/atlantis-xx.png')).status()).toBe(404);
   });
 
-  test('About, Privacy, Cookies and Terms carry the wind brand', async ({ request }) => {
+  test('About, Privacy, Cookies, Terms and Support carry the wind brand', async ({ request }) => {
     for (const name of CONTENT) {
       const res = await request.get(`/wind/${name}`);
       expect(res.status(), name).toBe(200);
@@ -229,10 +229,11 @@ test.describe('isitwindy.today pages', () => {
       expect(html).toMatch(/<title>[^<]+ \| isitwindy\.today<\/title>/);
       expect(html).toContain(WIND_BRAND);
       expect(html).toContain(ICON);
-      // One service on four domains, the page's own first.
-      expect(html).toContain(
-        'isitwindy.today, isithot.today, isitwet.today and willitsnow.today are one service',
-      );
+      // One service on four domains, the page's own first. Support is about the snow app alone.
+      const service =
+        'isitwindy.today, isithot.today, isitwet.today and willitsnow.today are one service';
+      if (name === 'support') expect(html).not.toContain(service);
+      else expect(html).toContain(service);
     }
     const about = await (await request.get('/wind/about')).text();
     expect(about).toContain('<h2>Is it windy?</h2>');
@@ -260,11 +261,12 @@ test.describe('isitwindy.today pages', () => {
     const robots = await (await request.get('/wind/robots.txt')).text();
     expect(robots).toContain('Sitemap: https://isitwindy.today/sitemap.xml');
     const xml = await (await request.get('/wind/sitemap.xml')).text();
-    // Home, About, places and every city page: the wind blows everywhere.
+    // Home, About, places, support and every city page: the wind blows everywhere.
     const shown = CITIES.filter((c) => listed(c, 'wind'));
     expect(shown.length).toBe(CITIES.length);
-    expect((xml.match(/<loc>/g) ?? []).length).toBe(3 + shown.length);
+    expect((xml.match(/<loc>/g) ?? []).length).toBe(4 + shown.length);
     expect(xml).toContain('<loc>https://isitwindy.today/places</loc>');
+    expect(xml).toContain('<loc>https://isitwindy.today/support</loc>');
     expect(xml).toContain('<loc>https://isitwindy.today/in/london-gb</loc>');
     expect(xml).toContain('<loc>https://isitwindy.today/in/singapore-sg</loc>');
     expect(xml).not.toContain('isithot.today');
