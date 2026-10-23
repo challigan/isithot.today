@@ -63,11 +63,20 @@ struct VectorFilesTests {
 
     struct Fixture: Decodable, Sendable {
       let fixture: String
+      let without: [String]?
     }
-    // A null output decodes as nil.
+    // A null output decodes as nil. There is a case for each fixture's whole answer, and for the
+    // fallbacks' answers with blocks taken out (`in.without`), and no other function's.
     let hours = try Vectors.cases(
       "freshness", fn: "dayUntil", input: Fixture.self, output: Double?.self)
-    #expect(hours.count == (try Fixtures.names().count))
+    let whole = hours.filter { $0.input.without == nil }
+    #expect(whole.count == (try Fixtures.names().count))
+    #expect(Set(whole.map(\.input.fixture)) == Set(try Fixtures.names()))
+    #expect(hours.contains { $0.input.without != nil })
+    let json = try #require(
+      try JSONSerialization.jsonObject(with: Vectors.data("freshness")) as? [String: Any])
+    let all = try #require(json["cases"] as? [[String: Any]])
+    #expect(hours.count == all.filter { $0["fn"] as? String == "dayUntil" }.count)
     #expect(hours.contains { $0.output != nil })
   }
 

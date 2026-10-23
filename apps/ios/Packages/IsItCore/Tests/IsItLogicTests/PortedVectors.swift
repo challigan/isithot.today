@@ -34,22 +34,23 @@ enum PortedVectors {
     PortedVector("query", by: "3.2: TodayQuery.build", port: nil),
 
     // core localDateTime
-    PortedVector("placeTime", by: "3.3: PlaceTime.local(_:in:)", port: nil),
+    PortedVector("placeTime", by: "3.3: PlaceTime.local(_:in:)", port: .placeTime),
 
     // core showsTomorrow, defaultView, viewLabel
-    PortedVector("tomorrow", by: "3.3: MiddleDay.showsTomorrow, .defaultView, .label", port: nil),
+    PortedVector(
+      "tomorrow", by: "3.3: MiddleDay.showsTomorrow, .defaultView, .label", port: .tomorrow),
 
     // client hourUntil, dayUntil, usableUntil, hold, outOfDate, nextRefreshAt
-    PortedVector("freshness", by: "3.3: Freshness", port: nil),
+    PortedVector("freshness", by: "3.3: Freshness", port: .freshness),
 
     // client pickHour, middleDay, updatedLine
-    PortedVector("hours", by: "3.3: HourPicker.pick, UpdatedLine.text", port: nil),
+    PortedVector("hours", by: "3.3: HourPicker.pick, UpdatedLine.text", port: .hours),
 
     // core question
-    PortedVector("questions", by: "3.3: Questions.snow", port: nil),
+    PortedVector("questions", by: "3.3: Questions.snow", port: .questions),
 
     // core viewDisplay's models strip
-    PortedVector("strip", by: "3.3: StripGeometry", port: nil),
+    PortedVector("strip", by: "3.3: StripGeometry", port: .strip),
 
     // client widgetEntries
     PortedVector("widget", by: "3.4: WidgetPlanner.entries", port: nil),

@@ -1,7 +1,8 @@
 import Foundation
 
 /// The answer from `GET /api/v1/today` (core `TodayResponse`), as far as the snow app reads it.
-/// The hot, rain and wind blocks aren't decoded, and fields the app doesn't know are ignored.
+/// The hot, rain and wind answers aren't decoded, but for the moments and dates the client's
+/// clock rules read (`hotDays`, `hotNow`, `rain`), and fields the app doesn't know are ignored.
 public struct TodayResponse: Codable, Sendable, Equatable {
   public let location: ApiLocation
   public let units: Units
@@ -18,6 +19,20 @@ public struct TodayResponse: Codable, Sendable, Equatable {
   /// The links out to the big forecast sites for the place, for the footer.
   @Lenient public var links: [OutboundLink]?
   @Lenient public var snow: ApiSnow?
+  /// The hot answer's days (`days`), for their dates: core `showsTomorrow` and client
+  /// `dayUntil` read today's and tomorrow's from them.
+  @Lenient public var hotDays: [ApiClockDay]?
+  /// The hot answer's Now (`now`), for when it was worked out and its hours' dates: client
+  /// `dayUntil`, `hold` and `outOfDate` tell the place's midnight from them.
+  @Lenient public var hotNow: ApiClockNow?
+  /// The rain answer's today and Now, which client `hourUntil` reads before snow's.
+  @Lenient public var rain: ApiRainClock?
+
+  enum CodingKeys: String, CodingKey {
+    case location, units, updatedAt, updated, attribution, stale, nearby, links, snow, rain
+    case hotDays = "days"
+    case hotNow = "now"
+  }
 }
 
 /// Where the answer is for (core `ApiLocation`).

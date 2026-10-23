@@ -10,6 +10,8 @@
  * - Moments (`now`, `fetchedAt`, and what the functions return as times) are epoch milliseconds,
  *   as the client's functions take them. Dates inside the API's own objects stay ISO 8601.
  * - An answer is named by its fixture: `in.fixture` is the file's name in the Fixtures folder.
+ *   `in.without`, where there is one, lists blocks taken out of it first ("rain", "snow.now"),
+ *   for the rules' fallbacks: the answer as it would be without them (`withoutBlocks`).
  * - Where a function returns one of the answer's own snow objects (pickHour's `now`, `today` and
  *   `week`, middleDay's and a widget entry's `day`), the vector has its path in that fixture
  *   instead ("snow.days.1", "snow.ahead.2.today"), or null: the same object, compared whole.
@@ -190,6 +192,44 @@ export function pathIn(res: TodayResponse | null, value: object | null): string 
   if (!found) throw new Error('Not one of the answer’s own snow objects');
   return found[0];
 }
+
+/**
+ * `f` with the blocks at `paths` ("rain", "snow.now") taken out, as an answer the server sent
+ * without them would be: a copy, so `f` itself is unchanged.
+ */
+export function withoutBlocks(f: Fixture, paths: readonly string[]): Fixture {
+  const copy = JSON.parse(JSON.stringify(f)) as Fixture;
+  for (const path of paths) {
+    const keys = path.split('.');
+    const last = keys.pop()!;
+    const parent = keys.reduce<unknown>(
+      (v, key) => (v as Record<string, unknown> | undefined)?.[key],
+      copy,
+    ) as Record<string, unknown> | undefined;
+    if (!parent || !(last in parent)) throw new Error(`Nothing at ${path} to take out`);
+    delete parent[last];
+  }
+  return copy;
+}
+
+/**
+ * The blocks the clock rules fall back without, taken out of a fixture: rain (snow's today and
+ * Now then say when the answer goes out of date), rain's Now or snow's too (the next UTC hour
+ * then), the snow answer, the hours ahead (the hour the answer holds for then ends it), and the
+ * hot answer's Now (which says when the place's midnight is).
+ */
+const LEFT_OUT: readonly (readonly string[])[] = [
+  ['rain'],
+  ['rain.now'],
+  ['rain', 'snow.now'],
+  ['rain', 'snow'],
+  ['snow'],
+  ['snow.ahead'],
+  ['now'],
+];
+
+/** Fixtures for the fallbacks: hours off the UTC hour, where they differ, and on it. */
+const FALLBACK_FIXTURES = ['kolkata-0530', 'aberdeen-snow'] as const;
 
 /** The object at `path` in `res` (`pathIn` read back). */
 export function atPath(res: TodayResponse, path: string): unknown {
@@ -619,6 +659,33 @@ function freshnessVectors(fixtures: FixtureSet): VectorFile {
     add('hold', { ...fixture, holds: kept, now: made }, hold(kept, f, made));
     add('outOfDate', { ...fixture, now: made, holds: kept }, outOfDate(f, made, kept));
   }
+  // The fallbacks, at the moments the whole answer's rules turn on: when it was made, two hours
+  // fast, and five minutes past its hour and its midnight, with the holds each gets.
+  for (const name of FALLBACK_FIXTURES) {
+    const full = fixtures.get(name);
+    if (!full) throw new Error(`No fixture ${name}`);
+    const made = madeAt(full);
+    const moments = [made, made + 2 * HOUR];
+    for (const t of [hourUntil(full), dayUntil(full)]) if (t !== null) moments.push(t + 5 * MINUTE);
+    for (const without of LEFT_OUT) {
+      const f = withoutBlocks(full, without);
+      const fixture = { fixture: name, without };
+      add('hourUntil', fixture, hourUntil(f));
+      add('dayUntil', fixture, dayUntil(f));
+      add('usableUntil', fixture, usableUntil(f));
+      for (const now of moments) {
+        add('nextRefreshAt', { ...fixture, now, jitterMs: 0 }, nextRefreshAt(f, now, 0));
+        add('hold', { ...fixture, holds: {}, now }, hold({}, f, now));
+        add('outOfDate', { ...fixture, now, holds: {} }, outOfDate(f, now, {}));
+        const holds = hold({}, f, now);
+        for (const held of Object.values(holds) as { until: number; at: number }[]) {
+          for (const later of [held.at - 1, held.at]) {
+            add('outOfDate', { ...fixture, now: later, holds }, outOfDate(f, later, holds));
+          }
+        }
+      }
+    }
+  }
   return vectorFile(
     [
       ['client', 'hourUntil'],
@@ -694,6 +761,40 @@ function hoursVectors(fixtures: FixtureSet): VectorFile {
       }
     }
   }
+  // Without hours ahead the answer's own hold until its hour ends, and without snow none do.
+  for (const name of FALLBACK_FIXTURES) {
+    const full = fixtures.get(name);
+    if (!full) throw new Error(`No fixture ${name}`);
+    const noAhead = withoutBlocks(full, ['snow.ahead']);
+    for (const now of hourMoments(noAhead)) {
+      const fixture = { fixture: name, without: ['snow.ahead'], now };
+      const picked = pickHour(noAhead, now);
+      add(
+        'pickHour',
+        fixture,
+        picked && {
+          start: picked.start,
+          end: picked.end,
+          now: pathIn(noAhead, picked.now),
+          today: pathIn(noAhead, picked.today),
+          week: pathIn(noAhead, picked.week),
+          source: picked.source,
+        },
+      );
+      if (picked) {
+        const { slot, day } = middleDay(noAhead, picked, now);
+        add('middleDay', fixture, { slot, day: pathIn(noAhead, day) });
+      }
+    }
+    const made = madeAt(full);
+    for (const now of [made, made + HOUR]) {
+      add(
+        'pickHour',
+        { fixture: name, without: ['snow'], now },
+        pickHour(withoutBlocks(full, ['snow']), now),
+      );
+    }
+  }
   // The Updated line, from each fixture's `updatedAt` and a few more, on the day and the next.
   const updates: [string, string][] = [...fixtures.values()].map((f) => [f.updatedAt, zoneOf(f)]);
   updates.push(
@@ -761,6 +862,14 @@ function stripVectors(fixtures: FixtureSet): VectorFile {
       const display = viewDisplay(f, 'snow', 'today', 'ready', { tomorrow });
       add('viewDisplay', { fixture: name, tomorrow }, display.models);
     }
+  }
+  // An answer without snow: a strip with nothing on it.
+  const aberdeen = fixtures.get('aberdeen-snow');
+  if (!aberdeen) throw new Error('No fixture aberdeen-snow');
+  const noSnow = withoutBlocks(aberdeen, ['snow']);
+  for (const tomorrow of [false, true]) {
+    const display = viewDisplay(noSnow, 'snow', 'today', 'ready', { tomorrow });
+    add('viewDisplay', { fixture: 'aberdeen-snow', without: ['snow'], tomorrow }, display.models);
   }
   return vectorFile([['core', 'viewDisplay']], cases);
 }
