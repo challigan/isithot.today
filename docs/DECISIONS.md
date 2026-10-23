@@ -1650,6 +1650,85 @@ What the review of phases 2 and 3 found, and what changed for it.
   jobs, and what App Intents reads at build time is from Apple's documentation, unchecked on
   Xcode.
 
+## The iPhone app's data and launch (IsItState, phase 5.1)
+
+PR 5.1's data half: the API client, what is stored, `AppModel` and the launch order (iOS build
+spec, sections 4 and 9.4 to 9.6). Everything that can be pure is in IsItCore and tested on
+Linux; IsItKit only fills its protocols. `apps/ios/README.md` lists the types.
+
+- **A third IsItCore module, `IsItState`,** rather than IsItLogic, which holds only ports of the
+  client's TypeScript with vectors. `AppModel` is in it, `@MainActor @Observable`, since
+  Observation and the main actor work in the Linux toolchain (Swift 6.3.3), so the launch order
+  and the refresh rules are tested there with fakes, in Swift 6 mode. The spec put `APIClient`
+  and the clock in IsItServices; they are here instead, over protocols (`HTTPTransport`,
+  `AppClock`), with URLSession behind `URLSessionTransport` in IsItServices. The app links
+  IsItLogic and IsItState as well; the widget reaches them through IsItServices.
+- **Services through `AppEnvironment`:** the client, the clock (`now`, and `schedule(at:_:)`,
+  which a test clock keeps until the test runs it, so no test waits on time), the stored state,
+  the widget reloads, the later phases' steps (`AppHooks`, with `NoHooks` doing nothing:
+  StoreKit in phase 7, the location fix in phase 6, the ads and notifications in phase 8, and
+  routes in phases 6 and 8) and the jitter's random source. Every protocol is `Sendable`, so the
+  main-actor model can call them across isolation in Swift 6 mode.
+- **The launch** (`init(environment:)`, then `launch()`): step 1 in `init`, so the saved answer
+  is on the first frame. It paints when its key is the target's, byte for byte as the website
+  compares keys, and `HourPicker.pick` is non-nil (nil from `usableUntil` on), and, beyond the
+  spec, only in the units asked for, so centimetres never paint for someone who chose inches.
+  The fetch is skipped when the answer was saved under `CLIENT.reuseMs` ago, again beyond the
+  spec only when it isn't out of date (a quick re-open past the hour still asks) and not saved
+  after now (a clock moved back). Out of date, the fetch is the website's `fresh` one: ask, and
+  when the answer is still out of date (a fast clock), ask once more with `TodayQuery.fresh`,
+  then `Freshness.hold`. Then steps 2 and 4 to 7 call the hooks in the spec's order: the
+  entitlement check starts first and is awaited only before the ads (step 5), which start only
+  when not unlocked.
+- **The first launch** asks by IP location with no units, as section 5.6 says, and keeps the
+  server's choice (`res.units`) in `units.v1`, so every later request, the widgets' included,
+  carries units. A city page's place that answers 404 `not_found` is dropped for IP location and
+  the user is told once (`AppCopy.slugGone`, `notice`), as section 4 says.
+- **Keeping current**: a quiet refresh at `Freshness.nextRefreshAt` plus 0 to 90 s of jitter,
+  scheduled after every answer and cancelled in the background, so no wait has to outlast the
+  phone's sleep. Back in the foreground the website's `wake` rule decides: the view for the time
+  of day after more than `CLIENT.refreshAfterMs` away; a fetch when the answer is older than
+  that, out of date, past `usableUntil`, or missing. After a failure: offline or 429 (which the
+  app treats as offline, section 5.6) asks again after `CLIENT.retryAfterMs` plus the jitter,
+  which costs the server nothing while there is no connection; any other error waits for the
+  next forecast hour of the answer on screen, or with none, for "Try again" or the next return,
+  so a broken request can't spend the function quota every minute. Only the newest fetch's
+  answer is shown.
+- **Offline** is `URLError`'s no-connection codes, `timedOut` among them (a weak signal far more
+  often than a slow server, on a phone); `AnswerState` keeps the picked hour until
+  `usableUntil`, then the stale state, and with nothing saved says there is no recent forecast.
+  The footer's line is `AppCopy.offline` with `UpdatedLine`; an answer without `updated` has
+  none. An error keeps the answer on screen, and the message is the server's, or
+  `CoreCopy.unavailable` when it sent none.
+- **What is stored.** `SavedToday` moved from IsItServices to IsItModel, with its codec: `v` is
+  read first, on its own, so another version's file is ignored whatever it holds.
+  `StoredUnlock` reads `unlock.v1` as `{ unlocked, checkedAt, productID }` JSON, the API's dates
+  in it; phase 7's StoreKit code writes it. `SharedStore` is the App Group's `StoredState`, and
+  `MemoryState` stands in when a Release build can't open the group (nothing is kept; the
+  widget sees nothing).
+- **Dates are exact to the millisecond.** `ApiJSON`'s encoder wrote dates with a formatter that
+  cuts the `Date`'s seconds, so a moment such as .234 s, whose double is a hair below, was
+  written .233: a saved answer fetched at an arbitrary moment read back a millisecond early. The
+  encoder now writes the moment's nearest whole millisecond as `toISOString` does, and the
+  decoder gives the millisecond's own `Date` (`Date(epochMs:)`), so a date written and read
+  back is equal; `SavedToday` keeps `savedAt` to the millisecond. Every date the server sends
+  reads as before, to the millisecond.
+- **The fixtures in the app** come through the transport now: `-fixture <name>` answers every
+  request with that fixture, after forgetting the saved answer, so the launch runs as it does
+  for real and the fixture is saved for the widget under the target's key (no longer
+  `fixture:<name>`). `-apiOrigin <url>` asks a deploy preview. The unit tests' host doesn't
+  launch (XCTest's `XCTestConfigurationFilePath`), so a live fetch can't write the App Group
+  under `AppGroupTests`; a fixture launch always launches. All three are in `DebugHooks.swift`
+  under `#if DEBUG`.
+- **The skeleton's widget can't show an old hour.** It now finds real answers, so its provider
+  shows the hour `HourPicker.pick` gives (an entry now and at each hour ahead), and nothing from
+  `usableUntil` on, until phase 7's planner replaces it.
+- **Not proven here:** `URLSessionTransport`, `SharedStore`'s defaults, `WidgetCenterReloader`,
+  the app's wiring and the debug hooks are Apple only, built and run only by the macOS jobs.
+  IsItServices and the widget's provider type-check on Linux against stubs of WidgetKit and
+  `containerURL`; whether `XCTestConfigurationFilePath` is in the hosted app's environment on
+  Xcode 26.6 is from long practice, not checked.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,
