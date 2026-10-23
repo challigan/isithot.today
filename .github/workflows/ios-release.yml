@@ -1,0 +1,191 @@
+name: iOS release
+
+# Builds will it snow? for the App Store and uploads it to TestFlight (iOS build spec, sections
+# 18.3 and 21.1). Run by hand, from main only: Actions, iOS release, Run workflow. The testflight
+# job holds the App Store Connect key, so it waits for Carl's approval of the `testflight`
+# environment; the unsigned job needs neither, and builds and checks an unsigned Release archive,
+# for use before signing is proven. apps/ios/README.md, "Releasing to TestFlight", says how to run
+# it and what its summary shows. The repo is public and so is this log: no step prints a secret.
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: 'testflight: sign, check and upload (waits for your approval). unsigned: build and check an unsigned archive, with no key.'
+        type: choice
+        options: [testflight, unsigned]
+        default: testflight
+      ads:
+        description: "Ad units: test (Google's demo units, for every build before the release candidate) or real"
+        type: choice
+        options: [test, real]
+        default: test
+      notes:
+        description: What to test, shown to testers in TestFlight (optional)
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+# One release at a time, and never cancelled halfway through an upload.
+concurrency:
+  group: ios-release
+  cancel-in-progress: false
+
+jobs:
+  main:
+    name: From main only
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Refuse any other branch or tag
+        run: |
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::iOS release runs only from main, not $GITHUB_REF: choose main under Use workflow from."
+            exit 1
+          fi
+          echo "From main at ${GITHUB_SHA::7}."
+
+  unsigned:
+    name: Unsigned archive and its checks
+    needs: main
+    if: github.ref == 'refs/heads/main' && inputs.build == 'unsigned'
+    # Pinned, as in ios.yml: never macos-latest, never -xlarge.
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      ADS_UNITS: ${{ inputs.ads }}
+      ADMOB_APP_ID: ${{ vars.ADMOB_APP_ID }}
+      ADMOB_BANNER_ID: ${{ vars.ADMOB_BANNER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Select Xcode 26.6
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version
+      - name: Build number
+        run: |
+          build=$((100 + GITHUB_RUN_NUMBER))
+          echo "BUILD_NUMBER=$build" >>"$GITHUB_ENV"
+          {
+            echo "## Unsigned Release archive, build $build"
+            echo
+            echo "- Commit: ${GITHUB_SHA::7}"
+            echo "- Ad units: $ADS_UNITS"
+            echo "- Not signed and not uploaded: this run checks the archive only."
+            echo
+          } >>"$GITHUB_STEP_SUMMARY"
+      # A release resolves afresh, with no cache: SwiftPM downloads Google's SDKs and checks them
+      # against their manifests' checksums, and xcodegen.sh checks its zip's SHA-256.
+      - name: Generate the project
+        run: apps/ios/ci/xcodegen.sh
+      - name: Archive, unsigned
+        run: apps/ios/ci/archive.sh unsigned
+      - name: Check the archive
+        run: scripts/check-archive.sh apps/ios/build/WillItSnow.xcarchive "$ADS_UNITS"
+
+  testflight:
+    name: Sign, check and upload to TestFlight
+    needs: main
+    if: github.ref == 'refs/heads/main' && inputs.build == 'testflight'
+    runs-on: macos-26
+    timeout-minutes: 90
+    # Carl is the environment's required reviewer: the job starts, and sees the key, only once he
+    # approves it. Fork pull requests never see an environment.
+    environment: testflight
+    env:
+      ADS_UNITS: ${{ inputs.ads }}
+      ADMOB_APP_ID: ${{ vars.ADMOB_APP_ID }}
+      ADMOB_BANNER_ID: ${{ vars.ADMOB_BANNER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # Node's built-ins only (the key file, What to test), so there is nothing to install.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Select Xcode 26.6
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version
+      # 100 + the run number (section 21.1); builds from Carl's Mac use 1 to 99. A re-run keeps
+      # its run's number, which App Store Connect refuses if the first attempt uploaded.
+      - name: Build number
+        env:
+          NOTES: ${{ inputs.notes }}
+        run: |
+          build=$((100 + GITHUB_RUN_NUMBER))
+          echo "BUILD_NUMBER=$build" >>"$GITHUB_ENV"
+          {
+            echo "## TestFlight build $build"
+            echo
+            echo "- Commit: ${GITHUB_SHA::7}"
+            echo "- Ad units: $ADS_UNITS"
+            if [ "$GITHUB_RUN_ATTEMPT" != 1 ]; then
+              echo "- Attempt $GITHUB_RUN_ATTEMPT, with the same build number: if an earlier attempt uploaded, run the workflow afresh instead."
+            fi
+            if [ -n "$NOTES" ]; then
+              echo "- What to test:"
+              echo
+              printf '%s\n' "$NOTES" | sed 's/^/  > /'
+            else
+              echo "- What to test: none given"
+            fi
+            echo
+            echo '```'
+            xcodebuild -version
+            echo '```'
+            echo
+          } >>"$GITHUB_STEP_SUMMARY"
+      # No caches here either (see the unsigned job).
+      - name: Generate the project
+        run: apps/ios/ci/xcodegen.sh
+      - name: Write the App Store Connect key
+        run: node scripts/asc-key.mjs
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      - name: Archive, signed
+        run: apps/ios/ci/archive.sh signed
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+      - name: Check the archive
+        run: scripts/check-archive.sh apps/ios/build/WillItSnow.xcarchive "$ADS_UNITS"
+      - name: Export for App Store Connect
+        run: apps/ios/ci/archive.sh export
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+      - name: Check the signed app
+        run: scripts/check-archive.sh --ipa apps/ios/build/export/WillItSnow.ipa
+      - name: Upload to TestFlight
+        id: upload
+        run: apps/ios/ci/upload.sh
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          # Only for fastlane's key file, if it comes to that.
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      # Waits for App Store Connect to list the build; never fails the job.
+      - name: What to test
+        if: steps.upload.outcome == 'success'
+        timeout-minutes: 25
+        run: node scripts/asc-notes.mjs
+        env:
+          NOTES: ${{ inputs.notes }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      - name: Delete the key
+        if: always()
+        run: |
+          rm -rf "$HOME/.appstoreconnect/private_keys"
+          echo "Deleted ~/.appstoreconnect/private_keys."

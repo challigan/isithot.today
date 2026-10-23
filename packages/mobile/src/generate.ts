@@ -3,16 +3,23 @@
  * files on disk differ from it (`pnpm mobile:check`). The files are committed, so the Mac and CI
  * build the app without Node, and the check stops a hand edit or a stale copy.
  */
+import { KEYS_PATH, keysSwift } from './exportKeys';
 import { FIXTURES, fixtureJson, makeFixture } from './fixtures';
 
-/** The Swift package's test resources, read by every test target through `IsItTestSupport`. */
+/**
+ * The Swift package's test resources, read by every test target through `IsItTestSupport`, and
+ * bundled into the app's Debug builds for its `-fixture` launch argument.
+ */
 export const FIXTURES_DIR = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources/Fixtures';
+
+/** IsItModel's generated Swift: `Keys` now, then the copy and the constants. */
+export const MODEL_GENERATED_DIR = 'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated';
 
 /**
  * Folders the generator owns: every file in them is generated, so one it no longer writes is
  * stale. Hidden files (a Mac's `.DS_Store`) don't count.
  */
-export const OWNED_DIRS: readonly string[] = [FIXTURES_DIR];
+export const OWNED_DIRS: readonly string[] = [FIXTURES_DIR, MODEL_GENERATED_DIR];
 
 export interface GeneratedFile {
   path: string;
@@ -20,7 +27,7 @@ export interface GeneratedFile {
 }
 
 export async function generatedFiles(): Promise<GeneratedFile[]> {
-  const files: GeneratedFile[] = [];
+  const files: GeneratedFile[] = [{ path: KEYS_PATH, contents: keysSwift() }];
   for (const spec of FIXTURES) {
     files.push({
       path: `${FIXTURES_DIR}/${spec.name}.json`,

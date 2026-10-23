@@ -979,6 +979,150 @@ fixtures, and the Swift package that holds the app's API models, tested on Linux
   come with the app skeleton. Its paths add the synthetic upstream, the city list and the script
   to the spec's, since the fixtures are made from them.
 
+## The iPhone app's skeleton (apps/ios)
+
+The iOS build spec's PRs 0.2 and 0.3: the XcodeGen project, the app and its widget, the debug
+hooks, their tests and the macOS CI. `apps/ios/README.md` says how to build it and how agents
+read CI; this records where the build fills or differs from the spec.
+
+- **Keys are generated now.** `SharedStore` needs the App Group keys and the store version, and
+  the spec never retypes them, so `pnpm mobile:generate` writes `IsItModel/Generated/Keys.swift`
+  from the client's `keys.ts` (phase 2.2's first emitter, with the escaping and identifier rules
+  and their tests). The generator owns that folder too, so a stale file there fails the check.
+- **IsItKit has four modules so far:** `IsItServices` (`SharedStore`), `IsItAds` (Google Mobile
+  Ads 13.11.0 and UMP 3.1.0, exact; nothing runs yet), `IsItUI` (the skeleton's answer view) and
+  `IsItWidgetUI` (the widget's entry, provider and view, there so an app-hosted test can draw
+  it). `SnowKit` comes with the first snow-only code; SwiftPM refuses an empty target.
+- **The saved answer.** `SharedStore` writes `{ v, savedAt, key, response }` to
+  `Library/Caches/today.v1.json` in the group's container, and ignores a file from another store
+  version. Without the App Group, Debug builds of the app fall back to their own defaults and
+  caches (`DebugHooks.storeFallback`, so the conditional stays in `DebugHooks.swift`); the widget
+  never does, since only the app saves answers. A fixture is saved under the key
+  `fixture:<name>`: the place keys are ported in phase 3.
+- **The skeleton's widget** is the small family only, one entry with no reload: the app reloads
+  the timelines when it saves. With nothing saved it draws the shape of an answer with no words.
+  It has no gallery name or description yet, because those are app copy (phase 2.2). It can't
+  show an old answer as current, because until the app fetches, the only answer it can find is a
+  Debug fixture.
+- **Fixtures in the app.** Debug builds bundle the `Fixtures` folder IsItCore's tests read, as a
+  folder reference; `EXCLUDED_SOURCE_FILE_NAMES = Fixtures` leaves it out of Release. The unit
+  test bundle has its own copy.
+- **XCTest in the app's test bundles,** where IsItCore uses Swift Testing: UI tests need it, and
+  `XCTAttachment` with `lifetime = .keepAlways` is what `xcresulttool export attachments` is known
+  to export. The unit tests are hosted by the app, so they run with its entitlements, and they
+  read the App Group back through the widget's own provider. They link IsItWidgetUI themselves,
+  which the app doesn't.
+- **What the skeleton leaves out of the Info.plist,** each until the phase that brings what it
+  names: `UIAppFonts` (the font), `SKAdNetworkItems` (the ads), the `LaunchBackground` colour
+  (the palettes; `UILaunchScreen` is empty), the app icon, the StoreKit configuration and the
+  `FEATURE_*` switches. The privacy manifests declare UserDefaults (CA92.1 and 1C8F.1 for the
+  app, 1C8F.1 for the widget) and no collected data, until location and notifications arrive.
+- **XcodeGen's presets.** XcodeGen adds Xcode's template settings to each target unless a
+  project xcconfig names the setting, so `Base.xcconfig` is what decides the device family
+  (iPhone only), the Swift version and the icon (none yet). Checked by generating the project on
+  Linux with XcodeGen 2.46.0 built from source.
+- **Test plans** name targets by their object IDs, which XcodeGen derives from the project's and
+  target's names only (the same from any folder, on Linux or a Mac). `ci/xcodegen.sh` checks them
+  after generating.
+- **`Package.resolved`** was made on Linux by `swift package resolve`, which writes it before
+  failing to download Google's binary zips (dl.google.com is blocked in the agents' container).
+  Its `originHash` is IsItKit's manifest's, not the project's; that doesn't matter, because CI
+  builds with `-disableAutomaticPackageResolution`, which uses the file as a lock file and never
+  compares the hash. If CI can't use it, the job keeps the file Xcode writes, as an artefact and
+  as a diff in the log.
+- **CI additions to the spec's sketch.** `ci/simulator.sh` finds or makes the iPhone 17 on iOS
+  26.5. `ci/test.sh` also summarises the build-for-testing step, so compiler errors appear with
+  file and line. Every summary goes to the job log as well as the step summary, because the log
+  is what the GitHub MCP tools return. `ci/release-check.sh` builds Release on every run and
+  fails on a debug hook's name in a binary, a bundled fixture, or ads code in the widget;
+  phase 0.4's archive check covers the signed archive. The resolve step uses
+  `-onlyUsePackageVersionsFromResolvedFile`, the builds `-disableAutomaticPackageResolution`.
+- **The contact sheet** draws every attachment at a third of its pixels, so screens and widgets
+  appear at their true relative size, with labels in a 5×7 pixel font built into the script
+  (pngjs only; no system fonts on the runner to depend on). Agents can't download artefacts from
+  the container yet: GitHub serves them from Azure blob storage, which its network policy denies.
+
+## The iPhone app's release job (apps/ios, scripts)
+
+The iOS build spec's PR 0.4: `ios-release.yml`, which signs the app through App Store Connect and
+uploads it to TestFlight, and `scripts/check-archive.sh`, which checks a build first.
+`apps/ios/README.md` says how Carl runs it; this records where it fills or differs from the spec.
+
+- **Debug hooks hide in short literals.** Swift keeps a string of up to 15 bytes inside the
+  String value, and with `-O` the compiler builds a literal one in registers. Checked on 23
+  October 2026: `swiftc -O` 6.3.3 IR for the hooks, compiled by its LLVM 21 for
+  `arm64-apple-ios17.0`, builds `-uitest` with `mov x19, #0x752d` and three `movk`s, and strings(1)
+  finds none of `-uitest`, `-fixture` or `-umpGeography` in the object (on x86-64 it does, because
+  `movabs` keeps the 8 bytes together). Every hook in the spec's list is 15 bytes or fewer, so a
+  strings-only check passes an optimised build with every hook compiled in. Long literals, type
+  names (`URLProtocolStub`) and literals stored as data (an array of them) are found. So
+  `scripts/swift-small-strings.mjs` rebuilds the short ASCII literals from arm64 `movz`/`movk`
+  sequences, joining a 9-to-15-byte literal's two words, and `check-archive.sh` and
+  `ci/release-check.sh` look in its output as well as in strings'. The tests use LLVM's own
+  instruction words.
+- **A literal's moves needn't be together** (found in review). With Apple's CPU models (apple-a7
+  to apple-a17, apple-m1) each constant's `movz` and `movk`s sat side by side in the probes, but
+  LLVM's generic model schedules them among other constants': 9 instructions apart for
+  `contains("-uitest")`, 26 for six literals passed to one call. The first reader followed a
+  register for 8 instructions, so it read `-uites`, and an archive with that hook compiled in
+  passed. It now follows it for 64, until another move to that register or a `movk` for a 16-bit
+  piece the constant already has. Joining a first word to the nearest second word is a guess,
+  too: in the probes the nearest was often another string's, under every model, and the compiler
+  can derive one second word from another (`add x1, x21, #0x23` turns `-forceEEA`'s into
+  `-unlocked`'s, which the reader can't follow, so it reads `-unlockeA`). So `check-archive.sh`
+  matches a hook of 8 bytes or more by its first 8, whatever follows them. Checked on 23 October 2026 with probes naming all twelve
+  hooks through `contains`, `firstIndex(of:)`, `switch`, `==`, dictionary lookups and call
+  arguments, for each of those CPU models: the reader recovers every hook's first word whole, and
+  the check reports all twelve.
+- **What `check-archive.sh` adds to the spec's list:** the fixtures (as `release-check.sh` checks
+  the simulator build); `CFBundleShortVersionString` as well as `CFBundleVersion`, and
+  `BUILD_NUMBER` when given; Google's consent SDK and an embedded framework as ways the widget
+  could link ads; `get-task-allow` on neither signed bundle; and the rest of section 9.8's launch
+  arguments (`-now`, `-clock`, `-unlocked`, `-noads`, `-resetStore`), matched only as whole short
+  literals, since as substrings they'd match ordinary text. With ads test it fails on any
+  publisher but Google's demo one, not only Carl's, so it needs no variable before C15; with
+  `ADMOB_APP_ID` set, his publisher ID's digits must appear nowhere. With ads real the units must
+  be well-formed and equal the variables. If Google's SDK, linked into the app, names its own
+  demo publisher, a real build would fail; a test build says so in a notice, so it shows long
+  before the release candidate.
+- **Testable on Linux.** The reads that need macOS go through `plutil -convert xml1` and
+  `codesign -d --entitlements - --xml` (the `:-` form the spec names is deprecated), named by
+  `PLUTIL` and `CODESIGN`, and a small awk reader takes values from plutil's XML, so the tests
+  stand in two short fakes and build archive and Payload trees in a temp folder. Each failure the
+  spec lists has a test, and so does a passing archive and a passing `.ipa`.
+- **The key** is written by `scripts/asc-key.mjs` with `asc.mjs` `keyPem`, the rule C12 needed
+  (the raw `.p8` text with any line breaks, or base64; the spec's 18.3 said base64 only), after
+  checking it is a usable key and that `ASC_KEY_ID` is 10 capital letters and digits, since the
+  file name is built from it. The folder is mode 700 and the file 600, and a step that always
+  runs deletes the folder. Each secret is given only to the steps that use it, and checkout keeps
+  no token.
+- **The release job resolves afresh.** No cache of `.spm` or XcodeGen: SwiftPM downloads Google's
+  SDKs and checks them against their manifests' checksums, and `xcodegen.sh` checks its zip, so
+  nothing restored from a cache goes into an App Store build.
+- **Unsigned, two ways.** Phase 0.4 planned to stop after an unsigned archive until C12 existed.
+  C12 exists, so the release job signs by default, and its `build: unsigned` input still builds
+  and checks an unsigned archive with no key or approval. `ios.yml`'s `archive-check` job does the
+  same on every pull request.
+- **ExportOptions** sets `manageAppVersionAndBuildNumber` to false, so Xcode can't renumber the
+  build the checks passed (its default for App Store Connect is true), and `uploadSymbols`.
+  `archive.sh` checks its `teamID` against `Configs/Team.xcconfig`, and `APPLE_TEAM_ID` against
+  both.
+- **The upload's fallbacks are automatic** (section 18.3, step 5): altool, then a second export
+  with destination upload, then fastlane 2.241.1's pilot, installed only when both of Apple's
+  ways fail (pinned; its own dependencies aren't). When App Store Connect refuses the build
+  itself (an ITMS or validation error, such as the missing icon until phase 2.3), it stops,
+  since every way would get the same answer. `scripts/test/upload.test.mjs` drives the order
+  with stand-ins.
+- **What to Test** (section 21.1) is set through the API: `scripts/asc-notes.mjs` waits up to 20
+  minutes for the build to be listed, then adds or updates its English (UK)
+  `betaBuildLocalizations`, retrying while App Store Connect refuses changes. It warns rather
+  than fails, since the build is uploaded by then.
+- **Not yet:** the `rc-archive` artefact (section 21.2), with the release candidate. The signed
+  archive embeds a development profile, which lists the team's registered devices, so whether to
+  publish it on a public repo is a decision for then. Unproven until the first run: cloud signing
+  of the archive (development signing may need a registered iPhone, and may add a certificate per
+  run; the README's table says what to do), and altool on Xcode 26.6.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,

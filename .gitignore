@@ -21,3 +21,5 @@ apps/ios/build
 apps/ios/Packages/*/.build
 apps/ios/Packages/*/.swiftpm
 DerivedData
+# The committed copy is apps/ios/Package.resolved (apps/ios/README.md).
+apps/ios/Packages/*/Package.resolved

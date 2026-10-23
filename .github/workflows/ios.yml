@@ -1,9 +1,13 @@
 name: iOS
 
-# The iPhone app's checks that run on Linux (iOS build spec, section 18.1): the files
-# packages/mobile generates for apps/ios are current, and IsItCore builds, passes its tests and
-# lints clean in the official Swift container. The macOS build and tests join in the next phase.
-# Runs only when something the app is built or generated from changes (the same paths twice).
+# The iPhone app's checks (iOS build spec, section 18.1). On Linux: the files packages/mobile
+# generates for apps/ios are current, every Swift file lints clean, and IsItCore builds and
+# passes its tests in the official Swift container. On macOS: the app, its widget and their tests
+# build for the iPhone 17 simulator, the Unit and UI test plans run, a Release build is checked
+# for debug hooks, and the screens and widgets the tests attach are tiled into a contact sheet;
+# beside that, an unsigned Release archive for iPhones gets the release job's archive checks
+# (scripts/check-archive.sh). No job needs a secret. Runs only when something the app is built,
+# generated or checked from changes (the same paths twice).
 on:
   push:
     branches: [main]
@@ -17,6 +21,8 @@ on:
       - packages/providers/**
       - data/cities.json
       - scripts/mobile-generate.ts
+      - scripts/check-archive.sh
+      - scripts/swift-small-strings.mjs
       - apps/web/src/lib/snowGlyphs.ts
       - apps/web/public/snow/favicon.svg
       - .github/workflows/ios*.yml
@@ -31,6 +37,8 @@ on:
       - packages/providers/**
       - data/cities.json
       - scripts/mobile-generate.ts
+      - scripts/check-archive.sh
+      - scripts/swift-small-strings.mjs
       - apps/web/src/lib/snowGlyphs.ts
       - apps/web/public/snow/favicon.svg
       - .github/workflows/ios*.yml
@@ -69,6 +77,190 @@ jobs:
         run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tzdata
       - run: swift --version
       - name: Lint
-        run: swift format lint --strict --recursive apps/ios/Packages/IsItCore
+        run: swift format lint --strict --recursive apps/ios/Packages apps/ios/Apps
       - name: Test
         run: swift test --package-path apps/ios/Packages/IsItCore
+
+  ios:
+    name: Build and test on the iPhone simulator
+    needs: [generated, swift-linux]
+    # Pinned: never macos-latest, which moves, and never -xlarge, which is billed even on a
+    # public repo.
+    runs-on: macos-26
+    timeout-minutes: 45
+    # The attachments' artefact ID, set only when they were uploaded. The runner evaluates job
+    # outputs after the last step whatever the result, so failed tests still set it.
+    outputs:
+      attachments: ${{ steps.attachments.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 26.6
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version
+          {
+            echo "### Toolchain"
+            echo
+            echo '```'
+            xcodebuild -version
+            sw_vers
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      # The packages' checkouts and Google's binary SDKs, keyed on the pinned versions (V11).
+      - name: Cache Swift packages
+        id: spm-cache
+        uses: actions/cache@v4
+        with:
+          path: apps/ios/.spm
+          key: spm-${{ runner.os }}-xcode26.6-${{ hashFiles('apps/ios/Package.resolved') }}
+      # The release zip, checked against its SHA-256 by xcodegen.sh on every run.
+      - name: Cache XcodeGen
+        uses: actions/cache@v4
+        with:
+          path: ~/.xcodegen/2.46.0
+          key: xcodegen-2.46.0-4d9e34b6-${{ runner.os }}
+      - name: Generate the project
+        run: apps/ios/ci/xcodegen.sh
+      # Exactly the versions in apps/ios/Package.resolved, or a failure. The builds after it pass
+      # -disableAutomaticPackageResolution, so they use these checkouts and nothing else.
+      - name: Resolve packages
+        id: resolve
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project apps/ios/WillItSnow.xcodeproj -scheme WillItSnow \
+            -clonedSourcePackagesDirPath apps/ios/.spm -onlyUsePackageVersionsFromResolvedFile
+          {
+            echo "### Packages (cache ${{ steps.spm-cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }})"
+            echo
+            echo '```'
+            grep -E '"(identity|version)"' apps/ios/Package.resolved | sed 's/^ *//'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      # If the committed file can't be used, resolve afresh and keep what Xcode wrote, so the next
+      # agent can compare it and commit it (apps/ios/README.md, "Package.resolved").
+      - name: Keep the Package.resolved Xcode writes
+        if: failure() && steps.resolve.outcome == 'failure'
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project apps/ios/WillItSnow.xcodeproj -scheme WillItSnow \
+            -clonedSourcePackagesDirPath apps/ios/.spm
+          mkdir -p apps/ios/build/resolved
+          cp apps/ios/WillItSnow.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved \
+            apps/ios/build/resolved/Package.resolved
+          diff -u apps/ios/Package.resolved apps/ios/build/resolved/Package.resolved || true
+      - name: Upload the resolved packages
+        if: failure() && steps.resolve.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-resolved
+          path: apps/ios/build/resolved/Package.resolved
+          retention-days: 5
+      # Assigned first, so that a failure in simulator.sh fails this step, not the next one.
+      - name: Boot the iPhone 17 simulator
+        id: simulator
+        run: |
+          udid="$(apps/ios/ci/simulator.sh)"
+          if [ -z "$udid" ]; then
+            echo "::error::simulator.sh printed no UDID"
+            exit 1
+          fi
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: Build for testing
+        id: build
+        run: apps/ios/ci/test.sh build "${{ steps.simulator.outputs.udid }}"
+      - name: Unit tests
+        id: unit
+        run: apps/ios/ci/test.sh Unit "${{ steps.simulator.outputs.udid }}"
+      # Run even when the unit tests fail, so one round trip shows both.
+      - name: UI tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: apps/ios/ci/test.sh UI "${{ steps.simulator.outputs.udid }}"
+      - name: Release build has no debug hooks
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: apps/ios/ci/release-check.sh
+      - name: Upload the result bundles
+        if: ${{ !cancelled() && steps.simulator.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-results
+          path: |
+            apps/ios/build/*.xcresult
+            apps/ios/build/*.json
+          if-no-files-found: warn
+          retention-days: 5
+      - name: Upload the attachments
+        id: attachments
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-attachments
+          path: apps/ios/build/attachments
+          if-no-files-found: warn
+          retention-days: 5
+
+  # The checks ios-release.yml makes before it signs (spec section 18.3, step 3), on an unsigned
+  # Release archive for iPhones, so a pull request finds a debug hook, a demo ad unit gone
+  # missing or a widget linking ads before a release does. The ios job's setup, with no
+  # simulator; it runs beside that job.
+  archive-check:
+    name: Release archive checks
+    needs: [generated, swift-linux]
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 26.6
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version
+      # The ios job's caches, under the same keys.
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: apps/ios/.spm
+          key: spm-${{ runner.os }}-xcode26.6-${{ hashFiles('apps/ios/Package.resolved') }}
+      - name: Cache XcodeGen
+        uses: actions/cache@v4
+        with:
+          path: ~/.xcodegen/2.46.0
+          key: xcodegen-2.46.0-4d9e34b6-${{ runner.os }}
+      - name: Generate the project
+        run: apps/ios/ci/xcodegen.sh
+      # Resolves exactly the versions in Package.resolved, then archives with no signing.
+      - name: Archive, unsigned
+        run: apps/ios/ci/archive.sh unsigned
+        env:
+          ADS_UNITS: test
+      - name: Check the archive
+        run: scripts/check-archive.sh apps/ios/build/WillItSnow.xcarchive test
+
+  contact-sheet:
+    name: Contact sheet
+    needs: ios
+    # Also after failed tests: a failing screen is the one most worth seeing. Skipped when ios
+    # uploaded no attachments (it failed before its tests ran, or no test attached any), so the
+    # only red job is the one to read.
+    if: ${{ !cancelled() && needs.ios.outputs.attachments }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios-attachments
+          path: attachments
+      - name: Tile the attachments
+        run: |
+          node apps/ios/ci/contact-sheet.mjs attachments/Unit attachments/UI \
+            --out contact-sheet.png --title "will it snow? ${GITHUB_SHA::7} run ${GITHUB_RUN_NUMBER}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: contact-sheet
+          path: contact-sheet.png
+          retention-days: 5
