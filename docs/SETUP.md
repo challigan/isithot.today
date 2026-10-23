@@ -172,6 +172,15 @@ Netlify and redeploy. `/app-ads.txt` on every domain then carries its line (unti
 comment). AdMob reads it from the developer website each app's store listing names, so each app
 lists its own site.
 
+The apps' notifications: Apple push keys, done on 23 October. Two team-scoped APNs keys (one
+Sandbox, one Production) from Certificates, IDs & Profiles → Keys. In Netlify (scope
+**Functions**), `APNS_TEAM_ID`, `APNS_KEY_ID_SANDBOX`, `APNS_KEY_SANDBOX`,
+`APNS_KEY_ID_PRODUCTION` and `APNS_KEY_PRODUCTION`, the two key texts marked as secret. The three
+sandbox values are also secrets in the GitHub environment `apns-smoke` (main only), for the daily
+smoke (`alerts-smoke.yml`). To check a function can reach Apple: set `ALERTS_SMOKE=1` for the
+**Deploy Previews** context only, open a deploy preview's Functions page, choose `alerts-run` and
+press **Run now**; its log should read `alerts-run: smoke passed: 400 BadDeviceToken…`.
+
 ## 6. Uptime monitor
 
 Any free monitor (UptimeRobot, Better Stack) on:

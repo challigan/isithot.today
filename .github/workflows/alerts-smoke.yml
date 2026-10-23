@@ -1,0 +1,40 @@
+name: APNs sandbox smoke
+
+# Daily proof that the APNs sandbox key in the `apns-smoke` environment still works and that
+# GitHub's runners can reach Apple: one push to a made-up device, which Apple must refuse with
+# 400 BadDeviceToken (scripts/alerts-smoke.ts). Nothing reaches a phone. The environment is
+# limited to main and has no required reviewer, since the job runs on a schedule; the production
+# key is never here. Also runs when its code changes on main, and on demand.
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/alerts-smoke.yml
+      - packages/server/src/apns.ts
+      - scripts/alerts-smoke.ts
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: apns-smoke
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Push to a made-up device with the sandbox key
+        run: pnpm tsx scripts/alerts-smoke.ts
+        env:
+          APNS_TEAM_ID: ${{ secrets.APNS_TEAM_ID }}
+          APNS_KEY_ID_SANDBOX: ${{ secrets.APNS_KEY_ID_SANDBOX }}
+          APNS_KEY_SANDBOX: ${{ secrets.APNS_KEY_SANDBOX }}

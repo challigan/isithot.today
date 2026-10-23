@@ -902,6 +902,30 @@ from it. The website adopts it in the same change, so the rules exist once.
   `hold` returns a copy, the device and search targets are functions of their own, and the
   address is built in two places.
 
+## Notifications: the probe (packages/server apns.ts)
+
+The apps' snow notifications are sent by a Netlify scheduled function through Apple's push
+service (APNs). Two things were unverified on Carl's legacy Netlify plan, so a small probe lands
+first (iOS build spec, phase 1.5) and the full job follows.
+
+- **V8, does the schedule run?** `functions/api/alerts-run.mts` runs every 15 minutes (UTC) and,
+  until the full job lands, only logs `alerts-run: disabled`. The Netlify Functions page should
+  list it as scheduled, with a log line every 15 minutes in production. About 2,900 invocations
+  a month.
+- **V9, can a function reach APNs over HTTP/2?** On a deploy preview with `ALERTS_SMOKE=1`,
+  **Run now** sends one push with the sandbox key to a made-up device (`apnsSmoke`). Apple's
+  `400 BadDeviceToken` proves egress, TLS, HTTP/2 and that Apple took the key's token (a refused
+  token is a 403). Production never sends it, whatever the setting.
+- **The sender** uses Node's built-ins: an ES256 provider token (`providerToken`) and `node:http2`
+  (`apnsSender`), tested against an in-process fake APNs. Keys come from Netlify's environment as
+  the `.p8` text however it was pasted, or its base64 (`apnsKeyPem`, the same rule as
+  `scripts/asc.mjs`). Nothing logs a key, a token or a device token.
+- **Daily key check:** `.github/workflows/alerts-smoke.yml` runs the same push from GitHub with
+  the sandbox key from the `apns-smoke` environment (main only, no reviewer, since it runs on a
+  schedule). The production key is only ever in Netlify.
+- **The topic is the app's bundle ID,** `today.willitsnow.app`. Until it is registered under the
+  team, Apple may refuse it (a 400 naming the topic, or a 403); the smoke says so.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,
