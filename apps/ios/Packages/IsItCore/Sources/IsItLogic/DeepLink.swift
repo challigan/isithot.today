@@ -49,14 +49,15 @@ public enum DeepLink {
   /// place, which need not be the one on screen. It opens on the notification's view (the middle
   /// one) while the day it was about is still today or tomorrow there: after 6pm the middle view
   /// reads Tomorrow and after midnight Today, either way that day. Once the day has passed it
-  /// opens on the place's view for the time of day (`view` nil). `placeToday` gives the place's
-  /// date now (YYYY-MM-DD), or nil when the app can't tell (it has no answer there yet), and the
-  /// notification is then taken as current. A payload that is malformed, or for another topic or
-  /// no chosen place, is nil: the app opens as usual.
+  /// opens on the place's view for the time of day (`view` nil). `placeNow` gives the place's
+  /// date and time now, as `PlaceTime.local(_:in:)` gives it in the place's zone (client
+  /// `placeToday`, of which only the date is read), or nil when the app can't tell (it has no
+  /// answer there yet), and the notification is then taken as current. A payload that is
+  /// malformed, or for another topic or no chosen place, is nil: the app opens as usual.
   ///
   /// `payload` is the notification's `userInfo`, or any JSON object as `JSONSerialization` reads
   /// it: `topic`, `kind`, `date`, `view`, `place` (the place's today query) and `name`.
-  public static func route(payload: Any?, placeToday: (Target) -> String?) -> Route? {
+  public static func route(payload: Any?, placeNow: (Target) -> LocalDateTime?) -> Route? {
     guard let fields = payload as? [AnyHashable: Any] else { return nil }
     guard fields["topic"] as? String == "snow",
       let shown = (fields["view"] as? String).flatMap(AppView.init(rawValue:)),
@@ -70,7 +71,7 @@ public enum DeepLink {
     if case .city(let slug, _) = found, let name = fields["name"] as? String, !name.isEmpty {
       target = .city(slug: slug, name: name)
     }
-    guard let today = placeToday(target) else { return .place(target, view: shown) }
+    guard let today = placeNow(target)?.date else { return .place(target, view: shown) }
     // What `Date.parse` doesn't read is NaN, never today or tomorrow.
     let ahead = parsedDate(today).map { day - $0 }
     return .place(target, view: ahead == 0 || ahead == dayMs ? shown : nil)
@@ -145,8 +146,9 @@ public enum DeepLink {
   /// A place's date as JavaScript's `Date.parse` reads it, in epoch milliseconds: YYYY-MM-DD as
   /// UTC midnight, with any day up to 31 rolling over into the next month (2026-11-31 is 1
   /// December), as V8 reads it. Nil, JavaScript's NaN, for anything else. `Date.parse` also
-  /// reads date-times and other forms, which `placeToday` never gives: the place's date is the
-  /// app's `PlaceTime.local(_:in:).date`.
+  /// reads date-times and other forms, which a `LocalDateTime`'s date never is: `placeNow`
+  /// takes one, rather than any text, so the app passes `PlaceTime.local(_:in:)` and not, say,
+  /// an ISO formatter's output.
   private static func parsedDate(_ text: String) -> Int? {
     guard let (year, month, day) = dateParts(text) else { return nil }
     return daysSinceEpoch(year: year, month: month, day: day) * dayMs

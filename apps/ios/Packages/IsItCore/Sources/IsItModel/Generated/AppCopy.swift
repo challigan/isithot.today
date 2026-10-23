@@ -115,10 +115,4 @@ public enum AppCopy {
   public static func agreementShort(snowy: String, total: String) -> String {
     "\(snowy) of \(total) forecasts"
   }
-
-  public static let intentTitle = "Will it snow tomorrow?"
-
-  public static func intentPhrase(app: String) -> String {
-    "Will it snow tomorrow in \(app)?"
-  }
 }

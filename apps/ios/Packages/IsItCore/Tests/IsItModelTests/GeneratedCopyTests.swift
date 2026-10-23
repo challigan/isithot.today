@@ -139,7 +139,6 @@ struct AppCopyTests {
       AppCopy.reportAdMail(time: "9:05am GMT", place: "Aberdeen")
         == "Time: 9:05am GMT\nPlace: Aberdeen\nWhat was wrong with the ad:\n"
     )
-    #expect(AppCopy.intentPhrase(app: "Shortcuts") == "Will it snow tomorrow in Shortcuts?")
     #expect(AppCopy.placeButtonLabel(place: #"\(x) $1"#) == #"Place: \(x) $1. Change place."#)
   }
 }

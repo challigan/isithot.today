@@ -1,5 +1,7 @@
 import SwiftUI
 
+// In SnowKit, the one SwiftUI module the app, the widget and the unit tests all link, beside the
+// glyphs it colours; the palettes themselves are IsItModel's `Palettes`.
 extension Color {
   /// A colour from 0xRRGGBB in sRGB, as the generated palettes write them: `Color(rgb: p.ink)`.
   public init(rgb: UInt32) {

@@ -8,7 +8,7 @@ import {
   VIEWS,
   question,
 } from '@isithot/core';
-import { APP_COPY } from '../src/appCopy';
+import { APP_COPY, APP_INTENT_KEYS, type AppCopyKey } from '../src/appCopy';
 import { APP_COPY_PATH, APP_COPY_SOURCE, appCopyMember, appCopySwift } from '../src/exportAppCopy';
 import {
   CORE_COPY_KEYS,
@@ -299,12 +299,20 @@ describe('appCopySwift', () => {
     expect(APP_COPY_SOURCE).toBe('packages/mobile/src/appCopy.ts');
   });
 
-  it("has every string, in appCopy.ts's order", () => {
+  it("has every string, in appCopy.ts's order, but those App Intents reads as literals", () => {
     const names = swift
       .split('\n')
       .map((l) => /^ {2}public static (?:let|func) (\w+)/.exec(l)?.[1])
       .filter(Boolean);
-    expect(names).toEqual(Object.keys(APP_COPY));
+    expect(APP_INTENT_KEYS).toEqual(['intentTitle', 'intentPhrase']);
+    expect(names).toEqual(
+      Object.keys(APP_COPY).filter((k) => !APP_INTENT_KEYS.includes(k as AppCopyKey)),
+    );
+    // The App Shortcut's words stay out: as a runtime String or function, neither could become
+    // the intent's title or its phrase.
+    for (const key of APP_INTENT_KEYS) expect(swift).not.toContain(key);
+    expect(swift).not.toContain('Will it snow tomorrow');
+    expect(appCopySwift({ intentTitle: 'x', kept: 'y' })).not.toContain('intentTitle');
   });
 
   it('makes a string with slots a function that fills them', () => {

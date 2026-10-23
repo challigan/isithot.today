@@ -1,5 +1,4 @@
 import IsItModel
-import IsItUI
 import SnowKit
 import SwiftUI
 import UIKit

@@ -13,7 +13,9 @@ extension Date {
 
   /// The moment in whole epoch milliseconds, to the nearest, as the TypeScript counts time. A
   /// moment made from whole milliseconds reads back as exactly those, so the rules ported from
-  /// the TypeScript compare and add moments exactly as it does.
+  /// the TypeScript compare and add moments exactly as it does. Every moment the app reads or
+  /// makes is within JavaScript's range (±8.64e15 ms, which `ApiClockHour` holds the API's hours
+  /// to), far inside `Int`'s.
   public var epochMs: Int {
     Int((timeIntervalSince1970 * 1000).rounded())
   }

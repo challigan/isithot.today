@@ -89,3 +89,35 @@ extension VectorPort {
     }
   }
 }
+
+/// What the vectors can't reach: an answer the reference would carry as it is, but whose
+/// moments no `Date` the rules count in milliseconds can hold.
+@Suite("The clock rules on a damaged answer")
+struct DamagedClockTests {
+  @Test("an hour beyond JavaScript's dates drops its series, and the rules read the rest")
+  func beyondDates() throws {
+    var json = try #require(
+      JSONSerialization.jsonObject(with: Fixtures.data("aberdeen-snow")) as? [String: Any])
+    var rain = try #require(json["rain"] as? [String: Any])
+    var now = try #require(rain["now"] as? [String: Any])
+    var series = try #require(now["series"] as? [[String: Any]])
+    series[0]["time"] = 1e20
+    now["series"] = series
+    rain["now"] = now
+    json["rain"] = rain
+    let damaged = try TodayResponse.decode(from: JSONSerialization.data(withJSONObject: json))
+    // As if the server had sent no Now for rain: the hours ahead and the clock rules still work.
+    let answers = FixtureAnswers()
+    let without = try answers("aberdeen-snow", without: ["rain.now"])
+    #expect(damaged.rain?.now == nil)
+    let made = try #require(damaged.snow?.days.first?.from)
+    for moment in [made, made.addingTimeInterval(2 * 3600)] {
+      #expect(
+        Freshness.hold(.init(), damaged, at: moment) == Freshness.hold(.init(), without, at: moment)
+      )
+      #expect(HourPicker.pick(damaged, at: moment) == HourPicker.pick(without, at: moment))
+    }
+    #expect(Freshness.hourUntil(damaged) == Freshness.hourUntil(without))
+    #expect(Freshness.usableUntil(damaged) == Freshness.usableUntil(without))
+  }
+}

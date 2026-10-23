@@ -40,9 +40,11 @@ import {
 import { FIXTURES, fixtureJson, makeFixture, type Fixture } from '../src/fixtures';
 import {
   addDays,
+  assertSpecParse,
   atPath,
   localMoments,
   pathIn,
+  specFormPairs,
   vectorFiles,
   vectorJson,
   withoutBlocks,
@@ -95,7 +97,7 @@ const replay: Record<string, (i: In) => unknown> = {
   question: (i) => question(i.city, i.view, 'snow', i.tomorrow),
   viewDisplay: (i) =>
     viewDisplay(res(i), 'snow', 'today', 'ready', { tomorrow: i.tomorrow }).models,
-  widgetEntries: (i) => widgetEntries(fx(i.fixture), i),
+  widgetEntries: (i) => widgetEntries(i.fixture === null ? null : res(i), i),
   alertPlaceAllowed: (i) => alertPlaceAllowed(i.target),
   registrationBody: (i) => registrationBody(i),
   fingerprint: (i) => fingerprint(i.body),
@@ -271,6 +273,49 @@ describe('withoutBlocks', () => {
     expect(f.snow!.now).toBeDefined();
     expect(() => withoutBlocks(f, ['snow.nothing'])).toThrow(/Nothing at snow.nothing/);
     expect(() => withoutBlocks(f, ['nothing.now'])).toThrow(/Nothing at nothing.now/);
+  });
+
+  it('takes an item out of a list, or empties it, and refuses an item that isn’t there', () => {
+    const f = fixtures.get('aberdeen-snow')!;
+    const g = withoutBlocks(f, ['snow.days.0', 'now.series.*']);
+    expect(g.snow!.days).toEqual([f.snow!.days[1]]);
+    expect(g.now!.series).toEqual([]);
+    expect(f.snow!.days).toHaveLength(2);
+    expect(f.now!.series.length).toBeGreaterThan(0);
+    expect(JSON.parse(JSON.stringify(g))).toEqual(g);
+    for (const path of ['snow.days.2', 'snow.days.-1', 'snow.days.01', 'snow.days.x']) {
+      expect(() => withoutBlocks(f, [path]), path).toThrow(/Nothing at/);
+    }
+    expect(() => withoutBlocks(f, ['now.series.*', 'now.series.*'])).toThrow(/Nothing at/);
+  });
+});
+
+describe('specFormPairs and assertSpecParse', () => {
+  const codes = (pairs: [string, string][]) =>
+    pairs.map((pair) => pair.map((text) => [...text].map((c) => c.codePointAt(0))));
+
+  it('read a query as the URL standard does', () => {
+    expect(specFormPairs('?a=1&&b=x+y%2Bz&c&=d&e=f=g')).toEqual([
+      ['a', '1'],
+      ['b', 'x y+z'],
+      ['c', ''],
+      ['', 'd'],
+      ['e', 'f=g'],
+    ]);
+    expect(specFormPairs('??a')).toEqual([['?a', '']]);
+    // A broken escape is kept, broken UTF-8 is U+FFFD, and a raw character beside it is itself.
+    expect(codes(specFormPairs('a=%zz%4%C3%28'))).toEqual([
+      [[0x61], [0x25, 0x7a, 0x7a, 0x25, 0x34, 0xfffd, 0x28]],
+    ]);
+    expect(codes(specFormPairs('a=%FF€'))).toEqual([[[0x61], [0xfffd, 0x20ac]]]);
+    expect(codes(specFormPairs('a=%EF%BB%BFb'))).toEqual([[[0x61], [0xfeff, 0x62]]]);
+  });
+
+  it('stop the generator where a parser reads a query otherwise', () => {
+    expect(() => assertSpecParse('place=leeds-gb&units=c')).not.toThrow();
+    expect(() => assertSpecParse('a=%FF€', () => [['a', '\ufffd\ufffd']])).toThrow(
+      /otherwise than the URL standard/,
+    );
   });
 });
 
@@ -471,6 +516,17 @@ describe('the cases cover what section 7.4 asks for', () => {
     expect(states).toEqual(new Set(['ok', 'locked', 'stale']));
     expect(cases.some((c) => (c.in as In).fixture === null)).toBe(true);
     expect(cases.some((c) => (c.out as any).reloadAt === 'never')).toBe(true);
+    // The fallbacks: without hours ahead, and an evening with no tomorrow for snow.
+    const without = (blocks: string) =>
+      cases.filter((c) => JSON.stringify((c.in as In).without) === blocks);
+    expect(without('["snow.ahead"]').length).toBeGreaterThan(0);
+    const noTomorrow = without('["snow.days.1"]').flatMap((c) => (c.out as any).entries);
+    expect(
+      noTomorrow.some(
+        (e: any) =>
+          e.state === 'ok' && e.slot === 'tomorrow' && e.day === null && e.palette === 'nosnow',
+      ),
+    ).toBe(true);
     // Older than the stale limit: a stale entry at the cut-off.
     const old = fixtures.get('old-forecast')!;
     expect(
@@ -489,6 +545,12 @@ describe('the cases cover what section 7.4 asks for', () => {
     expect(new Set(casesFor('alerts', 'alertPlaceAllowed').map((c) => c.out))).toEqual(
       new Set([true, false]),
     );
+    // A searched place with an empty name, and one with none: the registration names neither.
+    const unnamed = casesFor('alerts', 'registrationBody').filter(
+      (c) => (c.in as In).place.source === 'search' && !(c.in as In).place.name,
+    );
+    expect(new Set(unnamed.map((c) => (c.in as In).place.name))).toEqual(new Set(['', undefined]));
+    expect(unnamed.every((c) => !('name' in (c.out as any).place))).toBe(true);
   });
 
   it('links: every route, malformed payloads and past dates', () => {

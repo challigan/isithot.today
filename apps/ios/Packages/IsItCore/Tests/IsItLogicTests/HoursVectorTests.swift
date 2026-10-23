@@ -22,18 +22,18 @@ extension VectorPort {
       let week: String?
       let source: PickedHour.Source
     }
-    for item in try file.cases("pickHour", input: FixtureAt.self, output: Picked?.self) {
+    try file.forEachCase("pickHour", input: FixtureAt.self, output: Picked?.self) { item in
       let name = item.input.fixture
       let label = "hours.json case \(item.index): pickHour(\(item.input))"
       let res = try answers(item.input)
       let picked = HourPicker.pick(res, at: Date(epochMs: item.input.now))
       guard let expected = item.output else {
         #expect(picked == nil, "\(label)")
-        continue
+        return
       }
       guard let picked else {
         Issue.record("\(label): nil, expected \(expected)")
-        continue
+        return
       }
       let now = try Fixtures.object(ApiSnowNow.self, at: expected.now, in: name)
       let today = try Fixtures.object(ApiSnowDay.self, at: expected.today, in: name)
@@ -44,6 +44,10 @@ extension VectorPort {
       #expect(picked.now == now, "\(label): now, \(expected.now ?? "nil")")
       #expect(picked.today == today, "\(label): today, \(expected.today ?? "nil")")
       #expect(picked.week == week, "\(label): week, \(expected.week ?? "nil")")
+      #expect(
+        sameText(picked.now as Any, now as Any) && sameText(picked.today as Any, today as Any)
+          && sameText(picked.week as Any, week as Any),
+        "\(label): text")
       // An hour ahead's objects are its own: the path's index is the hour picked.
       for path in [expected.now, expected.today, expected.week].compactMap({ $0 }) {
         let parts = path.split(separator: ".")
@@ -61,7 +65,7 @@ extension VectorPort {
       let slot: MiddleDay.Slot
       let day: String?
     }
-    for item in try file.cases("middleDay", input: FixtureAt.self, output: Middle.self) {
+    try file.forEachCase("middleDay", input: FixtureAt.self, output: Middle.self) { item in
       let name = item.input.fixture
       let label = "hours.json case \(item.index): middleDay(\(item.input))"
       let res = try answers(item.input)
@@ -72,6 +76,7 @@ extension VectorPort {
       let day = try Fixtures.object(ApiSnowDay.self, at: item.output.day, in: name)
       #expect(middle.slot == item.output.slot, "\(label): slot")
       #expect(middle.day == day, "\(label): day, \(item.output.day ?? "nil")")
+      #expect(sameText(middle.day as Any, day as Any), "\(label): day's text")
       #expect(
         middle.label == MiddleDay.label(.today, tomorrow: item.output.slot == .tomorrow),
         "\(label): label")

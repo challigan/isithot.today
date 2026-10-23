@@ -68,6 +68,43 @@ struct ClockDecodingTests {
     #expect(response.snow?.days.first?.band == .snow)
   }
 
+  @Test(
+    "an hour that starts beyond JavaScript's dates is damage: its series is dropped",
+    arguments: [1e20, -1e20, 8.64e15 + 1, -8.64e15 - 1]
+  )
+  func beyondDates(_ ms: Double) throws {
+    var json = try tree("aberdeen-snow")
+    func damaged(_ block: JSONObject?) throws -> JSONObject {
+      var block = try #require(block)
+      var series = try #require(block["series"] as? [JSONObject])
+      series[0]["time"] = ms
+      block["series"] = series
+      return block
+    }
+    json["now"] = try damaged(json["now"] as? JSONObject)
+    var rain = try #require(json["rain"] as? JSONObject)
+    rain["now"] = try damaged(rain["now"] as? JSONObject)
+    json["rain"] = rain
+    var snow = try #require(json["snow"] as? JSONObject)
+    snow["now"] = try damaged(snow["now"] as? JSONObject)
+    json["snow"] = snow
+    let response = try decode(json)
+    #expect(response.hotNow == nil)
+    #expect(response.rain?.now == nil)
+    #expect(response.rain?.days.count == 2)
+    #expect(response.snow?.now?.series == nil)
+    #expect(response.snow?.now?.answer == "No.")
+  }
+
+  @Test("an hour at the edge of JavaScript's dates still decodes, to the millisecond")
+  func edgeOfDates() throws {
+    for ms in [8.64e15, -8.64e15] {
+      let data = Data(#"{"time":\#(ms),"date":"2026-12-02"}"#.utf8)
+      let hour = try JSONDecoder().decode(ApiClockHour.self, from: data)
+      #expect(hour.time.epochMs == Int(ms))
+    }
+  }
+
   @Test("an answer without the hot or rain answers decodes without their moments")
   func missing() throws {
     var json = try tree("leeds-dry")

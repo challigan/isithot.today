@@ -6,21 +6,25 @@ import Testing
 
 extension VectorPort {
   /// `widget.json`: client `widgetEntries`, ported as `WidgetPlanner.entries`, for section 6.5's
-  /// clocks across the fixtures, locked, stale and with no answer. Each entry's `day` is named by
-  /// its path in the fixture, so it is read back from there and compared whole; every other
-  /// field is compared as it is.
+  /// clocks across the fixtures, locked, stale and with no answer, and without hours ahead or
+  /// snow's tomorrow (`in.without`). Each entry's `day` is named by its path in the fixture, so it
+  /// is read back from there and compared whole; every other field is compared as it is.
   static let widget = VectorPort { file in
     let answers = FixtureAnswers()
 
     struct Plan: Decodable, Sendable, CustomStringConvertible {
       let fixture: String?
+      let without: [String]?
       let fetchedAt: Int
       let now: Int
       let unlocked: Bool
       let placeName: String?
 
       var description: String {
-        "\(fixture ?? "no answer") at \(now), fetched \(fetchedAt), "
+        let answer = fixture.map { name in
+          without.map { "\(name) without \($0.joined(separator: ", "))" } ?? name
+        }
+        return "\(answer ?? "no answer") at \(now), fetched \(fetchedAt), "
           + (unlocked ? "unlocked" : "locked") + (placeName.map { ", named \($0)" } ?? "")
       }
     }
@@ -70,10 +74,10 @@ extension VectorPort {
       let reloadAt: Reload
     }
 
-    for item in try file.cases("widgetEntries", input: Plan.self, output: Planned.self) {
+    try file.forEachCase("widgetEntries", input: Plan.self, output: Planned.self) { item in
       let input = item.input
       let label = "widget.json case \(item.index): widgetEntries(\(input))"
-      let res = try input.fixture.map { try answers($0) }
+      let res = try input.fixture.map { try answers($0, without: input.without ?? []) }
       let plan = WidgetPlanner.entries(
         res,
         fetchedAt: Date(epochMs: input.fetchedAt),
@@ -95,27 +99,28 @@ extension VectorPort {
         let day = try input.fixture.flatMap {
           try Fixtures.object(ApiSnowDay.self, at: expected.day, in: $0)
         }
+        let now = expected.now.map {
+          WidgetEntry.Now(answer: $0.answer, verdict: $0.verdict, band: $0.band)
+        }
+        let week = expected.week.map {
+          WidgetDay(
+            date: $0.date, label: $0.label, band: $0.band, bandLabel: $0.bandLabel,
+            amount: $0.amount, snowy: $0.snowy, total: $0.total)
+        }
         #expect(entry.date.epochMs == expected.date, "\(at): date")
         #expect(entry.state == expected.state, "\(at): state")
         #expect(entry.placeName == expected.placeName, "\(at): placeName")
         #expect(entry.slot == expected.slot, "\(at): slot")
         #expect(expected.day == nil || day != nil, "\(at): \(expected.day ?? "") in no answer")
         #expect(entry.day == day, "\(at): day, \(expected.day ?? "nil")")
-        #expect(
-          entry.now
-            == expected.now.map {
-              WidgetEntry.Now(answer: $0.answer, verdict: $0.verdict, band: $0.band)
-            },
-          "\(at): now")
-        #expect(
-          entry.week
-            == expected.week.map {
-              WidgetDay(
-                date: $0.date, label: $0.label, band: $0.band, bandLabel: $0.bandLabel,
-                amount: $0.amount, snowy: $0.snowy, total: $0.total)
-            },
-          "\(at): week")
+        #expect(entry.now == now, "\(at): now")
+        #expect(entry.week == week, "\(at): week")
         #expect(entry.palette == expected.palette, "\(at): palette")
+        // The reference's text, code unit for code unit.
+        #expect(
+          sameText(entry.placeName, expected.placeName) && sameText(entry.day as Any, day as Any)
+            && sameText(entry.now as Any, now as Any) && sameText(entry.week, week),
+          "\(at): text")
       }
     }
   }

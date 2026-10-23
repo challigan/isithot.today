@@ -18,10 +18,10 @@ struct PortedVector: Sendable {
 /// and for a file pnpm mobile:generate writes that isn't listed here, so none is skipped.
 ///
 /// To port a file: write the Swift; define its port in a test file of its own, as
-/// `extension VectorPort { static let grid = VectorPort { file in ... } }`, reading every
-/// function in the file (`file.compare` or `file.cases`); then change the file's `port: nil`
-/// below to that port (`port: .grid`). Entries stand apart, so porters working in parallel
-/// change lines that don't touch.
+/// `extension VectorPort { static let grid = VectorPort { file in ... } }`, checking every case
+/// of every function in the file (`file.compare`, or `file.forEachCase` for expectations of its
+/// own); then change the file's `port: nil` below to that port (`port: .grid`). Entries stand
+/// apart, so porters working in parallel change lines that don't touch.
 enum PortedVectors {
   static let all: [PortedVector] = [
     // core roundToGrid

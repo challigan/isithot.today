@@ -124,8 +124,9 @@ public enum Vectors {
 }
 
 /// A whole vector file, read once: `{ fn, source, cases }`, with each function's cases decoded
-/// when a test asks for them, as that function's own types. It notes whose cases were asked for,
-/// so a test can tell when a function in the file was left out (`unread`).
+/// when a test asks for them, as that function's own types. It notes each case a check has run
+/// on (`forEachCase`), so a test can tell when a function in the file, or any of its cases, was
+/// left out (`unchecked`).
 public final class VectorFile {
   /// The file's name, without `.json`.
   public let name: String
@@ -137,8 +138,8 @@ public final class VectorFile {
   public let functions: [String]
   /// How many cases each function has.
   public let counts: [String: Int]
-  /// The functions whose cases a test has read.
-  public private(set) var read: Set<String> = []
+  /// The cases a check has run on, by function: their indices in the file.
+  private var checked: [String: Set<Int>] = [:]
   private let data: Data
 
   /// The vector file pnpm mobile:generate wrote as `<name>.json`.
@@ -157,14 +158,19 @@ public final class VectorFile {
     self.data = data
   }
 
-  /// The functions it covers whose cases no test has read, in the file's order.
-  public var unread: [String] {
-    functions.filter { !read.contains($0) }
+  /// The functions it covers with a case no check has run on, in the file's order.
+  public var unchecked: [String] {
+    functions.filter { checkedCount($0) != counts[$0] }
+  }
+
+  /// How many of `fn`'s cases a check has run on.
+  public func checkedCount(_ fn: String) -> Int {
+    checked[fn]?.count ?? 0
   }
 
   /// `fn`'s cases, in order, each input decoded as `Input` and output as `Output` (an optional
   /// type where the output can be null), with its index in the file. Throws for a function the
-  /// file doesn't cover.
+  /// file doesn't cover. Reading them checks none: `forEachCase` notes each case it checks.
   public func cases<Input: Decodable & Sendable, Output: Decodable & Sendable>(
     _ fn: String,
     input: Input.Type = Input.self,
@@ -172,10 +178,23 @@ public final class VectorFile {
     decoder: JSONDecoder = JSONDecoder()
   ) throws -> [Vectors.Case<Input, Output>] {
     guard counts[fn] != nil else { throw Vectors.LoadError.noFunction(name, fn) }
-    let found = try Vectors.cases(
-      in: data, fn: fn, input: input, output: output, decoder: decoder)
-    read.insert(fn)
-    return found
+    return try Vectors.cases(in: data, fn: fn, input: input, output: output, decoder: decoder)
+  }
+
+  /// Runs `check` on each of `fn`'s cases, in order, and notes each case once `check` has run on
+  /// it: what makes the case count as checked (`unchecked`). A case `check` throws on is not
+  /// noted, and the throw ends the loop.
+  public func forEachCase<Input: Decodable & Sendable, Output: Decodable & Sendable>(
+    _ fn: String,
+    input: Input.Type = Input.self,
+    output: Output.Type = Output.self,
+    decoder: JSONDecoder = JSONDecoder(),
+    _ check: (Vectors.Case<Input, Output>) throws -> Void
+  ) throws {
+    for item in try cases(fn, input: input, output: output, decoder: decoder) {
+      try check(item)
+      checked[fn, default: []].insert(item.index)
+    }
   }
 
   /// The file without its cases' inputs and outputs.

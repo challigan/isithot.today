@@ -1,9 +1,10 @@
 /**
  * `AppCopy.swift` (iOS build spec, sections 7.1 and 10.9): the app's own strings, from
  * `appCopy.ts`, in its order. A string without slots is a constant; one with `{name}` slots is a
- * function with a `String` parameter for each, in the order they first appear.
+ * function with a `String` parameter for each, in the order they first appear. The strings App
+ * Intents reads as literals when the app is built (`APP_INTENT_KEYS`) are left out.
  */
-import { APP_COPY } from './appCopy';
+import { APP_COPY, APP_INTENT_KEYS } from './appCopy';
 import {
   generatedHeader,
   swiftIdentifier,
@@ -46,7 +47,11 @@ export function appCopySwift(copy: Readonly<Record<string, string>> = APP_COPY):
     "/// website doesn't (`CoreCopy`) and the server doesn't word. A string with slots is a",
     '/// function that fills them.',
     'public enum AppCopy {',
-    ...spaced(Object.entries(copy).map(([key, text]) => appCopyMember(key, text))),
+    ...spaced(
+      Object.entries(copy)
+        .filter(([key]) => !(APP_INTENT_KEYS as readonly string[]).includes(key))
+        .map(([key, text]) => appCopyMember(key, text)),
+    ),
     '}',
     '',
   ].join('\n');

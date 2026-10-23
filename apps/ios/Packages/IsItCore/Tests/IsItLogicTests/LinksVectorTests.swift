@@ -6,9 +6,10 @@ import Testing
 
 extension VectorPort {
   /// `links.json`: client `parseDeepLink` and `notificationRoute`, ported as `DeepLink.parse`
-  /// and `DeepLink.route(payload:placeToday:)`. A payload is any JSON, as a notification's
-  /// `userInfo` holds it: it reaches the port as `JSONSerialization` reads it. Each route is
-  /// decoded from the client's JSON and compared whole.
+  /// and `DeepLink.route(payload:placeNow:)`. A payload is any JSON, as a notification's
+  /// `userInfo` holds it: it reaches the port as `JSONSerialization` reads it, and the place's
+  /// date (`placeToday`) as a `LocalDateTime`'s. Each route is decoded from the client's JSON and
+  /// compared whole.
   static let links = VectorPort { file in
     struct Link: Decodable, Sendable {
       let url: String
@@ -22,7 +23,9 @@ extension VectorPort {
       let placeToday: String?
     }
     try file.compare("notificationRoute", input: Tap.self, output: DeepLink.Route?.self) { tap in
-      DeepLink.route(payload: try tap.payload.foundation()) { _ in tap.placeToday }
+      DeepLink.route(payload: try tap.payload.foundation()) { _ in
+        tap.placeToday.map { LocalDateTime(date: $0, hours: 0) }
+      }
     }
   }
 }
@@ -50,11 +53,31 @@ struct DeepLinkTests {
     var asked: [Target] = []
     let route = DeepLink.route(payload: userInfo) { target in
       asked.append(target)
-      return "2026-12-16"
+      return LocalDateTime(date: "2026-12-16", hours: 18.5)
     }
     let durham = Target.city(slug: "durham-gb", name: "Durham")
     #expect(route == .place(durham, view: .today))
     #expect(asked == [durham])
+  }
+
+  @Test("the place's day is the app's own time there, after 6pm and after midnight alike")
+  func placeNow() throws {
+    let userInfo: [AnyHashable: Any] = [
+      "topic": "snow", "kind": "evening", "date": "2026-12-17", "view": "today",
+      "place": "place=durham-gb",
+    ]
+    let durham = Target.city(slug: "durham-gb")
+    // 6:30pm on the 16th, 12:30am on the 17th, and 12:30am on the 18th, in London.
+    let moments = [1_797_445_800_000, 1_797_467_400_000, 1_797_553_800_000]
+    let views = moments.map { ms in
+      DeepLink.route(payload: userInfo) { _ in
+        PlaceTime.local(Date(epochMs: ms), in: "Europe/London")
+      }
+    }
+    #expect(
+      views == [
+        .place(durham, view: .today), .place(durham, view: .today), .place(durham, view: nil),
+      ])
   }
 
   @Test(

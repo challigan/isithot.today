@@ -17,6 +17,13 @@ public struct LocalDateTime: Codable, Sendable, Equatable {
 /// The time at a place: the port of core `localDateTime` (`dates.ts`), checked against
 /// `placeTime.json`. Only `TimeZone(identifier:)` and `secondsFromGMT(for:)` read the zone, and
 /// a Gregorian calendar in UTC reads the shifted clock, which Linux and iOS agree on (V4).
+///
+/// It is exact for the zones the API sends: Open-Meteo's IANA names, as written ("Europe/London",
+/// "Asia/Kolkata", "Etc/GMT+1"), aliases included, from 1582 on. Core's `Intl.DateTimeFormat`
+/// and Foundation disagree on names the API never sends: Intl reads a name in any case
+/// ("europe/london") and a UTC offset ("+05:30"), where this falls back to UTC, and it refuses
+/// "GMT+5", which this reads as UTC+5. Before 1582 Foundation's calendar is Julian, where Intl's
+/// stays Gregorian.
 public enum PlaceTime {
   /// The local date and time of day at `moment` in the IANA time zone `timezone`, to the minute,
   /// as core's formatter gives it: the seconds are dropped, not rounded. A zone the system

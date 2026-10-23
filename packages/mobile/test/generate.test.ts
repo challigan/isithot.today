@@ -20,7 +20,6 @@ import {
   FIXTURES_DIR,
   MODEL_GENERATED_DIR,
   OWNED_DIRS,
-  UI_GENERATED_DIR,
   VECTORS_DIR,
   drift,
   generatedFiles,
@@ -52,7 +51,7 @@ describe('generatedFiles', () => {
     assets = [...glyphFiles(sources.glyphs), ...iconFiles(sources.favicon)];
   }, 120_000);
 
-  it("writes IsItModel's and IsItUI's Swift, each fixture and vector file, the glyph catalogues and the app icon", async () => {
+  it("writes IsItModel's Swift, each fixture and vector file, the glyph catalogues and the app icon", async () => {
     const model = 'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated';
     const resources = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources';
     const vectors = [
@@ -69,7 +68,7 @@ describe('generatedFiles', () => {
       `${model}/AppCopy.swift`,
       `${model}/Constants.swift`,
       `${model}/Keys.swift`,
-      'apps/ios/Packages/IsItKit/Sources/IsItUI/Generated/Palettes.swift',
+      `${model}/Palettes.swift`,
       ...resourcePaths,
       ...assets.map((f) => f.path),
     ]);
@@ -90,7 +89,6 @@ describe('generatedFiles', () => {
       FIXTURES_DIR,
       VECTORS_DIR,
       MODEL_GENERATED_DIR,
-      UI_GENERATED_DIR,
       GLYPHS_DIR,
       GLYPHS_FALLBACK_DIR,
       SNOW_KIT_GENERATED_DIR,

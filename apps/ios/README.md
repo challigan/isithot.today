@@ -16,12 +16,12 @@ Package.resolved         the pinned package versions, copied into the project by
 Configs/                 Base (every target), Team (Carl's team ID, not a secret), Snow (identifiers,
                          API origin, ad units), CI-Simulator (signed to run locally, for CI)
 Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API models; generated CoreCopy,
-                         Questions, AppCopy, Constants and Keys; in Tests/IsItTestSupport the fixtures
-                         and golden vectors with their loaders; in Tests/IsItLogicTests the ports' golden
-                         tests and the guard that every vector file is ported (below)
+                         Questions, AppCopy, Constants, Keys and Palettes; in Tests/IsItTestSupport the
+                         fixtures and golden vectors with their loaders; in Tests/IsItLogicTests the ports'
+                         golden tests and the guard that every vector file is ported (below)
 Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore), IsItAds (Google's SDKs),
-                         IsItUI (the skeleton's answer view, generated Palettes, Color(rgb:)), IsItWidgetUI
-                         (the widget's entry, provider, view), SnowKit (Glyphs, and the glyph catalogues,
+                         IsItUI (the skeleton's answer view), IsItWidgetUI (the widget's entry, provider,
+                         view), SnowKit (Glyphs, Color(rgb:) for the palettes, and the glyph catalogues,
                          generated)
 Apps/Snow/App/           WillItSnowApp, AppModel, HomeView, DebugHooks (every test and debug hook)
 Apps/Snow/Resources/     the app's Info.plist, entitlements and privacy manifest; generated: Assets.xcassets
@@ -188,8 +188,8 @@ listed there, and for a port that doesn't read the cases of every function in it
 To port a file:
 
 1. Write the Swift (in IsItLogic, or IsItModel for 3.2's).
-2. In a test file of its own in `Tests/IsItLogicTests`, define its port, reading every function
-   in the file; for `grid.json`, say:
+2. In a test file of its own in `Tests/IsItLogicTests`, define its port, checking every case of
+   every function in the file; for `grid.json`, say:
 
    ```swift
    extension VectorPort {
@@ -206,17 +206,22 @@ To port a file:
    ```
 
    `file.compare` runs the port on each case and, on a mismatch, names the file, the case's
-   index and its input, with both values. Where an output needs more than `==` (an answer named
-   by its path in the fixture, say), read the cases with `file.cases(_:input:output:decoder:)`
-   and expect what each needs; `Fixtures.decode(_:at:in:decoder:)` reads a path such as
-   `snow.days.1` back from the fixture, with `ApiJSON.decoder()` for the API's types.
+   index and its input, with both values. It compares with `==` and then `sameText`, every
+   string in the two code unit for code unit, as JavaScript compares strings (Swift's `==` takes
+   canonically equivalent text as equal). Where an output needs more than that (an answer named
+   by its path in the fixture, say), run your own expectations over the cases with
+   `file.forEachCase(_:input:output:decoder:_:)`, which notes each case it runs on; the guard
+   fails a function with a case no check ran on, so reading the cases with `file.cases` checks
+   none. `Fixtures.decode(_:at:in:decoder:)` reads a path such as `snow.days.1` back from the
+   fixture, with `ApiJSON.decoder()` for the API's types.
 
    A test file that calls `file.compare` imports Testing, whose `#_sourceLocation` is its
    default argument. For a case naming a fixture, `FixtureAnswers` (in
    `Tests/IsItLogicTests/FixtureAnswers.swift`) decodes each answer once per check; give the
    case's input type `fixture` and `without` (`FixtureCase`, or `FixtureAt` and `FixtureOnly`)
    and call `answers(input)`, so a case that takes blocks out of its fixture (`in.without`, for
-   the rules' fallbacks) is answered without them, as `vectors.ts` answered it.
+   the rules' fallbacks: a field, a list's item such as `snow.days.1`, or every item, as in
+   `now.series.*`) is answered without them, as `vectors.ts` answered it.
 
 3. In `PortedVectors.swift`, change the file's `port: nil` to the port (`port: .grid`).
 
@@ -237,7 +242,7 @@ included. Until the last port landed it failed, with one issue for each file not
 | `strip.json`     | 3.3, done | `StripGeometry`                                     |
 | `widget.json`    | 3.4, done | `WidgetPlanner.entries`                             |
 | `alerts.json`    | 3.4, done | `AlertSync.action`, `.body`, `.fingerprint`         |
-| `links.json`     | 3.4, done | `DeepLink.parse`, `.route(payload:)`                |
+| `links.json`     | 3.4, done | `DeepLink.parse`, `.route(payload:placeNow:)`       |
 | `recent.json`    | 3.4, done | `RecentPlaces`                                      |
 
 While a file was still to port, `ios.yml`'s `swift-linux` job failed at its Test step, and the
@@ -270,8 +275,9 @@ links and recent places"):
   `AlertSync.body(...)` is the `PUT /api/v1/devices` body (`RegistrationBody`, `Codable`), and
   `AlertSync.fingerprint(_:)` what `alertSync.v1` keeps of it, with `AlertSync.Sent`.
 - **`DeepLink.parse(_:)`** reads a willitsnow:// link (a `String` or a `URL`), and
-  **`DeepLink.route(payload:placeToday:)`** a notification's `userInfo`; a place route's view is
-  nil for the place's view for the time of day.
+  **`DeepLink.route(payload:placeNow:)`** a notification's `userInfo`, given the place's time
+  now as `PlaceTime.local(_:in:)` gives it; a place route's view is nil for the place's view for
+  the time of day.
 - **`RecentPlaces.adding(_:name:to:max:)` and `.removing(_:from:)`** keep `recent.v1`'s
   `[RecentPlace]`, which is `Codable` as the client's JSON.
 

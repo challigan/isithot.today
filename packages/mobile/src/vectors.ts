@@ -10,8 +10,9 @@
  * - Moments (`now`, `fetchedAt`, and what the functions return as times) are epoch milliseconds,
  *   as the client's functions take them. Dates inside the API's own objects stay ISO 8601.
  * - An answer is named by its fixture: `in.fixture` is the file's name in the Fixtures folder.
- *   `in.without`, where there is one, lists blocks taken out of it first ("rain", "snow.now"),
- *   for the rules' fallbacks: the answer as it would be without them (`withoutBlocks`).
+ *   `in.without`, where there is one, lists blocks taken out of it first ("rain", "snow.now", a
+ *   list's item "snow.days.1", or every item, "now.series.*"), for the rules' fallbacks: the
+ *   answer as it would be without them (`withoutBlocks`).
  * - Where a function returns one of the answer's own snow objects (pickHour's `now`, `today` and
  *   `week`, middleDay's and a widget entry's `day`), the vector has its path in that fixture
  *   instead ("snow.days.1", "snow.ahead.2.today"), or null: the same object, compared whole.
@@ -69,6 +70,7 @@ import {
   type PushEnv,
   type RecentPlace,
   type Target,
+  type WidgetEntry,
 } from '@isithot/client';
 import type { Fixture } from './fixtures';
 
@@ -194,8 +196,9 @@ export function pathIn(res: TodayResponse | null, value: object | null): string 
 }
 
 /**
- * `f` with the blocks at `paths` ("rain", "snow.now") taken out, as an answer the server sent
- * without them would be: a copy, so `f` itself is unchanged.
+ * `f` with the blocks at `paths` taken out, as an answer the server sent without them would be:
+ * "rain" or "snow.now" leaves the field out, "snow.days.1" takes that item out of its list (any
+ * after it move up), and "now.series.*" empties the list. A copy, so `f` itself is unchanged.
  */
 export function withoutBlocks(f: Fixture, paths: readonly string[]): Fixture {
   const copy = JSON.parse(JSON.stringify(f)) as Fixture;
@@ -205,18 +208,40 @@ export function withoutBlocks(f: Fixture, paths: readonly string[]): Fixture {
     const parent = keys.reduce<unknown>(
       (v, key) => (v as Record<string, unknown> | undefined)?.[key],
       copy,
-    ) as Record<string, unknown> | undefined;
-    if (!parent || !(last in parent)) throw new Error(`Nothing at ${path} to take out`);
-    delete parent[last];
+    );
+    if (Array.isArray(parent)) {
+      const index = /^(0|[1-9]\d*)$/.test(last) ? Number(last) : -1;
+      if (last === '*' && parent.length > 0) parent.length = 0;
+      else if (index >= 0 && index < parent.length) parent.splice(index, 1);
+      else throw new Error(`Nothing at ${path} to take out`);
+    } else {
+      const object = parent as Record<string, unknown> | undefined;
+      if (!object || !(last in object)) throw new Error(`Nothing at ${path} to take out`);
+      delete object[last];
+    }
   }
   return copy;
 }
 
 /**
+ * `pathIn` for an answer with blocks taken out (`withoutBlocks`), where the vectors name the
+ * path in the whole fixture: throws unless the path names the same object there too, so taking
+ * an item out of a list can't move the one a vector names.
+ */
+function pathInWhole(whole: Fixture, res: Fixture, value: object | null): string | null {
+  const path = pathIn(res, value);
+  if (path !== null && JSON.stringify(atPath(whole, path)) !== JSON.stringify(value)) {
+    throw new Error(`${path} is another object in the whole fixture`);
+  }
+  return path;
+}
+
+/**
  * The blocks the clock rules fall back without, taken out of a fixture: rain (snow's today and
  * Now then say when the answer goes out of date), rain's Now or snow's too (the next UTC hour
- * then), the snow answer, the hours ahead (the hour the answer holds for then ends it), and the
- * hot answer's Now (which says when the place's midnight is).
+ * then), the snow answer, the hours ahead (the hour the answer holds for then ends it), the
+ * hot answer's Now (which says when the place's midnight is), and the hot answer's days or its
+ * Now's hours, each list left empty (no date to be past, no last hour).
  */
 const LEFT_OUT: readonly (readonly string[])[] = [
   ['rain'],
@@ -226,6 +251,8 @@ const LEFT_OUT: readonly (readonly string[])[] = [
   ['snow'],
   ['snow.ahead'],
   ['now'],
+  ['days.*'],
+  ['now.series.*'],
 ];
 
 /** Fixtures for the fallbacks: hours off the UTC hour, where they differ, and on it. */
@@ -426,6 +453,60 @@ const RESULTS: readonly SearchResult[] = [
   },
 ];
 
+/** `bytes` as the WHATWG urlencoded parser reads a name or value: "+" as a space, then %-escapes. */
+function formDecode(bytes: Uint8Array): string {
+  const hex = (b: number | undefined) =>
+    b !== undefined &&
+    ((b >= 0x30 && b <= 0x39) || (b >= 0x41 && b <= 0x46) || (b >= 0x61 && b <= 0x66));
+  const out: number[] = [];
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i]!;
+    if (b === 0x25 && hex(bytes[i + 1]) && hex(bytes[i + 2])) {
+      out.push(parseInt(String.fromCharCode(bytes[i + 1]!, bytes[i + 2]!), 16));
+      i += 2;
+    } else {
+      out.push(b === 0x2b ? 0x20 : b);
+    }
+  }
+  // UTF-8 decode without BOM: a leading U+FEFF is kept, and broken UTF-8 replaced by U+FFFD.
+  return new TextDecoder('utf-8', { ignoreBOM: true }).decode(Uint8Array.from(out));
+}
+
+/**
+ * A query's pairs as the WHATWG URL standard's urlencoded parser reads them, as browsers and
+ * IsItModel's `URLSearchParams` do: one leading "?" dropped, split on "&", empty pairs skipped,
+ * the name before the first "=".
+ */
+export function specFormPairs(query: string): [string, string][] {
+  const text = query.startsWith('?') ? query.slice(1) : query;
+  const encoder = new TextEncoder();
+  return text
+    .split('&')
+    .filter((pair) => pair !== '')
+    .map((pair) => {
+      const at = pair.indexOf('=');
+      const [name, value] = at < 0 ? [pair, ''] : [pair.slice(0, at), pair.slice(at + 1)];
+      return [formDecode(encoder.encode(name)), formDecode(encoder.encode(value))];
+    });
+}
+
+/**
+ * Throws unless `parse` (Node's `URLSearchParams`, which runs the reference here) reads `query`
+ * as the standard does. Node 22's doesn't always: next to a %-escape that decodes to broken
+ * UTF-8, it mangles raw non-ASCII characters in the same pair ("a=%FF€" gives two U+FFFD, where
+ * the standard, browsers and the Swift give U+FFFD and €). A vector built on that would pin
+ * Node's bug, so a query input must keep non-ASCII %-encoded wherever an escape in the same pair
+ * is broken UTF-8, and this check stops the generator when one doesn't.
+ */
+export function assertSpecParse(
+  query: string,
+  parse: (q: string) => [string, string][] = (q) => [...new URLSearchParams(q)],
+): void {
+  if (JSON.stringify(parse(query)) !== JSON.stringify(specFormPairs(query))) {
+    throw new Error(`Node reads ${JSON.stringify(query)} otherwise than the URL standard`);
+  }
+}
+
 function targetVectors(): VectorFile {
   const { cases, add } = collector();
   for (const target of TARGETS) add('targetKey', { target }, targetKey(target));
@@ -513,7 +594,10 @@ function targetVectors(): VectorFile {
     'lat=0&lon=0&elevation=9999.99&source=search',
     'lat=0&lon=0&elevation=1e3&source=search',
   ];
-  for (const query of queries) add('targetFromQuery', { query }, targetFromQuery(query));
+  for (const query of queries) {
+    assertSpecParse(query);
+    add('targetFromQuery', { query }, targetFromQuery(query));
+  }
   return vectorFile(
     [
       ['client', 'targetKey'],
@@ -845,61 +929,52 @@ function hourMoments(f: Fixture): number[] {
 
 function hoursVectors(fixtures: FixtureSet): VectorFile {
   const { cases, add } = collector();
-  for (const [name, f] of fixtures) {
-    for (const now of hourMoments(f)) {
-      const picked = pickHour(f, now);
-      add(
-        'pickHour',
-        { fixture: name, now },
-        picked && {
-          start: picked.start,
-          end: picked.end,
-          now: pathIn(f, picked.now),
-          today: pathIn(f, picked.today),
-          week: pathIn(f, picked.week),
-          source: picked.source,
-        },
-      );
-      // `picked` is pickHour's for the same fixture and moment.
-      if (picked) {
-        const { slot, day } = middleDay(f, picked, now);
-        add('middleDay', { fixture: name, now }, { slot, day: pathIn(f, day) });
-      }
+  /**
+   * pickHour at `now` for the fixture `name`, without the blocks `without` lists, and middleDay
+   * for the hour it picks.
+   */
+  const pick = (name: string, now: number, without?: readonly string[]): void => {
+    const whole = fixtures.get(name);
+    if (!whole) throw new Error(`No fixture ${name}`);
+    const f = without ? withoutBlocks(whole, without) : whole;
+    const input = without ? { fixture: name, without, now } : { fixture: name, now };
+    const path = (value: object | null) => pathInWhole(whole, f, value);
+    const picked = pickHour(f, now);
+    add(
+      'pickHour',
+      input,
+      picked && {
+        start: picked.start,
+        end: picked.end,
+        now: path(picked.now),
+        today: path(picked.today),
+        week: path(picked.week),
+        source: picked.source,
+      },
+    );
+    // `picked` is pickHour's for the same answer and moment.
+    if (picked) {
+      const { slot, day } = middleDay(f, picked, now);
+      add('middleDay', input, { slot, day: path(day) });
     }
-  }
+  };
+  for (const [name, f] of fixtures) for (const now of hourMoments(f)) pick(name, now);
   // Without hours ahead the answer's own hold until its hour ends, and without snow none do.
   for (const name of FALLBACK_FIXTURES) {
     const full = fixtures.get(name);
     if (!full) throw new Error(`No fixture ${name}`);
     const noAhead = withoutBlocks(full, ['snow.ahead']);
-    for (const now of hourMoments(noAhead)) {
-      const fixture = { fixture: name, without: ['snow.ahead'], now };
-      const picked = pickHour(noAhead, now);
-      add(
-        'pickHour',
-        fixture,
-        picked && {
-          start: picked.start,
-          end: picked.end,
-          now: pathIn(noAhead, picked.now),
-          today: pathIn(noAhead, picked.today),
-          week: pathIn(noAhead, picked.week),
-          source: picked.source,
-        },
-      );
-      if (picked) {
-        const { slot, day } = middleDay(noAhead, picked, now);
-        add('middleDay', fixture, { slot, day: pathIn(noAhead, day) });
-      }
-    }
+    for (const now of hourMoments(noAhead)) pick(name, now, ['snow.ahead']);
     const made = madeAt(full);
-    for (const now of [made, made + HOUR]) {
-      add(
-        'pickHour',
-        { fixture: name, without: ['snow'], now },
-        pickHour(withoutBlocks(full, ['snow']), now),
-      );
-    }
+    for (const now of [made, made + HOUR]) pick(name, now, ['snow']);
+    // An answer whose snow has no days: its own today is none.
+    for (const now of [made - 5 * MINUTE, made]) pick(name, now, ['snow.ahead', 'snow.days.*']);
+  }
+  // From 6pm, an answer whose snow has no tomorrow, where the hot answer has: no middle day.
+  const durham = fixtures.get('durham-tomorrow');
+  if (!durham) throw new Error('No fixture durham-tomorrow');
+  for (const now of [madeAt(durham), localMoment(zoneOf(durham), dateOf(durham), 23, 30)]) {
+    pick('durham-tomorrow', now, ['snow.days.1']);
   }
   // The Updated line, from each fixture's `updatedAt` and a few more, on the day and the next.
   const updates: [string, string][] = [...fixtures.values()].map((f) => [f.updatedAt, zoneOf(f)]);
@@ -992,20 +1067,27 @@ function widgetVectors(fixtures: FixtureSet): VectorFile {
   const plan = (
     name: string | null,
     now: number,
-    o: { fetchedAt?: number; unlocked?: boolean; placeName?: string } = {},
+    o: {
+      fetchedAt?: number;
+      unlocked?: boolean;
+      placeName?: string;
+      without?: readonly string[];
+    } = {},
   ): void => {
-    const f = name === null ? null : fx(name);
+    const whole = name === null ? null : fx(name);
+    const f = whole && o.without ? withoutBlocks(whole, o.without) : whole;
     const options = {
-      fetchedAt: o.fetchedAt ?? (f ? madeAt(f) : now - HOUR),
+      fetchedAt: o.fetchedAt ?? (whole ? madeAt(whole) : now - HOUR),
       now,
       unlocked: o.unlocked ?? true,
       ...(o.placeName === undefined ? {} : { placeName: o.placeName }),
     };
     const { entries, reloadAt } = widgetEntries(f, options);
+    const day = (e: WidgetEntry) => (whole && f ? pathInWhole(whole, f, e.day) : pathIn(f, e.day));
     add(
       'widgetEntries',
-      { fixture: name, ...options },
-      { entries: entries.map((e) => ({ ...e, day: pathIn(f, e.day) })), reloadAt },
+      { fixture: name, ...(o.without ? { without: o.without } : {}), ...options },
+      { entries: entries.map((e) => ({ ...e, day: day(e) })), reloadAt },
     );
   };
   const local = (name: string, days: number, hh: number, mm: number): number[] => {
@@ -1072,6 +1154,18 @@ function widgetVectors(fixtures: FixtureSet): VectorFile {
   plan(null, aberdeen);
   plan(null, aberdeen, { placeName: 'Aberdeen' });
   plan('aberdeen-snow', aberdeen, { placeName: 'Home' });
+  // Without hours ahead: entries from the answer's own Now, today and week, when it was fetched
+  // and at 6pm (a clock behind in Kolkata, past the hour it holds for in Aberdeen).
+  for (const name of FALLBACK_FIXTURES) {
+    for (const now of [madeAt(fx(name)), ...local(name, 0, 18, 0)]) {
+      plan(name, now, { without: ['snow.ahead'] });
+    }
+  }
+  // From 6pm, an answer whose snow has no tomorrow, where the hot answer has: no middle day, so
+  // the week from its first day and the nosnow palette.
+  for (const now of [madeAt(fx('durham-tomorrow')), ...local('durham-tomorrow', 0, 23, 30)]) {
+    plan('durham-tomorrow', now, { without: ['snow.days.1'] });
+  }
   return vectorFile([['client', 'widgetEntries']], cases);
 }
 
@@ -1114,6 +1208,19 @@ const PLACES: readonly PlaceTarget[] = [
     geonameId: 0,
     elevation: 0,
   },
+  // A searched place the search couldn't name, as searchTarget keeps it (an empty name, region
+  // and geonameId), and one with no name at all: the registration leaves each out.
+  {
+    kind: 'coords',
+    source: 'search',
+    lat: 0.05,
+    lon: -0.05,
+    name: '',
+    region: '',
+    country: null,
+    geonameId: 0,
+  },
+  { kind: 'coords', source: 'search', lat: -33.85, lon: 151.2, region: '', country: '' },
 ];
 
 function alertVectors(): VectorFile {
@@ -1284,12 +1391,16 @@ function linkVectors(): VectorFile {
     place: 'place=durham-gb',
     name: 'Durham',
   };
-  const route = (payload: unknown, placeToday: string | null) =>
+  const route = (payload: unknown, placeToday: string | null) => {
+    // The payload's place is a query the reference reads with URLSearchParams.
+    const place = (payload as { place?: unknown } | null)?.place;
+    if (typeof place === 'string') assertSpecParse(place);
     add(
       'notificationRoute',
       { payload, placeToday },
       notificationRoute(payload, () => placeToday),
     );
+  };
   // The day the notification is about, from two days before it to two after; or not known.
   for (const today of [
     '2026-12-15',

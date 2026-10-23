@@ -29,11 +29,11 @@ export const FIXTURES_DIR = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Re
 /** The golden vectors, beside the fixtures they name, for IsItLogic's tests (phase 3). */
 export const VECTORS_DIR = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources/Vectors';
 
-/** IsItModel's generated Swift: the copy, the questions, the constants and the keys. */
+/**
+ * IsItModel's generated Swift: the copy, the questions, the constants, the keys and the
+ * palettes.
+ */
 export const MODEL_GENERATED_DIR = 'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated';
-
-/** IsItUI's generated Swift: the palettes. */
-export const UI_GENERATED_DIR = 'apps/ios/Packages/IsItKit/Sources/IsItUI/Generated';
 
 /**
  * Folders the generator owns, with everything in them: every file there is generated, so one it
@@ -44,7 +44,6 @@ export const OWNED_DIRS: readonly string[] = [
   FIXTURES_DIR,
   VECTORS_DIR,
   MODEL_GENERATED_DIR,
-  UI_GENERATED_DIR,
   GLYPHS_DIR,
   GLYPHS_FALLBACK_DIR,
   SNOW_KIT_GENERATED_DIR,
@@ -67,7 +66,7 @@ export interface AssetSources {
 }
 
 /**
- * Every file but the answer font, in order: the Swift (IsItModel's, then the palettes), each
+ * Every file but the answer font, in order: IsItModel's Swift (the palettes last), each
  * fixture, each vector file, worked out from the fixtures exactly as their files have them, then
  * the glyphs and the app icon.
  */

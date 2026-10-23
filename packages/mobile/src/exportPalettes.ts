@@ -1,13 +1,16 @@
 /**
  * `Palettes.swift` (iOS build spec, sections 7.1, 10.1 and 16): the snow bands' colours, the
  * website's own (core `SNOW_PALETTES`), with the contrast of each band's `ink` against both ends
- * of its gradient. It goes into IsItUI, but is plain data that imports only IsItModel (for the
- * band), so it compiles anywhere; IsItUI's `Color(rgb:)` turns a value into a colour.
+ * of its gradient. It is plain data, keyed by the band, so it goes into IsItModel beside
+ * `SnowBand`, where every target reaches it, the widget too, and it compiles and is tested on
+ * Linux. SnowKit's `Color(rgb:)` turns a value into a colour. The spec put it in IsItUI, which
+ * the widget doesn't link.
  */
 import { SNOW_PALETTES, type Palette, type SnowBand } from '@isithot/core';
 import { generatedHeader, swiftCall, swiftCase, swiftDouble, swiftIdentifier } from './swift';
 
-export const PALETTES_PATH = 'apps/ios/Packages/IsItKit/Sources/IsItUI/Generated/Palettes.swift';
+export const PALETTES_PATH =
+  'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated/Palettes.swift';
 
 export const PALETTES_SOURCE = 'packages/core/src/palettes.ts';
 
@@ -78,8 +81,6 @@ export function palettesSwift(): string {
   const fallback = UNKNOWN_BAND_DRAWS_AS;
   return [
     generatedHeader(PALETTES_SOURCE),
-    '',
-    'import IsItModel',
     '',
     "/// One band's colours (core `Palette`), each 0xRRGGBB in sRGB: the page's gradient from `g1`",
     '/// to `g2`, the glow of `g3` at `glow` opacity (0 to 1) at its centre, the text colour `ink`,',

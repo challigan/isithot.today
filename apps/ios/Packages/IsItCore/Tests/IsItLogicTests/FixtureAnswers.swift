@@ -55,15 +55,34 @@ final class FixtureAnswers {
     return answer
   }
 
-  /// `value` without what is at `keys`, a path of object keys; nil when there is nothing there.
+  /// `value` without what is at `keys`, a path of object keys and list indices, as
+  /// `withoutBlocks` reads one: a field is left out, a list's item taken out (any after it move
+  /// up), and `*` empties a list. Nil when there is nothing there.
   private static func removing(_ keys: [String], from value: Any) -> Any? {
-    guard var object = value as? [String: Any], let key = keys.first, let inner = object[key]
-    else { return nil }
-    if keys.count == 1 {
+    guard let key = keys.first else { return nil }
+    let rest = Array(keys.dropFirst())
+    if var list = value as? [Any] {
+      if key == "*", rest.isEmpty {
+        return list.isEmpty ? nil : [Any]()
+      }
+      // A list index as JavaScript writes one: 0, or digits not starting with 0.
+      guard let index = Int(key), String(index) == key, list.indices.contains(index) else {
+        return nil
+      }
+      if rest.isEmpty {
+        list.remove(at: index)
+      } else {
+        guard let inner = removing(rest, from: list[index]) else { return nil }
+        list[index] = inner
+      }
+      return list
+    }
+    guard var object = value as? [String: Any], let inner = object[key] else { return nil }
+    if rest.isEmpty {
       object[key] = nil
     } else {
-      guard let rest = removing(Array(keys.dropFirst()), from: inner) else { return nil }
-      object[key] = rest
+      guard let changed = removing(rest, from: inner) else { return nil }
+      object[key] = changed
     }
     return object
   }

@@ -80,7 +80,7 @@ struct VectorFilesTests {
     #expect(hours.contains { $0.output != nil })
   }
 
-  @Test("a whole file reads once, with its functions, their cases, and whose cases were read")
+  @Test("a whole file reads once, with its functions, their cases, and which cases were checked")
   func wholeFile() throws {
     for name in try Vectors.names() {
       let file = try VectorFile(name)
@@ -90,7 +90,8 @@ struct VectorFilesTests {
       // Every function the file lists has cases, so a port can't pass by reading nothing.
       #expect(Set(file.counts.keys) == Set(file.functions), "\(name)")
       #expect(file.counts.values.allSatisfy { $0 > 0 }, "\(name)")
-      #expect(file.read.isEmpty && file.unread == file.functions, "\(name)")
+      #expect(file.unchecked == file.functions, "\(name)")
+      #expect(file.functions.allSatisfy { file.checkedCount($0) == 0 }, "\(name)")
     }
 
     struct Updated: Decodable, Sendable {
@@ -104,8 +105,15 @@ struct VectorFilesTests {
     #expect(lines.count == hours.counts["updatedLine"])
     #expect(lines.map(\.index) == alone.map(\.index))
     #expect(lines.map(\.output) == alone.map(\.output))
-    #expect(hours.read == ["updatedLine"])
-    #expect(hours.unread == ["pickHour", "middleDay"])
+    // Reading a function's cases checks none of them; running a check over them checks each.
+    #expect(hours.unchecked == ["pickHour", "middleDay", "updatedLine"])
+    var indices: [Int] = []
+    try hours.forEachCase("updatedLine", input: Updated.self, output: String.self) {
+      indices.append($0.index)
+    }
+    #expect(indices == alone.map(\.index))
+    #expect(hours.checkedCount("updatedLine") == hours.counts["updatedLine"])
+    #expect(hours.unchecked == ["pickHour", "middleDay"])
     #expect(throws: Vectors.LoadError.self) {
       try hours.cases("updated", input: Updated.self, output: String.self)
     }

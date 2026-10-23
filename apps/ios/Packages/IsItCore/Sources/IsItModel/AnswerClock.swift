@@ -22,9 +22,21 @@ public struct ApiClockHour: Codable, Sendable, Equatable {
     case time, date
   }
 
+  /// The largest moment JavaScript's `Date` can hold, either side of 1970: 8.64e15 ms
+  /// (ECMAScript's time value range, 100 million days).
+  static let maxEpochMs = 8.64e15
+
+  /// Refuses a start that isn't a moment JavaScript's `Date` could hold (not finite, or beyond
+  /// `maxEpochMs`), so `@Lenient` drops the series as it does any other damage, rather than the
+  /// rules trapping on it later (`epochMs` is an `Int`).
   public init(from decoder: any Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
-    time = Date(timeIntervalSince1970: try container.decode(Double.self, forKey: .time) / 1000)
+    let ms = try container.decode(Double.self, forKey: .time)
+    guard ms.isFinite, abs(ms) <= Self.maxEpochMs else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .time, in: container, debugDescription: "Not a moment: \(ms) ms")
+    }
+    time = Date(timeIntervalSince1970: ms / 1000)
     date = try container.decode(String.self, forKey: .date)
   }
 

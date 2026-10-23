@@ -105,9 +105,19 @@ export const APP_COPY = {
   widgetStale: 'No recent forecast. Open the app to refresh.',
   agreementShort: '{snowy} of {total} forecasts',
 
-  // The App Shortcut (11.5). `{app}` is App Shortcuts' own token for the app's name.
+  // The App Shortcut (11.5). `{app}` is App Shortcuts' own token for the app's name. Not in
+  // AppCopy.swift: see APP_INTENT_KEYS.
   intentTitle: 'Will it snow tomorrow?',
   intentPhrase: 'Will it snow tomorrow in {app}?',
 } as const;
 
 export type AppCopyKey = keyof typeof APP_COPY;
+
+/**
+ * The strings App Intents reads when the app is built, not when it runs: the intent's `title`,
+ * a `LocalizedStringResource` literal in the intent's own declaration, and the App Shortcut's
+ * phrase, an `AppShortcutPhrase` literal with `{app}` written as `\(.applicationName)`. No
+ * `String` constant or function can become either, so `AppCopy.swift` leaves them out, and the
+ * phase that builds the intent (spec 11.5) generates them as those literals from here.
+ */
+export const APP_INTENT_KEYS: readonly AppCopyKey[] = ['intentTitle', 'intentPhrase'];
