@@ -214,14 +214,14 @@ To port a file:
 3. In `PortedVectors.swift`, change the file's `port: nil` to the port (`port: .grid`).
 
 **Until phase 3 lands, `swift test` fails** in IsItCore, with one issue for each file not yet
-ported, and everything else passes. On 23 October 2026 no file is ported, so it fails for all
-13:
+ported, and everything else passes. On 23 October 2026 no file was ported, so it failed for
+all 13; those marked done are ported since:
 
 | Vector file      | Ported by | Swift                                               |
 | ---------------- | --------- | --------------------------------------------------- |
-| `grid.json`      | 3.2       | `GridRounding.round`                                |
-| `target.json`    | 3.2       | `Target.key`, `Target(query:)`, `Target(search:)`   |
-| `query.json`     | 3.2       | `TodayQuery.build`                                  |
+| `grid.json`      | 3.2, done | `GridRounding.round`                                |
+| `target.json`    | 3.2, done | `Target.key`, `Target(query:)`, `Target(search:)`   |
+| `query.json`     | 3.2, done | `TodayQuery.build`                                  |
 | `placeTime.json` | 3.3       | `PlaceTime.local(_:in:)`                            |
 | `tomorrow.json`  | 3.3       | `MiddleDay.showsTomorrow`, `.defaultView`, `.label` |
 | `freshness.json` | 3.3       | `Freshness`                                         |

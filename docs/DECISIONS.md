@@ -1368,6 +1368,60 @@ parallel against it.
   path a vector names (`snow.ahead.2.today`), as `atPath` does in `vectors.ts`; a test checks it
   against the decoded answer for every day, Now, week and hour ahead in all 21 fixtures.
 
+## The iPhone app's places and queries (IsItCore, phase 3.2)
+
+3.2 ports the client's targets and queries and core's grid rounding into IsItModel (spec sections
+6.1, 6.2 and 9.2): `Target` (`.key`, `.device(lat:lon:)`, `Target(search:)`, `Target(query:)`),
+`TodayQuery` (`.build(_:units:ahead:)`, `.fresh(_:now:)`, `.search(_:)`) and
+`GridRounding.round(_:step:)`, each checked against `target.json`, `query.json` and `grid.json`,
+and registered with the vector guard.
+
+- **JavaScript's arithmetic is ported, not approximated,** because a key or a query that differs
+  by one character is another cache entry, or another place. `String(n)` is written from Swift's
+  shortest digits (the same digits; Swift writes "53.0" and "1e-07" where JavaScript writes "53"
+  and "1e-7"). `Math.round` is the floor plus a look at what is left: the spec's
+  `((v / step) + 0.5).rounded(.down)` rounds 0.49999999999999994 up to 1, and an odd whole
+  number from 2^52 up to the even one above it, and new grid cases pin both.
+  `Number(x.toFixed(d))` is worked out from the double's own bits in 128-bit integers (halves
+  away from zero on the exact value, as `toFixed` rounds), not as `(x * 10^d).rounded() / 10^d`,
+  whose product can round first. The step's decimals come from JavaScript's own writing of it,
+  as core's `decimalsOf` counts them, so a step of 1e-7 has none there too.
+- **`URLSearchParams` is ported too** (the WHATWG form parser and serializer), with
+  `encodeURIComponent` for the search: one leading "?" dropped, empty pairs skipped, the first of
+  a repeated name read, "+" as a space, a broken %-escape kept and broken UTF-8 replaced by
+  U+FFFD; and `*-._`, letters and digits written as they are. Names and `source=search` are
+  compared byte for byte, as JavaScript compares strings, where Swift's `==` would treat
+  canonically equivalent text as equal. The server's checks on the numbers (`COORD`, `HEIGHT`,
+  `GEONAME_ID`) are written out by hand, since a Swift `Regex`'s `\d` matches any script's
+  digits.
+- **Null and absent are the same in Swift,** as they are to every rule in the client: it reads
+  a name, region or country only when it is a non-empty string. A searched place's `elevation`
+  is a `Double` in the target, because a query can carry a fraction (`elevation=-25.5`), which
+  the reference keeps; `SearchResult.elevation` is whole metres, as `ApiLocation`'s is.
+- **The types the port needed.** `SearchResponse` and `SearchResult` (section 9.2 puts them in
+  IsItModel; `Target(search:)` takes a result), and `Topic`, in core's order of topics, which is
+  the order `build` writes `ahead` in. `build` has no `windUnits`: the apps never send it, and a
+  vector with it would fail, since the reference's query would have it. `fresh` takes a `Date`;
+  its hour is the floor of the seconds over 3,600, the same hour as `floor(now / HOUR)` in
+  milliseconds.
+- **What `place.v1` holds** is the client's `Target` JSON, or nothing for approximate IP
+  location (section 9.6): `target.stored()` writes it and `Target(stored:)` reads it, falling back
+  to IP location for nothing, or for anything that isn't a target, as the website reads its
+  own. **The query contract** (sections 11.2 and 17.2) is `QueryContractTests`: for every target
+  in `query.json`'s `todayQuery` cases (all four forms, with the awkward names and numbers) and
+  units of °C, °F or none, the query the widget makes from the stored `place.v1` and `units.v1`
+  is the app's, and the stored target reads back equal, with the same key.
+- **More cases, from the reference.** `grid.json` gains `Math.round`'s edges and steps
+  JavaScript writes oddly (1e-7, 0.1 + 0.2), and values from 1e21 up; `target.json` gains how
+  `URLSearchParams` reads a query (above) and the server's patterns (ASCII digits only, the whole
+  value); `query.json` gains the order of topics (`ahead=hot%2Cwet%2Csnow%2Cwind`), what the
+  serializer escapes, and every form `String(n)` writes. JSON has no -0, so no case has one: the
+  generator's own test compares the reference's -0 with the file's 0.
+- **One quirk of the reference, kept.** A coordinate under 1e-6 in size is written with an
+  exponent (`lat=1e-7`), which the server's check and `targetFromQuery` both refuse. No target
+  the app makes has one (a coordinate on the grid is 0 or at least 0.05 in size), so the port
+  keeps the behaviour, and `query.json` pins it.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,

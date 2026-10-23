@@ -25,13 +25,13 @@ struct PortedVector: Sendable {
 enum PortedVectors {
   static let all: [PortedVector] = [
     // core roundToGrid
-    PortedVector("grid", by: "3.2: GridRounding.round", port: nil),
+    PortedVector("grid", by: "3.2: GridRounding.round", port: .grid),
 
     // client targetKey, deviceTarget, searchTarget, targetFromQuery
-    PortedVector("target", by: "3.2: Target.key, Target(query:), Target(search:)", port: nil),
+    PortedVector("target", by: "3.2: Target.key, Target(query:), Target(search:)", port: .target),
 
     // client todayQuery, freshQuery, searchQuery
-    PortedVector("query", by: "3.2: TodayQuery.build", port: nil),
+    PortedVector("query", by: "3.2: TodayQuery.build", port: .query),
 
     // core localDateTime
     PortedVector("placeTime", by: "3.3: PlaceTime.local(_:in:)", port: nil),

@@ -230,6 +230,34 @@ function gridVectors(): VectorFile {
   for (const value of [0, 13, 24, 25, 26, -25, -26, 75, 125, -75, 958, 1337, -430, 8849]) {
     round(value, ELEVATION.step);
   }
+  // Math.round's own edges (halves go up, and the largest double under a half is not one), and
+  // toFixed's clean-up: steps JavaScript writes in other forms, and values too big for decimals.
+  const edges: [number, number][] = [
+    [0.49999999999999994, 1],
+    [-0.49999999999999994, 1],
+    [0.5, 1],
+    [-0.5, 1],
+    [2.5, 1],
+    [-2.5, 1],
+    [4503599627370497, 1],
+    [-4503599627370497, 1],
+    [0.25, 0.1],
+    [0.15, 0.1],
+    [-0.35, 0.1],
+    [1.0005, 0.001],
+    [2.675, 0.01],
+    [1, 0.1 + 0.2],
+    [0.00000012, 0.0000001],
+    [0.00000037, 0.00000015],
+    [0.0000051, 0.000001],
+    [123456789.123456, 0.05],
+    [4503599627370495.5, 0.05],
+    [1e21, 0.05],
+    [-1e21, 0.05],
+    [1.5e300, 0.05],
+    [5e-324, 0.05],
+  ];
+  for (const [value, step] of edges) round(value, step);
   return vectorFile([['core', 'roundToGrid']], cases);
 }
 
@@ -373,6 +401,18 @@ function targetVectors(): VectorFile {
   ];
   for (const [lat, lon] of phones) add('deviceTarget', { lat, lon }, deviceTarget(lat, lon));
   for (const result of RESULTS) add('searchTarget', { result }, searchTarget(result));
+  // An empty slug is no city page; an empty name is kept, and the query leaves it out.
+  const unnamed: SearchResult = {
+    name: '',
+    region: '',
+    country: null,
+    countryName: null,
+    lat: 0.025,
+    lon: -0.025,
+    slug: '',
+    geonameId: 0,
+  };
+  add('searchTarget', { result: unnamed }, searchTarget(unnamed));
   // What a notification carries is the today query's place: every target's, read back.
   const queries = [
     ...TARGETS.flatMap((t) => [todayQuery(t, 'c', { ahead: ['snow'] }), todayQuery(t, null)]),
@@ -402,6 +442,36 @@ function targetVectors(): VectorFile {
     'lat=53.8&lon=-1.55&name=Caf%C3%A9+%E2%80%9Cn%C2%BA1%E2%80%9D&source=search',
     'lat=53.8&lon=-1.55&name=a%2Bb+c&source=search',
     'place=leeds-gb&lat=53.8&lon=-1.55',
+    // URLSearchParams' own reading: a leading "?", empty pairs, a pair without "=", the first of
+    // a repeated name, "=" in a value, and broken escapes (kept) and UTF-8 (replaced).
+    '?place=leeds-gb&units=c',
+    '??place=leeds-gb',
+    '&&lat=53.8&&lon=-1.55&',
+    'place',
+    'lat&lon=1',
+    'lat=53.8&lat=10&lon=-1.55&lon=2',
+    'lat=53.8&lon=-1.55&source=search&source=device',
+    'lat=53.8&lon=-1.55&name=x&name=y&source=search',
+    'lat=53.8&lon=-1.55&name=a=b&source=search',
+    'lat=53.8&lon=-1.55&name=%zz%4%C3%28%E2%82&source=search',
+    'lat=53.8&lon=-1.55&name=%EF%BB%BFBOM&source=search',
+    'place=a+b%26c',
+    'PLACE=leeds-gb',
+    // The server's patterns: ASCII digits only, the whole value, and up to three before the point.
+    'lat=53.8%0A&lon=1',
+    'lat=%D9%A5%D9%A3&lon=1',
+    'lat=53.&lon=1',
+    'lat=.5&lon=1',
+    'lat=-&lon=1',
+    'lat=0.0000001&lon=-0.00005',
+    'lat=90.0&lon=-180.000',
+    'lat=-90.0001&lon=0',
+    'lat=007&lon=0180',
+    'lat=0&lon=0&geonameId=0000000042&source=search',
+    'lat=0&lon=0&geonameId=9999999999&source=search',
+    'lat=0&lon=0&geonameId=-1&source=search',
+    'lat=0&lon=0&elevation=9999.99&source=search',
+    'lat=0&lon=0&elevation=1e3&source=search',
   ];
   for (const query of queries) add('targetFromQuery', { query }, targetFromQuery(query));
   return vectorFile(
@@ -423,6 +493,40 @@ function queryVectors(): VectorFile {
         add('todayQuery', { target, units, ahead }, todayQuery(target, units, { ahead }));
       }
     }
+  }
+  // The topics in core's order (TOPICS), once each, however they are asked for.
+  for (const ahead of [
+    ['wind', 'snow', 'hot', 'wet'],
+    ['snow', 'snow'],
+    ['wet', 'hot'],
+  ] as const) {
+    const target = TARGETS[1]!;
+    add('todayQuery', { target, units: 'c', ahead }, todayQuery(target, 'c', { ahead }));
+  }
+  // What URLSearchParams escapes, and how JavaScript writes a number (String(n)): fixed or
+  // exponential by size, with the shortest digits that read back.
+  const awkward: Target[] = [
+    { kind: 'city', slug: 'a b&c=d' },
+    {
+      kind: 'coords',
+      source: 'search',
+      lat: 0.0000001,
+      lon: -0.00005,
+      name: "a*b-c.d_e~f!g'h(i)j k",
+      region: '',
+      country: '',
+      geonameId: 0,
+      elevation: -25.5,
+    },
+    { kind: 'coords', source: 'device', lat: 53.8, lon: -1.55, name: '❄️ ⛄ 🏔', elevation: 0 },
+    { kind: 'coords', source: 'search', lat: 0.000001, lon: -1.5e-7, name: 'Line\nbreak\ttab' },
+    { kind: 'coords', source: 'search', lat: 0.1 + 0.2, lon: 5e-324, geonameId: 9999999999 },
+    { kind: 'coords', source: 'search', lat: 123456789012345680000, lon: 1e21 },
+    { kind: 'coords', source: 'device', lat: -1.5e21, lon: 1.7976931348623157e308 },
+    { kind: 'coords', source: 'device', lat: 100, lon: -1e-6, elevation: 1234.5678 },
+  ];
+  for (const target of awkward) {
+    add('todayQuery', { target, units: 'f', ahead: [] }, todayQuery(target, 'f'));
   }
   const moments = [
     0,
@@ -450,6 +554,8 @@ function queryVectors(): VectorFile {
     '❄ Snow',
     'a=b&c=d',
     '#1?',
+    '🏔 Ben Nevis',
+    'tab\tnew\nline',
   ];
   for (const q of searches) add('searchQuery', { q }, searchQuery(q));
   return vectorFile(
