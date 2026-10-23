@@ -33,9 +33,14 @@ let package = Package(
     ),
   ],
   targets: [
+    // The services behind AppModel's protocols (IsItState): URLSession, the App Group and
+    // WidgetKit's reloads.
     .target(
       name: "IsItServices",
-      dependencies: [.product(name: "IsItModel", package: "IsItCore")],
+      dependencies: [
+        .product(name: "IsItModel", package: "IsItCore"),
+        .product(name: "IsItState", package: "IsItCore"),
+      ],
       swiftSettings: swift5
     ),
     .target(
@@ -56,7 +61,11 @@ let package = Package(
     ),
     .target(
       name: "IsItWidgetUI",
-      dependencies: ["IsItServices", .product(name: "IsItModel", package: "IsItCore")],
+      dependencies: [
+        "IsItServices",
+        .product(name: "IsItModel", package: "IsItCore"),
+        .product(name: "IsItLogic", package: "IsItCore"),
+      ],
       swiftSettings: swift5
     ),
     // The snow topic, linked by the app and the widget. Its glyphs are generated (pnpm

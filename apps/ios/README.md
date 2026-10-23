@@ -4,8 +4,9 @@ The native SwiftUI app for willitsnow.today, built from the iOS build spec. This
 (phase 0, PRs 0.1 to 0.4): the project, the app and its widget, both entitlements, the debug
 hooks, their tests, the CI that builds and runs them, and the release job that signs the app and
 uploads it to TestFlight; with phase 2.3's generated assets: the snow glyphs, the app icon and
-the answer font. The app shows a fixture when a Debug build is launched with `-fixture <name>`,
-and the widget shows the answer the app saved in the App Group. Fetching, the real home screen
+the answer font. Phase 5.1's data half (below, "The data and the launch") fetches the answer
+from the API, keeps it current and saves it in the App Group, where the widget reads it; a Debug
+build launched with `-fixture <name>` is answered with that fixture instead. The real home screen
 and everything else come in later phases.
 
 ## What is where
@@ -16,14 +17,18 @@ Package.resolved         the pinned package versions, copied into the project by
 Configs/                 Base (every target), Team (Carl's team ID, not a secret), Snow (identifiers,
                          API origin, ad units), CI-Simulator (signed to run locally, for CI)
 Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API models; generated CoreCopy,
-                         Questions, AppCopy, Constants, Keys and Palettes; in Tests/IsItTestSupport the
-                         fixtures and golden vectors with their loaders; in Tests/IsItLogicTests the ports'
-                         golden tests and the guard that every vector file is ported (below)
-Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore), IsItAds (Google's SDKs),
+                         Questions, AppCopy, Constants, Keys and Palettes; the ports (IsItLogic); AppModel,
+                         its API client and the launch and refresh rules (IsItState); in
+                         Tests/IsItTestSupport the fixtures and golden vectors with their loaders; in
+                         Tests/IsItLogicTests the ports' golden tests and the guard that every vector file
+                         is ported (below); in Tests/IsItStateTests AppModel with fakes
+Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore, URLSessionTransport,
+                         WidgetCenterReloader: AppModel's services), IsItAds (Google's SDKs),
                          IsItUI (the skeleton's answer view), IsItWidgetUI (the widget's entry, provider,
                          view), SnowKit (Glyphs, Color(rgb:) for the palettes, and the glyph catalogues,
                          generated)
-Apps/Snow/App/           WillItSnowApp, AppModel, HomeView, DebugHooks (every test and debug hook)
+Apps/Snow/App/           WillItSnowApp (the services and the scene's phases), HomeView, DebugHooks (every
+                         test and debug hook)
 Apps/Snow/Resources/     the app's Info.plist, entitlements and privacy manifest; generated: Assets.xcassets
                          (the app icon) and Fonts/BricolageAnswer.ttf (the app's and the widget's)
 Apps/Snow/Widgets/       the widget extension, its Info.plist, entitlements and privacy manifest
@@ -38,12 +43,12 @@ ci/                      xcodegen.sh, simulator.sh, test.sh, release-check.sh, x
 The release checks are in the repo's `scripts/`: `check-archive.sh`, with `swift-small-strings.mjs`
 (below), and `asc-key.mjs` and `asc-notes.mjs` for the App Store Connect key and What to Test.
 
-| Target              | Bundle ID                      | Links                                                  |
-| ------------------- | ------------------------------ | ------------------------------------------------------ |
-| `WillItSnow` (app)  | `today.willitsnow.app`         | IsItModel, IsItServices, IsItUI, IsItAds, SnowKit      |
-| `WillItSnowWidgets` | `today.willitsnow.app.widgets` | IsItModel, IsItServices, IsItWidgetUI, SnowKit         |
-| `WillItSnowTests`   | hosted by the app              | IsItModel, IsItServices, IsItUI, IsItWidgetUI, SnowKit |
-| `WillItSnowUITests` | drives the app                 |                                                        |
+| Target              | Bundle ID                      | Links                                                                   |
+| ------------------- | ------------------------------ | ----------------------------------------------------------------------- |
+| `WillItSnow` (app)  | `today.willitsnow.app`         | IsItModel, IsItLogic, IsItState, IsItServices, IsItUI, IsItAds, SnowKit |
+| `WillItSnowWidgets` | `today.willitsnow.app.widgets` | IsItModel, IsItServices, IsItWidgetUI, SnowKit                          |
+| `WillItSnowTests`   | hosted by the app              | IsItModel, IsItServices, IsItUI, IsItWidgetUI, SnowKit                  |
+| `WillItSnowUITests` | drives the app                 |                                                                         |
 
 The widget never links IsItAds. Both the app and the widget have the App Group
 `group.today.willitsnow.app`; only the app has `aps-environment`. The name under the icon is
@@ -59,10 +64,10 @@ CI builds and tests everything, so this is only for trying the app by hand.
 2. `apps/ios/ci/xcodegen.sh`, then `open apps/ios/WillItSnow.xcodeproj`. Run the script again
    after every pull: the project is generated, never committed, so new files only appear then.
 3. Choose the `WillItSnow` scheme and an iPhone 17 simulator, and run. With no fixture the
-   app shows only a progress indicator, since it doesn't fetch yet. To see an answer: Product,
-   Scheme, Edit Scheme, Run, Arguments, and tick `-fixture aberdeen-snow` (or `leeds-dry`, or
-   add `-fixture` with any other fixture's name, below). Then add the widget on the simulator's
-   home screen: it shows the same answer.
+   app asks willitsnow.today for the answer by approximate IP location (the simulator's network
+   is the Mac's). To see a fixture instead: Product, Scheme, Edit Scheme, Run, Arguments, and
+   tick `-fixture aberdeen-snow` (or `leeds-dry`, or add `-fixture` with any other fixture's
+   name, below). Then add the widget on the simulator's home screen: it shows the same answer.
 4. Product, Test runs the Unit test plan; pick UI from the test plan menu for the UI tests.
 5. On your iPhone (Debug builds only): Xcode, Settings, Accounts needs your Apple Account, and
    the App IDs `today.willitsnow.app` and `today.willitsnow.app.widgets` need the App Group and,
@@ -281,6 +286,43 @@ links and recent places"):
 - **`RecentPlaces.adding(_:name:to:max:)` and `.removing(_:from:)`** keep `recent.v1`'s
   `[RecentPlace]`, which is `Codable` as the client's JSON.
 
+## The data and the launch (phase 5.1)
+
+`IsItState`, in IsItCore, is the app's state and its one request, with every decision about them
+pure and tested on Linux (`Tests/IsItStateTests`); IsItServices fills its protocols on iOS (spec
+sections 4 and 9.4 to 9.6; DECISIONS, "The iPhone app's data and launch").
+
+- **`AppModel`** (`@MainActor @Observable`) holds the place, the units, the answer on screen
+  and when it was fetched, the phase (loading, ready, offline, or an error with the server's
+  code and message), the holds, the unlock, the view on screen, a one-off notice and a pending
+  route. `init(environment:)` is step 1 of the launch: it reads what is stored and paints the
+  saved answer at once when it is for the place and still has an hour to show. `launch()` runs
+  steps 2 to 7 once; `refresh()` is pull to refresh and "Try again"; `didEnterBackground()` and
+  `willEnterForeground()` follow the scene's phase; `answer(at:)` and `offlineLine(at:)` are
+  what the views draw for the minute tick's date.
+- **`AppEnvironment`** gives it `APIClient` (over an `HTTPTransport`), an `AppClock` (the time,
+  and work at a time), a `StoredState`, a `WidgetReloader`, the later phases' `AppHooks`
+  (`NoHooks` until phases 6, 7 and 8 fill them: the entitlement check, the location fix, the
+  ads, the notifications and routes) and the random jitter.
+- **The decisions** are `Launch` (paint, reuse under 10 minutes, the launch's fetch), `Refresh`
+  (how to ask again, the hourly refresh with 0 to 90 s of jitter, the retry after a failure,
+  and the return to the foreground) and `AnswerState` (the picked hour, the stale state past
+  `usableUntil`, offline or the error with nothing saved, and the footer's offline line).
+- **`APIClient`** builds `TodayQuery.build`'s query with `ahead=snow` (byte for byte the query
+  vectors'), decodes `TodayResponse` and maps failures to `FetchError`: offline for
+  `URLError.notConnectedToInternet` and its kin (`APIClient.offlineCodes`), rate limited for 429,
+  and failed otherwise, with the status and the `ApiError` code and message when the server sent
+  them. It never logs, and a `FetchError` never carries the URL.
+- **What is stored**: `SavedToday` (IsItModel) is the codec of `today.v1.json`,
+  `{ v, savedAt, key, response }`, which is ignored when `v` is another store version;
+  `StoredUnlock` reads `unlock.v1`.
+  `SharedStore` is the App Group's `StoredState`: `place.v1`, `units.v1`, `unlock.v1` (read
+  only) and the saved answer; `MemoryState` stands in without an App Group.
+- **Apple only, and so proven only by CI's macOS jobs**: `URLSessionTransport` (section 4's
+  settings), `SharedStore`'s defaults, `WidgetCenterReloader`, the app's wiring in
+  `WillItSnowApp.swift` and the debug hooks. IsItServices and the widget's provider were
+  type-checked on Linux against stubs of WidgetKit and `containerURL` (above).
+
 ## CI (`.github/workflows/ios.yml`)
 
 | Job             | Runs on                     | What it proves                                                                                                                                                                                                                                                             |
@@ -400,11 +442,17 @@ Xcode's as the `package-resolved` artefact. The next agent:
 
 Every test and debug hook is in `Apps/Snow/App/DebugHooks.swift`, inside `#if DEBUG` (spec
 section 9.8). A Release build compiles a stub with the same names that does nothing and names no
-launch argument. So far there are two:
+launch argument. So far there are these:
 
 - `-uitest` turns animations off;
-- `-fixture <name>` shows that fixture as if just fetched, and saves it in the App Group for the
-  widget. A name with no fixture stops the app, so a UI test can't pass on the wrong screen.
+- `-fixture <name>` answers every request with that fixture (a transport of its own), after
+  forgetting the saved answer, so the launch fetches it rather than painting an earlier one; it
+  is then saved in the App Group for the widget, as any answer is. A name with no fixture stops
+  the app, so a UI test can't pass on the wrong screen;
+- `-apiOrigin <url>` asks a deploy preview's API instead of willitsnow.today's (spec section 4);
+- the unit tests' host: when the app only hosts the unit tests (XCTest's
+  `XCTestConfigurationFilePath` in its environment), it doesn't launch (`AppModel.launch()`), so
+  the hosted tests have the App Group to themselves; a launch with `-fixture` always launches.
 
 The fixtures are the ones `pnpm mobile:generate` writes for IsItCore's tests: 21 answers from
 the real server (two with a block deleted), each with a `_fixture` note saying what it shows
@@ -449,10 +497,10 @@ Each comes with the phase that needs it, so nothing in the skeleton is dormant:
 - the launch screen's `LaunchBackground` colour, from the palettes, which belongs in the
   generated `Assets.xcassets`; the widget's gallery name and description (`AppCopy.widgetName`,
   `AppCopy.widgetDescription`);
-- the target keys, freshness, hour picker and widget planner in the app and the widget (ported
-  in phase 3, used from phases 5 and 7), so the skeleton's widget shows one entry and never goes
-  stale: the only answer it can find is a Debug fixture;
-- the rest of `SnowKit`, `APIClient`, location, StoreKit (`Snow.storekit`), notifications, `AdsService` and the
+- the widget planner in the widget (ported in phase 3, used in phase 7), so the skeleton's
+  widget shows one entry, whatever the hour: it may show an answer past its hours until the app
+  saves another;
+- the rest of `SnowKit`, location, StoreKit (`Snow.storekit`), notifications, `AdsService` and the
   banner, `SKAdNetworkItems`, and the privacy manifests' collected data types (coarse location,
   the push token);
 - `FEATURE_UNLOCK` and `FEATURE_ADS` (spec section 9.8), with the purchase and the ads;

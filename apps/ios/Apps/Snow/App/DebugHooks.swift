@@ -1,5 +1,7 @@
 import Foundation
 import IsItModel
+import IsItServices
+import IsItState
 import UIKit
 
 /// Every test and debug hook in the app (iOS build spec, section 9.8), here and nowhere else.
@@ -7,13 +9,6 @@ import UIKit
 /// no launch argument, and the fixtures aren't in its bundle (`EXCLUDED_SOURCE_FILE_NAMES`).
 @MainActor
 enum DebugHooks {
-  /// An answer to show at launch, as if it had just been fetched.
-  struct LaunchAnswer {
-    let key: String
-    let savedAt: Date
-    let response: TodayResponse
-  }
-
   #if DEBUG
     /// When the App Group can't open, keep the last answer in the app's own container (V1), so a
     /// Debug build signed without the entitlement still works on its own.
@@ -26,16 +21,17 @@ enum DebugHooks {
       }
     }
 
-    /// `-fixture <name>`: a fixture `pnpm mobile:generate` wrote (packages/mobile), from the copy
-    /// only Debug builds bundle, saved as fetched at its own moment. Its key names the fixture,
-    /// since no place's key is worked out yet. A name with no fixture stops the app, so a UI test
-    /// can't pass on the wrong screen.
-    static func launchAnswer(
+    /// `-fixture <name>`: the server answers every request with a fixture `pnpm mobile:generate`
+    /// wrote (packages/mobile), from the copy only Debug builds bundle, as if fetched now. The
+    /// saved answer is forgotten first, so the launch fetches the fixture rather than painting
+    /// what an earlier launch saved; the fixture is then saved, for the widget, as any answer
+    /// is. A name with no fixture, or one that doesn't decode, stops the app, so a UI test can't
+    /// pass on the wrong screen.
+    static func transport(
+      forgetting store: SharedStore?,
       arguments: [String] = ProcessInfo.processInfo.arguments
-    ) -> LaunchAnswer? {
-      guard let flag = arguments.firstIndex(of: "-fixture"), arguments.indices.contains(flag + 1)
-      else { return nil }
-      let name = arguments[flag + 1]
+    ) -> (any HTTPTransport)? {
+      guard let name = value(after: "-fixture", in: arguments) else { return nil }
       guard
         let url = Bundle.main.url(
           forResource: name,
@@ -45,17 +41,55 @@ enum DebugHooks {
         let data = try? Data(contentsOf: url)
       else { fatalError("-fixture: the app has no Fixtures/\(name).json") }
       do {
-        let response = try TodayResponse.decode(from: data)
-        return LaunchAnswer(key: "fixture:\(name)", savedAt: response.updatedAt, response: response)
+        _ = try TodayResponse.decode(from: data)
       } catch {
         fatalError("-fixture: \(name).json doesn't decode: \(error)")
       }
+      try? store?.removeToday()
+      return FixtureTransport(body: data)
+    }
+
+    /// `-apiOrigin <url>`: a deploy preview's API instead of willitsnow.today's (section 4).
+    static func apiOrigin(arguments: [String] = ProcessInfo.processInfo.arguments) -> URL? {
+      value(after: "-apiOrigin", in: arguments).flatMap { URL(string: $0) }
+    }
+
+    /// Whether the app launches (`AppModel.launch()`): not while it only hosts the unit tests,
+    /// which own the App Group meanwhile (the hosted tests run in the app's process, with
+    /// XCTest's configuration in its environment), unless it was launched on a fixture.
+    nonisolated static func launches(
+      arguments: [String] = ProcessInfo.processInfo.arguments,
+      environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+      environment["XCTestConfigurationFilePath"] == nil || arguments.contains("-fixture")
+    }
+
+    /// The argument after `flag`, if there is one.
+    private static func value(after flag: String, in arguments: [String]) -> String? {
+      guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1)
+      else { return nil }
+      return arguments[index + 1]
     }
   #else
     static let storeFallback = false
 
     static func prepare() {}
 
-    static func launchAnswer() -> LaunchAnswer? { nil }
+    static func transport(forgetting store: SharedStore?) -> (any HTTPTransport)? { nil }
+
+    static func apiOrigin() -> URL? { nil }
+
+    nonisolated static func launches() -> Bool { true }
   #endif
 }
+
+#if DEBUG
+  /// A server that answers every request with the same fixture, with status 200.
+  private struct FixtureTransport: HTTPTransport {
+    let body: Data
+
+    func get(_ request: HTTPRequest) async throws -> HTTPResponse {
+      HTTPResponse(status: 200, body: body)
+    }
+  }
+#endif
