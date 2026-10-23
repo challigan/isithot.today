@@ -181,6 +181,8 @@ test('sitemap lists home, about, places and every city page', async ({ request }
   const xml = await (await request.get('/sitemap.xml')).text();
   expect((xml.match(/<loc>/g) ?? []).length).toBe(303);
   expect(xml).toContain('<loc>https://isithot.today/places</loc>');
+  // The snow app's support page is in willitsnow.today's sitemap alone.
+  expect(xml).not.toContain('/support<');
   expect(xml).toContain('/in/newcastle-upon-tyne-gb</loc>');
   // Google ignores both, and nothing knows when a page last changed.
   expect(xml).not.toMatch(/<(changefreq|priority|lastmod)>/);

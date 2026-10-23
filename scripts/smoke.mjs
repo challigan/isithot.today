@@ -31,7 +31,8 @@ function option(name) {
 const HOT = 'https://isithot.today';
 // Each sitemap lists home, About, the places page and the city pages the site lists: all 300 on
 // isithot.today, isitwet.today and isitwindy.today; willitsnow.today leaves out the places where
-// it never snows (SNOWLESS in packages/core/src/config.ts, 63 of them), such as Singapore.
+// it never snows (SNOWLESS in packages/core/src/config.ts, 63 of them), such as Singapore, and
+// alone lists the snow app's support page.
 const SITES = {
   wet: {
     url: 'https://isitwet.today',
@@ -47,7 +48,7 @@ const SITES = {
     header: 'x-willitsnow-host',
     home: 'Will it snow today?',
     city: 'Will it snow in Newcastle today?',
-    minUrls: 240,
+    minUrls: 241,
     unlisted: 'singapore-sg',
   },
   wind: {
@@ -60,6 +61,10 @@ const SITES = {
   },
 };
 const CITY = 'newcastle-upon-tyne-gb';
+// The support page's address (CONTACT_EMAIL in packages/core/src/config.ts), on every site, and
+// where every site's copy is canonical: App Store Connect's Support URL.
+const SUPPORT_MAILTO = 'href="mailto:support@willitsnow.today"';
+const SUPPORT_URL = 'https://willitsnow.today/support';
 /** A title with an answer in it ("… today? Yes. 24° | …"): titles must never carry one. */
 const ANSWERED = / (Yes|No|Almost|Maybe|A bit|Partly)\. /;
 
@@ -228,6 +233,7 @@ async function checkSite(t, label, { origin = base, prefix = '', headers = {} } 
       urls.every((u) => u.startsWith(`${own}/`)) &&
       urls.includes(`${own}/in/${CITY}`) &&
       urls.includes(`${own}/places`) &&
+      urls.includes(`${own}/support`) === (`${own}/support` === SUPPORT_URL) &&
       (!unlisted || !urls.includes(`${own}/in/${unlisted}`)),
     name('/sitemap.xml'),
     `${urls.length} urls, first ${urls[0]}`,
@@ -238,6 +244,15 @@ async function checkSite(t, label, { origin = base, prefix = '', headers = {} } 
     places.res.status === 200 && canonicalOf(places.body) === `${own}/places`,
     name('/places'),
     `${places.res.status} ${places.ms}ms ${canonicalOf(places.body)}`,
+  );
+
+  const support = await at('/support');
+  check(
+    support.res.status === 200 &&
+      canonicalOf(support.body) === SUPPORT_URL &&
+      String(support.body).includes(SUPPORT_MAILTO),
+    name('/support'),
+    `${support.res.status} ${support.ms}ms ${canonicalOf(support.body)}`,
   );
 
   const missing = await at('/in/atlantis-xx');
@@ -585,7 +600,8 @@ try {
     sitemap.res.status === 200 &&
       urls.length >= 303 &&
       urls.every((u) => u.startsWith(`${HOT}/`)) &&
-      urls.includes(`${HOT}/places`),
+      urls.includes(`${HOT}/places`) &&
+      !urls.includes(`${HOT}/support`),
     'GET /sitemap.xml',
     `${urls.length} urls`,
   );
@@ -595,6 +611,15 @@ try {
     places.res.status === 200 && canonicalOf(places.body) === `${HOT}/places`,
     'GET /places',
     `${places.ms}ms ${canonicalOf(places.body)}`,
+  );
+
+  const support = await get('/support');
+  check(
+    support.res.status === 200 &&
+      canonicalOf(support.body) === SUPPORT_URL &&
+      String(support.body).includes(SUPPORT_MAILTO),
+    'GET /support',
+    `${support.res.status} ${support.ms}ms ${canonicalOf(support.body)}`,
   );
 
   const bad = await get('/api/v1/today?lat=999&lon=0');

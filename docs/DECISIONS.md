@@ -1987,6 +1987,78 @@ What the review of PR 5.1 found, and what changed for it.
   label are Apple only, so the macOS jobs prove them; IsItUI's changes were not compiled here.
   Everything else ran on Linux.
 
+## The app's support page and privacy notice (S8)
+
+App Store Connect needs a Support URL with real contact details and a Privacy Policy URL, so
+the website carries both for the snow app (iOS build spec, section 5.8 and 15.5).
+
+- **The privacy notice gains "Our apps"**, the text of section 15.5 made complete (below): what
+  the app sends (the place, rounded to about 5 km, and the units), what notifications keep and
+  when it is deleted, AdMob in the free version, and Apple handling purchases. The heading stands
+  for the section's first label, so its first paragraph has none. It sits after the website's
+  sections and before "Your rights". The website's paragraphs are as they were ("No accounts" is
+  still true), except two that now cover the app as well: the intro ("This notice covers all
+  four, and our iPhone app") and "Your rights", which said there is usually nothing to find. With
+  notifications on there is (a token with a place, as section 15.3's label says, Linked: Yes), so
+  it points to Settings → Your privacy and the delete button, or an email with the ID that screen
+  shows. The page's description says the app is covered. "Last updated" moves to 23 October. One
+  notice on all four sites, as before.
+- **What the notice says notifications keep is what the server stores** (`DeviceRecord`, written
+  by `devices.ts` on the notifications branch), not section 15.5's shorter list: the token and the
+  ID made from it, the place, zone, units and switches, the app's version, whether it is a
+  developer build (`env`), when notifications were turned on (`createdAt`) and when the app last
+  checked in (`updatedAt` and `seenAt`, both set by every PUT). `v`, `app` and `platform` say
+  nothing about anyone. The claims the run and the test send write (`sent/` and `test/`, keyed by
+  the ID, holding no token or place) outlive a delete until the 03:00 UTC cleanup takes them, up
+  to about three and a half days later, so the notice and the support page say "a few days".
+  Settings → Your privacy shows the ID's first 8 characters, the place with its zone, the units
+  and the switches (section 10.6), so both pages say it shows "the main things we keep".
+  - **When it goes.** Turning notifications off in iPhone Settings sends nothing: the app finds
+    the permission denied and sends DELETE the next time it is opened (section 12.2), so both
+    pages say so, and that the in-app switches delete at once. The 90 days count from the app's
+    last PUT, and with nothing changed it puts again only every `ALERTS.heartbeatDays` (7), so a
+    registration can go about 83 days after the app was last opened: "about 90 days" in the
+    notice, "about three months" on the support page.
+  - **Not yet in the app's copy.** Section 15.5's text and `APP_COPY.privacyNotifications` (the
+    app's summary, above the live data and the link to this notice) have the shorter list and
+    "90 days after you last open the app". Phase 6 should give the app's line the notice's
+    "about" and "main things", or the app could refresh `seenAt` on every open (a client change,
+    with a vector update).
+- **`/support` on every site** (`SupportBody.astro`; `support.astro` and `snow/`, `wet/`, `wind/`),
+  built like Privacy: the contact address (`CONTACT_EMAIL`) as a `mailto:` link and no postal
+  address (Q7), then short answers on restoring the purchase, adding a widget, why a
+  notification didn't come, and turning notifications off to delete your data (Settings → Your
+  privacy → "Turn off notifications and delete my data"), and links to the privacy notice and
+  terms. It is about the snow app alone, wherever it is served: it names no other app, site or
+  weather, so it leaves out the legal pages' "one service" line (an e2e test checks both).
+  - The widget steps cover iOS 18 (Edit, then Add Widget) and iOS 17 (+ at the top left), which
+    the app supports, and name the app as the widget gallery and iPhone Settings list it: "will
+    it snow?", the name under the icon (Q2).
+  - "The app's Settings" and "your iPhone's Settings" are always named as such.
+  - Tests are refused from 9pm to 7am at the place (409 `quiet_hours`), which the app shows as
+    `testFailed` for now, so the page says to try one in the daytime there. A notification the
+    iPhone could not take in time is dropped at its `apns-expiration` (9pm for the evening, 11am
+    for the morning), so "It isn't time yet" says that too.
+  - The app's labels it quotes are `APP_COPY`'s, and the e2e test builds every answer's full text
+    from `APP_COPY` and from the app's `CFBundleDisplayName` in `Info.plist`, so a label renamed
+    in the app fails it. It checks the notice's app sections and rights paragraph in full too.
+- **Search engines:** every site's copy is canonical on willitsnow.today/support (`Content`'s
+  `canonicalTopic`), the App Store listing's Support URL, so search engines see one page about
+  one app rather than four copies on four domains. Only willitsnow.today's sitemap lists it, since
+  a sitemap lists canonical addresses, and the other sites' sitemaps do not promote a snow app's
+  page. That is how section 5.8's "add it to the sitemap" is read. It is not `noindex`. Every
+  footer links it, after Terms. Privacy, Cookies and Terms stay canonical on each site's own
+  domain and out of the sitemaps, as before.
+- **The address wraps.** At 320px with text at 200%, support@willitsnow.today is wider than the
+  page, and Privacy (which has carried it since the contact PR) scrolled sideways. A `mailto:`
+  link in a content page may now break anywhere; an e2e test checks both pages on every site.
+- **Written out, not generated:** the notice's 90 days and the support page's "about three
+  months", "about 6pm" and "about 7am", "until 9pm" and "until 11am", and "between 9pm and 7am"
+  are the notifications branch's `ALERTS.staleAfterDays`, `windows` and `quiet` (phase 4). A
+  change there must change these pages, and their tests, by hand. The test takes the two times
+  from the app's switches (`APP_COPY.evening` and `morning`); once `ALERTS.windows`, `quiet` and
+  `staleAfterDays` reach main, it should check the numbers against them as well.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,
@@ -2288,9 +2360,9 @@ in Leeds today"), with pages that are plainly original, easy to browse and hones
 - **Structured data**: WebSite (name, alternateName, url) on each home page, one per domain as
   Google's site names need; BreadcrumbList (site › Places › city) on city pages and the places
   page. No FAQPage or HowTo: Google no longer shows either.
-- **Sitemaps** list home, About, the places page and the city pages the site lists. No
-  `lastmod` (nothing knows when a page last changed), `changefreq` or `priority` (Google
-  ignores both).
+- **Sitemaps** list home, About, the places page and the city pages the site lists, and
+  willitsnow.today's the snow app's support page (since S8). No `lastmod` (nothing knows when a
+  page last changed), `changefreq` or `priority` (Google ignores both).
 - **Snow pages where it never snows** would say No all year. They get `noindex`, are left out of
   willitsnow.today's sitemap and places page, and the other sites' pages for those places do
   not link to them. The pages still work, and search on the site still finds them. The rule

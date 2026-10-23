@@ -11,10 +11,12 @@ interface Props {
   path: string;
   /** The site the page belongs to. */
   topic?: Topic;
+  /** The site whose copy search engines should index, when not the page's own (the default). */
+  canonicalTopic?: Topic;
   /** Structured data for search engines (lib/seo.ts). */
   jsonLd?: object;
 }
-const { title, description, path, topic = 'hot', jsonLd } = Astro.props;
+const { title, description, path, topic = 'hot', canonicalTopic = topic, jsonLd } = Astro.props;
 const site = SITES[topic];
 const [brand, tld] = site.name.split('.');
 ---
@@ -22,7 +24,7 @@ const [brand, tld] = site.name.split('.');
 <Base
   title={`${title} | ${site.name}`}
   description={description}
-  canonical={`${site.url}${path}`}
+  canonical={`${SITES[canonicalTopic].url}${path}`}
   palette={LOOKS[topic].content}
   jsonLd={jsonLd}
   topic={topic}
