@@ -1,8 +1,9 @@
-/// One vector file phase 3 must cover, and the port that checks it: nil until it is ported.
+/// One vector file phase 3 (or a later phase) must cover, and the port that checks it: nil until
+/// it is ported.
 struct PortedVector: Sendable {
   /// The vector file's name, without `.json`.
   let file: String
-  /// The phase 3 pull request that ports it, and the Swift it ports to (spec section 9.2).
+  /// The pull request that ports it, and the Swift it ports to (spec section 9.2).
   let by: String
   let port: VectorPort?
 
@@ -13,8 +14,8 @@ struct PortedVector: Sendable {
   }
 }
 
-/// Every vector file phase 3 must cover (iOS build spec, sections 7.4, 9.2 and 19), with its
-/// port. `VectorCoverageTests` runs each port, and fails for each file whose port is still nil,
+/// Every vector file phase 3 must cover (iOS build spec, sections 7.4, 9.2 and 19), and phase
+/// 5's `page.json`, with its port. `VectorCoverageTests` runs each port, and fails for each file whose port is still nil,
 /// and for a file pnpm mobile:generate writes that isn't listed here, so none is skipped.
 ///
 /// To port a file: write the Swift; define its port in a test file of its own, as
@@ -63,5 +64,8 @@ enum PortedVectors {
 
     // client addRecent, removeRecent
     PortedVector("recent", by: "3.4: RecentPlaces", port: .recent),
+
+    // packages/mobile homePage (the app's page, from core and the client), core creditParts
+    PortedVector("page", by: "5.1: HomePage, Credits.parts", port: .page),
   ]
 }

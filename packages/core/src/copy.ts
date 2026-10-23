@@ -194,6 +194,49 @@ export const ATTRIBUTION: readonly string[] = [
 ];
 
 /**
+ * The phrases of the credits that link out: "Weather data by Open-Meteo.com" to Open-Meteo, as its
+ * licence asks, each licence to its text, and NASA POWER to its project. The website's credits
+ * (components/Credit.astro) and the apps' footers link the same phrases (`creditParts`).
+ */
+export const CREDIT_LINKS: readonly { phrase: string; url: string }[] = [
+  { phrase: 'Weather data by Open-Meteo.com', url: 'https://open-meteo.com/' },
+  { phrase: 'CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' },
+  { phrase: 'CC BY-SA 4.0', url: 'https://creativecommons.org/licenses/by-sa/4.0/' },
+  { phrase: 'NASA POWER', url: 'https://power.larc.nasa.gov/' },
+];
+
+/** A piece of a credit: plain text, or one of `CREDIT_LINKS`' phrases with its `url`. */
+export interface CreditPart {
+  text: string;
+  url?: string;
+}
+
+/**
+ * A credit (`ATTRIBUTION`, as the API gives it) in pieces, in order: each phrase of
+ * `CREDIT_LINKS` with its link, from the left (where two could start at the same place, the
+ * first in the list), and the text between them, never empty.
+ */
+export function creditParts(text: string): CreditPart[] {
+  const parts: CreditPart[] = [];
+  // Where the plain text since the last link starts.
+  let start = 0;
+  let i = 0;
+  while (i < text.length) {
+    const link = CREDIT_LINKS.find((l) => text.startsWith(l.phrase, i));
+    if (!link) {
+      i += 1;
+      continue;
+    }
+    if (i > start) parts.push({ text: text.slice(start, i) });
+    parts.push({ text: link.phrase, url: link.url });
+    i += link.phrase.length;
+    start = i;
+  }
+  if (start < text.length) parts.push({ text: text.slice(start) });
+  return parts;
+}
+
+/**
  * Who runs each forecast model, by `MODELS` id, for the credits ("NOAA (GFS)"): the About pages
  * and the apps' credits read the same list.
  */

@@ -32,14 +32,7 @@ enum DebugHooks {
       arguments: [String] = ProcessInfo.processInfo.arguments
     ) -> (any HTTPTransport)? {
       guard let name = value(after: "-fixture", in: arguments) else { return nil }
-      guard
-        let url = Bundle.main.url(
-          forResource: name,
-          withExtension: "json",
-          subdirectory: "Fixtures"
-        ),
-        let data = try? Data(contentsOf: url)
-      else { fatalError("-fixture: the app has no Fixtures/\(name).json") }
+      let data = fixtureData(name)
       do {
         _ = try TodayResponse.decode(from: data)
       } catch {
@@ -47,6 +40,20 @@ enum DebugHooks {
       }
       try? store?.removeToday()
       return FixtureTransport(body: data)
+    }
+
+    /// With `-fixture <name>`, the moment the fixture is for (`_fixture.now`), which the home
+    /// screen shows it at, so a fixture launched on any day shows the state it was made for (the
+    /// hour picked, Tomorrow from 6pm, no recent forecast). Nil without, for the system clock.
+    static let launchMoment: Date? = fixtureMoment(ProcessInfo.processInfo.arguments)
+
+    static func fixtureMoment(_ arguments: [String]) -> Date? {
+      guard let name = value(after: "-fixture", in: arguments) else { return nil }
+      guard
+        let fixture = try? JSONDecoder().decode(FixtureNote.self, from: fixtureData(name)),
+        let moment = ApiJSON.parseDate(fixture.note.now)
+      else { fatalError("-fixture: \(name).json has no moment") }
+      return moment
     }
 
     /// `-apiOrigin <url>`: a deploy preview's API instead of willitsnow.today's (section 4).
@@ -70,12 +77,28 @@ enum DebugHooks {
       else { return nil }
       return arguments[index + 1]
     }
+
+    /// The fixture's file, from the copy only Debug builds bundle. A name with no fixture stops
+    /// the app.
+    private static func fixtureData(_ name: String) -> Data {
+      guard
+        let url = Bundle.main.url(
+          forResource: name,
+          withExtension: "json",
+          subdirectory: "Fixtures"
+        ),
+        let data = try? Data(contentsOf: url)
+      else { fatalError("-fixture: the app has no Fixtures/\(name).json") }
+      return data
+    }
   #else
     static let storeFallback = false
 
     static func prepare() {}
 
     static func transport(forgetting store: SharedStore?) -> (any HTTPTransport)? { nil }
+
+    static let launchMoment: Date? = nil
 
     static func apiOrigin() -> URL? { nil }
 
@@ -90,6 +113,20 @@ enum DebugHooks {
 
     func get(_ request: HTTPRequest) async throws -> HTTPResponse {
       HTTPResponse(status: 200, body: body)
+    }
+  }
+
+  /// What a fixture says about itself (`_fixture`), as far as the hooks read it: its moment.
+  private struct FixtureNote: Decodable {
+    struct Note: Decodable {
+      /// ISO 8601 UTC.
+      let now: String
+    }
+
+    let note: Note
+
+    enum CodingKeys: String, CodingKey {
+      case note = "_fixture"
     }
   }
 #endif

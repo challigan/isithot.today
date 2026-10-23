@@ -28,6 +28,14 @@ public enum AppCopy {
     "No ads, plus widgets for your home and lock screen · \(price)"
   }
 
+  public static func headingLabel(place: String, question: String, answer: String) -> String {
+    "\(place). \(question) \(answer)"
+  }
+
+  public static func modelLine(name: String, value: String) -> String {
+    "\(name) · \(value)"
+  }
+
   public static let recent = "Recent"
   public static let upgradeTitle = "Remove ads and add widgets"
 

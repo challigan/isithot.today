@@ -22,6 +22,10 @@ export const APP_COPY = {
   notNow: 'Not now',
   search: 'Search',
   upgradeRow: 'No ads, plus widgets for your home and lock screen · {price}',
+  // The page's question and answer as VoiceOver reads them, one heading with the place (10.2,
+  // 16), and a row of the model list under the strip (10.2).
+  headingLabel: '{place}. {question} {answer}',
+  modelLine: '{name} · {value}',
 
   // Place picker (10.3)
   recent: 'Recent',

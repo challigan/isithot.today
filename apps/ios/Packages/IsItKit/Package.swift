@@ -54,9 +54,15 @@ let package = Package(
       ],
       swiftSettings: swift5
     ),
+    // The app's screens, from plain values: IsItLogic's presenters (HomePage, HomeTopBar) and
+    // the actions the app's model answers. Topic-free: the app gives each page its colours and
+    // glyph (SnowKit), so the widget, which links SnowKit, never links the app's screens.
     .target(
       name: "IsItUI",
-      dependencies: [.product(name: "IsItModel", package: "IsItCore")],
+      dependencies: [
+        .product(name: "IsItModel", package: "IsItCore"),
+        .product(name: "IsItLogic", package: "IsItCore"),
+      ],
       swiftSettings: swift5
     ),
     .target(
