@@ -44,7 +44,7 @@ import {
 } from '@isithot/client';
 import { APP_COPY } from '../src/appCopy';
 import { FIXTURES, fixtureJson, makeFixture, type Fixture } from '../src/fixtures';
-import { fill, homePage } from '../src/page';
+import { fill, homePage, homeTopBar } from '../src/page';
 import {
   addDays,
   assertSpecParse,
@@ -114,6 +114,7 @@ const replay: Record<string, (i: In) => unknown> = {
   addRecent: (i) => addRecent(i.list, i.target, i.name, i.max),
   removeRecent: (i) => removeRecent(i.list, i.target),
   homePage: (i) => homePage(i.fixture === null ? null : res(i), i),
+  homeTopBar: (i) => homeTopBar(i.placeName, i.approximate, i.notice),
   creditParts: (i) => creditParts(i.text),
 };
 
@@ -174,7 +175,7 @@ const CORE = [
 ];
 
 /** The functions whose reference is packages/mobile's own, built on core's and the client's. */
-const MOBILE = ['homePage'];
+const MOBILE = ['homePage', 'homeTopBar'];
 
 const file = (name: string) => files.find((f) => f.name === name)!.vectors;
 const casesFor = (name: string, fn: string) => file(name).cases.filter((c) => c.fn === fn);
@@ -751,6 +752,47 @@ describe('the cases cover what section 7.4 asks for', () => {
     // Each credit the API gives, with something to link.
     const credits = casesFor('page', 'creditParts').map((c) => (c.in as In).text);
     for (const credit of ATTRIBUTION) expect(credits).toContain(credit);
+    // A model's row is its name and amount, apart as VoiceOver reads them and together on screen.
+    const lines = outs.flatMap((o) => o.day?.lines ?? []);
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) {
+      expect(line.text).toBe(fill(APP_COPY.modelLine, { name: line.name, value: line.value }));
+      expect(line.name.length && line.value.length).toBeTruthy();
+    }
+  });
+
+  it('homeTopBar: the place or "Finding you…", the approximate line or the notice', () => {
+    const cases = casesFor('page', 'homeTopBar');
+    const bar = (placeName: string | null, approximate: boolean, notice: string | null) =>
+      cases.find(
+        (c) =>
+          (c.in as In).placeName === placeName &&
+          (c.in as In).approximate === approximate &&
+          (c.in as In).notice === notice,
+      )?.out as any;
+    expect(bar('Leeds', true, null)).toEqual({
+      place: 'Leeds',
+      placeLabel: 'Place: Leeds. Change place.',
+      approximate: COPY.approximate,
+      useMyLocation: COPY.useMyLocation,
+      settings: APP_COPY.settings,
+    });
+    expect(bar('Leeds', false, null)).toMatchObject({ approximate: null, useMyLocation: null });
+    for (const unknown of [null, '']) {
+      expect(bar(unknown, true, null)).toMatchObject({
+        place: COPY.locating,
+        placeLabel: fill(APP_COPY.placeButtonUnknown, { status: COPY.locating }),
+      });
+    }
+    // The notice takes the approximate line's place, and shows on a chosen place too.
+    expect(bar(null, true, APP_COPY.slugGone)).toMatchObject({
+      approximate: APP_COPY.slugGone,
+      useMyLocation: COPY.useMyLocation,
+    });
+    expect(bar('Leeds', false, APP_COPY.slugGone)).toMatchObject({
+      approximate: APP_COPY.slugGone,
+      useMyLocation: null,
+    });
   });
 
   it('recent: de-duplication, the cap and IP refused', () => {

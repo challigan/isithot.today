@@ -8,8 +8,9 @@ extension VectorPort {
   /// `page.json`: packages/mobile `homePage`, the app's page made of core's and the client's
   /// rules, ported as `HomePage`, for every fixture and view at its own moment, at an hour ahead,
   /// the last minute before `usableUntil` and at it, across 6pm, after each kind of request (with
-  /// the server's message, `in.message`), with blocks taken out (`in.without`) and with no answer
-  /// at all; and core `creditParts`, ported as `Credits.parts`. Now's rows and the week's are
+  /// the server's message, `in.message`), with blocks taken out (`in.without`), with no answer
+  /// at all, and at each screen the UI tests open (`HomeScreens.json`); packages/mobile
+  /// `homeTopBar`, ported as `HomeTopBar`; and core `creditParts`, ported as `Credits.parts`. Now's rows and the week's are
   /// checked string by string, as they are drawn and as VoiceOver reads them. Where the page
   /// shows one of the answer's own objects, the vector names its path in the fixture (`shown`),
   /// and the middle page's strip is checked against `StripGeometry` for that day, which
@@ -37,6 +38,8 @@ extension VectorPort {
     }
     struct Line: Decodable, Sendable, Equatable {
       let text: String
+      let name: String
+      let value: String
       let out: Bool
     }
     struct Day: Decodable, Sendable {
@@ -106,7 +109,13 @@ extension VectorPort {
       #expect(page.tomorrow == expected.tomorrow, "\(label): tomorrow")
       #expect(page.band == expected.band, "\(label): band")
       #expect(page.palette == Palettes.snow(expected.band ?? .nosnow), "\(label): palette")
-      #expect(page.day?.lines.map { Line(text: $0.text, out: $0.out) } == expected.day?.lines)
+      let lines = page.day?.lines.map {
+        Line(text: $0.text, name: $0.name, value: $0.value, out: $0.out)
+      }
+      #expect(lines == expected.day?.lines, "\(label): model list")
+      let lineTexts = (page.day?.lines ?? []).flatMap { [$0.text, $0.name, $0.value] }
+      let wantLines = (expected.day?.lines ?? []).flatMap { [$0.text, $0.name, $0.value] }
+      #expect(sameText(lineTexts, wantLines), "\(label): model list code unit for code unit")
       // Every string on the page, in order, the same text code unit for code unit.
       let texts: [String?] = [
         page.label, page.question, page.answer, page.headingLabel, page.verdict, page.detail,
@@ -163,6 +172,40 @@ extension VectorPort {
         #expect(footer.nearby == (res.nearby ?? []), "\(label): nearby")
         #expect(footer.credits == res.attribution.map(Credits.parts), "\(label): credits")
       }
+    }
+
+    // The top bar (`HomeTopBar`): the place or "Finding you…", its button's label, and the
+    // approximate line or the notice in its place.
+    struct Bar: Decodable, Sendable, CustomStringConvertible {
+      let placeName: String?
+      let approximate: Bool
+      let notice: String?
+
+      var description: String {
+        "place \(placeName.map { "\"\($0)\"" } ?? "none"), approximate \(approximate), "
+          + "notice \(notice.map { "\"\($0)\"" } ?? "none")"
+      }
+    }
+    struct TopBar: Decodable, Sendable, Equatable {
+      let place: String
+      let placeLabel: String
+      let approximate: String?
+      let useMyLocation: String?
+      let settings: String
+    }
+    try file.compare("homeTopBar", input: Bar.self, output: TopBar.self) { bar in
+      let top = HomeTopBar(
+        placeName: bar.placeName,
+        approximate: bar.approximate,
+        notice: bar.notice
+      )
+      return TopBar(
+        place: top.place,
+        placeLabel: top.placeLabel,
+        approximate: top.approximate,
+        useMyLocation: top.useMyLocation,
+        settings: top.settings
+      )
     }
 
     struct Credit: Decodable, Sendable, CustomStringConvertible {

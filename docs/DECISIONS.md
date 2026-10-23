@@ -2085,6 +2085,90 @@ once to VoiceOver, and every text size up to AX5 (sections 9.5, 10.1, 10.2 and 1
   and whether `swipeRight()` on the app pages the outer scroll view) are unproven until the
   first `ios` run. Everything in IsItCore ran on Linux, and every Swift file was linted.
 
+## The iPhone app's home accessibility and its UI tests (IsItCore, IsItKit, apps/ios; phase 5.4)
+
+The iOS build spec's PR 5.4: the home screen's accessibility (section 16) proven on the
+simulator by `HomeTests`, `OfflineTests` and the audits (section 17.2), with every page on the
+contact sheet at Large and AX3 (phase 5's exit). `apps/ios/README.md` ("Phase 5.4") says how to
+read them.
+
+- **What a page should say is generated from page.json.** A UI test can't call the presenter
+  (it drives the app from another process), and typing a page's words into a test would check
+  the app against the test's copy rather than the reference. packages/mobile now writes
+  `apps/ios/Apps/Snow/UITests/Generated/HomeScreens.json` (`exportHomeScreens.ts`): for each
+  screen a test opens, its fixture, the moment as `-now` takes it, how its request went, the
+  view it opens on (core `defaultView`), its top bar and its three pages, the very outputs of
+  page.json's cases. The screens are listed once (`homeScreens`, vectors.ts), which also adds
+  each to page.json, so the Swift on Linux is held to the same inputs; a screen page.json has no
+  case for stops the generator. JSON in the test bundle rather than generated Swift: there is no
+  swift-format layout to reproduce, and XcodeGen puts a `.json` in the folder into the UI test
+  bundle's resources (checked with XcodeGen 2.46.0 built from source). Prettier ignores the
+  folder, as it does the other generated resources.
+- **Two references grow, TypeScript first.** A model line in page.ts now has its `name` and
+  `value` as well as its `text`, as the Swift's `HomePage.ModelLine` always had, since VoiceOver
+  reads a row as its name with the amount as its value; and the top bar has a reference,
+  `homeTopBar` (the place or "Finding you…", the place button's label, the approximate line or
+  the notice, "Use my location", Settings), with cases in page.json, which `PageVectorTests` now
+  holds `HomeTopBar` to. Nothing the app shows changed.
+- **`-clock fixed`** (spec 9.8): `FixedClock` (IsItState) reads one moment; work scheduled for
+  a time it has reached runs at once and work for any later time never runs, so a test on it
+  never meets the quiet refresh or the retry, and reads the screen its moment shows however
+  slowly the simulator goes. `-clock run`, which 5.1's tests rely on, stays the default; the
+  flip and the end of `usableUntil` are tested with it.
+- **The minute tick counts the model's minutes.** `TimelineView(.everyMinute)` ticked on the
+  system's minutes, so a Debug clock started at 5:59:30pm reached 6pm 30 seconds in and turned
+  the page only at the system's next minute, up to a minute later. The tick is now
+  `TimelineView(.periodic(from: MinuteTick.anchor(…), by: 60))`, from a moment when the model's
+  clock read a whole minute, plus 50 ms so that rounding in the two clocks' arithmetic never
+  ticks a hair before the minute. In the app the two clocks are the same, so it is the system's
+  minute, as before.
+- **`-network unavailable`** answers every request as the server does when the forecasts can't
+  be had without a cache (503, `upstream_unavailable`, core's message), over the app's own
+  transport as `-network off` is: a failure over a saved answer, which section 4 says keeps the
+  answer, says forecasts are unavailable, and offers Retry.
+- **The system's controls take the page's tone.** The pages always use their band's palette (section
+  10.1), but the switcher's segmented control and the bordered Retry draw their own text in the
+  system's colour scheme: black on the snow bands' purple in light mode, and white on no snow's
+  lilac in dark mode, which the contrast audit would very likely fail. `Palette.inkIsLight`
+  (IsItLogic, light ink on a dark page, by WCAG luminance, tested on Linux) sets `PageTheme.dark`,
+  and the shell and each page set the colour scheme for what they hold. The status bar is the
+  system's, and `preferredColorScheme` would also turn phase 6's sheets, which follow Dark Mode, so
+  it is left as it is. Fixed before the first audit rather than waiting for it to say so.
+- **Hit regions.** The footer's links and places, "Use my location" and the switcher's buttons
+  at accessibility sizes are at least 44 points tall (`HitTarget.minimum`), and Retry is the
+  large control size. The credits' links stay inside their text, beside the data as the licence
+  asks; if the audit flags them, that is the reason to give.
+- **The audits** (`HomeAuditTests`, spec 17.2's `AccessibilityAuditTests` for the home screen,
+  named apart so the later phases' audits of their own screens don't meet it in one file):
+  `performAccessibilityAudit(for: .all)` on each page of the three fixtures at Large and at AX3
+  (`-UIPreferredContentSizeCategoryName`, UIKit's own default); the handler keeps every issue
+  rather than stopping at the first, and the test fails once with them all, each with its page,
+  kind, Apple's descriptions and the element. `HomeAuditTests.exceptions` takes an issue that is
+  the audit's mistake, with its reason; it is empty, since no issue has been seen yet, and none
+  is allowed on a guess. The first run may show the segmented control's fixed font at Large (a
+  system control; at accessibility sizes the switcher is buttons) and the credits' links.
+- **The contact sheet** sorts attachments by name, so each audited page is attached as
+  `home-<fixture>-<n>-<size>-<m>-<tab>` (`home-aberdeen-snow-1-large-1-now` …
+  `home-leeds-dry-2-ax3-3-this-week`): fixture by fixture, Large before AX3, in the switcher's
+  order. Phase 5's exit asks for Large and AX3; section 16's XXXL belongs to the `ImageRenderer`
+  snapshots, which wait for the page's content to be drawn apart from its scroll view, which
+  `ImageRenderer` doesn't draw.
+- **Time in the tests.** The flip and the end of the saved answer's hours start half a minute
+  before with `-clock run` (the spec's example has 10 seconds before 6pm), so a slow launch on the
+  runner can't pass the moment before the first check, and wait up to 75 seconds for it. The new
+  tests carry on after a difference, so one run lists every one; a screen that never comes
+  throws, which stops the test.
+- **Not proven here:** everything Apple only. The UI tests were type-checked on Linux against stubs
+  of XCUITest written from Apple's documentation (with `NSPredicate(format:)`, which Linux lacks,
+  stubbed), and their types decoded `HomeScreens.json` there; `DebugHooks.swift` was type-checked in
+  Debug and Release against stub UIKit and WidgetKit. A page is read from one snapshot of the
+  accessibility tree (`XCUIElement.snapshot()`), rather than an element query for each of its forty
+  or so checks, which would each ask the app, and an identifier checked must be in it once, which
+  also proves the pages off screen are out of the tree. Unproven until the first `ios` run: the
+  periodic timeline, the colour scheme on the system's controls, the hit regions, what the audits
+  find, whether a segment reports `isSelected`, whether a swipe on a page's scroll view pages the
+  pager, and whether the AX3 argument reaches SwiftUI's text sizes.
+
 ## The app's support page and privacy notice (S8)
 
 App Store Connect needs a Support URL with real contact details and a Privacy Policy URL, so

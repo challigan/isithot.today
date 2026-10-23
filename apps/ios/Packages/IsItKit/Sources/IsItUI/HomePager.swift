@@ -75,6 +75,8 @@ public struct ViewSwitcher: View {
           .underline(selected)
           .fixedSize(horizontal: false, vertical: true)
           .padding(.vertical, 6)
+          .frame(minHeight: HitTarget.minimum)
+          .contentShape(Rectangle())
       }
       .accessibilityAddTraits(selected ? .isSelected : [])
       .accessibilityIdentifier("view-\(page.view.rawValue)")

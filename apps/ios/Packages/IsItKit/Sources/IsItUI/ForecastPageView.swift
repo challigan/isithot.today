@@ -63,6 +63,7 @@ public struct ForecastPageView: View {
     }
     .foregroundStyle(theme.ink)
     .tint(theme.ink)
+    .environment(\.colorScheme, theme.controls)
     .accessibilityIdentifier("page-\(page.view.rawValue)")
   }
 
@@ -156,8 +157,9 @@ struct DayBodyView: View {
         .accessibilityIdentifier("agreement")
       ModelStripView(strip: day.strip, ink: ink)
       VStack(alignment: .leading, spacing: typeSize.isAccessibilitySize ? 12 : 6) {
-        ForEach(Array(day.lines.enumerated()), id: \.offset) { _, line in
+        ForEach(Array(day.lines.enumerated()), id: \.offset) { index, line in
           ModelLineView(line: line, stacked: typeSize.isAccessibilitySize)
+            .accessibilityIdentifier("model-\(index)")
         }
       }
       .padding(.top, 4)
@@ -257,6 +259,8 @@ struct RetryButton: View {
         .padding(.horizontal, 8)
     }
     .buttonStyle(.bordered)
+    // The large size's bezel is taller than the 44 points a control is tapped by.
+    .controlSize(.large)
     .accessibilityIdentifier("retry")
   }
 }

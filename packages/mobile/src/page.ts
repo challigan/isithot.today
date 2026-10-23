@@ -65,9 +65,15 @@ export interface PageInput {
   placeName?: string | null;
 }
 
-/** A row of the model list under the strip: "ECMWF · 2cm", dimmed when the model disagrees. */
+/**
+ * A row of the model list under the strip: "ECMWF · 2cm", dimmed when the model disagrees; and
+ * its name and amount apart ("ECMWF", "2cm"), as the row is drawn at accessibility sizes and as
+ * VoiceOver reads it, the amount as the row's value.
+ */
 export interface ModelLine {
   text: string;
+  name: string;
+  value: string;
   out: boolean;
 }
 
@@ -288,6 +294,8 @@ export function homePage(res: TodayResponse | null, o: PageInput): HomePage {
       limited: models.limited,
       lines: models.items.map((m) => ({
         text: fill(APP_COPY.modelLine, { name: m.name, value: m.value }),
+        name: m.name,
+        value: m.value,
         out: m.out,
       })),
     },
@@ -315,5 +323,42 @@ export function homePage(res: TodayResponse | null, o: PageInput): HomePage {
     },
     retry: retry ? COPY.retry : null,
     footer: res && { updated: when && `${COPY.updated} ${when}`, notice },
+  };
+}
+
+/**
+ * The home screen's top bar (10.2), the reference for IsItLogic's `HomeTopBar`: the place as a
+ * button that opens the picker, labelled for VoiceOver "Place: Leeds. Change place.", or while no
+ * place is known core's "Finding you…" and "Finding you…, change place."; on approximate IP
+ * location the line beneath it ("Using approximate location.") with "Use my location", the
+ * notice in that line's place while there is one (`APP_COPY.slugGone`); and the gear's label.
+ */
+export interface HomeTopBar {
+  place: string;
+  placeLabel: string;
+  approximate: string | null;
+  useMyLocation: string | null;
+  settings: string;
+}
+
+/**
+ * The top bar for the place named `placeName` (the target's name, or the answer's; null or empty
+ * while neither is known), on approximate IP location when `approximate`, with the line `notice`
+ * to tell the user about the place, if any.
+ */
+export function homeTopBar(
+  placeName: string | null,
+  approximate: boolean,
+  notice: string | null = null,
+): HomeTopBar {
+  const known = placeName ? placeName : null;
+  return {
+    place: known ?? COPY.locating,
+    placeLabel: known
+      ? fill(APP_COPY.placeButtonLabel, { place: known })
+      : fill(APP_COPY.placeButtonUnknown, { status: COPY.locating }),
+    approximate: notice ?? (approximate ? COPY.approximate : null),
+    useMyLocation: approximate ? COPY.useMyLocation : null,
+    settings: APP_COPY.settings,
   };
 }

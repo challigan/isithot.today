@@ -33,6 +33,7 @@ public struct HomeShell<Content: View>: View {
     }
     .foregroundStyle(theme.ink)
     .tint(theme.ink)
+    .environment(\.colorScheme, theme.controls)
     .background {
       ZStack {
         PageBackground(theme: theme)
@@ -104,6 +105,7 @@ struct TopBarView: View {
   @ViewBuilder private func approximateLine(_ text: String) -> some View {
     Text(verbatim: text)
       .fixedSize(horizontal: false, vertical: true)
+      .accessibilityIdentifier("approximate")
     if let useMyLocation = topBar.useMyLocation {
       Button {
         actions.useMyLocation()
@@ -111,6 +113,8 @@ struct TopBarView: View {
         Text(verbatim: useMyLocation)
           .fontWeight(.semibold)
           .underline()
+          .frame(minHeight: HitTarget.minimum)
+          .contentShape(Rectangle())
       }
       .accessibilityIdentifier("use-my-location")
     }
