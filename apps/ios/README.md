@@ -162,6 +162,7 @@ There is no Xcode here, so iOS code is only compiled on GitHub's macOS runners. 
 
 ```sh
 pnpm mobile:check                     # the Swift, fixtures, vectors, glyphs, icon and font are as generated
+pnpm vitest run packages/mobile/test/swiftLiterals.test.ts   # no words typed in the Swift (phase 6, below)
 docker run --rm -v "$PWD/apps/ios":/w -w /w swift:6.3.3-noble \
   swift format lint --strict --recursive Packages Apps          # every Swift file, as CI lints it
 docker run --rm -v "$PWD/apps/ios/Packages/IsItCore":/w -w /w swift:6.3.3-noble \
@@ -554,7 +555,7 @@ constants' numbers, the credits and their links, Your privacy's lines, and no wo
 app, site or weather), `Tests/IsItStateTests/UnitsTests.swift` (the units kept, asked for and
 saved, the answer kept meanwhile, offline, the same units), and in packages/mobile the copy,
 the credits, the constants, Your privacy against the website's privacy notice, and the guard
-that no Swift view or label is given a string literal (`swiftLiterals.test.ts`).
+that no Swift view or label is given a string literal (`swiftLiterals.test.ts`, below).
 
 **On the macOS CI:** `SettingsTests` (UI plan), with `-openURLs`: the units switch, the refetch
 in inches and the choice kept at the next launch; every row's URL or page; Report an ad's and
@@ -575,6 +576,38 @@ Credits and licences, Your privacy and the fallback. The screens are `app-settin
   search fixtures (`SearchStub`, below).
 - **The tests.** `PickerTests` and `SettingsTests` launch the same app; the picker's Open
   Settings is read from the recorder (`testOpenSettingsOpensTheAppsPage`), as Settings' rows are.
+
+### No words typed in the Swift (phase 6's exit)
+
+Every word on screen and every accessibility label comes from the generated copy (`CoreCopy`,
+`AppCopy`, `AppCredits`, `Constants`), the presenters built on it, or the server's answer (spec
+section 10 and Appendix D). `packages/mobile/test/swiftLiterals.test.ts`, a vitest test that runs
+on Linux with the rest (`pnpm test`, and CI's `check` job), holds the Swift to that with two
+guards:
+
+- **No view or modifier is given a literal** (6.2's): `Text("…")`, `Button("…")`,
+  `.navigationTitle("…")`, `.accessibilityLabel("…")`, a `prompt:` or `title:` with words of its
+  own, whatever the literal says. `Text(verbatim:)` with data passes.
+- **No literal looks like prose**, anywhere in the Swift that ships: every `.swift` file under
+  `apps/ios` but the generated folders (the copy itself, which the TypeScript's tests check), the
+  test targets (`Apps/Snow/Tests`, `Apps/Snow/UITests`, each package's `Tests`: their words are
+  what they expect on screen) and build output. packages/mobile `swiftLiterals.ts` reads every
+  literal, with Swift's comments, raw and multi-line literals and interpolations, and the call
+  and argument label each one belongs to. A literal is prose when it has two words or more, or
+  one capitalised word ("Settings", "Version {} ({})") or a word that ends a sentence; keys,
+  identifiers, paths, URL pieces (`"/api/v1/search?"`, `"mailto:"`) and format specifiers have no
+  words in that sense.
+- **The allowlist** is in the test, each entry with why it is never shown: accessibility
+  identifiers, a crash's message (`fatalError` and its kin: DebugHooks' bad launch arguments), a
+  decoding error's description, a bundle's file and folder names, Info.plist keys, SF Symbols'
+  names, and three names: the `Accept` header, JavaScript's `Infinity` and the `Fallback` glyph
+  folder. A test fails when one of those names is no longer used.
+
+A word it finds belongs in packages/mobile `appCopy.ts` (then `pnpm mobile:generate`), not the
+allowlist. One lowercase word or a symbol ("cm", "°C") can't be told from a key by its shape, so
+the second guard lets it pass; the first catches it in a view. When phase 6 was put together the
+Swift had no stray prose: every literal the guard flags is a crash's or a decoding error's
+message, or one of the names above.
 
 ## CI (`.github/workflows/ios.yml`)
 

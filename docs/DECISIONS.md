@@ -2247,7 +2247,8 @@ and licences, the static lines of Your privacy, and Report an ad (sections 10.4,
   `packages/mobile/test/swiftLiterals.test.ts`: it reads every Swift file the app and its
   packages compile, and fails on a view or modifier given a string literal (`Text("…")`,
   `Button("…")`, `.navigationTitle("…")`, `.accessibilityLabel("…")`, a `prompt:` or `title:`
-  with words of its own). `Text(verbatim:)`, identifiers and SF Symbols' names pass.
+  with words of its own). `Text(verbatim:)`, identifiers and SF Symbols' names pass. When phase
+  6 was put together it gained a second guard, for prose in any literal (below).
 - **The copy test's names** gain "iPhone" and "ID" (in "your iPhone's Settings" and "an ID made
   from it"), proper nouns as section 10.9's word list allows.
 - **Not proven here:** IsItUI's Settings views, the sheet, the recorder, the pasteboard,
@@ -2286,9 +2287,40 @@ had to be made to agree:
   nothing new: git's merge of `AppCopy.swift` was already what the merged `appCopy.ts` generates.
   The generator's file list has both builds' additions (`AppCredits.swift` after `Constants.swift`,
   `Copy.xcconfig` after the palettes), and its test the shifted indices.
+- **The guard for words typed in the Swift** (phase 6's exit, section 10 and Appendix D) has
+  two halves in `packages/mobile/test/swiftLiterals.test.ts`. 6.2's stays as it was: no view or
+  modifier is given a literal. The new one reads every string literal in the Swift that ships
+  and fails on any that looks like prose and isn't on the allowlist.
+  - **Why a lexer, not a regex over lines.** A literal can sit anywhere (a `let`, a ternary, an
+    interpolation, a multi-line or raw literal, an argument on the next line), and what makes
+    one harmless is the call it belongs to (`fatalError(` on the line above, say). So
+    packages/mobile `swiftLiterals.ts` reads Swift's comments (nested block comments too), every
+    form of literal with its escapes and interpolations, and the brackets, giving each literal
+    its text, line, callee and argument label. A literal or bracket it can't close throws, so a
+    source it misreads fails the guard rather than slipping past it.
+  - **What counts as prose:** two words or more, or one capitalised word, or one word ending a
+    sentence, where a word is letters (with an apostrophe or hyphen inside) and the punctuation
+    around it. Keys, CamelCase identifiers, paths, URL pieces, header names such as
+    `Content-Type`, and format specifiers have none, so the allowlist names only what looks like
+    prose and isn't shown: by call (`accessibilityIdentifier`, `fatalError` and its kin,
+    `appendingPathComponent`), by label (`debugDescription`, `forResource`, `withExtension`,
+    `subdirectory`, `forInfoDictionaryKey`, `systemName`), and three names (`Accept`,
+    `Infinity`, `Fallback`), each commented, with a test that each name is still used.
+  - **Where it looks:** every `.swift` file under `apps/ios`, found by walking the folder so a new
+    one is covered at once, but the generated folders, the test targets and build output. The
+    tests are left out because their literals are the words they expect and their failure
+    messages; the generated copy because its words are checked in TypeScript.
+  - **Its limit:** one lowercase word or a symbol ("cm", "°C") looks like a key, so it passes; in
+    a view, the first guard catches it. The Swift had no stray prose to move into `appCopy.ts`:
+    what the guard flagged were DebugHooks' crash messages, IsItModel's decoding errors' and the
+    three names. Planted literals ("Opens in Safari" in `HomeView`, a sentence in a new folder)
+    fail it.
 - **Not proven here:** `HomeView`'s one-state presentation (the `Optional<HomeSheet>` bindings),
   the recorder on the picker and the new UI test are Apple only, so the macOS jobs prove them
-  first.
+  first. The bindings' logic was run on Linux against a stub of SwiftUI's `Binding` (its
+  dynamic member by a writable key path), and `DebugHooks.swift`'s Foundation half (the search
+  stub with both transports) type-checked in Swift 5 mode, Debug and Release, with the SwiftUI
+  recorder left out.
 
 ## API contract
 
