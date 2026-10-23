@@ -1,6 +1,7 @@
 /**
  * Writes what packages/mobile generates for the native apps into apps/ios (iOS build spec,
- * section 7.1): for now, `Keys.swift` and the fixtures the Swift tests decode.
+ * section 7.1): the Swift for the copy, questions, constants, keys and palettes, and the fixtures
+ * the Swift tests decode.
  *
  *   pnpm mobile:generate   writes the files, and removes stale ones from the folders it owns
  *   pnpm mobile:check      changes nothing; fails, listing each file, when any differs

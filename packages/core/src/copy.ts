@@ -193,6 +193,19 @@ export const ATTRIBUTION: readonly string[] = [
   COPY.climateCredit,
 ];
 
+/**
+ * Who runs each forecast model, by `MODELS` id, for the credits ("NOAA (GFS)"): the About pages
+ * and the apps' credits read the same list.
+ */
+export const MODEL_AGENCIES: Readonly<Record<string, string>> = {
+  ecmwf_ifs025: 'ECMWF',
+  ncep_gfs_seamless: 'NOAA',
+  dwd_icon_seamless: 'DWD',
+  ukmo_seamless: 'the Met Office',
+  meteofrance_seamless: 'Météo-France',
+  cmc_gem_seamless: 'Environment and Climate Change Canada',
+};
+
 /** Messages for the API error envelope. */
 export const ERROR_MESSAGES = {
   bad_location: 'Latitude and longitude must be decimal degrees.',

@@ -12,6 +12,12 @@ public enum SnowUnit: String, Codable, Sendable, CaseIterable {
   case `in`
 }
 
+/// The three views, left to right (core `View`): Now, Today (Tomorrow from 6pm) and This week.
+/// The raw values are core's, as deep links and the saved last view write them.
+public enum AppView: String, Codable, Sendable, CaseIterable {
+  case now, today, week
+}
+
 /// How snowy, from none to deep (core `SnowBand`). A band the app doesn't know yet is `unknown`,
 /// which draws as `nosnow`.
 public enum SnowBand: String, Codable, Sendable, CaseIterable, UnknownDecodable {

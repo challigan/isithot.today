@@ -29,7 +29,7 @@ packages/core        Pure TS: blending, climate normals, verdict, copy, units. N
 packages/client      Pure TS client rules (queries, freshness, the hour picker, widgets, notifications). No DOM, no I/O.
 packages/providers   Open-Meteo forecast + geocoding and NASA POWER adapters
 packages/server      API handlers, caching (memory + Netlify Blobs), location resolution
-packages/mobile      Generators for the native apps: Swift keys and fixtures from the real server (pnpm mobile:generate)
+packages/mobile      Generators for the native apps: Swift copy, constants, keys and palettes, and fixtures from the real server (pnpm mobile:generate)
 data/cities.json     The 300 city pages (150 UK, 150 worldwide), generated from GeoNames
 data/places.json     Town list used to name a rounded device location (Open-Meteo has no reverse geocoding)
 reference/           prototype.html, the approved design

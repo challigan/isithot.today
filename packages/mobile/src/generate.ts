@@ -3,7 +3,12 @@
  * files on disk differ from it (`pnpm mobile:check`). The files are committed, so the Mac and CI
  * build the app without Node, and the check stops a hand edit or a stale copy.
  */
+import { APP_COPY_PATH, appCopySwift } from './exportAppCopy';
+import { CONSTANTS_PATH, constantsSwift } from './exportConstants';
+import { CORE_COPY_PATH, coreCopySwift } from './exportCoreCopy';
 import { KEYS_PATH, keysSwift } from './exportKeys';
+import { PALETTES_PATH, palettesSwift } from './exportPalettes';
+import { QUESTIONS_PATH, questionsSwift } from './exportQuestions';
 import { FIXTURES, fixtureJson, makeFixture } from './fixtures';
 
 /**
@@ -12,14 +17,17 @@ import { FIXTURES, fixtureJson, makeFixture } from './fixtures';
  */
 export const FIXTURES_DIR = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources/Fixtures';
 
-/** IsItModel's generated Swift: `Keys` now, then the copy and the constants. */
+/** IsItModel's generated Swift: the copy, the questions, the constants and the keys. */
 export const MODEL_GENERATED_DIR = 'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated';
+
+/** IsItUI's generated Swift: the palettes. */
+export const UI_GENERATED_DIR = 'apps/ios/Packages/IsItKit/Sources/IsItUI/Generated';
 
 /**
  * Folders the generator owns: every file in them is generated, so one it no longer writes is
  * stale. Hidden files (a Mac's `.DS_Store`) don't count.
  */
-export const OWNED_DIRS: readonly string[] = [FIXTURES_DIR, MODEL_GENERATED_DIR];
+export const OWNED_DIRS: readonly string[] = [FIXTURES_DIR, MODEL_GENERATED_DIR, UI_GENERATED_DIR];
 
 export interface GeneratedFile {
   path: string;
@@ -27,7 +35,14 @@ export interface GeneratedFile {
 }
 
 export async function generatedFiles(): Promise<GeneratedFile[]> {
-  const files: GeneratedFile[] = [{ path: KEYS_PATH, contents: keysSwift() }];
+  const files: GeneratedFile[] = [
+    { path: CORE_COPY_PATH, contents: coreCopySwift() },
+    { path: QUESTIONS_PATH, contents: questionsSwift() },
+    { path: APP_COPY_PATH, contents: appCopySwift() },
+    { path: CONSTANTS_PATH, contents: constantsSwift() },
+    { path: KEYS_PATH, contents: keysSwift() },
+    { path: PALETTES_PATH, contents: palettesSwift() },
+  ];
   for (const spec of FIXTURES) {
     files.push({
       path: `${FIXTURES_DIR}/${spec.name}.json`,

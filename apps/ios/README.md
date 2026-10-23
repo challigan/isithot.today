@@ -14,13 +14,15 @@ project.yml              XcodeGen 2.46.0 spec; WillItSnow.xcodeproj is generated
 Package.resolved         the pinned package versions, copied into the project by ci/xcodegen.sh
 Configs/                 Base (every target), Team (Carl's team ID, not a secret), Snow (identifiers,
                          API origin, ad units), CI-Simulator (signed to run locally, for CI)
-Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API models, generated Keys
+Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API models; generated CoreCopy,
+                         Questions, AppCopy, Constants and Keys
 Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore), IsItAds (Google's SDKs),
-                         IsItUI (the skeleton's answer view), IsItWidgetUI (the widget's entry, provider, view)
+                         IsItUI (the skeleton's answer view, generated Palettes, Color(rgb:)), IsItWidgetUI
+                         (the widget's entry, provider, view)
 Apps/Snow/App/           WillItSnowApp, AppModel, HomeView, DebugHooks (every test and debug hook)
 Apps/Snow/Resources/     the app's Info.plist, entitlements and privacy manifest
 Apps/Snow/Widgets/       the widget extension, its Info.plist, entitlements and privacy manifest
-Apps/Snow/Tests/         app-hosted unit tests: the App Group round trip (V1), widget snapshots
+Apps/Snow/Tests/         app-hosted unit tests: the App Group round trip (V1), widget snapshots, palette contrast
 Apps/Snow/UITests/       launches each fixture and attaches the screen
 TestPlans/               Unit and UI
 ci/                      xcodegen.sh, simulator.sh, test.sh, release-check.sh, xcresult-summary.mjs, contact-sheet.mjs;
@@ -30,12 +32,12 @@ ci/                      xcodegen.sh, simulator.sh, test.sh, release-check.sh, x
 The release checks are in the repo's `scripts/`: `check-archive.sh`, with `swift-small-strings.mjs`
 (below), and `asc-key.mjs` and `asc-notes.mjs` for the App Store Connect key and What to Test.
 
-| Target              | Bundle ID                      | Links                                    |
-| ------------------- | ------------------------------ | ---------------------------------------- |
-| `WillItSnow` (app)  | `today.willitsnow.app`         | IsItModel, IsItServices, IsItUI, IsItAds |
-| `WillItSnowWidgets` | `today.willitsnow.app.widgets` | IsItModel, IsItServices, IsItWidgetUI    |
-| `WillItSnowTests`   | hosted by the app              | IsItModel, IsItServices, IsItWidgetUI    |
-| `WillItSnowUITests` | drives the app                 |                                          |
+| Target              | Bundle ID                      | Links                                         |
+| ------------------- | ------------------------------ | --------------------------------------------- |
+| `WillItSnow` (app)  | `today.willitsnow.app`         | IsItModel, IsItServices, IsItUI, IsItAds      |
+| `WillItSnowWidgets` | `today.willitsnow.app.widgets` | IsItModel, IsItServices, IsItWidgetUI         |
+| `WillItSnowTests`   | hosted by the app              | IsItModel, IsItServices, IsItUI, IsItWidgetUI |
+| `WillItSnowUITests` | drives the app                 |                                               |
 
 The widget never links IsItAds. Both the app and the widget have the App Group
 `group.today.willitsnow.app`; only the app has `aps-environment`. The name under the icon is
@@ -124,7 +126,7 @@ don't depend on them.
 There is no Xcode here, so iOS code is only compiled on GitHub's macOS runners. What runs here:
 
 ```sh
-pnpm mobile:check                     # Keys.swift and the fixtures are what packages/mobile writes
+pnpm mobile:check                     # the generated Swift and the fixtures are what packages/mobile writes
 docker run --rm -v "$PWD/apps/ios":/w -w /w swift:6.3.3-noble \
   swift format lint --strict --recursive Packages Apps          # every Swift file, as CI lints it
 docker run --rm -v "$PWD/apps/ios/Packages/IsItCore":/w -w /w swift:6.3.3-noble \
@@ -293,9 +295,9 @@ The early questions of spec section 26 that phase 0 settles.
 
 Each comes with the phase that needs it, so nothing in the skeleton is dormant:
 
-- the generated copy, constants, palettes, glyphs, app icon (`ASSETCATALOG_COMPILER_APPICON_NAME`
-  is empty until then) and the answer font (phase 2); the launch screen's `LaunchBackground`
-  colour, which needs the palettes;
+- the glyphs, the app icon (`ASSETCATALOG_COMPILER_APPICON_NAME` is empty until then) and the
+  answer font (phase 2); the launch screen's `LaunchBackground` colour, from the palettes; the
+  widget's gallery name and description (`AppCopy.widgetName`, `AppCopy.widgetDescription`);
 - the target keys, freshness, hour picker and widget planner (phase 3), so the skeleton's widget
   shows one entry and never goes stale: the only answer it can find is a Debug fixture;
 - `SnowKit`, `APIClient`, location, StoreKit (`Snow.storekit`), notifications, `AdsService` and the
