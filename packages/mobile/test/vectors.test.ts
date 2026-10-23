@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import {
   ATTRIBUTION,
   COPY,
+  ERROR_MESSAGES,
   GRID,
   creditParts,
   defaultView,
@@ -616,22 +617,54 @@ describe('the cases cover what section 7.4 asks for', () => {
     expect(find('old-forecast', 'today', (o) => o.answer === APP_COPY.staleApp)).toBe(true);
     expect(find(null, 'today', (o) => o.answer === COPY.checking && o.footer === null)).toBe(true);
     expect(find(null, 'today', (o) => o.retry === COPY.retry)).toBe(true);
-    // With no answer, a failed request is the error, and one that couldn't connect says so; both
-    // with Retry.
+    // With no answer, a failed request is the error, in the server's words when it sent some
+    // (section 4); one that couldn't connect says so, and one rate limited says that; all with
+    // Retry.
     const failed = (phase: string) =>
       cases.filter((c) => (c.in as In).fixture === null && (c.in as In).phase === phase);
     expect(failed('error').length).toBeGreaterThan(0);
     for (const c of failed('error')) {
       expect((c.out as any).state).toBe('error');
-      expect((c.out as any).answer).toBe(COPY.unavailable);
+      expect((c.out as any).answer).toBe((c.in as In).message || COPY.unavailable);
       expect((c.out as any).retry).toBe(COPY.retry);
     }
+    // A message that isn't COPY.unavailable, so a port that drops it fails.
+    expect(failed('error').some((c) => (c.out as any).answer === ERROR_MESSAGES.bad_location)).toBe(
+      true,
+    );
+    expect(ERROR_MESSAGES.bad_location).not.toBe(COPY.unavailable);
     expect(failed('offline').length).toBeGreaterThan(0);
     for (const c of failed('offline')) {
       expect((c.out as any).state).toBe('error');
       expect((c.out as any).answer).toBe(APP_COPY.staleApp);
       expect((c.out as any).retry).toBe(COPY.retry);
     }
+    expect(failed('limited').length).toBeGreaterThan(0);
+    for (const c of failed('limited')) {
+      expect((c.out as any).state).toBe('error');
+      expect((c.out as any).answer).toBe(ERROR_MESSAGES.rate_limited);
+      expect((c.out as any).retry).toBe(COPY.retry);
+    }
+    // Over an answer that shows: after a failure, forecasts are unavailable, with Retry; offline,
+    // the offline line, and rate limited, nothing new: neither has Retry. Past usableUntil,
+    // neither line nor Retry.
+    const over = (phase: string) =>
+      cases.filter((c) => (c.in as In).fixture !== null && (c.in as In).phase === phase);
+    for (const phase of ['error', 'offline', 'limited']) {
+      expect(over(phase).length, phase).toBeGreaterThan(0);
+      for (const c of over(phase)) {
+        const o = c.out as any;
+        const shows = o.state !== 'noRecent';
+        expect(o.retry, `${phase} ${o.state}`).toBe(phase === 'error' && shows ? COPY.retry : null);
+        if (phase === 'error') expect(o.footer.notice).toBe(shows ? COPY.unavailable : null);
+        if (phase === 'limited' && shows) {
+          const ready = homePage(res(c.in as In), { ...(c.in as In), phase: 'ready' });
+          expect(o.footer.notice).toBe(ready.footer?.notice);
+        }
+      }
+    }
+    expect(over('limited').some((c) => (c.out as any).footer.notice === COPY.stale)).toBe(true);
+    expect(over('error').some((c) => (c.out as any).state === 'notAvailable')).toBe(true);
     // The footer: the stale line, and offline, its own line, which beats it.
     expect(find('stale', 'today', (o) => o.footer.notice === COPY.stale)).toBe(true);
     expect(

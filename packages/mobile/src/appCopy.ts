@@ -12,6 +12,9 @@
 export const APP_COPY = {
   // Home (10.2)
   placeButtonLabel: 'Place: {place}. Change place.',
+  // The same button while no place is known, after what it shows (core's "Finding you…"), as
+  // the website's place button reads it ("…, change location").
+  placeButtonUnknown: '{status}, change place.',
   settings: 'Settings',
   slugGone: 'That place is no longer available. Showing your approximate location.',
   offline: "You're offline. Showing the forecast from {time}.",

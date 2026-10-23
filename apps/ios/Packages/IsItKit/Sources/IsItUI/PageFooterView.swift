@@ -3,17 +3,20 @@ import IsItModel
 import SwiftUI
 
 /// A page's footer (iOS build spec, section 10.2, item 7): when the forecast was fetched; the
-/// stale or offline line; the links out, which open in Safari; the places nearby, which load in
+/// offline, unavailable or stale line, with Retry under it after a failed request (section 4);
+/// the links out, which open in Safari; the places nearby, which load in
 /// place; and the credits as the API gives them, with Open-Meteo, the licences and NASA POWER
 /// linked, next to the data as the licence asks. Every link, the credits' included, goes through
 /// `actions.openLink`.
 struct PageFooterView: View {
   let footer: HomePage.Footer
+  /// The page's "Retry", drawn under the footer's line.
+  let retry: String?
   let actions: HomeActions
 
   var body: some View {
     VStack(alignment: .leading, spacing: 20) {
-      if footer.updated != nil || footer.notice != nil {
+      if footer.updated != nil || footer.notice != nil || retry != nil {
         VStack(alignment: .leading, spacing: 6) {
           if let updated = footer.updated {
             Text(verbatim: updated)
@@ -23,6 +26,10 @@ struct PageFooterView: View {
             Text(verbatim: notice)
               .fixedSize(horizontal: false, vertical: true)
               .accessibilityIdentifier("notice")
+          }
+          if let retry {
+            RetryButton(title: retry, action: actions.retry)
+              .padding(.top, 4)
           }
         }
         .font(.footnote)

@@ -4,12 +4,15 @@
  * words nothing of its own. What a view shows of the answer is core `viewDisplay`'s, as the
  * website shows it, for the answer client `pickHour` picks at the moment (the middle view's day
  * from client `middleDay`); the footer's lines are the website's (Views.astro), from the answer's
- * `updated` (client `updatedLine`) and `stale`; and the rest is appCopy.ts's.
+ * `updated` (client `updatedLine`) and `stale`; a failed request says what spec section 4 has the
+ * app say (`COPY.unavailable`, the server's message, `ERROR_MESSAGES.rate_limited`); and the rest
+ * is appCopy.ts's.
  *
  * Pure: the moment is given (`now`, epoch ms), and so is how the last request went (`phase`).
  */
 import {
   COPY,
+  ERROR_MESSAGES,
   localDateTime,
   question,
   showsTomorrow,
@@ -29,9 +32,10 @@ import { APP_COPY } from './appCopy';
 
 /**
  * How the last request went, as the app's model keeps it (spec 9.4): asking, answered, failed,
- * or failed for want of a connection.
+ * failed for want of a connection, or turned away for asking too often (429), which the app asks
+ * again after quietly (section 4).
  */
-export type PagePhase = 'loading' | 'ready' | 'error' | 'offline';
+export type PagePhase = 'loading' | 'ready' | 'error' | 'offline' | 'limited';
 
 /**
  * What the page shows: an answer; "Checking…" while the first is on its way; the error, with
@@ -46,6 +50,11 @@ export interface PageInput {
   /** The moment, epoch ms. */
   now: number;
   phase: PagePhase;
+  /**
+   * After a failed request (`error`), the server's own message (its `error.message`), which the
+   * page says when it has no answer to show; without one, `COPY.unavailable`.
+   */
+  message?: string | null;
   /** The place as the top bar names it; without one, the answer's (`location.name`). */
   placeName?: string | null;
 }
@@ -76,19 +85,36 @@ export interface HomePage {
   shown: ApiSnowDay | ApiSnowNow | Omit<ApiSnowNow, 'series'> | ApiSnowWeek | null;
   /** Today's or tomorrow's agreement heading, strip summary, limited line and model list. */
   day: { heading: string; summary: string; limited: string | null; lines: ModelLine[] } | null;
-  /** "Retry", in the error state. */
+  /**
+   * "Retry", after a failed request: in the error state, and under the footer's line while an
+   * answer shows; never offline over an answer, or rate limited, which ask again by themselves.
+   */
   retry: string | null;
-  /** The footer's lines, with an answer: when it was fetched, and the stale or offline line. */
+  /**
+   * The footer's lines, with an answer: when it was fetched, and the offline line, the
+   * unavailable line after a failed request, or the stale line.
+   */
   footer: { updated: string | null; notice: string | null } | null;
 }
 
 /** What the page says in the answer's place, without one to show. */
-const NO_ANSWER: Record<Exclude<PageState, 'ready'>, string> = {
+const NO_ANSWER: Record<Exclude<PageState, 'ready' | 'error'>, string> = {
   loading: COPY.checking,
-  error: COPY.unavailable,
   notAvailable: COPY.notAvailable,
   noRecent: APP_COPY.staleApp,
 };
+
+/**
+ * What the error state says, with no answer at all, after the request went as `o` says. Offline,
+ * the forecasts aren't what is unavailable: as past `usableUntil`, there is no recent forecast,
+ * and a connection brings one. Rate limited, core's words for it. Otherwise the server's message,
+ * as section 4 has the app show it, or `COPY.unavailable` without one.
+ */
+function failure(o: PageInput): string {
+  if (o.phase === 'offline') return APP_COPY.staleApp;
+  if (o.phase === 'limited') return ERROR_MESSAGES.rate_limited;
+  return o.message || COPY.unavailable;
+}
 
 /** An appCopy.ts template with its slots filled, as the generated Swift functions fill them. */
 export function fill(template: string, values: Readonly<Record<string, string>>): string {
@@ -141,9 +167,9 @@ export function homePage(res: TodayResponse | null, o: PageInput): HomePage {
   const picked = res?.snow ? pickHour(res, o.now) : null;
   const seen = res?.snow && picked ? shownView(res, res.snow, picked, o.view, o.now) : null;
   const state: PageState = !res
-    ? o.phase === 'error' || o.phase === 'offline'
-      ? 'error'
-      : 'loading'
+    ? o.phase === 'loading' || o.phase === 'ready'
+      ? 'loading'
+      : 'error'
     : !res.snow
       ? 'notAvailable'
       : !seen
@@ -154,26 +180,30 @@ export function homePage(res: TodayResponse | null, o: PageInput): HomePage {
   const ready = state === 'ready' ? seen!.display : null;
   // The same question `viewDisplay` asks, with or without an answer to show.
   const ask = question(null, o.view, 'snow', tomorrow);
-  // With no answer at all for want of a connection, the forecasts aren't what is unavailable: as
-  // past `usableUntil`, there is no recent forecast, and a connection brings one (Retry stays).
   const answer = ready
     ? ready.answer
-    : state === 'error' && o.phase === 'offline'
-      ? APP_COPY.staleApp
-      : NO_ANSWER[state as Exclude<PageState, 'ready'>];
+    : state === 'error'
+      ? failure(o)
+      : NO_ANSWER[state as Exclude<PageState, 'ready' | 'error'>];
   const place = o.placeName ?? res?.location.name ?? '';
   const models = ready?.view === 'today' ? ready.models : null;
   const when = res?.updated
     ? updatedLine(res.updated, localDateTime(res.location.timezone, new Date(o.now)).date)
     : null;
+  // Over an answer that shows: offline, since when; after a failed request, that forecasts are
+  // unavailable, with Retry (section 4); rate limited, nothing more than when it worked, since it
+  // asks again by itself, quietly.
   const notice =
     state === 'noRecent'
       ? null
       : o.phase === 'offline'
         ? when && fill(APP_COPY.offline, { time: when })
-        : res?.stale
-          ? COPY.stale
-          : null;
+        : o.phase === 'error'
+          ? COPY.unavailable
+          : res?.stale
+            ? COPY.stale
+            : null;
+  const retry = state === 'error' || (o.phase === 'error' && state !== 'noRecent');
   return {
     view: o.view,
     state,
@@ -197,7 +227,7 @@ export function homePage(res: TodayResponse | null, o: PageInput): HomePage {
         out: m.out,
       })),
     },
-    retry: state === 'error' ? COPY.retry : null,
+    retry: retry ? COPY.retry : null,
     footer: res && { updated: when && `${COPY.updated} ${when}`, notice },
   };
 }

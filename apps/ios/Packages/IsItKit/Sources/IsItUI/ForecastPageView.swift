@@ -5,8 +5,9 @@ import SwiftUI
 /// One forecast page (iOS build spec, section 10.2), scrolling, top to bottom: the glyph; the
 /// question and the answer, one heading for VoiceOver with the place; the verdict and the detail;
 /// the body (the middle page's agreement, strip and model list; phase 5.2 adds Now's hours and
-/// the week's days); Retry in the error state; and the footer. Everything shown is `page`'s, so
-/// the page reads as the website does for the same answer.
+/// the week's days); Retry in the error state; and the footer, with Retry under its line after a
+/// failed request while an answer shows. Everything shown is `page`'s, so the page reads as the
+/// website does for the same answer.
 public struct ForecastPageView: View {
   let page: HomePage
   let theme: PageTheme
@@ -30,19 +31,11 @@ public struct ForecastPageView: View {
         if let day = page.day {
           DayBodyView(day: day, ink: theme.ink)
         }
-        if let retry = page.retry {
-          Button {
-            actions.retry()
-          } label: {
-            Text(verbatim: retry)
-              .font(.headline)
-              .padding(.horizontal, 8)
-          }
-          .buttonStyle(.bordered)
-          .accessibilityIdentifier("retry")
+        if let retry = page.retry, page.footer == nil {
+          RetryButton(title: retry, action: actions.retry)
         }
         if let footer = page.footer {
-          PageFooterView(footer: footer, actions: actions)
+          PageFooterView(footer: footer, retry: page.retry, actions: actions)
             .padding(.top, 24)
         }
       }
@@ -228,5 +221,21 @@ struct ModelStripView: View {
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(Text(verbatim: strip.summary))
     .accessibilityIdentifier("strip")
+  }
+}
+
+/// "Retry": in the error state on the page, or under the footer's line over an answer.
+struct RetryButton: View {
+  let title: String
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      Text(verbatim: title)
+        .font(.headline)
+        .padding(.horizontal, 8)
+    }
+    .buttonStyle(.bordered)
+    .accessibilityIdentifier("retry")
   }
 }

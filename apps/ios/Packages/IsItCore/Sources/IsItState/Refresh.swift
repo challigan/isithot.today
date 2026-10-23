@@ -59,11 +59,13 @@ public enum Refresh {
   }
 
   /// Back in the foreground at `now`, after going to the background at `awayFrom`, with
-  /// `response` on screen, fetched at `fetchedAt` (the website's return to a page, `wake`).
-  /// After more than `Constants.Client.refreshAfterMs` (30 minutes) away, back to the view for
-  /// the time of day. A fetch when the answer is older than that (or its fetch time is after
-  /// `now`: the clock moved back), when it is out of date (past the caches), when it is past
-  /// `Freshness.usableUntil` and so shows the stale state, or when there is none.
+  /// `response` on screen, fetched at `fetchedAt` (section 9.5). After more than
+  /// `Constants.Client.refreshAfterMs` (30 minutes) away, back to the view for the time of day,
+  /// and a fetch. Sooner than that, a fetch only when the answer is out of date (past the
+  /// caches), and, beyond the spec, when it is past `Freshness.usableUntil` and so shows the
+  /// stale state, when there is none, or when its fetch time is unknown or after `now` (the clock
+  /// moved back). However old the answer, a short time away asks nothing more: the quiet refresh
+  /// at the next forecast hour, which the app schedules again, keeps it current.
   public static func foreground(
     _ response: TodayResponse?,
     fetchedAt: Date?,
@@ -72,13 +74,12 @@ public enum Refresh {
     holds: Freshness.Holds
   ) -> Foreground {
     let ms = now.epochMs
-    let resetView = ms - awayFrom.epochMs > Constants.Client.refreshAfterMs
-    guard let response else { return Foreground(resetView: resetView, fetch: .plain) }
+    let long = ms - awayFrom.epochMs > Constants.Client.refreshAfterMs
+    guard let response else { return Foreground(resetView: long, fetch: .plain) }
     let how = Self.fetch(response, at: now, holds: holds)
-    let age = fetchedAt.map { ms - $0.epochMs }
-    let old = age.map { $0 > Constants.Client.refreshAfterMs || $0 < 0 } ?? true
+    let backwards = fetchedAt.map { $0.epochMs > ms } ?? true
     let unusable = ms >= Freshness.usableUntil(response).epochMs
-    let asks = old || how == .fresh || unusable
-    return Foreground(resetView: resetView, fetch: asks ? how : nil)
+    let asks = long || how == .fresh || unusable || backwards
+    return Foreground(resetView: long, fetch: asks ? how : nil)
   }
 }

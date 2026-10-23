@@ -182,13 +182,46 @@ final class FakeWidgets: WidgetReloader {
   }
 }
 
-/// The later phases' steps, noting each call in order.
+/// Holds whatever waits on it until the test opens it; once open, it holds nothing.
+final class Gate: Sendable {
+  private let state = Locked<(open: Bool, waiting: [CheckedContinuation<Void, Never>])>(
+    (false, []))
+
+  func wait() async {
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      let open = state.change { state -> Bool in
+        if !state.open { state.waiting.append(continuation) }
+        return state.open
+      }
+      if open { continuation.resume() }
+    }
+  }
+
+  func open() {
+    let waiting = state.change { state -> [CheckedContinuation<Void, Never>] in
+      state.open = true
+      defer { state.waiting = [] }
+      return state.waiting
+    }
+    for continuation in waiting { continuation.resume() }
+  }
+}
+
+/// The later phases' steps, noting each call in order. With `holdingFix`, the location fix waits
+/// until the test releases it (`releaseFix()`).
 final class RecordingHooks: AppHooks {
   private let state:
     Locked<(calls: [String], routes: [DeepLink.Route], owned: Bool?, moved: Target?)>
+  private let fix: Gate?
 
-  init(owned: Bool? = nil, moved: Target? = nil) {
+  init(owned: Bool? = nil, moved: Target? = nil, holdingFix: Bool = false) {
     state = Locked(([], [], owned, moved))
+    fix = holdingFix ? Gate() : nil
+  }
+
+  /// Lets a held location fix through.
+  func releaseFix() {
+    fix?.open()
   }
 
   var calls: [String] { state.read(\.calls) }
@@ -208,6 +241,7 @@ final class RecordingHooks: AppHooks {
 
   func locate(_ target: Target) async -> Target? {
     note("locate \(target.key)")
+    await fix?.wait()
     return state.read(\.moved)
   }
 
@@ -287,42 +321,39 @@ func fixtureTarget(_ name: String) throws -> Target {
 final class GatedTransport: HTTPTransport {
   private let first: HTTPResponse
   private let others: HTTPResponse
-  private let state = Locked<
-    (requests: Int, released: Bool, waiting: CheckedContinuation<Void, Never>?)
-  >(
-    (0, false, nil))
+  private let count = Locked(0)
+  private let gate = Gate()
 
   init(first: HTTPResponse, others: HTTPResponse) {
     self.first = first
     self.others = others
   }
 
-  var requests: Int { state.read(\.requests) }
+  var requests: Int { count.read { $0 } }
 
   func get(_ request: HTTPRequest) async throws -> HTTPResponse {
-    let number = state.change { state -> Int in
-      state.requests += 1
-      return state.requests
+    let number = count.change { count -> Int in
+      count += 1
+      return count
     }
     guard number == 1 else { return others }
-    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-      state.change { state in
-        if state.released {
-          continuation.resume()
-        } else {
-          state.waiting = continuation
-        }
-      }
-    }
+    await gate.wait()
     return first
   }
 
   /// Lets the first answer through.
   func release() {
-    state.change { state in
-      state.released = true
-      state.waiting?.resume()
-      state.waiting = nil
-    }
+    gate.open()
   }
+}
+
+/// Yields to the other tasks until `done` holds, or 100,000 turns have passed; whether it held.
+@MainActor
+func yieldUntil(_ done: () -> Bool) async -> Bool {
+  var turns = 0
+  while !done() && turns < 100_000 {
+    turns += 1
+    await Task.yield()
+  }
+  return done()
 }

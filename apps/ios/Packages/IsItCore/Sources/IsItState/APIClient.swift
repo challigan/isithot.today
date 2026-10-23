@@ -12,8 +12,8 @@ public enum FetchError: Error, Sendable, Equatable {
   /// The server couldn't be reached: no connection, or one too weak to answer in time
   /// (`URLError.notConnectedToInternet` and its kin, `APIClient.offlineCodes`).
   case offline
-  /// 429: too many requests from this network. The app treats it as being offline, and asks
-  /// again `Constants.Client.retryAfterMs` later.
+  /// 429: too many requests from this network. The app keeps what is on screen and asks again
+  /// `Constants.Client.retryAfterMs` later, as it does offline, but never says it is offline.
   case rateLimited
   /// Anything else: the server's status when it answered, with its error answer's code and
   /// message when it sent one (`ApiError`); all nil when the request failed some other way, or

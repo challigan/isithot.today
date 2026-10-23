@@ -3,8 +3,10 @@ import XCTest
 /// The app shows the fixture it is launched with (`-uitest -fixture <name>`, the Debug hooks in
 /// section 9.8), at the fixture's own moment, on the Today page: the place in the top bar, the
 /// question and answer as one heading with the place, as VoiceOver reads it (section 16), and the
-/// verdict; and a place nearby loading in place. The screen is attached to the result bundle for
-/// the contact sheet.
+/// verdict; and a place nearby loading in place. Every launch starts from a clean store
+/// (`-resetStore`), so no test depends on another: the place a test leaves in the App Group
+/// (Dundee, after `testNearbyLoadsInPlace`) would otherwise name the next one's heading. The
+/// screen is attached to the result bundle for the contact sheet.
 final class FixtureLaunchTests: XCTestCase {
   override func setUpWithError() throws {
     continueAfterFailure = false
@@ -38,10 +40,12 @@ final class FixtureLaunchTests: XCTestCase {
     attachScreen(of: app, named: "app-durham-tomorrow")
   }
 
-  /// Past the last hour it can be shown, the answer is never shown as current.
+  /// Past the last hour it can be shown, the answer is never shown as current. There is no
+  /// verdict, so the launch waits for the footer's Updated line, which only an answer brings: the
+  /// loading state's heading is there before it.
   @MainActor
   func testOldForecast() throws {
-    let app = launch(fixture: "old-forecast", waitingFor: nil)
+    let app = launch(fixture: "old-forecast", waitingFor: "updated")
     XCTAssertEqual(
       heading(in: app).label,
       "Durham. Will it snow tomorrow? No recent forecast. Connect to the internet to refresh.")
@@ -69,17 +73,16 @@ final class FixtureLaunchTests: XCTestCase {
     XCTAssertEqual(app.staticTexts["verdict"].label, "It'll snow.")
   }
 
-  /// Launches the app on `fixture` and waits for its heading and, unless `waitingFor` is nil,
-  /// the element only an answer shows (the verdict).
+  /// Launches the app on `fixture`, from a clean store (`-resetStore` forgets the place, the
+  /// units and the saved answer before `-fixture` is read), and waits for its heading and for
+  /// `element`, a text only an answer shows (the verdict, by default).
   @MainActor
-  private func launch(fixture: String, waitingFor element: String? = "verdict") -> XCUIApplication {
+  private func launch(fixture: String, waitingFor element: String = "verdict") -> XCUIApplication {
     let app = XCUIApplication()
-    app.launchArguments = ["-uitest", "-fixture", fixture]
+    app.launchArguments = ["-uitest", "-resetStore", "-fixture", fixture]
     app.launch()
     XCTAssertTrue(heading(in: app).waitForExistence(timeout: 15), "No heading on screen")
-    if let element {
-      XCTAssertTrue(app.staticTexts[element].waitForExistence(timeout: 15), "No answer on screen")
-    }
+    XCTAssertTrue(app.staticTexts[element].waitForExistence(timeout: 15), "No answer on screen")
     return app
   }
 

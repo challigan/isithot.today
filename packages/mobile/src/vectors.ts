@@ -22,6 +22,7 @@
 import {
   ATTRIBUTION,
   ELEVATION,
+  ERROR_MESSAGES,
   GRID,
   HOUR,
   VIEWS,
@@ -1086,7 +1087,7 @@ const PAGE_FIXTURES = [
   'forecast-ends',
 ] as const;
 
-const PHASES: readonly PagePhase[] = ['loading', 'ready', 'error', 'offline'];
+const PHASES: readonly PagePhase[] = ['loading', 'ready', 'error', 'offline', 'limited'];
 
 function pageVectors(fixtures: FixtureSet): VectorFile {
   const { cases, add } = collector();
@@ -1138,21 +1139,38 @@ function pageVectors(fixtures: FixtureSet): VectorFile {
   if (!aberdeen) throw new Error('No fixture aberdeen-snow');
   const at = Date.parse(aberdeen._fixture.now);
   for (const phase of PHASES) page('aberdeen-snow', { now: at, phase });
+  // The server's own message, which differs from COPY.unavailable: over an answer the page still
+  // says forecasts are unavailable; with none it says the message.
+  const message = ERROR_MESSAGES.bad_location;
+  page('aberdeen-snow', { now: at, phase: 'error', message });
   page('aberdeen-snow', { now: at, phase: 'ready', placeName: 'Old Aberdeen' });
   page('aberdeen-snow', { now: at, phase: 'ready', placeName: '' });
   page('aberdeen-snow', { now: at, phase: 'offline' }, ['updated']);
   page('aberdeen-snow', { now: at, phase: 'ready' }, ['snow']);
   const stale = fixtures.get('stale');
   if (!stale) throw new Error('No fixture stale');
-  page('stale', { now: Date.parse(stale._fixture.now), phase: 'offline' });
+  // A stale answer after each kind of failure: the offline and unavailable lines beat the stale
+  // line; rate limited keeps it.
+  for (const phase of ['offline', 'error', 'limited'] as const) {
+    page('stale', { now: Date.parse(stale._fixture.now), phase });
+  }
+  // A view with nothing to show after a failure keeps the footer's line and Retry.
+  const noNow = fixtures.get('no-now');
+  if (!noNow) throw new Error('No fixture no-now');
+  page('no-now', { now: Date.parse(noNow._fixture.now), phase: 'error' });
+  // Past usableUntil, no line and no Retry, whatever the failure.
   const old = fixtures.get('old-forecast');
   if (!old) throw new Error('No fixture old-forecast');
-  page('old-forecast', { now: Date.parse(old._fixture.now), phase: 'offline' });
-  // No answer yet: asking, or failed.
+  for (const phase of ['offline', 'error', 'limited'] as const) {
+    page('old-forecast', { now: Date.parse(old._fixture.now), phase });
+  }
+  // No answer yet: asking, or failed; with the server's message, or an empty one.
   for (const phase of PHASES) {
     page(null, { now: at, phase });
     page(null, { now: at, phase, placeName: 'Leeds' });
   }
+  page(null, { now: at, phase: 'error', message, placeName: 'Leeds' });
+  page(null, { now: at, phase: 'error', message: '' });
   return vectorFile(
     [
       ['mobile', 'homePage'],

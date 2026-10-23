@@ -312,8 +312,8 @@ pure and tested on Linux (`Tests/IsItStateTests`); IsItServices fills its protoc
 sections 4 and 9.4 to 9.6).
 
 - **`AppModel`** (`@MainActor @Observable`) holds the place, the units, the answer on screen
-  and when it was fetched, the phase (loading, ready, offline, or an error with the server's
-  code and message), the holds, the unlock, the view on screen, a one-off notice and a pending
+  and when it was fetched, the phase (loading, ready, offline, or an error: rate limited, or
+  with the server's code and message), the holds, the unlock, the view on screen, a one-off notice and a pending
   route. `init(environment:)` is step 1 of the launch: it reads what is stored and paints the
   saved answer at once when it is for the place and still has an hour to show. `launch()` runs
   steps 2 to 7 once; `refresh()` is pull to refresh and "Try again"; `didEnterBackground()` and
@@ -348,11 +348,12 @@ sections 4 and 9.4 to 9.6).
 
 The top bar and the Today page (spec section 10.2), drawn from plain values:
 
-- **IsItLogic makes the content** (Linux-tested): `HomePage(_:view:at:phase:placeName:)` gives a
-  page's state, band and palette, question, answer, the heading VoiceOver reads with the place,
-  verdict and detail, the middle page's agreement, strip, model list and limited line, Retry, and
-  the footer (the Updated line, the stale or offline line, the links out, the places nearby and
-  the credits in pieces with their links); `HomeTopBar(placeName:approximate:notice:)` the top bar. Its
+- **IsItLogic makes the content** (Linux-tested): `HomePage(_:view:at:phase:message:placeName:)`
+  gives a page's state, band and palette, question, answer, the heading VoiceOver reads with the
+  place, verdict and detail, the middle page's agreement, strip, model list and limited line,
+  Retry, and the footer (the Updated line, the offline, unavailable or stale line, the links out,
+  the places nearby and the credits in pieces with their links);
+  `HomeTopBar(placeName:approximate:notice:)` the top bar. Its
   reference is packages/mobile `page.ts`, made of core's and the client's rules, and `page.json`
   checks it case by case (the table above).
 - **IsItUI draws it:** `HomeShell(topBar:theme:actions:content:)` (the background of the page on
@@ -373,19 +374,24 @@ The top bar and the Today page (spec section 10.2), drawn from plain values:
   phase calls `didEnterBackground()` and `willEnterForeground()`.
 - **The first launch** has no `place.v1`, so the target is approximate IP location: the app asks
   `/api/v1/today?ahead=snow`, the server places the phone and chooses the units, which the app
-  then keeps. The top bar shows "Finding you…" until the answer names the place, then the place
-  with "Using approximate location." beneath it. No picker, and no prompt.
+  then keeps. The top bar shows "Finding you…" (which VoiceOver reads as "Finding you…, change
+  place.") until the answer names the place, then the place with "Using approximate location."
+  beneath it. No picker, and no prompt.
 - **The home screen** (`HomeView.swift`) draws `model.topBar`, and the Today page at the
   model's clock (`model.page(.today, at: model.now)`), with IsItUI's `HomeShell` and
   `ForecastPageView`, inside a `TimelineView(.everyMinute)`, so the hour picked, Tomorrow from
   6pm and the stale state follow the clock while the app is open. Only the middle page is drawn in 5.1, whatever `model.view`
   says; phase 5.2's pager binds it.
-- **The states**, as `HomePage` gives them from the model's phase: loading ("Checking…");
-  ready; an error with nothing saved (`CoreCopy.unavailable` and Retry); offline with nothing
-  saved ("No recent forecast. Connect to the internet to refresh." and Retry); offline with an
-  answer (the answer, and "You're offline. Showing the forecast from …" in the footer); an error
-  with an answer (the answer stays, as on the website); and past `usableUntil`, no recent
-  forecast, never the old hour.
+- **The states**, as `HomePage` gives them from the model's phase (spec sections 4, 9.5 and
+  10.2): loading ("Checking…"); ready; an error with nothing saved (the server's message, or
+  `CoreCopy.unavailable` without one, and Retry); offline with nothing saved ("No recent
+  forecast. Connect to the internet to refresh." and Retry); rate limited (429) with nothing
+  saved ("Too many requests. Try again in a minute." and Retry); offline with an answer (the
+  answer, and "You're offline. Showing the forecast from …" in the footer); an error with an
+  answer (the answer stays, with "Forecasts are unavailable right now…" and Retry under the
+  footer's Updated line); rate limited with an answer (the answer, quietly: the model asks again
+  a minute later, and never says it is offline); and past `usableUntil`, no recent forecast,
+  never the old hour.
 - **The actions:** Retry calls `refresh()`; pulling the page down (`.refreshable`, on the page's
   scroll view) calls it too, keeping what is on screen; a place under "Nearby:" calls
   `select(.city(slug:name:))`, which keeps it as the place and shows the loading state under its
@@ -405,9 +411,11 @@ The top bar and the Today page (spec section 10.2), drawn from plain values:
 - `Tests/IsItStateTests/HomeScreenTests.swift`: what the home screen draws from the model. "The
   home screen, from the model" goes through the first launch with nothing stored (asked by IP,
   then "Leeds" on approximate location), an error then Retry, offline with and without a saved
-  answer, past `usableUntil`, and an error over an answer; it also holds the page to
-  `AnswerState` for every fixture at its own moment, a millisecond before `usableUntil` and at
-  it, in each phase. "A nearby place, loaded in place" covers `select(_:)`: the request, the
+  answer, past `usableUntil`, an error over an answer, a 429 with and without one, and the
+  server's message with nothing saved; it also holds the page to `AnswerState` for every
+  fixture at its own moment, a millisecond before `usableUntil` and at it, in each phase (a 400
+  with its message, a bodiless 500 and a 429 among them). "A nearby place, loaded in place"
+  covers `select(_:)`: the request, the
   place kept, the loading state under the new name meanwhile (never the last answer), offline,
   the same place again, and the notice going. "The system's clock" proves that a clock started
   at another moment schedules by its own time, ahead or behind.
@@ -417,11 +425,13 @@ The top bar and the Today page (spec section 10.2), drawn from plain values:
 **On the macOS CI** (the UI test plan; `### UI:` in the `ios` job's log names each failure with
 its file and line, and the contact sheet shows the screens each test attached):
 
-- `FixtureLaunchTests`: `-uitest -fixture <name>`, every request answered with that fixture,
-  the model's clock started at the fixture's moment. aberdeen-snow, leeds-dry, durham-tomorrow
-  (Tomorrow from 6pm) and old-forecast (no recent forecast) read the place button, the one
-  heading and the verdict; `testNearbyLoadsInPlace` taps "Dundee" under "Nearby:" and waits for
-  "Dundee. Will it snow today? Yes." (the fixture's server answers every place alike).
+- `FixtureLaunchTests`: `-uitest -resetStore -fixture <name>`, each launch from a clean store (so
+  no test sees the place another left), every request answered with that fixture, the model's
+  clock started at the fixture's moment. aberdeen-snow, leeds-dry, durham-tomorrow (Tomorrow
+  from 6pm) and old-forecast (no recent forecast; it waits for the Updated line, as it has no
+  verdict) read the place button, the one heading and the verdict; `testNearbyLoadsInPlace` taps
+  "Dundee" under "Nearby:" and waits for "Dundee. Will it snow today? Yes." (the fixture's server
+  answers every place alike).
 - `LaunchTests`: no fixture hook. The app's own client, URLSession transport and store run, with
   only the network stubbed (`-network`): `ip-first-launch` answers the request for approximate IP
   location and nothing else. `testFirstLaunchShowsTheApproximatePlace` (`-resetStore`) proves the
@@ -554,7 +564,8 @@ launch argument. So far there are these:
 
 - `-uitest` turns animations off;
 - `-resetStore` forgets the place, the units and the saved answer before the model reads them,
-  for a first launch (not `unlock.v1`, which only StoreKit's code writes);
+  for a first launch (not `unlock.v1`, which only StoreKit's code writes); every UI test's first
+  launch passes it;
 - `-fixture <name>` answers every request with that fixture (a transport of its own), after
   forgetting the saved answer, so the launch fetches it rather than painting an earlier one; it
   is then saved in the App Group for the widget, as any answer is;

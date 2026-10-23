@@ -46,6 +46,9 @@ public final class AppModel {
   @ObservationIgnored private var refreshWork: ScheduledWork?
   /// When the app went to the background, while it is there.
   @ObservationIgnored private var awayFrom: Date?
+  /// While the app is in the background, when the quiet refresh or the retry after a failure is
+  /// due: on the return it is due then still, at once if that time has passed.
+  @ObservationIgnored private var dueOnReturn: Date?
 
   /// Step 1: reads what was stored, and paints the saved answer at once, in the view for the
   /// time of day, when it is for the place and still has an hour to show (`Launch.plan`);
@@ -72,7 +75,8 @@ public final class AppModel {
   /// Steps 2 to 7 of the launch, once. Step 2 starts the entitlement check (phase 7); step 3
   /// fetches, unless the saved answer is recent (`Launch.reuses`), then saves the answer,
   /// writes the App Group and reloads the widgets; step 4 takes a location fix for "My
-  /// location" (phase 6), and fetches again only when the place's cell changed; step 5 starts
+  /// location" (phase 6), and fetches again only when the place's cell changed and the place is
+  /// still the one the fix was for, so a place chosen meanwhile stands; step 5 starts
   /// the ads once the check has finished, only when not unlocked (phase 8); step 6 syncs the
   /// notifications (phase 8); step 7 handles a pending route (phases 6 and 8).
   public func launch() async {
@@ -85,11 +89,15 @@ public final class AppModel {
     } else if let response {
       scheduleRefresh(at: next(after: response))
     }
-    if case .coords(let place) = target, place.source == .device,
-      let moved = await hooks.locate(target), !moved.key.utf8.elementsEqual(target.key.utf8)
-    {
-      choose(moved)
-      await load(.plain)
+    if case .coords(let place) = target, place.source == .device {
+      let located = target
+      if let moved = await hooks.locate(located),
+        target.key.utf8.elementsEqual(located.key.utf8),
+        !moved.key.utf8.elementsEqual(located.key.utf8)
+      {
+        choose(moved)
+        await load(.plain)
+      }
     }
     if let owned = await hooks.entitlement() { unlocked = owned }
     if !unlocked { await hooks.startAds() }
@@ -107,19 +115,26 @@ public final class AppModel {
     await load(Refresh.fetch(response, at: environment.clock.now, holds: holds))
   }
 
-  /// The app went to the background: nothing is fetched until it comes back.
+  /// The app went to the background: nothing is fetched until it comes back, and the refresh
+  /// or retry that was due is kept for then.
   public func didEnterBackground() {
+    // Told twice before coming back, what was due when the app first left is due still.
+    if awayFrom == nil { dueOnReturn = nextRefreshAt }
     awayFrom = environment.clock.now
     cancelRefresh()
   }
 
   /// The app came back from the background (`Refresh.foreground`): after more than 30 minutes
-  /// away, back to the view for the time of day; a fetch when the answer is old, out of date,
-  /// past its hours or missing; otherwise the next quiet refresh is scheduled again. Does
-  /// nothing unless the app was in the background, or before the launch.
+  /// away, back to the view for the time of day, and a fetch; sooner, a fetch only when the
+  /// answer is out of date, past its hours or missing. Otherwise what was due when the app left
+  /// is scheduled again for its own time (at once when that has passed): the quiet refresh at
+  /// the next forecast hour, or the retry a minute after a failure. Does nothing unless the app
+  /// was in the background, or before the launch.
   public func willEnterForeground() async {
     guard let away = awayFrom else { return }
+    let due = dueOnReturn
     awayFrom = nil
+    dueOnReturn = nil
     guard launched else { return }
     let now = environment.clock.now
     let back = Refresh.foreground(
@@ -133,7 +148,7 @@ public final class AppModel {
     if let fetch = back.fetch {
       await load(fetch)
     } else if let response {
-      scheduleRefresh(at: next(after: response))
+      scheduleRefresh(at: due ?? next(after: response))
     }
   }
 
@@ -206,9 +221,16 @@ public final class AppModel {
   }
 
   /// The page for `view` at `now` (`HomePage`), from the answer on screen and how the last
-  /// fetch went, with the top bar's place.
+  /// fetch went (with the server's message after a failure), with the top bar's place.
   public func page(_ view: AppView, at now: Date) -> HomePage {
-    HomePage(response, view: view, at: now, phase: HomePage.Phase(phase), placeName: placeName)
+    HomePage(
+      response,
+      view: view,
+      at: now,
+      phase: HomePage.Phase(phase),
+      message: phase.serverMessage,
+      placeName: placeName
+    )
   }
 
   // MARK: - Fetching
@@ -279,6 +301,7 @@ public final class AppModel {
       scheduleRefresh(at: retry)
     } else {
       cancelRefresh()
+      dueOnReturn = nil
     }
   }
 
@@ -299,10 +322,13 @@ public final class AppModel {
   }
 
   /// Asks again at `date`, quietly, replacing any refresh scheduled before; never while in the
-  /// background.
+  /// background, where it is kept for the return instead.
   private func scheduleRefresh(at date: Date) {
     cancelRefresh()
-    guard awayFrom == nil else { return }
+    guard awayFrom == nil else {
+      dueOnReturn = date
+      return
+    }
     nextRefreshAt = date
     refreshWork = environment.clock.schedule(at: date) { [weak self] in
       await self?.refreshDue()

@@ -32,6 +32,7 @@ struct HomeScreenTests {
     #expect(h.model.placeName == nil)
     #expect(h.model.topBar == HomeTopBar(placeName: nil, approximate: true))
     #expect(h.model.topBar.place == "Finding you…")
+    #expect(h.model.topBar.placeLabel == "Finding you…, change place.")
     #expect(h.model.topBar.approximate == "Using approximate location.")
     let checking = h.model.page(.today, at: h.model.now)
     #expect(checking.state == .loading)
@@ -138,13 +139,39 @@ struct HomeScreenTests {
     #expect(h.model.answer(at: until) == .stale)
   }
 
-  @Test("an error with the answer on screen keeps it, as the website does, with no Retry")
+  @Test("an error with the answer on screen keeps it, says forecasts are unavailable, with Retry")
   func errorWithAnswer() async throws {
     let saved = try savedAberdeen()
     let h = Harness(
       now: later(saved.savedAt, minutes: 15),
       store: .init(place: aberdeen, units: .c, today: saved),
-      replies: [try FakeTransport.error(503, code: "upstream_unavailable")]
+      replies: [
+        try FakeTransport.error(503, code: "upstream_unavailable"),
+        try FakeTransport.fixture("aberdeen-snow"),
+      ]
+    )
+    await h.model.launch()
+    let page = h.model.page(.today, at: h.model.now)
+    #expect(page.state == .ready)
+    #expect(page.headingLabel == "Aberdeen. Will it snow today? Yes.")
+    #expect(page.retry == "Retry")
+    #expect(
+      page.footer?.notice == "Forecasts are unavailable right now. Try again in a few minutes.")
+    #expect(h.model.offlineLine(at: h.model.now) == nil)
+    // Retry.
+    await h.model.refresh()
+    let again = h.model.page(.today, at: h.model.now)
+    #expect(again.retry == nil)
+    #expect(again.footer?.notice == nil)
+  }
+
+  @Test("rate limited with the answer on screen: kept quietly, never offline, and no Retry")
+  func rateLimitedWithAnswer() async throws {
+    let saved = try savedAberdeen()
+    let h = Harness(
+      now: later(saved.savedAt, minutes: 15),
+      store: .init(place: aberdeen, units: .c, today: saved),
+      replies: [try FakeTransport.error(429, code: "rate_limited")]
     )
     await h.model.launch()
     let page = h.model.page(.today, at: h.model.now)
@@ -152,13 +179,66 @@ struct HomeScreenTests {
     #expect(page.headingLabel == "Aberdeen. Will it snow today? Yes.")
     #expect(page.retry == nil)
     #expect(page.footer?.notice == nil)
+    #expect(h.model.offlineLine(at: h.model.now) == nil)
+    #expect(
+      page
+        == HomePage(
+          saved.response, view: .today, at: h.model.now, phase: .ready, placeName: "Aberdeen"))
+  }
+
+  @Test("rate limited with nothing saved: core's words for it, with Retry, never offline")
+  func rateLimitedWithNothing() async throws {
+    let h = Harness(
+      now: try fixtureNow("leeds-dry"),
+      store: .init(place: .city(slug: "leeds-gb", name: "Leeds"), units: .c),
+      replies: [try FakeTransport.error(429, code: "rate_limited")]
+    )
+    await h.model.launch()
+    let page = h.model.page(.today, at: h.model.now)
+    #expect(page.state == .error)
+    #expect(
+      page.headingLabel == "Leeds. Will it snow today? Too many requests. Try again in a minute.")
+    #expect(page.answer == FetchError.rateLimited.message)
+    #expect(page.retry == "Retry")
+    // It asks again by itself a minute later, plus the jitter.
+    #expect(h.clock.pending == [h.clock.now.addingTimeInterval(105)])
+  }
+
+  @Test("an error with nothing saved says the server's message, or that forecasts are unavailable")
+  func serverMessageWithNothing() async throws {
+    let searched = Target.coords(.init(source: .search, lat: 53.8, lon: -1.55, name: "Leeds"))
+    let h = Harness(
+      now: try fixtureNow("leeds-dry"),
+      store: .init(place: searched, units: .c),
+      replies: [
+        try FakeTransport.error(400, code: "bad_location"),
+        .answer(HTTPResponse(status: 500, body: Data())),
+      ]
+    )
+    await h.model.launch()
+    let bad = h.model.page(.today, at: h.model.now)
+    #expect(bad.state == .error)
+    #expect(bad.answer == "Latitude and longitude must be decimal degrees.")
+    #expect(bad.answer != CoreCopy.unavailable)
+    #expect(bad.answer == h.model.phase.serverMessage)
+    #expect(bad.retry == "Retry")
+    // A failure with no message of the server's.
+    await h.model.refresh()
+    #expect(h.model.phase.serverMessage == nil)
+    let none = h.model.page(.today, at: h.model.now)
+    #expect(none.answer == "Forecasts are unavailable right now. Try again in a few minutes.")
   }
 
   @Test("the page and AnswerState agree, for every fixture, moment and phase")
   func agreesWithAnswerState() throws {
     let phases: [AppPhase] = [
-      .loading, .ready, .offline,
+      .loading, .ready, .offline, .error(.rateLimited),
       .error(.failed(status: 503, code: "upstream_unavailable", message: CoreCopy.unavailable)),
+      .error(
+        .failed(
+          status: 400, code: "bad_location",
+          message: "Latitude and longitude must be decimal degrees.")),
+      .error(.failed(status: 500, code: nil, message: nil)),
     ]
     var checked = 0
     for name in try Fixtures.names() {
@@ -167,7 +247,9 @@ struct HomeScreenTests {
       for now in [try fixtureNow(name), until.addingTimeInterval(-0.001), until] {
         for phase in phases {
           let state = AnswerState.at(now, response: res, phase: phase)
-          let page = HomePage(res, view: .today, at: now, phase: HomePage.Phase(phase))
+          let page = HomePage(
+            res, view: .today, at: now, phase: HomePage.Phase(phase),
+            message: phase.serverMessage)
           switch state {
           case .answer:
             #expect(page.state == .ready || page.state == .notAvailable, "\(name) at \(now)")
@@ -178,20 +260,26 @@ struct HomeScreenTests {
           case .loading, .offline, .error:
             Issue.record("\(name) at \(now): \(state) with an answer")
           }
-          // Offline, while there is a forecast to show, the footer's line is AnswerState's.
+          // Offline, while there is a forecast to show, the footer's line is AnswerState's; it
+          // has none in any other phase, a 429 included.
           if phase == .offline, page.state != .noRecent {
             #expect(
               page.footer?.notice == AnswerState.offlineLine(res, phase: phase, at: now),
               "\(name) at \(now)")
           }
+          if phase != .offline {
+            #expect(AnswerState.offlineLine(res, phase: phase, at: now) == nil)
+          }
           checked += 1
         }
       }
     }
-    #expect(checked >= 21 * 3 * 4)
+    #expect(checked >= 21 * 3 * 7)
     let moment = try fixtureNow("leeds-dry")
     for phase in phases {
-      let page = HomePage(nil, view: .today, at: moment, phase: HomePage.Phase(phase))
+      let page = HomePage(
+        nil, view: .today, at: moment, phase: HomePage.Phase(phase),
+        message: phase.serverMessage)
       switch AnswerState.at(moment, response: nil, phase: phase) {
       case .loading:
         #expect(page.state == .loading && page.answer == CoreCopy.checking)
@@ -211,6 +299,19 @@ struct HomeScreenTests {
     #expect(HomePage.Phase(AppPhase.ready) == .ready)
     #expect(HomePage.Phase(AppPhase.offline) == .offline)
     #expect(HomePage.Phase(AppPhase.error(.failed(status: 400, code: nil, message: nil))) == .error)
+    #expect(HomePage.Phase(AppPhase.error(.rateLimited)) == .limited)
+  }
+
+  @Test("the server's message, only for a failure that came with one")
+  func serverMessage() {
+    let said = "Latitude and longitude must be decimal degrees."
+    let bad = AppPhase.error(.failed(status: 400, code: "bad_location", message: said))
+    #expect(bad.serverMessage == said)
+    #expect(AppPhase.error(.failed(status: 503, code: nil, message: "")).serverMessage == nil)
+    #expect(AppPhase.error(.failed(status: 500, code: nil, message: nil)).serverMessage == nil)
+    for phase in [AppPhase.loading, .ready, .offline, .error(.rateLimited)] {
+      #expect(phase.serverMessage == nil)
+    }
   }
 
   @Test("the place's name: its own, else the answer's, and never an empty one")

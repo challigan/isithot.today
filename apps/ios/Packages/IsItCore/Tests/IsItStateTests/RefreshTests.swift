@@ -99,13 +99,28 @@ struct ForegroundTests {
     #expect(back == .init(resetView: false, fetch: nil))
   }
 
-  @Test("an answer fetched more than 30 minutes ago is fetched again, however short the time away")
+  @Test("back after a minute, an answer fetched more than 30 minutes ago and current is kept")
   func old() throws {
+    // Fetched at 9:05, away from 9:40 to 9:41: the answer is still 9am's, and current.
     let a = try Aberdeen()
-    let at = Date(epochMs: a.made.epochMs + 1_800_001)
+    let at = later(a.made, minutes: 36)
+    #expect(Freshness.outOfDate(a.response, at: at, holds: .init()) == nil)
     let back = Refresh.foreground(
       a.response, fetchedAt: a.made, awayFrom: later(at, minutes: -1), at: at, holds: .init())
-    #expect(back == .init(resetView: false, fetch: .plain))
+    #expect(back == .init(resetView: false, fetch: nil))
+  }
+
+  @Test("after more than 30 minutes away, a fetch, however recent the answer")
+  func longAway() throws {
+    let a = try Aberdeen()
+    let away = later(a.made, minutes: 1)
+    let at = { (ms: Int) in Date(epochMs: away.epochMs + ms) }
+    let thirty = Refresh.foreground(
+      a.response, fetchedAt: away, awayFrom: away, at: at(1_800_000), holds: .init())
+    #expect(thirty == .init(resetView: false, fetch: nil))
+    let more = Refresh.foreground(
+      a.response, fetchedAt: away, awayFrom: away, at: at(1_800_001), holds: .init())
+    #expect(more == .init(resetView: true, fetch: .plain))
   }
 
   @Test("an answer out of date is fetched past the caches")
@@ -196,11 +211,11 @@ struct AnswerStateTests {
     #expect(AnswerState.offlineLine(undated, phase: .offline, at: a.ten) == nil)
   }
 
-  @Test("a failure's phase: offline for no connection and for 429, an error otherwise")
+  @Test("a failure's phase: offline for no connection only, an error otherwise, 429 included")
   func phases() {
     let failure = FetchError.failed(status: 400, code: "bad_location", message: "No.")
     #expect(AppPhase(.offline) == .offline)
-    #expect(AppPhase(.rateLimited) == .offline)
+    #expect(AppPhase(.rateLimited) == .error(.rateLimited))
     #expect(AppPhase(failure) == .error(failure))
   }
 }

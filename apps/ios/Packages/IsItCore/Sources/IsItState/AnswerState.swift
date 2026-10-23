@@ -8,29 +8,40 @@ public enum AppPhase: Sendable, Equatable {
   case loading
   /// The last fetch worked, or the saved answer was recent enough to keep.
   case ready
-  /// The last fetch couldn't reach the server, or was rate limited; what was saved is kept.
+  /// The last fetch couldn't reach the server; what was saved is kept.
   case offline
-  /// The last fetch failed otherwise; what was saved is kept.
+  /// The last fetch failed otherwise, rate limited (429) among them; what was saved is kept.
   case error(FetchError)
 
-  /// The phase a failed fetch leaves: offline for no connection, and for 429 (section 5.6),
-  /// which the app treats as being offline; an error otherwise.
+  /// The phase a failed fetch leaves: offline for no connection; an error otherwise. A 429 is
+  /// an error, never "offline": the phone is connected, so the app asks again as it does
+  /// offline (`Refresh.retry`, as section 5.6 says), but says so only with nothing to show, in
+  /// core's words for it, and over an answer says nothing (section 4's "retry quietly").
   public init(_ failure: FetchError) {
     switch failure {
-    case .offline, .rateLimited: self = .offline
-    case .failed: self = .error(failure)
+    case .offline: self = .offline
+    case .rateLimited, .failed: self = .error(failure)
     }
+  }
+
+  /// The server's own message for the last fetch's failure (its `ApiError`), which the page
+  /// says when it has no answer to show; nil without one, and in every other phase.
+  public var serverMessage: String? {
+    guard case .error(.failed(_, _, let message?)) = self, !message.isEmpty else { return nil }
+    return message
   }
 }
 
 extension HomePage.Phase {
-  /// How the last fetch went, as the home page's presenter takes it: the error without its
-  /// details, since the page says what the website says for any failure (`CoreCopy.unavailable`).
+  /// How the last fetch went, as the home page's presenter takes it: a 429 as `limited`, which
+  /// the page keeps quiet over an answer; any other error as `error`, whose server's message
+  /// `AppPhase.serverMessage` gives.
   public init(_ phase: AppPhase) {
     switch phase {
     case .loading: self = .loading
     case .ready: self = .ready
     case .offline: self = .offline
+    case .error(.rateLimited): self = .limited
     case .error: self = .error
     }
   }

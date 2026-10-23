@@ -1686,11 +1686,13 @@ Linux; IsItKit only fills its protocols. `apps/ios/README.md` lists the types.
   the user is told once (`AppCopy.slugGone`, `notice`), as section 4 says.
 - **Keeping current**: a quiet refresh at `Freshness.nextRefreshAt` plus 0 to 90 s of jitter,
   scheduled after every answer and cancelled in the background, so no wait has to outlast the
-  phone's sleep. Back in the foreground the website's `wake` rule decides: the view for the time
-  of day after more than `CLIENT.refreshAfterMs` away; a fetch when the answer is older than
-  that, out of date, past `usableUntil`, or missing. After a failure: offline or 429 (which the
-  app treats as offline, section 5.6) asks again after `CLIENT.retryAfterMs` plus the jitter,
-  which costs the server nothing while there is no connection; any other error waits for the
+  phone's sleep. Back in the foreground, section 9.5's rule: after more than
+  `CLIENT.refreshAfterMs` away, the view for the time of day and a fetch; sooner, a fetch only
+  when the answer is out of date, past `usableUntil`, or missing (until the review, below, the
+  website's `wake` rule, which also fetched any answer older than 30 minutes). After a failure:
+  offline or 429 (which section 5.6 has the app treat as offline; since the review it is never
+  called offline) asks again after `CLIENT.retryAfterMs` plus the jitter, which costs the
+  server nothing while there is no connection; any other error waits for the
   next forecast hour of the answer on screen, or with none, for "Try again" or the next return,
   so a broken request can't spend the function quota every minute. Only the newest fetch's
   answer is shown.
@@ -1699,7 +1701,7 @@ Linux; IsItKit only fills its protocols. `apps/ios/README.md` lists the types.
   `usableUntil`, then the stale state, and with nothing saved says there is no recent forecast.
   The footer's line is `AppCopy.offline` with `UpdatedLine`; an answer without `updated` has
   none. An error keeps the answer on screen, and the message is the server's, or
-  `CoreCopy.unavailable` when it sent none.
+  `CoreCopy.unavailable` when it sent none (which the page says too since the review, below).
 - **What is stored.** `SavedToday` moved from IsItServices to IsItModel, with its codec: `v` is
   read first, on its own, so another version's file is ignored whatever it holds.
   `StoredUnlock` reads `unlock.v1` as `{ unlocked, checkedAt, productID }` JSON, the API's dates
@@ -1865,7 +1867,8 @@ own approximate place in it with no picker.
   in a few minutes.", which blames the forecasts for the phone's connection; Retry stays. The
   change is in packages/mobile `page.ts` first, then `HomePage`, and `pnpm mobile:generate`
   rewrote the six cases of `page.json` it touches.
-- **Deviation: an error over an answer stays quiet.** Section 4 says a 503 keeps the saved answer
+- **Deviation: an error over an answer stays quiet** (reverted in review, below: the page now
+  follows section 4). Section 4 says a 503 keeps the saved answer
   "and show[s] `COPY.unavailable` with Try again". The website keeps the answer and shows no
   error ("a stale answer beats an error", `app.ts`), and so does the app: the answer shows while
   it has hours, the model asks again at the next forecast hour, pull to refresh is there, and
@@ -1914,6 +1917,75 @@ own approximate place in it with no picker.
   WidgetKit modules; whether `.refreshable` on the page reaches its inner scroll view, and
   whether XCUITest can scroll to and tap a place under "Nearby:", are from Apple's documentation
   and practice, unchecked.
+
+## The iPhone app's home screen, reviewed (phase 5.1)
+
+What the review of PR 5.1 found, and what changed for it.
+
+- **Every fixture UI test starts from a clean store.** `-fixture` forgets only the saved answer,
+  and `testNearbyLoadsInPlace` leaves Dundee as the place in the App Group, so `testOldForecast`,
+  which XCTest runs straight after it (methods in alphabetical order; the plan doesn't
+  randomise), would have read "Dundee. Will it snow tomorrow? …" over Durham's answer, since the
+  place's own name comes before the answer's. `FixtureLaunchTests` now launches with
+  `-resetStore` before `-fixture` (`prepare(store:)` runs first), so the place, the units and the
+  saved answer are forgotten; `-fixture` itself is unchanged, so a fixture tried by hand keeps
+  the place chosen. `testOldForecast` waits for the footer's Updated line, which only an answer
+  brings, rather than reading the heading that the loading state already has.
+- **A place chosen during the location fix stands.** Launch step 4 compared the fix with the
+  place as it was after the wait, so a place chosen while the fix was out (one under "Nearby:"
+  now, the picker's from phase 6) was replaced by the device's cell and saved to `place.v1`. The
+  model keeps the place the fix was for, and moves only while that is still the place. A Linux
+  test holds the fix (`RecordingHooks(holdingFix:)`) and loads Dundee meanwhile.
+- **Back in the foreground, section 9.5's rule, not the website's.** The return fetched whenever
+  the answer was more than 30 minutes old, however short the time away (the website's `wake`,
+  which counts from its last load), where section 9.5 says to refetch sooner than 30 minutes
+  away only when the answer is out of date. Now: after more than `CLIENT.refreshAfterMs` away,
+  the view for the time of day and a fetch; sooner, a fetch only when the answer is out of date,
+  and, kept beyond the spec, past `usableUntil`, missing, or fetched at an unknown time or after
+  now. A quick switch away and back with a current answer asks nothing; the hourly quiet refresh
+  keeps it current. Since the return asks less, what was due when the app left stays due: the
+  model keeps the quiet refresh's or the retry's time across the background and schedules it
+  again for then, at once if it has passed. Before, a return within half an hour of an offline
+  failure dropped the minute's retry for the next forecast hour, leaving "You're offline" on
+  screen for up to an hour after the connection came back.
+- **A 429 is never "offline".** Section 5.6 has the app treat a 429 like being offline, and
+  section 4 says to keep the saved answer and retry quietly. The app did both by making it the
+  offline phase, which told a phone that was connected but rate limited that it was offline
+  ("You're offline. Showing the forecast from …"; with nothing saved, "Connect to the internet"),
+  against section 0.2's honest copy, and at the moment section 5.6 expects 429s from carrier NAT.
+  Now a 429 is an error (`AppPhase.error(.rateLimited)`), retried as offline is, after
+  `CLIENT.retryAfterMs` plus the jitter. Over an answer the page adds nothing: no offline line,
+  no Retry. With nothing saved it says core's words for it ("Too many requests. Try again in a
+  minute.", `FetchError.rateLimited.message`), with Retry. The page has a phase of its own for
+  it, `limited`.
+- **An error says so, as section 4 asks.** 5.1 kept the website's way ("Deviation: an error over
+  an answer stays quiet", above), which overrode an explicit line of the spec without Carl's
+  word, so the page follows section 4 now. After a failed request, over an answer that shows,
+  the footer says `CoreCopy.unavailable` ("Forecasts are unavailable right now. Try again in a
+  few minutes.") with Retry under it, in place of the stale line; past `usableUntil` there is
+  still neither. With nothing saved the page says the server's own message
+  (`AppPhase.serverMessage`, the `ApiError` message), or `CoreCopy.unavailable` when it sent
+  none, as `AnswerState` already did; the test that held the two together used only a 503,
+  whose message is that same text, and now has a 400, a bodiless 500 and a 429 as well. Section
+  4's "Try again" is the app's Retry (`CoreCopy.retry`), as section 10.2 has it; no string was
+  added for it.
+- **The reference first.** packages/mobile `page.ts` takes the 429 phase and the server's
+  message (`PageInput.message`); `pnpm mobile:generate` rewrote `page.json` (255 page cases,
+  from 222: each failure over an answer, over a stale one, over a view with nothing to show and
+  past `usableUntil`, and with no answer the server's message, empty or not, and the 429); and
+  `HomePage(_:view:at:phase:message:placeName:)` ports it. Broken on purpose (the message
+  ignored, a 429 worded as offline over an answer), the Swift fails its cases, `HomePageTests`
+  and the test that holds the page to `AnswerState`.
+- **Retry goes where its line is.** IsItUI draws the page's Retry in the body with no answer, and
+  under the footer's line with one (`RetryButton`, in both places).
+- **The place button says what it does before the place is known.** VoiceOver read only "Finding
+  you…" for it, which also stays after a failed first launch. It now reads "Finding you…, change
+  place." (`AppCopy.placeButtonUnknown`, beside section 10.9's `placeButtonLabel`), as the
+  website's place button reads "…, change location" to a screen reader. The text on screen is
+  unchanged.
+- **Not proven here:** the UI tests' clean launches, the footer's Retry and the place button's
+  label are Apple only, so the macOS jobs prove them; IsItUI's changes were not compiled here.
+  Everything else ran on Linux.
 
 ## API contract
 

@@ -8,6 +8,10 @@ public enum AppCopy {
     "Place: \(place). Change place."
   }
 
+  public static func placeButtonUnknown(status: String) -> String {
+    "\(status), change place."
+  }
+
   public static let settings = "Settings"
   public static let slugGone =
     "That place is no longer available. Showing your approximate location."

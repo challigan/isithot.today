@@ -54,7 +54,7 @@ final class LaunchTests: XCTestCase {
     XCTAssertEqual(
       heading(in: app).label,
       "Will it snow today? No recent forecast. Connect to the internet to refresh.")
-    XCTAssertEqual(app.buttons["place"].label, "Finding you…")
+    XCTAssertEqual(app.buttons["place"].label, "Finding you…, change place.")
     XCTAssertFalse(app.staticTexts["verdict"].exists, "A verdict with no answer")
     attachScreen(of: app, named: "app-offline-nothing")
   }

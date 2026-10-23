@@ -181,13 +181,14 @@ struct AppModelLaunchTests {
     #expect(h.clock.pending == [made.addingTimeInterval(105)])
   }
 
-  @Test("rate limited: kept as offline, and asked again a minute later")
+  @Test("rate limited: the answer kept, never called offline, and asked again a minute later")
   func rateLimited() async throws {
     let h = try openAberdeen(
       after: 15, replies: [try FakeTransport.error(429, code: "rate_limited")])
     await h.model.launch()
-    #expect(h.model.phase == .offline)
+    #expect(h.model.phase == .error(.rateLimited))
     #expect(h.model.response == (try savedAberdeen()).response)
+    #expect(h.model.offlineLine(at: h.clock.now) == nil)
     #expect(h.clock.pending == [h.clock.now.addingTimeInterval(105)])
   }
 
@@ -385,6 +386,36 @@ struct AppModelStepTests {
       ])
   }
 
+  @Test("a place chosen while the fix is out stands: the fix doesn't move it")
+  func placeChosenDuringFix() async throws {
+    let leeds = Target.device(lat: 53.8, lon: -1.55)
+    let h = Harness(
+      now: try fixtureNow("leeds-dry"),
+      store: .init(place: leeds, units: .c),
+      replies: [try FakeTransport.fixture("leeds-dry"), .answer(try dundee())],
+      hooks: RecordingHooks(moved: .device(lat: 53.9, lon: -1.55), holdingFix: true)
+    )
+    let launch = Task { await h.model.launch() }
+    try #require(
+      await yieldUntil { h.hooks.calls.contains("locate device:53.8,-1.55") },
+      "the fix was never asked for")
+    // A place under "Nearby:" (or, from phase 6, the picker's) while the fix is out.
+    await h.model.select(dundeeTarget)
+    h.hooks.releaseFix()
+    await launch.value
+    #expect(h.model.target == dundeeTarget)
+    #expect(h.store.loadPlace() == dundeeTarget)
+    #expect(
+      h.transport.urls == [
+        "https://willitsnow.today/api/v1/today?lat=53.8&lon=-1.55&source=device&units=c&ahead=snow",
+        "https://willitsnow.today/api/v1/today?place=dundee-gb&units=c&ahead=snow",
+      ])
+    #expect(h.store.today?.key == "city:dundee-gb")
+    let page = h.model.page(.today, at: h.model.now)
+    #expect(page.headingLabel == "Dundee. Will it snow today? Yes.")
+    #expect(h.hooks.calls.last == "syncAlerts city:dundee-gb c")
+  }
+
   @Test("a route opened during the launch waits for its end; one opened after, at once")
   func routes() async throws {
     let h = Harness(
@@ -444,6 +475,52 @@ struct AppModelRefreshTests {
     #expect(h.transport.requests.count == 1)
     #expect(h.model.view == .week)
     #expect(h.clock.pending == [later(made, minutes: 55).addingTimeInterval(45)])
+  }
+
+  @Test("back after a minute, an answer fetched long ago but current is kept: no fetch")
+  func backSoonOldAnswer() async throws {
+    // Fetched at 9:05; away from 9:40 to 9:41, with 10:00's refresh still to come.
+    let h = try await launched([try FakeTransport.fixture("aberdeen-snow")])
+    let made = try fixtureNow("aberdeen-snow")
+    h.clock.now = later(made, minutes: 35)
+    h.model.didEnterBackground()
+    h.clock.now = later(made, minutes: 36)
+    await h.model.willEnterForeground()
+    #expect(h.transport.requests.count == 1)
+    #expect(h.clock.pending == [later(made, minutes: 55).addingTimeInterval(45)])
+  }
+
+  @Test("back soon after a failed fetch, its retry is still due, at once if its time has passed")
+  func retryKeptAway() async throws {
+    let saved = try savedAberdeen()
+    let opened = later(saved.savedAt, minutes: 15)
+    let h = Harness(
+      now: opened,
+      store: .init(place: aberdeen, units: .c, today: saved),
+      replies: [.failure(.notConnectedToInternet), try FakeTransport.fixture("aberdeen-snow")]
+    )
+    await h.model.launch()
+    let retry = opened.addingTimeInterval(105)
+    #expect(h.clock.pending == [retry])
+    // Away for half a minute, back before the retry is due: it is due when it was.
+    h.clock.now = opened.addingTimeInterval(10)
+    h.model.didEnterBackground()
+    h.clock.now = opened.addingTimeInterval(40)
+    await h.model.willEnterForeground()
+    #expect(h.transport.requests.count == 1)
+    #expect(h.clock.pending == [retry])
+    #expect(h.model.nextRefreshAt == retry)
+    // Away past the retry's time (told twice, as a scene may): back, it is due at once, and the
+    // answer comes.
+    h.model.didEnterBackground()
+    h.model.didEnterBackground()
+    h.clock.now = opened.addingTimeInterval(300)
+    await h.model.willEnterForeground()
+    #expect(h.transport.requests.count == 1)
+    #expect(h.clock.pending == [retry])
+    #expect(await h.clock.runNext())
+    #expect(h.model.phase == .ready)
+    #expect(h.transport.requests.count == 2)
   }
 
   @Test("back after more than 30 minutes, the view for the time of day, and a fetch")

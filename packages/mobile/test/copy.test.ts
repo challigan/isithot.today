@@ -238,6 +238,7 @@ describe('APP_COPY', () => {
     );
     expect(slotted).toEqual({
       placeButtonLabel: ['place'],
+      placeButtonUnknown: ['status'],
       offline: ['time'],
       upgradeRow: ['price'],
       headingLabel: ['place', 'question', 'answer'],

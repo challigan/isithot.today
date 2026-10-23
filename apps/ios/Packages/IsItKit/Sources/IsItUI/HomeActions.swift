@@ -5,7 +5,7 @@ import IsItModel
 /// state of its own: it draws the presenters' values (`HomePage`, `HomeTopBar`) and hands each
 /// tap to the app's model through these.
 public struct HomeActions {
-  /// Ask for the answer again: the error state's Retry.
+  /// Ask for the answer again: Retry, in the error state or under the footer's line.
   public var retry: () -> Void
   /// The place button: open the place picker.
   public var openPlacePicker: () -> Void

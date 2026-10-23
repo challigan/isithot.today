@@ -17,10 +17,13 @@ struct HomePageTests {
     _ fixture: String,
     _ view: AppView = .today,
     phase: HomePage.Phase = .ready,
+    message: String? = nil,
     placeName: String? = nil
   ) throws -> HomePage {
     let now = try #require(ApiJSON.parseDate(try Fixtures.info(fixture).now))
-    return HomePage(try answers(fixture), view: view, at: now, phase: phase, placeName: placeName)
+    return HomePage(
+      try answers(fixture), view: view, at: now, phase: phase, message: message,
+      placeName: placeName)
   }
 
   @Test("aberdeen-snow: Yes today from all six forecasts, though it isn't snowing now")
@@ -179,6 +182,58 @@ struct HomePageTests {
     #expect(offline.palette == Palettes.Snow.nosnow)
     #expect(offline.retry == "Retry")
     #expect(offline.footer == nil)
+    // The server's own message, when it sent one (section 4), and an empty one isn't.
+    let said = "Latitude and longitude must be decimal degrees."
+    let bad = HomePage(nil, view: .today, at: moment, phase: .error, message: said)
+    #expect(bad.state == .error)
+    #expect(bad.answer == said)
+    #expect(bad.headingLabel == "Will it snow today? \(said)")
+    #expect(bad.retry == "Retry")
+    let empty = HomePage(nil, view: .today, at: moment, phase: .error, message: "")
+    #expect(empty.answer == "Forecasts are unavailable right now. Try again in a few minutes.")
+    // Rate limited: core's words for it, never "offline", with Retry.
+    let limited = HomePage(nil, view: .today, at: moment, phase: .limited, message: said)
+    #expect(limited.state == .error)
+    #expect(limited.answer == "Too many requests. Try again in a minute.")
+    #expect(limited.retry == "Retry")
+    #expect(limited.footer == nil)
+  }
+
+  @Test("a failed request over the answer: forecasts are unavailable, with Retry")
+  func failedOverAnswer() throws {
+    let said = "Latitude and longitude must be decimal degrees."
+    for message in [nil, said] {
+      let error = try page("aberdeen-snow", phase: .error, message: message)
+      #expect(error.state == .ready)
+      #expect(error.headingLabel == "Aberdeen. Will it snow today? Yes.")
+      #expect(error.verdict == "It'll snow.")
+      #expect(error.retry == "Retry")
+      #expect(error.footer?.updated == "Updated 9:05am GMT")
+      #expect(
+        error.footer?.notice == "Forecasts are unavailable right now. Try again in a few minutes.")
+    }
+    // The unavailable line beats the stale line, as the offline line does.
+    #expect(try page("stale", phase: .error).footer?.notice == CoreCopy.unavailable)
+    // A view with nothing to show keeps the line and Retry.
+    let now = try page("no-now", .now, phase: .error)
+    #expect(now.state == .notAvailable)
+    #expect(now.retry == "Retry" && now.footer?.notice == CoreCopy.unavailable)
+    // Past usableUntil there is no forecast showing: no line, and no Retry.
+    let old = try page("old-forecast", phase: .error)
+    #expect(old.state == .noRecent)
+    #expect(old.retry == nil && old.footer?.notice == nil)
+  }
+
+  @Test("rate limited over the answer: quiet, as when it worked, and never offline")
+  func limitedOverAnswer() throws {
+    for name in ["aberdeen-snow", "stale"] {
+      let limited = try page(name, phase: .limited)
+      let ready = try page(name)
+      #expect(limited == ready, "\(name)")
+      #expect(limited.retry == nil)
+    }
+    #expect(try page("aberdeen-snow", phase: .limited).footer?.notice == nil)
+    #expect(try page("stale", phase: .limited).footer?.notice == CoreCopy.stale)
   }
 
   @Test("the place: the top bar's name, else the answer's; an empty one leaves it out")
@@ -238,12 +293,12 @@ struct HomeTopBarTests {
     #expect(chosen.useMyLocation == nil)
   }
 
-  @Test("before the place is known, the website's line for it")
+  @Test("before the place is known, the website's line for it, labelled to change it")
   func unknown() {
     for name in [nil, ""] as [String?] {
       let bar = HomeTopBar(placeName: name, approximate: true)
       #expect(bar.place == "Finding you…")
-      #expect(bar.placeLabel == "Finding you…")
+      #expect(bar.placeLabel == "Finding you…, change place.")
     }
   }
 }

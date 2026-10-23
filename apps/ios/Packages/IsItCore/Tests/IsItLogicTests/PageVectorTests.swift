@@ -7,11 +7,12 @@ import Testing
 extension VectorPort {
   /// `page.json`: packages/mobile `homePage`, the app's page made of core's and the client's
   /// rules, ported as `HomePage`, for every fixture and view at its own moment, at an hour ahead,
-  /// the last minute before `usableUntil` and at it, across 6pm, after each kind of request,
-  /// with blocks taken out (`in.without`) and with no answer at all; and core `creditParts`,
-  /// ported as `Credits.parts`. Where the page shows one of the answer's own objects, the vector
-  /// names its path in the fixture (`shown`), and the middle page's strip is checked against
-  /// `StripGeometry` for that day, which `strip.json` checks against core.
+  /// the last minute before `usableUntil` and at it, across 6pm, after each kind of request (with
+  /// the server's message, `in.message`), with blocks taken out (`in.without`) and with no answer
+  /// at all; and core `creditParts`, ported as `Credits.parts`. Where the page shows one of the
+  /// answer's own objects, the vector names its path in the fixture (`shown`), and the middle
+  /// page's strip is checked against `StripGeometry` for that day, which `strip.json` checks
+  /// against core.
   static let page = VectorPort { file in
     let answers = FixtureAnswers()
 
@@ -21,14 +22,16 @@ extension VectorPort {
       let view: AppView
       let now: Int
       let phase: HomePage.Phase
+      let message: String?
       let placeName: String?
 
       var description: String {
         let answer = fixture.map { name in
           without.map { "\(name) without \($0.joined(separator: ", "))" } ?? name
         }
+        let said = message.map { " \"\($0)\"" } ?? ""
         let place = placeName.map { ", place \"\($0)\"" } ?? ""
-        return "\(answer ?? "no answer") at \(now), \(view), \(phase)\(place)"
+        return "\(answer ?? "no answer") at \(now), \(view), \(phase)\(said)\(place)"
       }
     }
     struct Line: Decodable, Sendable, Equatable {
@@ -71,6 +74,7 @@ extension VectorPort {
         view: input.view,
         at: Date(epochMs: input.now),
         phase: input.phase,
+        message: input.message,
         placeName: input.placeName
       )
       #expect(page.view == expected.view, "\(label): view")

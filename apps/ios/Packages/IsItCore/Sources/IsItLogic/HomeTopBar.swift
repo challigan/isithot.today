@@ -7,7 +7,8 @@ import IsItModel
 public struct HomeTopBar: Sendable, Equatable {
   /// "Leeds", or "Finding you…" while the place isn't known yet, as on the website.
   public let place: String
-  /// The place button for VoiceOver: "Place: Leeds. Change place.".
+  /// The place button for VoiceOver: "Place: Leeds. Change place.", or while the place isn't
+  /// known, "Finding you…, change place.", so it always says what the button does.
   public let placeLabel: String
   /// "Using approximate location.", on the approximate IP place only; while there is a notice,
   /// the notice instead, which says why ("That place is no longer available. Showing your
@@ -28,7 +29,7 @@ public struct HomeTopBar: Sendable, Equatable {
       placeLabel = AppCopy.placeButtonLabel(place: placeName)
     } else {
       place = CoreCopy.locating
-      placeLabel = CoreCopy.locating
+      placeLabel = AppCopy.placeButtonUnknown(status: CoreCopy.locating)
     }
     self.approximate = notice ?? (approximate ? CoreCopy.approximate : nil)
     useMyLocation = approximate ? CoreCopy.useMyLocation : nil

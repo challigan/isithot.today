@@ -6,12 +6,15 @@ import IsItModel
 /// answer to show. The port of packages/mobile `homePage` (`page.ts`), checked against
 /// `page.json`. The page words nothing of its own: what it shows of the answer is the hour picked
 /// for the moment (`HourPicker`, `MiddleDay`), as the website shows the same answer (core
-/// `viewDisplay`); the footer's lines are the website's; the rest is `CoreCopy` and `AppCopy`.
+/// `viewDisplay`); the footer's lines are the website's; a failed request says what spec section
+/// 4 has the app say (`CoreCopy.unavailable`, the server's message, or core's for a 429); the
+/// rest is `CoreCopy` and `AppCopy`.
 public struct HomePage: Sendable, Equatable {
   /// How the last request went, as the app's model keeps it (spec 9.4): asking, answered,
-  /// failed, or failed for want of a connection.
+  /// failed, failed for want of a connection, or turned away for asking too often (429), which
+  /// the app asks again after quietly (section 4).
   public enum Phase: String, Codable, Sendable, CaseIterable {
-    case loading, ready, error, offline
+    case loading, ready, error, offline, limited
   }
 
   /// What the page shows: an answer; "Checking…" while the first is on its way; the error, with
@@ -91,8 +94,10 @@ public struct HomePage: Sendable, Equatable {
     /// "Updated 3:05pm GMT", or "Updated yesterday, 11:40pm GMT"; nil for an answer without
     /// `updated`.
     public let updated: String?
-    /// "You're offline. Showing the forecast from 3:05pm GMT.", or the stale line; nil when
-    /// neither applies, and past `usableUntil`, when there is no forecast showing.
+    /// "You're offline. Showing the forecast from 3:05pm GMT."; after a failed request,
+    /// "Forecasts are unavailable right now…", with Retry (section 4); or the stale line. Nil
+    /// when none applies (rate limited adds nothing, since it asks again by itself), and past
+    /// `usableUntil`, when there is no forecast showing.
     public let notice: String?
     /// "Want the full picture? See the forecast on", then `links`, which open in Safari.
     public let outboundIntro: String
@@ -144,19 +149,23 @@ public struct HomePage: Sendable, Equatable {
   public let detail: String?
   /// The middle page's body, with an answer to show.
   public let day: Day?
-  /// "Retry", in the error state.
+  /// "Retry", after a failed request: in the error state, and under the footer's line while an
+  /// answer shows; never offline over an answer, or rate limited, which ask again by themselves.
   public let retry: String?
   /// The footer, whenever there is an answer, shown or not.
   public let footer: Footer?
 
   /// The page for `view` at `now`, from the answer the app has (nil before the first), after a
-  /// request that went as `phase`. `placeName` is the place as the top bar names it; without one,
-  /// the answer's.
+  /// request that went as `phase`. `message` is the server's own message after a failed request
+  /// (`error`), which the page says when it has no answer to show; without one,
+  /// `CoreCopy.unavailable`. `placeName` is the place as the top bar names it; without one, the
+  /// answer's.
   public init(
     _ res: TodayResponse?,
     view: AppView,
     at now: Date,
     phase: Phase,
+    message: String? = nil,
     placeName: String? = nil
   ) {
     let tomorrow = MiddleDay.showsTomorrow(res, at: now)
@@ -176,10 +185,10 @@ public struct HomePage: Sendable, Equatable {
         state = shown == nil ? .notAvailable : .ready
       }
     } else {
-      state = phase == .error || phase == .offline ? .error : .loading
+      state = phase == .loading || phase == .ready ? .loading : .error
     }
     let question = Questions.snow(view: view, place: nil, tomorrow: tomorrow)
-    let answer = shown?.answer ?? Self.noAnswer(state, phase: phase)
+    let answer = shown?.answer ?? Self.noAnswer(state, phase: phase, message: message)
     let place = placeName ?? res?.location.name ?? ""
     self.view = view
     self.state = state
@@ -197,7 +206,7 @@ public struct HomePage: Sendable, Equatable {
     verdict = shown?.verdict
     detail = shown?.detail
     day = shown?.day
-    retry = state == .error ? CoreCopy.retry : nil
+    retry = state == .error || (phase == .error && state != .noRecent) ? CoreCopy.retry : nil
     footer = res.map { Self.footer($0, state: state, phase: phase, at: now) }
   }
 
@@ -252,20 +261,31 @@ public struct HomePage: Sendable, Equatable {
   }
 
   /// What the page says in the answer's place, without one to show (`ready` always has one).
-  /// With no answer at all for want of a connection, the forecasts aren't what is unavailable:
-  /// as past `usableUntil`, there is no recent forecast, and a connection brings one.
-  private static func noAnswer(_ state: State, phase: Phase) -> String {
+  private static func noAnswer(_ state: State, phase: Phase, message: String?) -> String {
     switch state {
     case .ready, .notAvailable: CoreCopy.notAvailable
     case .loading: CoreCopy.checking
-    case .error: phase == .offline ? AppCopy.staleApp : CoreCopy.unavailable
+    case .error: failure(phase, message: message)
     case .noRecent: AppCopy.staleApp
     }
   }
 
-  /// The footer: when the forecast was fetched, at the place (`UpdatedLine`); the offline line,
-  /// or the stale line, while there is a forecast to show; the links out, the places nearby and
-  /// the credits.
+  /// What the error state says, with no answer at all, after a request that went as `phase`.
+  /// Offline, the forecasts aren't what is unavailable: as past `usableUntil`, there is no recent
+  /// forecast, and a connection brings one. Rate limited, core's words for it. Otherwise the
+  /// server's message, as section 4 has the app show it, or `CoreCopy.unavailable` without one.
+  private static func failure(_ phase: Phase, message: String?) -> String {
+    switch phase {
+    case .offline: AppCopy.staleApp
+    case .limited: CoreCopy.errorMessage(code: "rate_limited") ?? CoreCopy.unavailable
+    case .loading, .ready, .error: message.flatMap { $0.isEmpty ? nil : $0 } ?? CoreCopy.unavailable
+    }
+  }
+
+  /// The footer: when the forecast was fetched, at the place (`UpdatedLine`); while there is a
+  /// forecast to show, the offline line, the unavailable line after a failed request (with Retry,
+  /// section 4), or the stale line, rate limited adding nothing; the links out, the places nearby
+  /// and the credits.
   private static func footer(
     _ res: TodayResponse,
     state: State,
@@ -278,6 +298,8 @@ public struct HomePage: Sendable, Equatable {
       notice = nil
     } else if phase == .offline {
       notice = when.map { AppCopy.offline(time: $0) }
+    } else if phase == .error {
+      notice = CoreCopy.unavailable
     } else {
       notice = res.stale == true ? CoreCopy.stale : nil
     }
