@@ -24,6 +24,7 @@ targets:
     platform: iOS
     sources:
       - path: Apps/Snow/App
+      # Also the generated Assets.xcassets (the app icon) and Fonts/BricolageAnswer.ttf.
       - path: Apps/Snow/Resources
         excludes: ['Info.plist', '*.entitlements']
       # The fixtures pnpm mobile:generate writes, for -fixture (DebugHooks.swift). Release builds
@@ -36,6 +37,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: $(SNOW_APP_ID)
         INFOPLIST_FILE: Apps/Snow/Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Apps/Snow/Resources/WillItSnow.entitlements
+        # The generated set in Assets.xcassets. Base.xcconfig leaves every other target without.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       configs:
         Release:
           EXCLUDED_SOURCE_FILE_NAMES: Fixtures
@@ -43,7 +46,7 @@ targets:
       - package: IsItCore
         products: [IsItModel]
       - package: IsItKit
-        products: [IsItServices, IsItUI, IsItAds]
+        products: [IsItServices, IsItUI, IsItAds, SnowKit]
       - target: WillItSnowWidgets
   WillItSnowWidgets:
     type: app-extension
@@ -51,6 +54,10 @@ targets:
     sources:
       - path: Apps/Snow/Widgets
         excludes: ['Info.plist', '*.entitlements']
+      # The answer font is a resource of both targets: an extension can't load fonts from the
+      # app's bundle (section 9.7).
+      - path: Apps/Snow/Resources/Fonts
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(SNOW_WIDGET_ID)
@@ -61,7 +68,7 @@ targets:
         products: [IsItModel]
       # Never IsItAds: the widget links no ads code (sections 9.1 and 18.3).
       - package: IsItKit
-        products: [IsItServices, IsItWidgetUI]
+        products: [IsItServices, IsItWidgetUI, SnowKit]
   WillItSnowTests:
     type: bundle.unit-test
     platform: iOS
@@ -80,7 +87,7 @@ targets:
       - package: IsItCore
         products: [IsItModel]
       - package: IsItKit
-        products: [IsItServices, IsItWidgetUI]
+        products: [IsItServices, IsItWidgetUI, SnowKit]
   WillItSnowUITests:
     type: bundle.ui-testing
     platform: iOS
