@@ -1,6 +1,5 @@
 import { createPublicKey, generateKeyPairSync, verify } from 'node:crypto';
-import { createServer, type Http2Server, type IncomingHttpHeaders } from 'node:http2';
-import type { AddressInfo } from 'node:net';
+import type { IncomingHttpHeaders } from 'node:http2';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   APNS_TOPICS,
@@ -13,6 +12,7 @@ import {
   providerToken,
   smokeVerdict,
 } from '../src';
+import { fakeApns, servers } from './fakeApns';
 
 // A throwaway P-256 key, as Apple's .p8 files are.
 const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
@@ -40,44 +40,6 @@ const signedBy = (jwt: string) => {
   );
 };
 
-interface Seen {
-  headers: IncomingHttpHeaders;
-  body: string;
-}
-
-/**
- * A fake APNs over h2c: answers each push with `answer(headers)`, as Apple does (a JSON body only
- * for refusals), and keeps what it was sent.
- */
-async function fakeApns(
-  answer: (headers: IncomingHttpHeaders) => { status: number; body?: object | string } | 'hang',
-) {
-  const seen: Seen[] = [];
-  const server: Http2Server = createServer();
-  server.on('stream', (stream, headers) => {
-    let body = '';
-    stream.setEncoding('utf8');
-    stream.on('data', (chunk: string) => (body += chunk));
-    stream.on('end', () => {
-      seen.push({ headers, body });
-      const reply = answer(headers);
-      if (reply === 'hang') return;
-      stream.respond({ ':status': reply.status, 'apns-id': headers['apns-id'] });
-      stream.end(
-        reply.body === undefined
-          ? undefined
-          : typeof reply.body === 'string'
-            ? reply.body
-            : JSON.stringify(reply.body),
-      );
-    });
-  });
-  await new Promise<void>((resolve) => server.listen(0, resolve));
-  servers.push(server);
-  return { origin: `http://localhost:${(server.address() as AddressInfo).port}`, seen };
-}
-
-const servers: Http2Server[] = [];
 afterEach(async () => {
   await Promise.all(
     servers.splice(0).map(

@@ -7,4 +7,5 @@ export * from './reverse';
 export * from './today';
 export * from './search';
 export * from './handlers';
+export * from './alertStore';
 export * from './apns';
