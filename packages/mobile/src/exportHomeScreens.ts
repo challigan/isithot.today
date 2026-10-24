@@ -6,9 +6,11 @@
  * and how its request went; its pages are page.json's `homePage` cases for those inputs, Now,
  * the middle view and This week in the switcher's order, as they are there, its top bar the
  * `homeTopBar` case, and the view it opens on core `defaultView`'s. A screen page.json has no
- * case for throws, so the two can't part.
+ * case for throws, so the two can't part. Beside the screens, each band's colours as the page
+ * draws them (`palettes`), which the home audit's failures read the screen's pixels against.
  */
-import { defaultView, type View } from '@isithot/core';
+import { SNOW_PALETTES, defaultView, type SnowBand, type View } from '@isithot/core';
+import { opacity } from './exportPalettes';
 import type { PagePhase } from './page';
 import {
   homeScreens,
@@ -40,6 +42,34 @@ export interface HomeScreenJson {
   topBar: unknown;
   /** page.json's `homePage` cases' outputs: Now, the middle view, This week. */
   pages: unknown[];
+}
+
+/**
+ * A band's colours as a page draws them (IsItUI `PageBackground`): the gradient from `g1` to `g2`,
+ * the glow of `g3` at `glow` opacity (0 to 1) at its centre, and the text in `ink`, each
+ * `#rrggbb`.
+ */
+export interface HomePaletteJson {
+  g1: string;
+  g2: string;
+  g3: string;
+  glow: number;
+  ink: string;
+}
+
+/**
+ * Every band's colours, core `SNOW_PALETTES` in core's order: what the home audit's contrast
+ * failures set the screen's pixels beside (`HomeAuditTests`), since the screens themselves can't
+ * be read off the runner. A page with no band draws as no snow (`UNKNOWN_BAND_DRAWS_AS`).
+ */
+export function homePalettes(): Record<SnowBand, HomePaletteJson> {
+  const bands = Object.keys(SNOW_PALETTES) as SnowBand[];
+  return Object.fromEntries(
+    bands.map((band) => {
+      const p = SNOW_PALETTES[band];
+      return [band, { g1: p.g1, g2: p.g2, g3: p.g3, glow: opacity(p.glow), ink: p.ink }];
+    }),
+  ) as Record<SnowBand, HomePaletteJson>;
 }
 
 /** Whether a case's input is the one asked for, field by field, with nothing more. */
@@ -85,12 +115,16 @@ export function homeScreensFrom(fixtures: FixtureSet, page: VectorFile): HomeScr
   });
 }
 
-/** `HomeScreens.json`: a screen to a line, so a changed screen is a changed line. */
+/**
+ * `HomeScreens.json`: the palettes on a line, then a screen to a line, so a changed screen is a
+ * changed line.
+ */
 export function homeScreensJson(fixtures: FixtureSet, page: VectorFile): string {
   const screens = homeScreensFrom(fixtures, page);
   return [
     '{',
     '  "source": "page.json (packages/mobile homePage and homeTopBar), by exportHomeScreens.ts",',
+    `  "palettes": ${JSON.stringify(homePalettes())},`,
     '  "screens": [',
     screens.map((s) => `    ${JSON.stringify(s)}`).join(',\n'),
     '  ]',

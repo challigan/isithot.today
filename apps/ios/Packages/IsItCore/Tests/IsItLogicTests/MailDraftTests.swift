@@ -23,7 +23,7 @@ struct MailDraftTests {
         + "end of Settings.")
     #expect(draft.fallback.address == "support@willitsnow.today")
     #expect(draft.fallback.copyAddress == "Copy address")
-    #expect(draft.fallback.copied == "Copied.")
+    #expect(draft.fallback.copied == "Address copied.")
     #expect(draft.fallback.close == "Close")
   }
 
@@ -52,7 +52,7 @@ struct MailDraftTests {
       draft.fallback.body
         == "Email support@willitsnow.today with a screenshot of the ad and the time you saw it.")
     #expect(draft.fallback.copyAddress == "Copy address")
-    #expect(draft.fallback.copied == "Copied.")
+    #expect(draft.fallback.copied == "Address copied.")
   }
 
   @Test("a place's name is encoded whole, whatever it holds")

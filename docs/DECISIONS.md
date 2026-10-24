@@ -2165,14 +2165,16 @@ order) is the other half, written beside it; the two meet in `HomeView.swift`.
   names no topic and the widget, which links SnowKit, still links none of the app's screens. The
   app now links IsItLogic (project.yml), generated with XcodeGen 2.46.0 built from source: the
   targets' IDs, which the test plans name, are unchanged.
-- **Accessibility, as section 16 asks for these elements:** the question and answer are one
-  heading element labelled with the place; the strip is one element read as its summary; a
-  model's row reads its name and amount; at accessibility sizes the rows stack, the place name
-  wraps to two lines and the glyph stops growing at 160 points; every text uses a text style, the
-  answer `Font.custom("BricolageAnswer", size: 64, relativeTo: .largeTitle)`; the background and
-  glyph are left alone by Smart Invert; buttons and links use the system's styles, tinted in the
-  palette's ink. A model that disagrees has a lighter amount rather than fainter text, as on the
-  website, so it keeps its contrast; its dot on the strip is fainter.
+- **Accessibility, as section 16 asks for these elements:** the question and answer are one heading
+  element labelled with the place; the strip is one element read as its summary; a model's row reads
+  its name and amount; at accessibility sizes the rows stack, the place name wraps to two lines and
+  the glyph stops growing at 160 points; every text uses a text style, the answer
+  `Font.custom("BricolageAnswer", size: 64, relativeTo: .largeTitle)`; the background and glyph are
+  left alone by Smart Invert (since PR #33's second macOS run, inverted with the text, which the
+  exemption left unreadable on them: "The iPhone app's UI tests, after PR #33's second macOS run");
+  buttons and links use the system's styles, tinted in the palette's ink. A model that disagrees has
+  a lighter amount rather than fainter text, as on the website, so it keeps its contrast; its dot on
+  the strip is fainter.
 - **The fixture hook shows a fixture at its own moment** (its `_fixture.now`; first
   `DebugHooks.launchMoment`, and since connecting the halves the model's clock, below), so a UI
   test on any day sees the state the fixture was made for. The UI tests
@@ -2392,7 +2394,10 @@ once to VoiceOver, and every text size up to AX5 (sections 9.5, 10.1, 10.2 and 1
   Switcher and pager share one binding to `AppModel.view`, so a tap, a swipe, a route and the
   return after 30 minutes away (5.1's rule, unchanged) always agree. A tap moves the pages
   without animation: an animated programmatic scroll passes Today on its way from Now to the
-  week, and the position it reports on the way could set the view mid-scroll.
+  week, and the position it reports on the way could set the view mid-scroll. (The container's
+  size, `containerRelativeFrame`, turned out to be the screen's safe area in height, which put
+  the top bar under the status bar; each page has been the pager's own size since main's first
+  macOS run: "The iPhone app's UI tests, after main's first macOS run", below.)
 - **Only the page on screen is in the accessibility tree.** The other two are hidden from
   VoiceOver (which changes page with the switcher, as with a system page view) and so from the UI
   tests, whose identifiers (`heading`, `verdict`, …) stay unique. Pull to refresh is on each
@@ -2749,7 +2754,9 @@ approximate line's "Use my location", with search, "Use my location" and the rec
   `-network` stub's answers were run for the requests the picker's tests make. Unchecked: that
   `.searchable` in the sheet's navigation bar is the only search field XCUITest finds, that a
   swipe on a recent place's button shows the system's Delete, a section header's label with
-  `.textCase(nil)`, and that the audit passes with the system's search bar.
+  `.textCase(nil)`, and that the audit passes with the system's search bar. (It didn't: the search
+  field's own clear button was too small to tap, and the box is the app's own since PR #33's second
+  macOS run, "The iPhone app's UI tests, after PR #33's second macOS run".)
 
 ## The app's support page and privacy notice (S8)
 
@@ -2926,7 +2933,9 @@ and licences, the static lines of Your privacy, and Report an ad (sections 10.4,
   accessibility audits) are Apple only, so the macOS jobs prove them first; whether XCUITest
   finds the segmented control's segments by "cm" and "in", and whether the audit passes the
   system's own Form and navigation bar, are from practice, unchecked. The presenters, the
-  model, the copy and the generated files ran here.
+  model, the copy and the generated files ran here. (The audit failed the Form's text on PR #33's
+  macOS runs: Settings is a page that scrolls now, "The iPhone app's UI tests, after PR #33's
+  third macOS run".)
 
 ## The iPhone app's phase 6, put together (apps/ios, packages/mobile)
 
@@ -3256,6 +3265,695 @@ What the review of phases 5 and 6 put together found, and what changed for it.
   stubs of XCUITest (with the new `state`, `elementType`, snapshot `frame` and
   `withOffset(_:)`), the held-issue logic ran against fakes, `DebugHooks.swift` type-checked in
   Debug and Release, and IsItCore's 313 tests passed.
+
+## The iPhone app's UI tests, after main's first macOS run
+
+PRs #31 and #32 merged before their macOS UI tests finished. Main's first `ios` run on 71128e9
+(run 40061399787, job 120775981243) built, passed the 20 unit tests and the Release check, and
+failed the UI plan: 39 tests, 21 passed, 18 failed. Every `PickerTests` test but
+`testUseMyLocationDenied` failed (8, "No picker"), every `SettingsTests` test (4, "No Settings"),
+and every `HomeAuditTests` test (6, each page "scrolls no further, but its end isn't on screen",
+and the audit's issues). FixtureLaunchTests, HomeTests, LaunchTests and OfflineTests passed. PR
+#32's own run (job 120771667747) failed the same 18 at the same lines, to within 3.33 points.
+
+- **One app fault explains the picker, Settings and the pages at Large.** `HomePager` gave each
+  page `.containerRelativeFrame([.horizontal, .vertical])`. A horizontal scroll view is a page's
+  container only along the axis it scrolls, so each page took the height of the screen's safe
+  area (778.33 points on the iPhone 17: 874, less 62 and 34), the scroll view took the page's,
+  and `HomeShell`'s `.frame(maxHeight: .infinity)` doesn't clamp a child taller than its offer.
+  The home screen was taller than the safe area by the top bar and the switcher, and the window
+  centred it. Two numbers in the log agree. The pages began at y=132.33, so the overflow was
+  140.67 points, half of it above the safe area. Every page at Large stopped scrolling with its
+  content's end at y=910.67, which is 132.33 + 778.33. So the place button and the gear were
+  centred at about y=18, under the status bar, where a tap never reaches the app. "Use my
+  location" was at about y=64, just below it, which is why `testUseMyLocationDenied`, the one
+  picker test that opens the picker from there, passed. At Large each page's last 36.67 points
+  were below the screen for good; at AX3 the pages ran 148 points below it, and stopped sooner
+  still (below). The tests were right, and assert what they did.
+- **The fix:** `HomePager` reads its own size with a `GeometryReader` and makes each page
+  exactly that size, the space under the top bar and the switcher, so the home screen fits the
+  safe area. `HomeShell` says beside its frame that its content must take the height it is
+  offered.
+- **A guard for it.** `expectFits` (`HomeScreens.swift`) checks the place button, the gear and the
+  page on screen each lie within the window (since its review, the pager's bottom edge in the
+  page's place: "The iPhone app's UI tests, reviewed", below). It runs in HomeTests' three
+  fixture tests and at each of HomeAuditTests' launches, at Large and at AX3. With main's
+  geometry from the log, place and gear at y=-4.33 (Large) and -115.67 (AX3) and the page running
+  to 910.67 or 1022, it fails on each of the three. With the top bar at the safe area's top and
+  the page ending at 840 or 874, it passes (run on Linux against stubs of XCUITest, below). When
+  a tap on the place button or the gear opens nothing, PickerTests' and SettingsTests' failures
+  now give the same geometry.
+- **What the log can't say, and what the next run will show.** Three things.
+  - **AX3's scroll ranges ended early.** The credits stopped 1,000 to 1,600 points short of
+    each page's end, in both runs, ending in a 3.33-point bounce. The stops don't follow the
+    pages' heights: durham-tomorrow's Now page is 144 points taller than aberdeen-snow's and
+    scrolled only 44 points further, and aberdeen-snow's week, its tallest page, had its shortest
+    range.
+  - **The issues the audit found besides the top bar's.** These are contrast on the nearby
+    places at Large, on four answer and verdict texts, and on five unlabelled elements in each
+    fixture at AX3. There is also `sufficientElementDescription` on an element with no
+    identifier and no label, on every screenful of every page, never shown whole.
+  - **The top bar's contrast issues**, "Use my location" at Large and "Using approximate
+    location." at AX3, are likely the same fault: both texts sat at or above the status bar's
+    edge.
+
+  Nothing was changed for these on a guess, and no exception was added. Each issue now names its
+  element's type and frame on screen, and an issue no screenful showed whole names the part of
+  the page on screen; the sheets' audits do the same, with their kinds by name. A page that stops
+  short or never reaches its end now also gives:
+  - the page's whole frame and the window's;
+  - each drag;
+  - the page's four lowest elements;
+  - where XCUITest's own `swipeUp()` then moved the credits, which tells a range that ends from a
+    drag the page didn't take;
+
+  and the app's element tree is attached as `<name>-tree`.
+
+- **Up to 20 screenfuls a page, from 15.** Once the home screen fits, the page on screen at AX3 is
+  about 420 points under the stacked top bar and switcher, not the 630 the overflowing pages
+  showed. The week at AX3 is about 2,930 points tall. The bound only stops a page that never
+  ends, and every screenful is still audited.
+- **Not proven here:** `HomePager` is SwiftUI and compiles only on the macOS jobs, so whether the
+  pages now fit, the picker and Settings open, and the pages reach their ends is for the next run.
+  No Linux test can reach a SwiftUI layout. On Linux, the nine UI test files type-checked against
+  stubs of XCUITest (with `XCTAttachment(string:)` and the element types they name). A copy of
+  `expectFits`, `homeGeometry` and the audit's issue text ran there against fake trees with main's
+  geometry (failing) and the fixed one (passing), and IsItCore's tests passed.
+
+## The iPhone app's UI tests, reviewed
+
+What the review of the fix for main's first macOS run found, and what changed for it. Nothing
+was given an exception, and no test asks less.
+
+- **The next run won't pass the home audits.** The pager's fix explains the top bar's issues and
+  the pages' ends at Large, not three others, and nothing changed the app for those on a guess:
+  - **The places nearby at Large** failed contrast on each page's last screenful, judged at
+    once, so whole on screen, at about y=650 to 780, clear of the status bar and the home
+    indicator; the pager's fix moves them about 70 points and changes no colour. They are
+    underlined buttons in text under 18 points (17 points, regular), as "Use my location" is (13
+    points, semibold), whose failures at Large may be this rather than the status bar's edge. The
+    underlined outbound links (17 points, semibold) pass, as does the plain footnote "Using
+    approximate location." at Large, and at AX3, where all of them are large text, no place
+    fails. The ink gives 6.26:1 or more on every page, so what the
+    audit measured there is for the screens to show.
+  - **`sufficientElementDescription`** on an element with neither an identifier nor a label, once
+    on each screenful of every page of all six tests, never whole on screen. HomePager's
+    horizontal scroll view had neither and, taller than the screen, was never whole. Fitting the
+    screen now, it would be judged at once and fail still, if it is the one; it is `pager` now,
+    so the next log names it if so.
+  - **AX3's scroll ranges.** At Large, each page's scroll range and the 778.33-point viewport add
+    up to its content's height from the credits' frames (aberdeen-snow's Now: 177 + 778.33 =
+    955). At AX3 they add up to 1,354 to 1,488 points on every page, where the content is 2,345 to
+    3,027 points tall, and they don't follow the heights (aberdeen-snow's tallest page has the
+    shortest range). So at accessibility sizes the scroll view's scrollable height or the
+    elements' accessibility frames are wrong, whatever the page's frame, which is all the pager's
+    fix touched. The three AX3 tests are expected to fail again, "scrolls no further", sooner now
+    that about 415 points of page are on screen; `stopped` says what it finds.
+
+  **Left for Carl:** the `ios-attachments` and `ios-results` artefacts of run 40061399787, the
+  `home-*` screens (`home-*-2-ax3-*` for AX3) and the xcresult, which the network policy keeps
+  from agents. They show what the audit measured and whether each stopped page shows the region
+  of its end. The app is to be fixed from them, with an exception only where they prove an issue
+  false, and only with Carl's agreement; without them, the next run is for the diagnostics, not a
+  pass.
+
+- **The page on screen is the part a user can see.** `onScreen` took the page's frame within the
+  window, as if it were the scroll view's fixed viewport. On main's run, durham-tomorrow's
+  Tomorrow page at Large had scrolled 312.33 points by its second screenful (its credits from
+  1,114 to 801.67) when its verdict, about 264 points down the content and so near y=84 under
+  the switcher, was judged at once; aberdeen-snow's week judged "Yes." at about y=68 the same
+  way. With a viewport from y=132.33 both would have been held, then dropped, as the first
+  screenful showed them whole. So the frame XCUITest gives the page's scroll view most likely
+  moves with its content (or XCUITest gave those elements no frame, which `note` also judges at
+  once; each issue's frame now says which). With a content frame, a scrolled page took in the top
+  bar and the switcher: elements under the switcher were judged whole there (the answer and
+  verdict failures), and each scroll brought the next element to y≈8, at AX3 under 363 points of
+  top bar and switcher, never audited in view. `shown(_:in:)` now clips the page's frame to the
+  window below the switcher (`pageWindow`), for the held issues, the scroll's length and the
+  drag; should the frame be the viewport, it changes nothing. Each failure gives the page's frame
+  on every screenful, which settles it.
+- **`expectFits` reads the page's top, not its bottom.** A content frame runs below the screen
+  from the page's top however well the page fits, so the guard would have failed HomeTests'
+  three fixture tests, which pass on main, and every HomeAuditTests launch. It now checks that
+  the place button, the gear and the switcher lie within the window; that the pager, whose
+  frame doesn't move as it scrolls only across, runs from under the switcher to no lower than
+  the window's bottom edge; and that the page starts under the switcher. A page's end is
+  HomeAuditTests' to check. On Linux against fake trees: main's geometry fails at Large (the
+  place button, the gear and the pager) and at AX3; the fixed layout passes, the pager to 840 or
+  874 and the page's frame its viewport or its 955-point content.
+- **What the guard can't see, it says.** It doesn't prove the place button and the gear are below
+  the status bar, whose frame XCUITest doesn't give. On the iPhone 17 a home screen 50 to 70
+  points too tall would put their centres, where a tap lands, under it, with them and the pager
+  within the window (if the pager ends at the safe area's bottom edge; one 60 points too tall
+  passes on Linux). PickerTests' and SettingsTests' taps are the real guard, and their failures
+  give the geometry, the pager's now too.
+- **The sheets' audits run for the first time on the next run**, allowing nothing, and each test
+  stops at its first failure. Three likely failures are fixed in the app:
+  - **A notice's project link** (`NoticeView`) was a line of footnote text, about 18 points
+    tall, and now is 44, as the footer's links are.
+  - **Credits and licences' links sat inside their sentences**, as tall as their line: the hit
+    regions that phase 5.4 expected the audit to flag on the home screen, where an exception lets
+    them through. Nothing on this page needs them inside the sentence, so each credit is now its
+    words whole, then each of its sources and licences as a row of its own that opens it in
+    Safari (`LeavingRow`, as Settings' rows that leave the app). SettingsTests reads the credits'
+    words as before.
+  - **Secondary text and the tint.** In the light appearance the system's secondary label (60% of
+    0x3c3c43) blends to 3.28:1 on a grouped list's background and 3.43:1 on its rows, and its blue,
+    the default tint, gives 3.59:1 and 4.01:1, under 4.5:1 for text under 18 points.
+    `SheetStyle` (IsItUI) draws the picker's search, location and results' second lines, and the
+    headers and footers of Settings, Credits and Your privacy, in 0x636366 (5.36:1 and 5.98:1),
+    and tints both sheets with the system's blue as Increase Contrast draws it: 0x0040dd light
+    (6.77:1 and 7.56:1), 0x409cff dark (4.92:1 or more, where the default gives 3.82:1 on a
+    sheet's rows). The dark appearance keeps the system's secondary label, 5.29:1 or more. "Copy
+    address", white on its fill, takes 0x0040dd in both (7.56:1): no blue reads at 4.5:1 both
+    under white and on a dark row. The values are IsItLogic's `SheetColours`, which
+    `SheetColoursTests` holds to 4.5:1 on Linux, with the system's they replace.
+  - **Not changed:** the search field's placeholder, the system's, about 1.7:1, which
+    `.searchable` doesn't let the app colour. Should the audit flag it, the next run will say.
+    (It never did; the search box is the app's own since PR #33's second macOS run, its prompt in
+    `SheetStyle.secondary`.)
+- **Not proven here:** IsItUI and the UI tests compile only on the macOS jobs. On Linux, the nine
+  UI test files type-checked against stubs of XCUITest; `expectFits`, `pageWindow`,
+  `shown(_:in:)`, the issue text and the held-issue logic ran against fake trees and issues as
+  above; the strict swift format lint passed; and IsItCore's 317 tests passed.
+
+## The iPhone app's UI tests, after PR #33's macOS run
+
+PR #33's own `ios` run (40073206108, job 120811218473, on 4b67a27) built, passed the 20 unit tests
+and the Release check, and failed the UI plan: 39 tests, 27 passed, 12 failed (21 failure
+records). The build's one warning, "'IsItLogic' is missing a dependency on 'IsItModel'", is Xcode's
+dependency scan of the generated project: IsItCore's Package.swift declares it. The pager's fix
+held: `expectFits` passed at every launch of HomeTests and HomeAuditTests, the pages begin at
+y=203 (Large) and 425.33 (AX3) and end at the window's bottom edge, and the place button and the
+gear take their taps. Six of main's 18 failures now pass (PickerTests' `testTooShortAndNoResults`,
+`testChoosingACityResult`, `testChoosingAPointResult`, `testOpenSettingsOpensTheAppsPage`,
+`testRecentPlaces` and `testUseMyLocation`), and so do FixtureLaunchTests, HomeTests, LaunchTests
+and OfflineTests. The other twelve fail further on: the six HomeAuditTests, the picker's two
+audits and the four SettingsTests, the sheets now opening and audited for the first time. The
+fixes, with no exception (the toolbar's Close buttons were one until the review, in the next
+section):
+
+- **The audit moved the page, and the test assumed it didn't.** The page's frame was the same on
+  every screenful, (0, 425.33, 402, 448.67) at AX3, so it is the scroll view's fixed viewport, and
+  the clip to `pageWindow` changes nothing. Each drag moved the credits 339 to 346 points, but the
+  next screenful began where the one before had, and XCUITest's own swipe up then moved them 661
+  to 689 points further on all nine AX3 pages. What put the page back was the audit:
+  `performAccessibilityAudit(for: .all)` lays the app out at a text size below Large for its
+  Dynamic Type check, where each page is 65 to 100 points shorter, and the scroll view keeps that
+  size's end, M, once the size is put back. Two measurements agree page by page, to within the
+  drags' slack: M from the AX3 drags, and where the Large pages' second screenfuls' issue frames
+  put them (250.33 and 250.34 for the Now pages of aberdeen-snow and leeds-dry, 294.33 for
+  durham-tomorrow's Now, 331.67 and 331.66 for leeds-dry's Today). On the week pages, step()'s
+  snapshot, taken after the audit, gave the same distance on two screenfuls the page had been
+  dragged 177 to 229 points apart. So every AX3 page went back to M before each drag (leeds-dry's
+  Now nine times), and the test called the page "no further"; very likely this is also what PR
+  #31's note read as a page that stood still. The issues' frames were read after the move too, so
+  the held logic compared them with screenfuls recorded before it: answers and verdicts under the
+  switcher when attached were judged whole where the move had brought them, and the "Contrast
+  failed (no element)" issues came only on screenfuls the audit had moved, never on a first. Now
+  each screenful is audited in two calls (`AuditKinds`, ScreenAudit.swift): every kind but two
+  first, on the screen as attached, and a move by it fails the test with the numbers; then
+  `.dynamicType` and `.textClipped`, the two that change the text size. Each issue's element is
+  noted where it was on the screenful, moved back by as much as the audit moved the credits (the
+  top bar and the switcher don't scroll), and before the next scroll `restore` drags the page back
+  to within 24 points short of where the screenful had it (a drag spends 13 to 20 points before
+  the page moves, so it never overshoots, and the next scroll is worked out from where the page
+  then is, so nothing goes unaudited). The two calls hold every kind iOS defines between them, so
+  every kind still runs on every screenful. A page that stops now compares its credits after the
+  drag with where the screenful had them, and its drags say which put the page back. AX3 pages are
+  about nine screenfuls now, each with up to eight restoring drags: HomeAuditTests, 11 minutes on
+  this run, should take about 30, within the job's 90 (the job took 41.5).
+- **The page's background was an element.** An `other` element at (0, 0, 402, 874), with no
+  identifier or label, failed `sufficientElementDescription` on every screenful of every page, 30 of
+  the 107 home issues. Only `PageBackground` is drawn edge to edge, and it isn't the pager, which is
+  `pager` now. Its gradients have no element, so `.accessibilityHidden(true)` had nothing to hide,
+  and the `.accessibilityIgnoresInvertColors()` after it left the view a node of its own; under the
+  sheets, where the home screen is hidden, it was gone. The hidden modifier now comes last, in
+  `PageBackground` and in `GlyphView` (whose image the old order did hide), and `HomeShell` hides
+  its whole background, cross-fade and all. (Wrong: on PR #33's second run the element was still
+  there. The order didn't matter; the hidden modifier, on a view with no element, made one, and the
+  background now has no accessibility modifier: "The iPhone app's UI tests, after PR #33's second
+  macOS run".)
+- **The results' keyboard.** `testResultsAccessibilityAudit` found the results but the keyboard
+  stayed up after a drag on them: the list had the default keyboard dismissal, and a user who
+  wanted to read past the keyboard couldn't put it away but by Search, which chooses the first
+  result. The picker's list has `.scrollDismissesKeyboard(.immediately)` and
+  `.scrollBounceBehavior(.always)`, so a drag on a list shorter than the screen is still a scroll.
+  The test is as it was; its comment, which said a scroll dismisses the keyboard by default, is
+  corrected.
+- **The picker's location row.** "Use my location", a `Label`'s title and the picker's only one,
+  was the one text the audit expected to clip at larger sizes. It is now the icon and a wrapping
+  text side by side, as the other rows' text is.
+- **The mail fallback opened as an inset card.** `.presentationDetents([.medium, .large])` opened
+  it at the medium detent, which iOS 26 draws as a card 8 points in from each side over Settings,
+  its content laid out full width and drawn at 0.9602 (386/402) of it: every frame started at
+  x=27.20 and Close was 34.57 points tall of 36. Two texts clipped, two texts of Settings around
+  and through the card with no element of their own, and Close short of contrast on the glass
+  came from that. The modifier is gone, so the fallback opens full height, opaque, as a sheet does
+  by default; section 10.7 asks only for a sheet.
+- **The toolbar's Close buttons.** `picker-close`, `close-settings` and `close-fallback` failed
+  Dynamic Type ("partially unsupported"): a toolbar draws a text item at the bar's own type size,
+  whatever the text size. They were the only buttons any sheet's audit flagged for Dynamic Type;
+  rows (but for Your privacy's full-policy row under the recorder, below), Open Settings, Copy
+  address and cm and in, in the same text styles, passed that check. This round first allowed it
+  as a limitation of UIKit's; the review found the app can avoid it, so each Close is now the xmark
+  with "Close" as its label, and the sheets' audits allow nothing (next section).
+- **The Debug recorder lay over the sheets' last rows.** Under `-openURLs`, its two lines were a
+  bottom `safeAreaInset` on a translucent bar, which insets a list's content but not its frame.
+  `testRowsOpenWhatTheySay` opened Privacy policy and Terms, but Support, Settings' last row, never
+  opened: `isHittable` is an accessibility hit test, which passes through a view with no element, so
+  the row was hittable under the bar, and the tap landed on the bar. Your privacy's full-policy row
+  ended 1 point under the bar's top, and was the one row there "unsupported" for Dynamic Type (not
+  the bar's doing: it failed again with the recorder below the content, as the `Form` jumped to its
+  top for the text-size check, "The iPhone app's UI tests, after PR #33's second macOS run"); the
+  two "Contrast failed (no element)" issues on Settings are most likely Help's rows under it. And
+  the lines were `caption2`, which is 11 points from the smallest size to Large, the one text style
+  that doesn't change below Large, so both failed Dynamic Type. The lines now sit below the sheet's
+  content on an opaque background, in `subheadline` (12 to 15 points from the smallest size to
+  Large). Debug code only: Release has no recorder. SettingsTests taps a row only once it has
+  stopped moving and lies whole above the recorder's lines, and a line that never reads its URL says
+  what it read.
+- **Not fixed: what the next log will say.** Every home text passes WCAG at full ink with the
+  glow, by the diagnosis's calculator: 5.42:1 at the least ("Use my location" on snow, under the
+  glow), the places nearby 8.73:1 or more. So no palette changed and no exception was added for:
+  - **The home's text buttons at Large.** "Use my location" and the places nearby (44 of the
+    issues) failed contrast, while plain text and the footer's links beside them, in the same ink,
+    size and weight, passed: "Using approximate location." on the same line, and the outbound
+    links whose label modifiers are those of "Use my location". "Use my location" passed only on
+    heavysnow, the darkest page there. The log can't say whether the audit measured a Button's
+    label drawn lighter than the ink (a dimmed or pressed state) or caught it as the Dynamic Type
+    check redrew the screen; the first call now runs before any size change, which tests the
+    second.
+  - **Five two-line details at y=510** on the first screenful of the middle and week pages at
+    Large (plain body text, 9.49:1 to 13.53:1, no glow there, and the page not scrolled), while
+    the one-line details at the same place passed.
+  - **Settings' "About" header** ("partially unsupported" for Dynamic Type), while the Privacy and
+    Help headers, the same view and style, passed; and "Copied." in the fallback, "Label not
+    human-readable", which may have been the scaled card (its identifier is no longer its own
+    word either, next section).
+
+  For these, each contrast failure now says what the screenful's screenshot shows inside the element
+  (`PixelRange`: its darkest and lightest pixels, and the WCAG contrast between them) beside the
+  page's ink and its background at the element's centre, as `PageBackground` draws it
+  (`PageColours`), from each band's palette, which `HomeScreens.json` now carries (packages/mobile
+  `homePalettes`, tested in `homeScreens.test.ts`); the sheets' contrast failures give the pixels
+  too. Pixels at the ink's full contrast mean the audit measured something the screen doesn't show;
+  pixels short of it show what was drawn. Should the buttons be drawn lighter, the next step is a
+  button style that draws their labels in the page's ink in every state, marking a press another
+  way. Should Settings' "no element" contrast remain with the recorder moved, LeavingRow's arrow, in
+  the system's `.secondary`, is the next candidate; should "About" or "Copied." remain, the run's
+  xcresult (`ios-results`, for Carl) shows them. (PR #33's second run answered each: the buttons
+  were drawn in full ink and nothing moved, Settings' "no element" issues were gone, and "About" and
+  "Copied." remained: "The iPhone app's UI tests, after PR #33's second macOS run".)
+
+- **Not proven here:** IsItUI, the app and the UI tests compile only on the macOS jobs. On Linux,
+  the nine UI test files type-checked against stubs of XCUITest and of the UIKit and Core Graphics
+  calls the pixel reading makes; copies ran against fakes: the two calls hold every kind between
+  them, `RGB`'s WCAG figures match the generator's (13.62:1 for no snow's ink on its `g1`),
+  `PixelRange` finds the extremes, `PageColours` matches the diagnosis's calculator (5.72:1 for
+  "Use my location" on snow, 10.71:1 for a place nearby on no snow), AX3's "It'll snow." read at
+  y=469 after a 343-point move is noted at 126, held and dropped as the first screenful showed it
+  whole, the top bar's elements aren't moved, and the regenerated `HomeScreens.json` decodes with
+  every page's band having its palette. The strict swift format lint passed, and IsItCore's tests
+  passed.
+
+## The iPhone app's UI tests after PR #33's macOS run, reviewed
+
+What the review of that fix found, and what changed for it. No test asks less, and the one
+exception the fix had added is gone.
+
+- **The recorder's lines would have squeezed three audits.** The Debug recorder now sits below a
+  sheet's content and shows the whole URL, so the height its lines take is the content's.
+  `testRowsOpenWhatTheySay` audited How it works, Credits and licences and the licence after
+  Report an ad's tap, with its email recorded: 201 characters with no space, about 5 lines (some
+  130 points) at Large, about 11 at AX3 and taller than the 874-point window at AX5, where the
+  audit's text-size checks lay a sheet out and where the sheet's navigation stack would be
+  squeezed to nothing. None of the three has run on macOS: the test stopped at Support. It now taps
+  Contact us and Report an ad after the pages' audits, every assertion as it was, so the pages are
+  audited with Support's address recorded, three lines or so at AX5. The other audits had short
+  lines already ("none" or "f" in `testUnitsChangeAsksInTheNewUnits` and `testYourPrivacy`), and
+  the mail fallback, audited with an email recorded, covers Settings and its lines. The lines are
+  not held to a few in a scroll view, as the review also offered: a long URL would then be cut at
+  their foot, which is what the clipped-text check fails.
+- **The toolbar's Close was the app's to change, so it isn't an exception.** The exception called
+  Dynamic Type on a toolbar button a limitation the app couldn't change, and the run doesn't show
+  that: Your privacy, on Settings' stack, has a bar button of its own, the back button in the same
+  navigation bar, and its audit didn't flag it; the three Closes flagged were SwiftUI buttons with
+  a text label. Drawn as an icon, as iOS 26 draws its own close control, Close has no text to stay
+  at the bar's size. `CloseLabel` (IsItUI, SheetStyle.swift) is an icon-only `Label`: the xmark,
+  with `CoreCopy.close` ("Close") as its title, which VoiceOver reads. The identifiers and the
+  toolbar placements are as they were, and no test read the word on screen. `SheetAudit` is
+  gone, and the sheets' audits allow nothing. Its matcher also needed a non-empty identifier,
+  which a system control may lack, such as the active search bar's cancel button in
+  `testResultsAccessibilityAudit`, whose audit has never run: should a system control the app
+  can't change fail there, its exception is to match it by its place in the navigation bar or the
+  search bar, with the run's evidence.
+- **The first call's kinds are named.** `AuditKinds.inPlace` was `.all` less the two resizing
+  kinds, so every bit set but two, macOS's `action` and `parentChild` and bits no kind has among
+  them. Apple documents the kinds and `.all`, and shows explicit sets; such a mask had never run,
+  and should XCTest check one against the kinds the platform has, every audited test would fail
+  before its first issue, the six HomeAuditTests and every sheet's. It now names its five:
+  `.contrast`, `.elementDetection`, `.hitRegion`, `.sufficientElementDescription` and `.trait`;
+  with `resizing`'s two, the seven kinds the iOS SDK defines, which `names` lists too. Nothing is
+  skipped; a kind a later SDK adds is to be added there.
+- **"Copied." has an identifier of its own.** It failed "Label not human-readable", and the fix
+  rested on the scaled card being the cause, which the log doesn't show. Its identifier was
+  `copied`, the label's own word, the one text in the app like that; it is `copy-confirmation`
+  now, and the test reads the same text by it. A guess, which costs nothing: the gear's
+  identifier, `settings`, is its label's word too, and it passed on every home screenful. Should
+  "Copied." fail again, the test stops there once more, and the Contact us fallback's audit after
+  it, which has never run, waits another round. (It failed again, the word itself the cause: it is
+  "Address copied." now, "The iPhone app's UI tests, after PR #33's second macOS run".)
+- **A page that stops would have run to the screenfuls' bound.** "Scrolls no further" compared
+  the credits after the step's drag with where `restore` left them, and `restore` stops up to 24
+  points short of the screenful on purpose (13 to 20 with this run's drags). At a scroll end short
+  of the credits' end, the drag still moved the page those points, so the check never fired, and
+  each screenful after paid two audits and a full restore until the 20th: some 6 to 9 minutes an
+  AX3 page, which, should main's first-run fault come back, would take the job past its 90
+  minutes, and a cancelled job uploads neither its summary nor its xcresult. It now compares them
+  with where the screenful had them: from at most 24 points short, a step of a quarter of the page
+  on screen or more, less a drag's 20, leaves a page that scrolls at least 68 points past it at
+  AX3, so only a page at the end of its scroll range fails there.
+- **Checked on Linux:** the nine UI test files type-check against the stubs, and the copies'
+  checks pass: the two calls are the seven kinds between them, once (`.all` less two fails that
+  check), and the sheets' notes fail every issue, Close's Dynamic Type and a button with no
+  identifier included. IsItUI and the UI tests compile only on macOS: the icons are for the next
+  run's screens (`app-settings`, the picker's and the fallbacks') to show.
+
+## The iPhone app's UI tests, after PR #33's second macOS run
+
+PR #33's `ios` run on e3b4a58 (run 40086509556, job 120850750875) ran the 39 UI tests: 28
+passed and 11 failed, every failure an issue of the accessibility audit, none a test's own check.
+The six HomeAuditTests failed on 93 `sufficientElementDescription` issues, one on every screenful,
+all on the same `other` element at (0, 0, 402, 874), and on 50 contrast issues (14 on "Use my
+location", 30 on places nearby, 6 on `detail`); `testResultsAccessibilityAudit` on the search
+field's clear button; and four SettingsTests on "Copied.", the Debug recorder's URL, the "About"
+header and Your privacy's full-policy row. This run's xcresult (each screenful, the screen
+recordings) and run 1's element trees were read for each cause. The fixes:
+
+- **The page's background was an element, and the modifier meant to hide it made it.** A
+  gradient has no accessibility element; SwiftUI makes one when an accessibility modifier is
+  given a view with none, and `.accessibilityHidden(true)` is such a modifier. Run 1's trees show
+  it three ways. Each Now row (`.accessibilityElement(children: .ignore)` with a label) has an
+  unlabelled `other` child exactly the bar's frame, the bar a `GeometryReader` of capsules with
+  `.accessibilityHidden(true)`; each week row one the size of its whole row of dots (184.33 by
+  21.67 for six, one element, not six), hidden the same way; the strip, the same kind of row with
+  the same shapes and no modifier, has none. And the window-sized leaf is a SwiftUI
+  `AccessibilityNode` (its class in the snapshot), the first child of the home screen's container,
+  beside the place button: only `PageBackground`, which ignores the safe area, has its frame. The
+  earlier diagnosis (previous section, "The page's background was an element") was wrong: the
+  order of `accessibilityHidden` and `accessibilityIgnoresInvertColors` didn't matter, and hiding
+  it last and hiding `HomeShell`'s whole background, on this run, left it where it was. Whether
+  the hidden modifier makes the node or `accessibilityIgnoresInvertColors` (a separate primitive)
+  makes one the hidden modifier can't hide, the run can't say; both are gone. `PageBackground`,
+  `HomeShell`'s background, the hour bars, the agreement dots and the loading skeleton's shapes
+  now have no accessibility modifier; shapes and gradients have no element to hide. The glyph
+  keeps `.accessibilityHidden(true)`, as do the chevron and the rows' arrows: an image is an
+  element, which the modifier removes (run 1's trees have no glyph). Nothing, here or elsewhere,
+  is to give a shape or a gradient an accessibility modifier, an identifier as a probe included.
+- **Two checks say where any such element is, next run.** `expectNoBareElements` (HomeScreens.swift)
+  reads one snapshot and fails on any `other` leaf with neither identifier nor label under no
+  labelled element (a row's bar is under its row's label), naming its path from the window with
+  each element's index; HomeTests runs it beside `expectFits` in each fixture's test, and
+  HomeAuditTests at each launch. On run 1's nine trees it finds the background's node and
+  nothing else. HomeAuditTests also attaches the app's tree on every page's first screenful
+  (`<page>-tree`; a page that stops attaches `<page>-tree-stopped`), where only stopped pages did:
+  on this run none stopped, so there was no tree.
+- **Smart Invert inverts the page with its text.** The background and the glyph were exempt
+  (`accessibilityIgnoresInvertColors`, spec section 16's "Glyphs and gradients"), the ink wasn't,
+  so under Smart Invert the ink inverted over a background that didn't: about 1:1 for the ink on
+  the pale pages and 3.7:1 for white on snow's purple, modelled as an inversion with the hue turned
+  back, where both inverted keep 8:1 to 13:1. Safari inverts the website's page and text together
+  (it has no `inverted-colors` rule). Neither is exempt now; the glyph, drawn in the ink, goes with
+  the text. A departure from spec section 16, whose exemption is for photos and artwork.
+- **The home's contrast failures are the check's, not the screen's.** In every flagged frame the
+  screenful's pixels run from the ink to the background, at 6.15:1 to 14.61:1 (`PixelRange`), and
+  the ink on the page's background gives 5.41:1 or more at each corner. The verdicts don't follow
+  the contrast: "Use my location", the ink exactly on 8.1% of its frame's pixels on all nine pages,
+  failed on seven (at 12.5:1 or more on no snow) and passed on heavy snow's two (6.9:1). They
+  didn't move: each page failed the same places on both runs at different heights, and the
+  recording shows nothing moving from a screenful's screenshot to the Dynamic Type check's sizes,
+  so neither a pressed button nor the text-size check drew them (the question run 1 left). What
+  fails is text whose frame is mostly the page's gradient: the text buttons' 44-point lines
+  around 13 to 17-point words, and details of two or three lines whose last is short. What passes
+  is text whose frame is mostly text: every one-line text ("Using approximate location.", the same
+  size beside "Use my location", 18 of 18), the semibold links in the same 44-point lines (27
+  of 27) and every button at AX3. Which places in a row fail, no estimator reproduced (a dozen
+  tried, from the top colours to Otsu), and Apple publishes none. Two changes:
+  - **The text buttons' element is their words' band** (`WordsButton`, IsItUI): a tap anywhere
+    on the 44-point line still acts (`.contentShape(.interaction, …)`), while the element is the
+    band of it the words take (`ContentShapeKinds.accessibility`, iOS 17), no shorter than 34
+    points (`HitTarget.shortestElement`), so its frame is more ink than gradient. Not the words'
+    own height, which the diagnosis proposed: the hit-region check failed the picker's clear
+    button, 19.67 by 19 (below), "Use my location"'s words are about 16 to 18, and 34 is clear of
+    them by "Copy address"'s 32.97, which passed on run 1. Only for words 44 points wide or more:
+    every element the check passed had a side of 44 or more (York 34 by 44 and Perth 41 by 44 on
+    this run, "Copy address" 123.9 by 32.97 on run 1) and the one it failed had neither, so words
+    narrower than 44 (York and Perth at Large) keep the whole 44-point line, which passed hit
+    regions on both runs, and their contrast is left to the `DrawnText` exception below.
+    `testNearbyLoadsInPlaceOnThisWeek` checks the place's element (Dundee's, about 61 points wide
+    at Large) is under 44 points and taps its line above the words, outside the element, as
+    `testUseMyLocationDenied` taps "Use my location": the whole line is still the button. The
+    places nearby have identifiers (`nearby-<slug>`).
+  - **An exception that proves each issue false** (`HomeAuditTests.exceptions`, `DrawnText`):
+    contrast on a `detail`, "Use my location" or a place nearby is allowed only when the
+    screenful shows, inside its frame, the ink on 2% or more of the pixels (within 3 levels a
+    channel), the frame's top row the page's background (within 6 levels of `PageColours`), and
+    the ink on the background 4.5:1 or more at all four corners. Text dimmed, in another colour,
+    over a plate, or on a page short of contrast fails it. Run on Linux against this run's
+    screenfuls, all 50 issues prove (the ink on 7.0% of the pixels at the least, the top rows
+    within 2 levels, 5.41:1), and none does dimmed, on another page's colours or synthetic with
+    a 2.6:1 ink. The paragraphs have no app-side change short of redesigning them, and the band
+    may not be enough for the buttons, so the exception covers both; the issues it allows, and
+    any exception no issue needed, are attached (`home-<fixture>-<size>-allowed`) and listed in
+    the failure, where they went to `print`, which reaches neither the log nor the result bundle.
+    So the next run says whether the band alone cleared the buttons, and whether the credits'
+    hit-region exception ever fires.
+  - Not done: a screenshot after the first audit call, which the diagnosis offered for the size
+    changes the first screenful's first call showed; it would add a PNG a page to the contact
+    sheet, and the verdicts there matched the second screenful's.
+- **The picker's search box is the app's own.** The flagged button was UIKit's
+  `_UITextFieldClearButton`, 19.67 by 19 points, in the field `.searchable` draws; on iOS 26 the
+  active search keeps it while the field has text, with the keyboard put away, and SwiftUI has no
+  way to resize or remove it (with nothing typed, `testPickerAccessibilityAudit` passed). Not an
+  exception: the app can avoid it. `SearchBox` (PlacePickerView.swift) is a `TextField` under the
+  navigation bar, above the list, with the Search key choosing the first result, and while it
+  holds text a clear button 44 points square, "Clear search" (`AppCopy.clearSearch`, its xmark
+  the icon). The field is UIKit's rounded one, at its own height, about 34 points: a plain field
+  is only as tall as its line, about 22, near what the hit-region check fails. Its prompt is
+  `SheetStyle.secondary` (the system placeholder, about 1.7:1, was never flagged). PickerTests
+  find the box by its identifier (`place-search`), whatever type XCUITest gives it, check there is
+  no clear button with nothing typed, and in `testRecentPlaces` that the button is 44 by 44,
+  labelled, clears the box back to the recent places and leaves the keyboard up. The earlier
+  notes on `.searchable` (phase 6.1, "Unchecked", and "Not changed: the search field's
+  placeholder") are superseded.
+- **"Copied." is "Address copied."** It failed "Label not human-readable" on both runs, with its
+  identifier `copied` in the scaled card and `copy-confirmation` at full height, so neither was the
+  cause. Every label the check has failed is one token with no space and a full stop, a slash or
+  a colon ("Copied.", "https://willitsnow.today/support"); every label of more than one word, full
+  stops and all, passed ("Rain, not snow.", "No places found."), and so did single words without
+  ("Settings", "none"). The new words say what was copied, on screen and in VoiceOver's
+  announcement: a departure from spec section 10.9's "Copied.", made in `appCopy.ts`.
+- **The Debug recorder's lines say what they hold.** The URL as `debug-opened`'s label failed the
+  same check on How it works, where "none" and "f" had passed. Each line is labelled ("Last link
+  opened", "Units last asked for", `AppCopy`, shown only in Debug builds) with the URL or the units
+  as its value, which the screen still shows; SettingsTests and PickerTests read the value, and
+  check the labels. (On run 3 the units' line, showing only its value under the longer label, was
+  "Text clipped": each line shows its label too now, next section.)
+- **Settings' "About" header** was "partially unsupported" for Dynamic Type on both runs, at the
+  same frame, while Privacy and Help, the same `Text` in the same style from the same `ForEach`,
+  passed. The recording shows it growing at every size it is on screen, xSmall to AX2, 0.80 to 0.84
+  of Privacy's width at each; from AX3 the form's visible part ends above it. So it scales, and the
+  audit's rule is its own (Help, never on screen at an accessibility size, passed, and so did rows
+  that left as late). Three changes. A section gets a header only when it has a heading: About was
+  the one header after the heading-less Report an ad's empty one, the one thing setting it apart.
+  The sheets' audits attach the screen as audited and the element tree (`audit-<screen>`,
+  `audit-<screen>-tree`): each failing sheet's test stopped at its audit, so none showed what it
+  read. And `SettingsTests.headersGrow`, an exception for this audit only: "partially unsupported"
+  on a static text labelled "About", standing only while "Privacy", the control, is on screen as
+  the audit begins and the audit raises no Dynamic Type issue on it (`ScreenException`,
+  ScreenAudit.swift); not Help, which never failed. Should About stop growing, Privacy, on screen
+  at every size, fails too, and the exception no longer applies; the allowed issue and an
+  exception not needed are attached (`audit-<screen>-allowed`) and listed in the failure. (Run 3
+  failed About again, with no empty header before it, and Report an ad: what set them apart was
+  the `Form`, which Settings no longer is, and the exception is gone, next section.)
+- **Your privacy is a page that scrolls.** `testYourPrivacy` scrolls to the page's end before its
+  audit, so the full policy's row was at y=738. The recording shows the `Form` jump back to its top
+  as the Dynamic Type check began and stay there through all twelve sizes, so the row was on
+  screen at no other size, and the audit called it "unsupported" and clipped. The same row in
+  Settings passed, and run 1's attribution of it to the recorder's bar (previous section) was
+  wrong: the recorder now sits below the content and the row failed again. `YourPrivacyView` is
+  now a scroll view of paragraphs, as How it works is, the policy's row 44 points tall: a scroll
+  view keeps its offset, held to its end, and no text a scroll view had brought into view was
+  failed so (the home pages' second screenfuls, scrolled to their ends). (The row passed on run 3,
+  but not for that reason: the page went back to its top as the check began, as the `Form` had,
+  and the row was on screen only at the two smallest sizes. What failed it was the `Form`'s cells,
+  next section.)
+- **What the next run settles:** whether any bare element is left (`expectNoBareElements`, with
+  its path) and the trees; whether the band alone cleared the buttons' contrast, its frame in the
+  tree and the hit-region check passing it at 34 points; the search box's type, height and hit
+  region; whether "About" fails again, with its frame and Privacy's in `audit-settings-tree`;
+  and the allowed lists, the credits' exception among them.
+- **Checked on Linux:** the copy's tests (written first) and `pnpm mobile:generate`; IsItCore's
+  tests (the picker's clear label, the fallback's words); the nine UI test files type-check
+  against the stubs of XCUITest, whose snapshots now carry `elementType`, as the SDK's do; and
+  copies of the new logic ran there: `DrawnText` against this run's 50 screenful crops and
+  synthetic frames as above, the contrast exception's match (a verdict, an unproven place and
+  an element with no reading refused), `bareElements` against run 1's tree (the background's
+  node found, a row's bar not), the header exception (allowed with its control, refused when
+  Privacy failed or wasn't read, for another kind, message, text, Help's among them, or type),
+  and the edge tap's offset (19.5 points above a 34-point band's centre). IsItUI, the app and the
+  UI tests compile only on macOS: `WordsButton`'s shape, `SearchBox` and the scrolling privacy
+  page are for the next run's trees and screens to show.
+
+## The iPhone app's UI tests, after PR #33's third macOS run
+
+PR #33's `ios` run on 1cc28b7 (run 40100641627, job 120892226190) ran the 39 UI tests: 35 passed,
+five of the six HomeAuditTests and every behaviour test among them, and 4 failed.
+`testAberdeenSnowAtAX3`: the first audit call on the Now page's sixth screenful threw "Audit failed
+to complete in time" (code -56). Three SettingsTests: "Text clipped" on the Debug recorder's units
+line (`debug-units`) on How it works, Settings and Your privacy, and on Settings, "Report an ad"
+"partially unsupported" for Dynamic Type (and "About", which `headersGrow` allowed). This run's
+screen recordings, screenshots and element trees, and run 2's, were read for each cause. The fixes:
+
+- **An audit call ran out of XCTest's time, with the app still.** A screen recording writes a frame
+  only when the screen changes; each frame's time (ffprobe), set beside the attachments' times,
+  times the first call on every screenful, up to the Dynamic Type check's burst of 13 frames (a
+  frame a size, xSmall to AX5, then AX3 again). The failing call began about 0.2 seconds after its
+  screenful's screenshot (14:12:53.667), and the next thing the test did, tap Today, began at
+  14:13:11.98: the call ran some 17 seconds. On run 2 the same call took 12.4, the longest of about
+  130 calls timed; this run took about 0.55 of run 2's time a screenful (the window-sized background
+  element gone), so about 7 was to be expected. The test's other first calls took 3.3 to 7.9 seconds
+  on Now, 3.5 to 9.5 on Today and 3.0 to 10.8 on This week; two of them, Today's first screenful
+  (9.5) and This week's ninth (10.8), ran about 2.5 times as long as expected and finished. The app
+  was still: no frame from the last drag's end (14:12:51.6) to the tap (14:13:12.25) but one at
+  14:13:00.08, within 4 levels of the frame before it, the status bar at the minute, as at about :00
+  of every minute in both runs; the app's minute tick falls at about :17.7 each minute under the
+  fixed clock (`MinuteTick.anchor`) and drew no frame there; `WordsButton`'s geometry callback fires
+  only when its words change size, which nothing did, every Dynamic Type burst is exactly 13 frames,
+  and the same eight places nearby were audited in 6.2 and 4.6 seconds on Today and This week; the
+  test found no issue, so no handler ran; and the tree is about 60 elements. That screenful is the
+  suite's costliest to audit, with the most controls at once (the eight places nearby, the credits'
+  four links, the top bar, the switcher's three buttons), and on every page the lower screenfuls
+  cost more. So the slowdown was the simulator's audit service's or the host's, and the call that
+  met it on the costliest screenful went over the limit. Which of the two, the artefacts can't say.
+  Apple documents neither -56 nor the deadline; other projects report it on busy hosts, count an
+  issue handler's time against it, and retry on -56 alone (justinahn711/weight-training-app #193 and
+  #196, straff2002/OpenGlasses #484). The test then left the page (`return`), so Now's seventh and
+  eighth screenfuls went unaudited: the test failed, so nothing was hidden, but that coverage was
+  lost.
+- **A call that times out runs once more, on the same screen** (`runAudit`, ScreenAudit.swift, for
+  HomeAuditTests and every sheet's audit). Its handler only keeps each issue; the tests read the
+  issue's element, the credits' frame and the screenshot's pixels once the call is done, outside its
+  deadline (they were already read only after the checks finished). On -56, and nothing else, the
+  attempt's issues are dropped, so none is counted twice; 2 seconds later, should the screen be the
+  one the call was to audit, the same call with the same kinds runs again. On the home pages that is
+  the app in the foreground, the switcher the one for the test's text size (a Dynamic Type check cut
+  short could leave another) and the credits within a point of where the screenful had them, the
+  resizing call's page put back first (`restore`, which may stop up to 24 points short, and then the
+  call doesn't run again); on the sheets, every element but the containers of the same type and
+  identifier within a point of where it was as audited (`ScreenLayout`). A second timeout, a screen
+  that isn't the one, or any other error fails the test, with each attempt's error and time. Not an
+  exception and not a skip: every kind runs on every screenful attached, or the test fails. Not more
+  than once, nor without the check, either of which could audit a screen other than the one
+  attached.
+- **The calls' times are kept.** Each call's place, kinds, seconds, issues and any timeout are
+  attached at the test's end (`home-<fixture>-<size>-audit-times`, `audit-<screen>-times`, a line a
+  call), and the slowest call and any that timed out are named in `home-<fixture>-<size>-allowed`.
+  `print` reaches neither the log nor the result bundle, so `ci/test.sh` reads them from the
+  exported attachments (`xcresult-summary.mjs timings`, tested on Linux) and puts the ten slowest
+  calls and every one that timed out in the step summary and the log (`### Audit times:`), with the
+  time each timeout took, roughly the deadline.
+- **The five kinds that read the screen as it is are two calls** (`AuditKinds`: contrast, then
+  element detection, hit regions, descriptions and traits; then the resizing call, three calls a
+  screenful). The rule was to split them once a first call came to more than about 60% of the
+  deadline, and this run is past it: This week's ninth first call finished in 10.8 seconds against
+  a deadline of about 17 (the timed-out call's), some 63%, and run 2's 12.4 on the same Now
+  screenful was about 72%. Nor would the retry alone have saved this run: Today's first screenful,
+  audited about 4.6 seconds after the timeout, took 9.5 seconds, about 2.5 times its expected
+  time, so the host was still slow, and the same five kinds run again 2 seconds after the -56, at
+  that rate, would have taken about 17.5 and timed out again. So the split is made now, not after
+  another run. Every kind still runs on every screenful, each call with a deadline and a retry of
+  its own (`runAudit`); contrast stays first, so the screenshot taken before the calls is the
+  screen its issues' pixels come from, and a call but the resizing one that moves the page still
+  fails. It costs a call more a screenful, about a hundred a run. The times attachment is to
+  confirm it.
+- **The Debug recorder's lines show their labels.** "Text clipped" was on `debug-units`, labelled
+  "Units last asked for", 34 by 18 points showing "none" (How it works, Your privacy) and 5.33 by 18
+  showing "f" (Settings). From run 2 to run 3 only its label changed, to the longer words, the
+  screen still showing the value alone; on run 2, its label the text it showed, it passed. The label
+  alone doesn't explain it: `debug-opened` showed the same "none", 34 points wide, under "Last link
+  opened" on Settings and Your privacy, and passed. The one difference between the two lines was
+  `.fixedSize(horizontal: false, vertical: true)`, the opened line's and not the units'. Each line
+  now shows its label, then what it holds ("Units last asked for: f", `AppCopy.recorderLine`,
+  packages/mobile first), held to its full height; its accessibility label is the label alone and
+  its value what it holds, as the tests read them, byte for byte. Either change might do alone; the
+  two runs implicate both, so both. The lines are taller for it: Report an ad's email takes about 6
+  lines at Large, and with Support's address recorded the two take about half the window at AX5,
+  where How it works is audited.
+- **Settings is a page that scrolls.** The recording of Settings' text-size check (12 sizes) shows
+  the `Form` at its top at every size, and every row growing at every size it is on screen. Report
+  an ad is on screen from xSmall to AX2, half cut at AX3 and gone at AX4 and AX5; About is gone from
+  AX3. How it works leaves at AX3 too, as About does; Credits and licences and Terms leave from AX1,
+  Help's header from xxL; all passed, and Privacy policy, on screen through AX4, passed. So whether
+  a row stays on screen doesn't divide what passed from what failed, and nothing in the rows does:
+  Report an ad passed on run 2 (with an empty header above it), and About failed on all three runs,
+  the empty header before it gone on this one. What the texts that failed share is the `Form`, a
+  collection view whose cells exist only while on screen and are reused for other rows, so which of
+  its texts the audit can follow from size to size is the `Form`'s doing. A scroll view lays out
+  every view at every size, and its text has passed on screen or off on every run: How it works (its
+  paragraphs off screen from Large), the home pages, and now Your privacy, whose policy row failed
+  "unsupported" and clipped as a `Form`'s row on runs 1 and 2 and passed as a scroll view's on this
+  one, though the page went back to its top as the check began, as the `Form` had, so the row was on
+  screen only at the two smallest sizes (the previous section's reason, that a scroll view keeps its
+  offset, was wrong). The evidence's reading, not a proof: Apple doesn't publish the audit's rules.
+  Settings is now `SheetPage(.grouped)` (IsItUI, SheetStyle.swift): a scroll view of
+  `SheetSection`s, each its header (`.headline` in `SheetStyle.secondary`, a heading to VoiceOver),
+  its rows on a card with a hairline between each two (`SheetDivider`), and its footer
+  (`.footnote`); each row at least 52 points tall (`sheetRow()`), and each that does something a
+  button the whole row wide (`SheetRowStyle`, pressed in `systemGray4`), a page on the stack in the
+  primary colour with a chevron (`PageRowLabel`), a page or email outside the app in the tint with
+  its arrow (`LeavingRow`); the units row (its label beside the two units' buttons) and the version
+  line are not buttons, nor are Credits and licences' models line and each credit's words. The
+  measures (`SheetMetrics`) are read off this run's Settings screenshot: the grouped background
+  #F2F2F7 with white cards 16 points in, corners of about 26 (25.8 and 25.9 by a
+  circle's fit), rows 52 tall with their 20.33-point text 16 points in, the units row 78 with its
+  48-point control, hairlines at (32, y, 338, 1), and the header in `.headline` ("Privacy" 56.7
+  points wide against 53.3 in a row), the footer in `.footnote`. Credits and licences, a `Form` too
+  and never yet audited (`testRowsOpenWhatTheySay` stopped before it on all three runs), is the same
+  now, its sources' links buttons that call `openURL`, as Settings' rows do; How it works, Your
+  privacy and a notice are `SheetPage`'s plain style, drawn as before. The picker's `List` stays: it
+  passed on this run. A departure from section 10.4's native form, its look kept but for the
+  sections 24 points apart (17 to 35 in the `Form`), the first card 16 points under the bar (35) and
+  the pressed row the app's own. Not a `List` with `.insetGrouped`, the same collection view, nor a
+  `LazyVStack`, lazy too. Should About or Report an ad fail again as a scroll view's text, laziness
+  wasn't the cause: `audit-settings` and `audit-settings-tree` show what the audit read, and the
+  header's frame there is the next thing to read.
+- **The sheets' audits allow nothing again.** `SettingsTests.headersGrow` is gone, and with it
+  `ScreenException`, `allowing:` and `audit-<screen>-allowed`, which nothing else used.
+  `testUnitsChangeAsksInTheNewUnits` also checks Your privacy's row is 44 points tall or more.
+- **What the next run settles:** the times, whether a -56 comes at about the same time each time
+  (the deadline), how often calls slow down so, and whether a call run again passes; whether
+  Settings' About and Report an ad pass as a scroll view's, Credits and licences' first audit, the
+  typeface's licence's first audit (its project link labelled in words, "Bricolage Grotesque's
+  project page", the URL its value, as the recorder's opened line has them, which passed on this
+  run, where the URL as a label was "not human-readable" on run 2), and the recorder's lines under
+  "Text clipped"; and the grouped pages' look on the contact sheet (`app-settings`,
+  `app-credits`).
+- **Checked on Linux:** the copy's tests (written first) and `pnpm mobile:generate`; IsItCore's
+  tests, the notices' link labels among them (written first); the nine UI test files type-check
+  against the stubs of XCUITest, whose
+  `XCUIApplication.state` and `performAccessibilityAudit` are `open` now, as an Objective-C class's
+  members are in the SDK, so a fake can stand in; and copies of the new logic ran there: `runAudit`
+  against a fake app (a timeout run again once, after the pause, only once settled, its first issues
+  dropped; a second timeout, or a screen not settled, failing with both errors and times; another
+  error failing at once, with no pause and no check), `ScreenLayout` (a row moved 2 points found,
+  half a point, a scroll bar coming and going and a label changing not), the times' lines and
+  report, and `AuditKinds`' three calls (the seven kinds between them, each once, in order, a
+  sheet's audit making each once); `xcresult-summary.mjs timings` against an export's manifest
+  (vitest). IsItUI and the app
+  compile only on macOS: `SheetPage`, the Settings and Credits pages and the recorder's lines are
+  for the next run's screens and trees to show.
 
 ## API contract
 
@@ -3666,3 +4364,7 @@ index the crawler's own US town; see "Search engines").
   Settings' units are (buttons in a segmented track whose labels grow with the text), which
   would let `HomeAuditTests` drop its one Dynamic Type exception ("The iPhone app's phases 5 and
   6, reviewed").
+- The iPhone app: whether to restore spec section 16's Smart Invert exemption for the glyph and
+  the gradients, which the app now inverts with the text. Restored, it is for the page as a
+  whole, its text too, and only once the window-sized element the audit fails is settled ("The
+  iPhone app's UI tests, after PR #33's second macOS run").

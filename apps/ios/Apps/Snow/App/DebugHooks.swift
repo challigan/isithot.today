@@ -480,7 +480,7 @@ enum DebugHooks {
 
   /// What `-openURLs` shows (`debugRecorder()`): the last web page or email the app would have
   /// opened, and the units the last request to the server asked in, so a UI test reads both on
-  /// screen. Only the units of a request, never its place.
+  /// screen, as the lines' accessibility values. Only the units of a request, never its place.
   @MainActor
   @Observable
   final class DebugRecorder {
@@ -505,33 +505,64 @@ enum DebugHooks {
 
   /// Under `-openURLs`: every URL the view opens is recorded instead of opened, a mail URL
   /// refused too under `nomail`, and the recorder's two lines show below the content.
+  ///
+  /// Below it, not over it: the lines were a bottom `safeAreaInset` on a translucent bar, which
+  /// insets a list's content but not its frame, so a sheet's last rows ran under the bar. On PR
+  /// #33's macOS run a tap on Support, Settings' last row, landed on the bar, the full policy's
+  /// row in Your privacy sat 1 point under it, and the audit found text under it short of
+  /// contrast. Opaque, and in a text style that changes at every text size (subheadline,
+  /// 12 to 15 points from the smallest to Large): `caption2` keeps 11 points from the smallest
+  /// size to Large, which the audit's Dynamic Type check failed on both lines.
+  ///
+  /// The URL wraps whole, so the lines take what height it needs, from the sheet's content:
+  /// Report an ad's email, 201 characters with no space, is about 6 lines at Large, after its
+  /// label, and taller than the window at AX5. So no audit reads a sheet over lines that hold an email:
+  /// `SettingsTests.testRowsOpenWhatTheySay` taps the emails after its pages' audits, and the
+  /// mail fallback, audited with one recorded, covers Settings and its lines. Not held to a few
+  /// lines in a scroll view: the URL would then be cut at the lines' foot, which is what the
+  /// audit's clipped-text check fails.
   @MainActor
   private struct URLRecorder: ViewModifier {
     let mode: DebugHooks.OpenURLs
 
     func body(content: Content) -> some View {
       let recorder = DebugRecorder.shared
-      content
-        .environment(
-          \.openURL,
-          OpenURLAction { url in
-            recorder.opened = url.absoluteString
-            return mode == .nomail && url.scheme == "mailto" ? .discarded : .handled
-          }
-        )
-        .safeAreaInset(edge: .bottom) {
-          VStack(alignment: .leading, spacing: 2) {
-            Text(verbatim: recorder.opened)
-              .accessibilityIdentifier("debug-opened")
-            Text(verbatim: recorder.units)
-              .accessibilityIdentifier("debug-units")
-          }
-          .font(.caption2)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal, 16)
-          .padding(.vertical, 4)
-          .background(.bar)
+      VStack(spacing: 0) {
+        content
+          .environment(
+            \.openURL,
+            OpenURLAction { url in
+              recorder.opened = url.absoluteString
+              return mode == .nomail && url.scheme == "mailto" ? .discarded : .handled
+            }
+          )
+        // Each line shows its label, then what it holds ("Units last asked for: f",
+        // `AppCopy.recorderLine`), held to its full height; its accessibility label is the label
+        // alone and its value what it holds, which the UI tests read. The URL as a label was "not
+        // human-readable" to the audit on PR #33's second macOS run; on its third the units' line,
+        // showing only "none" or "f" under its longer label and not held to its height, was "Text
+        // clipped", where the URL's line, held, passed showing "none" under "Last link opened".
+        VStack(alignment: .leading, spacing: 2) {
+          line(AppCopy.recorderOpened, recorder.opened)
+            .accessibilityIdentifier("debug-opened")
+          line(AppCopy.recorderUnits, recorder.units)
+            .accessibilityIdentifier("debug-units")
         }
+        .font(.subheadline)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+        .background(.background)
+      }
+    }
+
+    /// A line of the recorder: `label`, then `value`, wrapping whole; to VoiceOver and the UI
+    /// tests, `label`, with `value` as its value.
+    private func line(_ label: String, _ value: String) -> some View {
+      Text(verbatim: AppCopy.recorderLine(name: label, value: value))
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityLabel(Text(verbatim: label))
+        .accessibilityValue(Text(verbatim: value))
     }
   }
 #endif

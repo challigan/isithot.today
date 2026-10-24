@@ -28,6 +28,10 @@ public struct HomeShell<Content: View>: View {
   public var body: some View {
     VStack(spacing: 0) {
       TopBarView(topBar: topBar, actions: actions)
+      // The content must take the height it is offered, no more: this frame doesn't clamp a view
+      // taller than its offer, and a home screen taller than the screen is centred in it, the
+      // top bar pushed under the status bar (as the pager's pages did until main's first macOS
+      // run, HomePager.swift).
       content
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
@@ -41,6 +45,9 @@ public struct HomeShell<Content: View>: View {
           .transition(.opacity)
       }
       .animation(reduceMotion ? nil : .easeInOut(duration: 0.9), value: theme)
+      // Decoration with no accessibility element, and no accessibility modifier here or in
+      // `PageBackground`: one on views without an element makes one, the window's size here
+      // (PR #33's second macOS run, PageTheme.swift).
     }
   }
 }
@@ -104,21 +111,20 @@ struct TopBarView: View {
   }
 
   /// "Using approximate location." and its button, each centred in a line as tall as the
-  /// button's hit region, so the two read as one line when they share it.
+  /// button's hit region, so the two read as one line when they share it. The button's element is
+  /// its words' band of the line (`WordsButton`), as the text's is its own.
   @ViewBuilder private func approximateLine(_ text: String) -> some View {
     Text(verbatim: text)
       .fixedSize(horizontal: false, vertical: true)
       .frame(minHeight: HitTarget.minimum)
       .accessibilityIdentifier("approximate")
     if let useMyLocation = topBar.useMyLocation {
-      Button {
+      WordsButton {
         actions.useMyLocation()
       } label: {
         Text(verbatim: useMyLocation)
           .fontWeight(.semibold)
           .underline()
-          .frame(minHeight: HitTarget.minimum)
-          .contentShape(Rectangle())
       }
       .accessibilityIdentifier("use-my-location")
     }

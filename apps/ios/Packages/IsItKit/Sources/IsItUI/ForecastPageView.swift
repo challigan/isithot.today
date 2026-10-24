@@ -68,7 +68,8 @@ public struct ForecastPageView: View {
   }
 
   /// The glyph, the heading, the verdict and the detail; while the first answer is on its way,
-  /// shapes that hold their places.
+  /// shapes that hold their places, with no accessibility element and no accessibility modifier,
+  /// which would make one (PageTheme.swift).
   @ViewBuilder private var header: some View {
     let size = min(glyphSize, 160)
     if let glyph {
@@ -77,7 +78,6 @@ public struct ForecastPageView: View {
       Circle()
         .fill(theme.ink.opacity(0.12))
         .frame(width: size, height: size)
-        .accessibilityHidden(true)
     }
     VStack(alignment: .leading, spacing: 2) {
       Text(verbatim: page.question)
@@ -117,7 +117,6 @@ public struct ForecastPageView: View {
         placeholder(width: 0.9)
         placeholder(width: 0.75)
       }
-      .accessibilityHidden(true)
     }
   }
 

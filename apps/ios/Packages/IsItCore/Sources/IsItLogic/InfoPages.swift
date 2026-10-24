@@ -67,6 +67,8 @@ public struct CreditsPage: Sendable, Equatable {
     public let summary: String
     /// Its project's page.
     public let url: URL?
+    /// "Bricolage Grotesque's project page": the label of the link to it, which shows the URL.
+    public let urlLabel: String
     /// The notice's resource in the app's bundle, a `.txt` file.
     public let file: String
 
@@ -97,7 +99,9 @@ public struct CreditsPage: Sendable, Equatable {
       + AppCredits.data.map { Credits.parts($0.text, adding: $0.links) }
     softwareHeading = AppCopy.creditsSoftware
     notices = AppCredits.notices.map {
-      Notice(name: $0.name, summary: $0.summary, url: URL(string: $0.url), file: $0.file)
+      Notice(
+        name: $0.name, summary: $0.summary, url: URL(string: $0.url),
+        urlLabel: AppCopy.noticeProjectPage(name: $0.name), file: $0.file)
     }
   }
 }

@@ -74,6 +74,7 @@ public enum AppCopy {
   }
 
   public static let recent = "Recent"
+  public static let clearSearch = "Clear search"
   public static let searchOffline = "You're offline. Connect to the internet to search."
   public static let locationUnavailable = "Couldn't find your location. Search for a place instead."
   public static let locationPurpose =
@@ -150,7 +151,7 @@ public enum AppCopy {
   }
 
   public static let copyAddress = "Copy address"
-  public static let copied = "Copied."
+  public static let copied = "Address copied."
   public static let credits = "Credits and licences"
   public static let terms = "Terms"
   public static let contactUs = "Contact us"
@@ -198,6 +199,18 @@ public enum AppCopy {
     "Forecasts are estimates. For anything that matters, check your national weather service."
   public static let creditsData = "Forecasts and data"
   public static let creditsSoftware = "Typeface and software"
+
+  public static func noticeProjectPage(name: String) -> String {
+    "\(name)'s project page"
+  }
+
+  public static let recorderOpened = "Last link opened"
+  public static let recorderUnits = "Units last asked for"
+
+  public static func recorderLine(name: String, value: String) -> String {
+    "\(name): \(value)"
+  }
+
   public static let widgetName = "Snow forecast"
   public static let widgetDescription = "Today's snow answer, then tomorrow's from 6pm."
   public static let widgetLocked = "Open the app to turn on widgets."

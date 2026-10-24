@@ -56,14 +56,15 @@ struct PageFooterView: View {
           Text(verbatim: footer.nearbyLabel)
           FlowLayout(spacing: 16, lineSpacing: 0) {
             ForEach(Array(footer.nearby.enumerated()), id: \.offset) { _, city in
-              Button {
+              // Its element its words' band of the line, as "Use my location"'s (`WordsButton`);
+              // the links above pass the audit as the whole line.
+              WordsButton {
                 actions.selectNearby(city)
               } label: {
                 Text(verbatim: city.name)
                   .underline()
-                  .frame(minHeight: HitTarget.minimum)
-                  .contentShape(Rectangle())
               }
+              .accessibilityIdentifier("nearby-\(city.slug)")
             }
           }
         }

@@ -1,14 +1,16 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { COPY, defaultView, localDateTime } from '@isithot/core';
+import { COPY, SNOW_PALETTES, defaultView, localDateTime, type SnowBand } from '@isithot/core';
 import { usableUntil } from '@isithot/client';
 import { APP_COPY } from '../src/appCopy';
 import {
   HOME_SCREENS_PATH,
   UI_TESTS_GENERATED_DIR,
+  homePalettes,
   homeScreensFrom,
   homeScreensJson,
   type HomeScreenJson,
 } from '../src/exportHomeScreens';
+import { UNKNOWN_BAND_DRAWS_AS, opacity } from '../src/exportPalettes';
 import { FIXTURES, fixtureJson, makeFixture, type Fixture } from '../src/fixtures';
 import { fill } from '../src/page';
 import { RUNNING_LEAD_MS, homeScreens, vectorFiles, type VectorFile } from '../src/vectors';
@@ -178,15 +180,47 @@ describe('HomeScreens.json', () => {
     }
   });
 
+  it('gives every band’s colours as the page draws them, for the audit’s pixel readings', () => {
+    const palettes = homePalettes();
+    const bands = Object.keys(SNOW_PALETTES) as SnowBand[];
+    expect(Object.keys(palettes)).toEqual(bands);
+    for (const band of bands) {
+      const p = SNOW_PALETTES[band];
+      expect(palettes[band], band).toEqual({
+        g1: p.g1,
+        g2: p.g2,
+        g3: p.g3,
+        glow: opacity(p.glow),
+        ink: p.ink,
+      });
+    }
+    // Every page the UI tests open names a band there, or has none and draws as no snow.
+    expect(palettes[UNKNOWN_BAND_DRAWS_AS]).toBeDefined();
+    for (const s of screens) {
+      for (const p of s.pages as any[]) {
+        if (p.band !== null) expect(Object.keys(palettes), `${s.name} ${p.view}`).toContain(p.band);
+      }
+    }
+    expect(palettes.nosnow).toEqual({
+      g1: '#f6eef9',
+      g2: '#e1c9e8',
+      g3: '#ffe3d3',
+      glow: 0.85,
+      ink: '#341a3c',
+    });
+    expect(JSON.parse(homeScreensJson(fixtures, page)).palettes).toEqual(palettes);
+  });
+
   it('writes a screen to a line, and throws for a screen page.json has no case for', () => {
     const text = homeScreensJson(fixtures, page);
     const lines = text.split('\n');
-    expect(lines.slice(0, 3)).toEqual([
+    expect(lines.slice(0, 4)).toEqual([
       '{',
       '  "source": "page.json (packages/mobile homePage and homeTopBar), by exportHomeScreens.ts",',
+      `  "palettes": ${JSON.stringify(homePalettes())},`,
       '  "screens": [',
     ]);
-    expect(lines.length).toBe(screens.length + 6);
+    expect(lines.length).toBe(screens.length + 7);
     expect(text.endsWith('\n  ]\n}\n')).toBe(true);
     expect(JSON.parse(text).screens).toEqual(JSON.parse(JSON.stringify(screens)));
     const noBars = { ...page, cases: page.cases.filter((c) => c.fn !== 'homeTopBar') };

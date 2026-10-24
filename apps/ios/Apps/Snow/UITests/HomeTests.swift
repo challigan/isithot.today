@@ -107,7 +107,10 @@ final class HomeTests: XCTestCase {
 
   /// A place under "Nearby:" chosen on This week, not the view the app opened on, answers there:
   /// the view stays where the user put it while the new place loads (as on the website, the app
-  /// opens on the view for the time of day only once).
+  /// opens on the view for the time of day only once). The place's element is its words' band
+  /// of its line, shorter than the 44 points a tap takes (IsItUI's `WordsButton`), and the tap is
+  /// on the line outside that band, so the whole line is still the button. Dundee, about 61
+  /// points wide at Large, has a band: words narrower than 44 keep the whole line.
   @MainActor
   func testNearbyLoadsInPlaceOnThisWeek() throws {
     let aberdeen = try HomeScreen.named("aberdeen-snow")
@@ -124,7 +127,9 @@ final class HomeTests: XCTestCase {
       swipes += 1
     }
     guard button.isHittable else { throw HomeScreenError("No \(place) under Nearby") }
-    button.tap()
+    let element = button.frame
+    XCTAssertLessThan(element.height, 44, "\(place)'s element at \(element) isn't its words")
+    tapOutsideItsWords(button)
     let shown = try nearby.page("week")
     try awaitHeading(shown.heading, in: app)
     expect(shown, in: app)
@@ -139,6 +144,8 @@ final class HomeTests: XCTestCase {
     let screen = try HomeScreen.named(name)
     let app = try launch(screen)
     expect(screen.topBar, in: app)
+    expectFits(app, name)
+    expectNoBareElements(app, name)
     try tabs(screen, in: app)
     let opening = try screen.opening()
     expect(opening, in: app)

@@ -21,7 +21,9 @@ public struct PageGlyph {
 /// The glyph, tinted by the page's ink (iOS build spec, section 10.2). Its flakes drift twice,
 /// 3.2 s in all (`GlyphDrift`), on its first paint and when its band changes (`GlyphMotion`);
 /// never with Reduce Motion, and never when `still` (a test's still screens). Decorative, as on
-/// the website: VoiceOver skips it, and Smart Invert leaves it alone.
+/// the website: VoiceOver skips it. Smart Invert inverts it with the page and the text, whose ink
+/// it is drawn in: exempt alone, it would stay dark ink on the inverted, dark page
+/// (PageTheme.swift).
 struct GlyphView: View {
   let glyph: PageGlyph
   let size: CGFloat
@@ -35,8 +37,9 @@ struct GlyphView: View {
   var body: some View {
     drawing
       .frame(width: size, height: size)
+      // Its images are elements, which this removes: run 1's trees have no glyph. Hidden on a
+      // view with no element of its own, as on a shape, it would make one (PageTheme.swift).
       .accessibilityHidden(true)
-      .accessibilityIgnoresInvertColors()
       .onAppear { drawn() }
       .onChange(of: glyph.band) { drawn() }
       .onChange(of: reduceMotion) {

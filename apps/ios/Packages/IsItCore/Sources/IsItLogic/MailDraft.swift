@@ -29,7 +29,7 @@ public struct MailFallback: Sendable, Equatable, Identifiable {
   public let address: String
   /// "Copy address"
   public let copyAddress: String
-  /// "Copied.", once the address is copied.
+  /// "Address copied.", once the address is copied: on screen, and as VoiceOver's announcement.
   public let copied: String
   /// "Close"
   public let close: String

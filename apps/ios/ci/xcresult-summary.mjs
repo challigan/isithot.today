@@ -6,12 +6,17 @@
  *
  *   node xcresult-summary.mjs build <build-results.json>
  *   node xcresult-summary.mjs tests <plan> <summary.json> <tests.json>
+ *   node xcresult-summary.mjs timings <attachments folder>
  *
  * The JSON is `xcrun xcresulttool get build-results`, `get test-results summary` and
  * `get test-results tests` (Xcode 16 and later). A field that isn't there is left out, never
- * guessed, and a file that is missing or empty says so.
+ * guessed, and a file that is missing or empty says so. `timings` reads the UI tests' audit
+ * times (`…-audit-times` and `audit-<screen>-times`, one line a call: UITests/ScreenAudit.swift
+ * `AuditTime`) from the attachments `xcresulttool export attachments` wrote, by their
+ * manifest.json: `print` in a UI test reaches neither the log nor the result bundle.
  */
 import { readFileSync } from 'node:fs';
+import { basename, extname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 /** At most this many rows in a table; the rest are counted. */
@@ -125,6 +130,105 @@ export function testSummary(plan, summary, tests) {
   return `${out.join('\n')}\n`;
 }
 
+/** At most this many of the slowest audit calls are listed, with every call that timed out. */
+export const SLOWEST = 10;
+
+/**
+ * An attachment's name without what xcresulttool adds: the extension, and an `_<n>_<UUID>`
+ * suffix ("audit-settings-times_0_6F1C…-….txt" is "audit-settings-times"), as contact-sheet.mjs
+ * reads it.
+ */
+export function attachmentLabel(name) {
+  return basename(name, extname(name)).replace(/_\d+_[0-9A-Fa-f-]{36}$/, '');
+}
+
+/**
+ * An audit times attachment's calls: each line after the columns is seconds, place, kinds,
+ * issues and a note, tab-separated (`AuditTime.line`). A line that isn't one is skipped.
+ */
+export function auditCalls(text) {
+  const calls = [];
+  for (const line of String(text ?? '').split(/\r?\n/)) {
+    const [seconds, place, kinds, issues, note = ''] = line.split('\t');
+    if (!/^\d+(\.\d+)?$/.test(seconds ?? '') || place === undefined || kinds === undefined) {
+      continue;
+    }
+    calls.push({
+      seconds: Number(seconds),
+      place,
+      kinds,
+      issues: /^\d+$/.test(issues ?? '') ? Number(issues) : null,
+      note,
+    });
+  }
+  return calls;
+}
+
+/**
+ * Every audit call the tests attached, from an export's manifest.json (an array of tests, each
+ * with its `testIdentifier` and `attachments`, each with its `exportedFileName` and
+ * `suggestedHumanReadableName`), with its test; null without a manifest.
+ */
+export function readAuditTimes(folder) {
+  const manifest = readJson(join(folder, 'manifest.json'));
+  if (!Array.isArray(manifest)) return null;
+  const calls = [];
+  for (const test of manifest) {
+    for (const a of test?.attachments ?? []) {
+      if (
+        !a?.exportedFileName ||
+        !/-times$/.test(attachmentLabel(a.suggestedHumanReadableName ?? ''))
+      ) {
+        continue;
+      }
+      let text;
+      try {
+        text = readFileSync(join(folder, a.exportedFileName), 'utf8');
+      } catch {
+        continue;
+      }
+      for (const call of auditCalls(text)) calls.push({ test: test.testIdentifier ?? '', ...call });
+    }
+  }
+  return calls;
+}
+
+/**
+ * The audit calls' times: how many, the slowest `SLOWEST` and every call with a note (one that
+ * timed out, ran again or failed), slowest first; and the time of each attempt that timed out
+ * (-56), which says roughly how long XCTest's deadline is.
+ */
+export function timingSummary(calls) {
+  if (!calls) return '### Audit times: no attachments manifest (see the log)\n';
+  if (!calls.length) return '### Audit times: none attached\n';
+  const sorted = [...calls].sort((a, b) => b.seconds - a.seconds);
+  const shown = sorted.filter((c, i) => i < SLOWEST || c.note !== '');
+  const tests = new Set(calls.map((c) => c.test)).size;
+  const out = [
+    `### Audit times: ${calls.length} call${calls.length === 1 ? '' : 's'} in ${tests} ` +
+      `test${tests === 1 ? '' : 's'}, the slowest ${sorted[0].seconds.toFixed(1)} s`,
+  ];
+  const timedOut = calls.flatMap((c) =>
+    [...c.note.matchAll(/timed out \(-56\) after (\d+(?:\.\d+)?) s/g)].map((m) => m[1]),
+  );
+  if (timedOut.length) {
+    out.push(
+      '',
+      `Timed out (-56, "Audit failed to complete in time") after ${timedOut.join(' s, ')} s: ` +
+        "about XCTest's deadline for a call.",
+    );
+  }
+  out.push('', '| Seconds | Test | Where | Kinds | Issues | Note |', '|---|---|---|---|---|---|');
+  out.push(
+    ...shown.map(
+      (c) =>
+        `| ${c.seconds.toFixed(1)} | ${cell(c.test)} | ${cell(c.place)} | ${cell(c.kinds)} | ` +
+        `${c.issues ?? ''} | ${cell(c.note)} |`,
+    ),
+  );
+  return `${out.join('\n')}\n`;
+}
+
 /** The JSON in `path`, or null when it is missing, empty or not JSON. */
 export function readJson(path) {
   try {
@@ -141,8 +245,13 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     process.stdout.write(buildSummary(readJson(args[0])));
   } else if (kind === 'tests' && args.length === 3) {
     process.stdout.write(testSummary(args[0], readJson(args[1]), readJson(args[2])));
+  } else if (kind === 'timings' && args.length === 1) {
+    process.stdout.write(timingSummary(readAuditTimes(args[0])));
   } else {
-    console.error('usage: xcresult-summary.mjs build <json> | tests <plan> <summary> <tests>');
+    console.error(
+      'usage: xcresult-summary.mjs build <json> | tests <plan> <summary> <tests> | ' +
+        'timings <attachments>',
+    );
     process.exit(2);
   }
 }

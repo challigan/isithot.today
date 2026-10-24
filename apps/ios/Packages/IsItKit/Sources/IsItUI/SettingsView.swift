@@ -3,12 +3,20 @@ import IsItModel
 import SwiftUI
 import UIKit
 
-/// The Settings sheet (iOS build spec, section 10.4): a native form, in system materials that
-/// follow Dark Mode, with the snow units, the privacy rows, Report an ad in the free version,
-/// About and Help, and the version. Pages open on the sheet's own stack (Your privacy, How it
-/// works, Credits and licences); willitsnow.today's pages open in Safari and the emails in the
-/// mail app, through `openURL`, and with no mail app the fallback sheet says where to write.
-/// Everything shown is the presenters'.
+/// The Settings sheet (iOS build spec, section 10.4): the snow units, the privacy rows, Report an
+/// ad in the free version, About and Help, and the version, as sections of rows on cards, drawn
+/// as an inset grouped list draws them, in system materials that follow Dark Mode. A page that
+/// scrolls (`SheetPage(.grouped)`), not a `Form`: on PR #33's macOS runs the audit's Dynamic Type
+/// check failed the `Form`'s "About" header (all three runs) and its "Report an ad" row (the
+/// third) as "partially unsupported", though the recording shows both growing at every size they
+/// were on screen, while "How it works", which left the screen at the same size as About, passed.
+/// A `Form`'s cells are made only while on screen; a scroll view's text, on screen or not, has
+/// passed on every run (DECISIONS). A departure from section 10.4's native form, its look kept.
+/// Pages open on the sheet's own stack (Your privacy, How it works, Credits and licences);
+/// willitsnow.today's pages open in Safari and the emails in the mail app, through `openURL`, and
+/// with no mail app the fallback sheet says where to write. Everything shown is the presenters'.
+/// The headers, the footer and the tint are `SheetStyle`'s, which meet WCAG AA where the system's
+/// light ones don't.
 public struct SettingsView: View {
   let screen: SettingsScreen
   let privacy: YourPrivacy
@@ -27,27 +35,22 @@ public struct SettingsView: View {
 
   public var body: some View {
     NavigationStack {
-      Form {
-        Section {
+      SheetPage(.grouped, spacing: 24) {
+        SheetSection(footer: screen.units.footnote) {
           UnitsRow(control: screen.units, setUnits: actions.setUnits)
-        } footer: {
-          Text(verbatim: screen.units.footnote)
+            .sheetRow()
         }
         ForEach(screen.sections) { section in
-          Section {
-            ForEach(section.rows) { row in
-              rowView(row)
-            }
-          } header: {
-            if let heading = section.heading {
-              Text(verbatim: heading)
-            }
+          // A header only for a section with a heading: Report an ad's has none.
+          SheetSection(header: section.heading) {
+            rows(section)
           }
         }
         if let version = screen.version {
-          Section {
+          SheetSection {
             Text(verbatim: version)
               .accessibilityIdentifier("version")
+              .sheetRow()
           }
         }
       }
@@ -58,7 +61,7 @@ public struct SettingsView: View {
           Button {
             dismiss()
           } label: {
-            Text(verbatim: screen.close)
+            CloseLabel(title: screen.close)
           }
           .accessibilityIdentifier("close-settings")
         }
@@ -67,19 +70,41 @@ public struct SettingsView: View {
         destination(page)
       }
     }
+    // The rows that leave the app, Close, and the pages' links and buttons: the system's blue
+    // gives 4.01:1 on a row and 3.59:1 on the page's grouped background (`SheetStyle`).
+    .tint(SheetStyle.accent)
     .sheet(item: $fallback) { fallback in
       MailFallbackView(fallback: fallback, copy: actions.copy)
     }
   }
 
-  /// A row as its action has it: a page on the stack, a web page or an email (each marked as
-  /// leaving the app), or Google's form.
+  /// A section's rows, a hairline between each two: those it shows, "Privacy choices" only with
+  /// Google's form to open.
+  @ViewBuilder private func rows(_ section: SettingsScreen.Section) -> some View {
+    let shown = section.rows.filter { row in
+      guard case .privacyChoices = row.action else { return true }
+      return actions.privacyChoices != nil
+    }
+    ForEach(Array(shown.enumerated()), id: \.element.id) { index, row in
+      if index > 0 {
+        SheetDivider()
+      }
+      rowView(row)
+    }
+  }
+
+  /// A row as its action has it, the whole row a button at least `SheetMetrics.rowHeight` tall
+  /// (`SheetRowStyle`): a page on the stack, a web page or an email (each marked as leaving the
+  /// app), or Google's form.
   @ViewBuilder private func rowView(_ row: SettingsScreen.Row) -> some View {
     switch row.action {
     case .page(let page):
       NavigationLink(value: page) {
-        Text(verbatim: row.title)
+        PageRowLabel {
+          Text(verbatim: row.title)
+        }
       }
+      .buttonStyle(SheetRowStyle())
       .accessibilityIdentifier(row.id)
     case .open(let url):
       Button {
@@ -87,6 +112,7 @@ public struct SettingsView: View {
       } label: {
         LeavingRow(title: row.title)
       }
+      .buttonStyle(SheetRowStyle())
       .accessibilityIdentifier(row.id)
     case .mail(let draft):
       Button {
@@ -94,6 +120,7 @@ public struct SettingsView: View {
       } label: {
         LeavingRow(title: row.title)
       }
+      .buttonStyle(SheetRowStyle())
       .accessibilityIdentifier(row.id)
     case .reportAd:
       Button {
@@ -101,6 +128,7 @@ public struct SettingsView: View {
       } label: {
         LeavingRow(title: row.title)
       }
+      .buttonStyle(SheetRowStyle())
       .accessibilityIdentifier(row.id)
     case .privacyChoices:
       if let privacyChoices = actions.privacyChoices {
@@ -108,7 +136,9 @@ public struct SettingsView: View {
           privacyChoices()
         } label: {
           Text(verbatim: row.title)
+            .foregroundStyle(.tint)
         }
+        .buttonStyle(SheetRowStyle())
         .accessibilityIdentifier(row.id)
       }
     }
@@ -165,9 +195,9 @@ struct UnitsRow: View {
 /// The cm | in control (section 10.4): a segmented control drawn as two buttons, the one chosen
 /// raised and marked selected, as a segment is. Not UIKit's segmented control, which keeps its
 /// own type size where section 16 has every string grow to AX5, and which phase 5's home audit
-/// expects the accessibility audit to report; here the labels are the Form's text and grow
+/// expects the accessibility audit to report; here the labels are the page's text and grow
 /// with it, so Settings' audit, which allows nothing, has nothing to allow. Each button is
-/// tapped on its own (`.plain`, as a Form row's buttons must be) and is at least 44 points
+/// tapped on its own (`.plain`, a style of its own, not a row's) and is at least 44 points
 /// square.
 struct UnitsSegments: View {
   let control: SettingsScreen.UnitsControl
@@ -206,8 +236,8 @@ struct UnitsSegments: View {
   }
 }
 
-/// A row that leaves the app, for Safari or the mail app: its title, and an arrow out that
-/// VoiceOver doesn't read.
+/// A row's label for a page or an email outside the app, opened in Safari or the mail app: its
+/// title in the tint, and an arrow out that VoiceOver doesn't read.
 struct LeavingRow: View {
   let title: String
 
@@ -220,14 +250,15 @@ struct LeavingRow: View {
         .foregroundStyle(.secondary)
         .accessibilityHidden(true)
     }
+    .foregroundStyle(.tint)
     .contentShape(Rectangle())
   }
 }
 
 /// What shows when no mail app can open an email (section 10.7): where to write, and "Copy
-/// address", which says "Copied." once it has, on screen and to VoiceOver. The announcement is
-/// UIKit's: iOS 17's `AccessibilityNotification` is the Accessibility framework's, which SwiftUI
-/// isn't known to re-export.
+/// address", which says "Address copied." once it has, on screen and to VoiceOver. The
+/// announcement is UIKit's: iOS 17's `AccessibilityNotification` is the Accessibility
+/// framework's, which SwiftUI isn't known to re-export.
 struct MailFallbackView: View {
   let fallback: MailFallback
   let copy: @MainActor (String) -> Void
@@ -250,10 +281,16 @@ struct MailFallbackView: View {
             Text(verbatim: fallback.copyAddress)
           }
           .buttonStyle(.borderedProminent)
+          // White on the fill, 7.56:1 in both appearances (`SheetStyle.filled`).
+          .tint(SheetStyle.filled)
           .accessibilityIdentifier("copy-address")
           if copied {
+            // "Address copied.", not section 10.9's "Copied.": the audit found that one word
+            // with its full stop "not human-readable" on PR #33's two macOS runs, with the
+            // identifier `copied` in the card the sheet was then drawn as, and with this one at
+            // full height; every label of more than one word passed (packages/mobile appCopy.ts).
             Text(verbatim: fallback.copied)
-              .accessibilityIdentifier("copied")
+              .accessibilityIdentifier("copy-confirmation")
           }
         }
         .padding(20)
@@ -266,12 +303,16 @@ struct MailFallbackView: View {
           Button {
             dismiss()
           } label: {
-            Text(verbatim: fallback.close)
+            CloseLabel(title: fallback.close)
           }
           .accessibilityIdentifier("close-fallback")
         }
       }
     }
-    .presentationDetents([.medium, .large])
+    // A sheet of its own, so Settings' tint is given again, for Close. Full height, as a sheet
+    // opens by default: at the medium detent iOS 26 draws a sheet as a card inset over Settings,
+    // scaled to 96%, with Settings showing through its glass, which the audit found on PR #33's
+    // macOS run as clipped text, text no element holds, and Close short of contrast.
+    .tint(SheetStyle.accent)
   }
 }

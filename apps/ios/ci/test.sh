@@ -2,7 +2,8 @@
 # Builds the app for testing, or runs one test plan, on the simulator simulator.sh booted (iOS
 # build spec, section 18.1). Then writes what happened to the GitHub step summary: the counts,
 # and each error or failing test with its file and line (ci/xcresult-summary.mjs). A test plan's
-# attachments are exported for the contact sheet.
+# attachments are exported for the contact sheet, and the UI plan's audit calls' times read from
+# them: the slowest, and every call that didn't finish in time.
 #
 #   apps/ios/ci/test.sh build <UDID>   build-for-testing     -> build/Build.xcresult
 #   apps/ios/ci/test.sh Unit <UDID>    the Unit test plan    -> build/Unit.xcresult, build/attachments/Unit
@@ -77,5 +78,9 @@ else
   mkdir -p "$build/attachments/$name"
   xcrun xcresulttool export attachments --path "$result" --output-path "$build/attachments/$name" ||
     echo "test.sh: no attachments exported from $name" >&2
+  if [ "$what" = UI ]; then
+    node "$ios/ci/xcresult-summary.mjs" timings "$build/attachments/$name" | report ||
+      echo "test.sh: no audit times" >&2
+  fi
 fi
 exit "$status"
