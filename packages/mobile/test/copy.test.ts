@@ -252,6 +252,7 @@ describe('APP_COPY', () => {
       upgradeRow: ['price'],
       headingLabel: ['place', 'question', 'answer'],
       modelLine: ['name', 'value'],
+      announcement: ['heading', 'verdict'],
       percent: ['value'],
       hourRowLabel: ['chance', 'time'],
       weekRowLabel: ['day', 'amount', 'band', 'agreement'],

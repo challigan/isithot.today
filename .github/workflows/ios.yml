@@ -93,7 +93,10 @@ jobs:
     # Pinned: never macos-latest, which moves, and never -xlarge, which is billed even on a
     # public repo.
     runs-on: macos-26
-    timeout-minutes: 45
+    # The UI plan's audits take every screenful of eighteen pages, and two tests wait two
+    # minutes for a running clock, on a runner whose simulator alone has taken six minutes to
+    # boot: room for a slow first run to report its results rather than be cancelled.
+    timeout-minutes: 90
     # The attachments' artefact ID, set only when they were uploaded. The runner evaluates job
     # outputs after the last step whatever the result, so failed tests still set it.
     outputs:

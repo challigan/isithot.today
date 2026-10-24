@@ -52,9 +52,11 @@ final class HomeTests: XCTestCase {
     expect(try after.page("today"), in: late)
   }
 
-  /// Open on Today at 5:59:30pm with the clock running (`-clock run`): at 6pm the middle tab
-  /// turns to Tomorrow and its page to tomorrow's answer, where it is, with no request (the
-  /// fixture's server would answer the same anyway) and without moving to Now.
+  /// Open on Today at 5:58pm with the clock running (`-clock run`): at 6pm the middle tab turns
+  /// to Tomorrow and its page to tomorrow's answer, where it is, with no request (the fixture's
+  /// server would answer the same anyway) and without moving to Now. The clock starts two
+  /// minutes before 6pm, so that a slow launch on the runner can't pass 6pm before the test has
+  /// read Today; the wait for it allows for the rest.
   @MainActor
   func testTheMiddleTabTurnsToTomorrowAt6pm() throws {
     let start = try HomeScreen.named("durham-flip-start")
@@ -65,9 +67,9 @@ final class HomeTests: XCTestCase {
     expect(today, in: app)
     XCTAssertTrue(app.buttons[today.label].isSelected, "The app didn't open on the middle tab")
 
-    // The tick at 6pm on the model's clock, 30 seconds after the launch's moment.
+    // The tick at 6pm on the model's clock, two minutes after the launch's moment.
     let tomorrow = try six.page("today")
-    try awaitHeading(tomorrow.heading, in: app, timeout: 75)
+    try awaitHeading(tomorrow.heading, in: app, timeout: 180)
     expect(tomorrow, in: app)
     let tab = app.buttons[tomorrow.label]
     XCTAssertTrue(tab.exists, "No \(tomorrow.label) tab after 6pm")
@@ -101,6 +103,33 @@ final class HomeTests: XCTestCase {
     expect(nearby.topBar, in: app)
     try tap(try nearby.page("now"), in: app)
     expect(try nearby.page("now"), in: app)
+  }
+
+  /// A place under "Nearby:" chosen on This week, not the view the app opened on, answers there:
+  /// the view stays where the user put it while the new place loads (as on the website, the app
+  /// opens on the view for the time of day only once).
+  @MainActor
+  func testNearbyLoadsInPlaceOnThisWeek() throws {
+    let aberdeen = try HomeScreen.named("aberdeen-snow")
+    let nearby = try HomeScreen.named("aberdeen-snow-nearby")
+    let place = try XCTUnwrap(nearby.placeName)
+    let week = try aberdeen.page("week")
+    XCTAssertNotEqual(aberdeen.defaultView, week.view, "The app opens on This week")
+    let app = try launch(aberdeen)
+    try tap(week, in: app)
+    let button = app.buttons[place]
+    var swipes = 0
+    while !button.isHittable && swipes < 10 {
+      app.find("page-week").swipeUp()
+      swipes += 1
+    }
+    guard button.isHittable else { throw HomeScreenError("No \(place) under Nearby") }
+    button.tap()
+    let shown = try nearby.page("week")
+    try awaitHeading(shown.heading, in: app)
+    expect(shown, in: app)
+    expect(nearby.topBar, in: app)
+    XCTAssertTrue(app.buttons[shown.label].isSelected, "The view moved from This week")
   }
 
   /// Opens `name` on its fixture at its moment, and reads every page: the one it opens on, then

@@ -40,6 +40,10 @@ public enum AppCopy {
     "\(name) · \(value)"
   }
 
+  public static func announcement(heading: String, verdict: String) -> String {
+    "\(heading) \(verdict)"
+  }
+
   public static func percent(value: String) -> String {
     "\(value)%"
   }

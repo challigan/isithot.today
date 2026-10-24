@@ -125,10 +125,12 @@ struct HomeScreenError: Error, CustomStringConvertible {
 private final class BundleToken {}
 
 /// The text sizes the screens are read and audited at: Large, the default, and AX3, an
-/// accessibility size, given to the app as UIKit's preferred content size category.
+/// accessibility size, given to the app as UIKit's preferred content size category, whose raw
+/// values abbreviate the sizes: AX1 to AX5 are `…AccessibilityM`, `L`, `XL`, `XXL` and `XXXL`, so
+/// AX3, `UIContentSizeCategory.accessibilityExtraLarge`, is `…AccessibilityXL`.
 enum TextSize: String {
   case large = "UICTContentSizeCategoryL"
-  case ax3 = "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge"
+  case ax3 = "UICTContentSizeCategoryAccessibilityXL"
 
   /// The launch arguments that set it, through the arguments' defaults domain.
   var arguments: [String] { ["-UIPreferredContentSizeCategoryName", rawValue] }
@@ -203,6 +205,17 @@ extension XCTestCase {
     tab.tap()
     try awaitHeading(page.heading, in: app)
     XCTAssertTrue(tab.isSelected, "The \(page.label) tab isn't selected")
+  }
+
+  /// Scrolls `page`, the page on screen (`page-<view>`), down by four fifths of its height, so
+  /// each screenful shows the last fifth of the one before: a slow drag that holds still before
+  /// it lifts, so the page doesn't fling on past what the next screenful shows.
+  @MainActor
+  func scrollDown(_ page: HomeScreen.Page, in app: XCUIApplication) {
+    let shown = app.find("page-\(page.view)")
+    let from = shown.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9))
+    let to = shown.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1))
+    from.press(forDuration: 0.05, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.3)
   }
 
   /// Swipes the pages from `from` (the page on screen) towards `to`, the page beside it, and

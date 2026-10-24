@@ -31,14 +31,16 @@ final class OfflineTests: XCTestCase {
     try everyPage(later, in: app)
   }
 
-  /// Opened with no connection half a minute before the saved answer's last hour ends, with the
+  /// Opened with no connection two minutes before the saved answer's last hour ends, with the
   /// clock running: the answer shows, with the offline line; at `usableUntil`, Now, the middle
   /// page and the week each say there is no recent forecast, never the old hour, and the
-  /// offline line goes with the forecast.
+  /// offline line goes with the forecast. Two minutes, so that a slow launch on the runner
+  /// can't pass `usableUntil` before the test has read the answer; the wait for it allows for
+  /// the rest.
   @MainActor
   func testPastItsLastHourNoRecentForecastOnEveryPage() throws {
     let saved = try HomeScreen.named("aberdeen-snow")
-    let last = try HomeScreen.named("aberdeen-snow-last-seconds-offline")
+    let last = try HomeScreen.named("aberdeen-snow-last-minutes-offline")
     let past = try HomeScreen.named("aberdeen-snow-past-offline")
     try save(saved)
     let app = try launchApp(["-network", "off", "-now", last.now, "-clock", "run"])
@@ -46,9 +48,9 @@ final class OfflineTests: XCTestCase {
     try awaitHeading(opening.heading, in: app)
     try awaitNotice(in: app)
     expect(opening, in: app)
-    // The tick at `usableUntil` on the model's clock, 30 seconds after the launch's moment.
+    // The tick at `usableUntil` on the model's clock, two minutes after the launch's moment.
     let gone = try past.page(last.defaultView)
-    try awaitHeading(gone.heading, in: app, timeout: 75)
+    try awaitHeading(gone.heading, in: app, timeout: 180)
     expect(gone, in: app)
     for page in past.pages {
       try tap(page, in: app)

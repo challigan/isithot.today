@@ -1109,11 +1109,17 @@ export interface HomeScreenSpec {
 }
 
 /**
+ * How long before 6pm, or before the saved answer's hours end, a UI test's running clock starts.
+ */
+export const RUNNING_LEAD_MS = 2 * MINUTE;
+
+/**
  * Every screen the UI tests open: HomeTests' three fixtures at their own moments, Durham either
- * side of 6pm and from half a minute before it as the clock runs, and the first place under
- * "Nearby:"; OfflineTests' saved answer an hour on with no connection, its last half minute and
+ * side of 6pm and from two minutes before it as the clock runs, and the first place under
+ * "Nearby:"; OfflineTests' saved answer an hour on with no connection, its last two minutes and
  * its end (`usableUntil`) offline, a failed request over it, and nothing saved with no
- * connection.
+ * connection. The two clocks that run start `RUNNING_LEAD_MS` before their moment, so that a
+ * slow launch on the CI's simulator can't pass it before the test has read the screen before it.
  */
 export function homeScreens(fixtures: FixtureSet): HomeScreenSpec[] {
   const get = (name: string): Fixture => {
@@ -1137,7 +1143,7 @@ export function homeScreens(fixtures: FixtureSet): HomeScreenSpec[] {
   screens.push(
     durhamAt('durham-before-6pm', evening(17, 59)),
     durhamAt('durham-at-6pm', evening(18, 0)),
-    durhamAt('durham-flip-start', evening(17, 59) + 30 * 1000),
+    durhamAt('durham-flip-start', evening(18, 0) - RUNNING_LEAD_MS),
   );
   const aberdeen = get('aberdeen-snow');
   const nearby = aberdeen.nearby?.[0]?.name;
@@ -1160,7 +1166,7 @@ export function homeScreens(fixtures: FixtureSet): HomeScreenSpec[] {
       approximate: false,
     },
     at('aberdeen-snow-hour-ahead-offline', Date.parse(first.time) + 30 * MINUTE, 'offline'),
-    at('aberdeen-snow-last-seconds-offline', until - 30 * 1000, 'offline'),
+    at('aberdeen-snow-last-minutes-offline', until - RUNNING_LEAD_MS, 'offline'),
     at('aberdeen-snow-past-offline', until, 'offline'),
     at('aberdeen-snow-unavailable', own('aberdeen-snow') + 15 * MINUTE, 'error'),
     {

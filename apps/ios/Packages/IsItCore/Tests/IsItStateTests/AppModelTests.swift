@@ -634,3 +634,148 @@ struct AppModelOverlapTests {
     #expect(store.saves == 1)
   }
 }
+
+/// The view on screen (iOS build spec, section 10.2): the app opens on the view for the time of
+/// day (`MiddleDay.defaultView`) once, from the saved answer it paints or else from its first
+/// answer, unless the user has moved meanwhile or a route has chosen a view, as the website opens
+/// on it only once and never once the visitor has moved (`openOnDefault`, apps/web app.ts). After
+/// that the view moves only as the user moves it, by a route, or on the return after a long time
+/// away: never by itself, as a nearby place or Retry brings an answer.
+@MainActor
+@Suite("The view on screen")
+struct AppModelViewTests {
+  /// durham-tomorrow at 6:05pm, nothing saved, where the app would open on Now.
+  func evening(_ replies: [FakeTransport.Reply]) throws -> Harness {
+    Harness(
+      now: try fixtureNow("durham-tomorrow"),
+      store: .init(place: durham, units: .c),
+      replies: replies
+    )
+  }
+
+  @Test("moving during the launch's Checking… keeps the view the user chose")
+  func movedWhileChecking() async throws {
+    let transport = GatedTransport(
+      first: HTTPResponse(status: 200, body: try Fixtures.data("durham-tomorrow")),
+      others: HTTPResponse(status: 200, body: try Fixtures.data("durham-tomorrow"))
+    )
+    let model = AppModel(
+      environment: AppEnvironment(
+        client: APIClient(transport: transport),
+        clock: TestClock(try fixtureNow("durham-tomorrow")),
+        store: FakeState(.init(place: durham, units: .c)),
+        widgets: FakeWidgets(),
+        hooks: NoHooks(),
+        random: { _ in 0 }
+      ))
+    #expect(model.view == .today)
+    let launch = Task { await model.launch() }
+    try #require(await yieldUntil { transport.requests == 1 }, "the launch's fetch never started")
+    #expect(model.page(model.view, at: model.now).state == .loading)
+    model.view = .week
+    transport.release()
+    await launch.value
+    #expect(model.response != nil)
+    #expect(model.view == .week)
+    #expect(MiddleDay.defaultView(model.response, at: model.now) == .now)
+  }
+
+  @Test("choosing the view already on screen is no move: the first answer opens on Now")
+  func sameViewIsNoMove() async throws {
+    let h = try evening([try FakeTransport.fixture("durham-tomorrow")])
+    // As a pager or switcher may write back the view it shows.
+    h.model.view = .today
+    await h.model.launch()
+    #expect(h.model.view == .now)
+  }
+
+  @Test("a place under Nearby chosen on This week answers on This week")
+  func nearbyFromTheWeek() async throws {
+    let h = Harness(
+      now: try fixtureNow("aberdeen-snow"),
+      store: .init(place: aberdeen, units: .c),
+      replies: [try FakeTransport.fixture("aberdeen-snow"), .answer(try dundee())]
+    )
+    await h.model.launch()
+    #expect(h.model.view == .today)
+    h.model.view = .week
+    await h.model.select(dundeeTarget)
+    #expect(h.model.target == dundeeTarget)
+    #expect(h.model.view == .week)
+    #expect(onScreen(h.model).headingLabel == "Dundee. Will it snow this week? Yes.")
+  }
+
+  @Test("a place under Nearby chosen on Now in the evening answers on Now; on Tomorrow, there")
+  func nearbyInTheEvening() async throws {
+    let durhamAnswer = HTTPResponse(status: 200, body: try Fixtures.data("durham-tomorrow"))
+    let h = try evening([try FakeTransport.fixture("durham-tomorrow"), .answer(durhamAnswer)])
+    await h.model.launch()
+    #expect(h.model.view == .now)
+    h.model.view = .today
+    await h.model.select(.city(slug: "sunderland-gb", name: "Sunderland"))
+    #expect(h.model.view == .today)
+    #expect(onScreen(h.model).headingLabel == "Sunderland. Will it snow tomorrow? Yes.")
+  }
+
+  @Test("Retry after a failed launch with nothing saved keeps the view the user moved to")
+  func retryKeepsTheView() async throws {
+    let h = Harness(
+      now: try fixtureNow("aberdeen-snow"),
+      store: .init(place: aberdeen, units: .c),
+      replies: [.failure(.notConnectedToInternet), try FakeTransport.fixture("aberdeen-snow")]
+    )
+    await h.model.launch()
+    #expect(h.model.response == nil)
+    h.model.view = .now
+    await h.model.refresh()
+    #expect(h.model.response != nil)
+    #expect(h.model.view == .now)
+    #expect(onScreen(h.model).headingLabel == "Aberdeen. Is it snowing right now? No.")
+  }
+
+  @Test("Retry's answer, the first and the user not having moved, opens on the evening's Now")
+  func retryFirstAnswerOpens() async throws {
+    let h = try evening([
+      .failure(.notConnectedToInternet), try FakeTransport.fixture("durham-tomorrow"),
+    ])
+    await h.model.launch()
+    #expect(h.model.response == nil)
+    #expect(h.model.view == .today)
+    await h.model.refresh()
+    #expect(h.model.view == .now)
+    // A later answer never moves it.
+    h.model.view = .week
+    await h.model.refresh()
+    #expect(h.model.view == .week)
+  }
+
+  @Test("a route's view, followed after a failed launch, stands when Retry brings the answer")
+  func routeStands() async throws {
+    let h = try evening([
+      .failure(.notConnectedToInternet), try FakeTransport.fixture("durham-tomorrow"),
+    ])
+    await h.model.open(.view(.today))
+    await h.model.launch()
+    #expect(h.hooks.routes == [.view(.today)])
+    #expect(h.model.view == .today)
+    await h.model.refresh()
+    #expect(h.model.response != nil)
+    #expect(h.model.view == .today)
+  }
+
+  @Test("a saved answer painted at launch has chosen the view: the user's move stands")
+  func paintedThenMoved() async throws {
+    let saved = try savedAberdeen()
+    let h = Harness(
+      now: later(saved.savedAt, minutes: 15),
+      store: .init(place: aberdeen, units: .c, today: saved),
+      replies: [try FakeTransport.fixture("aberdeen-snow"), .answer(try dundee())]
+    )
+    #expect(h.model.view == .today)
+    h.model.view = .now
+    await h.model.launch()
+    #expect(h.model.view == .now)
+    await h.model.select(dundeeTarget)
+    #expect(h.model.view == .now)
+  }
+}

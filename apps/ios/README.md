@@ -476,8 +476,10 @@ brought forward the minute's tick, pull to refresh, the footer and the loading a
   `.scrollPosition(id:)`. Both are bound to `AppModel.view` (`$model.view` in `HomeView`), so a
   tap, a swipe, a widget's route (`.view`, which now sets the view) and the return after more
   than 30 minutes away (the view for the time of day) move both. The app opens on
-  `MiddleDay.defaultView`, Today or Now from 6pm. Only the page on screen is in the accessibility
-  tree, so VoiceOver and the UI tests read that one.
+  `MiddleDay.defaultView`, Today or Now from 6pm, once: from the saved answer it paints, or else
+  from its first answer, unless the user or a route has chosen a view by then, as the website
+  does; a place under "Nearby:" and Retry answer on the view the user is on. Only the page on
+  screen is in the accessibility tree, so VoiceOver and the UI tests read that one.
 - **The 6pm flip** needs nothing new: the minute's tick draws every page at the model's clock,
   so at 6pm at the place the middle tab reads Tomorrow and shows `snow.days[1]`, with no request.
   `FlipTests` (IsItStateTests) prove it at 5:59pm and 6pm in Durham (GMT), minute by minute in
@@ -487,10 +489,12 @@ brought forward the minute's tick, pull to refresh, the footer and the loading a
   the band changes (`GlyphMotion`); never with Reduce Motion, and never under `-now` or `-uitest`
   (`DebugHooks.stillMotion()`).
 - **VoiceOver hears a change once**: `Announcements` (IsItState) takes the page on screen each
-  time it is drawn and gives its heading when it says something new on the same view (an answer
-  after "Checking…", a refresh's new answer, the hour picked, Tomorrow from 6pm, no recent
-  forecast); nothing on a tick that changed nothing, on moving to another view, or while
-  checking. `HomeView` posts it (`UIAccessibility.post(notification: .announcement, …)`).
+  time it is drawn and gives its heading and verdict (`AppCopy.announcement`, as the website's
+  live region holds the two) when they say something new on the same view (a refresh's new
+  answer, the hour picked changing the answer or the verdict, Tomorrow from 6pm, no recent
+  forecast), or after "Checking…" on whichever view the answer opens; nothing on a tick that
+  changed nothing, on moving to another view, or while checking. `HomeView` posts it
+  (`UIAccessibility.post(notification: .announcement, …)`).
 - **Text sizes up to AX5**: every text wraps rather than truncating, the answer word shrinks to
   fit its line rather than breaking, the pages scroll, and Now's rows and the week's stack at
   accessibility sizes, as the model list already did.
@@ -511,7 +515,8 @@ at accessibility sizes), `page-now`, `page-today` and `page-week` (each page's s
 the one on screen), `hours-heading` and `hour-0` to `hour-5` (Now's rows), and `day-0` to
 `day-6` (the week's rows). Phase 5.4 added `model-0` onwards (the middle page's model list, each
 read as the model's name with its amount as the value) and `approximate` (the top bar's
-"Using approximate location." or the notice in its place).
+"Using approximate location." or the notice in its place), and its review `credits` (the
+footer's credits, a container of their lines, the last on the page).
 
 ## Phase 5.4: the home screen's accessibility, and its UI tests
 
@@ -543,33 +548,42 @@ file and line):
   or Now from 6pm), then each page by its tab, then back from This week to Now by swiping and on
   again, each tab selected as it shows. `testDefaultViewEitherSideOf6pm` opens Durham at 5:59pm
   (Today; Now, Today, This week) and at 6pm (Now; the middle tab Tomorrow).
-  `testTheMiddleTabTurnsToTomorrowAt6pm` opens at 5:59:30pm with `-clock run` and waits for 6pm:
-  the middle page turns to tomorrow where it is. `testNearbyLoadsInPlace` taps the first place
-  under "Nearby:" and reads its answer, and the chosen place on the top bar.
+  `testTheMiddleTabTurnsToTomorrowAt6pm` opens at 5:58pm with `-clock run` and waits up to three
+  minutes for 6pm: the middle page turns to tomorrow where it is. `testNearbyLoadsInPlace` taps
+  the first place under "Nearby:" and reads its answer, and the chosen place on the top bar;
+  `testNearbyLoadsInPlaceOnThisWeek` does it from This week, which stays on screen. The two
+  tests with a running clock (this flip, and `OfflineTests`' end of the saved answer's hours)
+  start `RUNNING_LEAD_MS` (packages/mobile `vectors.ts`, two minutes) before their moment, so a
+  slow launch can't pass it before the test has read the screen.
 - `OfflineTests`: each first saves aberdeen-snow from its fixture, then opens again over the
   app's own transport with the network stubbed. `testOfflineAnHourOnShowsThatHour` (`-network
 off` at 10:30am): the 10am hour on Now and Today, and the offline line on every page.
-  `testPastItsLastHourNoRecentForecastOnEveryPage` (`-network off`, half a minute before
+  `testPastItsLastHourNoRecentForecastOnEveryPage` (`-network off`, two minutes before
   `usableUntil`, clock running): the answer with the offline line, then no recent forecast on
   Now, the middle page and the week. `testOfflineWithNothingSaved`: no recent forecast and Retry
   on every page. `testAFailureOverTheAnswerKeepsItWithRetry` (`-network unavailable`, a quarter
   of an hour on): the answer stays on every page, with "Forecasts are unavailable…" and Retry,
   and stays when Retry fails again.
 - `HomeAuditTests` (spec 17.2's `AccessibilityAuditTests` for the home screen): each page of the
-  three fixtures at Large and at AX3 (`-UIPreferredContentSizeCategoryName`), with
-  `performAccessibilityAudit(for: .all)` on each. Every issue fails the test, once per fixture and
-  size, listing each with its page, kind (`contrast`, `hitRegion`, `dynamicType`, …), Apple's
-  descriptions and the element's identifier and label, except those in
-  `HomeAuditTests.exceptions`, each with why it isn't one. There are none: fix the app, or, for an
-  issue that is the audit's mistake, add it there with its reason.
+  three fixtures at Large and at AX3 (`-UIPreferredContentSizeCategoryName` with
+  `UICTContentSizeCategoryAccessibilityXL`; the test checks the switcher is buttons at AX3 and not
+  at Large, so the size reached the app), with `performAccessibilityAudit(for: .all)` on every
+  screenful, from the page's top to the end of its credits (an audit reads only what is on
+  screen). Every issue fails the test, once per fixture and size, listing each with its page and
+  screenful, kind (`contrast`, `hitRegion`, `dynamicType`, …), Apple's descriptions and the
+  element's identifier and label, except those in `HomeAuditTests.exceptions`, each with why it
+  isn't a fault to fix: the segmented control's own type size (`dynamicType`; section 10.2's
+  segmented picker, buttons that scale at accessibility sizes) and the credits' inline links
+  (`hitRegion`). The log names an exception a test didn't need. For a new issue, fix the app, or,
+  when it isn't a fault, add it there with its reason.
 
 **The contact sheet** tiles every attachment in its names' order (`ci/contact-sheet.mjs`, five
-screens to a row). `HomeAuditTests` attaches every page it audits as
-`home-<fixture>-<n>-<size>-<m>-<tab>`: `home-aberdeen-snow-1-large-1-now`,
-`…-1-large-2-today`, `…-1-large-3-this-week`, `…-2-ax3-1-now` and so on, then durham-tomorrow
-(whose middle tab is `2-tomorrow`) and leeds-dry: eighteen screens, fixture by fixture, Large
-before AX3, each in the switcher's order, after the `app-…` and `glyph-…` attachments and before
-the widgets'. Phase 5's exit asks for exactly these.
+screens to a row). `HomeAuditTests` attaches every screenful it audits as
+`home-<fixture>-<n>-<size>-<m>-<tab>-<k>`: `home-aberdeen-snow-1-large-1-now-01`, `…-1-now-02`,
+…, `…-1-large-2-today-01`, …, `…-1-large-3-this-week-01`, …, `…-2-ax3-1-now-01` and so on, then
+durham-tomorrow (whose middle tab is `2-tomorrow`) and leeds-dry: eighteen pages top to bottom,
+fixture by fixture, Large before AX3, each in the switcher's order, after the `app-…` and
+`glyph-…` attachments and before the widgets'. Phase 5's exit asks for these.
 
 **On Linux** (`swift test` in IsItCore): `ClockTests.swift` (`FixedClock`: one moment, work for a
 later time never runs, the model on it asks once; `MinuteTick.anchor`: each tick a twentieth of

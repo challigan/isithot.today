@@ -160,7 +160,7 @@ struct AnnouncementTests {
     #expect(onScreen(h.model).state == .loading)
     #expect(heard.hears(h.model) == nil)
     await h.model.launch()
-    #expect(heard.hears(h.model) == "Aberdeen. Will it snow today? Yes.")
+    #expect(heard.hears(h.model) == "Aberdeen. Will it snow today? Yes. It'll snow.")
     #expect(heard.hears(h.model) == nil)
     for minute in 1...10 {
       h.clock.now = later(made, minutes: Double(minute))
@@ -207,7 +207,7 @@ struct AnnouncementTests {
         == "Aberdeen. Is it snowing right now? Not available right now.")
     #expect(heard.hears(h.model) == nil)
     await h.model.refresh()
-    #expect(heard.hears(h.model) == "Aberdeen. Is it snowing right now? No.")
+    #expect(heard.hears(h.model) == "Aberdeen. Is it snowing right now? No. Raining, not snowing.")
     #expect(heard.hears(h.model) == nil)
     // The same answer again says nothing.
     await h.model.refresh()
@@ -235,7 +235,7 @@ struct AnnouncementTests {
     #expect(heard.hears(h.model) == nil)
   }
 
-  @Test("the hour picked changing Now's answer is announced once, at that hour")
+  @Test("the hour picked changing Now's answer or verdict is announced once, at that hour")
   func hourChanges() async throws {
     let made = try fixtureNow("aberdeen-snow")
     let res = try fixture("aberdeen-snow")
@@ -249,27 +249,34 @@ struct AnnouncementTests {
     let heard = Listener()
     #expect(heard.hears(h.model) == nil)
     // Each minute until the answer's hours run out: an announcement wherever the hour picked
-    // changes the heading, and only there.
+    // changes the heading or the verdict, and only there.
     let until = Freshness.usableUntil(res)
     var said: [(Date, String)] = []
     var minute = 1.0
-    var last = onScreen(h.model).headingLabel
+    let shown = onScreen(h.model)
+    var last = [shown.headingLabel, shown.verdict]
     var changes = 0
     while later(made, minutes: minute) < later(until, minutes: 2) {
       h.clock.now = later(made, minutes: minute)
       let page = onScreen(h.model)
-      if page.headingLabel != last { changes += 1 }
-      last = page.headingLabel
+      if [page.headingLabel, page.verdict] != last { changes += 1 }
+      last = [page.headingLabel, page.verdict]
       if let text = heard.hears(page) { said.append((h.clock.now, text)) }
       minute += 1
     }
     #expect(said.count == changes)
-    // At 3pm Now turns from No to Maybe (the fixture's last hour ahead); at usableUntil there is
-    // no recent forecast.
+    // At 10am Now's verdict turns from rain to none, its answer still No (the fixture's first
+    // hour ahead); at 3pm Now turns from No to Maybe (its last); at usableUntil there is no
+    // recent forecast.
+    #expect(said.count == 3)
+    let ten = try #require(res.snow?.ahead?.first?.time)
+    let dry = try #require(said.first)
+    #expect(dry.0 == ten)
+    #expect(dry.1 == "Aberdeen. Is it snowing right now? No. It's not snowing.")
     let three = try #require(res.snow?.ahead?.last?.time)
-    let maybe = try #require(said.first)
+    let maybe = try #require(said.dropFirst().first)
     #expect(maybe.0 == three)
-    #expect(maybe.1 == "Aberdeen. Is it snowing right now? Maybe.")
+    #expect(maybe.1 == "Aberdeen. Is it snowing right now? Maybe. Snow showers around.")
     // The first minute's tick from usableUntil on.
     let gone = try #require(said.last)
     #expect(gone.0 >= until && gone.0 < later(until, minutes: 1))
@@ -277,7 +284,6 @@ struct AnnouncementTests {
       gone.1
         == "Aberdeen. Is it snowing right now? No recent forecast. Connect to the internet to refresh."
     )
-    #expect(said.count == 2)
   }
 
   @Test("the 6pm flip is announced once, on the middle page")
@@ -296,7 +302,7 @@ struct AnnouncementTests {
       h.clock.now = later(made, minutes: Double(minute))
       if let text = heard.hears(h.model) { said.append(text) }
     }
-    #expect(said == ["London. Will it snow tomorrow? No."])
+    #expect(said == ["London. Will it snow tomorrow? No. Too warm for snow."])
   }
 
   @Test("a failure with nothing to show is announced, and then a nearby place's answer")
@@ -314,6 +320,96 @@ struct AnnouncementTests {
       heard.hears(h.model)
         == "Aberdeen. Will it snow today? No recent forecast. Connect to the internet to refresh.")
     await h.model.select(dundeeTarget)
-    #expect(heard.hears(h.model) == "Dundee. Will it snow today? Yes.")
+    #expect(heard.hears(h.model) == "Dundee. Will it snow today? Yes. It'll snow.")
+  }
+
+  @Test("the evening's first answer, which opens on Now while Checking… was on Today, once")
+  func eveningFirstAnswer() async throws {
+    let made = try fixtureNow("durham-tomorrow")
+    let h = Harness(
+      now: made,
+      store: .init(place: durham, units: .c),
+      replies: [try FakeTransport.fixture("durham-tomorrow")]
+    )
+    let heard = Listener()
+    #expect(h.model.view == .today)
+    #expect(onScreen(h.model).headingLabel == "Durham. Will it snow today? Checking…")
+    #expect(heard.hears(h.model) == nil)
+    await h.model.launch()
+    #expect(h.model.view == .now)
+    #expect(heard.hears(h.model) == "Durham. Is it snowing right now? No. Too warm for snow.")
+    #expect(heard.hears(h.model) == nil)
+    for minute in 1...10 {
+      h.clock.now = later(made, minutes: Double(minute))
+      #expect(heard.hears(h.model) == nil, "minute \(minute)")
+    }
+  }
+
+  @Test("nothing while a place under Nearby is checking; then its answer, once")
+  func checkingSaysNothing() async throws {
+    let saved = try savedAberdeen()
+    let transport = GatedTransport(first: try dundee(), others: try dundee())
+    let model = AppModel(
+      environment: AppEnvironment(
+        client: APIClient(transport: transport),
+        clock: TestClock(later(saved.savedAt, minutes: 1)),
+        store: FakeState(.init(place: aberdeen, units: .c, today: saved)),
+        widgets: FakeWidgets(),
+        hooks: NoHooks(),
+        random: { _ in 0 }
+      ))
+    let heard = Listener()
+    await model.launch()
+    #expect(transport.requests == 0)
+    #expect(heard.hears(model) == nil)
+    let selecting = Task { await model.select(dundeeTarget) }
+    try #require(
+      await yieldUntil { transport.requests == 1 }, "the nearby place's fetch never started")
+    #expect(onScreen(model).headingLabel == "Dundee. Will it snow today? Checking…")
+    #expect(heard.hears(model) == nil)
+    transport.release()
+    await selecting.value
+    #expect(heard.hears(model) == "Dundee. Will it snow today? Yes. It'll snow.")
+    #expect(heard.hears(model) == nil)
+  }
+
+  @Test("a place under Nearby chosen on This week is announced there")
+  func nearbyOnTheWeek() async throws {
+    let h = Harness(
+      now: try fixtureNow("aberdeen-snow"),
+      store: .init(place: aberdeen, units: .c),
+      replies: [try FakeTransport.fixture("aberdeen-snow"), .answer(try dundee())]
+    )
+    await h.model.launch()
+    h.model.view = .week
+    let heard = Listener()
+    #expect(heard.hears(h.model) == nil)
+    await h.model.select(dundeeTarget)
+    #expect(
+      heard.hears(h.model)
+        == "Dundee. Will it snow this week? Yes. Snow today and on Sun and Mon, heavy on Sun.")
+    #expect(heard.hears(h.model) == nil)
+  }
+
+  @Test("a new verdict under the same heading is announced, with the heading, at its hour")
+  func verdictChanges() async throws {
+    // leeds-dry on Today: still "No." at 2pm, where the hour ahead says it won't snow, not rain.
+    let h = Harness(
+      now: try fixtureNow("leeds-dry"),
+      store: .init(place: .city(slug: "leeds-gb", name: "Leeds"), units: .c),
+      replies: [try FakeTransport.fixture("leeds-dry")]
+    )
+    await h.model.launch()
+    let two = try #require(ApiJSON.parseDate("2026-12-01T14:00:00.000Z"))
+    h.clock.now = later(two, minutes: -1)
+    let heard = Listener()
+    let before = onScreen(h.model)
+    #expect(before.headingLabel == "Leeds. Will it snow today? No.")
+    #expect(before.verdict == "Rain, not snow.")
+    #expect(heard.hears(h.model) == nil)
+    h.clock.now = two
+    #expect(onScreen(h.model).headingLabel == before.headingLabel)
+    #expect(heard.hears(h.model) == "Leeds. Will it snow today? No. It won't snow.")
+    #expect(heard.hears(h.model) == nil)
   }
 }

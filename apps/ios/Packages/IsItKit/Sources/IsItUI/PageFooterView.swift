@@ -75,6 +75,9 @@ struct PageFooterView: View {
         }
       }
       .font(.footnote)
+      // The page's last lines, which the audits scroll to, and whose links they know by it.
+      .accessibilityElement(children: .contain)
+      .accessibilityIdentifier("credits")
     }
     .environment(
       \.openURL,

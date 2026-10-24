@@ -11,7 +11,7 @@ import {
 } from '../src/exportHomeScreens';
 import { FIXTURES, fixtureJson, makeFixture, type Fixture } from '../src/fixtures';
 import { fill } from '../src/page';
-import { homeScreens, vectorFiles, type VectorFile } from '../src/vectors';
+import { RUNNING_LEAD_MS, homeScreens, vectorFiles, type VectorFile } from '../src/vectors';
 
 const fixtures = new Map<string, Fixture>();
 let page: VectorFile;
@@ -106,13 +106,15 @@ describe('HomeScreens.json', () => {
     expect(pages('aberdeen-snow')[1].label).toBe('Today');
   });
 
-  it('has Durham at 5:59pm and 6pm at the place, and half a minute before 6pm', () => {
+  it('has Durham at 5:59pm and 6pm at the place, and two minutes before 6pm', () => {
     const local = (name: string) => localDateTime('Europe/London', new Date(screen(name).now));
     expect(Math.round(local('durham-before-6pm').hours * 60)).toBe(17 * 60 + 59);
     expect(Math.round(local('durham-at-6pm').hours * 60)).toBe(18 * 60);
     expect(
       Date.parse(screen('durham-at-6pm').now) - Date.parse(screen('durham-flip-start').now),
-    ).toBe(30_000);
+    ).toBe(RUNNING_LEAD_MS);
+    expect(RUNNING_LEAD_MS).toBe(120_000);
+    expect(Math.round(local('durham-flip-start').hours * 60)).toBe(17 * 60 + 58);
     expect(pages('durham-before-6pm')[1].label).toBe('Today');
     expect(pages('durham-flip-start')).toEqual(pages('durham-before-6pm'));
     expect(pages('durham-at-6pm')[1].label).toBe('Tomorrow');
@@ -137,11 +139,13 @@ describe('HomeScreens.json', () => {
     expect(pages('aberdeen-snow-hour-ahead-offline')[0].verdict).not.toBe(
       pages('aberdeen-snow')[0].verdict,
     );
-    // Its last half minute, still shown; then at usableUntil, no recent forecast on every page.
+    // Its last two minutes, still shown; then at usableUntil, no recent forecast on every page.
     const until = usableUntil(aberdeen);
-    expect(Date.parse(screen('aberdeen-snow-last-seconds-offline').now)).toBe(until - 30_000);
+    expect(Date.parse(screen('aberdeen-snow-last-minutes-offline').now)).toBe(
+      until - RUNNING_LEAD_MS,
+    );
     expect(Date.parse(screen('aberdeen-snow-past-offline').now)).toBe(until);
-    for (const name of ['aberdeen-snow-hour-ahead-offline', 'aberdeen-snow-last-seconds-offline']) {
+    for (const name of ['aberdeen-snow-hour-ahead-offline', 'aberdeen-snow-last-minutes-offline']) {
       for (const p of pages(name)) {
         expect(p.state, `${name} ${p.view}`).toBe('ready');
         expect(p.footer.notice).toBe(offline);
