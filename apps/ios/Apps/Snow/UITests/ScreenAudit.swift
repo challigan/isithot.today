@@ -3,61 +3,133 @@ import XCTest
 
 /// Section 16's accessibility audit of the screen on show, as the picker's and Settings' UI tests
 /// run it: XCUITest's `performAccessibilityAudit(for:)` (iOS 17), every kind of issue, in the two
-/// calls `AuditKinds.passes`. Each issue is noted with its kind, its element (type, identifier,
-/// label and frame on screen) and Apple's description, and a contrast issue with the screen's
-/// pixels inside its element (`PixelRange`); then the test fails once, listing them all, so one
-/// run shows every issue on the screen rather than stopping at the first (these tests stop at
-/// their first failure). Every issue is the app's to fix, but for those `exceptions` allow, each
-/// standing only while its control passes (`ScreenException`). (The toolbars' Close buttons,
-/// which failed Dynamic Type as text on PR #33's first macOS run, are icons now; Your privacy's
-/// back button, a bar button too, passed.) Should a system control the app can't change fail,
-/// its exception would match it as one of `app.navigationBars`' or the search bar's by its
-/// place, with the run's evidence, not by an identifier it may not have.
+/// calls `AuditKinds.passes`, each through `runAudit`, which times it and runs it again once
+/// should it not finish in time. Each issue is noted with its kind, its element (type,
+/// identifier, label and frame on screen) and Apple's description, and a contrast issue with the
+/// screen's pixels inside its element (`PixelRange`); then the test fails once, listing them all,
+/// so one run shows every issue on the screen rather than stopping at the first (these tests stop
+/// at their first failure). Nothing is allowed: every issue is the app's to fix. (The toolbars'
+/// Close buttons, which failed Dynamic Type as text on PR #33's first macOS run, are icons now;
+/// Your privacy's back button, a bar button too, passed. Settings' "About" header and "Report an
+/// ad", which a `Form` left "partially unsupported", are a scrolling page's now.) Should a system
+/// control the app can't change fail, an exception would match it as one of
+/// `app.navigationBars`' or the search bar's by its place, with the run's evidence, not by an
+/// identifier it may not have.
 ///
 /// The screen as audited and the app's element tree are attached first, as
 /// `audit-<screen>` and `audit-<screen>-tree`: on PR #33's second macOS run each failing sheet's
 /// test stopped at its audit, before it attached its screen, so nothing showed what the audit
-/// had read. The issues allowed and the exceptions no issue needed are attached as
-/// `audit-<screen>-allowed`, and the failure lists them too.
+/// had read. Each call's time is attached as `audit-<screen>-times`, however the audit ends.
 extension XCTestCase {
   @MainActor
   func auditAccessibility(
     of app: XCUIApplication,
     on screen: String,
-    allowing exceptions: [ScreenException] = [],
     file: StaticString = #filePath,
     line: UInt = #line
   ) throws {
     let found = AuditIssues()
+    let times = AuditTimes()
     // The screen as the first call audits it, for a contrast issue's pixels.
     let shot = app.screenshot()
     let window = app.frame
     let name = "audit-" + slug(screen)
     attachPNG(shot, as: name)
     attachText(app.debugDescription, as: "\(name)-tree")
-    // An exception's control on screen before the audit, which can't tell one it didn't read.
-    let shown = Set(exceptions.map(\.control).filter { app.staticTexts[$0].exists })
+    defer { attachText(times.text, as: "\(name)-times") }
+    // Where the screen's elements are as audited, so a call is run again only on this screen.
+    let audited = ScreenLayout(app)
     for kinds in AuditKinds.passes {
-      try app.performAccessibilityAudit(for: kinds) { issue in
+      let issues = try runAudit(of: app, for: kinds, at: screen, timing: times) {
+        guard app.state == .runningForeground else {
+          return "the app isn't in the foreground (state \(app.state.rawValue))"
+        }
+        return ScreenLayout.change(from: audited, to: ScreenLayout(app))
+      }
+      for issue in issues {
         found.note(issue, shot: shot, window: window)
-        // Noted, so the audit doesn't fail on it alone: the assertion below fails once for all.
-        return true
       }
     }
-    let judged = found.judged(by: exceptions, controlsShown: shown)
-    if !exceptions.isEmpty {
-      let unneeded = exceptions.filter { !judged.used.contains($0.why) }
-      attachText(
-        (judged.allowed.map { "Allowed: \($0)" } + unneeded.map { "Not needed: \($0.why)" })
-          .joined(separator: "\n"), as: "\(name)-allowed")
-    }
     XCTAssertTrue(
-      judged.unexpected.isEmpty,
-      "\(judged.unexpected.count) accessibility issues on \(screen), in the window at "
-        + "\(app.frame):\n"
-        + (judged.unexpected + judged.allowed.map { "Allowed: \($0)" })
-        .joined(separator: "\n"),
+      found.lines.isEmpty,
+      "\(found.lines.count) accessibility issues on \(screen), in the window at \(app.frame):\n"
+        + found.lines.joined(separator: "\n"),
       file: file, line: line)
+  }
+
+  /// Runs one audit call of `kinds` on the screen as it is, and gives the issues it found, in the
+  /// order found, for the caller to read once the call is done: the handler only keeps each, so
+  /// what the tests read of an issue (its element's properties, the credits' frame, a screenshot's
+  /// pixels) is read outside the call, and outside XCTest's deadline for it. Each call's time,
+  /// and its issues' count, go into `times`.
+  ///
+  /// A call that didn't finish in time (XCTest's "Audit failed to complete in time", -56,
+  /// `isAuditTimeout`) runs once more, with the same kinds, 2 seconds later, only once `settled`
+  /// finds the screen the one the call was to audit (nil; or why it isn't): the first attempt's
+  /// issues are dropped, so none is counted twice. On PR #33's third macOS run the first call on
+  /// the Now page's sixth screenful at AX3, the costliest screenful of the suite, ran some 17
+  /// seconds where about 7 were expected, with the app still on screen, and timed out; two other
+  /// calls of that test ran about 2.5 times as long as expected and finished (DECISIONS, "The
+  /// iPhone app's UI tests, after PR #33's third macOS run"). Any other error, a second failure,
+  /// or a screen that isn't the one to audit throws (`AuditFailure`), with each attempt's error
+  /// and time: every kind runs on every screen the test attaches, or the test fails.
+  @MainActor
+  func runAudit(
+    of app: XCUIApplication,
+    for kinds: XCUIAccessibilityAuditType,
+    at place: String,
+    timing times: AuditTimes,
+    settled: () -> String?
+  ) throws -> [XCUIAccessibilityAuditIssue] {
+    let first = timedAudit(of: app, for: kinds)
+    guard let error = first.error else {
+      times.add(AuditTime(place, kinds, first.seconds, issues: first.issues.count))
+      return first.issues
+    }
+    var failure = AuditFailure(place: place, kinds: kinds, first: error, after: first.seconds)
+    guard isAuditTimeout(error) else {
+      times.add(AuditTime(place, kinds, first.seconds, note: "failed: \(brief(error))"))
+      throw failure
+    }
+    let timedOut = "timed out (-56) after \(secondsText(first.seconds)) s"
+    RunLoop.current.run(until: Date().addingTimeInterval(2))
+    if let why = settled() {
+      failure.notRunAgain = why
+      times.add(AuditTime(place, kinds, first.seconds, note: "\(timedOut); not run again: \(why)"))
+      throw failure
+    }
+    let second = timedAudit(of: app, for: kinds)
+    guard let again = second.error else {
+      let note = "\(timedOut); ran again"
+      times.add(AuditTime(place, kinds, second.seconds, issues: second.issues.count, note: note))
+      return second.issues
+    }
+    failure.second = (again, second.seconds)
+    let how =
+      isAuditTimeout(again)
+      ? "timed out (-56) after \(secondsText(second.seconds)) s" : "failed: \(brief(again))"
+    times.add(AuditTime(place, kinds, second.seconds, note: "\(timedOut); ran again, \(how)"))
+    throw failure
+  }
+
+  /// One audit call, timed, its issues kept as they come.
+  @MainActor
+  private func timedAudit(
+    of app: XCUIApplication,
+    for kinds: XCUIAccessibilityAuditType
+  ) -> (issues: [XCUIAccessibilityAuditIssue], error: Error?, seconds: Double) {
+    var issues: [XCUIAccessibilityAuditIssue] = []
+    let start = ContinuousClock.now
+    do {
+      try app.performAccessibilityAudit(for: kinds) { issue in
+        issues.append(issue)
+        // Kept, so the audit doesn't fail on it alone: the caller fails once for all.
+        return true
+      }
+    } catch {
+      return (issues, error, seconds(since: start))
+    }
+    return (issues, nil, seconds(since: start))
   }
 
   /// Attaches `shot` to the result bundle as a PNG, kept, named `name`.
@@ -94,19 +166,6 @@ func slug(_ name: String) -> String {
   return out.hasSuffix("-") ? String(out.dropLast()) : out
 }
 
-/// An issue a sheet's audit allows, matched as narrowly as its element can be: an issue of
-/// `type` whose short description says `says`, on a static text labelled one of `labels`. It
-/// stands only while `control`, a static text of the same view and style, is on screen as the
-/// audit begins and the audit raises no issue of `type` on it: should the texts stop doing what
-/// the exception says they do, the control fails too, and the exception no longer applies.
-struct ScreenException {
-  let type: XCUIAccessibilityAuditType
-  let says: String
-  let labels: Set<String>
-  let control: String
-  let why: String
-}
-
 /// The audit's kinds, in the two calls the UI tests make for each screen, which together are all
 /// of them: first every kind that reads the screen as it is, then the Dynamic Type and clipped-text
 /// checks, which lay the app out at other text sizes and then put the size back. A page scrolled
@@ -129,21 +188,11 @@ enum AuditKinds {
   static let passes = [inPlace, resizing]
 }
 
-/// The issues one screen's audits found, each described, with what an exception reads of it.
+/// The issues one screen's audits found, each described.
 @MainActor
 private final class AuditIssues {
-  struct Noted {
-    let type: XCUIAccessibilityAuditType
-    let elementType: XCUIElement.ElementType?
-    let label: String
-    let compact: String
-    let text: String
-  }
-
-  private(set) var noted: [Noted] = []
-
   /// Each issue's description, in the order found.
-  var lines: [String] { noted.map(\.text) }
+  private(set) var lines: [String] = []
 
   func note(_ issue: XCUIAccessibilityAuditIssue, shot: XCUIScreenshot, window: CGRect) {
     var text =
@@ -153,45 +202,202 @@ private final class AuditIssues {
       let pixels = PixelRange(shot, in: element.frame, window: window)
       text += "; the screen's pixels there: " + (pixels.map(\.description) ?? "can't be read")
     }
-    noted.append(
-      Noted(
-        type: issue.auditType, elementType: issue.element?.elementType,
-        label: issue.element?.label ?? "", compact: issue.compactDescription, text: text))
+    lines.append(text)
+  }
+}
+
+/// Whether `error` is XCTest's "Audit failed to complete in time": code -56 in its accessibility
+/// audit's domain, which Apple doesn't document, nor how long the deadline is.
+func isAuditTimeout(_ error: Error) -> Bool {
+  let error = error as NSError
+  return error.domain == "com.apple.xcode.xctest.accessibilityAudit" && error.code == -56
+}
+
+/// An error on one line, for a line of `AuditTimes`: its domain and code and its description.
+func brief(_ error: Error) -> String {
+  let error = error as NSError
+  return "\(error.domain) \(error.code): \(error.localizedDescription)"
+    .replacingOccurrences(of: "\t", with: " ").replacingOccurrences(of: "\n", with: " ")
+}
+
+/// The seconds since `start`.
+func seconds(since start: ContinuousClock.Instant) -> Double {
+  let elapsed = start.duration(to: .now).components
+  return Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18
+}
+
+/// Seconds as the times and failures give them: "17.2".
+func secondsText(_ seconds: Double) -> String {
+  String(format: "%.1f", seconds)
+}
+
+/// An audit call that failed (`runAudit`), as the test's failure says it: where, which kinds,
+/// each attempt's error and time, and, for one that didn't finish in time and wasn't run again,
+/// why not.
+struct AuditFailure: Error, CustomStringConvertible, LocalizedError {
+  let place: String
+  let kinds: XCUIAccessibilityAuditType
+  let first: Error
+  let after: Double
+  /// Why a call that didn't finish in time wasn't run again: the screen wasn't the one to audit.
+  var notRunAgain: String?
+  /// The second attempt's error and time.
+  var second: (error: Error, after: Double)?
+
+  init(place: String, kinds: XCUIAccessibilityAuditType, first: Error, after: Double) {
+    self.place = place
+    self.kinds = kinds
+    self.first = first
+    self.after = after
   }
 
-  /// The issues `exceptions` don't allow, those they do (each with why), and the reasons of the
-  /// exceptions that allowed any; `controlsShown`, the controls on screen as the audit began.
-  func judged(
-    by exceptions: [ScreenException],
-    controlsShown: Set<String>
-  ) -> (unexpected: [String], allowed: [String], used: [String]) {
-    var unexpected: [String] = []
-    var allowed: [String] = []
-    var used: [String] = []
-    for issue in noted {
-      let candidate = exceptions.first { exception in
-        exception.type == issue.type && issue.elementType == .staticText
-          && exception.labels.contains(issue.label) && issue.compact.contains(exception.says)
+  var description: String {
+    let audit = "\(place): the audit of \(kinds.names)"
+    let firstTime = "after \(secondsText(after)) s"
+    guard isAuditTimeout(first) else { return "\(audit) didn't run (\(first)) \(firstTime)" }
+    if let notRunAgain {
+      return "\(audit) didn't finish in time (\(first)) \(firstTime), and wasn't run again: "
+        + notRunAgain
+    }
+    guard let second else { return "\(audit) didn't finish in time (\(first)) \(firstTime)" }
+    let secondTime = "after \(secondsText(second.after)) s"
+    if isAuditTimeout(second.error) {
+      return "\(audit) didn't finish in time twice: \(first) \(firstTime), then, run again on "
+        + "the same screen once it had settled, \(second.error) \(secondTime)"
+    }
+    return "\(audit) didn't finish in time (\(first)) \(firstTime), then, run again on the "
+      + "same screen once it had settled, didn't run (\(second.error)) \(secondTime)"
+  }
+
+  /// What XCTest reports of a test that throws it.
+  var errorDescription: String? { description }
+}
+
+/// One audit call as `runAudit` timed it: where, which kinds, its seconds (the last attempt's),
+/// how many issues it found, and what else befell it ("timed out (-56) after 17.2 s; ran again").
+struct AuditTime {
+  let place: String
+  let kinds: XCUIAccessibilityAuditType
+  let seconds: Double
+  let issues: Int
+  let note: String
+
+  init(
+    _ place: String,
+    _ kinds: XCUIAccessibilityAuditType,
+    _ seconds: Double,
+    issues: Int = 0,
+    note: String = ""
+  ) {
+    self.place = place
+    self.kinds = kinds
+    self.seconds = seconds
+    self.issues = issues
+    self.note = note
+  }
+
+  /// The attachment's columns, which ci/xcresult-summary.mjs `timings` reads.
+  static let header = "seconds\tplace\tkinds\tissues\tnote"
+
+  /// A line of the attachment, its fields tab-separated in `header`'s order.
+  var line: String {
+    [secondsText(seconds), place, kinds.names, "\(issues)", note].joined(separator: "\t")
+  }
+
+  /// For a test's report: "now page, screenful 6, contrast, …: 7.1 s, 0 issues".
+  var summary: String {
+    "\(place), \(kinds.names): \(secondsText(seconds)) s, \(issues) issue\(issues == 1 ? "" : "s")"
+      + (note.isEmpty ? "" : "; \(note)")
+  }
+}
+
+/// A test's or a screen's audit calls, timed (`runAudit`), attached as text a line a call
+/// (`AuditTime.line`): `print` reaches neither the log nor the result bundle, so CI lists the
+/// slowest calls and every one that timed out from the attachments (ci/xcresult-summary.mjs
+/// `timings`), and a timeout's time says roughly how long XCTest's deadline is.
+@MainActor
+final class AuditTimes {
+  private(set) var calls: [AuditTime] = []
+
+  func add(_ time: AuditTime) {
+    calls.append(time)
+  }
+
+  /// The attachment: the columns, then a line a call.
+  var text: String {
+    ([AuditTime.header] + calls.map(\.line)).joined(separator: "\n")
+  }
+
+  /// For a test's report: its slowest call, then each other that didn't go as a call should.
+  var report: [String] {
+    guard let slowest = calls.indices.max(by: { calls[$0].seconds < calls[$1].seconds }) else {
+      return []
+    }
+    let others = calls.indices.filter { $0 != slowest && !calls[$0].note.isEmpty }
+    return ["Slowest audit call: \(calls[slowest].summary)"]
+      + others.map { "Audit call: \(calls[$0].summary)" }
+  }
+}
+
+/// The screen's elements as one snapshot of the app has them, but those of type `other` (the
+/// containers, and scroll bars that come and go), each by its type, identifier, label and frame:
+/// by which an audit call that didn't finish in time runs again only on the screen it was to
+/// audit (`runAudit`).
+struct ScreenLayout {
+  struct Element {
+    let type: XCUIElement.ElementType
+    let identifier: String
+    let label: String
+    let frame: CGRect
+  }
+
+  let elements: [Element]
+
+  /// Of the app now; nil when it can't be read.
+  @MainActor
+  init?(_ app: XCUIApplication) {
+    guard let root = try? app.snapshot() else { return nil }
+    self.init(root)
+  }
+
+  /// Of `root`'s tree, in its order.
+  @MainActor
+  init(_ root: any XCUIElementSnapshot) {
+    var found: [Element] = []
+    var pending = [root]
+    while let node = pending.popLast() {
+      if node.elementType != .other {
+        found.append(
+          Element(
+            type: node.elementType, identifier: node.identifier, label: node.label,
+            frame: node.frame))
       }
-      guard let exception = candidate else {
-        unexpected.append(issue.text)
-        continue
-      }
-      // The control must have been read, and passed.
-      if !controlsShown.contains(exception.control) {
-        unexpected.append(
-          "\(issue.text) (not allowed: \"\(exception.control)\" wasn't on screen to be read)")
-      } else if noted.contains(where: { $0.type == exception.type && $0.label == exception.control }
-      ) {
-        unexpected.append(
-          "\(issue.text) (not allowed: \"\(exception.control)\" failed \(exception.type.names) too)"
-        )
-      } else {
-        allowed.append("\(issue.text). Allowed: \(exception.why)")
-        if !used.contains(exception.why) { used.append(exception.why) }
+      pending.append(contentsOf: node.children.reversed())
+    }
+    elements = found
+  }
+
+  /// How the screen `now` differs from the screen `audited`, or nil when each element is there,
+  /// of the same type and identifier, within a point of where it was (labels may change: a
+  /// line that says the time).
+  static func change(from audited: ScreenLayout?, to now: ScreenLayout?) -> String? {
+    guard let audited, let now else { return "the screen's elements can't be read" }
+    guard now.elements.count == audited.elements.count else {
+      return "the screen has \(now.elements.count) elements, where it had "
+        + "\(audited.elements.count) as audited"
+    }
+    for (before, after) in zip(audited.elements, now.elements) {
+      let (a, b) = (before.frame, after.frame)
+      let near =
+        abs(a.minX - b.minX) < 1 && abs(a.minY - b.minY) < 1 && abs(a.width - b.width) < 1
+        && abs(a.height - b.height) < 1
+      if before.type != after.type || before.identifier != after.identifier || !near {
+        return "the screen's " + describeElement(after.type, after.identifier, after.label, b)
+          + " was " + describeElement(before.type, before.identifier, before.label, a)
+          + " as audited"
       }
     }
-    return (unexpected, allowed, used)
+    return nil
   }
 }
 

@@ -22,7 +22,9 @@ import XCTest
 ///
 /// Every issue an audit finds fails the test, but for the exceptions in `exceptions`, each with
 /// why it isn't a fault to fix in the app. An element of the page is judged on a screenful that
-/// shows it whole (`AuditLog`).
+/// shows it whole (`AuditLog`). Each call goes through `runAudit` (ScreenAudit.swift): timed, the
+/// times attached at the test's end as `home-<fixture>-<order>-audit-times`, and run again once,
+/// on the screenful as attached, should it not finish in time.
 final class HomeAuditTests: XCTestCase {
   override func setUpWithError() throws {
     continueAfterFailure = true
@@ -158,21 +160,25 @@ final class HomeAuditTests: XCTestCase {
     // The window-sized element with no label, on every screenful of PR #33's two macOS runs.
     expectNoBareElements(app, "\(name) at \(order)")
     let found = AuditLog(tabs: screen.pages.map(\.label))
+    let times = AuditTimes()
+    // Every call's time, however the test ends (ci/xcresult-summary.mjs `timings` lists them).
+    defer { attachText(times.text, as: "home-\(name)-\(order)-audit-times") }
     for (index, page) in screen.pages.enumerated() {
       try tap(page, in: app)
       XCTAssertEqual(app.heading.label, page.heading, "\(page.view) page at \(order)")
       let tab = page.label.lowercased().replacingOccurrences(of: " ", with: "-")
       let colours = PageColours(palette: try HomeScreen.palette(of: page), window: app.frame)
       try audit(
-        page, as: "home-\(name)-\(order)-\(index + 1)-\(tab)", in: app, colours: colours,
-        noting: found)
+        page, as: "home-\(name)-\(order)-\(index + 1)-\(tab)", in: app, at: size,
+        colours: colours, noting: found, timing: times)
     }
     // What the exceptions allowed and which no issue needed, for the log and the result bundle:
-    // `print` reaches neither, so PR #33's runs couldn't say whether the credits' fired.
+    // `print` reaches neither, so PR #33's runs couldn't say whether the credits' fired. Then the
+    // slowest audit call, and any that didn't finish in time.
     let unneeded = Self.exceptions.indices.filter { !found.used.contains($0) }.map {
       "Not needed: \(Self.exceptions[$0].why)"
     }
-    let report = found.allowed.map { "Allowed: \($0)" } + unneeded
+    let report = found.allowed.map { "Allowed: \($0)" } + unneeded + times.report
     attachText(report.joined(separator: "\n"), as: "home-\(name)-\(order)-allowed")
     XCTAssertTrue(
       found.unexpected.isEmpty,
@@ -187,17 +193,21 @@ final class HomeAuditTests: XCTestCase {
   /// the page moved it with the credits. An element of the page that a screenful cuts at the
   /// page's edge, or shows not at all, is judged on a screenful that shows it whole
   /// (`AuditLog.settle`). Before the next scroll the page is put back where the screenful had it,
-  /// should an audit have moved it (`restore`). Fails, with where the page and its credits were,
-  /// when the credits aren't there, the app has left the foreground, an audit can't run, the
-  /// first call moves the page, the page stops scrolling before its end, or its end never comes
-  /// into view; for the last two, with what `stopped` finds too.
+  /// should an audit have moved it (`restore`). A call that doesn't finish in time runs again
+  /// once, only on the screenful as attached (`runAudit`, `unsettled`). Fails, with where the page
+  /// and its credits were, when the credits aren't there, the app has left the foreground, an
+  /// audit can't run or doesn't finish in time twice, the first call moves the page, the page
+  /// stops scrolling before its end, or its end never comes into view; for the last two, with
+  /// what `stopped` finds too.
   @MainActor
   private func audit(
     _ page: HomeScreen.Page,
     as name: String,
     in app: XCUIApplication,
+    at size: TextSize,
     colours: PageColours,
-    noting found: AuditLog
+    noting found: AuditLog,
+    timing times: AuditTimes
   ) throws {
     let credits = app.find("credits")
     guard credits.exists else {
@@ -230,25 +240,30 @@ final class HomeAuditTests: XCTestCase {
       // A contrast issue's pixels, from the screenful as attached.
       let pixels = { (frame: CGRect) in ScreenPixels(shot, in: frame, window: colours.window) }
       for kinds in AuditKinds.passes {
-        var after: CGRect?
+        let issues: [XCUIAccessibilityAuditIssue]
         do {
-          try app.performAccessibilityAudit(for: kinds) { issue in
-            // Where the credits are now, read once: how far the audit moved the page.
-            let now = after ?? credits.frame
-            after = now
-            found.note(
-              issue, on: place, in: screenful, moved: now.minY - screenful.credits.minY,
-              pixels: pixels, colours: colours)
-            return true
+          issues = try runAudit(of: app, for: kinds, at: place, timing: times) {
+            // Run again only on the screenful as attached: the resizing call's page put back
+            // first, as before a scroll.
+            if kinds == AuditKinds.resizing {
+              drags += restore(page, to: screenful, in: app, credits: credits)
+            }
+            return unsettled(app, at: size, credits: credits, as: screenful)
           }
         } catch {
           XCTFail(
-            "\(place): the audit of \(kinds.names) didn't run (\(error)); the app's state is "
-              + "\(app.state.rawValue), " + Screenful.describe(seen))
+            "\(error); the app's state is \(app.state.rawValue), " + Screenful.describe(seen))
           return
         }
+        // Where the credits are once the call is done: how far it moved the page, by which each
+        // issue's element is noted where it was on the screenful.
         let end = settledFrame(of: credits)
         let moved = end.minY - screenful.credits.minY
+        for issue in issues {
+          found.note(
+            issue, on: place, in: screenful, moved: abs(moved) < 1 ? 0 : moved, pixels: pixels,
+            colours: colours)
+        }
         guard abs(moved) >= 1 else { continue }
         let says =
           "\(place): the audit of \(kinds.names) moved the page \(moved) points, the credits from "
@@ -315,6 +330,30 @@ final class HomeAuditTests: XCTestCase {
       now = next
     }
     return drags
+  }
+
+  /// Why the screen isn't `screenful` as attached, for an audit call that didn't finish in time
+  /// to run again on it (`runAudit`), or nil when it is: the app in the foreground; the switcher
+  /// the one for `size`, so the text size is the test's (a Dynamic Type check cut short could
+  /// leave another); and the credits within a point of where the screenful had them.
+  @MainActor
+  private func unsettled(
+    _ app: XCUIApplication,
+    at size: TextSize,
+    credits: XCUIElement,
+    as screenful: Screenful
+  ) -> String? {
+    guard app.state == .runningForeground else {
+      return "the app isn't in the foreground (state \(app.state.rawValue))"
+    }
+    guard app.buttons["view-now"].exists == (size == .ax3) else {
+      return "the switcher isn't the one for the test's text size"
+    }
+    let now = settledFrame(of: credits)
+    guard abs(now.minY - screenful.credits.minY) < 1 else {
+      return "the page isn't where the screenful had it, the credits at \(now)"
+    }
+    return nil
   }
 
   /// What a page that stopped short of its end shows, for its failure to say, beyond where the
@@ -452,11 +491,11 @@ struct AuditedElement {
 /// it, scrolled off the page's top; the places nearby and the links failed it on the first
 /// screenful, at the screen's bottom edge or under it.
 ///
-/// An issue's element is read once the audit is done, so it is noted where it was on the
-/// screenful, moved back by as much as the audit moved the credits: on PR #33's macOS run, when
-/// one call held every kind, the Dynamic Type check had moved the page back before any issue was
-/// read, and elements under the switcher when the screenful was attached were judged whole where
-/// the move had brought them.
+/// An issue's element is read once the audit call is done (`runAudit`), so it is noted where it
+/// was on the screenful, moved back by as much as the audit moved the credits: on PR #33's macOS
+/// run, when one call held every kind, the Dynamic Type check had moved the page back before any
+/// issue was read, and elements under the switcher when the screenful was attached were judged
+/// whole where the move had brought them.
 @MainActor
 private final class AuditLog {
   /// An issue whose element wasn't whole on its screenful.

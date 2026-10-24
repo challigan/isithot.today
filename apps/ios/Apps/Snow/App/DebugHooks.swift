@@ -515,8 +515,8 @@ enum DebugHooks {
   /// size to Large, which the audit's Dynamic Type check failed on both lines.
   ///
   /// The URL wraps whole, so the lines take what height it needs, from the sheet's content:
-  /// Report an ad's email, 201 characters with no space, is about 5 lines at Large and taller
-  /// than the window at AX5. So no audit reads a sheet over lines that hold an email:
+  /// Report an ad's email, 201 characters with no space, is about 6 lines at Large, after its
+  /// label, and taller than the window at AX5. So no audit reads a sheet over lines that hold an email:
   /// `SettingsTests.testRowsOpenWhatTheySay` taps the emails after its pages' audits, and the
   /// mail fallback, audited with one recorded, covers Settings and its lines. Not held to a few
   /// lines in a scroll view: the URL would then be cut at the lines' foot, which is what the
@@ -536,18 +536,16 @@ enum DebugHooks {
               return mode == .nomail && url.scheme == "mailto" ? .discarded : .handled
             }
           )
-        // Each line's label says what it holds, and its value is the URL or the units, which the
-        // UI tests read: the URL as a label was "not human-readable" to the audit on PR #33's
-        // second macOS run, where "none" and "f" passed.
+        // Each line shows its label, then what it holds ("Units last asked for: f",
+        // `AppCopy.recorderLine`), held to its full height; its accessibility label is the label
+        // alone and its value what it holds, which the UI tests read. The URL as a label was "not
+        // human-readable" to the audit on PR #33's second macOS run; on its third the units' line,
+        // showing only "none" or "f" under its longer label and not held to its height, was "Text
+        // clipped", where the URL's line, held, passed showing "none" under "Last link opened".
         VStack(alignment: .leading, spacing: 2) {
-          Text(verbatim: recorder.opened)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityLabel(Text(verbatim: AppCopy.recorderOpened))
-            .accessibilityValue(Text(verbatim: recorder.opened))
+          line(AppCopy.recorderOpened, recorder.opened)
             .accessibilityIdentifier("debug-opened")
-          Text(verbatim: recorder.units)
-            .accessibilityLabel(Text(verbatim: AppCopy.recorderUnits))
-            .accessibilityValue(Text(verbatim: recorder.units))
+          line(AppCopy.recorderUnits, recorder.units)
             .accessibilityIdentifier("debug-units")
         }
         .font(.subheadline)
@@ -556,6 +554,15 @@ enum DebugHooks {
         .padding(.vertical, 4)
         .background(.background)
       }
+    }
+
+    /// A line of the recorder: `label`, then `value`, wrapping whole; to VoiceOver and the UI
+    /// tests, `label`, with `value` as its value.
+    private func line(_ label: String, _ value: String) -> some View {
+      Text(verbatim: AppCopy.recorderLine(name: label, value: value))
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityLabel(Text(verbatim: label))
+        .accessibilityValue(Text(verbatim: value))
     }
   }
 #endif

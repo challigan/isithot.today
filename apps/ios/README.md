@@ -635,11 +635,19 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   page's ink over its background at 4.5:1 or more at every corner, proven again on each issue
   (`contrast`). The issues allowed and any exception a test didn't need are attached
   (`home-<fixture>-<size>-allowed`) and listed in its failure. Each page's first screenful also
-  attaches the app's element tree (`<page>-tree`). A page that stops scrolling short of its end,
-  an app that has left the foreground or an
-  audit that can't run fails with where the page and its credits were on each screenful, and the
-  page's frame on each (the scroll view's viewport, PR #33's run showed). A page
-  that stops short, or never reaches its end, also says the page's whole frame and the window's,
+  attaches the app's element tree (`<page>-tree`). Each call goes through `runAudit`
+  (ScreenAudit.swift), which times it and reads its issues once it is done, outside XCTest's
+  deadline for the call; one that doesn't finish in time ("Audit failed to complete in time",
+  -56) runs once more, 2 seconds later, with the same kinds, only while the app is in the
+  foreground, the switcher is the test's size's and the page is within a point of the screenful
+  attached (the resizing call's page put back first), the first attempt's issues dropped. The
+  times are attached (`home-<fixture>-<size>-audit-times`, a line a call), and the slowest call
+  and any that timed out are named in `-allowed`. A page that stops scrolling short of its end,
+  an app that has left the foreground, or an audit that can't run, or doesn't finish in time
+  twice or on a screen that isn't the screenful's, fails with where the page and its credits were
+  on each screenful, and the page's frame on each (the scroll view's viewport, PR #33's run
+  showed); a timeout with each attempt's error and time. A page that stops short, or never
+  reaches its end, also says the page's whole frame and the window's,
   each drag (those that put the page back marked so), the page's four lowest elements and where
   a swipe by XCUITest's own gesture then moved the credits (a page at the end of its scroll range,
   or a drag it didn't take), and attaches the app's element tree as `<name>-tree-stopped`. For a
@@ -730,10 +738,11 @@ access off, and of its results with the keyboard put away by a drag. Their scree
 
 ### 6.2 and 6.3: Settings
 
-The gear opens the Settings sheet (spec sections 10.4, 10.6 and 10.7), a native `Form` in system
-materials. As on the home screen, IsItLogic makes the content as plain values (Linux-tested),
-IsItUI draws it, and the app connects them in one file (`SettingsSheet.swift`). DECISIONS has
-the choices ("The iPhone app's Settings").
+The gear opens the Settings sheet (spec sections 10.4, 10.6 and 10.7): sections of rows on cards,
+drawn as an inset grouped list draws them, in system materials, on a page that scrolls
+(`SheetPage`, not a `Form`). As on the home screen, IsItLogic makes the content as plain values
+(Linux-tested), IsItUI draws it, and the app connects them in one file (`SettingsSheet.swift`).
+DECISIONS has the choices ("The iPhone app's Settings").
 
 - **The rows, in order:** Snow units (cm | in, the footnote beneath: `UnitsSegments`, a
   segmented control drawn as two buttons whose labels grow with the text, the one chosen marked
@@ -757,8 +766,11 @@ the choices ("The iPhone app's Settings").
   (`YourPrivacyView`, `HowItWorksView`, `CreditsView`, `NoticeView`) and `MailFallbackView`.
   Credits and licences gives each credit's words whole, then each of its sources and licences
   as a row of its own that opens it, not as links inside the sentence; a notice's project link
-  is 44 points tall. Your privacy is a page of paragraphs that scrolls, as How it works is, not a
-  `Form`, whose jump to its top during the audit's text-size check left its last row unmeasured.
+  is 44 points tall. No page of the sheet is a `Form`: each scrolls (`SheetPage`,
+  SheetStyle.swift), Settings and Credits and licences as sections of rows on cards
+  (`SheetSection`, `SheetRowStyle`, each row a button 52 points tall or more), How it works, Your
+  privacy and a notice as paragraphs. The audit's Dynamic Type check failed a `Form`'s rows and
+  headers that grew with the text, and passed a scroll view's text on screen or not (DECISIONS).
   A section of Settings has a header only when it has a heading.
 - **The sheets' colours** (the picker's too) are the system's but where those fall short of
   WCAG AA's 4.5:1 for text under 18 points in the light appearance: `SheetStyle` (IsItUI) draws
@@ -799,19 +811,18 @@ exceptions, above) go through `auditAccessibility(of:on:)` (`UITests/ScreenAudit
 `performAccessibilityAudit(for:)` for every kind of issue, in the home audit's two calls
 (`AuditKinds`: contrast, element detection, hit regions, descriptions and traits, then Dynamic
 Type and clipped text, the seven kinds the iOS SDK defines, each named rather than `.all` less
-two), with a handler that notes each issue with its kind (named as `HomeAuditTests`
-names it), its element's type, identifier, label and frame, and Apple's description, a contrast
-issue with the screen's darkest and lightest pixels inside the element, then one failure that
-lists them all with the window's frame. The tests stop at their first failure, so without it a
+two), each issue noted once its call is done with its kind (named as `HomeAuditTests` names
+it), its element's type, identifier, label and frame, and Apple's description, a contrast issue
+with the screen's darkest and lightest pixels inside the element, then one failure that lists
+them all with the window's frame. The tests stop at their first failure, so without it a
 run would show one issue a screen. Each audit first attaches the screen as audited and the
-element tree (`audit-<screen>`, `audit-<screen>-tree`). Every issue is the app's to fix but one,
-for Settings' audit alone: "partially unsupported" for Dynamic Type on the "About" header,
-standing only while "Privacy", the same text in the same style, is on screen and passes
-(`SettingsTests.headersGrow`, a `ScreenException`; what it allowed is attached as
-`audit-<screen>-allowed`). The
-sheets' Close buttons (`picker-close`, `close-settings`, `close-fallback`) are the xmark with
-"Close" as their label (`CloseLabel`, IsItUI), not the word on screen, which a toolbar draws at
-the bar's own type size and the audit failed for Dynamic Type.
+element tree (`audit-<screen>`, `audit-<screen>-tree`), and each call goes through `runAudit`, as
+the home audit's do: timed (`audit-<screen>-times`), and run again once after a timeout only
+while the screen's elements are where they were as audited. Every issue is the app's to fix: the
+sheets' audits allow none. The sheets' Close buttons (`picker-close`, `close-settings`,
+`close-fallback`) are the xmark with "Close" as their label (`CloseLabel`, IsItUI), not the word
+on screen, which a toolbar draws at the bar's own type size and the audit failed for Dynamic
+Type.
 
 ### How they meet
 
@@ -907,7 +918,9 @@ on every run. It uploads, for five days:
 - `package-resolved`: only when the committed file can't be used (below).
 
 Each step's outcome goes to the run's summary page and to the job log: the build's errors and
-warnings with file and line, each test plan's counts and every failure with its file and line
+warnings with file and line, each test plan's counts and every failure with its file and line,
+the UI plan's audit calls' times, read from its attachments (the ten slowest and every call that
+timed out, with the time a timeout took, which says roughly how long XCTest's deadline is)
 (`ci/test.sh`, using `ci/xcresult-summary.mjs`), and the Release checks. xcbeautify also turns
 compiler errors into annotations.
 
@@ -922,9 +935,10 @@ minutes, the macOS job in about 15.
 1. `actions_list` for the workflow runs of `ios.yml` on the branch, newest first; then the run's
    jobs and their steps' conclusions (`actions_get`).
 2. `get_job_logs` for a failed job (or only its failed steps). The step summaries are in the log
-   as well: search for `### Build:`, `### Unit:`, `### UI:`, `### Release build:`,
-   `### Archive, unsigned` and `### Archive checks:`. Each failure is a table row with the test,
-   `File.swift:line` and the message, or for the archive checks a line naming the check.
+   as well: search for `### Build:`, `### Unit:`, `### UI:`, `### Audit times:`,
+   `### Release build:`, `### Archive, unsigned` and `### Archive checks:`. Each failure is a
+   table row with the test, `File.swift:line` and the message, or for the archive checks a line
+   naming the check.
 3. Compiler errors are in the `Build for testing` step: `### Build: failed, N errors` and a row
    per error with its path from `apps/ios/` and line.
 
@@ -1046,11 +1060,13 @@ launch argument. So far there are these:
   web page, email and Settings page it would open instead of leaving the app, and shows the last one
   below the sheet's content, on an opaque background in `subheadline`, so no row runs under it and
   its text follows every text size (`debug-opened`), with the units the last request to the server
-  asked in (`debug-units`: `c`, `f`, or `none`); each line's label says what it holds ("Last link
-  opened", "Units last asked for"), and its value is the URL or the units, which the tests read; the
-  URL wraps whole, so its height is taken from the content's, and no test audits a sheet over an
-  email's lines; `-openURLs nomail` also refuses every `mailto:` URL, as a phone with no mail app
-  does, so the fallback sheet shows. Any other value stops the app;
+  asked in (`debug-units`: `c`, `f`, or `none`); each line shows its label, then what it holds
+  ("Units last asked for: f", `AppCopy.recorderLine`), held to its full height; its accessibility
+  label is the label alone ("Last link opened", "Units last asked for") and its value the URL or
+  the units, which the tests read; the URL wraps whole, so its height is taken from the
+  content's, and no test audits a sheet over an email's lines; `-openURLs nomail` also refuses
+  every `mailto:` URL, as a phone with no mail app does, so the fallback sheet shows. Any other
+  value stops the app;
 - the unit tests' host: when the app only hosts the unit tests (XCTest's
   `XCTestConfigurationFilePath` in its environment), it doesn't launch (`AppModel.launch()`), so
   the hosted tests have the App Group to themselves; a launch with `-fixture` or `-network`

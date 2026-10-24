@@ -201,6 +201,11 @@ public enum AppCopy {
   public static let creditsSoftware = "Typeface and software"
   public static let recorderOpened = "Last link opened"
   public static let recorderUnits = "Units last asked for"
+
+  public static func recorderLine(name: String, value: String) -> String {
+    "\(name): \(value)"
+  }
+
   public static let widgetName = "Snow forecast"
   public static let widgetDescription = "Today's snow answer, then tomorrow's from 6pm."
   public static let widgetLocked = "Open the app to turn on widgets."

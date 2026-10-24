@@ -2933,7 +2933,9 @@ and licences, the static lines of Your privacy, and Report an ad (sections 10.4,
   accessibility audits) are Apple only, so the macOS jobs prove them first; whether XCUITest
   finds the segmented control's segments by "cm" and "in", and whether the audit passes the
   system's own Form and navigation bar, are from practice, unchecked. The presenters, the
-  model, the copy and the generated files ran here.
+  model, the copy and the generated files ran here. (The audit failed the Form's text on PR #33's
+  macOS runs: Settings is a page that scrolls now, "The iPhone app's UI tests, after PR #33's
+  third macOS run".)
 
 ## The iPhone app's phase 6, put together (apps/ios, packages/mobile)
 
@@ -3756,7 +3758,8 @@ recordings) and run 1's element trees were read for each cause. The fixes:
   same check on How it works, where "none" and "f" had passed. Each line is labelled ("Last link
   opened", "Units last asked for", `AppCopy`, shown only in Debug builds) with the URL or the units
   as its value, which the screen still shows; SettingsTests and PickerTests read the value, and
-  check the labels.
+  check the labels. (On run 3 the units' line, showing only its value under the longer label, was
+  "Text clipped": each line shows its label too now, next section.)
 - **Settings' "About" header** was "partially unsupported" for Dynamic Type on both runs, at the
   same frame, while Privacy and Help, the same `Text` in the same style from the same `ForEach`,
   passed. The recording shows it growing at every size it is on screen, xSmall to AX2, 0.80 to 0.84
@@ -3771,7 +3774,9 @@ recordings) and run 1's element trees were read for each cause. The fixes:
   the audit begins and the audit raises no Dynamic Type issue on it (`ScreenException`,
   ScreenAudit.swift); not Help, which never failed. Should About stop growing, Privacy, on screen
   at every size, fails too, and the exception no longer applies; the allowed issue and an
-  exception not needed are attached (`audit-<screen>-allowed`) and listed in the failure.
+  exception not needed are attached (`audit-<screen>-allowed`) and listed in the failure. (Run 3
+  failed About again, with no empty header before it, and Report an ad: what set them apart was
+  the `Form`, which Settings no longer is, and the exception is gone, next section.)
 - **Your privacy is a page that scrolls.** `testYourPrivacy` scrolls to the page's end before its
   audit, so the full policy's row was at y=738. The recording shows the `Form` jump back to its top
   as the Dynamic Type check began and stay there through all twelve sizes, so the row was on
@@ -3780,7 +3785,10 @@ recordings) and run 1's element trees were read for each cause. The fixes:
   wrong: the recorder now sits below the content and the row failed again. `YourPrivacyView` is
   now a scroll view of paragraphs, as How it works is, the policy's row 44 points tall: a scroll
   view keeps its offset, held to its end, and no text a scroll view had brought into view was
-  failed so (the home pages' second screenfuls, scrolled to their ends).
+  failed so (the home pages' second screenfuls, scrolled to their ends). (The row passed on run 3,
+  but not for that reason: the page went back to its top as the check began, as the `Form` had,
+  and the row was on screen only at the two smallest sizes. What failed it was the `Form`'s cells,
+  next section.)
 - **What the next run settles:** whether any bare element is left (`expectNoBareElements`, with
   its path) and the trees; whether the band alone cleared the buttons' contrast, its frame in the
   tree and the hit-region check passing it at 34 points; the search box's type, height and hit
@@ -3797,6 +3805,136 @@ recordings) and run 1's element trees were read for each cause. The fixes:
   and the edge tap's offset (19.5 points above a 34-point band's centre). IsItUI, the app and the
   UI tests compile only on macOS: `WordsButton`'s shape, `SearchBox` and the scrolling privacy
   page are for the next run's trees and screens to show.
+
+## The iPhone app's UI tests, after PR #33's third macOS run
+
+PR #33's `ios` run on 1cc28b7 (run 40100641627, job 120892226190) ran the 39 UI tests: 35 passed,
+five of the six HomeAuditTests and every behaviour test among them, and 4 failed.
+`testAberdeenSnowAtAX3`: the first audit call on the Now page's sixth screenful threw "Audit failed
+to complete in time" (code -56). Three SettingsTests: "Text clipped" on the Debug recorder's units
+line (`debug-units`) on How it works, Settings and Your privacy, and on Settings, "Report an ad"
+"partially unsupported" for Dynamic Type (and "About", which `headersGrow` allowed). This run's
+screen recordings, screenshots and element trees, and run 2's, were read for each cause. The fixes:
+
+- **An audit call ran out of XCTest's time, with the app still.** A screen recording writes a frame
+  only when the screen changes; each frame's time (ffprobe), set beside the attachments' times,
+  times the first call on every screenful, up to the Dynamic Type check's burst of 13 frames (a
+  frame a size, xSmall to AX5, then AX3 again). The failing call began about 0.2 seconds after its
+  screenful's screenshot (14:12:53.667), and the next thing the test did, tap Today, began at
+  14:13:11.98: the call ran some 17 seconds. On run 2 the same call took 12.4, the longest of about
+  130 calls timed; this run took about 0.55 of run 2's time a screenful (the window-sized background
+  element gone), so about 7 was to be expected. The test's other first calls took 3.3 to 7.9 seconds
+  on Now, 3.5 to 9.5 on Today and 3.0 to 10.8 on This week; two of them, Today's first screenful
+  (9.5) and This week's ninth (10.8), ran about 2.5 times as long as expected and finished. The app
+  was still: no frame from the last drag's end (14:12:51.6) to the tap (14:13:12.25) but one at
+  14:13:00.08, within 4 levels of the frame before it, the status bar at the minute, as at about :00
+  of every minute in both runs; the app's minute tick falls at about :17.7 each minute under the
+  fixed clock (`MinuteTick.anchor`) and drew no frame there; `WordsButton`'s geometry callback fires
+  only when its words change size, which nothing did, every Dynamic Type burst is exactly 13 frames,
+  and the same eight places nearby were audited in 6.2 and 4.6 seconds on Today and This week; the
+  test found no issue, so no handler ran; and the tree is about 60 elements. That screenful is the
+  suite's costliest to audit, with the most controls at once (the eight places nearby, the credits'
+  four links, the top bar, the switcher's three buttons), and on every page the lower screenfuls
+  cost more. So the slowdown was the simulator's audit service's or the host's, and the call that
+  met it on the costliest screenful went over the limit. Which of the two, the artefacts can't say.
+  Apple documents neither -56 nor the deadline; other projects report it on busy hosts, count an
+  issue handler's time against it, and retry on -56 alone (justinahn711/weight-training-app #193 and
+  #196, straff2002/OpenGlasses #484). The test then left the page (`return`), so Now's seventh and
+  eighth screenfuls went unaudited: the test failed, so nothing was hidden, but that coverage was
+  lost.
+- **A call that times out runs once more, on the same screen** (`runAudit`, ScreenAudit.swift, for
+  HomeAuditTests and every sheet's audit). Its handler only keeps each issue; the tests read the
+  issue's element, the credits' frame and the screenshot's pixels once the call is done, outside its
+  deadline (they were already read only after the checks finished). On -56, and nothing else, the
+  attempt's issues are dropped, so none is counted twice; 2 seconds later, should the screen be the
+  one the call was to audit, the same call with the same kinds runs again. On the home pages that is
+  the app in the foreground, the switcher the one for the test's text size (a Dynamic Type check cut
+  short could leave another) and the credits within a point of where the screenful had them, the
+  resizing call's page put back first (`restore`, which may stop up to 24 points short, and then the
+  call doesn't run again); on the sheets, every element but the containers of the same type and
+  identifier within a point of where it was as audited (`ScreenLayout`). A second timeout, a screen
+  that isn't the one, or any other error fails the test, with each attempt's error and time. Not an
+  exception and not a skip: every kind runs on every screenful attached, or the test fails. Not more
+  than once, nor without the check, either of which could audit a screen other than the one
+  attached.
+- **The calls' times are kept.** Each call's place, kinds, seconds, issues and any timeout are
+  attached at the test's end (`home-<fixture>-<size>-audit-times`, `audit-<screen>-times`, a line a
+  call), and the slowest call and any that timed out are named in `home-<fixture>-<size>-allowed`.
+  `print` reaches neither the log nor the result bundle, so `ci/test.sh` reads them from the
+  exported attachments (`xcresult-summary.mjs timings`, tested on Linux) and puts the ten slowest
+  calls and every one that timed out in the step summary and the log (`### Audit times:`), with the
+  time each timeout took, roughly the deadline. Should the first call come to more than about 60% of
+  that, `AuditKinds.inPlace` is to be split in two calls (contrast, then the other four): every kind
+  still runs on every screenful, each call with a deadline of its own, at about one call more a
+  screenful.
+- **The Debug recorder's lines show their labels.** "Text clipped" was on `debug-units`, labelled
+  "Units last asked for", 34 by 18 points showing "none" (How it works, Your privacy) and 5.33 by 18
+  showing "f" (Settings). From run 2 to run 3 only its label changed, to the longer words, the
+  screen still showing the value alone; on run 2, its label the text it showed, it passed. The label
+  alone doesn't explain it: `debug-opened` showed the same "none", 34 points wide, under "Last link
+  opened" on Settings and Your privacy, and passed. The one difference between the two lines was
+  `.fixedSize(horizontal: false, vertical: true)`, the opened line's and not the units'. Each line
+  now shows its label, then what it holds ("Units last asked for: f", `AppCopy.recorderLine`,
+  packages/mobile first), held to its full height; its accessibility label is the label alone and
+  its value what it holds, as the tests read them, byte for byte. Either change might do alone; the
+  two runs implicate both, so both. The lines are taller for it: Report an ad's email takes about 6
+  lines at Large, and with Support's address recorded the two take about half the window at AX5,
+  where How it works is audited.
+- **Settings is a page that scrolls.** The recording of Settings' text-size check (12 sizes) shows
+  the `Form` at its top at every size, and every row growing at every size it is on screen. Report
+  an ad is on screen from xSmall to AX2, half cut at AX3 and gone at AX4 and AX5; About is gone from
+  AX3. How it works leaves at AX3 too, as About does; Credits and licences and Terms leave from AX1,
+  Help's header from xxL; all passed, and Privacy policy, on screen through AX4, passed. So whether
+  a row stays on screen doesn't divide what passed from what failed, and nothing in the rows does:
+  Report an ad passed on run 2 (with an empty header above it), and About failed on all three runs,
+  the empty header before it gone on this one. What the texts that failed share is the `Form`, a
+  collection view whose cells exist only while on screen and are reused for other rows, so which of
+  its texts the audit can follow from size to size is the `Form`'s doing. A scroll view lays out
+  every view at every size, and its text has passed on screen or off on every run: How it works (its
+  paragraphs off screen from Large), the home pages, and now Your privacy, whose policy row failed
+  "unsupported" and clipped as a `Form`'s row on runs 1 and 2 and passed as a scroll view's on this
+  one, though the page went back to its top as the check began, as the `Form` had, so the row was on
+  screen only at the two smallest sizes (the previous section's reason, that a scroll view keeps its
+  offset, was wrong). The evidence's reading, not a proof: Apple doesn't publish the audit's rules.
+  Settings is now `SheetPage(.grouped)` (IsItUI, SheetStyle.swift): a scroll view of
+  `SheetSection`s, each its header (`.headline` in `SheetStyle.secondary`, a heading to VoiceOver),
+  its rows on a card with a hairline between each two (`SheetDivider`), and its footer
+  (`.footnote`); each row is a button the whole row wide and at least 52 points tall
+  (`SheetRowStyle`, pressed in `systemGray4`), a page on the stack in the primary colour with a
+  chevron (`PageRowLabel`), a page or email outside the app in the tint with its arrow
+  (`LeavingRow`). The measures (`SheetMetrics`) are read off this run's Settings screenshot: the
+  grouped background #F2F2F7 with white cards 16 points in, corners of about 26 (25.8 and 25.9 by a
+  circle's fit), rows 52 tall with their 20.33-point text 16 points in, the units row 78 with its
+  48-point control, hairlines at (32, y, 338, 1), and the header in `.headline` ("Privacy" 56.7
+  points wide against 53.3 in a row), the footer in `.footnote`. Credits and licences, a `Form` too
+  and never yet audited (`testRowsOpenWhatTheySay` stopped before it on all three runs), is the same
+  now, its sources' links buttons that call `openURL`, as Settings' rows do; How it works, Your
+  privacy and a notice are `SheetPage`'s plain style, drawn as before. The picker's `List` stays: it
+  passed on this run. A departure from section 10.4's native form, its look kept but for the
+  sections 24 points apart (17 to 35 in the `Form`), the first card 16 points under the bar (35) and
+  the pressed row the app's own. Not a `List` with `.insetGrouped`, the same collection view, nor a
+  `LazyVStack`, lazy too. Should About or Report an ad fail again as a scroll view's text, laziness
+  wasn't the cause: `audit-settings` and `audit-settings-tree` show what the audit read, and the
+  header's frame there is the next thing to read.
+- **The sheets' audits allow nothing again.** `SettingsTests.headersGrow` is gone, and with it
+  `ScreenException`, `allowing:` and `audit-<screen>-allowed`, which nothing else used.
+  `testUnitsChangeAsksInTheNewUnits` also checks Your privacy's row is 44 points tall or more.
+- **What the next run settles:** the times, whether a -56 comes at about the same time each time
+  (the deadline), how often calls slow down so, and whether a call run again passes; whether
+  Settings' About and Report an ad pass as a scroll view's, Credits and licences' first audit, and
+  the recorder's lines under "Text clipped"; and the grouped pages' look on the contact sheet
+  (`app-settings`, `app-credits`).
+- **Checked on Linux:** the copy's test (written first) and `pnpm mobile:generate`; IsItCore's
+  tests; the nine UI test files type-check against the stubs of XCUITest, whose
+  `XCUIApplication.state` and `performAccessibilityAudit` are `open` now, as an Objective-C class's
+  members are in the SDK, so a fake can stand in; and copies of the new logic ran there: `runAudit`
+  against a fake app (a timeout run again once, after the pause, only once settled, its first issues
+  dropped; a second timeout, or a screen not settled, failing with both errors and times; another
+  error failing at once, with no pause and no check), `ScreenLayout` (a row moved 2 points found,
+  half a point, a scroll bar coming and going and a label changing not), and the times' lines and
+  report; `xcresult-summary.mjs timings` against an export's manifest (vitest). IsItUI and the app
+  compile only on macOS: `SheetPage`, the Settings and Credits pages and the recorder's lines are
+  for the next run's screens and trees to show.
 
 ## API contract
 

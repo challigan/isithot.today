@@ -26,6 +26,7 @@ import {
   questionTemplates,
   questionsSwift,
 } from '../src/exportQuestions';
+import { fill } from '../src/page';
 import { generatedHeader, swiftString, templateSlots } from '../src/swift';
 
 /** The lines between `start` and the next line that is exactly `end`. */
@@ -272,6 +273,7 @@ describe('APP_COPY', () => {
       howWarm: ['warm'],
       howWeek: ['height'],
       forecastModels: ['count', 'agencies'],
+      recorderLine: ['name', 'value'],
       agreementShort: ['snowy', 'total'],
       intentPhrase: ['app'],
     });
@@ -471,5 +473,13 @@ describe('the labels the accessibility audit reads', () => {
   it('names the Debug recorder’s lines, whose values are the URL and the units', () => {
     expect(APP_COPY.recorderOpened).toBe('Last link opened');
     expect(APP_COPY.recorderUnits).toBe('Units last asked for');
+  });
+
+  it('shows each Debug recorder line as its label, then what it holds', () => {
+    // The value alone under a longer label was "Text clipped" on PR #33's third macOS run.
+    expect(APP_COPY.recorderLine).toBe('{name}: {value}');
+    expect(fill(APP_COPY.recorderLine, { name: APP_COPY.recorderUnits, value: 'f' })).toBe(
+      'Units last asked for: f',
+    );
   });
 });

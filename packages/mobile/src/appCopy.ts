@@ -212,9 +212,12 @@ export const APP_COPY = {
   // The Debug recorder's two lines (`-openURLs`, DebugHooks.swift), in Debug builds only, for the
   // UI tests: their labels, whose values are the last URL the app would have opened and the
   // units the last request asked in. A URL as a label was "not human-readable" to the audit on PR
-  // #33's second macOS run.
+  // #33's second macOS run. On screen each line is its label, then its value (`recorderLine`):
+  // the value alone ("none", "f") under the longer label "Units last asked for" was "Text
+  // clipped" on its third.
   recorderOpened: 'Last link opened',
   recorderUnits: 'Units last asked for',
+  recorderLine: '{name}: {value}',
 
   // Widgets (11)
   widgetName: 'Snow forecast',

@@ -3,30 +3,26 @@ import IsItModel
 import SwiftUI
 
 /// "How it works" (section 10.6): headed sections of plain paragraphs, in the system's text
-/// styles, so they grow with Dynamic Type; each heading is a heading for VoiceOver.
+/// styles, so they grow with Dynamic Type, on a page that scrolls (`SheetPage`); each heading is a
+/// heading for VoiceOver.
 struct HowItWorksView: View {
   let page: HowItWorks
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 24) {
-        ForEach(Array(page.sections.enumerated()), id: \.offset) { _, section in
-          VStack(alignment: .leading, spacing: 10) {
-            if let heading = section.heading {
-              Text(verbatim: heading)
-                .font(.title3.weight(.semibold))
-                .accessibilityAddTraits(.isHeader)
-            }
-            ForEach(Array(section.paragraphs.enumerated()), id: \.offset) { _, paragraph in
-              Text(verbatim: paragraph)
-                .fixedSize(horizontal: false, vertical: true)
-            }
+    SheetPage(spacing: 24) {
+      ForEach(Array(page.sections.enumerated()), id: \.offset) { _, section in
+        VStack(alignment: .leading, spacing: 10) {
+          if let heading = section.heading {
+            Text(verbatim: heading)
+              .font(.title3.weight(.semibold))
+              .accessibilityAddTraits(.isHeader)
+          }
+          ForEach(Array(section.paragraphs.enumerated()), id: \.offset) { _, paragraph in
+            Text(verbatim: paragraph)
+              .fixedSize(horizontal: false, vertical: true)
           }
         }
       }
-      .padding(.horizontal, 20)
-      .padding(.vertical, 16)
-      .frame(maxWidth: .infinity, alignment: .leading)
     }
     .navigationTitle(Text(verbatim: page.title))
     .navigationBarTitleDisplayMode(.inline)
@@ -35,60 +31,70 @@ struct HowItWorksView: View {
 
 /// "Credits and licences" (section 10.6): the forecast data's credits, each with its sources and
 /// licences as rows of their own, which a tap opens in Safari; and the typeface and software,
-/// each opening its notice in full.
+/// each opening its notice in full. Sections of rows on cards that scroll, as Settings' are
+/// (`SheetPage(.grouped)`), not a `Form`, whose rows and headers the audit failed on Settings; no
+/// run has yet audited this page.
 ///
 /// A credit's words are whole in its first row, its linked phrases plain, and each phrase is a
 /// row under it: not links inside the sentence, as the home screen's footer has them, whose hit
 /// regions are only as tall as their line. The footer's are an exception its audit allows, as
 /// WCAG 2.2's target size allows a link inside a sentence, and the attribution belongs beside the
 /// data there; this page's audit allows nothing, and nothing here asks for the links to sit in
-/// the sentence, so each is a row at least 44 points tall.
+/// the sentence, so each is a row at least 52 points tall, the whole row its button
+/// (`SheetRowStyle`).
 struct CreditsView: View {
   let page: CreditsPage
   /// A bundled notice's text, by its resource name.
   let notice: (String) -> String?
 
+  @Environment(\.openURL) private var openURL
+
   var body: some View {
-    Form {
-      Section {
+    SheetPage(.grouped, spacing: 24) {
+      SheetSection(header: page.dataHeading) {
         Text(verbatim: page.models)
           .fixedSize(horizontal: false, vertical: true)
-      } header: {
-        Text(verbatim: page.dataHeading)
-          .foregroundStyle(SheetStyle.secondary)
+          .sheetRow()
       }
       ForEach(Array(page.data.enumerated()), id: \.offset) { _, credit in
-        Section {
+        SheetSection {
           Text(verbatim: credit.map(\.text).joined())
             .fixedSize(horizontal: false, vertical: true)
+            .sheetRow()
           ForEach(Array(credit.enumerated()), id: \.offset) { _, part in
             if let url = part.url {
-              Link(destination: url) {
+              SheetDivider()
+              Button {
+                openURL(url)
+              } label: {
                 LeavingRow(title: part.text)
               }
+              .buttonStyle(SheetRowStyle())
             }
           }
         }
       }
-      Section {
-        ForEach(page.notices) { item in
+      SheetSection(header: page.softwareHeading) {
+        ForEach(Array(page.notices.enumerated()), id: \.element.id) { index, item in
+          if index > 0 {
+            SheetDivider()
+          }
           NavigationLink {
             NoticeView(title: item.name, url: item.url, text: notice(item.file))
           } label: {
-            VStack(alignment: .leading, spacing: 4) {
-              Text(verbatim: item.name)
-                .fontWeight(.semibold)
-              Text(verbatim: item.summary)
-                .font(.footnote)
-                .fixedSize(horizontal: false, vertical: true)
+            PageRowLabel {
+              VStack(alignment: .leading, spacing: 4) {
+                Text(verbatim: item.name)
+                  .fontWeight(.semibold)
+                Text(verbatim: item.summary)
+                  .font(.footnote)
+                  .fixedSize(horizontal: false, vertical: true)
+              }
             }
-            .padding(.vertical, 2)
           }
+          .buttonStyle(SheetRowStyle())
           .accessibilityIdentifier("notice-\(item.file)")
         }
-      } header: {
-        Text(verbatim: page.softwareHeading)
-          .foregroundStyle(SheetStyle.secondary)
       }
     }
     .navigationTitle(Text(verbatim: page.title))
@@ -96,37 +102,33 @@ struct CreditsView: View {
   }
 }
 
-/// A notice in full, as its owners wrote it, under its project's address.
+/// A notice in full, as its owners wrote it, under its project's address, on a page that scrolls
+/// (`SheetPage`).
 struct NoticeView: View {
   let title: String
   let url: URL?
   let text: String?
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 16) {
-        if let url {
-          // As tall as a tap needs, as the footer's links are: one line of footnote text is
-          // about half that, under the audit's hit region.
-          Link(destination: url) {
-            Text(verbatim: url.absoluteString)
-              .font(.footnote)
-              .multilineTextAlignment(.leading)
-              .frame(minHeight: HitTarget.minimum)
-              .contentShape(Rectangle())
-          }
-        }
-        if let text {
-          Text(verbatim: text)
-            .font(.footnote.monospaced())
-            .fixedSize(horizontal: false, vertical: true)
-            .textSelection(.enabled)
-            .accessibilityIdentifier("notice-text")
+    SheetPage {
+      if let url {
+        // As tall as a tap needs, as the footer's links are: one line of footnote text is about
+        // half that, under the audit's hit region.
+        Link(destination: url) {
+          Text(verbatim: url.absoluteString)
+            .font(.footnote)
+            .multilineTextAlignment(.leading)
+            .frame(minHeight: HitTarget.minimum)
+            .contentShape(Rectangle())
         }
       }
-      .padding(.horizontal, 20)
-      .padding(.vertical, 16)
-      .frame(maxWidth: .infinity, alignment: .leading)
+      if let text {
+        Text(verbatim: text)
+          .font(.footnote.monospaced())
+          .fixedSize(horizontal: false, vertical: true)
+          .textSelection(.enabled)
+          .accessibilityIdentifier("notice-text")
+      }
     }
     .navigationTitle(Text(verbatim: title))
     .navigationBarTitleDisplayMode(.inline)
@@ -135,12 +137,12 @@ struct NoticeView: View {
 
 /// "Your privacy" (section 10.6): the plain lines, then what is kept for notifications with the
 /// button that deletes it, while registered (phase 8), then the full policy in Safari. A page of
-/// paragraphs that scrolls, as How it works is, not a `Form`: during the audit's text-size check
-/// a `Form` jumped back to its top and stayed there through every size, so the full policy's
-/// row, at its foot where the test had scrolled, was on screen at no other size, and was failed
-/// for Dynamic Type and as clipped on PR #33's two macOS runs. A scroll view keeps its offset,
-/// held to its end: no text a scroll view had brought into view was failed so (the home pages'
-/// last screenfuls).
+/// paragraphs that scrolls (`SheetPage`), as How it works is, not a `Form`: as a `Form`'s row,
+/// the full policy's, at the page's foot where the test had scrolled, was failed for Dynamic Type
+/// and as clipped on PR #33's first two macOS runs. On the third, as a scroll view's, it passed,
+/// though the page went back to its top as the audit's text-size check began, as the `Form` had,
+/// so the row was on screen only at the two smallest sizes: what failed it was the `Form`'s cells,
+/// made only while on screen, not where the page was (`SheetPage`).
 struct YourPrivacyView: View {
   let page: YourPrivacy
   /// Turn off notifications and delete my data; nil until phase 8.
@@ -149,48 +151,43 @@ struct YourPrivacyView: View {
   @Environment(\.openURL) private var openURL
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 16) {
-        ForEach(Array(page.lines.enumerated()), id: \.offset) { index, line in
-          Text(verbatim: line)
+    SheetPage {
+      ForEach(Array(page.lines.enumerated()), id: \.offset) { index, line in
+        Text(verbatim: line)
+          .fixedSize(horizontal: false, vertical: true)
+          .accessibilityIdentifier("privacy-line-\(index)")
+      }
+      if let kept = page.kept {
+        VStack(alignment: .leading, spacing: 10) {
+          Text(verbatim: kept.heading)
+            .font(.title3.weight(.semibold))
             .fixedSize(horizontal: false, vertical: true)
-            .accessibilityIdentifier("privacy-line-\(index)")
-        }
-        if let kept = page.kept {
-          VStack(alignment: .leading, spacing: 10) {
-            Text(verbatim: kept.heading)
-              .font(.title3.weight(.semibold))
+            .accessibilityAddTraits(.isHeader)
+          ForEach(Array(kept.lines.enumerated()), id: \.offset) { _, line in
+            Text(verbatim: line)
               .fixedSize(horizontal: false, vertical: true)
-              .accessibilityAddTraits(.isHeader)
-            ForEach(Array(kept.lines.enumerated()), id: \.offset) { _, line in
-              Text(verbatim: line)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-            if let deleteMyData {
-              Button(role: .destructive) {
-                deleteMyData()
-              } label: {
-                Text(verbatim: kept.delete)
-                  .multilineTextAlignment(.leading)
-                  .frame(minHeight: HitTarget.minimum)
-              }
-              .accessibilityIdentifier("delete-my-data")
-            }
           }
-        }
-        if let policy = page.policy, let url = policyURL {
-          Button {
-            openURL(url)
-          } label: {
-            LeavingRow(title: policy.title)
-              .frame(minHeight: HitTarget.minimum)
+          if let deleteMyData {
+            Button(role: .destructive) {
+              deleteMyData()
+            } label: {
+              Text(verbatim: kept.delete)
+                .multilineTextAlignment(.leading)
+                .frame(minHeight: HitTarget.minimum)
+            }
+            .accessibilityIdentifier("delete-my-data")
           }
-          .accessibilityIdentifier(policy.id)
         }
       }
-      .padding(.horizontal, 20)
-      .padding(.vertical, 16)
-      .frame(maxWidth: .infinity, alignment: .leading)
+      if let policy = page.policy, let url = policyURL {
+        Button {
+          openURL(url)
+        } label: {
+          LeavingRow(title: policy.title)
+            .frame(minHeight: HitTarget.minimum)
+        }
+        .accessibilityIdentifier(policy.id)
+      }
     }
     .navigationTitle(Text(verbatim: page.title))
     .navigationBarTitleDisplayMode(.inline)

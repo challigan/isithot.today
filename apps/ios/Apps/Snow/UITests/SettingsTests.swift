@@ -12,26 +12,6 @@ final class SettingsTests: XCTestCase {
     continueAfterFailure = false
   }
 
-  /// Settings' "About" header, which the audit found "partially unsupported" for Dynamic Type
-  /// (on PR #33's two macOS runs, the frame the same in both), though it grows with the text:
-  /// run 2's recording shows it at every size it is on screen, from the smallest to AX2, 0.80 to
-  /// 0.84 of the width of "Privacy", the same view in the same style, which grows to AX5 and
-  /// passes. "About" is below the form's visible part from AX3 at the audit's sizes, and Help
-  /// from xxL; the rule that failed About and passed Help and rows that left as late is the
-  /// audit's own. Help, never failed, isn't allowed. Allowed only while "Privacy", the control,
-  /// is on screen as the audit begins and passes: should the header stop growing, it fails too
-  /// (DECISIONS, "The iPhone app's UI tests, after PR #33's second macOS run").
-  static let headersGrow = ScreenException(
-    type: .dynamicType,
-    says: "partially unsupported",
-    labels: ["About"],
-    control: "Privacy",
-    why:
-      "the About header, the same text in the same style as Privacy's, which the recording "
-      + "shows growing with every text size at which it is on screen; the audit's Dynamic Type "
-      + "check passed Privacy's, on screen at every size"
-  )
-
   /// Changing the units keeps them, asks the server again in them, and they stay chosen at the
   /// next launch. `-network` runs the app's own client and transport over the stubbed network,
   /// so the request is the app's: the recorder shows the units the last one asked in.
@@ -52,11 +32,14 @@ final class SettingsTests: XCTestCase {
     XCTAssertEqual(opened(app).label, "Last link opened")
     XCTAssertTrue(
       app.staticTexts["Temperatures follow: cm with °C, inches with °F."].exists, "No footnote")
+    // Each row is a whole row's button, as tall as a list's (`SheetRowStyle`).
+    let row = app.buttons["your-privacy"]
+    XCTAssertGreaterThanOrEqual(row.frame.height, 44, "Your privacy's row at \(row.frame)")
     units.buttons["in"].tap()
     waitFor(app.staticTexts["debug-units"], value: "f")
     XCTAssertTrue(units.buttons["in"].isSelected, "in isn't chosen")
     XCTAssertFalse(units.buttons["cm"].isSelected, "cm is still chosen")
-    try auditAccessibility(of: app, on: "Settings", allowing: [Self.headersGrow])
+    try auditAccessibility(of: app, on: "Settings")
     attachScreen(of: app, named: "app-settings")
     app.terminate()
 
@@ -75,10 +58,11 @@ final class SettingsTests: XCTestCase {
   ///
   /// The emails come last, after the pages' audits. The Debug recorder's lines sit below the
   /// sheet's content and wrap to show the whole URL, so the height they take is the content's:
-  /// Report an ad's email is 201 characters with no space, about 5 lines at Large and taller
+  /// Report an ad's email is 201 characters with no space, about 6 lines at Large and taller
   /// than the window at AX5, where the audit's text-size checks lay the sheet out. Audited with
   /// it recorded, How it works, Credits and licences and the licence would be squeezed under
-  /// it; with Support's address recorded, the lines are three or so at AX5.
+  /// it; with Support's address recorded, the two lines, each its label then what it holds, take
+  /// about half the window at AX5.
   @MainActor
   func testRowsOpenWhatTheySay() throws {
     let app = launch(["-resetStore", "-fixture", "leeds-dry", "-openURLs", "record"])
