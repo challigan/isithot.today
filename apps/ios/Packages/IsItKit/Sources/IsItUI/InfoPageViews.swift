@@ -80,7 +80,8 @@ struct CreditsView: View {
             SheetDivider()
           }
           NavigationLink {
-            NoticeView(title: item.name, url: item.url, text: notice(item.file))
+            NoticeView(
+              title: item.name, url: item.url, urlLabel: item.urlLabel, text: notice(item.file))
           } label: {
             PageRowLabel {
               VStack(alignment: .leading, spacing: 4) {
@@ -103,10 +104,15 @@ struct CreditsView: View {
 }
 
 /// A notice in full, as its owners wrote it, under its project's address, on a page that scrolls
-/// (`SheetPage`).
+/// (`SheetPage`). The address is a link that shows the URL, held to its full height; its
+/// accessibility label is in words (`urlLabel`, "Bricolage Grotesque's project page") and its
+/// value the URL, as the Debug recorder's lines are: a URL as a label was "not human-readable" to
+/// the audit on PR #33's second macOS run, and the recorder's line showing a URL under a shorter
+/// label, held, passed on its third.
 struct NoticeView: View {
   let title: String
   let url: URL?
+  let urlLabel: String
   let text: String?
 
   var body: some View {
@@ -118,9 +124,12 @@ struct NoticeView: View {
           Text(verbatim: url.absoluteString)
             .font(.footnote)
             .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(minHeight: HitTarget.minimum)
             .contentShape(Rectangle())
         }
+        .accessibilityLabel(Text(verbatim: urlLabel))
+        .accessibilityValue(Text(verbatim: url.absoluteString))
       }
       if let text {
         Text(verbatim: text)

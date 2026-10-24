@@ -208,6 +208,10 @@ export const APP_COPY = {
   // credits.ts's (AppCredits), and the licences' full texts are bundled files.
   creditsData: 'Forecasts and data',
   creditsSoftware: 'Typeface and software',
+  // A notice's project link, as VoiceOver and the audit read it ("Bricolage Grotesque's project
+  // page"); the screen shows the URL, its value. A URL as a label was "not human-readable" to the
+  // audit on PR #33's second macOS run.
+  noticeProjectPage: "{name}'s project page",
 
   // The Debug recorder's two lines (`-openURLs`, DebugHooks.swift), in Debug builds only, for the
   // UI tests: their labels, whose values are the last URL the app would have opened and the

@@ -608,10 +608,11 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   `expectFits`, with no bare element, `expectNoBareElements`), with
   `performAccessibilityAudit(for:)` for every kind on every screenful, from
   the page's top to the end of its credits, in at most 20 screenfuls. Each screenful is audited
-  in two calls (`AuditKinds`, `UITests/ScreenAudit.swift`): every kind but two on the screen as
-  attached, and an audit that moves the page there fails; then the Dynamic Type and clipped-text
-  checks, which lay the app out at a smaller text size, where a page scrolled past that size's end
-  comes back to it. Each issue's element is noted where it was on the screenful, moved back with
+  in three calls (`AuditKinds`, `UITests/ScreenAudit.swift`): contrast, then element detection,
+  hit regions, descriptions and traits, on the screen as attached, and an audit there that moves
+  the page fails; then the Dynamic Type and clipped-text checks, which lay the app out at a
+  smaller text size, where a page scrolled past that size's end comes back to it. (The first two
+  were one call until PR #33's third macOS run, where it timed out once.) Each issue's element is noted where it was on the screenful, moved back with
   the credits, and the page is dragged back to where the screenful had it before the next scroll
   (`restore`; on PR #33's macOS run, with one call, every AX3 page went back to that end before
   each drag and failed "scrolls no further"). The page on screen is the part of its
@@ -766,12 +767,16 @@ DECISIONS has the choices ("The iPhone app's Settings").
   (`YourPrivacyView`, `HowItWorksView`, `CreditsView`, `NoticeView`) and `MailFallbackView`.
   Credits and licences gives each credit's words whole, then each of its sources and licences
   as a row of its own that opens it, not as links inside the sentence; a notice's project link
-  is 44 points tall. No page of the sheet is a `Form`: each scrolls (`SheetPage`,
-  SheetStyle.swift), Settings and Credits and licences as sections of rows on cards
-  (`SheetSection`, `SheetRowStyle`, each row a button 52 points tall or more), How it works, Your
-  privacy and a notice as paragraphs. The audit's Dynamic Type check failed a `Form`'s rows and
-  headers that grew with the text, and passed a scroll view's text on screen or not (DECISIONS).
-  A section of Settings has a header only when it has a heading.
+  is 44 points tall, shows the URL and is labelled in words ("Bricolage Grotesque's project
+  page", `CreditsPage.Notice.urlLabel`), the URL its value. No page of the sheet is a `Form`:
+  each scrolls (`SheetPage`, SheetStyle.swift). Settings and Credits and licences are sections of
+  rows on cards (`SheetSection`), each row at least 52 points tall (`sheetRow()`) and each that
+  does something a button the whole row wide (`SheetRowStyle`); the others are not buttons:
+  Settings' units row (its label beside the two units' buttons) and version line, and Credits
+  and licences' models line and each credit's words. How it works, Your privacy and a notice are
+  paragraphs. The audit's Dynamic Type check failed a `Form`'s rows and headers that grew with the
+  text, and passed a scroll view's text on screen or not (DECISIONS). A section of Settings has a
+  header only when it has a heading.
 - **The sheets' colours** (the picker's too) are the system's but where those fall short of
   WCAG AA's 4.5:1 for text under 18 points in the light appearance: `SheetStyle` (IsItUI) draws
   the headers, footers and secondary lines in `SheetColours.secondaryLight` (5.36:1 on a grouped
@@ -808,10 +813,10 @@ and Report an ad's, 201 characters, would take most of the screen at the audit's
 
 **The audits** (`PickerTests` and `SettingsTests`; `HomeAuditTests` has its own, with its
 exceptions, above) go through `auditAccessibility(of:on:)` (`UITests/ScreenAudit.swift`):
-`performAccessibilityAudit(for:)` for every kind of issue, in the home audit's two calls
-(`AuditKinds`: contrast, element detection, hit regions, descriptions and traits, then Dynamic
-Type and clipped text, the seven kinds the iOS SDK defines, each named rather than `.all` less
-two), each issue noted once its call is done with its kind (named as `HomeAuditTests` names
+`performAccessibilityAudit(for:)` for every kind of issue, in the home audit's three calls
+(`AuditKinds`: contrast; then element detection, hit regions, descriptions and traits; then
+Dynamic Type and clipped text, the seven kinds the iOS SDK defines, each named rather than `.all`
+less two), each issue noted once its call is done with its kind (named as `HomeAuditTests` names
 it), its element's type, identifier, label and frame, and Apple's description, a contrast issue
 with the screen's darkest and lightest pixels inside the element, then one failure that lists
 them all with the window's frame. The tests stop at their first failure, so without it a

@@ -3863,10 +3863,21 @@ screen recordings, screenshots and element trees, and run 2's, were read for eac
   `print` reaches neither the log nor the result bundle, so `ci/test.sh` reads them from the
   exported attachments (`xcresult-summary.mjs timings`, tested on Linux) and puts the ten slowest
   calls and every one that timed out in the step summary and the log (`### Audit times:`), with the
-  time each timeout took, roughly the deadline. Should the first call come to more than about 60% of
-  that, `AuditKinds.inPlace` is to be split in two calls (contrast, then the other four): every kind
-  still runs on every screenful, each call with a deadline of its own, at about one call more a
-  screenful.
+  time each timeout took, roughly the deadline.
+- **The five kinds that read the screen as it is are two calls** (`AuditKinds`: contrast, then
+  element detection, hit regions, descriptions and traits; then the resizing call, three calls a
+  screenful). The rule was to split them once a first call came to more than about 60% of the
+  deadline, and this run is past it: This week's ninth first call finished in 10.8 seconds against
+  a deadline of about 17 (the timed-out call's), some 63%, and run 2's 12.4 on the same Now
+  screenful was about 72%. Nor would the retry alone have saved this run: Today's first screenful,
+  audited about 4.6 seconds after the timeout, took 9.5 seconds, about 2.5 times its expected
+  time, so the host was still slow, and the same five kinds run again 2 seconds after the -56, at
+  that rate, would have taken about 17.5 and timed out again. So the split is made now, not after
+  another run. Every kind still runs on every screenful, each call with a deadline and a retry of
+  its own (`runAudit`); contrast stays first, so the screenshot taken before the calls is the
+  screen its issues' pixels come from, and a call but the resizing one that moves the page still
+  fails. It costs a call more a screenful, about a hundred a run. The times attachment is to
+  confirm it.
 - **The Debug recorder's lines show their labels.** "Text clipped" was on `debug-units`, labelled
   "Units last asked for", 34 by 18 points showing "none" (How it works, Your privacy) and 5.33 by 18
   showing "f" (Settings). From run 2 to run 3 only its label changed, to the longer words, the
@@ -3899,11 +3910,13 @@ screen recordings, screenshots and element trees, and run 2's, were read for eac
   Settings is now `SheetPage(.grouped)` (IsItUI, SheetStyle.swift): a scroll view of
   `SheetSection`s, each its header (`.headline` in `SheetStyle.secondary`, a heading to VoiceOver),
   its rows on a card with a hairline between each two (`SheetDivider`), and its footer
-  (`.footnote`); each row is a button the whole row wide and at least 52 points tall
-  (`SheetRowStyle`, pressed in `systemGray4`), a page on the stack in the primary colour with a
-  chevron (`PageRowLabel`), a page or email outside the app in the tint with its arrow
-  (`LeavingRow`). The measures (`SheetMetrics`) are read off this run's Settings screenshot: the
-  grouped background #F2F2F7 with white cards 16 points in, corners of about 26 (25.8 and 25.9 by a
+  (`.footnote`); each row at least 52 points tall (`sheetRow()`), and each that does something a
+  button the whole row wide (`SheetRowStyle`, pressed in `systemGray4`), a page on the stack in the
+  primary colour with a chevron (`PageRowLabel`), a page or email outside the app in the tint with
+  its arrow (`LeavingRow`); the units row (its label beside the two units' buttons) and the version
+  line are not buttons, nor are Credits and licences' models line and each credit's words. The
+  measures (`SheetMetrics`) are read off this run's Settings screenshot: the grouped background
+  #F2F2F7 with white cards 16 points in, corners of about 26 (25.8 and 25.9 by a
   circle's fit), rows 52 tall with their 20.33-point text 16 points in, the units row 78 with its
   48-point control, hairlines at (32, y, 338, 1), and the header in `.headline` ("Privacy" 56.7
   points wide against 53.3 in a row), the footer in `.footnote`. Credits and licences, a `Form` too
@@ -3921,18 +3934,24 @@ screen recordings, screenshots and element trees, and run 2's, were read for eac
   `testUnitsChangeAsksInTheNewUnits` also checks Your privacy's row is 44 points tall or more.
 - **What the next run settles:** the times, whether a -56 comes at about the same time each time
   (the deadline), how often calls slow down so, and whether a call run again passes; whether
-  Settings' About and Report an ad pass as a scroll view's, Credits and licences' first audit, and
-  the recorder's lines under "Text clipped"; and the grouped pages' look on the contact sheet
-  (`app-settings`, `app-credits`).
-- **Checked on Linux:** the copy's test (written first) and `pnpm mobile:generate`; IsItCore's
-  tests; the nine UI test files type-check against the stubs of XCUITest, whose
+  Settings' About and Report an ad pass as a scroll view's, Credits and licences' first audit, the
+  typeface's licence's first audit (its project link labelled in words, "Bricolage Grotesque's
+  project page", the URL its value, as the recorder's opened line has them, which passed on this
+  run, where the URL as a label was "not human-readable" on run 2), and the recorder's lines under
+  "Text clipped"; and the grouped pages' look on the contact sheet (`app-settings`,
+  `app-credits`).
+- **Checked on Linux:** the copy's tests (written first) and `pnpm mobile:generate`; IsItCore's
+  tests, the notices' link labels among them (written first); the nine UI test files type-check
+  against the stubs of XCUITest, whose
   `XCUIApplication.state` and `performAccessibilityAudit` are `open` now, as an Objective-C class's
   members are in the SDK, so a fake can stand in; and copies of the new logic ran there: `runAudit`
   against a fake app (a timeout run again once, after the pause, only once settled, its first issues
   dropped; a second timeout, or a screen not settled, failing with both errors and times; another
   error failing at once, with no pause and no check), `ScreenLayout` (a row moved 2 points found,
-  half a point, a scroll bar coming and going and a label changing not), and the times' lines and
-  report; `xcresult-summary.mjs timings` against an export's manifest (vitest). IsItUI and the app
+  half a point, a scroll bar coming and going and a label changing not), the times' lines and
+  report, and `AuditKinds`' three calls (the seven kinds between them, each once, in order, a
+  sheet's audit making each once); `xcresult-summary.mjs timings` against an export's manifest
+  (vitest). IsItUI and the app
   compile only on macOS: `SheetPage`, the Settings and Credits pages and the recorder's lines are
   for the next run's screens and trees to show.
 

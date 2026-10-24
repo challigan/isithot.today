@@ -8,11 +8,11 @@ import XCTest
 /// its fixture at its own moment with the clock fixed: XCUITest's
 /// `performAccessibilityAudit(for:)` (iOS 17) for every kind of issue on each screenful of the
 /// page, from its top down to the credits at its end, since an audit can judge only what the
-/// screen shows; and each screenful attached. Each screenful is audited in two calls
-/// (`AuditKinds.passes`): every kind that reads the screen as it is, then the Dynamic Type and
-/// clipped-text checks, which lay the app out at other text sizes and leave a page scrolled past
-/// its end at the size checked short of where it was, so the page is put back before the next
-/// scroll (`restore`).
+/// screen shows; and each screenful attached. Each screenful is audited in three calls
+/// (`AuditKinds.passes`): the kinds that read the screen as it is, contrast and then the other
+/// four, then the Dynamic Type and clipped-text checks, which lay the app out at other text sizes
+/// and leave a page scrolled past its end at the size checked short of where it was, so the page
+/// is put back before the next scroll (`restore`).
 ///
 /// The attachments are named so that the contact sheet, which tiles them in their names' order
 /// (`ci/contact-sheet.mjs`), shows them fixture by fixture, Large then AX3, each page in the
@@ -188,7 +188,7 @@ final class HomeAuditTests: XCTestCase {
 
   /// Audits the page on screen a screenful at a time, from its top (where it is on its first
   /// showing) down to the end of the credits, its last lines, attaching each screenful as
-  /// `<name>-<k>`, k from 01. Each screenful is audited in two calls (`AuditKinds.passes`), and
+  /// `<name>-<k>`, k from 01. Each screenful is audited in three calls (`AuditKinds.passes`), and
   /// each issue's element is noted where it was on the screenful as attached: an audit that moved
   /// the page moved it with the credits. An element of the page that a screenful cuts at the
   /// page's edge, or shows not at all, is judged on a screenful that shows it whole
@@ -196,9 +196,9 @@ final class HomeAuditTests: XCTestCase {
   /// should an audit have moved it (`restore`). A call that doesn't finish in time runs again
   /// once, only on the screenful as attached (`runAudit`, `unsettled`). Fails, with where the page
   /// and its credits were, when the credits aren't there, the app has left the foreground, an
-  /// audit can't run or doesn't finish in time twice, the first call moves the page, the page
-  /// stops scrolling before its end, or its end never comes into view; for the last two, with
-  /// what `stopped` finds too.
+  /// audit can't run or doesn't finish in time twice, a call but the resizing one moves the page,
+  /// the page stops scrolling before its end, or its end never comes into view; for the last two,
+  /// with what `stopped` finds too.
   @MainActor
   private func audit(
     _ page: HomeScreen.Page,

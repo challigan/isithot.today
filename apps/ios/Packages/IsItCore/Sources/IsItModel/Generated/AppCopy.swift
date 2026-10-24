@@ -199,6 +199,11 @@ public enum AppCopy {
     "Forecasts are estimates. For anything that matters, check your national weather service."
   public static let creditsData = "Forecasts and data"
   public static let creditsSoftware = "Typeface and software"
+
+  public static func noticeProjectPage(name: String) -> String {
+    "\(name)'s project page"
+  }
+
   public static let recorderOpened = "Last link opened"
   public static let recorderUnits = "Units last asked for"
 

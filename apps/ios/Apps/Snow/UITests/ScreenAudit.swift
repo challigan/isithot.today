@@ -2,7 +2,7 @@ import UIKit
 import XCTest
 
 /// Section 16's accessibility audit of the screen on show, as the picker's and Settings' UI tests
-/// run it: XCUITest's `performAccessibilityAudit(for:)` (iOS 17), every kind of issue, in the two
+/// run it: XCUITest's `performAccessibilityAudit(for:)` (iOS 17), every kind of issue, in the three
 /// calls `AuditKinds.passes`, each through `runAudit`, which times it and runs it again once
 /// should it not finish in time. Each issue is noted with its kind, its element (type,
 /// identifier, label and frame on screen) and Apple's description, and a contrast issue with the
@@ -67,12 +67,13 @@ extension XCTestCase {
   /// `isAuditTimeout`) runs once more, with the same kinds, 2 seconds later, only once `settled`
   /// finds the screen the one the call was to audit (nil; or why it isn't): the first attempt's
   /// issues are dropped, so none is counted twice. On PR #33's third macOS run the first call on
-  /// the Now page's sixth screenful at AX3, the costliest screenful of the suite, ran some 17
-  /// seconds where about 7 were expected, with the app still on screen, and timed out; two other
-  /// calls of that test ran about 2.5 times as long as expected and finished (DECISIONS, "The
-  /// iPhone app's UI tests, after PR #33's third macOS run"). Any other error, a second failure,
-  /// or a screen that isn't the one to audit throws (`AuditFailure`), with each attempt's error
-  /// and time: every kind runs on every screen the test attaches, or the test fails.
+  /// the Now page's sixth screenful at AX3, the costliest screenful of the suite, then of all five
+  /// kinds that read the screen as it is, ran some 17 seconds where about 7 were expected, with
+  /// the app still on screen, and timed out; two other calls of that test ran about 2.5 times as
+  /// long as expected and finished (those five kinds are two calls now, `AuditKinds`; DECISIONS,
+  /// "The iPhone app's UI tests, after PR #33's third macOS run"). Any other error, a second
+  /// failure, or a screen that isn't the one to audit throws (`AuditFailure`), with each attempt's
+  /// error and time: every kind runs on every screen the test attaches, or the test fails.
   @MainActor
   func runAudit(
     of app: XCUIApplication,
@@ -166,26 +167,35 @@ func slug(_ name: String) -> String {
   return out.hasSuffix("-") ? String(out.dropLast()) : out
 }
 
-/// The audit's kinds, in the two calls the UI tests make for each screen, which together are all
-/// of them: first every kind that reads the screen as it is, then the Dynamic Type and clipped-text
-/// checks, which lay the app out at other text sizes and then put the size back. A page scrolled
-/// further than it can scroll at the size checked comes back clamped to that size's end, short of
-/// where it was: on PR #33's macOS run every home page scrolled past it went back between
-/// screenfuls, and the contrast measured after that check was of a page the screenful's frames no
-/// longer described (DECISIONS, "The iPhone app's UI tests, after PR #33's macOS run").
+/// The audit's kinds, in the three calls the UI tests make for each screen, which together are
+/// all of them: first the kinds that read the screen as it is, contrast and then the other four,
+/// then the Dynamic Type and clipped-text checks, which lay the app out at other text sizes and
+/// then put the size back. A page scrolled further than it can scroll at the size checked comes
+/// back clamped to that size's end, short of where it was: on PR #33's macOS run every home page
+/// scrolled past it went back between screenfuls, and the contrast measured after that check was
+/// of a page the screenful's frames no longer described (DECISIONS, "The iPhone app's UI tests,
+/// after PR #33's macOS run"). Contrast is first, so the screen it measures is the one in the
+/// screenshot taken before the calls, whose pixels its issues are noted with. Two calls where the
+/// screen is read as it is, not one: on PR #33's third macOS run the one call of those five kinds
+/// took up to 10.8 seconds where it finished, against XCTest's deadline of about 17, and timed out
+/// once, on the home's costliest screenful (DECISIONS, "The iPhone app's UI tests, after PR #33's
+/// third macOS run"); each call has a deadline of its own.
 enum AuditKinds {
   /// The checks that change the text size.
   static let resizing: XCUIAccessibilityAuditType = [.dynamicType, .textClipped]
-  /// The others: contrast, element detection, hit regions, descriptions and traits. Named one by
-  /// one, not `.all` less `resizing`: `.all` is every bit set, so that would ask for macOS's own
-  /// kinds (`action`, `parentChild`) and bits no kind has, a set Apple neither documents nor
-  /// shows, where these are the kinds the iOS SDK defines, all seven of them with `resizing`'s
-  /// (`names` lists the same seven). A kind a later SDK adds is to be added here.
-  static let inPlace: XCUIAccessibilityAuditType = [
-    .contrast, .elementDetection, .hitRegion, .sufficientElementDescription, .trait,
+  /// Contrast, measured on the screen as it is.
+  static let contrast: XCUIAccessibilityAuditType = [.contrast]
+  /// The other kinds that read the screen as it is: element detection, hit regions, descriptions
+  /// and traits. These and `contrast` are named one by one, not `.all` less `resizing`: `.all` is
+  /// every bit set, so that would ask for macOS's own kinds (`action`, `parentChild`) and bits no
+  /// kind has, a set Apple neither documents nor shows, where these are the kinds the iOS SDK
+  /// defines, all seven of them with `resizing`'s (`names` lists the same seven). A kind a later
+  /// SDK adds is to be added here.
+  static let described: XCUIAccessibilityAuditType = [
+    .elementDetection, .hitRegion, .sufficientElementDescription, .trait,
   ]
   /// The calls, in order.
-  static let passes = [inPlace, resizing]
+  static let passes = [contrast, described, resizing]
 }
 
 /// The issues one screen's audits found, each described.

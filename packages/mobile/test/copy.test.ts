@@ -273,6 +273,7 @@ describe('APP_COPY', () => {
       howWarm: ['warm'],
       howWeek: ['height'],
       forecastModels: ['count', 'agencies'],
+      noticeProjectPage: ['name'],
       recorderLine: ['name', 'value'],
       agreementShort: ['snowy', 'total'],
       intentPhrase: ['app'],
@@ -468,6 +469,14 @@ describe('the labels the accessibility audit reads', () => {
     // One word with a full stop ("Copied.") was "not human-readable" to the audit on PR #33's
     // two macOS runs, whatever its identifier and its sheet.
     expect(APP_COPY.copied).toBe('Address copied.');
+  });
+
+  it('names a notice’s project link in words, whose value is its URL', () => {
+    // A URL as a label was "not human-readable" to the audit on PR #33's second macOS run.
+    expect(APP_COPY.noticeProjectPage).toBe("{name}'s project page");
+    expect(fill(APP_COPY.noticeProjectPage, { name: 'Bricolage Grotesque' })).toBe(
+      "Bricolage Grotesque's project page",
+    );
   });
 
   it('names the Debug recorder’s lines, whose values are the URL and the units', () => {

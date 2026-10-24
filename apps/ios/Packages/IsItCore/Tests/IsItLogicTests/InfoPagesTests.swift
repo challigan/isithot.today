@@ -110,7 +110,16 @@ struct InfoPagesTests {
     #expect(page.notices[0].summary.contains("SIL Open Font License, Version 1.1"))
     #expect(page.notices[1].summary.contains("Apache License, Version 2.0"))
     #expect(page.notices.allSatisfy { $0.url?.scheme == "https" })
-    for text in [page.title, page.models] + page.notices.flatMap({ [$0.name, $0.summary] }) {
+    // The project link's label, in words: a URL as a label was "not human-readable" to the
+    // accessibility audit on PR #33's second macOS run.
+    #expect(
+      page.notices.map(\.urlLabel) == [
+        "Bricolage Grotesque's project page", "Google Mobile Ads SDK's project page",
+        "Google User Messaging Platform SDK's project page",
+      ])
+    for text in [page.title, page.models]
+      + page.notices.flatMap({ [$0.name, $0.summary, $0.urlLabel] })
+    {
       #expect(otherTopic(in: text) == nil, "\(text)")
     }
   }
