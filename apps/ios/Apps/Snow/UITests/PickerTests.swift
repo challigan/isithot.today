@@ -181,7 +181,24 @@ final class PickerTests: XCTestCase {
     app.buttons["picker-use-my-location"].tap()
     XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10), "No Open Settings")
     attachScreen(of: app, named: "picker-audit")
-    try app.performAccessibilityAudit()
+    try auditAccessibility(of: app, on: "the picker, with a recent place and location access off")
+  }
+
+  /// The search's results pass the audit too, with the keyboard down: a drag on the list puts it
+  /// away (scrollable content dismisses the keyboard on a scroll from iOS 16), and the results
+  /// stay, with "Leeds" still in the search box.
+  @MainActor
+  func testResultsAccessibilityAudit() throws {
+    let app = launch(["-resetStore", "-network", "ip-first-launch"])
+    let field = openPicker(in: app)
+    field.typeText("Leeds")
+    let result = app.buttons["result-0"]
+    XCTAssertTrue(result.waitForExistence(timeout: 10), "No results for Leeds")
+    result.swipeDown()
+    waitUntilGone(app.keyboards.firstMatch, "The keyboard is still up")
+    XCTAssertTrue(result.exists, "The results went with the keyboard")
+    attachScreen(of: app, named: "picker-results-audit")
+    try auditAccessibility(of: app, on: "the picker's results")
   }
 
   // MARK: - Helpers

@@ -5,15 +5,21 @@
  * answer through `Text(verbatim:)`. Two guards, both reading every Swift file the app and its
  * packages compile (not the tests, which assert the words):
  *
- * - no SwiftUI view or modifier is given a literal, whatever it says (`Text("cm")` too);
- * - no string literal anywhere outside the generated folders looks like prose, unless the
+ * - no SwiftUI view or modifier is given a literal straight after its parenthesis, whatever it
+ *   says (`Text("cm")` too), read line by line;
+ * - no string literal anywhere outside the generated folders holds words for someone, unless the
  *   allowlist below says why it is never shown. The literals are read by `swiftLiterals`
  *   (packages/mobile `swiftLiterals.ts`), a lexer that knows Swift's comments, raw and
- *   multi-line strings and interpolations, and the call each literal is an argument of.
+ *   multi-line strings and interpolations, and the call and argument label each literal belongs
+ *   to. A literal with a letter in it is words when a view or label is given it, however
+ *   (`Text(verbatim: "in")`, `Text(verbatim: "\(depth) cm")`, a `prompt:`); anywhere else, when
+ *   it looks like prose: two words, one capitalised or sentence-ending word, or one word set
+ *   beside other text with a space (`"ID " + prefix`).
  *
- * A literal of one lowercase word or a symbol ("cm", "°C") can't be told from a key by its shape,
- * so the second guard lets it pass; the first catches it in a view, and the copy's own tests hold
- * the words. A stray word belongs in packages/mobile `appCopy.ts`, then `pnpm mobile:generate`.
+ * What still passes is one lowercase word or a symbol alone, outside any view (`let unit = "cm"`):
+ * it can't be told from a key by its shape. The copy's own tests hold the words, and a view given
+ * it fails the second guard. A stray word belongs in packages/mobile `appCopy.ts`, then
+ * `pnpm mobile:generate`.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -140,14 +146,59 @@ const SENTENCE_END = /^\p{Ll}+[.!?…]$/u;
 
 /**
  * Whether a literal's text reads as words for someone: two words or more ("Close the sheet",
- * "Not a view: {}"), or one capitalised or sentence-ending word, alone among keys and
- * interpolations ("Settings", "Version {} ({})", "done."). Interpolations (`{}`) are data.
+ * "Not a view: {}"); one word set beside other text with a space, a piece of a sentence ("ID {}",
+ * "{} cm", "ID " before a value); or one capitalised or sentence-ending word, alone among keys
+ * and interpolations ("Settings", "Version {} ({})", "done."). Interpolations (`{}`) are data.
  */
 export function looksLikeProse(text: string): boolean {
   const tokens = text.replaceAll('{}', ' ').split(/\s+/).filter(Boolean);
   const words = tokens.filter((t) => WORD.test(t));
   if (words.length >= 2) return true;
+  if (words.length === 1 && /\s/.test(text)) return true;
   return words.some((w) => CAPITALISED.test(w) || SENTENCE_END.test(w));
+}
+
+/**
+ * The calls that show or read out the string they are given unlabelled: SwiftUI's views and
+ * modifiers (the first guard's), and the announcement VoiceOver reads.
+ */
+const SHOWN_BY = new Set([
+  'Text',
+  'Label',
+  'Button',
+  'Toggle',
+  'Picker',
+  'Link',
+  'Section',
+  'TextField',
+  'SecureField',
+  'Menu',
+  'LabeledContent',
+  'NavigationLink',
+  'ProgressView',
+  'ShareLink',
+  'Announcement',
+  'navigationTitle',
+  'accessibilityLabel',
+  'accessibilityHint',
+  'accessibilityValue',
+  'help',
+  'alert',
+  'confirmationDialog',
+  'badge',
+]);
+/** The argument labels whose string is shown, whatever the call: `Text(verbatim:)`, a prompt. */
+const SHOWN_AS = new Set(['verbatim', 'prompt', 'title', 'message']);
+
+/**
+ * Whether `literal` is given to a view or a label to show or read out: then any letter in it is
+ * a word for someone, whatever its shape (`Text(verbatim: "in")`). UIKit's announcement
+ * (`UIAccessibility.post(notification:argument:)`) reads its argument.
+ */
+export function shown(literal: SwiftLiteral): boolean {
+  if (SHOWN_AS.has(literal.label)) return true;
+  if (literal.callee === 'post' && literal.label === 'argument') return true;
+  return SHOWN_BY.has(literal.callee) && literal.label === '';
 }
 
 /**
@@ -195,8 +246,9 @@ const NAMES: Record<string, string> = {
   Fallback: 'a folder in a package',
 };
 
-/** Why `literal` may say what it does, or nil when it is prose with no reason to be. */
+/** Why `literal` may say what it does, or nil when it is words with no reason to be. */
 export function allowed(literal: SwiftLiteral): string | undefined {
+  if (shown(literal)) return /\p{L}/u.test(literal.text) ? undefined : 'no words';
   if (!looksLikeProse(literal.text)) return 'not prose';
   return NEVER_SHOWN_IN[literal.callee] ?? NEVER_SHOWN_AS[literal.label] ?? NAMES[literal.text];
 }
@@ -250,6 +302,11 @@ describe('the Swift sources, outside the generated copy', () => {
       'label BEGINSWITH %@',
       '“Recent”',
       'One-off',
+      // One word beside a value, with a space: a piece of a sentence.
+      'ID {}',
+      '{} cm',
+      '{} of {}',
+      'ID ',
     ]) {
       expect(looksLikeProse(prose), prose).toBe(true);
     }
@@ -318,6 +375,39 @@ describe('the Swift sources, outside the generated copy', () => {
     expect(found('fatalError(describe { "Two words" })')).toEqual(['x.swift:1: "Two words"']);
     // Comments are not code.
     expect(found('// Settings\n/* A /* nested */ comment */ let x = 1')).toEqual([]);
+  });
+
+  it('finds a word given to a view however it is written, and one set beside a value', () => {
+    // Both guards, as the Swift is held to them.
+    const flagged = (swift: string) => [
+      ...literalLines('x.swift', swift),
+      ...proseLines('x.swift', swift),
+    ];
+    for (const bad of [
+      'Text(verbatim: "\\(depth) cm")',
+      'Text(verbatim: "in")',
+      '.accessibilityLabel(Text(verbatim: "close"))',
+      'Text(verbatim: "\\(snowy) of \\(total)")',
+      'Text(verbatim: "ID \\(prefix)")',
+      'let line = "ID " + prefix',
+      'Label("copy", systemImage: "doc.on.doc")',
+      'TextField(text: $query, prompt: Text(verbatim: "town"))',
+      'UIAccessibility.post(notification: .announcement, argument: "copied")',
+    ]) {
+      expect(flagged(bad), bad).not.toEqual([]);
+    }
+    for (const fine of [
+      'Text(verbatim: page.verdict)',
+      'Text(verbatim: "\\(model.name) \\(amount)")',
+      'Text(verbatim: ", ")',
+      'Label(title, systemImage: "doc.on.doc")',
+      '.accessibilityIdentifier("result-\\(row.id)")',
+      'let key = "city:\\(slug)"',
+      // The limit: one lowercase word alone, outside any view, is a key by its shape.
+      'let unit = "cm"',
+    ]) {
+      expect(flagged(fine), fine).toEqual([]);
+    }
   });
 });
 

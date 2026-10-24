@@ -29,7 +29,7 @@ final class SettingsTests: XCTestCase {
     units.buttons["in"].tap()
     waitFor(app.staticTexts["debug-units"], label: "f")
     XCTAssertTrue(units.buttons["in"].isSelected, "in isn't chosen")
-    try app.performAccessibilityAudit()
+    try auditAccessibility(of: app, on: "Settings")
     attachScreen(of: app, named: "app-settings")
     app.terminate()
 
@@ -85,7 +85,7 @@ final class SettingsTests: XCTestCase {
     XCTAssertTrue(text("rounded to about 5 km before it leaves your phone", in: app).exists)
     XCTAssertFalse(text("one service", in: app).exists, "The four sites' paragraph is in the app")
     assertSnowOnly(app)
-    try app.performAccessibilityAudit()
+    try auditAccessibility(of: app, on: "How it works")
     attachScreen(of: app, named: "app-how-it-works")
     back(in: app)
 
@@ -95,12 +95,15 @@ final class SettingsTests: XCTestCase {
     XCTAssertTrue(text("Place names: GeoNames, licensed under CC BY 4.0", in: app).exists)
     XCTAssertTrue(text("Contains Met Office data", in: app).exists)
     assertSnowOnly(app)
-    try app.performAccessibilityAudit()
+    try auditAccessibility(of: app, on: "Credits and licences")
     attachScreen(of: app, named: "app-credits")
     tap("notice-BricolageGrotesque-OFL", in: app)
     let notice = app.staticTexts["notice-text"]
     XCTAssertTrue(notice.waitForExistence(timeout: 5), "No notice text")
     XCTAssertTrue(notice.label.contains("SIL OPEN FONT LICENSE Version 1.1"))
+    // A licence in full is a screen of its own, audited too.
+    try auditAccessibility(of: app, on: "the typeface's licence")
+    attachScreen(of: app, named: "app-notice")
     back(in: app)
     tap("notice-GoogleMobileAds-LICENSE", in: app)
     XCTAssertTrue(app.staticTexts["notice-text"].waitForExistence(timeout: 5), "No notice text")
@@ -125,7 +128,7 @@ final class SettingsTests: XCTestCase {
     let copied = app.staticTexts["copied"]
     XCTAssertTrue(copied.waitForExistence(timeout: 5), "No confirmation")
     XCTAssertEqual(copied.label, "Copied.")
-    try app.performAccessibilityAudit()
+    try auditAccessibility(of: app, on: "Report an ad's fallback")
     attachScreen(of: app, named: "app-report-ad-fallback")
     app.buttons["close-fallback"].tap()
 
@@ -136,6 +139,8 @@ final class SettingsTests: XCTestCase {
       app.staticTexts["fallback-body"].label,
       "Email support@willitsnow.today. Tell us what happened, and the version number at the end "
         + "of Settings.")
+    try auditAccessibility(of: app, on: "Contact us's fallback")
+    attachScreen(of: app, named: "app-contact-us-fallback")
   }
 
   /// Your privacy: the plain lines, in the free version with the ads line, no notifications
@@ -149,13 +154,17 @@ final class SettingsTests: XCTestCase {
     let lines = [
       "To get the forecast, the app sends the place (a town, or your location rounded to about "
         + "5 km) and your units to our server. Until you choose a place, our server estimates a "
-        + "rough one from your internet connection.",
+        + "rough one from your internet connection. Place names you search for go to Open-Meteo, "
+        + "our forecast provider, to find matching places. The app keeps your place, units, "
+        + "recent places and the last forecast on your iPhone.",
       "Only while notifications are on, we keep your device's notification token, an ID made "
         + "from it, the place, its time zone, your units and which notifications you chose, "
         + "with a few details such as the app's version and when it last checked in. We delete "
         + "them when you turn notifications off in the app, when Apple tells us the app is no "
         + "longer installed, or about 90 days after you last open it. If you turn notifications "
-        + "off in your iPhone's Settings instead, we delete them the next time you open the app.",
+        + "off in your iPhone's Settings instead, we delete them the next time you open the app. "
+        + "For a few days after each notification and each test, we also keep a note that it was "
+        + "sent, even once the rest is deleted. It holds no token or place.",
       "In the free version, Google shows the ads and may collect device and usage data.",
       "Apple handles purchases. We never see your payment details.",
       "There are no accounts.",
@@ -171,7 +180,7 @@ final class SettingsTests: XCTestCase {
     XCTAssertFalse(text("What we keep for notifications", in: app).exists)
     XCTAssertFalse(app.buttons["delete-my-data"].exists)
     assertSnowOnly(app)
-    try app.performAccessibilityAudit()
+    try auditAccessibility(of: app, on: "Your privacy")
     attachScreen(of: app, named: "app-your-privacy")
     tap("full-policy", in: app)
     waitFor(opened(app), label: "https://willitsnow.today/privacy")
@@ -202,10 +211,11 @@ final class SettingsTests: XCTestCase {
     app.staticTexts["debug-opened"]
   }
 
-  /// A text on screen that contains `words`.
+  /// A text on screen whose own label contains `words` (`matching`, not `containing`, which
+  /// finds elements with such a descendant: a text has none).
   @MainActor
   private func text(_ words: String, in app: XCUIApplication) -> XCUIElement {
-    app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", words)).firstMatch
+    app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", words)).firstMatch
   }
 
   /// Scrolls until `element` can be tapped, up then down.

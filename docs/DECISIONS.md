@@ -2311,16 +2311,84 @@ had to be made to agree:
     tests are left out because their literals are the words they expect and their failure
     messages; the generated copy because its words are checked in TypeScript.
   - **Its limit:** one lowercase word or a symbol ("cm", "°C") looks like a key, so it passes; in
-    a view, the first guard catches it. The Swift had no stray prose to move into `appCopy.ts`:
-    what the guard flagged were DebugHooks' crash messages, IsItModel's decoding errors' and the
-    three names. Planted literals ("Opens in Safari" in `HomeView`, a sentence in a new folder)
-    fail it.
+    a view, the first guard catches it. (Narrowed in review: given to any view or label, however,
+    it fails; "The iPhone app's phase 6, reviewed".) The Swift had no stray prose to move into
+    `appCopy.ts`: what the guard flagged were DebugHooks' crash messages, IsItModel's decoding
+    errors' and the three names. Planted literals ("Opens in Safari" in `HomeView`, a sentence in
+    a new folder) fail it.
 - **Not proven here:** `HomeView`'s one-state presentation (the `Optional<HomeSheet>` bindings),
   the recorder on the picker and the new UI test are Apple only, so the macOS jobs prove them
   first. The bindings' logic was run on Linux against a stub of SwiftUI's `Binding` (its
   dynamic member by a writable key path), and `DebugHooks.swift`'s Foundation half (the search
   stub with both transports) type-checked in Swift 5 mode, Debug and Release, with the SwiftUI
   recorder left out.
+
+## The iPhone app's phase 6, reviewed (apps/ios, packages/mobile)
+
+What the review of phase 6 (the picker and Settings, put together) found, and what changed for
+it.
+
+- **Close means no place, even while the phone is being found.** The approximate line's "Use my
+  location" opens the picker already finding the phone's place; closed then, the fix still
+  chose the device's place when it came: `place.v1`, the request with the rounded location, the
+  recent places and the notifications' sync. A search result or recent place chosen meanwhile was
+  replaced the same way. `PlacePickerModel` now notes when its showing is over (a place chosen,
+  or `close()`), and a fix that comes after that chooses nothing and leaves the row idle. Two
+  Linux tests hold the fix (`RecordingHooks(holdingFix:)`): Close, then the fix; a city chosen,
+  then the fix. Both failed before the change.
+- **Your privacy says what the notice says about the notes, the searches and the phone.** The
+  notifications line said everything kept is deleted when notifications go off, but the run's and
+  the test button's notes (`sent/`, `judged/`, `test/`, keyed by the registration ID, with no token
+  or place) stay until the cleanup a few days later, as the privacy notice and the support page
+  say. The line now ends "For a few days after each notification and each test, we also keep a
+  note that it was sent, even once the rest is deleted. It holds no token or place." The
+  forecast line adds the notice's other two facts about the app: place names searched for go to
+  Open-Meteo, and the app keeps the place, units, recent places and last forecast on the iPhone
+  (still five lines, as section 10.6 has them). `credits.test.ts` holds each to the notice's
+  words; "Open-Meteo" joins the sentence-case test's names. The 90 days are still written out:
+  `ALERTS.staleAfterDays` is on main but not yet on this branch, so the test should check the
+  number against it once main is merged in.
+- **The literal guard catches a word however a view is given it.** It missed a lowercase word
+  passed to `Text(verbatim:)` (how every view here draws text) or to an accessibility label,
+  a unit beside an interpolation (`"\(depth) cm"`, `"\(snowy) of \(total)"`), and a capitalised
+  abbreviation with a value (`"ID \(prefix)"`, `"ID " + prefix`), which phase 8's "What we keep
+  for notifications" will show. Now a literal with any letter in it is words when its label is
+  `verbatim`, `prompt`, `title` or `message`, when it is a view's or label modifier's unlabelled
+  argument, or UIKit's announcement's; and anywhere, one word set beside other text with a space
+  is prose. Only a lowercase word or a symbol alone outside any view still passes, as a key's
+  shape. The shipped Swift passed unchanged: no literal is given to `Text(verbatim:)`.
+- **"Copied." is announced with UIKit.** `MailFallbackView` posted iOS 17's
+  `AccessibilityNotification.Announcement`, which the Accessibility framework declares and IsItUI
+  didn't import; whether SwiftUI re-exports it was never shown. It now posts
+  `UIAccessibility.post(notification: .announcement, argument:)`, UIKit's long-standing call,
+  which the home screen's announcement on the pages branch uses too.
+- **The UI tests read a text by its own label.** SettingsTests found a text containing some words
+  with `staticTexts.containing(_:)`, which matches elements with such a descendant; a text has
+  none, so the positive checks would have failed and the negative ones passed without testing
+  anything. It is `staticTexts.matching(_:)` now.
+- **Every screen the UI tests open is audited, and an audit lists every issue.** The full licence
+  screen, Contact us's fallback and the picker's results (with the keyboard put away by a drag on
+  the list, as scrollable content does from iOS 16) had no audit, against section 16; they have
+  one each, with their screens attached. Every audit in PickerTests and SettingsTests goes through
+  `auditAccessibility(of:on:)` (`UITests/ScreenAudit.swift`): every audit type, each issue noted
+  with its type, its element's identifier and label and Apple's description, then one failure
+  that lists them all, since the tests stop at their first failure. There are no exceptions.
+- **Left for Carl: does a recent place from "Use my location" follow the phone?** A device fix
+  joins the recent places as a device target named by its answer ("Leeds"). Chosen from the list
+  later, it is My location again, so launch step 4 moves it to wherever the phone is at the next
+  launch: chosen in London, "Leeds" becomes London. The spec doesn't say how recents and step 4
+  meet, and both fixes change what users see: a recent chosen from the list could be a fixed place
+  that step 4 never moves (a flag beside `place.v1` that only "Use my location" sets), or device
+  fixes could stay out of the recent places. Nothing changed until Carl picks one; it is under
+  "Open decisions" below.
+- **Not proven here:** the announcement, the UI tests' text query, the new audits and their
+  helper, and the keyboard put away by a drag are Apple only, so the macOS jobs prove them first.
+  The helper uses only the audit API that the pages branch's `HomeAuditTests` built with on its
+  macOS run, and the three UI test files type-checked on Linux against stubs of XCUITest's
+  main-actor API. Whether the audits pass is unknown until then: candidates are the system's `.secondary` footers
+  and detail lines (contrast), Credits' links inside a paragraph (hit regions), and, behind the
+  Settings sheet, the home screen before phase 5.4's fixes. The picker model, the copy and the
+  guard ran on Linux.
 
 ## API contract
 
@@ -2724,3 +2792,6 @@ index the crawler's own US town; see "Search engines").
 
 - Tuning α and the band edges after real use (all in `packages/core/src/config.ts`).
 - Remove-ads model. The `AdSlot` component takes an `adsDisabled` flag for it.
+- The iPhone app: whether a recent place that came from "Use my location", chosen again from the
+  list, follows the phone at the next launch (as now) or stays put ("The iPhone app's phase 6,
+  reviewed").

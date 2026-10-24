@@ -175,6 +175,11 @@ describe("Your privacy and the website's privacy notice", () => {
       ],
       ['and your units to our server', 'and your units to our server'],
       ['a rough one from your internet connection', 'a rough location from your IP address'],
+      ['Place names you search for go to Open-Meteo', 'place searches go to Open-Meteo'],
+      [
+        'The app keeps your place, units, recent places and the last forecast on your iPhone.',
+        'it keeps your place, units, recent places and last answer on your iPhone',
+      ],
       ["your device's notification token, an ID made from it", 'an ID made from the token'],
       [
         'the place, its time zone, your units and which notifications you chose',
@@ -191,6 +196,12 @@ describe("Your privacy and the website's privacy notice", () => {
         "If you turn notifications off in your iPhone's Settings instead, we delete them the next time you open the app.",
         "If you turn notifications off in your iPhone's Settings instead, we delete it the next time you open the app.",
       ],
+      // The notes that a notification or a test was sent outlive the rest by a few days.
+      [
+        'For a few days after each notification and each test, we also keep a note that it was sent, even once the rest is deleted.',
+        'For a few days after each notification and each test, we also keep a note that it was sent, even once the rest is deleted,',
+      ],
+      ['It holds no token or place.', 'it holds no token or place.'],
       ['In the free version, Google shows the ads', 'The free version shows ads from Google AdMob'],
       [APP_COPY.privacyChoices, `Settings → ${APP_COPY.privacyChoices} lets you change it`],
       [APP_COPY.privacyPurchases, APP_COPY.privacyPurchases],

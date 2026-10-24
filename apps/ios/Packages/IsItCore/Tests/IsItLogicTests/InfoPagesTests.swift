@@ -123,13 +123,17 @@ struct InfoPagesTests {
       page.lines == [
         "To get the forecast, the app sends the place (a town, or your location rounded to about "
           + "5 km) and your units to our server. Until you choose a place, our server estimates a "
-          + "rough one from your internet connection.",
+          + "rough one from your internet connection. Place names you search for go to Open-Meteo, "
+          + "our forecast provider, to find matching places. The app keeps your place, units, "
+          + "recent places and the last forecast on your iPhone.",
         "Only while notifications are on, we keep your device's notification token, an ID made "
           + "from it, the place, its time zone, your units and which notifications you chose, "
           + "with a few details such as the app's version and when it last checked in. We delete "
           + "them when you turn notifications off in the app, when Apple tells us the app is no "
           + "longer installed, or about 90 days after you last open it. If you turn notifications "
-          + "off in your iPhone's Settings instead, we delete them the next time you open the app.",
+          + "off in your iPhone's Settings instead, we delete them the next time you open the app. "
+          + "For a few days after each notification and each test, we also keep a note that it was "
+          + "sent, even once the rest is deleted. It holds no token or place.",
         "In the free version, Google shows the ads and may collect device and usage data.",
         "Apple handles purchases. We never see your payment details.",
         "There are no accounts.",

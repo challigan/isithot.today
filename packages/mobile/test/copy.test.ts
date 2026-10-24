@@ -290,6 +290,7 @@ describe('APP_COPY', () => {
       'Settings',
       'Safari',
       'Met Office',
+      'Open-Meteo',
       'Apple',
       'Google',
       'UK',

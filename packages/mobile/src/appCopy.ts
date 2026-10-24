@@ -93,22 +93,30 @@ export const APP_COPY = {
   // its zone, the units, the switches, and a few details more (the app's version, when it last
   // checked in), deleted when notifications go off in the app, when Apple says the app is gone,
   // or about 90 days after the app was last opened (it checks in at most weekly), and after
-  // notifications go off in iPhone Settings, at the next open. "See Privacy choices." follows
-  // the ads line only while that row is in Settings.
+  // notifications go off in iPhone Settings, at the next open; the notes that a notification or
+  // a test was sent (sent/, judged/ and test/, keyed by the ID, with no token or place) go a few
+  // days later, at the run's cleanup. Searches go to Open-Meteo, and the phone keeps the place,
+  // units, recent places and last answer (phase 8 adds the notification choices to both this
+  // line and the notice's). "See Privacy choices." follows the ads line only while that row is
+  // in Settings.
   privacyChoices: 'Privacy choices',
   yourPrivacy: 'Your privacy',
   privacyPolicy: 'Privacy policy',
   privacyForecast:
     'To get the forecast, the app sends the place (a town, or your location rounded to about ' +
     '5 km) and your units to our server. Until you choose a place, our server estimates a rough ' +
-    'one from your internet connection.',
+    'one from your internet connection. Place names you search for go to Open-Meteo, our ' +
+    'forecast provider, to find matching places. The app keeps your place, units, recent ' +
+    'places and the last forecast on your iPhone.',
   privacyNotifications:
     "Only while notifications are on, we keep your device's notification token, an ID made from " +
     'it, the place, its time zone, your units and which notifications you chose, with a few ' +
     "details such as the app's version and when it last checked in. We delete them when you turn " +
     'notifications off in the app, when Apple tells us the app is no longer installed, or about ' +
     "90 days after you last open it. If you turn notifications off in your iPhone's Settings " +
-    'instead, we delete them the next time you open the app.',
+    'instead, we delete them the next time you open the app. For a few days after each ' +
+    'notification and each test, we also keep a note that it was sent, even once the rest is ' +
+    'deleted. It holds no token or place.',
   privacyAds: 'In the free version, Google shows the ads and may collect device and usage data.',
   seePrivacyChoices: 'See Privacy choices.',
   privacyPurchases: 'Apple handles purchases. We never see your payment details.',

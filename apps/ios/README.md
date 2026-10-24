@@ -506,15 +506,17 @@ iPhone app's place picker").
 
 **Its tests.** On Linux: `Tests/IsItStateTests/PlacePickerModelTests.swift` (the search's pause,
 cancelling and failures, choosing a city and a point, the recent places, Use my location
-granted, denied, refused, without a fix and tapped twice, and a launch that never asks),
+granted, denied, refused, without a fix and tapped twice, the sheet closed or a place chosen
+while the fix is out (the fix then chooses nothing), and a launch that never asks),
 `Tests/IsItLogicTests/PlacePickerTests.swift` (the content and `recent.v1`'s reading) and the
 `search.json` port. On the macOS CI, `PickerTests` (UI plan), over `-network
 ip-first-launch,leeds-dry` or `…,kathmandu-0545` and `-location`: too short and no results;
 choosing Leeds (a city page) and Kathmandu (a point); a recent place kept across a relaunch, then
 swiped away; Use my location denied, from the approximate line and the picker's own row; Use my
-location with a fix; and the accessibility audit of the sheet. Their screens are
-`picker-no-results`, `picker-results`, `picker-recent`, `picker-location-denied` and
-`picker-audit`.
+location with a fix; and the accessibility audit of the sheet, with a recent place and location
+access off, and of its results with the keyboard put away by a drag. Their screens are
+`picker-no-results`, `picker-results`, `picker-recent`, `picker-location-denied`,
+`picker-audit` and `picker-results-audit`.
 
 ### 6.2 and 6.3: Settings
 
@@ -560,9 +562,16 @@ that no Swift view or label is given a string literal (`swiftLiterals.test.ts`, 
 **On the macOS CI:** `SettingsTests` (UI plan), with `-openURLs`: the units switch, the refetch
 in inches and the choice kept at the next launch; every row's URL or page; Report an ad's and
 Contact us's fallback with "Copied."; Your privacy's lines; the version line; no word naming
-another weather type on screen; and `performAccessibilityAudit()` on Settings, How it works,
-Credits and licences, Your privacy and the fallback. The screens are `app-settings`,
-`app-how-it-works`, `app-credits`, `app-your-privacy` and `app-report-ad-fallback`.
+another weather type on screen; and the accessibility audit on Settings, How it works,
+Credits and licences, a licence in full, Your privacy and both fallbacks. The screens are
+`app-settings`, `app-how-it-works`, `app-credits`, `app-notice`, `app-your-privacy`,
+`app-report-ad-fallback` and `app-contact-us-fallback`.
+
+**The audits** (both classes) go through `auditAccessibility(of:on:)` (`UITests/ScreenAudit.swift`):
+`performAccessibilityAudit(for: .all)`, every kind of issue, with a handler that notes each issue
+with its type, its element's identifier and label and Apple's description, then one failure that
+lists them all. The tests stop at their first failure, so without it a run would show one issue
+a screen.
 
 ### How they meet
 
@@ -587,16 +596,20 @@ guards:
 
 - **No view or modifier is given a literal** (6.2's): `Text("…")`, `Button("…")`,
   `.navigationTitle("…")`, `.accessibilityLabel("…")`, a `prompt:` or `title:` with words of its
-  own, whatever the literal says. `Text(verbatim:)` with data passes.
+  own, whatever the literal says. `Text(verbatim:)` with data passes; given a literal, the second
+  guard fails it.
 - **No literal looks like prose**, anywhere in the Swift that ships: every `.swift` file under
   `apps/ios` but the generated folders (the copy itself, which the TypeScript's tests check), the
   test targets (`Apps/Snow/Tests`, `Apps/Snow/UITests`, each package's `Tests`: their words are
   what they expect on screen) and build output. packages/mobile `swiftLiterals.ts` reads every
   literal, with Swift's comments, raw and multi-line literals and interpolations, and the call
-  and argument label each one belongs to. A literal is prose when it has two words or more, or
-  one capitalised word ("Settings", "Version {} ({})") or a word that ends a sentence; keys,
-  identifiers, paths, URL pieces (`"/api/v1/search?"`, `"mailto:"`) and format specifiers have no
-  words in that sense.
+  and argument label each one belongs to. A literal with a letter in it is words when a view or
+  label is given it, whatever its shape: `Text(verbatim: "in")`, `Text(verbatim: "\(depth) cm")`,
+  `.accessibilityLabel(Text(verbatim: "close"))`, a `prompt:`, `title:` or `message:`, UIKit's
+  announcement. Anywhere else a literal is prose when it has two words or more, one word set
+  beside other text with a space (`"ID \(prefix)"`, `"ID " + prefix`), or one capitalised word
+  ("Settings", "Version {} ({})") or a word that ends a sentence; keys, identifiers, paths, URL
+  pieces (`"/api/v1/search?"`, `"mailto:"`) and format specifiers have no words in that sense.
 - **The allowlist** is in the test, each entry with why it is never shown: accessibility
   identifiers, a crash's message (`fatalError` and its kin: DebugHooks' bad launch arguments), a
   decoding error's description, a bundle's file and folder names, Info.plist keys, SF Symbols'
@@ -604,10 +617,11 @@ guards:
   folder. A test fails when one of those names is no longer used.
 
 A word it finds belongs in packages/mobile `appCopy.ts` (then `pnpm mobile:generate`), not the
-allowlist. One lowercase word or a symbol ("cm", "°C") can't be told from a key by its shape, so
-the second guard lets it pass; the first catches it in a view. When phase 6 was put together the
-Swift had no stray prose: every literal the guard flags is a crash's or a decoding error's
-message, or one of the names above.
+allowlist. What still passes is one lowercase word or a symbol alone outside any view (`let unit
+= "cm"`), which can't be told from a key by its shape; given to a view, it fails. When phase 6 was
+put together the Swift had no stray prose: every literal the guard flags is a crash's or a
+decoding error's message, or one of the names above; and no literal is given to
+`Text(verbatim:)`.
 
 ## CI (`.github/workflows/ios.yml`)
 

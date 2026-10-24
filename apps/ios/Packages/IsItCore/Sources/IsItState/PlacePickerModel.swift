@@ -28,6 +28,9 @@ public final class PlacePickerModel {
   @ObservationIgnored private let clock: any AppClock
   /// Counts the searches started; only the newest one's answer is shown.
   @ObservationIgnored private var searches = 0
+  /// Whether this showing is over: a place was chosen, or the sheet closed. A fix that comes
+  /// after that is dropped.
+  @ObservationIgnored private var over = false
   /// The wait before the newest search asks.
   @ObservationIgnored private var waiting: ScheduledWork?
   /// The newest search's request, while it is out.
@@ -95,11 +98,17 @@ public final class PlacePickerModel {
   /// "Use my location": permission, asked only now and only if never asked, then one fix
   /// (`AppModel.locate()`). With a fix, the sheet closes and the device's place loads, joining
   /// the recent places under its answer's name; without one, the row says why. A tap while
-  /// the fix is out does nothing.
+  /// the fix is out does nothing, and a fix that comes once a place was chosen or the sheet
+  /// closed is dropped: Close means no place, and a place chosen meanwhile stays chosen.
   public func useMyLocation() async {
     guard location != .locating else { return }
     location = .locating
-    switch await app.locate() {
+    let found = await app.locate()
+    guard !over else {
+      location = .idle
+      return
+    }
+    switch found {
     case .located(let place):
       location = .idle
       finish()
@@ -111,10 +120,12 @@ public final class PlacePickerModel {
     }
   }
 
-  /// The sheet closed: nothing more is asked, and no answer still on its way is shown.
+  /// The sheet closed: nothing more is asked, no answer still on its way is shown, and a fix
+  /// still on its way chooses nothing.
   public func close() {
     cancelSearch()
     searches += 1
+    over = true
   }
 
   // MARK: - The search
@@ -149,5 +160,6 @@ public final class PlacePickerModel {
     cancelSearch()
     searches += 1
     finished = true
+    over = true
   }
 }

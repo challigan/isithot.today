@@ -1,6 +1,7 @@
 import IsItLogic
 import IsItModel
 import SwiftUI
+import UIKit
 
 /// The Settings sheet (iOS build spec, section 10.4): a native form, in system materials that
 /// follow Dark Mode, with the snow units, the privacy rows, Report an ad in the free version,
@@ -201,7 +202,9 @@ struct LeavingRow: View {
 }
 
 /// What shows when no mail app can open an email (section 10.7): where to write, and "Copy
-/// address", which says "Copied." once it has, on screen and to VoiceOver.
+/// address", which says "Copied." once it has, on screen and to VoiceOver. The announcement is
+/// UIKit's: iOS 17's `AccessibilityNotification` is the Accessibility framework's, which SwiftUI
+/// isn't known to re-export.
 struct MailFallbackView: View {
   let fallback: MailFallback
   let copy: @MainActor (String) -> Void
@@ -219,7 +222,7 @@ struct MailFallbackView: View {
           Button {
             copy(fallback.address)
             copied = true
-            AccessibilityNotification.Announcement(fallback.copied).post()
+            UIAccessibility.post(notification: .announcement, argument: fallback.copied)
           } label: {
             Text(verbatim: fallback.copyAddress)
           }

@@ -488,6 +488,59 @@ struct PlacePickerLocationTests {
     #expect(h.transport.requests.count == 1)
   }
 
+  /// The approximate line's "Use my location" opens the picker already finding the phone's
+  /// place; Close then means no. A fix that comes after is dropped: nothing is kept, loaded or
+  /// remembered, and the notifications aren't synced.
+  @Test("closed while the fix is out: nothing is chosen when it comes")
+  func closedWhileLocating() async throws {
+    let h = Harness(
+      now: try fixtureNow("kathmandu-0545"),
+      store: .init(units: .c),
+      replies: [try FakeTransport.fixture("kathmandu-0545")],
+      hooks: RecordingHooks(moved: fix, holdingFix: true)
+    )
+    let picker = h.model.makePicker()
+    let locating = Task { await picker.useMyLocation() }
+    try #require(await yieldUntil { h.hooks.calls.contains("location fix") })
+    picker.close()
+    h.hooks.releaseFix()
+    await locating.value
+    #expect(!picker.finished)
+    #expect(picker.location == .idle)
+    #expect(h.model.target == .ip)
+    #expect(h.store.loadPlace() == .ip)
+    #expect(h.transport.requests.isEmpty)
+    #expect(h.model.recents.isEmpty)
+    #expect(h.recents.loadRecents().isEmpty)
+    #expect(h.hooks.calls == ["location access", "location fix"])
+  }
+
+  @Test("a place chosen while the fix is out stays chosen when it comes")
+  func chosenWhileLocating() async throws {
+    let h = Harness(
+      now: try fixtureNow("leeds-dry"),
+      store: .init(units: .c),
+      replies: [try FakeTransport.fixture("leeds-dry")],
+      hooks: RecordingHooks(moved: fix, holdingFix: true)
+    )
+    let picker = h.model.makePicker()
+    let locating = Task { await picker.useMyLocation() }
+    try #require(await yieldUntil { h.hooks.calls.contains("location fix") })
+    await picker.choose(try #require(try found("search-leeds").first))
+    h.hooks.releaseFix()
+    await locating.value
+    #expect(picker.finished)
+    #expect(picker.location == .idle)
+    #expect(h.model.target == leedsCity)
+    #expect(h.store.loadPlace() == leedsCity)
+    #expect(
+      h.transport.urls == [
+        "https://willitsnow.today/api/v1/today?place=leeds-gb&units=c&ahead=snow"
+      ])
+    #expect(h.model.recents == [RecentPlace(target: leedsCity, name: "Leeds")])
+    #expect(h.hooks.calls == ["location access", "location fix", "syncAlerts city:leeds-gb c"])
+  }
+
   @Test("a device place whose answer never came isn't a recent place")
   func failed() async throws {
     let h = Harness(
