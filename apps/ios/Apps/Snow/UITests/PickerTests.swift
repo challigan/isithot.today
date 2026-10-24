@@ -214,12 +214,15 @@ final class PickerTests: XCTestCase {
   }
 
   /// Opens the picker with the place button, and gives its search field, focused unless not
-  /// `focusing`.
+  /// `focusing`. With no picker, the failure says where the top bar was: on main's first macOS
+  /// run the place button was under the status bar, where the tap never reached it.
   @MainActor
   private func openPicker(in app: XCUIApplication, focusing: Bool = true) -> XCUIElement {
     app.buttons["place"].tap()
     let field = app.searchFields.firstMatch
-    XCTAssertTrue(field.waitForExistence(timeout: 10), "No picker")
+    XCTAssertTrue(
+      field.waitForExistence(timeout: 10),
+      "No picker after tapping the place button; \(app.homeGeometry)")
     XCTAssertEqual(field.placeholderValue, "Town or city")
     XCTAssertTrue(app.buttons["picker-use-my-location"].exists, "No Use my location")
     if focusing { field.tap() }

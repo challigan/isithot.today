@@ -144,6 +144,44 @@ extension XCUIApplication {
 
   /// The question and the answer: one heading element.
   var heading: XCUIElement { find("heading") }
+
+  /// The top bar's controls and the switcher, which don't scroll, by identifier.
+  static let homeBar = ["place", "settings", "approximate", "use-my-location", "views"]
+
+  /// Where the home screen's parts are, from one snapshot of the app: the window, then the top
+  /// bar's controls, the switcher and the page on screen (`page-<view>`), each with its frame or
+  /// "no <identifier>", for a failure to say where things were when a tap opened nothing or a
+  /// page didn't fit.
+  var homeGeometry: String {
+    guard let root = try? snapshot() else { return "the screen can't be read" }
+    let frames = Self.homeFrames(in: root)
+    let parts = Self.homeBar + frames.keys.filter { $0.hasPrefix("page-") }.sorted()
+    let found = parts.map { id in frames[id].map { "\(id) at \($0)" } ?? "no \(id)" }
+    return "the window at \(root.frame); " + found.joined(separator: ", ")
+  }
+
+  /// The frame of the first element with each of the top bar's and switcher's identifiers, and
+  /// of each page in the tree, under `root`.
+  static func homeFrames(in root: any XCUIElementSnapshot) -> [String: CGRect] {
+    var frames: [String: CGRect] = [:]
+    var pending = [root]
+    while let element = pending.popLast() {
+      let id = element.identifier
+      if frames[id] == nil, homeBar.contains(id) || id.hasPrefix("page-") {
+        frames[id] = element.frame
+      }
+      pending.append(contentsOf: element.children)
+    }
+    return frames
+  }
+}
+
+/// A drag that scrolled a page: where it started and ended on screen.
+struct Drag: CustomStringConvertible {
+  let from: CGPoint
+  let to: CGPoint
+
+  var description: String { "(\(from.x), \(from.y)) to (\(to.x), \(to.y))" }
 }
 
 extension XCTestCase {
@@ -220,9 +258,14 @@ extension XCTestCase {
   /// padding), where no button, link or row is, so the page's scroll view always takes it.
   /// (Phase 5.4's drag, from 90% of the page's frame down its middle, never moved a page past
   /// its first scroll on PR #31's macOS run, and at AX3 the audit after it found no app to
-  /// audit.)
+  /// audit.) Gives the drag, for a failure to say.
   @MainActor
-  func scrollDown(_ page: HomeScreen.Page, by distance: CGFloat, in app: XCUIApplication) {
+  @discardableResult
+  func scrollDown(
+    _ page: HomeScreen.Page,
+    by distance: CGFloat,
+    in app: XCUIApplication
+  ) -> Drag {
     let shown = onScreen(page, in: app)
     let screen = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
     let x = shown.minX + 10
@@ -230,6 +273,44 @@ extension XCTestCase {
     let from = screen.withOffset(CGVector(dx: x, dy: start))
     let to = screen.withOffset(CGVector(dx: x, dy: start - distance))
     from.press(forDuration: 0.01, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.3)
+    return Drag(from: CGPoint(x: x, y: start), to: CGPoint(x: x, y: start - distance))
+  }
+
+  /// Checks the home screen fits the screen: the top bar's place button and gear, and the page on
+  /// screen, each lie within the window. On main's first macOS run they didn't: each of the
+  /// pager's pages was the height of the screen's safe area, so the home screen was taller than
+  /// the screen by the top bar and the switcher, and the window centred it. The place button and
+  /// the gear were under the status bar, where taps never reached them, and every page ran past
+  /// the screen's bottom edge, its end never on screen.
+  @MainActor
+  func expectFits(
+    _ app: XCUIApplication,
+    _ what: String,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    let root: any XCUIElementSnapshot
+    do {
+      root = try app.snapshot()
+    } catch {
+      XCTFail("\(what): the screen can't be read: \(error)", file: file, line: line)
+      return
+    }
+    let window = root.frame
+    let frames = XCUIApplication.homeFrames(in: root)
+    let pages = frames.keys.filter { $0.hasPrefix("page-") }.sorted()
+    XCTAssertFalse(pages.isEmpty, "\(what): no page on screen", file: file, line: line)
+    for id in ["place", "settings"] + pages {
+      guard let frame = frames[id] else {
+        XCTFail("\(what): no \(id) on screen; \(app.homeGeometry)", file: file, line: line)
+        continue
+      }
+      XCTAssertTrue(
+        window.insetBy(dx: -0.5, dy: -0.5).contains(frame),
+        "\(what): \(id) at \(frame) isn't within the window at \(window), so the home screen "
+          + "doesn't fit the screen; \(app.homeGeometry)",
+        file: file, line: line)
+    }
   }
 
   /// `element`'s frame once it has stopped moving: read until two readings a quarter of a second

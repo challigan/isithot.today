@@ -491,9 +491,12 @@ brought forward the minute's tick, pull to refresh, the footer and the loading a
   labels (the middle one "Tomorrow" from 6pm), which at accessibility text sizes becomes a row
   of buttons that wraps so no label is cut short; and `HomePager`, the three pages side by side
   in a horizontal `ScrollView` paged with `.scrollTargetBehavior(.paging)` and
-  `.scrollPosition(id:)`. Both are bound to `AppModel.view` (`$model.view` in `HomeView`), so a
-  tap, a swipe, a widget's route (`.view`, which now sets the view) and the return after more
-  than 30 minutes away (the view for the time of day) move both. The app opens on
+  `.scrollPosition(id:)`, each page the pager's own size, which a `GeometryReader` reads (since
+  main's first macOS run: sized to the screen's safe area, the pages pushed the top bar under the
+  status bar; DECISIONS, "The iPhone app's UI tests, after main's first macOS run"). Both are
+  bound to `AppModel.view` (`$model.view` in `HomeView`), so a tap, a swipe, a widget's route
+  (`.view`, which now sets the view) and the return after more than 30 minutes away (the view
+  for the time of day) move both. The app opens on
   `MiddleDay.defaultView`, Today or Now from 6pm, once: from the saved answer it paints, or else
   from its first answer, unless the user or a route has chosen a view by then, as the website
   does; a place under "Nearby:", a place chosen in the picker (phase 6) and Retry answer on the
@@ -563,10 +566,12 @@ difference is reported and the test goes on to the next; a screen that never com
 file and line):
 
 - `HomeTests`: `testAberdeenSnow`, `testDurhamTomorrow` and `testLeedsDry` open each fixture at
-  its own moment with `-clock fixed`, check the top bar, the tabs and the page it opens on (Today,
-  or Now from 6pm), then each page by its tab, then back from This week to Now by swiping and on
-  again, each tab selected as it shows. `testDefaultViewEitherSideOf6pm` opens Durham at 5:59pm
-  (Today; Now, Today, This week) and at 6pm (Now; the middle tab Tomorrow).
+  its own moment with `-clock fixed`, check the top bar, that the home screen fits the screen
+  (`expectFits`: the place button, the gear and the page on screen each within the window), the
+  tabs and the page it opens on (Today, or Now from 6pm), then each page by its tab, then back
+  from This week to Now by swiping and on again, each tab selected as it shows.
+  `testDefaultViewEitherSideOf6pm` opens Durham at 5:59pm (Today; Now, Today, This week) and at
+  6pm (Now; the middle tab Tomorrow).
   `testTheMiddleTabTurnsToTomorrowAt6pm` opens at 5:58pm with `-clock run` and waits up to three
   minutes for 6pm: the middle page turns to tomorrow where it is. `testNearbyLoadsInPlace` taps
   the first place under "Nearby:" and reads its answer, and the chosen place on the top bar;
@@ -586,21 +591,27 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
 - `HomeAuditTests` (spec 17.2's `AccessibilityAuditTests` for the home screen): each page of the
   three fixtures at Large and at AX3 (`-UIPreferredContentSizeCategoryName` with
   `UICTContentSizeCategoryAccessibilityXL`; the test checks the switcher is buttons at AX3 and not
-  at Large, so the size reached the app), with `performAccessibilityAudit(for: .all)` on every
-  screenful, from the page's top to the end of its credits. Each scroll brings the first element
+  at Large, so the size reached the app, and that the home screen fits the screen at that size,
+  `expectFits`), with `performAccessibilityAudit(for: .all)` on every screenful, from the page's
+  top to the end of its credits, in at most 20 screenfuls. Each scroll brings the first element
   the screen doesn't show whole to the top (a drag in the page's left margin, clear of the home
   indicator, read from one snapshot of the page), and an issue on an element the screenful cuts
   at the page's edge, or doesn't show, is judged on a screenful that shows it whole (an audit
   measures what the screen has where the element is: on PR #31's macOS run, the answer failed
   contrast on every screenful that had scrolled it off the top). Every issue fails the test, once
   per fixture and size, listing each with its page and screenful, kind (`contrast`, `hitRegion`,
-  `dynamicType`, …), Apple's descriptions and the element's identifier and label, except those in
+  `dynamicType`, …), Apple's descriptions and the element's type, identifier, label and frame on
+  screen (with the part of the page on screen, for one no screenful showed whole), except those in
   `HomeAuditTests.exceptions`, each with why it isn't a fault to fix: the segmented control's own
   type size (`dynamicType`; section 10.2's segmented picker, buttons that scale at accessibility
   sizes) and the credits' inline links (`hitRegion`). The log names an exception a test didn't
   need. A page that stops scrolling short of its end, an app that has left the foreground or an
-  audit that can't run fails with where the page and its credits were on each screenful. For a
-  new issue, fix the app, or, when it isn't a fault, add it there with its reason.
+  audit that can't run fails with where the page and its credits were on each screenful. A page
+  that stops short, or never reaches its end, also says the page's whole frame and the window's,
+  each drag, the page's four lowest elements and where a swipe by XCUITest's own gesture then
+  moved the credits (a page at the end of its scroll range, or a drag it didn't take), and
+  attaches the app's element tree as `<name>-tree`. For a new issue, fix the app, or, when it
+  isn't a fault, add it there with its reason.
 
 **The contact sheet** tiles every attachment in its names' order (`ci/contact-sheet.mjs`, five
 screens to a row). `HomeAuditTests` attaches every screenful it audits as
@@ -731,9 +742,9 @@ Credits and licences, a licence in full, Your privacy and both fallbacks. The sc
 **The audits** (`PickerTests` and `SettingsTests`; `HomeAuditTests` has its own, with its
 exceptions, above) go through `auditAccessibility(of:on:)` (`UITests/ScreenAudit.swift`):
 `performAccessibilityAudit(for: .all)`, every kind of issue, with a handler that notes each issue
-with its type, its element's identifier and label and Apple's description, then one failure that
-lists them all. The tests stop at their first failure, so without it a run would show one issue
-a screen.
+with its kind (named as `HomeAuditTests` names it), its element's type, identifier, label and
+frame, and Apple's description, then one failure that lists them all with the window's frame. The
+tests stop at their first failure, so without it a run would show one issue a screen.
 
 ### How they meet
 
@@ -759,6 +770,8 @@ a screen.
   search fixtures (`SearchStub`, below).
 - **The tests.** `PickerTests` and `SettingsTests` launch the same app; the picker's Open
   Settings is read from the recorder (`testOpenSettingsOpensTheAppsPage`), as Settings' rows are.
+  When a tap on the place button or the gear opens nothing, the failure says where the window,
+  the top bar's controls, the switcher and the page were (`homeGeometry`).
   Phase 5.4's tests and phase 6's share the launch arguments (below, "Debug hooks"): `-network`
   takes a comma list of fixtures, or `off` or `unavailable`; `-clock fixed` and `-now` fix the
   moment; `-resetStore` forgets the recent places too. Their identifiers differ, and the pager

@@ -139,6 +139,7 @@ final class HomeTests: XCTestCase {
     let screen = try HomeScreen.named(name)
     let app = try launch(screen)
     expect(screen.topBar, in: app)
+    expectFits(app, name)
     try tabs(screen, in: app)
     let opening = try screen.opening()
     expect(opening, in: app)

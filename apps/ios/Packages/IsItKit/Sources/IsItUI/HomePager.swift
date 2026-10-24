@@ -88,6 +88,15 @@ public struct ViewSwitcher: View {
 /// scrolls vertically and pulls to refresh (`refresh`). Only the page on screen is in the
 /// accessibility tree, so VoiceOver and the UI tests read that one; VoiceOver moves between pages
 /// with the switcher.
+///
+/// Each page is exactly the pager's size: the space the home screen leaves it under the top bar
+/// and the switcher, read as the pager is laid out. Not
+/// `.containerRelativeFrame([.horizontal, .vertical])`: a horizontal scroll view is a page's
+/// container only along the axis it scrolls, so each page took the height of the screen's safe
+/// area, the horizontal scroll view took the page's, and the home screen was taller than the
+/// screen by the top bar and the switcher. The window centred it, which put the top bar's place
+/// button and gear under the status bar, where a tap never reaches the app, and every page's end
+/// below the screen (DECISIONS, "The iPhone app's UI tests, after main's first macOS run").
 public struct HomePager: View {
   let pages: [PageContent]
   @Binding var selection: AppView
@@ -111,29 +120,32 @@ public struct HomePager: View {
   }
 
   public var body: some View {
-    ScrollViewReader { proxy in
-      ScrollView(.horizontal) {
-        HStack(spacing: 0) {
-          ForEach(pages, id: \.page.view) { content in
-            ForecastPageView(
-              page: content.page,
-              theme: content.theme,
-              glyph: content.glyph,
-              still: still,
-              actions: actions
-            )
-            .refreshable { [refresh] in await refresh() }
-            .containerRelativeFrame([.horizontal, .vertical])
-            .id(content.page.view)
-            .accessibilityHidden(content.page.view != selection)
+    // The reader takes all the space it is offered, no more, and says how much that is.
+    GeometryReader { space in
+      ScrollViewReader { proxy in
+        ScrollView(.horizontal) {
+          HStack(spacing: 0) {
+            ForEach(pages, id: \.page.view) { content in
+              ForecastPageView(
+                page: content.page,
+                theme: content.theme,
+                glyph: content.glyph,
+                still: still,
+                actions: actions
+              )
+              .refreshable { [refresh] in await refresh() }
+              .frame(width: space.size.width, height: space.size.height)
+              .id(content.page.view)
+              .accessibilityHidden(content.page.view != selection)
+            }
           }
+          .scrollTargetLayout()
         }
-        .scrollTargetLayout()
+        .scrollTargetBehavior(.paging)
+        .scrollPosition(id: position)
+        .scrollIndicators(.hidden)
+        .onAppear { proxy.scrollTo(selection, anchor: .leading) }
       }
-      .scrollTargetBehavior(.paging)
-      .scrollPosition(id: position)
-      .scrollIndicators(.hidden)
-      .onAppear { proxy.scrollTo(selection, anchor: .leading) }
     }
   }
 

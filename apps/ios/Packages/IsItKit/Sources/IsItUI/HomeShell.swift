@@ -28,6 +28,10 @@ public struct HomeShell<Content: View>: View {
   public var body: some View {
     VStack(spacing: 0) {
       TopBarView(topBar: topBar, actions: actions)
+      // The content must take the height it is offered, no more: this frame doesn't clamp a view
+      // taller than its offer, and a home screen taller than the screen is centred in it, the
+      // top bar pushed under the status bar (as the pager's pages did until main's first macOS
+      // run, HomePager.swift).
       content
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }

@@ -203,11 +203,15 @@ final class SettingsTests: XCTestCase {
     return app
   }
 
-  /// Taps the gear, and waits for the sheet.
+  /// Taps the gear, and waits for the sheet. With no sheet, the failure says where the top bar
+  /// was: on main's first macOS run the gear was under the status bar, where the tap never
+  /// reached it.
   @MainActor
   private func openSettings(_ app: XCUIApplication) {
     app.buttons["settings"].tap()
-    XCTAssertTrue(app.buttons["close-settings"].waitForExistence(timeout: 5), "No Settings")
+    XCTAssertTrue(
+      app.buttons["close-settings"].waitForExistence(timeout: 5),
+      "No Settings after tapping the gear; \(app.homeGeometry)")
   }
 
   /// The recorder's line: the last URL the app would have opened.

@@ -2392,7 +2392,10 @@ once to VoiceOver, and every text size up to AX5 (sections 9.5, 10.1, 10.2 and 1
   Switcher and pager share one binding to `AppModel.view`, so a tap, a swipe, a route and the
   return after 30 minutes away (5.1's rule, unchanged) always agree. A tap moves the pages
   without animation: an animated programmatic scroll passes Today on its way from Now to the
-  week, and the position it reports on the way could set the view mid-scroll.
+  week, and the position it reports on the way could set the view mid-scroll. (The container's
+  size, `containerRelativeFrame`, turned out to be the screen's safe area in height, which put
+  the top bar under the status bar; each page has been the pager's own size since main's first
+  macOS run: "The iPhone app's UI tests, after main's first macOS run", below.)
 - **Only the page on screen is in the accessibility tree.** The other two are hidden from
   VoiceOver (which changes page with the switcher, as with a system page view) and so from the UI
   tests, whose identifiers (`heading`, `verdict`, …) stay unique. Pull to refresh is on each
@@ -3256,6 +3259,78 @@ What the review of phases 5 and 6 put together found, and what changed for it.
   stubs of XCUITest (with the new `state`, `elementType`, snapshot `frame` and
   `withOffset(_:)`), the held-issue logic ran against fakes, `DebugHooks.swift` type-checked in
   Debug and Release, and IsItCore's 313 tests passed.
+
+## The iPhone app's UI tests, after main's first macOS run
+
+PRs #31 and #32 merged before their macOS UI tests finished. Main's first `ios` run on 71128e9
+(run 40061399787, job 120775981243) built, passed the 20 unit tests and the Release check, and
+failed the UI plan: 39 tests, 21 passed, 18 failed. Every `PickerTests` test but
+`testUseMyLocationDenied` failed (8, "No picker"), every `SettingsTests` test (4, "No Settings"),
+and every `HomeAuditTests` test (6, each page "scrolls no further, but its end isn't on screen",
+and the audit's issues). FixtureLaunchTests, HomeTests, LaunchTests and OfflineTests passed. PR
+#32's own run (job 120771667747) failed the same 18 at the same lines, to within 3.33 points.
+
+- **One app fault explains the picker, Settings and the pages at Large.** `HomePager` gave each
+  page `.containerRelativeFrame([.horizontal, .vertical])`. A horizontal scroll view is a page's
+  container only along the axis it scrolls, so each page took the height of the screen's safe
+  area (778.33 points on the iPhone 17: 874, less 62 and 34), the scroll view took the page's,
+  and `HomeShell`'s `.frame(maxHeight: .infinity)` doesn't clamp a child taller than its offer.
+  The home screen was taller than the safe area by the top bar and the switcher, and the window
+  centred it. Two numbers in the log agree. The pages began at y=132.33, so the overflow was
+  140.67 points, half of it above the safe area. Every page at Large stopped scrolling with its
+  content's end at y=910.67, which is 132.33 + 778.33. So the place button and the gear were
+  centred at about y=18, under the status bar, where a tap never reaches the app. "Use my
+  location" was at about y=64, just below it, which is why `testUseMyLocationDenied`, the one
+  picker test that opens the picker from there, passed. At Large each page's last 36.67 points
+  were below the screen for good; at AX3 the pages ran 148 points below it, and stopped sooner
+  still (below). The tests were right, and assert what they did.
+- **The fix:** `HomePager` reads its own size with a `GeometryReader` and makes each page
+  exactly that size, the space under the top bar and the switcher, so the home screen fits the
+  safe area. `HomeShell` says beside its frame that its content must take the height it is
+  offered.
+- **A guard for it.** `expectFits` (`HomeScreens.swift`) checks the place button, the gear and the
+  page on screen each lie within the window. It runs in HomeTests' three fixture tests and at each
+  of HomeAuditTests' launches, at Large and at AX3. With main's geometry from the log, place and
+  gear at y=-4.33 (Large) and -115.67 (AX3) and the page running to 910.67 or 1022, it fails on
+  each of the three. With the top bar at the safe area's top and the page ending at 840 or 874,
+  it passes (run on Linux against stubs of XCUITest, below). When a tap on the place button or
+  the gear opens nothing, PickerTests' and SettingsTests' failures now give the same geometry.
+- **What the log can't say, and what the next run will show.** Three things.
+  - **AX3's scroll ranges ended early.** The credits stopped 1,000 to 1,600 points short of
+    each page's end, in both runs, ending in a 3.33-point bounce. The stops don't follow the
+    pages' heights: durham-tomorrow's Now page is 144 points taller than aberdeen-snow's and
+    scrolled only 44 points further, and aberdeen-snow's week, its tallest page, had its shortest
+    range.
+  - **The issues the audit found besides the top bar's.** These are contrast on the nearby
+    places at Large, on four answer and verdict texts, and on five unlabelled elements in each
+    fixture at AX3. There is also `sufficientElementDescription` on an element with no
+    identifier and no label, on every screenful of every page, never shown whole.
+  - **The top bar's contrast issues**, "Use my location" at Large and "Using approximate
+    location." at AX3, are likely the same fault: both texts sat at or above the status bar's
+    edge.
+
+  Nothing was changed for these on a guess, and no exception was added. Each issue now names its
+  element's type and frame on screen, and an issue no screenful showed whole names the part of
+  the page on screen; the sheets' audits do the same, with their kinds by name. A page that stops
+  short or never reaches its end now also gives:
+  - the page's whole frame and the window's;
+  - each drag;
+  - the page's four lowest elements;
+  - where XCUITest's own `swipeUp()` then moved the credits, which tells a range that ends from a
+    drag the page didn't take;
+
+  and the app's element tree is attached as `<name>-tree`.
+
+- **Up to 20 screenfuls a page, from 15.** Once the home screen fits, the page on screen at AX3 is
+  about 420 points under the stacked top bar and switcher, not the 630 the overflowing pages
+  showed. The week at AX3 is about 2,930 points tall. The bound only stops a page that never
+  ends, and every screenful is still audited.
+- **Not proven here:** `HomePager` is SwiftUI and compiles only on the macOS jobs, so whether the
+  pages now fit, the picker and Settings open, and the pages reach their ends is for the next run.
+  No Linux test can reach a SwiftUI layout. On Linux, the nine UI test files type-checked against
+  stubs of XCUITest (with `XCTAttachment(string:)` and the element types they name). A copy of
+  `expectFits`, `homeGeometry` and the audit's issue text ran there against fake trees with main's
+  geometry (failing) and the fixed one (passing), and IsItCore's tests passed.
 
 ## API contract
 

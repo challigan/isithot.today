@@ -93,9 +93,12 @@ final class HomeAuditTests: XCTestCase {
     ),
   ]
 
-  /// The most screenfuls a page is audited in, top to bottom. At AX3 the longest page, the
-  /// week's, has about ten under the top bar and the switcher's stacked buttons.
-  static let screenfuls = 15
+  /// The most screenfuls a page is audited in, top to bottom: a bound on a page that never ends,
+  /// not on the app. At AX3 the longest page, the week's, is about 2,930 points tall (main's
+  /// first macOS run), and once the home screen fits the screen about 420 of them are on screen
+  /// under the top bar and the switcher's stacked buttons, so it takes ten screenfuls or more,
+  /// each scroll at most four fifths of the page on screen.
+  static let screenfuls = 20
 
   /// Opens `name` at `size`, checks the switcher is the one for that size, and for each page in
   /// the switcher's order shows it by its tab, checks its heading, and from its top to its end
@@ -115,6 +118,9 @@ final class HomeAuditTests: XCTestCase {
     XCTAssertEqual(
       app.buttons["view-now"].exists, size == .ax3,
       "The switcher isn't the one for \(order): the text size didn't reach the app")
+    // The top bar under the status bar, and every page's end below the screen, at both sizes on
+    // main's first macOS run.
+    expectFits(app, "\(name) at \(order)")
     let found = AuditLog(tabs: screen.pages.map(\.label))
     for (index, page) in screen.pages.enumerated() {
       try tap(page, in: app)
@@ -124,8 +130,8 @@ final class HomeAuditTests: XCTestCase {
     }
     XCTAssertTrue(
       found.unexpected.isEmpty,
-      "\(found.unexpected.count) accessibility issues on \(name) at \(order):\n"
-        + found.unexpected.joined(separator: "\n"))
+      "\(found.unexpected.count) accessibility issues on \(name) at \(order), in the window at "
+        + "\(app.frame):\n" + found.unexpected.joined(separator: "\n"))
     for allowed in found.allowed {
       print("Allowed accessibility issue on \(name) at \(order): \(allowed)")
     }
@@ -140,7 +146,7 @@ final class HomeAuditTests: XCTestCase {
   /// shows not at all, is judged on a screenful that shows it whole (`AuditLog.settle`). Fails,
   /// with where the page and its credits were, when the credits aren't there, the app has left
   /// the foreground, an audit can't run, the page stops scrolling before its end, or its end
-  /// never comes into view.
+  /// never comes into view; for the last two, with what `stopped` finds too.
   @MainActor
   private func audit(
     _ page: HomeScreen.Page,
@@ -154,6 +160,7 @@ final class HomeAuditTests: XCTestCase {
       return
     }
     var seen: [Screenful] = []
+    var drags: [Drag] = []
     defer { found.settle(on: seen) }
     for number in 1...Self.screenfuls {
       let place = "\(page.view) page, screenful \(number)"
@@ -182,17 +189,65 @@ final class HomeAuditTests: XCTestCase {
       }
       // The credits' end is on screen: the whole page has been audited.
       if screenful.credits.maxY <= screenful.page.maxY { return }
-      scrollDown(page, by: step(page, from: screenful, in: app), in: app)
+      drags.append(scrollDown(page, by: step(page, from: screenful, in: app), in: app))
       if settledFrame(of: credits) == screenful.credits {
         XCTFail(
           "\(page.view) page: it scrolls no further, but its end isn't on screen; "
-            + Screenful.describe(seen))
+            + Screenful.describe(seen) + "; "
+            + stopped(page, as: name, in: app, credits: credits, drags: drags))
         return
       }
     }
     XCTFail(
       "\(page.view) page: its end never came into view in \(Self.screenfuls) screenfuls; "
-        + Screenful.describe(seen))
+        + Screenful.describe(seen) + "; "
+        + stopped(page, as: name, in: app, credits: credits, drags: drags))
+  }
+
+  /// What a page that stopped short of its end shows, for its failure to say, beyond where the
+  /// page and its credits were on each screenful: the page's whole frame, the part off screen
+  /// too, and the window's; each drag; the page's lowest elements, by which the page's content
+  /// reaches below its frame or not; and where the credits went on a swipe up by XCUITest's own
+  /// gesture, which tells a page at the end of its scroll range from a drag the page didn't
+  /// take. Attaches the app's element tree as `<name>-tree`. On main's first macOS run, every page
+  /// at AX3 stopped 1,000 to 1,600 points short of its end, and the log couldn't say why.
+  @MainActor
+  private func stopped(
+    _ page: HomeScreen.Page,
+    as name: String,
+    in app: XCUIApplication,
+    credits: XCUIElement,
+    drags: [Drag]
+  ) -> String {
+    let tree = XCTAttachment(string: app.debugDescription)
+    tree.name = "\(name)-tree"
+    tree.lifetime = .keepAlways
+    add(tree)
+    let shown = app.find("page-\(page.view)")
+    let frame = shown.frame
+    var lowest = "can't be read"
+    if let root = try? shown.snapshot() {
+      var leaves: [any XCUIElementSnapshot] = []
+      var pending = root.children
+      while let element = pending.popLast() {
+        if element.children.isEmpty {
+          leaves.append(element)
+        } else {
+          pending.append(contentsOf: element.children)
+        }
+      }
+      lowest = leaves.sorted { $0.frame.maxY > $1.frame.maxY }.prefix(4).map { leaf in
+        let named = leaf.identifier.isEmpty ? String(leaf.label.prefix(40)) : leaf.identifier
+        return "\"\(named)\" at \(leaf.frame)"
+      }.joined(separator: ", ")
+    }
+    let before = credits.frame
+    shown.swipeUp()
+    let after = settledFrame(of: credits)
+    return "the page's whole frame \(frame), in the window at \(app.frame); the drags "
+      + drags.map(\.description).joined(separator: ", ")
+      + "; the page's lowest elements \(lowest); a swipe up by XCUITest then moved the credits "
+      + "from \(before) to \(after)"
   }
 
   /// How far to scroll the page from `screenful` for the next one: so the first of the page's
@@ -310,15 +365,19 @@ private final class AuditLog {
       tabs: tabs,
       credits: screenful.credits
     )
-    let kind = Self.name(of: issue.auditType)
+    let type = issue.element?.elementType
+    // The element's type and frame as well as its identifier and label, so that one with
+    // neither can be told apart (DECISIONS, "The iPhone app's UI tests, after main's first macOS
+    // run").
+    let described =
+      type.map { describeElement($0, element.identifier, element.label, element.frame) }
+      ?? "no element"
     let text =
-      "\(page): \(kind): \(issue.compactDescription) (element \"\(element.identifier)\", "
-      + "\"\(element.label)\"): \(issue.detailedDescription)"
+      "\(page): \(issue.auditType.names): \(issue.compactDescription) (\(described)): "
+      + issue.detailedDescription
     // A segment of the switcher's segmented control: a button with a tab's label, and no
     // identifier of its own.
-    let segment =
-      issue.element?.elementType == .button && element.identifier.isEmpty
-      && tabs.contains(element.label)
+    let segment = type == .button && element.identifier.isEmpty && tabs.contains(element.label)
     let fixed =
       Self.fixed.contains(element.identifier) || element.identifier.hasPrefix("view-") || segment
     if fixed || element.frame.isNull || screenful.showsWhole(element.frame, from: screenful) {
@@ -333,7 +392,9 @@ private final class AuditLog {
   func settle(on seen: [Screenful]) {
     for item in held
     where !seen.contains(where: { $0.showsWhole(item.element.frame, from: item.on) }) {
-      judge(item.element, item.type, "\(item.text) (no screenful showed it whole)")
+      judge(
+        item.element, item.type,
+        "\(item.text) (no screenful showed it whole; the page on screen at \(item.on.page))")
     }
     held = []
   }
@@ -353,17 +414,5 @@ private final class AuditLog {
     } else {
       unexpected.append(text)
     }
-  }
-
-  /// The audit type's name, as Apple's documentation spells it: the kinds an audit reports on
-  /// iOS. (`action` and `parentChild` are macOS's alone, and not in the iOS SDK.)
-  private static func name(of type: XCUIAccessibilityAuditType) -> String {
-    let names: [(XCUIAccessibilityAuditType, String)] = [
-      (.contrast, "contrast"), (.elementDetection, "elementDetection"),
-      (.hitRegion, "hitRegion"), (.sufficientElementDescription, "sufficientElementDescription"),
-      (.dynamicType, "dynamicType"), (.textClipped, "textClipped"), (.trait, "trait"),
-    ]
-    let found = names.filter { type.contains($0.0) }.map(\.1)
-    return found.isEmpty ? "type \(type.rawValue)" : found.joined(separator: ", ")
   }
 }
