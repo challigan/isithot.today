@@ -105,7 +105,7 @@ struct InfoPagesTests {
       ])
     #expect(
       page.notices.map(\.file) == [
-        "BricolageGrotesque-OFL", "GoogleMobileAds-LICENSE", "UserMessagingPlatform-LICENSE",
+        "BricolageGrotesque-OFL", "Google-Mobile-Ads-LICENSE", "Google-UMP-LICENSE",
       ])
     #expect(page.notices[0].summary.contains("SIL Open Font License, Version 1.1"))
     #expect(page.notices[1].summary.contains("Apache License, Version 2.0"))

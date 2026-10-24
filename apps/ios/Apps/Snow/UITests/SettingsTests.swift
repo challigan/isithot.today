@@ -109,7 +109,7 @@ final class SettingsTests: XCTestCase {
     try auditAccessibility(of: app, on: "the typeface's licence")
     attachScreen(of: app, named: "app-notice")
     back(in: app)
-    tap("notice-GoogleMobileAds-LICENSE", in: app)
+    tap("notice-Google-Mobile-Ads-LICENSE", in: app)
     XCTAssertTrue(app.staticTexts["notice-text"].waitForExistence(timeout: 5), "No notice text")
     XCTAssertTrue(app.staticTexts["notice-text"].label.contains("Apache License"))
     back(in: app)

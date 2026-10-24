@@ -57,14 +57,14 @@ public enum AppCredits {
       summary:
         "Shows the ads in the free version. Its Swift package is copyright 2021 Google LLC, licensed under the Apache License, Version 2.0.",
       url: "https://github.com/googleads/swift-package-manager-google-mobile-ads",
-      file: "GoogleMobileAds-LICENSE"
+      file: "Google-Mobile-Ads-LICENSE"
     ),
     Notice(
       name: "Google User Messaging Platform SDK",
       summary:
         "Asks for your choice about ads where the law requires it. Its Swift package is copyright 2021 Google LLC, licensed under the Apache License, Version 2.0.",
       url: "https://github.com/googleads/swift-package-manager-google-user-messaging-platform",
-      file: "UserMessagingPlatform-LICENSE"
+      file: "Google-UMP-LICENSE"
     ),
   ]
 }

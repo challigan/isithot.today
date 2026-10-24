@@ -91,12 +91,12 @@ describe('the bundled notices', () => {
     const pins = Object.fromEntries(resolved.pins.map((p) => [p.identity, p]));
     const google = [
       [
-        'GoogleMobileAds-LICENSE',
+        'Google-Mobile-Ads-LICENSE',
         'swift-package-manager-google-mobile-ads',
         'd1fa1f5c1dfe3b43d56c73f4de388ad3316618bc',
       ],
       [
-        'UserMessagingPlatform-LICENSE',
+        'Google-UMP-LICENSE',
         'swift-package-manager-google-user-messaging-platform',
         '13b248eaa73b7826f0efb1bcf455e251d65ecb1b',
       ],
