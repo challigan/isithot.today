@@ -1,6 +1,7 @@
 import IsItLogic
 import IsItModel
 import SwiftUI
+import UIKit
 
 /// What the place picker asks the app to do (iOS build spec, section 10.3). The picker keeps no
 /// state of its own but the search box's text, which the app's model holds through `text`.
@@ -40,12 +41,12 @@ public struct PlacePickerActions {
 }
 
 /// The place picker, a full-screen sheet (iOS build spec, section 10.3), drawn from IsItLogic's
-/// `PlacePicker`: the search box in the navigation bar ("Town or city"), "Use my location" as
-/// the first row, then the search's line or its results ("Leeds", with "England, United
-/// Kingdom" beneath), or with nothing typed, the recent places under "Recent", each of which can
-/// be swiped away. A native `List`, so it follows Dark Mode, Dynamic Type and the system's
-/// accessibility settings; its secondary lines and its tint are `SheetStyle`'s, which meet WCAG
-/// AA where the system's light ones don't.
+/// `PlacePicker`: the search box under the navigation bar ("Town or city", `SearchBox`), "Use my
+/// location" as the first row, then the search's line or its results ("Leeds", with "England,
+/// United Kingdom" beneath), or with nothing typed, the recent places under "Recent", each of
+/// which can be swiped away. A native `List`, so it follows Dark Mode, Dynamic Type and the
+/// system's accessibility settings; its secondary lines and its tint are `SheetStyle`'s, which
+/// meet WCAG AA where the system's light ones don't.
 public struct PlacePickerView: View {
   let picker: PlacePicker
   @Binding var text: String
@@ -59,58 +60,17 @@ public struct PlacePickerView: View {
 
   public var body: some View {
     NavigationStack {
-      List {
-        Section {
-          locationRow
-        }
-        if let status = picker.status {
-          Section {
-            Text(verbatim: status)
-              .foregroundStyle(SheetStyle.secondary)
-              .accessibilityIdentifier("search-status")
-          }
-        }
-        if !picker.results.isEmpty {
-          Section {
-            ForEach(picker.results) { row in
-              Button {
-                actions.choose(row.result)
-              } label: {
-                PlaceRowLabel(name: row.name, detail: row.detail)
-              }
-              .accessibilityIdentifier("result-\(row.id)")
-            }
-          }
-        }
-        if let heading = picker.recentHeading {
-          Section {
-            ForEach(picker.recents) { row in
-              Button {
-                actions.chooseRecent(row.place)
-              } label: {
-                PlaceRowLabel(name: row.name, detail: nil)
-              }
-              .accessibilityIdentifier("recent-\(row.id)")
-            }
-            .onDelete { offsets in
-              let places = offsets.map { picker.recents[$0].place }
-              for place in places { actions.removeRecent(place) }
-            }
-          } header: {
-            // As written: section headers are capitalised otherwise.
-            Text(verbatim: heading)
-              .textCase(nil)
-              .foregroundStyle(SheetStyle.secondary)
-              .accessibilityIdentifier("recent-heading")
-          }
-        }
+      // The box above the list, not in a `safeAreaInset`, so no row runs under it (the Debug
+      // recorder's lesson, DebugHooks.swift).
+      VStack(spacing: 0) {
+        SearchBox(
+          text: $text, prompt: picker.prompt, clear: picker.clear, submit: actions.submit
+        )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        list
       }
-      .listStyle(.insetGrouped)
-      // A drag on the list puts the keyboard away, so the results under it can be read and the
-      // audit reads them with it down; with the default, a drag on the results left the keyboard
-      // up on PR #33's macOS run. The list bounces however short it is, so the drag is a scroll.
-      .scrollDismissesKeyboard(.immediately)
-      .scrollBounceBehavior(.always)
+      .background(Color(uiColor: .systemGroupedBackground))
       .navigationTitle(Text(verbatim: picker.title))
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
@@ -123,18 +83,66 @@ public struct PlacePickerView: View {
           .accessibilityIdentifier("picker-close")
         }
       }
-      .searchable(
-        text: $text,
-        placement: .navigationBarDrawer(displayMode: .always),
-        prompt: Text(verbatim: picker.prompt)
-      )
-      .textInputAutocapitalization(.words)
-      .autocorrectionDisabled()
-      .onSubmit(of: .search) { actions.submit() }
     }
     // Use my location, Open Settings and Close: the system's blue gives 3.59:1 on the list's
     // background (`SheetStyle`).
     .tint(SheetStyle.accent)
+  }
+
+  /// "Use my location", then the search's line, its results or the recent places.
+  private var list: some View {
+    List {
+      Section {
+        locationRow
+      }
+      if let status = picker.status {
+        Section {
+          Text(verbatim: status)
+            .foregroundStyle(SheetStyle.secondary)
+            .accessibilityIdentifier("search-status")
+        }
+      }
+      if !picker.results.isEmpty {
+        Section {
+          ForEach(picker.results) { row in
+            Button {
+              actions.choose(row.result)
+            } label: {
+              PlaceRowLabel(name: row.name, detail: row.detail)
+            }
+            .accessibilityIdentifier("result-\(row.id)")
+          }
+        }
+      }
+      if let heading = picker.recentHeading {
+        Section {
+          ForEach(picker.recents) { row in
+            Button {
+              actions.chooseRecent(row.place)
+            } label: {
+              PlaceRowLabel(name: row.name, detail: nil)
+            }
+            .accessibilityIdentifier("recent-\(row.id)")
+          }
+          .onDelete { offsets in
+            let places = offsets.map { picker.recents[$0].place }
+            for place in places { actions.removeRecent(place) }
+          }
+        } header: {
+          // As written: section headers are capitalised otherwise.
+          Text(verbatim: heading)
+            .textCase(nil)
+            .foregroundStyle(SheetStyle.secondary)
+            .accessibilityIdentifier("recent-heading")
+        }
+      }
+    }
+    .listStyle(.insetGrouped)
+    // A drag on the list puts the keyboard away, so the results under it can be read and the
+    // audit reads them with it down; with the default, a drag on the results left the keyboard
+    // up on PR #33's macOS run. The list bounces however short it is, so the drag is a scroll.
+    .scrollDismissesKeyboard(.immediately)
+    .scrollBounceBehavior(.always)
   }
 
   /// "Use my location", with the line beneath it while the fix is out or when it came to
@@ -176,6 +184,62 @@ public struct PlacePickerView: View {
       }
       .accessibilityIdentifier("open-settings")
     }
+  }
+}
+
+/// The search box, the app's own: a text field with its prompt ("Town or city"), the keyboard's
+/// Search key choosing the first result, and while it holds text, the box's clear button
+/// ("Clear search", the xmark), 44 points square. Not the system's search (`.searchable`), whose
+/// field keeps its own clear button about 20 points square, which the accessibility audit
+/// failed as too small to tap on PR #33's second macOS run, and which SwiftUI doesn't let the
+/// app resize or remove. The field is UIKit's rounded one, at its own height (about 34 points at
+/// the default text size, growing with it): a plain field is only as tall as its line, under
+/// what the audit's hit-region check has passed (`HitTarget.shortestElement`). Its prompt is in
+/// `SheetStyle.secondary`, where the system's placeholder gives about 1.7:1.
+private struct SearchBox: View {
+  @Binding var text: String
+  let prompt: String
+  let clear: String
+  let submit: () -> Void
+
+  @FocusState private var focused: Bool
+
+  var body: some View {
+    HStack(spacing: 4) {
+      TextField(
+        text: $text,
+        prompt: Text(verbatim: prompt).foregroundStyle(SheetStyle.secondary)
+      ) {
+        Text(verbatim: prompt)
+      }
+      .textFieldStyle(.roundedBorder)
+      .focused($focused)
+      .submitLabel(.search)
+      .onSubmit(submit)
+      .textInputAutocapitalization(.words)
+      .autocorrectionDisabled()
+      .accessibilityAddTraits(.isSearchField)
+      .accessibilityIdentifier("place-search")
+      if !text.isEmpty {
+        Button {
+          text = ""
+          focused = true
+        } label: {
+          Label {
+            Text(verbatim: clear)
+          } icon: {
+            Image(systemName: "xmark.circle.fill")
+          }
+          .labelStyle(.iconOnly)
+          .foregroundStyle(SheetStyle.secondary)
+          .frame(minWidth: HitTarget.minimum, minHeight: HitTarget.minimum)
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("clear-search")
+      }
+    }
+    .frame(minHeight: HitTarget.minimum)
   }
 }
 

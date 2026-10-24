@@ -16,12 +16,13 @@ let recentHere = RecentPlace(target: .device(lat: 53.8, lon: -1.55), name: "Leed
 /// location row's and the recent places.
 @Suite("The place picker's content")
 struct PlacePickerTests {
-  @Test("its words: the title, Close, the prompt and Use my location, from core's copy")
+  @Test("its words: the title, Close, the prompt, the clear button and Use my location")
   func words() {
     let picker = PlacePicker(search: .empty, location: .idle, recents: [])
     #expect(picker.title == "Search for a place")
     #expect(picker.close == "Close")
     #expect(picker.prompt == "Town or city")
+    #expect(picker.clear == "Clear search")
     #expect(
       picker.location
         == PlacePicker.LocationRow(

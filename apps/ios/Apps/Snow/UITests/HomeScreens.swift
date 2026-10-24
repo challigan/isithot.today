@@ -402,6 +402,65 @@ extension XCTestCase {
     }
   }
 
+  /// Checks the app has no bare element: a leaf of the accessibility tree of type `other` with
+  /// neither an identifier nor a label, under no element with a label (a row's bar or dots are
+  /// under their row's). On PR #33's two macOS runs one such, the window's size, failed the
+  /// audit's `sufficientElementDescription` on every screenful of every page: the page's
+  /// background, made an element by its own accessibility modifiers (PageTheme.swift). Read from
+  /// one snapshot, outside the audit, and failing with each one's place from its window, every
+  /// element on the way with its index among its parent's children, and the app's element tree
+  /// attached (`<what>-bare-tree`, `what` as a slug), so a run says where any is at once.
+  @MainActor
+  func expectNoBareElements(
+    _ app: XCUIApplication,
+    _ what: String,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    let root: any XCUIElementSnapshot
+    do {
+      root = try app.snapshot()
+    } catch {
+      XCTFail("\(what): the screen can't be read: \(error)", file: file, line: line)
+      return
+    }
+    let bare = bareElements(under: root)
+    guard !bare.isEmpty else { return }
+    attachText(app.debugDescription, as: "\(slug(what))-bare-tree")
+    XCTFail(
+      "\(what): \(bare.count) elements with neither an identifier nor a label, under none with a "
+        + "label:\n" + bare.joined(separator: "\n"), file: file, line: line)
+  }
+
+  /// `expectNoBareElements`' finding: each bare leaf under `root`'s windows, as its path.
+  @MainActor
+  func bareElements(under root: any XCUIElementSnapshot) -> [String] {
+    func named(_ node: any XCUIElementSnapshot, _ index: Int, of count: Int) -> String {
+      "\(node.elementType.name) \"\(node.identifier)\" at \(node.frame), #\(index + 1) of \(count)"
+    }
+    var bare: [String] = []
+    var pending: [(node: any XCUIElementSnapshot, path: [String], labelled: Bool)] =
+      root.children.enumerated().map { index, window in
+        (window, [named(window, index, of: root.children.count)], !window.label.isEmpty)
+      }
+    while let (node, path, labelled) = pending.popLast() {
+      if node.children.isEmpty {
+        if node.elementType == .other, node.identifier.isEmpty, node.label.isEmpty, !labelled {
+          bare.append(path.joined(separator: " > "))
+        }
+        continue
+      }
+      for (index, child) in node.children.enumerated() {
+        pending.append(
+          (
+            child, path + [named(child, index, of: node.children.count)],
+            labelled || !child.label.isEmpty
+          ))
+      }
+    }
+    return bare
+  }
+
   /// `element`'s frame once it has stopped moving: read until two readings a quarter of a second
   /// apart agree, for up to three seconds, so a page pulled past its end has sprung back.
   @MainActor
@@ -414,6 +473,18 @@ extension XCTestCase {
       last = now
     }
     return last
+  }
+
+  /// Taps `button`, a `WordsButton` (IsItUI), above its words: halfway between the top of its
+  /// element, the words' band, and the top of the 44-point line it is centred in, which a tap
+  /// takes. A button whose element is the whole line or more is tapped halfway up its top half.
+  /// Waits up to 10 seconds for it, as a tap on it would.
+  @MainActor
+  func tapOutsideItsWords(_ button: XCUIElement) {
+    XCTAssertTrue(button.waitForExistence(timeout: 10), "No \(button) to tap")
+    button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+      .withOffset(CGVector(dx: 0, dy: -aboveTheWords(button.frame.height)))
+      .tap()
   }
 
   /// Swipes the pages from `from` (the page on screen) towards `to`, the page beside it, and
@@ -512,6 +583,14 @@ extension XCTestCase {
     add(attachment)
     return shot
   }
+}
+
+/// How far above its centre `tapOutsideItsWords` taps a button whose element is `height` tall:
+/// halfway from the element's top to the top of the 44-point line, or for an element as tall or
+/// taller, halfway up its top half.
+func aboveTheWords(_ height: CGFloat) -> CGFloat {
+  let half = height / 2
+  return half < 22 ? (half + 22) / 2 : half / 2
 }
 
 /// The screen as the accessibility tree has it at one moment: every element with an identifier,

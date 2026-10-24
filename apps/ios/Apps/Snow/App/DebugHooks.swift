@@ -480,7 +480,7 @@ enum DebugHooks {
 
   /// What `-openURLs` shows (`debugRecorder()`): the last web page or email the app would have
   /// opened, and the units the last request to the server asked in, so a UI test reads both on
-  /// screen. Only the units of a request, never its place.
+  /// screen, as the lines' accessibility values. Only the units of a request, never its place.
   @MainActor
   @Observable
   final class DebugRecorder {
@@ -536,11 +536,18 @@ enum DebugHooks {
               return mode == .nomail && url.scheme == "mailto" ? .discarded : .handled
             }
           )
+        // Each line's label says what it holds, and its value is the URL or the units, which the
+        // UI tests read: the URL as a label was "not human-readable" to the audit on PR #33's
+        // second macOS run, where "none" and "f" passed.
         VStack(alignment: .leading, spacing: 2) {
           Text(verbatim: recorder.opened)
             .fixedSize(horizontal: false, vertical: true)
+            .accessibilityLabel(Text(verbatim: AppCopy.recorderOpened))
+            .accessibilityValue(Text(verbatim: recorder.opened))
             .accessibilityIdentifier("debug-opened")
           Text(verbatim: recorder.units)
+            .accessibilityLabel(Text(verbatim: AppCopy.recorderUnits))
+            .accessibilityValue(Text(verbatim: recorder.units))
             .accessibilityIdentifier("debug-units")
         }
         .font(.subheadline)

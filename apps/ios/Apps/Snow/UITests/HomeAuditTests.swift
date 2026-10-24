@@ -68,9 +68,12 @@ final class HomeAuditTests: XCTestCase {
   }
 
   /// The issues allowed, each matched as narrowly as its element allows, with its reason: the
-  /// two phase 5.4 foresaw (DECISIONS, "The iPhone app's home accessibility and its UI tests").
-  /// An exception that no audit of a test needed is printed at its end, so that one the app no
-  /// longer needs can go.
+  /// two phase 5.4 foresaw (DECISIONS, "The iPhone app's home accessibility and its UI tests"),
+  /// and contrast on text the screenful shows drawn in the page's ink at 4.5:1 or more, proven
+  /// again on each issue (`DrawnText`; DECISIONS, "The iPhone app's UI tests, after PR #33's
+  /// second macOS run"). The issues allowed and the exceptions no audit of a test needed are
+  /// attached at its end (`home-<fixture>-<size>-allowed`) and listed in its failure, so that one
+  /// the app no longer needs can go.
   static let exceptions: [Exception] = [
     Exception(
       type: .dynamicType,
@@ -94,6 +97,23 @@ final class HomeAuditTests: XCTestCase {
         "a link inside the credits' text, the attribution beside the data as the licence asks "
         + "(section 10.2), is as tall as its line, as WCAG 2.2's target size (2.5.8) allows a "
         + "target inside a sentence"
+    ),
+    Exception(
+      type: .contrast,
+      matches: { element in
+        // A page's detail, "Use my location" or a place nearby, and only with the proof.
+        let detail = element.type == .staticText && element.identifier == "detail"
+        let words =
+          element.type == .button
+          && (element.identifier == "use-my-location" || element.identifier.hasPrefix("nearby-"))
+        return (detail || words) && element.drawn?.proves(4.5) == true
+      },
+      why:
+        "text the screenful shows drawn in the page's ink over the page's background, which "
+        + "gives 4.5:1 or more at every corner of its frame: Apple's check failed such text "
+        + "whose frame is mostly the page's gradient (two-line details, and the text buttons' "
+        + "44-point lines) at 5.3:1 to 14.6:1 on PR #33's two macOS runs, and passed the same "
+        + "ink on one line"
     ),
   ]
 
@@ -135,6 +155,8 @@ final class HomeAuditTests: XCTestCase {
     // The top bar under the status bar, and every page's end below the screen, at both sizes on
     // main's first macOS run.
     expectFits(app, "\(name) at \(order)")
+    // The window-sized element with no label, on every screenful of PR #33's two macOS runs.
+    expectNoBareElements(app, "\(name) at \(order)")
     let found = AuditLog(tabs: screen.pages.map(\.label))
     for (index, page) in screen.pages.enumerated() {
       try tap(page, in: app)
@@ -145,16 +167,17 @@ final class HomeAuditTests: XCTestCase {
         page, as: "home-\(name)-\(order)-\(index + 1)-\(tab)", in: app, colours: colours,
         noting: found)
     }
+    // What the exceptions allowed and which no issue needed, for the log and the result bundle:
+    // `print` reaches neither, so PR #33's runs couldn't say whether the credits' fired.
+    let unneeded = Self.exceptions.indices.filter { !found.used.contains($0) }.map {
+      "Not needed: \(Self.exceptions[$0].why)"
+    }
+    let report = found.allowed.map { "Allowed: \($0)" } + unneeded
+    attachText(report.joined(separator: "\n"), as: "home-\(name)-\(order)-allowed")
     XCTAssertTrue(
       found.unexpected.isEmpty,
       "\(found.unexpected.count) accessibility issues on \(name) at \(order), in the window at "
-        + "\(app.frame):\n" + found.unexpected.joined(separator: "\n"))
-    for allowed in found.allowed {
-      print("Allowed accessibility issue on \(name) at \(order): \(allowed)")
-    }
-    for (index, exception) in Self.exceptions.enumerated() where !found.used.contains(index) {
-      print("Accessibility exception not needed on \(name) at \(order): \(exception.why)")
-    }
+        + "\(app.frame):\n" + (found.unexpected + report).joined(separator: "\n"))
   }
 
   /// Audits the page on screen a screenful at a time, from its top (where it is on its first
@@ -192,6 +215,11 @@ final class HomeAuditTests: XCTestCase {
         return
       }
       let shot = attach(app, as: "\(name)-\(String(format: "%02d", number))")
+      if number == 1 {
+        // The tree on every page, not only one that stops: on PR #33's second macOS run none
+        // stopped, and nothing showed what held the window-sized element with no label.
+        attachText(app.debugDescription, as: "\(name)-tree")
+      }
       let whole = app.find("page-\(page.view)").frame
       let screenful = Screenful(page: shown(whole, in: app), frame: whole, credits: credits.frame)
       guard !screenful.page.isEmpty else {
@@ -199,12 +227,8 @@ final class HomeAuditTests: XCTestCase {
         return
       }
       seen.append(screenful)
-      // A contrast issue's pixels, from the screenful as attached, beside the page's colours.
-      let pixels = { (frame: CGRect) -> String in
-        let drawn = PixelRange(shot, in: frame, window: colours.window)
-        return "the screenful's pixels there: \(drawn.map(\.description) ?? "can't be read"); "
-          + colours.expected(in: frame)
-      }
+      // A contrast issue's pixels, from the screenful as attached.
+      let pixels = { (frame: CGRect) in ScreenPixels(shot, in: frame, window: colours.window) }
       for kinds in AuditKinds.passes {
         var after: CGRect?
         do {
@@ -214,7 +238,7 @@ final class HomeAuditTests: XCTestCase {
             after = now
             found.note(
               issue, on: place, in: screenful, moved: now.minY - screenful.credits.minY,
-              pixels: pixels)
+              pixels: pixels, colours: colours)
             return true
           }
         } catch {
@@ -298,8 +322,9 @@ final class HomeAuditTests: XCTestCase {
   /// too, and the window's; each drag; the page's lowest elements, by which the page's content
   /// reaches below its frame or not; and where the credits went on a swipe up by XCUITest's own
   /// gesture, which tells a page at the end of its scroll range from a drag the page didn't
-  /// take. Attaches the app's element tree as `<name>-tree`. On main's first macOS run, every page
-  /// at AX3 stopped 1,000 to 1,600 points short of its end, and the log couldn't say why.
+  /// take. Attaches the app's element tree as `<name>-tree-stopped` (`<name>-tree` is the
+  /// page's first screenful's). On main's first macOS run, every page at AX3 stopped 1,000 to
+  /// 1,600 points short of its end, and the log couldn't say why.
   @MainActor
   private func stopped(
     _ page: HomeScreen.Page,
@@ -308,10 +333,7 @@ final class HomeAuditTests: XCTestCase {
     credits: XCUIElement,
     drags: [Drag]
   ) -> String {
-    let tree = XCTAttachment(string: app.debugDescription)
-    tree.name = "\(name)-tree"
-    tree.lifetime = .keepAlways
-    add(tree)
+    attachText(app.debugDescription, as: "\(name)-tree-stopped")
     let shown = app.find("page-\(page.view)")
     let frame = shown.frame
     var lowest = "can't be read"
@@ -402,14 +424,17 @@ struct Screenful {
   }
 }
 
-/// What an exception knows of an issue's element: its identifier, label and frame on screen,
-/// and the screen's switcher tabs and its credits, where they are on screen (`.null` without).
+/// What an exception knows of an issue's element: its type, identifier, label and frame on
+/// screen, the screen's switcher tabs and its credits, where they are on screen (`.null`
+/// without), and for a contrast issue, what the screenful shows drawn in its frame.
 struct AuditedElement {
+  let type: XCUIElement.ElementType?
   let identifier: String
   let label: String
   let frame: CGRect
   let tabs: [String]
   let credits: CGRect
+  var drawn: DrawnText?
 }
 
 /// What the audits found: the issues that fail the test, and those allowed, each described with
@@ -463,13 +488,15 @@ private final class AuditLog {
   /// Notes `issue`, found on `screenful` by an audit after which the page's content was `moved`
   /// points lower than on the screenful (the credits' move): an element of the page is noted
   /// where it was on the screenful, the top bar's and the switcher's where they are. A contrast
-  /// issue says what `pixels` reads of the screenful inside its element.
+  /// issue says what `pixels` reads of the screenful as attached inside its element, beside the
+  /// page's `colours` there, and what text that shows drawn (`DrawnText`).
   func note(
     _ issue: XCUIAccessibilityAuditIssue,
     on page: String,
     in screenful: Screenful,
     moved: CGFloat,
-    pixels: (CGRect) -> String
+    pixels: (CGRect) -> ScreenPixels?,
+    colours: PageColours
   ) {
     let identifier = issue.element?.identifier ?? ""
     let label = issue.element?.label ?? ""
@@ -480,8 +507,9 @@ private final class AuditLog {
     let segment = type == .button && identifier.isEmpty && tabs.contains(label)
     let fixed = Self.fixed.contains(identifier) || identifier.hasPrefix("view-") || segment
     let frame = fixed || read.isNull || moved == 0 ? read : read.offsetBy(dx: 0, dy: -moved)
-    let element = AuditedElement(
-      identifier: identifier, label: label, frame: frame, tabs: tabs, credits: screenful.credits)
+    var element = AuditedElement(
+      type: type, identifier: identifier, label: label, frame: frame, tabs: tabs,
+      credits: screenful.credits)
     // The element's type and frame as well as its identifier and label, so that one with
     // neither can be told apart (DECISIONS, "The iPhone app's UI tests, after main's first macOS
     // run"); and where it was once the audit was done, when the audit had moved it.
@@ -491,7 +519,15 @@ private final class AuditLog {
     var text =
       "\(page): \(issue.auditType.names): \(issue.compactDescription) (\(described)): "
       + issue.detailedDescription
-    if issue.auditType == .contrast, !frame.isNull { text += "; " + pixels(frame) }
+    if issue.auditType == .contrast, !frame.isNull {
+      let read = pixels(frame)
+      element.drawn = read.flatMap { DrawnText($0, in: frame, colours: colours) }
+      let range = read.flatMap { PixelRange(rgba: $0.rgba) }
+      text +=
+        "; the screenful's pixels there: \(range.map(\.description) ?? "can't be read"); "
+        + colours.expected(in: frame) + "; "
+        + (element.drawn.map(\.description) ?? "the text drawn can't be read")
+    }
     if fixed || element.frame.isNull || screenful.showsWhole(element.frame, from: screenful) {
       judge(element, issue.auditType, text)
     } else {
@@ -565,5 +601,68 @@ struct PageColours {
     else { return "the page's colours can't be read" }
     return "the page's ink \(ink) on about \(background) at its centre, "
       + ratio(ink.contrast(with: background))
+  }
+}
+
+/// What a screenful shows of text in the page's ink inside an element's frame, for a contrast
+/// issue: the share of the frame's pixels that are the ink (within 3 levels a channel); whether
+/// the frame's top row, half a point in, above a line's tallest letters, is the page's background
+/// there (`PageColours`, within 6 levels a channel); and the least WCAG contrast of the ink with
+/// the page's background at the frame's four corners. Text drawn whole in the ink over the
+/// page's background has all three, so one that `proves(4.5)` is text a reader sees at 4.5:1 or
+/// more wherever it is in its frame: dimmed, drawn in another colour, over anything but the
+/// page's background, or on a page short of contrast, it fails one of them. On PR #33's second
+/// macOS run all 50 home contrast issues proved so (the ink 7 to 11% of their pixels, the top row
+/// within 2 levels, 5.41:1 at the least), from the screenfuls attached.
+struct DrawnText: CustomStringConvertible {
+  let inkShare: Double
+  let edgeIsBackground: Bool
+  let worst: Double
+
+  /// Of `pixels`, the screenful inside `frame`, on the page drawn in `colours`; nil for a
+  /// palette that can't be read or no pixels.
+  init?(_ pixels: ScreenPixels, in frame: CGRect, colours: PageColours) {
+    guard let ink = RGB(hex: colours.palette.ink), pixels.width > 0, pixels.height > 0 else {
+      return nil
+    }
+    var inked = 0
+    for y in 0..<pixels.height {
+      for x in 0..<pixels.width where pixels.pixel(x, y).within(3, of: ink) {
+        inked += 1
+      }
+    }
+    let row = Int(((frame.minY + 0.5 - pixels.origin.y) * pixels.scale).rounded(.down))
+    var edge = (0..<pixels.height).contains(row)
+    if edge {
+      for x in 0..<pixels.width {
+        guard let background = colours.background(at: pixels.point(x, row)) else { return nil }
+        if !pixels.pixel(x, row).within(6, of: background) {
+          edge = false
+          break
+        }
+      }
+    }
+    let corners = [
+      CGPoint(x: frame.minX, y: frame.minY), CGPoint(x: frame.maxX, y: frame.minY),
+      CGPoint(x: frame.minX, y: frame.maxY), CGPoint(x: frame.maxX, y: frame.maxY),
+    ]
+    let ratios = corners.compactMap { colours.background(at: $0).map(ink.contrast(with:)) }
+    guard let worst = ratios.min() else { return nil }
+    inkShare = Double(inked) / Double(pixels.width * pixels.height)
+    edgeIsBackground = edge
+    self.worst = worst
+  }
+
+  /// Whether it is text drawn whole in the ink over the page's background, which gives
+  /// `minimum` or more at every corner of the frame.
+  func proves(_ minimum: Double) -> Bool {
+    inkShare >= 0.02 && edgeIsBackground && worst >= minimum
+  }
+
+  var description: String {
+    let percent = (inkShare * 1000).rounded() / 10
+    return "the ink on \(percent)% of its pixels, its top row "
+      + (edgeIsBackground ? "the page's background" : "not the page's background")
+      + ", the ink on the background at its corners \(ratio(worst)) at the least"
   }
 }

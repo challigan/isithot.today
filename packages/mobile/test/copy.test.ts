@@ -455,4 +455,21 @@ describe('the picker’s strings', () => {
       "Couldn't find your location. Search for a place instead.",
     );
   });
+
+  it('labels the search box’s own clear button', () => {
+    expect(APP_COPY.clearSearch).toBe('Clear search');
+  });
+});
+
+describe('the labels the accessibility audit reads', () => {
+  it('says what was copied, in more than one word', () => {
+    // One word with a full stop ("Copied.") was "not human-readable" to the audit on PR #33's
+    // two macOS runs, whatever its identifier and its sheet.
+    expect(APP_COPY.copied).toBe('Address copied.');
+  });
+
+  it('names the Debug recorder’s lines, whose values are the URL and the units', () => {
+    expect(APP_COPY.recorderOpened).toBe('Last link opened');
+    expect(APP_COPY.recorderUnits).toBe('Units last asked for');
+  });
 });

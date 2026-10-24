@@ -7,31 +7,104 @@ import XCTest
 /// label and frame on screen) and Apple's description, and a contrast issue with the screen's
 /// pixels inside its element (`PixelRange`); then the test fails once, listing them all, so one
 /// run shows every issue on the screen rather than stopping at the first (these tests stop at
-/// their first failure). Nothing is allowed: every issue is the app's to fix. (The toolbars'
-/// Close buttons, which failed Dynamic Type as text on PR #33's macOS run, are icons now; Your
-/// privacy's back button, a bar button too, passed.) Should a system control the app can't change
-/// fail, its exception would match it as one of `app.navigationBars`' or the search bar's by its
+/// their first failure). Every issue is the app's to fix, but for those `exceptions` allow, each
+/// standing only while its control passes (`ScreenException`). (The toolbars' Close buttons,
+/// which failed Dynamic Type as text on PR #33's first macOS run, are icons now; Your privacy's
+/// back button, a bar button too, passed.) Should a system control the app can't change fail,
+/// its exception would match it as one of `app.navigationBars`' or the search bar's by its
 /// place, with the run's evidence, not by an identifier it may not have.
-@MainActor
-func auditAccessibility(
-  of app: XCUIApplication, on screen: String, file: StaticString = #filePath, line: UInt = #line
-) throws {
-  let found = AuditIssues()
-  // The screen as the first call audits it, for a contrast issue's pixels.
-  let shot = app.screenshot()
-  let window = app.frame
-  for kinds in AuditKinds.passes {
-    try app.performAccessibilityAudit(for: kinds) { issue in
-      found.note(issue, shot: shot, window: window)
-      // Noted, so the audit doesn't fail on it alone: the assertion below fails once for all.
-      return true
+///
+/// The screen as audited and the app's element tree are attached first, as
+/// `audit-<screen>` and `audit-<screen>-tree`: on PR #33's second macOS run each failing sheet's
+/// test stopped at its audit, before it attached its screen, so nothing showed what the audit
+/// had read. The issues allowed and the exceptions no issue needed are attached as
+/// `audit-<screen>-allowed`, and the failure lists them too.
+extension XCTestCase {
+  @MainActor
+  func auditAccessibility(
+    of app: XCUIApplication,
+    on screen: String,
+    allowing exceptions: [ScreenException] = [],
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) throws {
+    let found = AuditIssues()
+    // The screen as the first call audits it, for a contrast issue's pixels.
+    let shot = app.screenshot()
+    let window = app.frame
+    let name = "audit-" + slug(screen)
+    attachPNG(shot, as: name)
+    attachText(app.debugDescription, as: "\(name)-tree")
+    // An exception's control on screen before the audit, which can't tell one it didn't read.
+    let shown = Set(exceptions.map(\.control).filter { app.staticTexts[$0].exists })
+    for kinds in AuditKinds.passes {
+      try app.performAccessibilityAudit(for: kinds) { issue in
+        found.note(issue, shot: shot, window: window)
+        // Noted, so the audit doesn't fail on it alone: the assertion below fails once for all.
+        return true
+      }
+    }
+    let judged = found.judged(by: exceptions, controlsShown: shown)
+    if !exceptions.isEmpty {
+      let unneeded = exceptions.filter { !judged.used.contains($0.why) }
+      attachText(
+        (judged.allowed.map { "Allowed: \($0)" } + unneeded.map { "Not needed: \($0.why)" })
+          .joined(separator: "\n"), as: "\(name)-allowed")
+    }
+    XCTAssertTrue(
+      judged.unexpected.isEmpty,
+      "\(judged.unexpected.count) accessibility issues on \(screen), in the window at "
+        + "\(app.frame):\n"
+        + (judged.unexpected + judged.allowed.map { "Allowed: \($0)" })
+        .joined(separator: "\n"),
+      file: file, line: line)
+  }
+
+  /// Attaches `shot` to the result bundle as a PNG, kept, named `name`.
+  @MainActor
+  func attachPNG(_ shot: XCUIScreenshot, as name: String) {
+    let attachment = XCTAttachment(
+      data: shot.pngRepresentation, uniformTypeIdentifier: "public.png")
+    attachment.name = name
+    attachment.lifetime = .keepAlways
+    add(attachment)
+  }
+
+  /// Attaches `text` to the result bundle, kept, named `name`.
+  @MainActor
+  func attachText(_ text: String, as name: String) {
+    let attachment = XCTAttachment(string: text)
+    attachment.name = name
+    attachment.lifetime = .keepAlways
+    add(attachment)
+  }
+}
+
+/// A screen's name as an attachment's: lower case, each run of other characters a hyphen
+/// ("the picker's results" is `the-picker-s-results`).
+func slug(_ name: String) -> String {
+  var out = ""
+  for character in name.lowercased() {
+    if character.isLetter || character.isNumber {
+      out.append(character)
+    } else if !out.isEmpty, out.last != "-" {
+      out.append("-")
     }
   }
-  XCTAssertTrue(
-    found.lines.isEmpty,
-    "\(found.lines.count) accessibility issues on \(screen), in the window at \(app.frame):\n"
-      + found.lines.joined(separator: "\n"),
-    file: file, line: line)
+  return out.hasSuffix("-") ? String(out.dropLast()) : out
+}
+
+/// An issue a sheet's audit allows, matched as narrowly as its element can be: an issue of
+/// `type` whose short description says `says`, on a static text labelled one of `labels`. It
+/// stands only while `control`, a static text of the same view and style, is on screen as the
+/// audit begins and the audit raises no issue of `type` on it: should the texts stop doing what
+/// the exception says they do, the control fails too, and the exception no longer applies.
+struct ScreenException {
+  let type: XCUIAccessibilityAuditType
+  let says: String
+  let labels: Set<String>
+  let control: String
+  let why: String
 }
 
 /// The audit's kinds, in the two calls the UI tests make for each screen, which together are all
@@ -56,10 +129,21 @@ enum AuditKinds {
   static let passes = [inPlace, resizing]
 }
 
-/// The issues one screen's audits found, each described.
+/// The issues one screen's audits found, each described, with what an exception reads of it.
 @MainActor
 private final class AuditIssues {
-  private(set) var lines: [String] = []
+  struct Noted {
+    let type: XCUIAccessibilityAuditType
+    let elementType: XCUIElement.ElementType?
+    let label: String
+    let compact: String
+    let text: String
+  }
+
+  private(set) var noted: [Noted] = []
+
+  /// Each issue's description, in the order found.
+  var lines: [String] { noted.map(\.text) }
 
   func note(_ issue: XCUIAccessibilityAuditIssue, shot: XCUIScreenshot, window: CGRect) {
     var text =
@@ -69,7 +153,45 @@ private final class AuditIssues {
       let pixels = PixelRange(shot, in: element.frame, window: window)
       text += "; the screen's pixels there: " + (pixels.map(\.description) ?? "can't be read")
     }
-    lines.append(text)
+    noted.append(
+      Noted(
+        type: issue.auditType, elementType: issue.element?.elementType,
+        label: issue.element?.label ?? "", compact: issue.compactDescription, text: text))
+  }
+
+  /// The issues `exceptions` don't allow, those they do (each with why), and the reasons of the
+  /// exceptions that allowed any; `controlsShown`, the controls on screen as the audit began.
+  func judged(
+    by exceptions: [ScreenException],
+    controlsShown: Set<String>
+  ) -> (unexpected: [String], allowed: [String], used: [String]) {
+    var unexpected: [String] = []
+    var allowed: [String] = []
+    var used: [String] = []
+    for issue in noted {
+      let candidate = exceptions.first { exception in
+        exception.type == issue.type && issue.elementType == .staticText
+          && exception.labels.contains(issue.label) && issue.compact.contains(exception.says)
+      }
+      guard let exception = candidate else {
+        unexpected.append(issue.text)
+        continue
+      }
+      // The control must have been read, and passed.
+      if !controlsShown.contains(exception.control) {
+        unexpected.append(
+          "\(issue.text) (not allowed: \"\(exception.control)\" wasn't on screen to be read)")
+      } else if noted.contains(where: { $0.type == exception.type && $0.label == exception.control }
+      ) {
+        unexpected.append(
+          "\(issue.text) (not allowed: \"\(exception.control)\" failed \(exception.type.names) too)"
+        )
+      } else {
+        allowed.append("\(issue.text). Allowed: \(exception.why)")
+        if !used.contains(exception.why) { used.append(exception.why) }
+      }
+    }
+    return (unexpected, allowed, used)
   }
 }
 
@@ -141,6 +263,12 @@ struct RGB: Equatable, CustomStringConvertible {
     return (max(a, b) + 0.05) / (min(a, b) + 0.05)
   }
 
+  /// Whether each channel is within `levels` of `other`'s.
+  func within(_ levels: Int, of other: RGB) -> Bool {
+    abs(Int(red) - Int(other.red)) <= levels && abs(Int(green) - Int(other.green)) <= levels
+      && abs(Int(blue) - Int(other.blue)) <= levels
+  }
+
   /// This colour taken `amount` (0 to 1) of the way to `other`, channel by channel in sRGB, as
   /// SwiftUI mixes a gradient's stops and lays a colour over another at an opacity.
   func mixed(with other: RGB, by amount: Double) -> RGB {
@@ -160,14 +288,76 @@ func ratio(_ value: Double) -> String {
   return "\(hundredths / 100).\(cents < 10 ? "0" : "")\(cents):1"
 }
 
+/// A screenshot's pixels inside a frame on screen, read once: 8-bit red, green, blue and alpha,
+/// four bytes each (the alpha unread: a screenshot is opaque), row by row, `width` by `height`,
+/// the first pixel's top-left corner at `origin` on screen, `scale` pixels to the point.
+struct ScreenPixels {
+  let rgba: [UInt8]
+  let width: Int
+  let height: Int
+  let origin: CGPoint
+  let scale: CGFloat
+
+  init(rgba: [UInt8], width: Int, height: Int, origin: CGPoint, scale: CGFloat) {
+    self.rgba = rgba
+    self.width = width
+    self.height = height
+    self.origin = origin
+    self.scale = scale
+  }
+
+  /// The pixel `x` across and `y` down.
+  func pixel(_ x: Int, _ y: Int) -> RGB {
+    let index = (y * width + x) * 4
+    return RGB(red: rgba[index], green: rgba[index + 1], blue: rgba[index + 2])
+  }
+
+  /// The point on screen at the centre of the pixel `x` across and `y` down.
+  func point(_ x: Int, _ y: Int) -> CGPoint {
+    CGPoint(x: origin.x + (CGFloat(x) + 0.5) / scale, y: origin.y + (CGFloat(y) + 0.5) / scale)
+  }
+
+  /// Inside `frame`, in points on screen, of `shot`, a screenshot of the window at `window`; nil
+  /// when the frame is off the screenshot or it can't be read.
+  init?(_ shot: XCUIScreenshot, in frame: CGRect, window: CGRect) {
+    guard let image = shot.image.cgImage, window.width > 0, !frame.isNull else { return nil }
+    let scale = CGFloat(image.width) / window.width
+    let wanted = CGRect(
+      x: (frame.minX - window.minX) * scale, y: (frame.minY - window.minY) * scale,
+      width: frame.width * scale, height: frame.height * scale
+    ).integral
+    let pixels = wanted.intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
+    guard !pixels.isNull, !pixels.isEmpty, let crop = image.cropping(to: pixels),
+      let space = CGColorSpace(name: CGColorSpace.sRGB)
+    else { return nil }
+    let (width, height) = (crop.width, crop.height)
+    var bytes = [UInt8](repeating: 0, count: width * height * 4)
+    let drawn = bytes.withUnsafeMutableBytes { buffer -> Bool in
+      guard
+        let context = CGContext(
+          data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+          bytesPerRow: width * 4, space: space,
+          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+      else { return false }
+      context.draw(crop, in: CGRect(x: 0, y: 0, width: width, height: height))
+      return true
+    }
+    guard drawn else { return nil }
+    self.init(
+      rgba: bytes, width: width, height: height,
+      origin: CGPoint(x: window.minX + pixels.minX / scale, y: window.minY + pixels.minY / scale),
+      scale: scale)
+  }
+}
+
 /// What a screenshot shows inside an element's frame: its darkest and lightest pixels, by WCAG
 /// luminance, and the contrast between them. Text drawn whole in its colour on a plain or gently
 /// graded background has its stroke's colour at one end and the background's at the other, so a
 /// contrast failure on an element whose pixels give 4.5:1 or more was measured on something the
-/// screenshot doesn't show; one whose pixels give less shows the colours drawn. For the next
-/// run's log, since the screenshots and the xcresult can't be read off the runner by agents (on
-/// PR #33's macOS run the home's text buttons and five two-line details failed contrast with
-/// colours that pass at 5.42:1 or more).
+/// screenshot doesn't show; one whose pixels give less shows the colours drawn. For the log, since
+/// the screenshots and the xcresult can't be read off the runner by agents (on PR #33's first
+/// macOS run the home's text buttons and five two-line details failed contrast with colours that
+/// pass at 5.42:1 or more; on its second, the pixels gave 6.15:1 to 14.61:1).
 struct PixelRange: CustomStringConvertible {
   let darkest: RGB
   let lightest: RGB
@@ -199,30 +389,8 @@ struct PixelRange: CustomStringConvertible {
   /// Inside `frame`, in points on screen, of `shot`, a screenshot of the window at `window`; nil
   /// when the frame is off the screenshot or it can't be read.
   init?(_ shot: XCUIScreenshot, in frame: CGRect, window: CGRect) {
-    guard let image = shot.image.cgImage, window.width > 0, !frame.isNull else { return nil }
-    let scale = CGFloat(image.width) / window.width
-    let wanted = CGRect(
-      x: (frame.minX - window.minX) * scale, y: (frame.minY - window.minY) * scale,
-      width: frame.width * scale, height: frame.height * scale
-    ).integral
-    let pixels = wanted.intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
-    guard !pixels.isNull, !pixels.isEmpty, let crop = image.cropping(to: pixels),
-      let space = CGColorSpace(name: CGColorSpace.sRGB)
-    else { return nil }
-    let (width, height) = (crop.width, crop.height)
-    var bytes = [UInt8](repeating: 0, count: width * height * 4)
-    let drawn = bytes.withUnsafeMutableBytes { buffer -> Bool in
-      guard
-        let context = CGContext(
-          data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
-          bytesPerRow: width * 4, space: space,
-          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-      else { return false }
-      context.draw(crop, in: CGRect(x: 0, y: 0, width: width, height: height))
-      return true
-    }
-    guard drawn else { return nil }
-    self.init(rgba: bytes)
+    guard let pixels = ScreenPixels(shot, in: frame, window: window) else { return nil }
+    self.init(rgba: pixels.rgba)
   }
 }
 

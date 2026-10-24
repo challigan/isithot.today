@@ -134,7 +134,13 @@ struct NoticeView: View {
 }
 
 /// "Your privacy" (section 10.6): the plain lines, then what is kept for notifications with the
-/// button that deletes it, while registered (phase 8), then the full policy in Safari.
+/// button that deletes it, while registered (phase 8), then the full policy in Safari. A page of
+/// paragraphs that scrolls, as How it works is, not a `Form`: during the audit's text-size check
+/// a `Form` jumped back to its top and stayed there through every size, so the full policy's
+/// row, at its foot where the test had scrolled, was on screen at no other size, and was failed
+/// for Dynamic Type and as clipped on PR #33's two macOS runs. A scroll view keeps its offset,
+/// held to its end: no text a scroll view had brought into view was failed so (the home pages,
+/// How it works).
 struct YourPrivacyView: View {
   let page: YourPrivacy
   /// Turn off notifications and delete my data; nil until phase 8.
@@ -143,42 +149,48 @@ struct YourPrivacyView: View {
   @Environment(\.openURL) private var openURL
 
   var body: some View {
-    Form {
-      Section {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 16) {
         ForEach(Array(page.lines.enumerated()), id: \.offset) { index, line in
           Text(verbatim: line)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityIdentifier("privacy-line-\(index)")
         }
-      }
-      if let kept = page.kept {
-        Section {
-          ForEach(Array(kept.lines.enumerated()), id: \.offset) { _, line in
-            Text(verbatim: line)
-          }
-          if let deleteMyData {
-            Button(role: .destructive) {
-              deleteMyData()
-            } label: {
-              Text(verbatim: kept.delete)
+        if let kept = page.kept {
+          VStack(alignment: .leading, spacing: 10) {
+            Text(verbatim: kept.heading)
+              .font(.title3.weight(.semibold))
+              .fixedSize(horizontal: false, vertical: true)
+              .accessibilityAddTraits(.isHeader)
+            ForEach(Array(kept.lines.enumerated()), id: \.offset) { _, line in
+              Text(verbatim: line)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .accessibilityIdentifier("delete-my-data")
+            if let deleteMyData {
+              Button(role: .destructive) {
+                deleteMyData()
+              } label: {
+                Text(verbatim: kept.delete)
+                  .multilineTextAlignment(.leading)
+                  .frame(minHeight: HitTarget.minimum)
+              }
+              .accessibilityIdentifier("delete-my-data")
+            }
           }
-        } header: {
-          Text(verbatim: kept.heading)
-            .foregroundStyle(SheetStyle.secondary)
         }
-      }
-      if let policy = page.policy, let url = policyURL {
-        Section {
+        if let policy = page.policy, let url = policyURL {
           Button {
             openURL(url)
           } label: {
             LeavingRow(title: policy.title)
+              .frame(minHeight: HitTarget.minimum)
           }
           .accessibilityIdentifier(policy.id)
         }
       }
+      .padding(.horizontal, 20)
+      .padding(.vertical, 16)
+      .frame(maxWidth: .infinity, alignment: .leading)
     }
     .navigationTitle(Text(verbatim: page.title))
     .navigationBarTitleDisplayMode(.inline)

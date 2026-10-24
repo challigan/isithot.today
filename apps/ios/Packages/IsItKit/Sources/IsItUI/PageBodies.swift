@@ -75,7 +75,10 @@ struct HourRowView: View {
       .fixedSize(horizontal: false, vertical: true)
   }
 
-  /// The chance as a filled share of a track, decorative: the row's label says it.
+  /// The chance as a filled share of a track, decorative: the row's label says it, and its
+  /// shapes have no accessibility element. No accessibility modifier: `.accessibilityHidden(true)`
+  /// here made the bar an unlabelled element under its row on PR #33's first macOS run (its
+  /// trees), as it made the page's background one (PageTheme.swift).
   private var bar: some View {
     GeometryReader { proxy in
       ZStack(alignment: .leading) {
@@ -87,7 +90,6 @@ struct HourRowView: View {
       }
     }
     .frame(height: barHeight)
-    .accessibilityHidden(true)
   }
 }
 
@@ -178,7 +180,8 @@ struct WeekRowView: View {
 }
 
 /// A dot for each forecast with data for the day, filled for each that expects snow, outlined
-/// for the others. Decorative: the row's label says how many.
+/// for the others. Decorative: the row's label says how many. No accessibility modifier, as the
+/// hour bar has none (above): hidden, the dots were one unlabelled element under their row.
 struct AgreementDots: View {
   let snowy: Int
   let total: Int
@@ -196,6 +199,5 @@ struct AgreementDots: View {
       }
     }
     .fixedSize()
-    .accessibilityHidden(true)
   }
 }

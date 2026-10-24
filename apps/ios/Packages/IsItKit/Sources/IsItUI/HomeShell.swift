@@ -45,8 +45,9 @@ public struct HomeShell<Content: View>: View {
           .transition(.opacity)
       }
       .animation(reduceMotion ? nil : .easeInOut(duration: 0.9), value: theme)
-      // Decoration, all of it, cross-fade and all: nothing here for VoiceOver or the audit.
-      .accessibilityHidden(true)
+      // Decoration with no accessibility element, and no accessibility modifier here or in
+      // `PageBackground`: one on views without an element makes one, the window's size here
+      // (PR #33's second macOS run, PageTheme.swift).
     }
   }
 }
@@ -110,21 +111,20 @@ struct TopBarView: View {
   }
 
   /// "Using approximate location." and its button, each centred in a line as tall as the
-  /// button's hit region, so the two read as one line when they share it.
+  /// button's hit region, so the two read as one line when they share it. The button's element is
+  /// its words' band of the line (`WordsButton`), as the text's is its own.
   @ViewBuilder private func approximateLine(_ text: String) -> some View {
     Text(verbatim: text)
       .fixedSize(horizontal: false, vertical: true)
       .frame(minHeight: HitTarget.minimum)
       .accessibilityIdentifier("approximate")
     if let useMyLocation = topBar.useMyLocation {
-      Button {
+      WordsButton {
         actions.useMyLocation()
       } label: {
         Text(verbatim: useMyLocation)
           .fontWeight(.semibold)
           .underline()
-          .frame(minHeight: HitTarget.minimum)
-          .contentShape(Rectangle())
       }
       .accessibilityIdentifier("use-my-location")
     }

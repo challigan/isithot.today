@@ -36,14 +36,20 @@ public struct SettingsView: View {
             .foregroundStyle(SheetStyle.secondary)
         }
         ForEach(screen.sections) { section in
-          Section {
-            ForEach(section.rows) { row in
-              rowView(row)
-            }
-          } header: {
-            if let heading = section.heading {
+          // A header only for a section with a heading. "About", the one header after the
+          // heading-less Report an ad's empty one, was the one the audit found "partially
+          // unsupported" for Dynamic Type on PR #33's two macOS runs, though it grew at every size
+          // the recording shows it, as Privacy's and Help's did (DECISIONS).
+          if let heading = section.heading {
+            Section {
+              rows(section)
+            } header: {
               Text(verbatim: heading)
                 .foregroundStyle(SheetStyle.secondary)
+            }
+          } else {
+            Section {
+              rows(section)
             }
           }
         }
@@ -75,6 +81,13 @@ public struct SettingsView: View {
     .tint(SheetStyle.accent)
     .sheet(item: $fallback) { fallback in
       MailFallbackView(fallback: fallback, copy: actions.copy)
+    }
+  }
+
+  /// A section's rows.
+  private func rows(_ section: SettingsScreen.Section) -> some View {
+    ForEach(section.rows) { row in
+      rowView(row)
     }
   }
 
@@ -231,9 +244,9 @@ struct LeavingRow: View {
 }
 
 /// What shows when no mail app can open an email (section 10.7): where to write, and "Copy
-/// address", which says "Copied." once it has, on screen and to VoiceOver. The announcement is
-/// UIKit's: iOS 17's `AccessibilityNotification` is the Accessibility framework's, which SwiftUI
-/// isn't known to re-export.
+/// address", which says "Address copied." once it has, on screen and to VoiceOver. The
+/// announcement is UIKit's: iOS 17's `AccessibilityNotification` is the Accessibility
+/// framework's, which SwiftUI isn't known to re-export.
 struct MailFallbackView: View {
   let fallback: MailFallback
   let copy: @MainActor (String) -> Void
@@ -260,10 +273,10 @@ struct MailFallbackView: View {
           .tint(SheetStyle.filled)
           .accessibilityIdentifier("copy-address")
           if copied {
-            // Not `copied`, the label's own word: on PR #33's macOS run the audit found "Copied."
-            // "not human-readable", in the card the sheet was then drawn as (below). A label
-            // that is its identifier is the one other cause the log leaves open, though the
-            // gear's ("settings", "Settings") passed on every home screen.
+            // "Address copied.", not section 10.9's "Copied.": the audit found that one word
+            // with its full stop "not human-readable" on PR #33's two macOS runs, with the
+            // identifier `copied` in the card the sheet was then drawn as, and with this one at
+            // full height; every label of more than one word passed (packages/mobile appCopy.ts).
             Text(verbatim: fallback.copied)
               .accessibilityIdentifier("copy-confirmation")
           }
