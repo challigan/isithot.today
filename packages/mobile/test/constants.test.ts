@@ -1,19 +1,27 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   AHEAD,
   ALERTS,
   CACHE,
+  CONTACT_EMAIL,
   GRID,
   MODELS,
   MODEL_AGENCIES,
   SEARCH,
+  SITES,
   SNOW,
   SNOW_PALETTES,
   TOMORROW_FROM_HOUR,
   WIDGET,
 } from '@isithot/core';
 import { CLIENT } from '@isithot/client';
-import { CONSTANTS_PATH, CONSTANTS_SOURCE, constantsSwift } from '../src/exportConstants';
+import {
+  CONSTANTS_PATH,
+  CONSTANTS_SOURCE,
+  SITE_PAGES,
+  constantsSwift,
+} from '../src/exportConstants';
 import {
   BODY_TEXT_CONTRAST,
   PALETTES_PATH,
@@ -80,7 +88,12 @@ describe('constantsSwift', () => {
     expect(members(swift, 'Snow')).toEqual([
       `public static let likelyFrom: Double = ${SNOW.likelyFrom}`,
       `public static let maybeFrom: Double = ${SNOW.maybeFrom}`,
+      `public static let cmPerMm: Double = ${SNOW.cmPerMm}`,
+      `public static let warmAboveC: Double = ${SNOW.warmAboveC}`,
     ]);
+    expect(members(swift, 'Hour')).toEqual(
+      Object.entries(SNOW.hour).map(([k, v]) => `public static let ${k}: Double = ${v}`),
+    );
     expect(members(swift, 'Day')).toEqual([
       'public static let snow: Double = 0.5',
       'public static let flakes: Double = 0.1',
@@ -88,6 +101,38 @@ describe('constantsSwift', () => {
       'public static let deep: Double = 15',
     ]);
     expect(Object.keys(SNOW.day)).toEqual(['snow', 'flakes', 'heavy', 'deep']);
+    expect(members(swift, 'Normals')).toEqual(
+      Object.entries(SNOW.normals).map(([k, v]) => `public static let ${k}: Double = ${v}`),
+    );
+    // How it works reads these (spec 10.6): the numbers the About page's snow section words.
+    expect(swift).toContain('      public static let maxHeightDifference: Double = 300\n');
+    expect(swift).toContain('    public static let warmAboveC: Double = 2.5\n');
+  });
+
+  it("writes willitsnow.today's pages and the support address, from core", () => {
+    expect(members(swift, 'Site')).toEqual([
+      'public static let privacy = "https://willitsnow.today/privacy"',
+      'public static let terms = "https://willitsnow.today/terms"',
+      'public static let support = "https://willitsnow.today/support"',
+      'public static let contactEmail = "support@willitsnow.today"',
+    ]);
+    expect(SITES.snow.url).toBe('https://willitsnow.today');
+    expect(CONTACT_EMAIL).toBe('support@willitsnow.today');
+    expect(Object.keys(SITE_PAGES)).toEqual(['privacy', 'terms', 'support']);
+  });
+
+  it('links only to pages the website has, under the snow site', () => {
+    const web = new URL('../../../apps/web/src/', import.meta.url);
+    for (const [name, path] of Object.entries(SITE_PAGES)) {
+      expect(path).toBe(`/${name}`);
+      // The page willitsnow.today serves, and the body it renders, at that path.
+      const page = readFileSync(new URL(`pages/snow/${name}.astro`, web), 'utf8');
+      const body = /import (\w+) from '\.\.\/\.\.\/components\/(\w+)\.astro';/.exec(page);
+      expect(body, name).not.toBeNull();
+      expect(page).toContain(`<${body![1]} topic="snow" />`);
+      const component = readFileSync(new URL(`components/${body![2]}.astro`, web), 'utf8');
+      expect(component).toContain(`path="${path}"`);
+    }
   });
 
   it('lists every model with its name and agency, in order', () => {

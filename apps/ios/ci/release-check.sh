@@ -73,8 +73,13 @@ if otool -L "$widget/WillItSnowWidgets" | contains GoogleMobileAds ||
   fail "the widget links Google Mobile Ads"
 fi
 
+# Nor IsItLocation: no location API in the widget, which has no purpose string.
+if strings -a "$widget/WillItSnowWidgets" | contains CLLocationManager; then
+  fail "the widget links the app's location code"
+fi
+
 if [ "$status" -eq 0 ]; then
-  line="### Release build: no debug hooks, no fixtures, no ads code in the widget"
+  line="### Release build: no debug hooks, no fixtures, no ads or location code in the widget"
 else
   line="### Release build: failed its checks (see the errors above)"
 fi

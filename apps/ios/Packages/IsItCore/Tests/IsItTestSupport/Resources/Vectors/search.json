@@ -1,0 +1,39 @@
+{
+  "fn": "searchInput, resultDetail",
+  "source": "client@searchInput, client@resultDetail",
+  "cases": [
+    {"fn":"searchInput","in":{"text":""},"out":{"kind":"empty"}},
+    {"fn":"searchInput","in":{"text":" "},"out":{"kind":"empty"}},
+    {"fn":"searchInput","in":{"text":"   "},"out":{"kind":"empty"}},
+    {"fn":"searchInput","in":{"text":"L"},"out":{"kind":"tooShort"}},
+    {"fn":"searchInput","in":{"text":" L "},"out":{"kind":"tooShort"}},
+    {"fn":"searchInput","in":{"text":"Le"},"out":{"kind":"search","q":"Le"}},
+    {"fn":"searchInput","in":{"text":"Leeds"},"out":{"kind":"search","q":"Leeds"}},
+    {"fn":"searchInput","in":{"text":"  Leeds "},"out":{"kind":"search","q":"Leeds"}},
+    {"fn":"searchInput","in":{"text":" Newcastle  upon Tyne "},"out":{"kind":"search","q":"Newcastle  upon Tyne"}},
+    {"fn":"searchInput","in":{"text":"Bath & Wells"},"out":{"kind":"search","q":"Bath & Wells"}},
+    {"fn":"searchInput","in":{"text":"Zürich"},"out":{"kind":"search","q":"Zürich"}},
+    {"fn":"searchInput","in":{"text":"Zürich"},"out":{"kind":"search","q":"Zürich"}},
+    {"fn":"searchInput","in":{"text":"𝔸"},"out":{"kind":"search","q":"𝔸"}},
+    {"fn":"searchInput","in":{"text":"é"},"out":{"kind":"search","q":"é"}},
+    {"fn":"searchInput","in":{"text":"é"},"out":{"kind":"tooShort"}},
+    {"fn":"searchInput","in":{"text":"\t\n\u000b\f\r"},"out":{"kind":"empty"}},
+    {"fn":"searchInput","in":{"text":" Le "},"out":{"kind":"search","q":"Le"}},
+    {"fn":"searchInput","in":{"text":"﻿Le﻿"},"out":{"kind":"search","q":"Le"}},
+    {"fn":"searchInput","in":{"text":" L "},"out":{"kind":"tooShort"}},
+    {"fn":"searchInput","in":{"text":"     　Le　"},"out":{"kind":"search","q":"Le"}},
+    {"fn":"searchInput","in":{"text":"L"},"out":{"kind":"search","q":"L"}},
+    {"fn":"searchInput","in":{"text":""},"out":{"kind":"tooShort"}},
+    {"fn":"searchInput","in":{"text":"​L"},"out":{"kind":"search","q":"​L"}},
+    {"fn":"searchInput","in":{"text":"᠎"},"out":{"kind":"tooShort"}},
+    {"fn":"resultDetail","in":{"result":{"name":"Leeds","region":"England","country":"GB","countryName":"United Kingdom","lat":53.79648,"lon":-1.54785,"slug":"leeds-gb","geonameId":2644688,"elevation":63}},"out":"England, United Kingdom"},
+    {"fn":"resultDetail","in":{"result":{"name":"Leeds","region":"England","country":"GB","countryName":null,"lat":53.79648,"lon":-1.54785,"slug":"leeds-gb","geonameId":2644688,"elevation":63}},"out":"England, GB"},
+    {"fn":"resultDetail","in":{"result":{"name":"Leeds","region":null,"country":"GB","countryName":"United Kingdom","lat":53.79648,"lon":-1.54785,"slug":"leeds-gb","geonameId":2644688,"elevation":63}},"out":"United Kingdom"},
+    {"fn":"resultDetail","in":{"result":{"name":"Leeds","region":"","country":"GB","countryName":"United Kingdom","lat":53.79648,"lon":-1.54785,"slug":"leeds-gb","geonameId":2644688,"elevation":63}},"out":"United Kingdom"},
+    {"fn":"resultDetail","in":{"result":{"name":"Leeds","region":"England","country":"GB","countryName":"","lat":53.79648,"lon":-1.54785,"slug":"leeds-gb","geonameId":2644688,"elevation":63}},"out":"England"},
+    {"fn":"resultDetail","in":{"result":{"name":"Leeds","region":null,"country":"GB","countryName":null,"lat":53.79648,"lon":-1.54785,"slug":"leeds-gb","geonameId":2644688,"elevation":63}},"out":"GB"},
+    {"fn":"resultDetail","in":{"result":{"name":"Leeds","region":null,"country":null,"countryName":null,"lat":53.79648,"lon":-1.54785,"slug":"leeds-gb","geonameId":2644688,"elevation":63}},"out":""},
+    {"fn":"resultDetail","in":{"result":{"name":"Leeds","region":"","country":"","countryName":"","lat":53.79648,"lon":-1.54785,"slug":"leeds-gb","geonameId":2644688,"elevation":63}},"out":""},
+    {"fn":"resultDetail","in":{"result":{"name":"Kathmandu","region":"Bagmati Province","country":"NP","countryName":"Nepal","lat":27.70169,"lon":85.3206}},"out":"Bagmati Province, Nepal"}
+  ]
+}

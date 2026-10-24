@@ -26,7 +26,7 @@ public enum DeepLink {
   /// A willitsnow:// link, the app's URL scheme (client `parseDeepLink`). Case is ignored, and so
   /// is a query or fragment; anything else is nil, and the app opens as usual.
   public static func parse(_ url: String) -> Route? {
-    let text = Array(javaScriptTrimmed(url).lowercased().unicodeScalars)
+    let text = Array(JavaScriptString.trimmed(url).lowercased().unicodeScalars)
     guard let (host, path) = match(text) else { return nil }
     switch (host, path) {
     case ("view", let path?):
@@ -113,23 +113,6 @@ public enum DeepLink {
     var index = index
     if index < text.count, text[index] == "/" { index += 1 }
     return index == text.count || text[index] == "?" || text[index] == "#"
-  }
-
-  /// `text` without what JavaScript's `trim` takes off its ends: white space (ECMAScript
-  /// WhiteSpace, the space separators among it) and line terminators. Not Swift's
-  /// `whitespacesAndNewlines`, which has U+0085 and not U+FEFF.
-  private static func javaScriptTrimmed(_ text: String) -> String {
-    let scalars = text.unicodeScalars
-    let isSpace = { (scalar: Unicode.Scalar) -> Bool in
-      switch scalar.value {
-      case 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0xA0, 0xFEFF, 0x2028, 0x2029: true
-      default: scalar.properties.generalCategory == .spaceSeparator
-      }
-    }
-    guard let first = scalars.firstIndex(where: { !isSpace($0) }),
-      let last = scalars.lastIndex(where: { !isSpace($0) })
-    else { return "" }
-    return String(scalars[first...last])
   }
 
   /// A calendar date (YYYY-MM-DD) as its UTC midnight in epoch milliseconds, or nil: 2026-02-30

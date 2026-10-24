@@ -1,10 +1,19 @@
 import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { SNOW_GLYPHS } from '../../../apps/web/src/lib/snowGlyphs';
-import { FIXTURES, fixtureJson, makeFixture, type Fixture } from '../src/fixtures';
+import {
+  FIXTURES,
+  SEARCH_FIXTURES,
+  fixtureJson,
+  makeFixture,
+  makeSearchFixture,
+  type Fixture,
+} from '../src/fixtures';
 import { appCopySwift } from '../src/exportAppCopy';
+import { CONFIGS_GENERATED_DIR, configCopy } from '../src/exportConfigCopy';
 import { constantsSwift } from '../src/exportConstants';
 import { coreCopySwift } from '../src/exportCoreCopy';
+import { creditsSwift } from '../src/exportCredits';
 import { FONTS_DIR, FONT_PATH } from '../src/exportFont';
 import {
   GLYPHS_DIR,
@@ -25,6 +34,7 @@ import {
   FIXTURES_DIR,
   MODEL_GENERATED_DIR,
   OWNED_DIRS,
+  SEARCH_FIXTURES_DIR,
   VECTORS_DIR,
   drift,
   generatedFiles,
@@ -61,10 +71,11 @@ describe('generatedFiles', () => {
     const resources = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources';
     const vectors = [
       ...['grid', 'target', 'query', 'placeTime', 'tomorrow', 'freshness', 'hours'],
-      ...['questions', 'strip', 'widget', 'alerts', 'links', 'recent', 'page'],
+      ...['questions', 'strip', 'widget', 'alerts', 'links', 'recent', 'page', 'search'],
     ];
     const resourcePaths = [
       ...FIXTURES.map((s) => `${resources}/Fixtures/${s.name}.json`),
+      ...SEARCH_FIXTURES.map((s) => `${resources}/Fixtures/Search/${s.name}.json`),
       ...vectors.map((name) => `${resources}/Vectors/${name}.json`),
     ];
     expect(files.map((f) => f.path)).toEqual([
@@ -72,22 +83,29 @@ describe('generatedFiles', () => {
       `${model}/Questions.swift`,
       `${model}/AppCopy.swift`,
       `${model}/Constants.swift`,
+      `${model}/AppCredits.swift`,
       `${model}/Keys.swift`,
       `${model}/Palettes.swift`,
+      'apps/ios/Configs/Generated/Copy.xcconfig',
       ...resourcePaths,
       HOME_SCREENS_PATH,
       ...assets.map((f) => f.path),
     ]);
-    expect(files.slice(0, 6).map((f) => f.contents)).toEqual([
+    expect(files.slice(0, 8).map((f) => f.contents)).toEqual([
       coreCopySwift(),
       questionsSwift(),
       appCopySwift(),
       constantsSwift(),
+      creditsSwift(),
       keysSwift(),
       palettesSwift(),
+      configCopy(),
     ]);
-    expect(files[7]!.contents).toBe(fixtureJson(await makeFixture(FIXTURES[1]!)));
-    const first = 6 + resourcePaths.length + 1;
+    expect(files[9]!.contents).toBe(fixtureJson(await makeFixture(FIXTURES[1]!)));
+    const search = files.find((f) => f.path.endsWith('/Fixtures/Search/search-leeds.json'))!;
+    expect(search.contents).toBe(fixtureJson(await makeSearchFixture(SEARCH_FIXTURES[0]!)));
+    expect(SEARCH_FIXTURES_DIR).toBe(`${FIXTURES_DIR}/Search`);
+    const first = 8 + resourcePaths.length + 1;
     for (const [i, f] of assets.entries()) {
       expect(sameContents(files[first + i]!.contents, f.contents)).toBe(true);
     }
@@ -100,6 +118,7 @@ describe('generatedFiles', () => {
       SNOW_KIT_GENERATED_DIR,
       ASSETS_DIR,
       FONTS_DIR,
+      CONFIGS_GENERATED_DIR,
       UI_TESTS_GENERATED_DIR,
     ]);
   });

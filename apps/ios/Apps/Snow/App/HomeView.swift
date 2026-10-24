@@ -14,15 +14,73 @@ import UIKit
 /// 9.5) draws the pages again as each of the model's minutes begins, at the model's clock, so the
 /// hour picked, Tomorrow from 6pm and the stale state follow the time while the app is open. Its
 /// minutes are the model's (`MinuteTick`): the system's own in the app, and a Debug build's clock
-/// started at `-now` turns the page on its own minute too. The place and Settings buttons are
-/// here; their sheets come with phase 6.
+/// started at `-now` turns the page on its own minute too. The top bar, over every page, opens
+/// the two sheets (`HomeSheet`), one at a time: the place button, and the approximate line's
+/// "Use my location", the place picker, full screen (section 10.3, `PickerSheet`); the gear,
+/// Settings (section 10.4, `SettingsSheet`).
 struct HomeView: View {
   let model: AppModel
+  /// The sheet open over the home screen, if any.
+  @State private var sheet: HomeSheet?
 
   var body: some View {
     let ticks = MinuteTick.anchor(model: model.now, system: Date())
     TimelineView(.periodic(from: ticks, by: 60)) { context in
-      HomeContent(model: model, tick: context.date)
+      HomeContent(model: model, tick: context.date, covered: sheet != nil) { sheet = $0 }
+        // Under a sheet, the pages are out of the accessibility tree, as VoiceOver already
+        // treats what is under a modal sheet: the sheets' audits read the sheet alone, and the
+        // pages' own audits are HomeAuditTests'. Nor are their changes announced (`covered`).
+        .accessibilityHidden(sheet != nil)
+    }
+    // Both sheets are drawn outside the page's colours, so they follow the system's, and Dark
+    // Mode; and both under the Debug recorder (`debugRecorder()`, DebugHooks.swift), so under
+    // `-openURLs` every URL either would open is recorded instead, the picker's Open Settings
+    // as well as Settings' rows. A Release build draws them as they are.
+    .fullScreenCover(item: $sheet.picker) { request in
+      PickerSheet(model: model, request: request)
+        .debugRecorder()
+    }
+    .sheet(isPresented: $sheet.settings) {
+      SettingsSheet(model: model)
+        .debugRecorder()
+    }
+  }
+}
+
+/// The sheets the home screen opens, one at a time: the place picker (with why it opened) and
+/// Settings.
+enum HomeSheet: Equatable {
+  case picker(PickerRequest)
+  case settings
+}
+
+extension Optional where Wrapped == HomeSheet {
+  /// The picker's request while the picker is open. Set to nil, as the sheet does when it
+  /// closes, it closes the picker only.
+  fileprivate var picker: PickerRequest? {
+    get {
+      guard case .picker(let request)? = self else { return nil }
+      return request
+    }
+    set {
+      if let newValue {
+        self = .picker(newValue)
+      } else if case .picker? = self {
+        self = nil
+      }
+    }
+  }
+
+  /// Whether Settings is open. Set to false, as the sheet does when it closes, it closes
+  /// Settings only.
+  fileprivate var settings: Bool {
+    get { self == .settings }
+    set {
+      if newValue {
+        self = .settings
+      } else if self == .settings {
+        self = nil
+      }
     }
   }
 }
@@ -31,11 +89,17 @@ struct HomeView: View {
 /// model changes as well as each minute, always at the model's clock. The switcher and the
 /// pager share the model's view (`$model.view`), so a tap, a swipe, a route and the return
 /// after a long time away all move both. When the page on screen says something new
-/// (`Announcements`, IsItState), VoiceOver hears its heading once (section 16).
+/// (`Announcements`, IsItState), VoiceOver hears its heading once (section 16), unless a sheet
+/// covers the pages: then nothing is said, then or once it closes, as the pages are out of the
+/// accessibility tree under it (the 6pm flip, or a quiet refresh's new answer, behind Settings).
 private struct HomeContent: View {
   @Bindable var model: AppModel
   /// The minute tick's date: a new one each minute, which draws the screen again.
   let tick: Date
+  /// Whether a sheet is open over the pages.
+  let covered: Bool
+  /// Opens a sheet: the place picker, or Settings.
+  let open: (HomeSheet) -> Void
 
   @Environment(\.openURL) private var openURL
   @State private var announcements = Announcements()
@@ -66,22 +130,24 @@ private struct HomeContent: View {
       }
     }
     .onChange(of: shown, initial: true) { _, page in
-      if let heading = announcements.drawn(page) {
+      if let heading = announcements.drawn(page, covered: covered) {
         UIAccessibility.post(notification: .announcement, argument: heading)
       }
     }
   }
 
-  /// What the screen's taps do: Retry asks again; a place under "Nearby:" loads in place;
-  /// links open in Safari; the place picker, Settings and "Use my location" wait for phase 6.
+  /// What the screen's taps do: Retry asks again; the place button opens the picker, and "Use
+  /// my location" opens it finding the phone's place; the gear opens Settings; a place under
+  /// "Nearby:" loads in place; links open in Safari.
   private var actions: HomeActions {
     let model = model
     let openURL = openURL
+    let open = open
     return HomeActions(
       retry: { Task { await model.refresh() } },
-      openPlacePicker: {},
-      openSettings: {},
-      useMyLocation: {},
+      openPlacePicker: { open(.picker(PickerRequest(locating: false))) },
+      openSettings: { open(.settings) },
+      useMyLocation: { open(.picker(PickerRequest(locating: true))) },
       openLink: { openURL($0) },
       selectNearby: { city in
         Task { await model.select(.city(slug: city.slug, name: city.name)) }

@@ -362,7 +362,7 @@ struct AppModelStepTests {
     )
     await same.model.launch()
     #expect(same.transport.requests.count == 1)
-    #expect(same.hooks.calls.contains("locate device:53.8,-1.55"))
+    #expect(same.hooks.calls.contains("location fix"))
 
     let h = Harness(
       now: made,
@@ -381,8 +381,8 @@ struct AppModelStepTests {
     #expect(h.store.today?.key == "device:53.9,-1.55")
     #expect(
       h.hooks.calls == [
-        "startEntitlementCheck", "locate device:53.8,-1.55", "entitlement", "startAds",
-        "syncAlerts device:53.9,-1.55 c",
+        "startEntitlementCheck", "location access", "location fix", "entitlement",
+        "startAds", "syncAlerts device:53.9,-1.55 c",
       ])
   }
 
@@ -397,7 +397,7 @@ struct AppModelStepTests {
     )
     let launch = Task { await h.model.launch() }
     try #require(
-      await yieldUntil { h.hooks.calls.contains("locate device:53.8,-1.55") },
+      await yieldUntil { h.hooks.calls.contains("location fix") },
       "the fix was never asked for")
     // A place under "Nearby:" (or, from phase 6, the picker's) while the fix is out.
     await h.model.select(dundeeTarget)
@@ -640,7 +640,8 @@ struct AppModelOverlapTests {
 /// answer, unless the user has moved meanwhile or a route has chosen a view, as the website opens
 /// on it only once and never once the visitor has moved (`openOnDefault`, apps/web app.ts). After
 /// that the view moves only as the user moves it, by a route, or on the return after a long time
-/// away: never by itself, as a nearby place or Retry brings an answer.
+/// away: never by itself, as a nearby place, a place chosen in the picker or Retry brings an
+/// answer.
 @MainActor
 @Suite("The view on screen")
 struct AppModelViewTests {
@@ -703,6 +704,48 @@ struct AppModelViewTests {
     #expect(h.model.target == dundeeTarget)
     #expect(h.model.view == .week)
     #expect(onScreen(h.model).headingLabel == "Dundee. Will it snow this week? Yes.")
+  }
+
+  @Test("a place chosen in the picker on This week answers on This week, as a recent place")
+  func chosenFromTheWeek() async throws {
+    let recent = RecentPlace(target: dundeeTarget, name: "Dundee")
+    let h = Harness(
+      now: try fixtureNow("aberdeen-snow"),
+      store: .init(place: aberdeen, units: .c),
+      replies: [try FakeTransport.fixture("aberdeen-snow"), .answer(try dundee())],
+      recents: [recent]
+    )
+    await h.model.launch()
+    #expect(h.model.view == .today)
+    h.model.view = .week
+    let picker = h.model.makePicker()
+    await picker.choose(try #require(picker.content.recents.first).place)
+    #expect(picker.finished)
+    #expect(h.model.target == dundeeTarget)
+    #expect(h.model.view == .week)
+    #expect(onScreen(h.model).state == .ready)
+    #expect(onScreen(h.model).headingLabel == "Dundee. Will it snow this week? Yes.")
+    #expect(h.model.recents == [recent])
+  }
+
+  @Test("a place chosen after a failed launch, before any move, opens on the evening's Now")
+  func chosenFirstAnswerOpens() async throws {
+    let sunderland = Target.city(slug: "sunderland-gb", name: "Sunderland")
+    let h = Harness(
+      now: try fixtureNow("durham-tomorrow"),
+      store: .init(place: durham, units: .c),
+      replies: [.failure(.notConnectedToInternet), try FakeTransport.fixture("durham-tomorrow")],
+      recents: [RecentPlace(target: sunderland, name: "Sunderland")]
+    )
+    await h.model.launch()
+    #expect(h.model.response == nil)
+    #expect(h.model.view == .today)
+    let picker = h.model.makePicker()
+    await picker.choose(try #require(picker.content.recents.first).place)
+    #expect(h.model.target == sunderland)
+    #expect(h.model.response != nil)
+    #expect(h.model.view == .now)
+    #expect(onScreen(h.model).headingLabel == "Sunderland. Is it snowing right now? No.")
   }
 
   @Test("a place under Nearby chosen on Now in the evening answers on Now; on Tomorrow, there")

@@ -1,18 +1,23 @@
 /**
  * `Constants.swift` (iOS build spec, section 7.1): the numbers the app shares with the server and
  * the website, from core's `config.ts` (and the models' agencies from `copy.ts`) and the client's
- * `config.ts`, under the same names. A group written whole (`SEARCH`, `AHEAD`, `WIDGET`, `ALERTS`,
- * `CLIENT`) gains a member when core adds a key, and stops the generator if the new value isn't a
- * whole number, so a Swift type is chosen for it rather than guessed.
+ * `config.ts`, under the same names, and willitsnow.today's pages and support address (core
+ * `SITES.snow` and `CONTACT_EMAIL`), which the app's Settings open, so no URL is typed in Swift.
+ * A group written whole (`SEARCH`, `AHEAD`, `WIDGET`, `CLIENT`) gains a member when core adds a
+ * key, and stops the generator if the new value isn't a whole number, so a Swift type is chosen
+ * for it rather than guessed. `ALERTS` is not written whole: it holds the notifications run's
+ * windows, quiet hours and budgets too, and the app needs only `heartbeatDays`.
  */
 import {
   AHEAD,
   ALERTS,
   CACHE,
+  CONTACT_EMAIL,
   GRID,
   MODELS,
   MODEL_AGENCIES,
   SEARCH,
+  SITES,
   SNOW,
   TOMORROW_FROM_HOUR,
   WIDGET,
@@ -35,6 +40,27 @@ export const CONSTANTS_SOURCE =
   'packages/core/src/config.ts, packages/core/src/copy.ts and packages/client/src/config.ts';
 
 type Numbers = Readonly<Record<string, number>>;
+
+/**
+ * willitsnow.today's own pages that the app's Settings open in Safari (iOS build spec, section
+ * 10.4), by their paths on the website (`apps/web/src/pages/snow/`, where a test finds each).
+ */
+export const SITE_PAGES = { privacy: '/privacy', terms: '/terms', support: '/support' } as const;
+
+/** A page of willitsnow.today: an https URL, or it throws. */
+function sitePage(path: string): string {
+  const url = new URL(path, SITES.snow.url);
+  if (url.protocol !== 'https:') throw new Error(`Not an https page: ${url.href}`);
+  return url.href;
+}
+
+/** The support address, or it throws: one plain address, for a mailto: URL. */
+function contactEmail(address: string): string {
+  if (!/^[a-z0-9.-]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(address)) {
+    throw new Error(`Not a plain email address: ${address}`);
+  }
+  return address;
+}
 
 const ints = (indent: string, values: Numbers): string[] =>
   Object.entries(values).flatMap(([name, value]) =>
@@ -67,7 +93,8 @@ export function constantsSwift(): string {
     generatedHeader(CONSTANTS_SOURCE),
     '',
     '/// The numbers the app shares with the server and the website, under their TypeScript names,',
-    '/// so the app judges nothing differently. Durations say their unit, as the TypeScript does.',
+    '/// so the app judges nothing differently, and the site it links to. Durations say their',
+    '/// unit, as the TypeScript does.',
     'public enum Constants {',
     '  /// From this local hour at the place until midnight, the middle view answers for tomorrow',
     '  /// and the app opens on Now (core `TOMORROW_FROM_HOUR`).',
@@ -116,11 +143,26 @@ export function constantsSwift(): string {
       'Snow',
       [
         ...doubles('    ', { likelyFrom: SNOW.likelyFrom, maybeFrom: SNOW.maybeFrom }),
+        '    /// Centimetres of fresh snow from a millimetre of water (core `SNOW.cmPerMm`).',
+        ...doubles('    ', { cmPerMm: SNOW.cmPerMm }),
+        '    /// In an hour warmer than this, °C, nothing counts as snow (core `SNOW.warmAboveC`).',
+        ...doubles('    ', { warmAboveC: SNOW.warmAboveC }),
+        '',
+        '    /// Core `SNOW.hour`: from these amounts an hour has snow, flakes, heavy and deep snow, cm.',
+        '    public enum Hour {',
+        ...doubles('      ', SNOW.hour),
+        '    }',
         '',
         '    /// Core `SNOW.day`: from these amounts a whole day has snow, flakes, heavy and deep',
         '    /// snow, cm.',
         '    public enum Day {',
         ...doubles('      ', SNOW.day),
+        '    }',
+        '',
+        "    /// Core `SNOW.normals`: when the climate records' snowfall is used, and how; the",
+        "    /// records' cell must be within `maxHeightDifference` metres of the place's height.",
+        '    public enum Normals {',
+        ...doubles('      ', SNOW.normals),
         '    }',
       ],
     ),
@@ -160,6 +202,27 @@ export function constantsSwift(): string {
       ],
       'Client',
       ints('    ', CLIENT),
+    ),
+    ...group(
+      [
+        'willitsnow.today (core `SITES.snow`): the pages Settings opens in Safari, and the address',
+        'people write to (core `CONTACT_EMAIL`), for Contact us and Report an ad.',
+      ],
+      'Site',
+      [
+        ...Object.entries(SITE_PAGES).flatMap(([name, path]) =>
+          swiftLet(
+            '    ',
+            `public static let ${swiftIdentifier(name)}`,
+            swiftString(sitePage(path)),
+          ),
+        ),
+        ...swiftLet(
+          '    ',
+          'public static let contactEmail',
+          swiftString(contactEmail(CONTACT_EMAIL)),
+        ),
+      ],
     ),
     '}',
     '',

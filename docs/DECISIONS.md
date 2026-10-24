@@ -1592,10 +1592,11 @@ strings are not in `AppCopy`: see "The iPhone app's phases 2 and 3, reviewed".)
   Google, UK, °C, °F), and no other weather type, website or app.
 - **`Constants`** keeps the TypeScript's names and units (`Constants.Client.refreshAfterMs`,
   ms; `Constants.Cache.forecastStale`, seconds). The groups written whole (`SEARCH`, `AHEAD`,
-  `WIDGET`, `ALERTS`, `CLIENT`) gain a member when a key is added, and stop the generator when
-  the new value isn't a whole number, so a type is chosen rather than guessed; snow's shares and
-  thresholds are declared `Double`, whole numbers too. `ALERTS` has only `heartbeatDays` until
-  the notifications work adds the windows.
+  `WIDGET`, `CLIENT`) gain a member when a key is added, and stop the generator when the new
+  value isn't a whole number, so a type is chosen rather than guessed; snow's shares and
+  thresholds are declared `Double`, whole numbers too. `Constants.Alerts` names its one value,
+  `heartbeatDays`, as `Cache` and `Grid` do: the notifications work (PR #30) added the run's
+  windows, quiet hours and budgets to core's `ALERTS`, and the app needs none of them.
 - **The models' agencies move into core** (`MODEL_AGENCIES` in `copy.ts`) from the About page,
   which now reads them there, unchanged: the spec's `MODELS (names and agencies)` assumed core had
   them, and the app's credits must say the same. Data only, so core's coverage is unchanged;
@@ -2652,6 +2653,104 @@ OfflineTests, LaunchTests and FixtureLaunchTests passed. The fixes, none of them
 These were found and fixed while phase 6 was put together with this branch, and are ported here so
 this PR can pass on its own. They are unproven until the next macOS run.
 
+## The iPhone app's place picker (phase 6.1)
+
+The iOS build spec's PR 6.1: the full-screen picker behind the top bar's place button and the
+approximate line's "Use my location", with search, "Use my location" and the recent places
+(sections 4, 9.4 step 4, 10.3, 15.2 and 16). `apps/ios/README.md` ("Phase 6", "6.1") lists the types.
+
+- **The search box's rules moved into the client, and the app ports them.** The website's
+  picker decided in `app.ts` what a search asks for (the text trimmed, at least `SEARCH.minChars`
+  long, else "Type at least 2 letters." or nothing) and wrote the line under a result (the region,
+  then the country's name or its code). Both moved to `packages/client/src/search.ts`
+  (`searchInput`, `resultDetail`), which `app.ts` imports; the website's behaviour is the same.
+  `search.json` (phase 6's vector file) holds the cases: JavaScript's `trim` (U+FEFF and the
+  space separators go, U+0085 and U+200B stay) and `length` in UTF-16 code units (one letter
+  outside the Basic Multilingual Plane is enough, as the server counts it), and each part of the
+  line missing or empty. `PlaceSearch.input` and `.detail` port them; JavaScript's `trim`, which
+  DeepLink had, is now `JavaScriptString` in IsItModel for both.
+- **The search, as section 4 has it, on the model's clock.** `PlacePickerModel` (IsItState)
+  waits `Constants.Search.debounceMs` after the last keystroke through `AppClock.schedule`, so
+  the Linux tests move a test clock rather than wait; a keystroke cancels the wait and the
+  request still out (its task is cancelled, which cancels URLSession's request), and a counter
+  drops any answer that comes anyway. The last search's results stay while a new one is waiting
+  or out, as the website's do, rather than flashing empty; with nothing typed the recent places
+  show instead. The keyboard's Search key chooses the first result, as Enter does on the
+  website. `APIClient.search` asks `/api/v1/search?q=` with `TodayQuery.search`, with the same
+  headers and timeout as the forecast.
+- **A failed search says why, without blaming the forecasts for the connection.** Offline
+  (`APIClient.offlineCodes`), it says "You're offline. Connect to the internet to search."
+  (`AppCopy.searchOffline`, new): the website's "Forecasts are unavailable right now…" isn't
+  true then, and "No recent forecast…" (the forecast's offline line) is about something else. A
+  429 says core's rate-limited message, and anything else the server's message, or
+  `CoreCopy.unavailable` without one (`FetchError.searchMessage`).
+- **Choosing a place** is `AppModel.choose(_:name:)`: the place is kept and loaded in place
+  (`select(_:)`, as a place under "Nearby:" is: `place.v1`, the loading state under its name,
+  the answer saved for the widgets and the widgets reloaded), then phase 8's `syncAlerts` hook is
+  called, so a notification place that follows the device's location can follow it; `AlertSync`
+  decides, and a chosen notification place never follows browsing (section 12.1). The sheet
+  closes as the place is chosen, not when its answer arrives.
+- **Recent places.** A search result or a recent place joins the list at once, under its name;
+  the device's place has no name of its own, so it joins under its answer's name when the answer
+  arrives (`RecentPlace`'s rule: "a device location's comes from its answer"), and not at all if
+  none comes. A place under "Nearby:" is browsing and doesn't join it. `recent.v1` is the
+  client's JSON in the app's own defaults (`RecentDefaults`; the widgets never read it);
+  `RecentPlaces.list(stored:)` reads it leniently, skipping an entry that isn't a place, IP
+  location or a second entry for a place, and cutting it to five. `-resetStore` forgets it. The
+  "Recent" heading is written as it is (`.textCase(nil)`), not capitalised.
+- **The location hook is filled with a service of its own.** `AppHooks.locate(_:)` is gone:
+  `LocationService` (IsItState: `access()`, `requestAccess()`, `fix()`) is in `AppEnvironment`,
+  with `NoLocation` (as if permission were off) by default. The rules are `AppModel`'s, tested on
+  Linux: launch step 4 reads the permission and takes a fix only when it is granted, never
+  asking; `locate()`, for "Use my location", asks only when permission was never asked
+  (restricted reads as denied), then takes one fix, rounded with `Target.device(lat:lon:)`. A
+  permission that went while the fix was out reads as denied, and a fix that never came says
+  "Couldn't find your location. Search for a place instead." (`AppCopy.locationUnavailable`,
+  new). The tests' recording hooks are the location too, so the launch's order of calls is still
+  checked whole. A tap while the fix is out does nothing.
+- **Deviation: Core Location is in IsItLocation, not IsItServices.** The widget links
+  IsItServices, and Xcode links a package target's code whole, Objective-C classes kept by dead
+  stripping, so `CoreLocationService` there would put `CLLocationManager` in the widget's
+  binary, which has no purpose string and asks for no location (App Store Connect's ITMS-90683
+  checks each bundle). It is a module of its own that only the app links, as IsItAds is.
+  `ci/release-check.sh` and `scripts/check-archive.sh` now fail a widget that names
+  `CLLocationManager`, as they fail one that links Google Mobile Ads.
+- **The approximate line's "Use my location" opens the picker finding the phone's place**, so
+  permission is still asked at that tap, and a refusal has somewhere to say so with Open
+  Settings and the search beside it. It starts in `onAppear`, not `.task`, which is cancelled as
+  the sheet closes and would cancel the chosen place's fetch with it.
+- **The purpose string is generated** (section 15.2's words, `AppCopy.locationPurpose`): the
+  generator writes it into `apps/ios/Configs/Generated/Copy.xcconfig` (a folder it owns) as
+  `LOCATION_PURPOSE`, which Snow.xcconfig includes and Info.plist reads as
+  `$(LOCATION_PURPOSE)`. An xcconfig reads `//` as a comment and `$(` as a setting, so the
+  emitter refuses either, and a line break or spaces at the ends. `InfoPlistTests`, hosted by
+  the app, checks the built Info.plist holds the copy, and no `NSLocationDefaultAccuracyReduced`.
+  The app's privacy manifest declares coarse location, linked, not tracking, for app
+  functionality (section 15.1); the widget's waits for phase 7, when it fetches.
+- **Search fixtures, from the real server.** `packages/mobile` asks `getSearch` on the synthetic
+  geocoder, at a fixed moment, as the picker asks: `search-leeds` (a city page),
+  `search-kathmandu` (no city page, so a point on the grid; the synthetic geocoder is given
+  GeoNames' Kathmandu besides the city list, as `data/places.json` has it) and `search-none`.
+  They are in `Fixtures/Search`, so they ship with the Debug fixtures and `Fixtures.names()`
+  doesn't list them among the answers.
+- **UI tests without the network or the prompt.** `-network` takes a list: the first fixture
+  answers approximate IP location as before, each other answers its own place (by its query: a
+  city by slug, coordinates by their point, whoever's they are), and the picker's searches are
+  answered by the search fixtures with the same query, so an answer on screen still means the
+  app asked for the right place. `-location <lat>,<lon>|denied|unavailable` stands in for Core
+  Location (a hook in the archive checks, as a short literal; 15 with 6.2's `-openURLs`). `PickerTests` covers section
+  17.2's list (stubbed search, too short, no results, a slug result and a coordinate result,
+  recents, "Use my location" denied), a fix chosen, and the sheet's accessibility audit with the
+  keyboard down.
+- **Not proven here:** IsItUI's `PlacePickerView`, `PickerSheet`, `HomeView`'s sheet, Core
+  Location's calls and the UI tests are Apple only, built and run only by the macOS jobs. On
+  Linux, IsItServices, IsItLocation and `DebugHooks.swift` (Debug and Release) were type-checked
+  in Swift 5 mode against stub `CoreLocation`, `UIKit` and `WidgetKit` modules, and the
+  `-network` stub's answers were run for the requests the picker's tests make. Unchecked: that
+  `.searchable` in the sheet's navigation bar is the only search field XCUITest finds, that a
+  swipe on a recent place's button shows the system's Delete, a section header's label with
+  `.textCase(nil)`, and that the audit passes with the system's search bar.
+
 ## The app's support page and privacy notice (S8)
 
 App Store Connect needs a Support URL with real contact details and a Privacy Policy URL, so
@@ -2676,6 +2775,10 @@ the website carries both for the snow app (iOS build spec, section 5.8 and 15.5)
   nothing about anyone. The claims the run and the test send write (`sent/` and `test/`, keyed by
   the ID, holding no token or place) outlive a delete until the 03:00 UTC cleanup takes them, up
   to about three and a half days later, so the notice and the support page say "a few days".
+  So does the run's `judged/` note (`{ at }`, keyed the same way), written for a registration
+  judged with nothing to send in a zone the run left unfinished; since phases 5 and 6 were
+  reviewed together, both pages and Your privacy name it too ("some forecast checks that found
+  nothing to send").
   Settings → Your privacy shows the ID's first 8 characters, the place with its zone, the units
   and the switches (section 10.6), so both pages say it shows "the main things we keep".
   - **When it goes.** Turning notifications off in iPhone Settings sends nothing: the app finds
@@ -2684,11 +2787,12 @@ the website carries both for the snow app (iOS build spec, section 5.8 and 15.5)
     last PUT, and with nothing changed it puts again only every `ALERTS.heartbeatDays` (7), so a
     registration can go about 83 days after the app was last opened: "about 90 days" in the
     notice, "about three months" on the support page.
-  - **Not yet in the app's copy.** Section 15.5's text and `APP_COPY.privacyNotifications` (the
-    app's summary, above the live data and the link to this notice) have the shorter list and
-    "90 days after you last open the app". Phase 6 should give the app's line the notice's
-    "about" and "main things", or the app could refresh `seenAt` on every open (a client change,
-    with a vector update).
+  - **In the app's copy since phase 6.2.** Section 15.5's text and `APP_COPY.privacyNotifications`
+    (the app's summary, above the live data and the link to this notice) had the shorter list and
+    "90 days after you last open the app". Phase 6.2 gave the app's lines the notice's facts:
+    "an ID made from it", "a few details such as the app's version and when it last checked
+    in", "about 90 days", "no longer installed" and the iPhone Settings case ("The iPhone app's
+    Settings", below), and a vitest test holds them to this notice.
 - **`/support` on every site** (`SupportBody.astro`; `support.astro` and `snow/`, `wet/`, `wind/`),
   built like Privacy: the contact address (`CONTACT_EMAIL`) as a `mailto:` link and no postal
   address (Q7), then short answers on restoring the purchase, adding a widget, why a
@@ -2723,6 +2827,435 @@ the website carries both for the snow app (iOS build spec, section 5.8 and 15.5)
   change there must change these pages, and their tests, by hand. The test takes the two times
   from the app's switches (`APP_COPY.evening` and `morning`); once `ALERTS.windows`, `quiet` and
   `staleAfterDays` reach main, it should check the numbers against them as well.
+
+## The iPhone app's Settings (apps/ios, IsItCore, packages/mobile; phase 6.2 and 6.3)
+
+The iOS build spec's PRs 6.2 and 6.3: the Settings sheet behind the gear, How it works, Credits
+and licences, the static lines of Your privacy, and Report an ad (sections 10.4, 10.6 and 10.7).
+`apps/ios/README.md` ("Phase 6", "6.2 and 6.3") lists the types.
+
+- **The shell has only what works now.** Section 10.4's order stands, with three sections left to
+  the phases that make them work, rather than rows that do nothing (section 0.2: nothing
+  dormant, no placeholder): Notifications (12.1) is phase 8's and goes after the units; the
+  upgrade row and "Restore purchase" are phase 7's and go after that, since there is no product
+  to price or restore until StoreKit is in (10.4 says "Restore purchase, always visible": from
+  phase 7 on); "Privacy choices" shows only while the ads are on and Google's form is required,
+  which only phase 8's consent code can say, so the app passes false. `SettingsScreen` takes
+  that flag already, `YourPrivacy` the lines kept for notifications (nil until a registration),
+  and `SettingsActions` the form and the delete button, both nil.
+- **"Ads on" is the free version** (`!unlocked`), as section 14.2 starts the ads only when not
+  unlocked: Report an ad shows in the free version (10.7) and Your privacy's ads line with it,
+  though phase 6 builds no banner yet. Bought, neither shows.
+- **Your privacy says what the privacy notice says.** Section 10.6's lines were shorter than PR
+  #28's notice and PR #30's server (`devices.ts`): the place is "a town, or your location
+  rounded to about 5 km" (a town isn't rounded); until a place is chosen the server estimates
+  one from the connection; besides the token, the place, zone, units and switches, the server
+  keeps an ID made from the token and a few details (the app's version, the developer-build
+  flag, when notifications were turned on and when the app last checked in); deletion is "when
+  you turn notifications off in the app, when Apple tells us the app is no longer installed, or
+  about 90 days after you last open it" (the 90 days count from the last PUT, at most a week
+  old while the app is used), and "If you turn notifications off in your iPhone's Settings
+  instead, we delete them the next time you open the app." `credits.test.ts` holds each fact to
+  the notice's own words, and the 90 to the notice's and to `ALERTS.staleAfterDays`, the days
+  the notifications run keeps a registration that has not checked in.
+- **"See Privacy choices." is a line of its own** (`APP_COPY.seePrivacyChoices`), shown after the
+  ads line only while the Privacy choices row is in Settings: outside the UK and the EEA,
+  Google's form isn't required and there is no row to see. Section 10.6 had it in the ads line.
+- **Report an ad (10.7).** The subject is `reportAdSubject` with the marketing version
+  ("Report an ad (willitsnow.today 1.0)"), the body section 10.7's with the phone's time in
+  figures and its own zone ("2026-10-23 15:05 Europe/London", which matches logs whatever the
+  phone's language) and the place on screen (empty while none is known). The email is written
+  at the tap. The `mailto:` URL encodes the subject and body as `encodeURIComponent` does
+  (RFC 6068: a space is `%20`, never `+`, which a mail app would show). When the open's
+  completion says false, the fallback sheet shows the address with "Copy address" and "Copied.",
+  announced to VoiceOver. Contact us falls back the same way, with one new string,
+  `contactUsBody` ("Email {email}. Tell us what happened, and the version number at the end of
+  Settings.", as the support page asks).
+- **Addresses come from core.** `Constants.Site` (generated) has willitsnow.today's privacy,
+  terms and support pages and `CONTACT_EMAIL`; the pages' paths are packages/mobile's
+  `SITE_PAGES`, and a test finds each in `apps/web/src/pages/snow/` with the body that renders
+  at that path. No URL or address is typed in Swift.
+- **How it works** is the About page's snow section and its location and data paragraphs,
+  rewritten for an app about snow alone: no four-sites paragraph, no "Wet and Snow agree"
+  sentence (another weather type), and "rounded to about 5 km before it leaves your phone". Its
+  numbers are slots the app fills from the generated constants, written as the About page
+  writes them (`String(n)`, `Math.round`): `Constants.models.count`, `Snow.likelyFrom`,
+  `maybeFrom`, `Day.snow`, and, newly generated, `Snow.cmPerMm`, `warmAboveC`, `Snow.Hour` and
+  `Snow.Normals` (core `SNOW.hour` and `SNOW.normals`, whole). The answer words are lower case
+  ("the answer is yes"), so the copy keeps the sentence-case rule without making Yes, Maybe and
+  No names; "the climate records" stand for NASA POWER, which the credits name.
+- **Credits are data, beside core's.** Core's credits (`COPY.forecastCredit`, `metOfficeCredit`)
+  are shown as the footer splits and links them; packages/mobile `credits.ts` adds the models'
+  agencies, listed as the About page lists them, the climate records' credit (core's
+  `climateCredit`, then NASA's project, for snowfall only) and the place names', with GeoNames
+  linked, and the typeface and Google's two SDKs, each with its notice. `pnpm mobile:generate`
+  writes them into `AppCredits.swift`. They are names and licence titles as their owners write
+  them ("SIL Open Font License", "NASA Langley Research Center"), so they aren't in `APP_COPY`,
+  whose British spelling and sentence-case tests they couldn't pass; they have tests of their
+  own (no other weather type, https links, the files).
+- **The notices are bundled whole** in `Apps/Snow/Resources/Licences/`, which the app target's
+  resources already take (XcodeGen 2.46.0 built from source puts the three files in the app's
+  resources phase, not the widget's; project.yml is unchanged). Bricolage Grotesque's is its
+  npm package's LICENSE (the font's source, `exportFont.ts`), and a test holds the copy to it
+  byte for byte. Google's are the LICENSE files of the two Swift packages at the revisions
+  `Package.resolved` pins (Apache 2.0, "Copyright 2021 Google LLC", SHA-256 `fd112c8…`), and a
+  test fails when a pin moves, so they are copied again. Those notices cover the packages; the
+  binary SDKs they fetch are Google's, under Google's terms, and whether the zips carry notices
+  of their own was not checked here (dl.google.com is blocked).
+- **The units** (`AppModel.setUnits(_:)`): kept in `units.v1`, then `refresh()` in them,
+  keeping what is on screen, as the website's units pill reloads quietly; then
+  `syncAlerts(target:units:)`, since a registration carries the units (a no-op until phase 8).
+  Offline, the choice stays and the answer on screen stays in the old units, with the offline
+  line; the next launch never paints it (`Launch.paints` checks the units).
+- **A Debug hook for the rows, `-openURLs record|nomail`.** A UI test can't follow Safari or the
+  mail app, so under it the sheet's `openURL` records each URL and shows the last one at its
+  bottom, with the units the last request asked in (only the units, never the place); `nomail`
+  refuses `mailto:` as a phone without a mail app does. It is in `DebugHooks.swift` under
+  `#if DEBUG`, and `check-archive.sh` looks for it in Release binaries (15 hooks, with 6.1's
+  `-location`). Since phase 6 was put together it records the picker's Open Settings too (below).
+- **The literal-strings guard** (section 10, phase 6's exit) is a vitest test,
+  `packages/mobile/test/swiftLiterals.test.ts`: it reads every Swift file the app and its
+  packages compile, and fails on a view or modifier given a string literal (`Text("…")`,
+  `Button("…")`, `.navigationTitle("…")`, `.accessibilityLabel("…")`, a `prompt:` or `title:`
+  with words of its own). `Text(verbatim:)`, identifiers and SF Symbols' names pass. When phase
+  6 was put together it gained a second guard, for prose in any literal (below).
+- **The copy test's names** gain "iPhone" and "ID" (in "your iPhone's Settings" and "an ID made
+  from it"), proper nouns as section 10.9's word list allows.
+- **Not proven here:** IsItUI's Settings views, the sheet, the recorder, the pasteboard,
+  `openURL`'s completion saying false for a refused `mailto:` and `SettingsTests` (with its
+  accessibility audits) are Apple only, so the macOS jobs prove them first; whether XCUITest
+  finds the segmented control's segments by "cm" and "in", and whether the audit passes the
+  system's own Form and navigation bar, are from practice, unchecked. The presenters, the
+  model, the copy and the generated files ran here.
+
+## The iPhone app's phase 6, put together (apps/ios, packages/mobile)
+
+Phase 6.1 (the picker) and 6.2 with 6.3 (Settings) were built side by side from the same home
+screen, then merged into `claude/ios-picker` with ordinary merge commits, keeping both. What
+had to be made to agree:
+
+- **One sheet at a time, presented in one place.** Both builds put their sheet on `HomeView`'s
+  `TimelineView` with a state of their own. Now one state, `HomeSheet?` (`.picker(PickerRequest)`
+  or `.settings`), drives both: the picker as a full-screen cover (section 10.3) and Settings as
+  a sheet (10.4), each closing only itself, so two can never be asked for at once. The top bar's
+  place button and the approximate line's "Use my location" open the picker (the second finding
+  the phone's place), and the gear opens Settings; `HomeContent` takes one `open` closure for
+  both. Both sheets are outside the page's colours and follow the system's, and Dark Mode.
+- **One URL recorder.** 6.2's `-openURLs` recorder was applied inside `SettingsSheet`. It is now
+  applied where `HomeView` presents each sheet, to both, so the picker's Open Settings
+  (`UIApplication.openSettingsURLString`) is recorded as Settings' rows are, and
+  `PickerTests.testOpenSettingsOpensTheAppsPage` reads it. The home screen's own links are left
+  as they were (phase 5.4's HomeTests own them).
+- **One search stub.** 6.1's `-network` answered the picker's searches from the search fixtures;
+  `-fixture` answered every request, searches included, with its forecast, which doesn't decode
+  as a search. Both now share `SearchStub` in `DebugHooks.swift`: a search fixture's query gets
+  that fixture, any other search a 404, whichever hook is on. The units each request asks in
+  are still noted for the recorder by both transports.
+- **The hooks are counted once.** Each build added one hook (`-location`, `-openURLs`) and
+  counted 14; there are 15, in `check-archive.sh`'s summary and its test.
+- **Generated files were regenerated, not merged.** `pnpm mobile:generate` after the merge wrote
+  nothing new: git's merge of `AppCopy.swift` was already what the merged `appCopy.ts` generates.
+  The generator's file list has both builds' additions (`AppCredits.swift` after `Constants.swift`,
+  `Copy.xcconfig` after the palettes), and its test the shifted indices.
+- **The guard for words typed in the Swift** (phase 6's exit, section 10 and Appendix D) has
+  two halves in `packages/mobile/test/swiftLiterals.test.ts`. 6.2's stays as it was: no view or
+  modifier is given a literal. The new one reads every string literal in the Swift that ships
+  and fails on any that looks like prose and isn't on the allowlist.
+  - **Why a lexer, not a regex over lines.** A literal can sit anywhere (a `let`, a ternary, an
+    interpolation, a multi-line or raw literal, an argument on the next line), and what makes
+    one harmless is the call it belongs to (`fatalError(` on the line above, say). So
+    packages/mobile `swiftLiterals.ts` reads Swift's comments (nested block comments too), every
+    form of literal with its escapes and interpolations, and the brackets, giving each literal
+    its text, line, callee and argument label. A literal or bracket it can't close throws, so a
+    source it misreads fails the guard rather than slipping past it.
+  - **What counts as prose:** two words or more, or one capitalised word, or one word ending a
+    sentence, where a word is letters (with an apostrophe or hyphen inside) and the punctuation
+    around it. Keys, CamelCase identifiers, paths, URL pieces, header names such as
+    `Content-Type`, and format specifiers have none, so the allowlist names only what looks like
+    prose and isn't shown: by call (`accessibilityIdentifier`, `fatalError` and its kin,
+    `appendingPathComponent`), by label (`debugDescription`, `forResource`, `withExtension`,
+    `subdirectory`, `forInfoDictionaryKey`, `systemName`), and three names (`Accept`,
+    `Infinity`, `Fallback`), each commented, with a test that each name is still used.
+  - **Where it looks:** every `.swift` file under `apps/ios`, found by walking the folder so a new
+    one is covered at once, but the generated folders, the test targets and build output. The
+    tests are left out because their literals are the words they expect and their failure
+    messages; the generated copy because its words are checked in TypeScript.
+  - **Its limit:** one lowercase word or a symbol ("cm", "°C") looks like a key, so it passes; in
+    a view, the first guard catches it. (Narrowed in review: given to any view or label, however,
+    it fails; "The iPhone app's phase 6, reviewed".) The Swift had no stray prose to move into
+    `appCopy.ts`: what the guard flagged were DebugHooks' crash messages, IsItModel's decoding
+    errors' and the three names. Planted literals ("Opens in Safari" in `HomeView`, a sentence in
+    a new folder) fail it.
+- **Not proven here:** `HomeView`'s one-state presentation (the `Optional<HomeSheet>` bindings),
+  the recorder on the picker and the new UI test are Apple only, so the macOS jobs prove them
+  first. The bindings' logic was run on Linux against a stub of SwiftUI's `Binding` (its
+  dynamic member by a writable key path), and `DebugHooks.swift`'s Foundation half (the search
+  stub with both transports) type-checked in Swift 5 mode, Debug and Release, with the SwiftUI
+  recorder left out.
+
+## The iPhone app's phase 6, reviewed (apps/ios, packages/mobile)
+
+What the review of phase 6 (the picker and Settings, put together) found, and what changed for
+it.
+
+- **Close means no place, even while the phone is being found.** The approximate line's "Use my
+  location" opens the picker already finding the phone's place; closed then, the fix still
+  chose the device's place when it came: `place.v1`, the request with the rounded location, the
+  recent places and the notifications' sync. A search result or recent place chosen meanwhile was
+  replaced the same way. `PlacePickerModel` now notes when its showing is over (a place chosen,
+  or `close()`), and a fix that comes after that chooses nothing and leaves the row idle. Two
+  Linux tests hold the fix (`RecordingHooks(holdingFix:)`): Close, then the fix; a city chosen,
+  then the fix. Both failed before the change.
+- **Your privacy says what the notice says about the notes, the searches and the phone.** The
+  notifications line said everything kept is deleted when notifications go off, but the run's and
+  the test button's notes (`sent/`, `judged/`, `test/`, keyed by the registration ID, with no token
+  or place) stay until the cleanup a few days later, as the privacy notice and the support page say.
+  The line now ends "For a few days after each notification and each test, we also keep a note that
+  it was sent, even once the rest is deleted. It holds no token or place." (That left out `judged/`,
+  which records no sending; since phases 5 and 6 were reviewed together, it names "some forecast
+  checks that found nothing to send" too.) The forecast line adds the notice's other two facts about
+  the app: place names searched for go to Open-Meteo, and the app keeps the place, units, recent
+  places and last forecast on the iPhone (still five lines, as section 10.6 has them).
+  `credits.test.ts` holds each to the notice's words; "Open-Meteo" joins the sentence-case test's
+  names. The 90 days are written out in the copy, and since main (PR #30) was merged in, the test
+  checks them against `ALERTS.staleAfterDays` as well as against the notice.
+- **The literal guard catches a word however a view is given it.** It missed a lowercase word
+  passed to `Text(verbatim:)` (how every view here draws text) or to an accessibility label,
+  a unit beside an interpolation (`"\(depth) cm"`, `"\(snowy) of \(total)"`), and a capitalised
+  abbreviation with a value (`"ID \(prefix)"`, `"ID " + prefix`), which phase 8's "What we keep
+  for notifications" will show. Now a literal with any letter in it is words when its label is
+  `verbatim`, `prompt`, `title` or `message`, when it is a view's or label modifier's unlabelled
+  argument, or UIKit's announcement's; and anywhere, one word set beside other text with a space
+  is prose. Only a lowercase word or a symbol alone outside any view still passes, as a key's
+  shape. The shipped Swift passed unchanged: no literal is given to `Text(verbatim:)`.
+- **"Copied." is announced with UIKit.** `MailFallbackView` posted iOS 17's
+  `AccessibilityNotification.Announcement`, which the Accessibility framework declares and IsItUI
+  didn't import; whether SwiftUI re-exports it was never shown. It now posts
+  `UIAccessibility.post(notification: .announcement, argument:)`, UIKit's long-standing call,
+  which the home screen's announcement on the pages branch uses too.
+- **The UI tests read a text by its own label.** SettingsTests found a text containing some words
+  with `staticTexts.containing(_:)`, which matches elements with such a descendant; a text has
+  none, so the positive checks would have failed and the negative ones passed without testing
+  anything. It is `staticTexts.matching(_:)` now.
+- **Every screen the UI tests open is audited, and an audit lists every issue.** The full licence
+  screen, Contact us's fallback and the picker's results (with the keyboard put away by a drag on
+  the list, as scrollable content does from iOS 16) had no audit, against section 16; they have
+  one each, with their screens attached. Every audit in PickerTests and SettingsTests goes through
+  `auditAccessibility(of:on:)` (`UITests/ScreenAudit.swift`): every audit type, each issue noted
+  with its type, its element's identifier and label and Apple's description, then one failure
+  that lists them all, since the tests stop at their first failure. There are no exceptions.
+- **Left for Carl: does a recent place from "Use my location" follow the phone?** A device fix
+  joins the recent places as a device target named by its answer ("Leeds"). Chosen from the list
+  later, it is My location again, so launch step 4 moves it to wherever the phone is at the next
+  launch: chosen in London, "Leeds" becomes London. The spec doesn't say how recents and step 4
+  meet, and both fixes change what users see: a recent chosen from the list could be a fixed place
+  that step 4 never moves (a flag beside `place.v1` that only "Use my location" sets), or device
+  fixes could stay out of the recent places. Nothing changed until Carl picks one; it is under
+  "Open decisions" below.
+- **Not proven here:** the announcement, the UI tests' text query, the new audits and their
+  helper, and the keyboard put away by a drag are Apple only, so the macOS jobs prove them first.
+  The helper uses only the audit API that the pages branch's `HomeAuditTests` built with on its
+  macOS run, and the three UI test files type-checked on Linux against stubs of XCUITest's
+  main-actor API. Whether the audits pass is unknown until then: candidates are the system's `.secondary` footers
+  and detail lines (contrast), Credits' links inside a paragraph (hit regions), and, behind the
+  Settings sheet, the home screen before phase 5.4's fixes. The picker model, the copy and the
+  guard ran on Linux.
+
+## The iPhone app's phases 5 and 6, put together (apps/ios, IsItCore, packages/mobile)
+
+Phases 5.2 to 5.4 (PR #31, `claude/ios-pages`) and phase 6 (`claude/ios-picker`) were built side
+by side from the 5.1 home screen. Main, with the support pages (#28) and the notifications server
+(#30), was merged into phase 6 first, then the pages branch, with ordinary merge commits keeping
+both. What had to be made to agree:
+
+- **Choosing a place keeps the view.** Phase 6's `show(_:)` opened an answer on the view for the
+  time of day whenever nothing was on screen before it (`response == nil`), which `select(_:)`
+  makes so for every new place: a place chosen from This week came back on Today, or on Now from
+  6pm. Phase 5's review had already replaced that rule, for a place under "Nearby:", with
+  `opened`: the view is chosen once, by the saved answer painted, the first answer shown, the
+  user or a route. The merge keeps phase 5's rule, and `choose(_:name:)` goes through
+  `select(_:)`, so a place chosen in the picker answers on the view the user is on, as a nearby
+  place does. Only while nothing has chosen a view (a failed launch, the user not having moved)
+  does its answer open on the view for the time of day. Two Linux tests in `AppModelViewTests`
+  hold both: a recent place chosen from This week stays on This week, and is still a recent
+  place; one chosen after a failed launch at 6:05pm in Durham opens on Now. The first fails when
+  `choose` resets the view (checked by planting that). Phase 6's picker tests assert no view, so
+  none of them changed.
+- **The sheets over every page.** `HomeView` keeps phase 6's one `HomeSheet?` (the picker as a
+  full-screen cover, Settings as a sheet, each under the `-openURLs` recorder) and phase 5's
+  minute tick (`TimelineView(.periodic(from: MinuteTick.anchor(…), by: 60))`), with the
+  switcher, the pager and `Announcements` in `HomeContent`. The top bar is `HomeShell`'s, above
+  the pager, so the place button, "Use my location" and the gear open their sheets from Now,
+  Today and This week alike. The sheets are presented from outside `HomeShell`, so phase 5.4's
+  dark colour scheme for the system's controls on a dark page doesn't reach them; they still
+  follow the system's colours and Dark Mode.
+- **Under a sheet, the pages leave the accessibility tree** (`.accessibilityHidden(sheet != nil)`
+  on `HomeContent`). VoiceOver already ignores what is under a modal sheet, but XCUITest's
+  queries, and so perhaps its audit, see it: phase 6's review named "behind the Settings sheet,
+  the home screen" as a candidate for the Settings audit's failures, and with phase 5 the
+  switcher's segmented control is there, whose own type size `HomeAuditTests` allows as an
+  exception and phase 6's audit, which has none, would not. (Firmer since: PR #31's macOS run
+  found the top bar's "Use my location" and "Using approximate location." failing Dynamic Type
+  on every page, and "Use my location" contrast on the pale ones; the top bar stays on screen,
+  dimmed, behind a sheet. "The iPhone app's phases 5 and 6, reviewed", below.) Nor, since that
+  review, are their changes announced under a sheet. The home screen is audited by
+  `HomeAuditTests`, page by page and screenful by screenful; the sheets' audits now read only the
+  sheet. `SettingsTests.assertSnowOnly` already counted only what can be tapped, and no picker or
+  Settings test reads the home screen while its sheet is open.
+- **The hooks, from both.** `DebugHooks.swift` has phase 5's `-clock fixed|run`,
+  `-network unavailable` and `stillMotion()`, and phase 6's `-location`, `-openURLs`, the search
+  stub, `-resetStore` forgetting the recent places, and `-network`'s list. `StubServer.Mode` is `.off`,
+  `.unavailable` (503 `upstream_unavailable` for every request, searches too) or
+  `.fixtures(ip:places:)`: `-network`'s value is one of the first two whole, or else a comma list
+  of fixtures, and the clock starts at the first one's moment (`StubServer.fixtureNames`). A list
+  with no name stops the app. No two hooks share a name, and the archive checks' list was already
+  whole (`-clock` was in it from the spec).
+- **The copy and the generated files.** `appCopy.ts` has both sides' keys (git merged it without a
+  conflict). `generate.ts` writes both sides' new files (`Copy.xcconfig` and the search fixtures;
+  `HomeScreens.json` after the vectors) and owns both new folders (`Configs/Generated`,
+  `UITests/Generated`), and its test has the indices that follow. `pnpm mobile:generate` after
+  the merge wrote nothing: git's merge of the generated Swift, the vectors and `HomeScreens.json`
+  was already what the merged sources generate. `PortedVectors` lists `page.json` with 5.4's
+  `HomeTopBar` and 6.1's `search.json`.
+- **The literal guard over phase 5's Swift.** It passed unchanged. Phase 5's Swift (the pager, the
+  switcher, the bodies, the glyph view, the announcements and the clocks) gives no view a literal,
+  and its only prose is `DebugHooks`' crash message for a bad `-clock`, allowed as a crash's
+  message. Nothing moved into `appCopy.ts`.
+- **The tests still find what they look for.** Phase 5's UI tests use the top bar's `place`,
+  `settings`, `use-my-location` and `approximate` and the pages' identifiers; phase 6's use the
+  sheets' own (`picker-…`, `result-…`, `recent-…`, `location-detail`, `close-settings`, `units`,
+  `debug-…`) and the page's `heading` and `verdict`, which the pager keeps once in the tree, the
+  page on screen's. At the stubbed launches' moments (12:05pm in Leeds; 11:50am UTC) that is
+  Today, the page phase 6's tests were written against, and a chosen place stays on it. The UI
+  test helpers don't collide: `HomeScreens.swift`'s `XCTestCase` extension (`launchApp(_:)`,
+  `launch(_:clock:size:)` and `tap(_:in:)`, which take a `HomeScreen`) and the classes' private
+  `launch(_:)` and `tap(_:in:)`, which take strings, are overloads by type, as `LaunchTests`' was
+  already beside it.
+- **The project.** `project.yml` merged without a conflict (6.1's IsItLocation for the app, 5.4's
+  comment on the UI test bundle, which now names phase 6's files too). XcodeGen 2.46.0, built on
+  Linux, generates the merged project: the test plans' target IDs are unchanged, and the UI test
+  bundle has `HomeScreens.json`, `PickerTests`, `SettingsTests` and `ScreenAudit`.
+- **Not proven here:** everything Apple only: `HomeView` as merged (the periodic timeline with the
+  sheets, and the pages hidden under them), IsItUI, and the UI tests over the merged app, so the
+  macOS jobs prove them first. (The merge took PR #31's head as its macOS run was thought to be
+  still going. It had finished, and failed: 6 of 26 UI tests, every one `HomeAuditTests`, with the
+  home screen exactly as merged here. The review below fixed what it found.) On Linux,
+  `DebugHooks.swift` (Debug and Release, its SwiftUI recorder left out) type-checked in Swift 5 mode
+  against stub UIKit, WidgetKit and Core Location modules; its stub answered
+  `-network ip-first-launch`, `ip-first-launch,leeds-dry`, `off`, `unavailable` and `aberdeen-snow`
+  as it should for IP location, a named place, a known search and an unknown one; and its clock
+  started where each launch says, fixed under `-clock fixed`. Everything in IsItCore ran on Linux.
+
+## The iPhone app's phases 5 and 6, reviewed (apps/ios, IsItCore, packages/mobile, the website)
+
+What the review of phases 5 and 6 put together found, and what changed for it.
+
+- **PR #31's macOS run had failed, not passed or still been running.** Its `ios` job on f030349
+  (run 40047913226) built, passed the 18 unit tests and the Release check, and failed the UI
+  plan: 26 tests, 20 passed, 6 failed, all six `HomeAuditTests`. HomeTests (7), OfflineTests
+  (4), LaunchTests (3) and FixtureLaunchTests (6) passed, and the UI step took about 32 minutes
+  of the 90. The merge into phase 6 had left the home screen and its audits as they were on
+  #31, so the combined branch would have failed the same six. What the log showed, and the
+  changes (none an exception):
+  - **At Large, the pages never scrolled to their end** ("its end never came into view in 15
+    screenfuls", every page of the three fixtures), and from the second screenful on every
+    audit found the same issues, so the page stood still after its first scroll. The drag went
+    from 90% of the page's frame to 10%, down its middle, across buttons and links, starting
+    near the screen's bottom edge, with a 50 ms press. It is now a drag in the page's left
+    margin (10 points in; the pages have 20 of padding), where no control is, from no lower
+    than 90% of the part of the page on screen and 80 points above the screen's bottom edge,
+    with no press to speak of; its length brings the first element the screen doesn't show
+    whole to the top (read from one snapshot of the page), between a quarter and four fifths of
+    the page on screen; the credits' frame is read once it has settled (a page pulled past its
+    end springs back, which the old test read as a move); and a page that scrolls no further
+    short of its end fails at once with where the page and the credits were on each screenful,
+    as do the other failures, so the next log says where things are.
+  - **At AX3, every audit after the first scroll threw**
+    `com.apple.accessibilityAudit Code=-902 "Invalid target app <pid>"`: the first screenful was
+    attached and audited, the drag ran, the second screenful was attached, and the audit then found
+    no app to audit. The drag at AX3 started still closer to the bottom edge (the top bar and the
+    stacked switcher are taller there), so a system gesture is the likely cause; the new drag keeps
+    clear of it. Each audit now first checks the app is in the foreground, and an audit that throws
+    fails its page with the app's state and the geometry, and the test goes on to the next page,
+    rather than stopping the test with nothing else known. Unproven until the next run.
+  - **What a screenful cuts is judged where it is whole.** The audit measured contrast for
+    elements the screen didn't show whole: the answer and the question passed on each page's
+    first screenful, where they were whole, and failed on every screenful after, scrolled off
+    the page's top under the switcher; the places nearby and the outbound links failed on the
+    first screenful, where, by the layout's sizes, they were at the screen's bottom edge or
+    below it. The palettes give the ink 6.26:1 or more on both ends of every gradient (section
+    16's check), so no colour changed. `HomeAuditTests` now judges an issue on a page element at
+    once only if its screenful shows the element whole (within the part of the page on screen,
+    to a point), and holds the rest until the page's last screenful: one that another screenful
+    showed whole was judged there, and goes; one no screenful showed whole is judged as it was,
+    marked so. The top bar's and the switcher's elements, which don't scroll, are always judged
+    at once. On Linux, a copy of the logic ran against fake issues (an answer cut at the top, a
+    place at the bottom edge, the top bar's button, a whole element, one taller than the page, a
+    week row's "Today" scrolled under the switcher, a segment) and judged each as above.
+  - **The top bar's approximate line was the one real fault found**: "Using approximate
+    location." and "Use my location" failed `dynamicType` ("partially unsupported") on every
+    page of every fixture, and "Use my location" `contrast` on every pale page (nosnow,
+    flakes), on every screenful, where it was whole. Both were inside a `ViewThatFits` that
+    chose between a row and a column of the same two views; the same text, link and button
+    drawn by the footer's `FlowLayout` passed both. The line is now one `FlowLayout`, the text
+    and the button each laid out once, centred in a line as tall as the button's hit region.
+    The two other `ViewThatFits` on the home screen, the switcher's buttons and a week row's day
+    and amount at accessibility sizes, became `FlowLayout`s the same way; no AX3 audit
+    reported, since each test threw at its second screenful. Whether this clears the issues is
+    for the next run: nothing in the log says which of the two arrangements, or what in them,
+    the audit read.
+  - **The hand-off and the merge's section** above read as if #31's macOS run were still to
+    come; the section now says it had failed, and how.
+    `.accessibilityHidden(sheet != nil)` stays: the elements the run flagged on the home screen
+    include the top bar's, which stays on screen, dimmed, behind Settings' sheet.
+- **UIKit's segmented control, decided once for both phases.** Phase 5 expects the audit to report
+  a segmented control's fixed type size (`HomeAuditTests.exceptions[0]`), phase 6 put one in
+  Settings (the units) under an audit that allows nothing, and the merge's reasoning for hiding the
+  home screen leaned on phase 5's expectation; both can't hold. Whatever the audit does, section
+  16 has every string grow to AX5, and a segmented control's titles don't. So Settings draws its
+  own: `UnitsSegments` (IsItUI), cm | in as two buttons in a segmented track, the one chosen
+  raised and marked selected, labels in the Form's text so they grow, each 44 points at least and
+  tapped on its own (`.plain`, as a Form row's buttons must be). Section 10.4 asks for "a segmented
+  cm | in control", which this is in look; 10.2 asks for a segmented `Picker` for the switcher, so
+  the home switcher keeps UIKit's at standard sizes, with its documented exception, and buttons
+  that scale at accessibility sizes. Drawing the switcher the same way and dropping the exception
+  is Carl's call, below. `SettingsTests` finds the units by their group (`app.find("units")`, not
+  `segmentedControls["units"]`), and now also checks the other choice isn't selected each time.
+- **VoiceOver hears nothing from under a sheet.** The pages left the accessibility tree under a
+  sheet, but their announcements were still posted: at 6pm with Settings open on Durham's Today,
+  the minute's tick turned the middle page to Tomorrow and VoiceOver spoke "Durham. Will it snow
+  tomorrow? Yes. It'll snow." over Settings; a quiet refresh's new answer too.
+  `Announcements.drawn(_:covered:)` (IsItState) now says nothing while covered, and still notes
+  the page as heard, so nothing from under the sheet is said once it closes (VoiceOver reads the
+  page from there) and the next change after it is. `HomeView` passes `covered: sheet != nil`.
+  Two Linux tests (`AnnouncementTests`): London's 6pm flip drawn covered, minute by minute, says
+  nothing, then or after; a failure drawn covered, then a nearby place's answer, is announced.
+  Both failed before the change (checked with the parameter in place and ignored).
+- **`-clock fixed` no longer stops the picker's search.** `FixedClock` never runs work due later,
+  and the picker's 250 ms pause after typing was scheduled on the model's clock, so a picker test
+  at a fixed moment would have shown "Searching…" for ever. The pause counts time passing and
+  shows no moment, so it now runs on `AppEnvironment.waits`, the model's clock unless given; a
+  Debug build under `-clock fixed` gives the system's (`DebugHooks.waits()`), and a Release build
+  never does. Two Linux tests: with a `FixedClock` for the model and a test clock for waits, the
+  search asks once the waits' clock passes 250 ms (it failed before the change); without waits,
+  the model's clock times it, as every existing picker test has it.
+- **Your privacy and the notice name the run's `judged/` note.** They said only notifications and
+  tests leave a note that outlives a delete. The run also writes
+  `judged/v1/<date>/snow.<kind>/<app>.<id>` (`{ at }`) for a registration judged with nothing to
+  send in a zone it leaves unfinished, and the cleanup takes it with the others, more than 2 days
+  on. Keyed by the registration ID, it is personal data like them, so the copy
+  (`APP_COPY.privacyNotifications`), the privacy notice (`PrivacyBody.astro`) and the support page
+  (`SupportBody.astro`) now add "after some forecast checks that found nothing to send" and "Our
+  notes of notifications, tests and forecast checks"; `credits.test.ts`'s pair and the Playwright
+  assertions on both pages changed with them, and appCopy.ts's comment says which keys each note is.
+- **Not proven here:** everything in IsItUI (the top bar, the switcher's and the week rows'
+  `FlowLayout`, `UnitsSegments`), `HomeView`'s `covered`, and the UI tests, which compile and run
+  only on the macOS jobs: whether the audit now passes the top bar, whether the new drag scrolls
+  each page to its end in at most 15 screenfuls at AX3, whether the AX3 audits run, and whether
+  Settings' audit passes `UnitsSegments`. On Linux the nine UI test files type-checked against
+  stubs of XCUITest (with the new `state`, `elementType`, snapshot `frame` and
+  `withOffset(_:)`), the held-issue logic ran against fakes, `DebugHooks.swift` type-checked in
+  Debug and Release, and IsItCore's 313 tests passed.
 
 ## API contract
 
@@ -3126,3 +3659,10 @@ index the crawler's own US town; see "Search engines").
 
 - Tuning α and the band edges after real use (all in `packages/core/src/config.ts`).
 - Remove-ads model. The `AdSlot` component takes an `adsDisabled` flag for it.
+- The iPhone app: whether a recent place that came from "Use my location", chosen again from the
+  list, follows the phone at the next launch (as now) or stays put ("The iPhone app's phase 6,
+  reviewed").
+- The iPhone app: whether the home switcher, section 10.2's segmented `Picker`, is drawn as
+  Settings' units are (buttons in a segmented track whose labels grow with the text), which
+  would let `HomeAuditTests` drop its one Dynamic Type exception ("The iPhone app's phases 5 and
+  6, reviewed").

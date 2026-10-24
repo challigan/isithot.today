@@ -1,0 +1,19 @@
+{
+  "_fixture": {
+    "query": "q=Kathmandu",
+    "now": "2026-12-01T12:05:00.000Z",
+    "note": "The picker’s search for \"Kathmandu\": one result with no city page, so choosing it asks for its point on the 0.05° grid (27.7, 85.3) as a searched place, which kathmandu-0545 answers."
+  },
+  "results": [
+    {
+      "name": "Kathmandu",
+      "region": "Bagmati Province",
+      "country": "NP",
+      "countryName": "Nepal",
+      "lat": 27.702,
+      "lon": 85.321,
+      "geonameId": 1283240,
+      "elevation": 50
+    }
+  ]
+}

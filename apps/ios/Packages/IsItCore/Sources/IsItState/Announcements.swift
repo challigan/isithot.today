@@ -29,10 +29,15 @@ public struct Announcements: Sendable, Equatable {
   /// loading state (on whichever view it opens), a refresh's new answer or its failure with
   /// nothing to show, the hour picked changing the answer or the verdict, Tomorrow from 6pm, or
   /// no recent forecast once the answer's hours run out.
-  public mutating func drawn(_ page: HomePage) -> String? {
+  ///
+  /// Under a sheet (`covered`: Settings or the picker open over the pages, which are then out of
+  /// the accessibility tree) nothing is said, so VoiceOver never speaks a hidden page over the
+  /// sheet; the page is still noted as heard, so nothing from under the sheet is said late once
+  /// it closes (VoiceOver reads the page from there), and the next change after it is.
+  public mutating func drawn(_ page: HomePage, covered: Bool = false) -> String? {
     let now = Heard(view: page.view, said: Self.said(page), checking: page.state == .loading)
     defer { heard = now }
-    guard let last = heard, !now.checking, last.view == now.view || last.checking,
+    guard !covered, let last = heard, !now.checking, last.view == now.view || last.checking,
       !last.said.utf8.elementsEqual(now.said.utf8)
     else { return nil }
     return now.said

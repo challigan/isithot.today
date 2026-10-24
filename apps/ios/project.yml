@@ -47,8 +47,9 @@ targets:
       # the home screen's presenters.
       - package: IsItCore
         products: [IsItModel, IsItLogic, IsItState]
+      # IsItLocation (Core Location) is the app's alone, as IsItAds is: never the widget's.
       - package: IsItKit
-        products: [IsItServices, IsItUI, IsItAds, SnowKit]
+        products: [IsItServices, IsItLocation, IsItUI, IsItAds, SnowKit]
       - target: WillItSnowWidgets
   WillItSnowWidgets:
     type: app-extension
@@ -68,7 +69,8 @@ targets:
     dependencies:
       - package: IsItCore
         products: [IsItModel]
-      # Never IsItAds: the widget links no ads code (sections 9.1 and 18.3).
+      # Never IsItAds: the widget links no ads code (sections 9.1 and 18.3); nor IsItLocation,
+      # so no location API is in its binary.
       - package: IsItKit
         products: [IsItServices, IsItWidgetUI, SnowKit]
   WillItSnowTests:
@@ -94,9 +96,10 @@ targets:
     type: bundle.ui-testing
     platform: iOS
     sources:
-      # FixtureLaunchTests, LaunchTests, and phase 5.4's HomeTests, OfflineTests and
-      # HomeAuditTests with HomeScreens.swift; Generated/HomeScreens.json (pnpm mobile:generate,
-      # from page.json) is a resource of the bundle, where they read what each screen shows.
+      # FixtureLaunchTests, LaunchTests, phase 5.4's HomeTests, OfflineTests and HomeAuditTests
+      # with HomeScreens.swift, and phase 6's PickerTests and SettingsTests with ScreenAudit.swift;
+      # Generated/HomeScreens.json (pnpm mobile:generate, from page.json) is a resource of the
+      # bundle, where the home screen's tests read what each screen shows.
       - path: Apps/Snow/UITests
     settings:
       base:

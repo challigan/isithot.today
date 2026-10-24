@@ -10,13 +10,19 @@
  * stops, or an upstream that is down. Only `no-week` and `no-now` change the server's answer
  * itself, to an edge state it never sends for a snow day; each note says how a fixture was made.
  */
-import { MODELS, type TodayResponse, type Units } from '@isithot/core';
-import { todayQuery, type Target } from '@isithot/client';
-import { createSyntheticFetch, zoneOffsetSeconds, type FetchLike } from '@isithot/providers';
+import { MODELS, type SearchResponse, type TodayResponse, type Units } from '@isithot/core';
+import { searchQuery, todayQuery, type Target } from '@isithot/client';
+import {
+  createSyntheticFetch,
+  zoneOffsetSeconds,
+  type FetchLike,
+  type SyntheticPlace,
+} from '@isithot/providers';
 import {
   CITIES,
   MemoryKV,
   createDeps,
+  getSearch,
   handleToday,
   type Platform,
   type VisitorGeo,
@@ -430,6 +436,94 @@ export async function makeFixture(spec: FixtureSpec): Promise<Fixture> {
 }
 
 /** A fixture as its file has it: two-space JSON in the server's key order, then a newline. */
-export function fixtureJson(fixture: Fixture): string {
+export function fixtureJson(fixture: Fixture | SearchFixture): string {
   return `${JSON.stringify(fixture, null, 2)}\n`;
+}
+
+// ---- Search answers --------------------------------------------------------------------------
+
+/**
+ * A search fixture: the server's answer to `GET /api/v1/search?q=…`, as the picker asks it
+ * (client `searchQuery`), on the synthetic geocoder at a fixed moment. The app's Debug builds
+ * answer the picker's searches with them (`-network`), and IsItCore's tests decode them.
+ */
+export interface SearchFixtureSpec {
+  /** The file's name, without `.json`, in the fixtures' `Search` folder. */
+  name: string;
+  /** What the picker searches for: the search box's text, trimmed (client `searchInput`). */
+  q: string;
+  /** The moment the server answers, ISO 8601 UTC. */
+  now: string;
+  /** What the answer shows. */
+  note: string;
+}
+
+/** A search fixture as its file has it. */
+export type SearchFixture = { _fixture: FixtureInfo } & SearchResponse;
+
+/**
+ * Kathmandu, which the synthetic geocoder knows besides the city list (GeoNames' place, as
+ * `data/places.json` has it): a place with no city page, so its result is a searched point.
+ */
+const KATHMANDU: SyntheticPlace = {
+  geonameId: 1283240,
+  name: 'Kathmandu',
+  country: 'NP',
+  countryName: 'Nepal',
+  region: 'Bagmati Province',
+  lat: 27.702,
+  lon: 85.321,
+  population: 1442271,
+};
+
+/** The places the synthetic geocoder finds for the search fixtures: the city list's, and Kathmandu. */
+const SEARCH_PLACES: readonly SyntheticPlace[] = [...CITIES, KATHMANDU];
+
+export const SEARCH_FIXTURES: readonly SearchFixtureSpec[] = [
+  {
+    name: 'search-leeds',
+    q: 'Leeds',
+    now: '2026-12-01T12:05:00.000Z',
+    note:
+      'The picker’s search for "Leeds": one result, Leeds in England, which has a city page ' +
+      '(`slug`), so choosing it asks for `place=leeds-gb`, which leeds-dry answers.',
+  },
+  {
+    name: 'search-kathmandu',
+    q: 'Kathmandu',
+    now: '2026-12-01T12:05:00.000Z',
+    note:
+      'The picker’s search for "Kathmandu": one result with no city page, so choosing it asks ' +
+      'for its point on the 0.05° grid (27.7, 85.3) as a searched place, which kathmandu-0545 ' +
+      'answers.',
+  },
+  {
+    name: 'search-none',
+    q: 'Xyzzy',
+    now: '2026-12-01T12:05:00.000Z',
+    note: 'The picker’s search for "Xyzzy", a place nowhere: no results.',
+  },
+];
+
+/**
+ * The server's answer to `spec`'s search, as it sends it, with `_fixture` first: from the
+ * synthetic geocoder, or from `fetch` when given (an upstream that is down, in a test).
+ */
+export async function makeSearchFixture(
+  spec: SearchFixtureSpec,
+  fetch?: FetchLike,
+): Promise<SearchFixture> {
+  const now = new Date(spec.now);
+  const query = searchQuery(spec.q);
+  const upstream = fetch ?? createSyntheticFetch(SEARCH_PLACES, () => now);
+  const platform: Platform = { env: (name) => ENV[name] };
+  const deps = fixedAt(now, upstream, new MemoryKV())(platform);
+  const res = await getSearch(new URLSearchParams(query), deps);
+  if (res.status !== 200 || !('results' in res.body)) {
+    throw new Error(`${spec.name}: the server answered ${res.status}: ${JSON.stringify(res.body)}`);
+  }
+  return {
+    _fixture: { query, now: now.toISOString(), note: spec.note },
+    results: res.body.results,
+  };
 }

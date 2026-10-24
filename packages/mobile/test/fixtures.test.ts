@@ -8,14 +8,26 @@ import {
   type SnowReason,
   type TodayResponse,
 } from '@isithot/core';
-import { pickHour, todayQuery, usableUntil } from '@isithot/client';
+import {
+  pickHour,
+  resultDetail,
+  searchInput,
+  searchQuery,
+  searchTarget,
+  targetFromQuery,
+  targetKey,
+  todayQuery,
+  usableUntil,
+} from '@isithot/client';
 import { createSyntheticFetch, zoneOffsetSeconds } from '@isithot/providers';
 import { CITIES } from '@isithot/server';
 import {
   FIXTURES,
+  SEARCH_FIXTURES,
   endsAfter,
   fixtureJson,
   makeFixture,
+  makeSearchFixture,
   offsetName,
   onlyModels,
   relabelZone,
@@ -482,6 +494,72 @@ describe('fixtures', () => {
     await expect(
       makeFixture({ ...spec('leeds-dry'), target: { kind: 'city', slug: 'nowhere-gb' } }),
     ).rejects.toThrow(/^leeds-dry: the server answered 404: .*not_found/);
+  });
+});
+
+describe('search fixtures', () => {
+  const made = new Map<string, Awaited<ReturnType<typeof makeSearchFixture>>>();
+  beforeAll(async () => {
+    for (const s of SEARCH_FIXTURES) {
+      made.set(s.name, JSON.parse(fixtureJson(await makeSearchFixture(s))));
+    }
+  });
+  const search = (name: string) => made.get(name)!;
+  /** The key of the place a today fixture asks about, as its query names it. */
+  const fixtureKey = (name: string) => {
+    const s = spec(name);
+    return targetKey(targetFromQuery(todayQuery(s.target, s.units, { ahead: ['snow'] }))!);
+  };
+
+  it('names each file once, and each asks as the picker does', () => {
+    expect(SEARCH_FIXTURES.map((s) => s.name)).toEqual([
+      'search-leeds',
+      'search-kathmandu',
+      'search-none',
+    ]);
+    for (const s of SEARCH_FIXTURES) {
+      // What the picker sends for what was typed: the trimmed text, as searchQuery writes it.
+      expect(searchInput(s.q)).toEqual({ kind: 'search', q: s.q });
+      expect(search(s.name)._fixture).toEqual({
+        query: searchQuery(s.q),
+        now: s.now,
+        note: s.note,
+      });
+      expect(s.note.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('search-leeds: Leeds, with its city page, which leeds-dry answers', () => {
+    const [leeds, ...others] = search('search-leeds').results;
+    expect(others).toEqual([]);
+    expect(leeds).toMatchObject({ name: 'Leeds', slug: 'leeds-gb' });
+    expect(resultDetail(leeds!)).toBe('England, United Kingdom');
+    expect(targetKey(searchTarget(leeds!))).toBe(fixtureKey('leeds-dry'));
+  });
+
+  it('search-kathmandu: a place with no city page, on the grid point kathmandu-0545 answers', () => {
+    const [kathmandu, ...others] = search('search-kathmandu').results;
+    expect(others).toEqual([]);
+    expect(kathmandu!.slug).toBeUndefined();
+    expect(resultDetail(kathmandu!)).toBe('Bagmati Province, Nepal');
+    expect(searchTarget(kathmandu!)).toMatchObject({ kind: 'coords', source: 'search' });
+    expect(targetKey(searchTarget(kathmandu!))).toBe(fixtureKey('kathmandu-0545'));
+  });
+
+  it('search-none: no results', () => {
+    expect(search('search-none').results).toEqual([]);
+  });
+
+  it('is the same answer every time it is made', async () => {
+    for (const s of SEARCH_FIXTURES) {
+      expect(fixtureJson(await makeSearchFixture(s))).toBe(fixtureJson(search(s.name)));
+    }
+  });
+
+  it('fails loudly when the server does not answer', async () => {
+    await expect(makeSearchFixture(SEARCH_FIXTURES[0]!, upstreamDown)).rejects.toThrow(
+      /^search-leeds: the server answered 503: .*upstream_unavailable/,
+    );
   });
 });
 

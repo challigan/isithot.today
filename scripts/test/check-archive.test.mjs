@@ -28,6 +28,7 @@ const HOOKS = [
   '-apiOrigin',
   '-route',
   '-umpGeography',
+  '-openURLs',
   'URLProtocolStub',
   '127.0.0.1',
 ];
@@ -128,6 +129,8 @@ const FIXTURE_AFTER_STUB = [
 const NOW_CODE = [0x528dc5a8, 0x72aeede8];
 // "-network" (8 bytes), built in x19: mov x19, #0x6e2d; then movk "et", "wo" and "rk".
 const NETWORK_CODE = [0xd28dc5b3, 0xf2ae8cb3, 0xf2cdeef3, 0xf2ed6e53];
+// "-location" (9 bytes): its first 8, "-locatio", built in x19 as "-network" is above.
+const LOCATION_CODE = [0xd28d85b3, 0xf2ac6df3, 0xf2ce8c33, 0xf2eded33];
 
 const PRIVACY = plist({ NSPrivacyTracking: false, NSPrivacyCollectedDataTypes: [] });
 
@@ -268,7 +271,7 @@ describe('an archive that passes', () => {
         '',
         '- WillItSnow 1.0 (101)',
         `- ads test: Google's demo units (${DEMO_APP})`,
-        "- checked: privacy manifests, the icon, the answer font, 13 debug hooks in both binaries, the ad units, the widget's links, versions, encryption and fixtures",
+        "- checked: privacy manifests, the icon, the answer font, 15 debug hooks in both binaries, the ad units, the widget's links, versions, encryption and fixtures",
         '',
       ].join('\n'),
     );
@@ -293,7 +296,13 @@ describe('an archive that passes', () => {
   it('passes with "-now" and the like inside ordinary text', () => {
     const dir = archive({
       files: {
-        WillItSnow: binary(['right-now', 'the-clock-noads', 'unlocked-resetStore', 'ad-network']),
+        WillItSnow: binary([
+          'right-now',
+          'the-clock-noads',
+          'unlocked-resetStore',
+          'ad-network',
+          'use-location',
+        ]),
       },
     });
     expect(check(dir).errors).toEqual([]);
@@ -370,6 +379,19 @@ describe('an archive that fails', () => {
     ).toEqual(["WillItSnowWidgets.appex's UIAppFonts doesn't name BricolageAnswer.ttf"]);
   });
 
+  it.each(['CLLocationManager', 'CoreLocationService'])(
+    "fails when the widget links the app's location code (%s)",
+    (text) => {
+      const dir = archive({ files: { [`${WIDGET}/WillItSnowWidgets`]: binary([text]) } });
+      expect(check(dir).errors).toEqual(["the widget links the app's location code"]);
+    },
+  );
+
+  it("passes with the location code in the app's binary", () => {
+    const dir = archive({ files: { WillItSnow: binary(['CLLocationManager']) } });
+    expect(check(dir).errors).toEqual([]);
+  });
+
   it('fails when the widget embeds the Google Mobile Ads framework', () => {
     const dir = archive({
       files: { [`${WIDGET}/Frameworks/GoogleMobileAds.framework/GoogleMobileAds`]: binary() },
@@ -422,6 +444,10 @@ describe('an archive that fails', () => {
     const network = archive({ files: { WillItSnow: binary([], NETWORK_CODE) } });
     expect(check(network).errors).toEqual([
       'the app binary builds the debug hook -network as a short Swift literal',
+    ]);
+    const location = archive({ files: { WillItSnow: binary([], LOCATION_CODE) } });
+    expect(check(location).errors).toEqual([
+      'the app binary builds the debug hook -location as a short Swift literal',
     ]);
   });
 

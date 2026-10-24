@@ -14,9 +14,10 @@ struct PortedVector: Sendable {
   }
 }
 
-/// Every vector file phase 3 must cover (iOS build spec, sections 7.4, 9.2 and 19), and phase
-/// 5's `page.json`, with its port. `VectorCoverageTests` runs each port, and fails for each file whose port is still nil,
-/// and for a file pnpm mobile:generate writes that isn't listed here, so none is skipped.
+/// Every vector file phase 3 must cover (iOS build spec, sections 7.4, 9.2 and 19), phase 5's
+/// `page.json` and phase 6's `search.json`, with its port. `VectorCoverageTests` runs each port,
+/// and fails for each file whose port is still nil, and for a file pnpm mobile:generate writes
+/// that isn't listed here, so none is skipped.
 ///
 /// To port a file: write the Swift; define its port in a test file of its own, as
 /// `extension VectorPort { static let grid = VectorPort { file in ... } }`, checking every case
@@ -68,5 +69,8 @@ enum PortedVectors {
     // packages/mobile homePage (the app's page, from core and the client) and homeTopBar (5.4),
     // core creditParts
     PortedVector("page", by: "5.1: HomePage, Credits.parts; 5.4: HomeTopBar", port: .page),
+
+    // client searchInput, resultDetail (the place picker's search box)
+    PortedVector("search", by: "6.1: PlaceSearch.input, .detail", port: .search),
   ]
 }

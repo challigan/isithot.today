@@ -3,13 +3,24 @@ import IsItLogic
 import IsItModel
 
 /// What `AppModel` works with (iOS build spec, section 9.4), each behind a protocol so that the
-/// tests, on Linux, give it fakes: the API, the clock, what is stored, the widgets, the later
-/// phases' steps, and the random jitter.
+/// tests, on Linux, give it fakes: the API, the clock, what is stored, the widgets, the phone's
+/// location, the recent places, the later phases' steps, and the random jitter.
 public struct AppEnvironment: Sendable {
   public var client: APIClient
+  /// The time the answers are shown at, and the refreshes', retries' and holds' work at a time.
   public var clock: any AppClock
+  /// Short waits that count time passing but no moment shown: the picker's pause after typing
+  /// (`Constants.Search.debounceMs`). The model's clock unless given, as in the app; a Debug
+  /// build under `-clock fixed`, whose `FixedClock` never runs later work, gives the system's,
+  /// so the picker still searches.
+  public var waits: any AppClock
   public var store: any StoredState
   public var widgets: any WidgetReloader
+  /// The phone's location: launch step 4's fix for "My location", and the picker's "Use my
+  /// location" (phase 6).
+  public var location: any LocationService
+  /// The picker's recent places, `recent.v1` (phase 6).
+  public var recents: any RecentStore
   public var hooks: any AppHooks
   /// A random whole number in the range: the refreshes' jitter.
   public var random: @Sendable (ClosedRange<Int>) -> Int
@@ -17,15 +28,21 @@ public struct AppEnvironment: Sendable {
   public init(
     client: APIClient,
     clock: any AppClock = SystemClock(),
+    waits: (any AppClock)? = nil,
     store: any StoredState,
     widgets: any WidgetReloader,
+    location: any LocationService = NoLocation(),
+    recents: any RecentStore = MemoryRecents(),
     hooks: any AppHooks = NoHooks(),
     random: @escaping @Sendable (ClosedRange<Int>) -> Int = { Int.random(in: $0) }
   ) {
     self.client = client
     self.clock = clock
+    self.waits = waits ?? clock
     self.store = store
     self.widgets = widgets
+    self.location = location
+    self.recents = recents
     self.hooks = hooks
     self.random = random
   }
@@ -113,13 +130,37 @@ public protocol StoredState: Sendable {
   func saveToday(_ saved: SavedToday) throws
 }
 
+/// The picker's recent places (`recent.v1`, in the app's own defaults: iOS build spec, section
+/// 9.6), the last five chosen. `RecentDefaults` (IsItServices) in the app.
+public protocol RecentStore: Sendable {
+  /// The list kept, newest first (`RecentPlaces.list(stored:)` reads it).
+  func loadRecents() -> [RecentPlace]
+  /// Keeps `list`, replacing the one before.
+  func saveRecents(_ list: [RecentPlace])
+}
+
+/// Recent places kept in memory only: the tests', and a build's without its own defaults.
+public final class MemoryRecents: RecentStore, @unchecked Sendable {
+  private let lock = NSLock()
+  private var list: [RecentPlace]
+
+  public init(_ list: [RecentPlace] = []) {
+    self.list = list
+  }
+
+  public func loadRecents() -> [RecentPlace] { lock.withLock { list } }
+
+  public func saveRecents(_ list: [RecentPlace]) { lock.withLock { self.list = list } }
+}
+
 /// Tells the widgets that the saved answer changed: WidgetKit's `reloadAllTimelines` in the app.
 public protocol WidgetReloader: Sendable {
   func reloadAllTimelines()
 }
 
 /// The launch's steps that later phases fill (iOS build spec, section 9.4). `NoHooks` does
-/// nothing for each until then.
+/// nothing for each until then. Step 4's location fix is no hook: phase 6 filled it, with
+/// `LocationService`.
 public protocol AppHooks: Sendable {
   /// Step 2 (phase 7, StoreKit): starts `Transaction.updates` and the entitlement check, and
   /// returns at once.
@@ -127,12 +168,12 @@ public protocol AppHooks: Sendable {
   /// Step 5 (phase 7): once the check has finished, whether the purchase is owned; nil keeps
   /// what `unlock.v1` says.
   func entitlement() async -> Bool?
-  /// Step 4 (phase 6, Core Location): for "My location" (`target`, a device's coordinates),
-  /// one fix when permission is granted; the new target when its 0.05° cell differs, else nil.
-  func locate(_ target: Target) async -> Target?
   /// Step 5 (phase 8): consent, then Mobile Ads, then the banner. Called only when not unlocked.
   func startAds() async
-  /// Step 6 (phase 8): when a notification switch is on, registration and `AlertSync`.
+  /// Step 6 (phase 8): when a notification switch is on, registration and `AlertSync`. Also
+  /// called when the picker chooses a place (section 10.3), so a notification place that
+  /// follows the device's location follows it; a chosen notification place never follows
+  /// browsing, which `AlertSync` decides.
   func syncAlerts(target: Target, units: Units?) async
   /// Step 7 (phases 6 and 8): a notification tap, a widget or a deep link.
   func handle(_ route: DeepLink.Route) async
@@ -147,9 +188,6 @@ public struct NoHooks: AppHooks {
 
   /// Phase 7 answers from StoreKit; until then `unlock.v1` stands.
   public func entitlement() async -> Bool? { nil }
-
-  /// Phase 6 takes the location fix.
-  public func locate(_ target: Target) async -> Target? { nil }
 
   /// Phase 8 starts consent and the ads.
   public func startAds() async {}

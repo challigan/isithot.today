@@ -4,8 +4,10 @@
  * build the app without Node, and the check stops a hand edit or a stale copy.
  */
 import { APP_COPY_PATH, appCopySwift } from './exportAppCopy';
+import { CONFIGS_GENERATED_DIR, CONFIG_COPY_PATH, configCopy } from './exportConfigCopy';
 import { CONSTANTS_PATH, constantsSwift } from './exportConstants';
 import { CORE_COPY_PATH, coreCopySwift } from './exportCoreCopy';
+import { CREDITS_PATH, creditsSwift } from './exportCredits';
 import { FONTS_DIR } from './exportFont';
 import {
   GLYPHS_DIR,
@@ -18,7 +20,14 @@ import { ASSETS_DIR, iconFiles } from './exportIcon';
 import { KEYS_PATH, keysSwift } from './exportKeys';
 import { PALETTES_PATH, palettesSwift } from './exportPalettes';
 import { QUESTIONS_PATH, questionsSwift } from './exportQuestions';
-import { FIXTURES, fixtureJson, makeFixture, type Fixture } from './fixtures';
+import {
+  FIXTURES,
+  SEARCH_FIXTURES,
+  fixtureJson,
+  makeFixture,
+  makeSearchFixture,
+  type Fixture,
+} from './fixtures';
 import { vectorFiles, vectorJson } from './vectors';
 
 /**
@@ -27,12 +36,15 @@ import { vectorFiles, vectorJson } from './vectors';
  */
 export const FIXTURES_DIR = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources/Fixtures';
 
+/** The search fixtures, in a folder of their own inside the fixtures', so they ship with them. */
+export const SEARCH_FIXTURES_DIR = `${FIXTURES_DIR}/Search`;
+
 /** The golden vectors, beside the fixtures they name, for IsItLogic's tests (phase 3). */
 export const VECTORS_DIR = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources/Vectors';
 
 /**
- * IsItModel's generated Swift: the copy, the questions, the constants, the keys and the
- * palettes.
+ * IsItModel's generated Swift: the copy, the questions, the constants, the credits, the keys
+ * and the palettes.
  */
 export const MODEL_GENERATED_DIR = 'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated';
 
@@ -50,6 +62,7 @@ export const OWNED_DIRS: readonly string[] = [
   SNOW_KIT_GENERATED_DIR,
   ASSETS_DIR,
   FONTS_DIR,
+  CONFIGS_GENERATED_DIR,
   UI_TESTS_GENERATED_DIR,
 ];
 
@@ -68,9 +81,10 @@ export interface AssetSources {
 }
 
 /**
- * Every file but the answer font, in order: IsItModel's Swift (the palettes last), each
- * fixture, each vector file, worked out from the fixtures exactly as their files have them, the
- * UI tests' screens (from page.json), then the glyphs and the app icon.
+ * Every file but the answer font, in order: IsItModel's Swift (the palettes last), the
+ * Info.plist's strings (`Copy.xcconfig`), each fixture, each search fixture, each vector file,
+ * worked out from the fixtures exactly as their files have them, the UI tests' screens (from
+ * page.json), then the glyphs and the app icon.
  */
 export async function generatedFiles(sources: AssetSources): Promise<GeneratedFile[]> {
   const files: GeneratedFile[] = [
@@ -78,14 +92,20 @@ export async function generatedFiles(sources: AssetSources): Promise<GeneratedFi
     { path: QUESTIONS_PATH, contents: questionsSwift() },
     { path: APP_COPY_PATH, contents: appCopySwift() },
     { path: CONSTANTS_PATH, contents: constantsSwift() },
+    { path: CREDITS_PATH, contents: creditsSwift() },
     { path: KEYS_PATH, contents: keysSwift() },
     { path: PALETTES_PATH, contents: palettesSwift() },
+    { path: CONFIG_COPY_PATH, contents: configCopy() },
   ];
   const fixtures = new Map<string, Fixture>();
   for (const spec of FIXTURES) {
     const contents = fixtureJson(await makeFixture(spec));
     files.push({ path: `${FIXTURES_DIR}/${spec.name}.json`, contents });
     fixtures.set(spec.name, JSON.parse(contents) as Fixture);
+  }
+  for (const spec of SEARCH_FIXTURES) {
+    const contents = fixtureJson(await makeSearchFixture(spec));
+    files.push({ path: `${SEARCH_FIXTURES_DIR}/${spec.name}.json`, contents });
   }
   const vectors = vectorFiles(fixtures);
   for (const { name, vectors: file } of vectors) {
