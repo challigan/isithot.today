@@ -23,9 +23,10 @@ func onScreen(_ model: AppModel) -> HomePage {
 final class Listener {
   private var announcements = Announcements()
 
-  /// What is announced as the page on screen is drawn at the model's clock.
-  func hears(_ model: AppModel) -> String? {
-    announcements.drawn(onScreen(model))
+  /// What is announced as the page on screen is drawn at the model's clock, under a sheet when
+  /// `covered`.
+  func hears(_ model: AppModel, covered: Bool = false) -> String? {
+    announcements.drawn(onScreen(model), covered: covered)
   }
 
   /// What is announced as `page` is drawn.
@@ -303,6 +304,46 @@ struct AnnouncementTests {
       if let text = heard.hears(h.model) { said.append(text) }
     }
     #expect(said == ["London. Will it snow tomorrow? No. Too warm for snow."])
+  }
+
+  @Test("under a sheet nothing is announced, the 6pm flip neither then nor once it closes")
+  func coveredFlipSaysNothing() async throws {
+    let made = try fixtureNow("london-dst-autumn-evening")
+    let h = Harness(
+      now: made,
+      store: .init(place: .city(slug: "london-gb", name: "London"), units: .c),
+      replies: [try FakeTransport.fixture("london-dst-autumn-evening")]
+    )
+    await h.model.launch()
+    let heard = Listener()
+    #expect(heard.hears(h.model) == nil)
+    var said: [String] = []
+    for minute in 1...40 {
+      h.clock.now = later(made, minutes: Double(minute))
+      // Settings or the picker is open over the pages, which are out of the accessibility tree.
+      if let text = heard.hears(h.model, covered: true) { said.append(text) }
+    }
+    #expect(said.isEmpty)
+    // The sheet closes on the page as it now is: VoiceOver reads it from there, and nothing
+    // from under the sheet is said late.
+    #expect(heard.hears(h.model) == nil)
+  }
+
+  @Test("what changed under a sheet is kept: the next change after it is announced")
+  func coveredThenChange() async throws {
+    let made = try fixtureNow("aberdeen-snow")
+    let h = Harness(
+      now: made,
+      store: .init(place: aberdeen, units: .c),
+      replies: [.failure(.notConnectedToInternet), .answer(try dundee())]
+    )
+    let heard = Listener()
+    #expect(heard.hears(h.model, covered: true) == nil)
+    await h.model.launch()
+    #expect(heard.hears(h.model, covered: true) == nil)
+    #expect(heard.hears(h.model) == nil)
+    await h.model.select(dundeeTarget)
+    #expect(heard.hears(h.model) == "Dundee. Will it snow today? Yes. It'll snow.")
   }
 
   @Test("a failure with nothing to show is announced, and then a nearby place's answer")

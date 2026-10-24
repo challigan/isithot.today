@@ -7,7 +7,13 @@ import IsItModel
 /// location, the recent places, the later phases' steps, and the random jitter.
 public struct AppEnvironment: Sendable {
   public var client: APIClient
+  /// The time the answers are shown at, and the refreshes', retries' and holds' work at a time.
   public var clock: any AppClock
+  /// Short waits that count time passing but no moment shown: the picker's pause after typing
+  /// (`Constants.Search.debounceMs`). The model's clock unless given, as in the app; a Debug
+  /// build under `-clock fixed`, whose `FixedClock` never runs later work, gives the system's,
+  /// so the picker still searches.
+  public var waits: any AppClock
   public var store: any StoredState
   public var widgets: any WidgetReloader
   /// The phone's location: launch step 4's fix for "My location", and the picker's "Use my
@@ -22,6 +28,7 @@ public struct AppEnvironment: Sendable {
   public init(
     client: APIClient,
     clock: any AppClock = SystemClock(),
+    waits: (any AppClock)? = nil,
     store: any StoredState,
     widgets: any WidgetReloader,
     location: any LocationService = NoLocation(),
@@ -31,6 +38,7 @@ public struct AppEnvironment: Sendable {
   ) {
     self.client = client
     self.clock = clock
+    self.waits = waits ?? clock
     self.store = store
     self.widgets = widgets
     self.location = location

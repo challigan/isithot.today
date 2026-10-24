@@ -7,10 +7,10 @@ import Observation
 /// (`AppModel.makePicker()`): the search box's text and its search, the "Use my location" row,
 /// and whether a place was chosen, when the sheet closes. `content` is what IsItUI draws.
 ///
-/// The search waits for a pause in typing (`Constants.Search.debounceMs`, 250 ms) before it
-/// asks, from 2 letters (`PlaceSearch.input`); each keystroke cancels the search before it, the
-/// wait and the request both, and only the newest search's answer is ever shown. While a new
-/// search is on its way, the last one's results stay.
+/// The search waits for a pause in typing (`Constants.Search.debounceMs`, 250 ms, timed by
+/// `AppEnvironment.waits`) before it asks, from 2 letters (`PlaceSearch.input`); each keystroke
+/// cancels the search before it, the wait and the request both, and only the newest search's
+/// answer is ever shown. While a new search is on its way, the last one's results stay.
 @MainActor
 @Observable
 public final class PlacePickerModel {

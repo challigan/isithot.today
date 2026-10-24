@@ -111,7 +111,7 @@ test.describe('the legal pages', () => {
           "With them we keep an ID made from the token, the app's version, whether it is a developer build, when you turned notifications on and when the app last checked in with us. It checks in when you open it: at most once a week, unless you change something. " +
           'We delete all of this when you turn notifications off in the app, when Apple tells us the app is no longer installed, or 90 days after the app last checked in, so about 90 days after you last opened it. ' +
           "If you turn notifications off in your iPhone's Settings instead, we delete it the next time you open the app. " +
-          'For a few days after each notification and each test, we also keep a note that it was sent, even once the rest is deleted, so a notification is never sent twice and tests keep to 3 an hour; it holds no token or place. ' +
+          'For a few days after each notification and each test, and after some forecast checks that found nothing to send, we also keep a note of it, even once the rest is deleted, so nothing is sent or checked twice and tests keep to 3 an hour; it holds no token or place. ' +
           "Notifications are sent through Apple's push service. Our server and its storage are run by Netlify, in the United States. " +
           `In the app, ${settings} → ${yourPrivacy} shows the ID and the main things we keep, and "${deleteMyData}" deletes them.`,
         'Ads in the app. The free version shows ads from Google AdMob. ' +
@@ -199,7 +199,7 @@ test.describe('the legal pages', () => {
       await expect(answer('Turning notifications off and deleting your data')).toHaveText(
         `In the app, open ${settings} → ${yourPrivacy} and tap "${deleteMyData}". ` +
           "That turns every notification off and deletes what we keep for them: your device's notification token and an ID made from it, the place, its time zone, your units, which notifications you chose, the app's version and whether it is a developer build, and when you turned notifications on and when the app last checked in with us. " +
-          'Our notes that a notification or a test was sent, which hold no token or place, go a few days later. ' +
+          'Our notes of notifications, tests and forecast checks, which hold no token or place, go a few days later. ' +
           'The same screen shows the ID and the main things we keep while notifications are on. ' +
           `Turning every notification off in the app's ${notifyIn} deletes it too. ` +
           "If you turn notifications off in your iPhone's Settings instead, we delete it the next time you open the app. " +

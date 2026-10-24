@@ -56,6 +56,7 @@ struct WillItSnowApp: App {
     return AppEnvironment(
       client: APIClient(origin: origin, transport: transport),
       clock: DebugHooks.clock() ?? SystemClock(),
+      waits: DebugHooks.waits(),
       store: store,
       widgets: WidgetCenterReloader(),
       location: DebugHooks.location() ?? CoreLocationService(),

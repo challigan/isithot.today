@@ -587,14 +587,20 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   three fixtures at Large and at AX3 (`-UIPreferredContentSizeCategoryName` with
   `UICTContentSizeCategoryAccessibilityXL`; the test checks the switcher is buttons at AX3 and not
   at Large, so the size reached the app), with `performAccessibilityAudit(for: .all)` on every
-  screenful, from the page's top to the end of its credits (an audit reads only what is on
-  screen). Every issue fails the test, once per fixture and size, listing each with its page and
-  screenful, kind (`contrast`, `hitRegion`, `dynamicType`, …), Apple's descriptions and the
-  element's identifier and label, except those in `HomeAuditTests.exceptions`, each with why it
-  isn't a fault to fix: the segmented control's own type size (`dynamicType`; section 10.2's
-  segmented picker, buttons that scale at accessibility sizes) and the credits' inline links
-  (`hitRegion`). The log names an exception a test didn't need. For a new issue, fix the app, or,
-  when it isn't a fault, add it there with its reason.
+  screenful, from the page's top to the end of its credits. Each scroll brings the first element
+  the screen doesn't show whole to the top (a drag in the page's left margin, clear of the home
+  indicator, read from one snapshot of the page), and an issue on an element the screenful cuts
+  at the page's edge, or doesn't show, is judged on a screenful that shows it whole (an audit
+  measures what the screen has where the element is: on PR #31's macOS run, the answer failed
+  contrast on every screenful that had scrolled it off the top). Every issue fails the test, once
+  per fixture and size, listing each with its page and screenful, kind (`contrast`, `hitRegion`,
+  `dynamicType`, …), Apple's descriptions and the element's identifier and label, except those in
+  `HomeAuditTests.exceptions`, each with why it isn't a fault to fix: the segmented control's own
+  type size (`dynamicType`; section 10.2's segmented picker, buttons that scale at accessibility
+  sizes) and the credits' inline links (`hitRegion`). The log names an exception a test didn't
+  need. A page that stops scrolling short of its end, an app that has left the foreground or an
+  audit that can't run fails with where the page and its credits were on each screenful. For a
+  new issue, fix the app, or, when it isn't a fault, add it there with its reason.
 
 **The contact sheet** tiles every attachment in its names' order (`ci/contact-sheet.mjs`, five
 screens to a row). `HomeAuditTests` attaches every screenful it audits as
@@ -678,7 +684,9 @@ materials. As on the home screen, IsItLogic makes the content as plain values (L
 IsItUI draws it, and the app connects them in one file (`SettingsSheet.swift`). DECISIONS has
 the choices ("The iPhone app's Settings").
 
-- **The rows, in order:** Snow units (cm | in, the footnote beneath); Privacy ("Your privacy",
+- **The rows, in order:** Snow units (cm | in, the footnote beneath: `UnitsSegments`, a
+  segmented control drawn as two buttons whose labels grow with the text, the one chosen marked
+  selected; not UIKit's segmented control, whose type size is fixed); Privacy ("Your privacy",
   "Privacy policy"); "Report an ad", in the free version only; About ("How it works", "Credits
   and licences", "Terms"); Help ("Contact us", "Support"); and "Version 1.0 (112)" from the
   bundle. willitsnow.today's pages open in Safari and the emails in the mail app, through
@@ -737,7 +745,9 @@ a screen.
   colours, not the page's: they are presented from outside `HomeShell`, so the dark colour
   scheme it gives the system's controls on a dark page (phase 5.4) doesn't reach them. While
   one is open, the home screen under it is out of the accessibility tree, as VoiceOver already
-  treats it, so the sheets' audits read only the sheet.
+  treats it, so the sheets' audits read only the sheet, and its changes (the 6pm flip, a quiet
+  refresh's new answer) aren't announced over the sheet, then or once it closes
+  (`Announcements.drawn(_:covered:)`).
 - **One view.** Choosing a place (`AppModel.choose(_:name:)`, through `select(_:)`) keeps the
   view on screen, as a place under "Nearby:" does; only the first answer shown, before anything
   chose a view, opens on the view for the time of day (`AppModelViewTests`: a place chosen from
@@ -946,7 +956,9 @@ launch argument. So far there are these:
   state it was made for: the hour picked, Tomorrow from 6pm at the place, no recent forecast for
   `old-forecast`. `-now <iso>` starts it at that moment instead. `-clock fixed` keeps it at that
   moment (or the launch's own, without either), so nothing changes or falls due while a test
-  reads the screen (`FixedClock`, IsItState); `-clock run`, the default, runs on. The minute tick
+  reads the screen (`FixedClock`, IsItState): no quiet refresh, no retry. The picker's pause
+  after typing still runs, on the system's clock (`AppEnvironment.waits`, `DebugHooks.waits()`),
+  so the picker searches at a fixed moment too. `-clock run`, the default, runs on. The minute tick
   counts the model's minutes (`MinuteTick`), so a clock started at 5:59:30pm turns the middle
   tab to Tomorrow 30 seconds later, not at the system's next minute;
 - `-apiOrigin <url>` asks a deploy preview's API instead of willitsnow.today's (spec section 4);

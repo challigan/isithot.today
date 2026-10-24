@@ -132,8 +132,9 @@ struct InfoPagesTests {
           + "them when you turn notifications off in the app, when Apple tells us the app is no "
           + "longer installed, or about 90 days after you last open it. If you turn notifications "
           + "off in your iPhone's Settings instead, we delete them the next time you open the app. "
-          + "For a few days after each notification and each test, we also keep a note that it was "
-          + "sent, even once the rest is deleted. It holds no token or place.",
+          + "For a few days after each notification and each test, and after some forecast checks "
+          + "that found nothing to send, we also keep a note of it, even once the rest is deleted. "
+          + "It holds no token or place.",
         "In the free version, Google shows the ads and may collect device and usage data.",
         "Apple handles purchases. We never see your payment details.",
         "There are no accounts.",

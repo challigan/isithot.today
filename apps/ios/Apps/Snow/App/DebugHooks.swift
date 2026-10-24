@@ -81,8 +81,9 @@ enum DebugHooks {
     /// on any day shows the state it was made for (the hour picked, Tomorrow from 6pm at the
     /// place, no recent forecast). `-clock run`, the default, runs on from there; `-clock fixed`
     /// stays at that moment (from the launch's own without either), so a UI test reads the
-    /// screen its moment shows and nothing falls due meanwhile (`FixedClock`). Nil, for the
-    /// system's clock, without any of them.
+    /// screen its moment shows and nothing falls due meanwhile (`FixedClock`): no quiet
+    /// refresh, no retry. The picker's pause after typing is timed apart, by `waits()`, so it
+    /// still searches. Nil, for the system's clock, without any of them.
     static func clock(arguments: [String] = ProcessInfo.processInfo.arguments) -> (any AppClock)? {
       let mode = value(after: "-clock", in: arguments)
       if let mode, mode != "fixed", mode != "run" {
@@ -102,6 +103,14 @@ enum DebugHooks {
       }
       if mode == "fixed" { return FixedClock(at: start ?? Date()) }
       return start.map { SystemClock(startingAt: $0) }
+    }
+
+    /// The clock for short waits, which count time passing and show no moment
+    /// (`AppEnvironment.waits`: the picker's pause after typing). Under `-clock fixed`, whose
+    /// clock never runs work due later, the system's, so a picker test at a fixed moment still
+    /// searches; nil, for the model's clock, otherwise.
+    static func waits(arguments: [String] = ProcessInfo.processInfo.arguments) -> (any AppClock)? {
+      value(after: "-clock", in: arguments) == "fixed" ? SystemClock() : nil
     }
 
     /// The phone's location without Core Location, so a UI test never sees the system's prompt
@@ -248,6 +257,8 @@ enum DebugHooks {
     static func transport(forgetting store: SharedStore?) -> (any HTTPTransport)? { nil }
 
     static func clock() -> (any AppClock)? { nil }
+
+    static func waits() -> (any AppClock)? { nil }
 
     static func apiOrigin() -> URL? { nil }
 

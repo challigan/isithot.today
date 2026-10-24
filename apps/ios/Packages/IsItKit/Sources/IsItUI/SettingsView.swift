@@ -138,7 +138,7 @@ public struct SettingsView: View {
 }
 
 /// "Snow units" with its cm | in control, side by side, or one over the other at accessibility
-/// sizes. VoiceOver reads the control by the label; nothing is chosen before the first answer
+/// sizes. VoiceOver reads the label, then each choice; nothing is chosen before the first answer
 /// chose the units.
 struct UnitsRow: View {
   let control: SettingsScreen.UnitsControl
@@ -154,32 +154,55 @@ struct UnitsRow: View {
       : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
     layout {
       Text(verbatim: control.label)
-        .accessibilityHidden(true)
       if !stacked {
         Spacer(minLength: 0)
       }
-      Picker(selection: selection) {
-        ForEach(control.choices) { choice in
-          Text(verbatim: choice.name)
-            .tag(Optional(choice.units))
-        }
-      } label: {
-        Text(verbatim: control.label)
-      }
-      .pickerStyle(.segmented)
-      .fixedSize()
-      .accessibilityLabel(Text(verbatim: control.label))
-      .accessibilityIdentifier("units")
+      UnitsSegments(control: control, setUnits: setUnits)
     }
   }
+}
 
-  private var selection: Binding<Units?> {
-    Binding(
-      get: { control.selected },
-      set: { units in
-        if let units { setUnits(units) }
+/// The cm | in control (section 10.4): a segmented control drawn as two buttons, the one chosen
+/// raised and marked selected, as a segment is. Not UIKit's segmented control, which keeps its
+/// own type size where section 16 has every string grow to AX5, and which phase 5's home audit
+/// expects the accessibility audit to report; here the labels are the Form's text and grow
+/// with it, so Settings' audit, which allows nothing, has nothing to allow. Each button is
+/// tapped on its own (`.plain`, as a Form row's buttons must be) and is at least 44 points
+/// square.
+struct UnitsSegments: View {
+  let control: SettingsScreen.UnitsControl
+  let setUnits: (Units) -> Void
+
+  var body: some View {
+    HStack(spacing: 2) {
+      ForEach(control.choices) { choice in
+        let selected = choice.units == control.selected
+        Button {
+          setUnits(choice.units)
+        } label: {
+          Text(verbatim: choice.name)
+            .fontWeight(selected ? .semibold : .regular)
+            .padding(.horizontal, 14)
+            .frame(minWidth: HitTarget.minimum, minHeight: HitTarget.minimum)
+            .background {
+              if selected {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                  .fill(.background)
+                  .shadow(color: .black.opacity(0.15), radius: 1, y: 1)
+              }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
       }
-    )
+    }
+    .padding(2)
+    .background(.quaternary, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+    .fixedSize()
+    // The choices' group, which the UI tests find by it.
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("units")
   }
 }
 

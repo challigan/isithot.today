@@ -107,9 +107,11 @@ export const APP_COPY = {
   // its zone, the units, the switches, and a few details more (the app's version, when it last
   // checked in), deleted when notifications go off in the app, when Apple says the app is gone,
   // or about 90 days after the app was last opened (it checks in at most weekly), and after
-  // notifications go off in iPhone Settings, at the next open; the notes that a notification or
-  // a test was sent (sent/, judged/ and test/, keyed by the ID, with no token or place) go a few
-  // days later, at the run's cleanup. Searches go to Open-Meteo, and the phone keeps the place,
+  // notifications go off in iPhone Settings, at the next open; the run's and the test button's
+  // notes, keyed by the ID with no token or place, go a few days later, at the run's cleanup:
+  // sent/ (a notification sent), test/ (a test sent) and judged/ (a registration a run judged
+  // with nothing to send, in a zone it left unfinished, so the next run skips it: "some forecast
+  // checks that found nothing to send"). Searches go to Open-Meteo, and the phone keeps the place,
   // units, recent places and last answer (phase 8 adds the notification choices to both this
   // line and the notice's). "See Privacy choices." follows the ads line only while that row is
   // in Settings.
@@ -129,8 +131,8 @@ export const APP_COPY = {
     'notifications off in the app, when Apple tells us the app is no longer installed, or about ' +
     "90 days after you last open it. If you turn notifications off in your iPhone's Settings " +
     'instead, we delete them the next time you open the app. For a few days after each ' +
-    'notification and each test, we also keep a note that it was sent, even once the rest is ' +
-    'deleted. It holds no token or place.',
+    'notification and each test, and after some forecast checks that found nothing to send, we ' +
+    'also keep a note of it, even once the rest is deleted. It holds no token or place.',
   privacyAds: 'In the free version, Google shows the ads and may collect device and usage data.',
   seePrivacyChoices: 'See Privacy choices.',
   privacyPurchases: 'Apple handles purchases. We never see your payment details.',

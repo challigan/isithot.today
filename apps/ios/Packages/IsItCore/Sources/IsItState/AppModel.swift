@@ -213,10 +213,10 @@ public final class AppModel {
 
   // MARK: - The place picker
 
-  /// A picker over this model (section 10.3), with the model's client and clock: the sheet makes
-  /// one each time it opens.
+  /// A picker over this model (section 10.3), with the model's client, its pause after typing
+  /// timed by the environment's `waits`: the sheet makes one each time it opens.
   public func makePicker() -> PlacePickerModel {
-    PlacePickerModel(app: self, client: environment.client, clock: environment.clock)
+    PlacePickerModel(app: self, client: environment.client, clock: environment.waits)
   }
 
   /// Chooses `target` as the place, as the picker does (section 10.3): it is kept in

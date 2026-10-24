@@ -92,11 +92,12 @@ const site = SITES[topic].name;
       us the app is no longer installed, or 90 days after the app last checked in, so about 90 days
       after you last opened it. If you turn notifications off in your iPhone's Settings instead, we
       delete it the next time you open the app. For a few days after each notification and each
-      test, we also keep a note that it was sent, even once the rest is deleted, so a notification
-      is never sent twice and tests keep to 3 an hour; it holds no token or place. Notifications are
-      sent through Apple's push service. Our server and its storage are run by Netlify, in the
-      United States. In the app, Settings → Your privacy shows the ID and the main things we keep,
-      and "Turn off notifications and delete my data" deletes them.
+      test, and after some forecast checks that found nothing to send, we also keep a note of it,
+      even once the rest is deleted, so nothing is sent or checked twice and tests keep to 3 an
+      hour; it holds no token or place. Notifications are sent through Apple's push service. Our
+      server and its storage are run by Netlify, in the United States. In the app, Settings → Your
+      privacy shows the ID and the main things we keep, and "Turn off notifications and delete my
+      data" deletes them.
     </li>
     <!-- prettier-ignore -->
     <li>

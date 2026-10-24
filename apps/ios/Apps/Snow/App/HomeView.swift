@@ -26,10 +26,10 @@ struct HomeView: View {
   var body: some View {
     let ticks = MinuteTick.anchor(model: model.now, system: Date())
     TimelineView(.periodic(from: ticks, by: 60)) { context in
-      HomeContent(model: model, tick: context.date) { sheet = $0 }
+      HomeContent(model: model, tick: context.date, covered: sheet != nil) { sheet = $0 }
         // Under a sheet, the pages are out of the accessibility tree, as VoiceOver already
         // treats what is under a modal sheet: the sheets' audits read the sheet alone, and the
-        // pages' own audits are HomeAuditTests'.
+        // pages' own audits are HomeAuditTests'. Nor are their changes announced (`covered`).
         .accessibilityHidden(sheet != nil)
     }
     // Both sheets are drawn outside the page's colours, so they follow the system's, and Dark
@@ -89,11 +89,15 @@ extension Optional where Wrapped == HomeSheet {
 /// model changes as well as each minute, always at the model's clock. The switcher and the
 /// pager share the model's view (`$model.view`), so a tap, a swipe, a route and the return
 /// after a long time away all move both. When the page on screen says something new
-/// (`Announcements`, IsItState), VoiceOver hears its heading once (section 16).
+/// (`Announcements`, IsItState), VoiceOver hears its heading once (section 16), unless a sheet
+/// covers the pages: then nothing is said, then or once it closes, as the pages are out of the
+/// accessibility tree under it (the 6pm flip, or a quiet refresh's new answer, behind Settings).
 private struct HomeContent: View {
   @Bindable var model: AppModel
   /// The minute tick's date: a new one each minute, which draws the screen again.
   let tick: Date
+  /// Whether a sheet is open over the pages.
+  let covered: Bool
   /// Opens a sheet: the place picker, or Settings.
   let open: (HomeSheet) -> Void
 
@@ -126,7 +130,7 @@ private struct HomeContent: View {
       }
     }
     .onChange(of: shown, initial: true) { _, page in
-      if let heading = announcements.drawn(page) {
+      if let heading = announcements.drawn(page, covered: covered) {
         UIAccessibility.post(notification: .announcement, argument: heading)
       }
     }

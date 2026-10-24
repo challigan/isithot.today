@@ -144,6 +144,37 @@ struct PlacePickerSearchTests {
     #expect(held.cancelled == [true, false])
   }
 
+  @Test("the search's pause is the waits' clock's: a model clock that never runs still asks")
+  func pauseOnTheWaitsClock() async throws {
+    let made = try fixtureNow("leeds-dry")
+    let transport = FakeTransport([try searchReply("search-leeds")])
+    let waits = TestClock(made)
+    // `-clock fixed`'s clock, which never runs work due after its moment, as the model's.
+    let model = AppModel(
+      environment: AppEnvironment(
+        client: APIClient(transport: transport),
+        clock: FixedClock(at: made),
+        waits: waits,
+        store: FakeState(),
+        widgets: FakeWidgets()
+      ))
+    let picker = model.makePicker()
+    picker.type("Leeds")
+    #expect(waits.pending == [made.addingTimeInterval(0.25)])
+    #expect(transport.requests.isEmpty)
+    await waits.runNext()
+    #expect(transport.urls == ["https://willitsnow.today/api/v1/search?q=Leeds"])
+    #expect(picker.search == .found(try found("search-leeds")))
+  }
+
+  @Test("without a clock for waits of its own, the model's clock times the pause")
+  func pauseOnTheModelsClock() throws {
+    let made = try fixtureNow("leeds-dry")
+    let h = Harness(now: made, replies: [try searchReply("search-leeds")])
+    h.model.makePicker().type("Leeds")
+    #expect(h.clock.pending == [made.addingTimeInterval(0.25)])
+  }
+
   @Test("the last search's results stay while the next is on its way; none is said so")
   func previousAndNone() async throws {
     let h = Harness(

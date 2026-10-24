@@ -19,16 +19,20 @@ final class SettingsTests: XCTestCase {
   func testUnitsChangeAsksInTheNewUnits() throws {
     let app = launch(["-resetStore", "-network", "ip-first-launch", "-openURLs", "record"])
     openSettings(app)
-    let units = app.segmentedControls["units"]
+    // The control is two buttons in a group (`UnitsSegments`), each marked selected as a
+    // segment is, so its labels grow with the text size.
+    let units = app.find("units")
     XCTAssertTrue(units.waitForExistence(timeout: 5), "No snow units control")
     // The first launch asked by IP with no units, and kept the server's choice.
     XCTAssertTrue(units.buttons["cm"].isSelected, "cm isn't chosen")
+    XCTAssertFalse(units.buttons["in"].isSelected, "in is chosen as well")
     XCTAssertEqual(app.staticTexts["debug-units"].label, "none")
     XCTAssertTrue(
       app.staticTexts["Temperatures follow: cm with °C, inches with °F."].exists, "No footnote")
     units.buttons["in"].tap()
     waitFor(app.staticTexts["debug-units"], label: "f")
     XCTAssertTrue(units.buttons["in"].isSelected, "in isn't chosen")
+    XCTAssertFalse(units.buttons["cm"].isSelected, "cm is still chosen")
     try auditAccessibility(of: app, on: "Settings")
     attachScreen(of: app, named: "app-settings")
     app.terminate()
@@ -36,7 +40,7 @@ final class SettingsTests: XCTestCase {
     // units.v1 holds the choice: the next launch asks in inches, and Settings shows them.
     let again = launch(["-network", "ip-first-launch", "-openURLs", "record"])
     openSettings(again)
-    let kept = again.segmentedControls["units"]
+    let kept = again.find("units")
     XCTAssertTrue(kept.waitForExistence(timeout: 5), "No snow units control")
     XCTAssertTrue(kept.buttons["in"].isSelected, "in isn't kept")
     XCTAssertEqual(again.staticTexts["debug-units"].label, "f", "The launch didn't ask in inches")
@@ -163,8 +167,9 @@ final class SettingsTests: XCTestCase {
         + "them when you turn notifications off in the app, when Apple tells us the app is no "
         + "longer installed, or about 90 days after you last open it. If you turn notifications "
         + "off in your iPhone's Settings instead, we delete them the next time you open the app. "
-        + "For a few days after each notification and each test, we also keep a note that it was "
-        + "sent, even once the rest is deleted. It holds no token or place.",
+        + "For a few days after each notification and each test, and after some forecast checks "
+        + "that found nothing to send, we also keep a note of it, even once the rest is deleted. "
+        + "It holds no token or place.",
       "In the free version, Google shows the ads and may collect device and usage data.",
       "Apple handles purchases. We never see your payment details.",
       "There are no accounts.",

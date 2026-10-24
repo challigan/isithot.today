@@ -196,10 +196,10 @@ describe("Your privacy and the website's privacy notice", () => {
         "If you turn notifications off in your iPhone's Settings instead, we delete them the next time you open the app.",
         "If you turn notifications off in your iPhone's Settings instead, we delete it the next time you open the app.",
       ],
-      // The notes that a notification or a test was sent outlive the rest by a few days.
+      // The run's and the tests' notes (sent/, test/ and judged/) outlive the rest by a few days.
       [
-        'For a few days after each notification and each test, we also keep a note that it was sent, even once the rest is deleted.',
-        'For a few days after each notification and each test, we also keep a note that it was sent, even once the rest is deleted,',
+        'For a few days after each notification and each test, and after some forecast checks that found nothing to send, we also keep a note of it, even once the rest is deleted.',
+        'For a few days after each notification and each test, and after some forecast checks that found nothing to send, we also keep a note of it, even once the rest is deleted,',
       ],
       ['It holds no token or place.', 'it holds no token or place.'],
       ['In the free version, Google shows the ads', 'The free version shows ads from Google AdMob'],
