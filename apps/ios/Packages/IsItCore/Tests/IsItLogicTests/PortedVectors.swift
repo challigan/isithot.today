@@ -66,8 +66,9 @@ enum PortedVectors {
     // client addRecent, removeRecent
     PortedVector("recent", by: "3.4: RecentPlaces", port: .recent),
 
-    // packages/mobile homePage (the app's page, from core and the client), core creditParts
-    PortedVector("page", by: "5.1: HomePage, Credits.parts", port: .page),
+    // packages/mobile homePage (the app's page, from core and the client) and homeTopBar (5.4),
+    // core creditParts
+    PortedVector("page", by: "5.1: HomePage, Credits.parts; 5.4: HomeTopBar", port: .page),
 
     // client searchInput, resultDetail (the place picker's search box)
     PortedVector("search", by: "6.1: PlaceSearch.input, .detail", port: .search),

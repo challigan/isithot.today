@@ -36,6 +36,18 @@ public enum CoreCopy {
   /// The middle view's label while it answers for tomorrow (core `TOMORROW_LABEL`).
   public static let tomorrowLabel = "Tomorrow"
 
+  /// The days of the week, Sunday first (core `WEEKDAYS`): a day of the week's rows as
+  /// VoiceOver reads it, "Tuesday" for the row labelled "Tue".
+  public static let weekdays: [String] = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ]
+
   /// A view's tab label (core `VIEW_LABELS`). `MiddleDay.label` says when Today reads
   /// `tomorrowLabel` instead.
   public static func viewLabel(_ view: AppView) -> String {

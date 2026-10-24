@@ -89,6 +89,131 @@ public struct HomePage: Sendable, Equatable {
     }
   }
 
+  /// A row of Now's next hours (spec 10.2): "6pm" and "60%", the chance for the row's bar, and
+  /// what VoiceOver reads for the row, "60% chance at 6pm", as the website's screen readers hear
+  /// it (core `viewDisplay`'s `sr`).
+  public struct HourRow: Sendable, Equatable {
+    /// "6pm", the block's start, local time.
+    public let label: String
+    /// "60%"
+    public let value: String
+    /// Percent, rounded to the nearest 10 (`ApiSnowHour.chance`).
+    public let chance: Int
+    /// "60% chance at 6pm"
+    public let spoken: String
+
+    public init(label: String, value: String, chance: Int, spoken: String) {
+      self.label = label
+      self.value = value
+      self.chance = chance
+      self.spoken = spoken
+    }
+
+    /// The row for one of Now's 2-hour blocks.
+    public init(hour: ApiSnowHour) {
+      let value = AppCopy.percent(value: String(hour.chance))
+      self.init(
+        label: hour.label,
+        value: value,
+        chance: hour.chance,
+        spoken: AppCopy.hourRowLabel(chance: value, time: hour.label)
+      )
+    }
+  }
+
+  /// What the Now page shows below the answer: "Chance of snow, next 12 hours", then up to six
+  /// 2-hour rows (fewer where the forecast ends).
+  public struct Hours: Sendable, Equatable {
+    public let heading: String
+    public let rows: [HourRow]
+
+    public init(heading: String, rows: [HourRow]) {
+      self.heading = heading
+      self.rows = rows
+    }
+
+    /// The next hours of `now`, the picked hour's Now.
+    public init(now: ApiSnowNow) {
+      self.init(heading: CoreCopy.nextHoursSnow, rows: now.hours.map(HourRow.init(hour:)))
+    }
+  }
+
+  /// A day of the week (spec 10.2): its label ("Today", "Tue"), amount ("2cm") and band label
+  /// ("Snow", or for a day without snow why: "Too warm"), the models expecting snow of those
+  /// with data, drawn as `total` dots with `snowy` filled, and what VoiceOver reads for the row:
+  /// "Tuesday, 2cm, snow, 4 of 6 forecasts expect snow", never a percentage.
+  public struct WeekRow: Sendable, Equatable {
+    public let label: String
+    public let amount: String
+    public let bandLabel: String
+    /// Models expecting snow, and models with data for the day (S1); nil in an answer saved
+    /// before the week's days had them, which then has no dots, and isn't read with them.
+    public let snowy: Int?
+    public let total: Int?
+    public let spoken: String
+
+    public init(
+      label: String,
+      amount: String,
+      bandLabel: String,
+      snowy: Int?,
+      total: Int?,
+      spoken: String
+    ) {
+      self.label = label
+      self.amount = amount
+      self.bandLabel = bandLabel
+      self.snowy = snowy
+      self.total = total
+      self.spoken = spoken
+    }
+
+    /// The row for `day` of `week`, in the answer's unit. VoiceOver hears the day's name in full
+    /// ("Today" for the week's first day, which the server labels so, else the weekday of its
+    /// date), the amount, the band label starting in lower case, as it is mid-sentence, and the
+    /// agreement (core `snowAgreementLine`, which `AppCopy.dayAgreement` words as core does).
+    public init(day: ApiSnowWeekDay, of week: ApiSnowWeek, unit: SnowUnit) {
+      let amount = StripGeometry.amountText(day.amount, unit)
+      let name =
+        day.date == week.from
+        ? day.label : CivilDate.weekday(day.date).map { CoreCopy.weekdays[$0] } ?? day.label
+      let band = day.bandLabel.prefix(1).lowercased() + day.bandLabel.dropFirst()
+      let spoken: String
+      if let snowy = day.snowy, let total = day.total {
+        let values = (snowy: String(snowy), total: String(total))
+        let agreement =
+          snowy == 1
+          ? AppCopy.dayAgreementOne(snowy: values.snowy, total: values.total)
+          : AppCopy.dayAgreement(snowy: values.snowy, total: values.total)
+        spoken = AppCopy.weekRowLabel(day: name, amount: amount, band: band, agreement: agreement)
+      } else {
+        spoken = AppCopy.weekRowLabelShort(day: name, amount: amount, band: band)
+      }
+      self.init(
+        label: day.label,
+        amount: amount,
+        bandLabel: day.bandLabel,
+        snowy: day.snowy,
+        total: day.total,
+        spoken: spoken
+      )
+    }
+  }
+
+  /// What the week page shows below its verdict and detail: a row for each day.
+  public struct Week: Sendable, Equatable {
+    public let rows: [WeekRow]
+
+    public init(rows: [WeekRow]) {
+      self.rows = rows
+    }
+
+    /// The days of `week`, the picked hour's week, in the answer's unit.
+    public init(week: ApiSnowWeek, unit: SnowUnit) {
+      self.init(rows: week.days.map { WeekRow(day: $0, of: week, unit: unit) })
+    }
+  }
+
   /// The footer, with an answer (spec 10.2, item 7).
   public struct Footer: Sendable, Equatable {
     /// "Updated 3:05pm GMT", or "Updated yesterday, 11:40pm GMT"; nil for an answer without
@@ -149,6 +274,10 @@ public struct HomePage: Sendable, Equatable {
   public let detail: String?
   /// The middle page's body, with an answer to show.
   public let day: Day?
+  /// The Now page's body, with an answer to show: the next hours.
+  public let hours: Hours?
+  /// The week page's body, with an answer to show: the days.
+  public let week: Week?
   /// "Retry", after a failed request: in the error state, and under the footer's line while an
   /// answer shows; never offline over an answer, or rate limited, which ask again by themselves.
   public let retry: String?
@@ -206,6 +335,8 @@ public struct HomePage: Sendable, Equatable {
     verdict = shown?.verdict
     detail = shown?.detail
     day = shown?.day
+    hours = shown?.hours
+    week = shown?.week
     retry = state == .error || (phase == .error && state != .noRecent) ? CoreCopy.retry : nil
     footer = res.map { Self.footer($0, state: state, phase: phase, at: now) }
   }
@@ -216,7 +347,9 @@ public struct HomePage: Sendable, Equatable {
     let answer: String
     let verdict: String
     let detail: String
-    let day: Day?
+    var day: Day?
+    var hours: Hours?
+    var week: Week?
   }
 
   /// The picked hour's Now or week, or the middle view's day (today's, or tomorrow's from
@@ -235,16 +368,16 @@ public struct HomePage: Sendable, Equatable {
         answer: shown.answer,
         verdict: shown.verdict,
         detail: shown.detail,
-        day: nil
+        hours: Hours(now: shown)
       )
     case .week:
-      guard let shown = picked.week else { return nil }
+      guard let shown = picked.week, let snow = res.snow else { return nil }
       return Shown(
         band: shown.band,
         answer: shown.answer,
         verdict: shown.verdict,
         detail: shown.detail,
-        day: nil
+        week: Week(week: shown, unit: snow.unit)
       )
     case .today:
       guard let shown = MiddleDay(res, picked: picked, at: now).day, let snow = res.snow else {

@@ -9,6 +9,7 @@ export * from './exportCoreCopy';
 export * from './exportCredits';
 export * from './exportFont';
 export * from './exportGlyphs';
+export * from './exportHomeScreens';
 export * from './exportIcon';
 export * from './exportKeys';
 export * from './exportPalettes';

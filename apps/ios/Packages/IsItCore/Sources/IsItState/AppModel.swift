@@ -26,9 +26,22 @@ public final class AppModel {
   public private(set) var holds = Freshness.Holds()
   /// Whether the purchase is owned: `unlock.v1`, then StoreKit's check (phase 7).
   public private(set) var unlocked: Bool
-  /// The view on screen. The launch and a return after a long time away set it to the view for
-  /// the time of day (`MiddleDay.defaultView`); the pager sets it as the user moves.
-  public var view: AppView
+  /// The view on screen; the pager and the switcher set it as the user moves. The app opens on
+  /// the view for the time of day (`MiddleDay.defaultView`) once: from the saved answer it
+  /// paints, or else from the first answer it shows, unless the user has moved or a route has
+  /// chosen a view by then, as the website opens on it only once and never once the visitor has
+  /// moved (`openOnDefault`). After that it moves only as the user moves it, by a route to a view,
+  /// or on the return after a long time away; never as a place under "Nearby:", a place chosen
+  /// in the picker or Retry brings an answer.
+  public var view: AppView {
+    get { shownView }
+    set {
+      // The view on screen chosen again (a pager may write back the one it shows) is no move.
+      if newValue != shownView { opened = true }
+      shownView = newValue
+    }
+  }
+  private var shownView: AppView
   /// A line to tell the user once, until `dismissNotice()`: `AppCopy.slugGone`, say.
   public private(set) var notice: String?
   /// A route waiting for the launch to finish (step 7).
@@ -42,6 +55,10 @@ public final class AppModel {
   /// The launch's fetch (step 3), decided with the paint in `init`.
   @ObservationIgnored private let launchFetch: Fetch?
   @ObservationIgnored private var launched = false
+  /// Whether the view on screen has been chosen: by the saved answer painted at launch, the first
+  /// answer shown, the user or a route. Until then the first answer opens on its view for the
+  /// time of day.
+  @ObservationIgnored private var opened: Bool
   @ObservationIgnored private var launchFinished = false
   /// Counts the fetches started; only the latest one's answer is shown.
   @ObservationIgnored private var requests = 0
@@ -72,7 +89,8 @@ public final class AppModel {
     response = plan.paint?.response
     fetchedAt = plan.paint?.savedAt
     phase = plan.paint == nil ? .loading : .ready
-    view = MiddleDay.defaultView(plan.paint?.response, at: now)
+    shownView = MiddleDay.defaultView(plan.paint?.response, at: now)
+    opened = plan.paint != nil
     recents = environment.recents.loadRecents()
   }
 
@@ -111,7 +129,7 @@ public final class AppModel {
     launchFinished = true
     if let pending = route {
       route = nil
-      await hooks.handle(pending)
+      await follow(pending)
     }
   }
 
@@ -150,7 +168,7 @@ public final class AppModel {
       at: now,
       holds: holds
     )
-    if back.resetView { view = MiddleDay.defaultView(response, at: now) }
+    if back.resetView { shownView = MiddleDay.defaultView(response, at: now) }
     if let fetch = back.fetch {
       await load(fetch)
     } else if let response {
@@ -174,6 +192,17 @@ public final class AppModel {
       self.route = route
       return
     }
+    await follow(route)
+  }
+
+  /// A route to a view (a widget's) puts that view on screen, over the view for the time of day
+  /// the launch chose (section 10.2: "unless a route says otherwise"), and an answer still to
+  /// come after a failed launch keeps it; every route then goes to the later phases' hooks.
+  private func follow(_ route: DeepLink.Route) async {
+    if case .view(let shown) = route {
+      shownView = shown
+      opened = true
+    }
     await environment.hooks.handle(route)
   }
 
@@ -195,7 +224,8 @@ public final class AppModel {
   /// and joins the recent places, under `name`, at once; a place without one (the device's)
   /// joins them under its answer's name when the answer arrives. Then the notifications are
   /// synced (phase 8's `syncAlerts`), as a notification place that follows the device's
-  /// location may have moved. The place on screen again only asks again.
+  /// location may have moved. The view on screen stays, as for a place under "Nearby:": a place
+  /// chosen from This week opens on its week. The place on screen again only asks again.
   public func choose(_ target: Target, name: String?) async {
     if let name, !name.isEmpty {
       unnamedChoice = nil
@@ -251,9 +281,9 @@ public final class AppModel {
 
   /// Loads the answer for `target` in place, as a place under "Nearby:" does (section 10.2):
   /// it becomes the place, kept in `place.v1`, and the page shows the loading state for it
-  /// until its own answer arrives, never the last place's answer under its name; a failure then
-  /// shows as it would with nothing saved. The notice, about the last place, goes. The place on
-  /// screen again only asks again (`refresh()`).
+  /// until its own answer arrives, never the last place's answer under its name, on the view the
+  /// user is on; a failure then shows as it would with nothing saved. The notice, about the last
+  /// place, goes. The place on screen again only asks again (`refresh()`).
   public func select(_ target: Target) async {
     notice = nil
     guard !target.key.utf8.elementsEqual(self.target.key.utf8) else {
@@ -347,15 +377,18 @@ public final class AppModel {
 
   /// Shows `answer` for `target`, saves it as the last good answer, reloads the widgets, keeps
   /// its units when none were chosen, schedules the next refresh, and when the picker chose
-  /// `target` without a name, adds it to the recent places under the answer's.
+  /// `target` without a name, adds it to the recent places under the answer's. The first answer
+  /// shown, with no view chosen yet, opens on its view for the time of day.
   private func show(_ answer: TodayResponse, for target: Target, holding: Bool) {
     let now = environment.clock.now
     if holding { holds = Freshness.hold(holds, answer, at: now) }
-    let first = response == nil
     response = answer
     fetchedAt = now
     phase = .ready
-    if first { view = MiddleDay.defaultView(answer, at: now) }
+    if !opened {
+      shownView = MiddleDay.defaultView(answer, at: now)
+      opened = true
+    }
     if let unnamed = unnamedChoice {
       unnamedChoice = nil
       let name = answer.location.name

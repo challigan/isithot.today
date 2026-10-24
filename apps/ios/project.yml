@@ -96,6 +96,10 @@ targets:
     type: bundle.ui-testing
     platform: iOS
     sources:
+      # FixtureLaunchTests, LaunchTests, phase 5.4's HomeTests, OfflineTests and HomeAuditTests
+      # with HomeScreens.swift, and phase 6's PickerTests and SettingsTests with ScreenAudit.swift;
+      # Generated/HomeScreens.json (pnpm mobile:generate, from page.json) is a resource of the
+      # bundle, where the home screen's tests read what each screen shows.
       - path: Apps/Snow/UITests
     settings:
       base:

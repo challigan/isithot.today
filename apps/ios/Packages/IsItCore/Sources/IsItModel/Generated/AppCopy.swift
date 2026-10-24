@@ -40,6 +40,39 @@ public enum AppCopy {
     "\(name) · \(value)"
   }
 
+  public static func announcement(heading: String, verdict: String) -> String {
+    "\(heading) \(verdict)"
+  }
+
+  public static func percent(value: String) -> String {
+    "\(value)%"
+  }
+
+  public static func hourRowLabel(chance: String, time: String) -> String {
+    "\(chance) chance at \(time)"
+  }
+
+  public static func weekRowLabel(
+    day: String,
+    amount: String,
+    band: String,
+    agreement: String
+  ) -> String {
+    "\(day), \(amount), \(band), \(agreement)"
+  }
+
+  public static func weekRowLabelShort(day: String, amount: String, band: String) -> String {
+    "\(day), \(amount), \(band)"
+  }
+
+  public static func dayAgreement(snowy: String, total: String) -> String {
+    "\(snowy) of \(total) forecasts expect snow"
+  }
+
+  public static func dayAgreementOne(snowy: String, total: String) -> String {
+    "\(snowy) of \(total) forecasts expects snow"
+  }
+
   public static let recent = "Recent"
   public static let searchOffline = "You're offline. Connect to the internet to search."
   public static let locationUnavailable = "Couldn't find your location. Search for a place instead."

@@ -3,9 +3,8 @@ import SwiftUI
 
 /// The home screen's frame (iOS build spec, section 10.2): the background of the page on
 /// screen, full bleed, cross-fading in 0.9 s when its band changes (at once with Reduce Motion),
-/// with the top bar above the pages. The pages are `content`: in phase 5.1 the Today page alone;
-/// phase 5.2 puts the switcher and the pager of Now, Today and This week there, and passes the
-/// theme of the page on screen.
+/// with the top bar above the pages. The pages are `content`: the switcher (`ViewSwitcher`) over
+/// the pager of Now, Today and This week (`HomePager`), with `theme` the page on screen's.
 public struct HomeShell<Content: View>: View {
   let topBar: HomeTopBar
   let theme: PageTheme
@@ -34,6 +33,7 @@ public struct HomeShell<Content: View>: View {
     }
     .foregroundStyle(theme.ink)
     .tint(theme.ink)
+    .environment(\.colorScheme, theme.controls)
     .background {
       ZStack {
         PageBackground(theme: theme)
@@ -105,6 +105,7 @@ struct TopBarView: View {
   @ViewBuilder private func approximateLine(_ text: String) -> some View {
     Text(verbatim: text)
       .fixedSize(horizontal: false, vertical: true)
+      .accessibilityIdentifier("approximate")
     if let useMyLocation = topBar.useMyLocation {
       Button {
         actions.useMyLocation()
@@ -112,6 +113,8 @@ struct TopBarView: View {
         Text(verbatim: useMyLocation)
           .fontWeight(.semibold)
           .underline()
+          .frame(minHeight: HitTarget.minimum)
+          .contentShape(Rectangle())
       }
       .accessibilityIdentifier("use-my-location")
     }

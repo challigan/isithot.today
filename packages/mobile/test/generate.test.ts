@@ -21,6 +21,11 @@ import {
   SNOW_KIT_GENERATED_DIR,
   glyphFiles,
 } from '../src/exportGlyphs';
+import {
+  HOME_SCREENS_PATH,
+  UI_TESTS_GENERATED_DIR,
+  homeScreensJson,
+} from '../src/exportHomeScreens';
 import { ASSETS_DIR, iconFiles } from '../src/exportIcon';
 import { keysSwift } from '../src/exportKeys';
 import { palettesSwift } from '../src/exportPalettes';
@@ -61,7 +66,7 @@ describe('generatedFiles', () => {
     assets = [...glyphFiles(sources.glyphs), ...iconFiles(sources.favicon)];
   }, 120_000);
 
-  it("writes IsItModel's Swift, each fixture and vector file, the glyph catalogues and the app icon", async () => {
+  it("writes IsItModel's Swift, each fixture and vector file, the UI tests' screens, the glyph catalogues and the app icon", async () => {
     const model = 'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated';
     const resources = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources';
     const vectors = [
@@ -83,6 +88,7 @@ describe('generatedFiles', () => {
       `${model}/Palettes.swift`,
       'apps/ios/Configs/Generated/Copy.xcconfig',
       ...resourcePaths,
+      HOME_SCREENS_PATH,
       ...assets.map((f) => f.path),
     ]);
     expect(files.slice(0, 8).map((f) => f.contents)).toEqual([
@@ -99,7 +105,7 @@ describe('generatedFiles', () => {
     const search = files.find((f) => f.path.endsWith('/Fixtures/Search/search-leeds.json'))!;
     expect(search.contents).toBe(fixtureJson(await makeSearchFixture(SEARCH_FIXTURES[0]!)));
     expect(SEARCH_FIXTURES_DIR).toBe(`${FIXTURES_DIR}/Search`);
-    const first = 8 + resourcePaths.length;
+    const first = 8 + resourcePaths.length + 1;
     for (const [i, f] of assets.entries()) {
       expect(sameContents(files[first + i]!.contents, f.contents)).toBe(true);
     }
@@ -113,6 +119,7 @@ describe('generatedFiles', () => {
       ASSETS_DIR,
       FONTS_DIR,
       CONFIGS_GENERATED_DIR,
+      UI_TESTS_GENERATED_DIR,
     ]);
   });
 
@@ -123,11 +130,17 @@ describe('generatedFiles', () => {
         JSON.parse(text(files.find((f) => f.path === `${FIXTURES_DIR}/${s.name}.json`)!)),
       ]),
     );
-    for (const { name, vectors } of vectorFiles(fixtures)) {
+    const vectors = vectorFiles(fixtures);
+    for (const { name, vectors: file } of vectors) {
       expect(files.find((f) => f.path === `${VECTORS_DIR}/${name}.json`)!.contents).toBe(
-        vectorJson(vectors),
+        vectorJson(file),
       );
     }
+    // The UI tests' screens, from the same page.json.
+    const page = vectors.find((v) => v.name === 'page')!.vectors;
+    expect(files.find((f) => f.path === HOME_SCREENS_PATH)!.contents).toBe(
+      homeScreensJson(fixtures, page),
+    );
   });
 
   it('starts every Swift file with the header that names its source', () => {

@@ -4,15 +4,21 @@ The native SwiftUI app for willitsnow.today, built from the iOS build spec. This
 (phase 0, PRs 0.1 to 0.4): the project, the app and its widget, both entitlements, the debug
 hooks, their tests, the CI that builds and runs them, and the release job that signs the app and
 uploads it to TestFlight; with phase 2.3's generated assets: the snow glyphs, the app icon and
-the answer font; and phase 5.1, the skeleton TestFlight build: the app fetches the answer for
+the answer font; phase 5.1, the skeleton TestFlight build: the app fetches the answer for
 its place (approximate IP location until one is chosen, so the first launch shows the phone's
 own place with no picker), keeps it current, saves it in the App Group, where the widget reads
-it, and draws it on the home screen's top bar and Today page (below, "Phase 5.1"); and phase 6,
-the sheets behind the top bar: the place picker (6.1: search, "Use my location" and the recent
-places) and Settings (6.2 and 6.3: the snow units, the privacy rows, Report an ad, About and
-Help, the version, How it works, Credits and licences and Your privacy's lines) (below, "Phase
-6"). A Debug build can be answered by a fixture or a stubbed network instead (below, "Debug
-hooks"). Everything else comes in later phases.
+it, and draws it on the home screen's top bar and Today page (below, "Phase 5.1"); phases 5.2
+and 5.3: the switcher and the pager of Now, Today (Tomorrow from 6pm) and This week, with Now's
+next hours and the week's days, the 6pm flip at the minute's tick, the glyph's drift, changes
+announced once to VoiceOver, and every text size up to AX5 (below, "Phases 5.2 and 5.3"); phase
+5.4, the home screen's accessibility proven by UI tests: every page of three fixtures read as
+VoiceOver hears it against the TypeScript's words, the offline and failure states, the
+accessibility audits at Large and AX3, and every page on the contact sheet (below, "Phase 5.4");
+and phase 6, the sheets behind the top bar, over every page: the place picker (6.1: search, "Use
+my location" and the recent places) and Settings (6.2 and 6.3: the snow units, the privacy rows,
+Report an ad, About and Help, the version, How it works, Credits and licences and Your privacy's
+lines) (below, "Phase 6"). A Debug build can be answered by a fixture or a stubbed network
+instead (below, "Debug hooks"). Everything else comes in later phases.
 
 ## What is where
 
@@ -23,22 +29,24 @@ Configs/                 Base (every target), Team (Carl's team ID, not a secret
                          API origin, ad units), CI-Simulator (signed to run locally, for CI); generated:
                          Generated/Copy.xcconfig (the Info.plist's strings: the location purpose string)
 Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API models; generated CoreCopy,
-                         Questions, AppCopy, AppCredits, Constants, Keys and Palettes; the ports and the
-                         home screen's, the picker's and Settings' presenters (IsItLogic); AppModel, its
-                         API client, the launch and refresh rules, the picker's search and the location
-                         rules (IsItState); in Tests/IsItTestSupport the fixtures (the search answers in
-                         Fixtures/Search) and golden vectors with their loaders; in Tests/IsItLogicTests
-                         the ports' golden tests and the guard that every
+                         Questions, AppCopy, AppCredits, Constants, Keys and Palettes; the ports, the
+                         home screen's, the picker's and Settings' presenters, the glyph's drift and which
+                         pages are light ink on dark (IsItLogic); AppModel, its API client, the launch and
+                         refresh rules, what VoiceOver is told, the clocks and the minute tick, the
+                         picker's search and the location rules (IsItState); in Tests/IsItTestSupport the
+                         fixtures (the search answers in Fixtures/Search) and golden vectors with their
+                         loaders; in Tests/IsItLogicTests the ports' golden tests and the guard that every
                          vector file is ported (below); in Tests/IsItStateTests AppModel with fakes, and
                          the home screen drawn from it
 Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore, URLSessionTransport,
                          WidgetCenterReloader, RecentDefaults: AppModel's services), IsItLocation
                          (CoreLocationService, the app's only), IsItAds (Google's SDKs),
-                         IsItUI (the home screen: HomeShell and ForecastPageView, drawing IsItLogic's
-                         HomePage and HomeTopBar, with HomeActions; the picker: PlacePickerView, drawing
-                         PlacePicker, with PlacePickerActions; Settings: SettingsView and its pages, with
-                         SettingsActions), IsItWidgetUI (the widget's entry, provider, view), SnowKit
-                         (Glyphs, Color(rgb:) for the palettes, and the glyph catalogues, generated)
+                         IsItUI (the home screen: HomeShell, ViewSwitcher, HomePager and ForecastPageView
+                         with its bodies and GlyphView, drawing IsItLogic's HomePage and HomeTopBar, with
+                         HomeActions; the picker: PlacePickerView, drawing PlacePicker, with
+                         PlacePickerActions; Settings: SettingsView and its pages, with SettingsActions),
+                         IsItWidgetUI (the widget's entry, provider, view), SnowKit (Glyphs, Color(rgb:)
+                         for the palettes, and the glyph catalogues, generated)
 Apps/Snow/App/           WillItSnowApp (the services and the scene's phases), HomeView (the home screen,
                          from the model, and its two sheets), PickerSheet (the place picker, from its
                          model), SettingsSheet (Settings, from the model), DebugHooks (every test and
@@ -50,9 +58,12 @@ Apps/Snow/Widgets/       the widget extension, its Info.plist, entitlements and 
 Apps/Snow/Tests/         app-hosted unit tests: the App Group round trip (V1), widget and glyph snapshots,
                          palette contrast, the answer font, the built Info.plist's purpose string
 Apps/Snow/UITests/       FixtureLaunchTests (fixtures at their own moments, and a place nearby),
-                         LaunchTests (the real launch over a stubbed network), PickerTests (the place
-                         picker over a stubbed network and location) and SettingsTests (every row, the
-                         units, Report an ad's fallback, Your privacy); each attaches its screens
+                         LaunchTests (the real launch over a stubbed network); HomeTests, OfflineTests and
+                         HomeAuditTests (phase 5.4), which read what each screen should say from
+                         Generated/HomeScreens.json (generated from page.json) through HomeScreens.swift;
+                         PickerTests (the place picker over a stubbed network and location) and
+                         SettingsTests (every row, the units, Report an ad's fallback, Your privacy),
+                         with ScreenAudit.swift's audit; each attaches its screens
 TestPlans/               Unit and UI
 ci/                      xcodegen.sh, simulator.sh, test.sh, release-check.sh, xcresult-summary.mjs, contact-sheet.mjs;
                          for releases archive.sh, upload.sh and ExportOptions.plist
@@ -86,9 +97,10 @@ CI builds and tests everything, so this is only for trying the app by hand.
    is the Mac's). To see a fixture instead: Product, Scheme, Edit Scheme, Run, Arguments, and
    tick `-fixture aberdeen-snow` (or `leeds-dry`, or add `-fixture` with any other fixture's
    name, below). Then add the widget on the simulator's home screen: it shows the same answer.
-   Pull the page down to ask again; a place under "Nearby:" loads in place. The place button
-   opens the picker: search for a town, use your location (the simulator's, from Features,
-   Location), or choose a recent place. The gear opens Settings.
+   Tap Now, Today or This week, or swipe between them; pull a page down to ask again; a place
+   under "Nearby:" loads in place. On any page, the place button opens the picker: search for a
+   town, use your location (the simulator's, from Features, Location), or choose a recent
+   place. The gear opens Settings.
 4. Product, Test runs the Unit test plan; pick UI from the test plan menu for the UI tests.
 5. On your iPhone (Debug builds only): Xcode, Settings, Accounts needs your Apple Account, and
    the App IDs `today.willitsnow.app` and `today.willitsnow.app.widgets` need the App Group and,
@@ -399,8 +411,9 @@ The top bar and the Today page (spec section 10.2), drawn from plain values:
 - **The home screen** (`HomeView.swift`) draws `model.topBar`, and the Today page at the
   model's clock (`model.page(.today, at: model.now)`), with IsItUI's `HomeShell` and
   `ForecastPageView`, inside a `TimelineView(.everyMinute)`, so the hour picked, Tomorrow from
-  6pm and the stale state follow the clock while the app is open. Only the middle page is drawn in 5.1, whatever `model.view`
-  says; phase 5.2's pager binds it.
+  6pm and the stale state follow the clock while the app is open. Only the middle page was
+  drawn in 5.1, whatever `model.view` said; since phases 5.2 and 5.3 the pager draws all three
+  and binds it (below).
 - **The states**, as `HomePage` gives them from the model's phase (spec sections 4, 9.5 and
   10.2): loading ("Checking…"); ready; an error with nothing saved (the server's message, or
   `CoreCopy.unavailable` without one, and Retry); offline with nothing saved ("No recent
@@ -460,6 +473,144 @@ its file and line, and the contact sheet shows the screens each test attached):
   `testOfflineWithNothingSaved` reads "No recent forecast…" and Retry. Their screens are
   `app-first-launch`, `app-offline-saved` and `app-offline-nothing`.
 
+## Phases 5.2 and 5.3: the pages, the switcher and the pager
+
+What 5.1 had not already brought (DECISIONS, "The iPhone app's pages, switcher and pager"): 5.1
+brought forward the minute's tick, pull to refresh, the footer and the loading and error states.
+
+- **Now and This week** (spec section 10.2) come from the same presenter, `HomePage`, which now
+  has `hours` (Now: "Chance of snow, next 12 hours" and up to six `HourRow`s, "6pm" and "60%",
+  each read "60% chance at 6pm") and `week` (a `WeekRow` a day: "Tue", "2cm", "Snow", the
+  forecasts expecting snow of those with data, `snowy` of `total`, drawn as dots, and read
+  "Tuesday, 2cm, snow, 4 of 6 forecasts expect snow", never a percentage). Its reference,
+  packages/mobile `page.ts`, takes them from core (`viewDisplay`'s rows and their `sr`,
+  `snowAgreementLine`, `WEEKDAYS`), and `page.json` holds the Swift to them case by case; the
+  Swift words them with `AppCopy.percent`, `hourRowLabel`, `weekRowLabel`, `dayAgreement` and
+  `dayAgreementOne` and `CoreCopy.weekdays`, which a vitest proves say what core says.
+- **The switcher and the pager** (IsItUI): `ViewSwitcher`, a segmented picker of the pages'
+  labels (the middle one "Tomorrow" from 6pm), which at accessibility text sizes becomes a row
+  of buttons that wraps so no label is cut short; and `HomePager`, the three pages side by side
+  in a horizontal `ScrollView` paged with `.scrollTargetBehavior(.paging)` and
+  `.scrollPosition(id:)`. Both are bound to `AppModel.view` (`$model.view` in `HomeView`), so a
+  tap, a swipe, a widget's route (`.view`, which now sets the view) and the return after more
+  than 30 minutes away (the view for the time of day) move both. The app opens on
+  `MiddleDay.defaultView`, Today or Now from 6pm, once: from the saved answer it paints, or else
+  from its first answer, unless the user or a route has chosen a view by then, as the website
+  does; a place under "Nearby:", a place chosen in the picker (phase 6) and Retry answer on the
+  view the user is on. Only the page on screen is in the accessibility tree, so VoiceOver and
+  the UI tests read that one.
+- **The 6pm flip** needs nothing new: the minute's tick draws every page at the model's clock,
+  so at 6pm at the place the middle tab reads Tomorrow and shows `snow.days[1]`, with no request.
+  `FlipTests` (IsItStateTests) prove it at 5:59pm and 6pm in Durham (GMT), minute by minute in
+  London's evening, and in Kathmandu (UTC+5:45).
+- **The glyph's drift**: `GlyphView` (IsItUI) draws SnowKit's two layers and moves the flakes
+  as the website's CSS does, twice in 3.2 s (`GlyphDrift`, IsItLogic), on first paint and when
+  the band changes (`GlyphMotion`); never with Reduce Motion, and never under `-now` or `-uitest`
+  (`DebugHooks.stillMotion()`).
+- **VoiceOver hears a change once**: `Announcements` (IsItState) takes the page on screen each
+  time it is drawn and gives its heading and verdict (`AppCopy.announcement`, as the website's
+  live region holds the two) when they say something new on the same view (a refresh's new
+  answer, the hour picked changing the answer or the verdict, Tomorrow from 6pm, no recent
+  forecast), or after "Checking…" on whichever view the answer opens; nothing on a tick that
+  changed nothing, on moving to another view, or while checking. `HomeView` posts it
+  (`UIAccessibility.post(notification: .announcement, …)`).
+- **Text sizes up to AX5**: every text wraps rather than truncating, the answer word shrinks to
+  fit its line rather than breaking, the pages scroll, and Now's rows and the week's stack at
+  accessibility sizes, as the model list already did.
+
+**Tests.** On Linux: `PageVectorTests` (every row's strings, code unit for code unit),
+`HomePageTests` (the spec's examples, and an answer saved before the week's days had their
+agreement), `GlyphDriftTests`, `MinuteTickTests.swift` (`FlipTests` and `AnnouncementTests`:
+each announcement once, and only then) and `AppModelTests` (a route to a view). On the macOS CI:
+`FixtureLaunchTests`, whose Durham tests now open on Now and tap Tomorrow, and
+`testSwitcherAndSwipe`, which taps the tabs and swipes, attaching `app-aberdeen-snow-now` and
+`app-aberdeen-snow-week` for the contact sheet.
+
+**Accessibility identifiers** for phase 5.4's tests, besides 5.1's (`place`, `settings`,
+`use-my-location`, `heading`, `verdict`, `detail`, `agreement`, `strip`, `limited`, `retry`,
+`updated`, `notice`): `views` (the switcher; its segments are buttons labelled as the tabs read,
+"Now", "Today" or "Tomorrow", "This week"), `view-now`, `view-today` and `view-week` (its buttons
+at accessibility sizes), `page-now`, `page-today` and `page-week` (each page's scroll view, only
+the one on screen), `hours-heading` and `hour-0` to `hour-5` (Now's rows), and `day-0` to
+`day-6` (the week's rows). Phase 5.4 added `model-0` onwards (the middle page's model list, each
+read as the model's name with its amount as the value) and `approximate` (the top bar's
+"Using approximate location." or the notice in its place), and its review `credits` (the
+footer's credits, a container of their lines, the last on the page).
+
+## Phase 5.4: the home screen's accessibility, and its UI tests
+
+What section 16 asks of the home screen, proven where it can only be proven, on the simulator
+(DECISIONS, "The iPhone app's home accessibility and its UI tests").
+
+**What a page should say comes from the TypeScript.** `pnpm mobile:generate` writes
+`Apps/Snow/UITests/Generated/HomeScreens.json` (packages/mobile `exportHomeScreens.ts`) from
+page.json: for each screen a UI test opens, its fixture, the moment as `-now` takes it, how its
+request went, the view it opens on (core `defaultView`), the top bar (`homeTopBar`, a reference new
+in 5.4 for IsItLogic's `HomeTopBar`) and its three pages (`homePage`), exactly as page.json has
+them. The screens are listed in `homeScreens` (packages/mobile `vectors.ts`), which adds each to
+page.json, so the Swift on Linux is held to the same cases (`PageVectorTests`). The UI test bundle
+carries the file (project.yml), and `HomeScreens.swift` reads it (`HomeScreen.named`) and compares
+the screen with it, from one snapshot of the accessibility tree for each check (`ShownScreen`), in
+which each identifier checked must be there once: `expect(page, in:)` checks the heading (the
+question and the answer, with the place), the verdict and the detail, the agreement, the strip's
+summary, each model's name and amount (`model-0`…), Now's rows (`hour-0`…) and the week's (`day-0`…)
+as VoiceOver reads them, the Updated line, the offline, unavailable or stale line and Retry, and
+that nothing else of them is there; `expect(topBar, in:)` the place button's label, the approximate
+line (`approximate`), "Use my location" and Settings. Nothing in a test types a page's words. A
+difference is reported and the test goes on to the next; a screen that never comes stops it.
+
+**The tests** (the UI test plan; `### UI:` in the `ios` job's log names each failure with its
+file and line):
+
+- `HomeTests`: `testAberdeenSnow`, `testDurhamTomorrow` and `testLeedsDry` open each fixture at
+  its own moment with `-clock fixed`, check the top bar, the tabs and the page it opens on (Today,
+  or Now from 6pm), then each page by its tab, then back from This week to Now by swiping and on
+  again, each tab selected as it shows. `testDefaultViewEitherSideOf6pm` opens Durham at 5:59pm
+  (Today; Now, Today, This week) and at 6pm (Now; the middle tab Tomorrow).
+  `testTheMiddleTabTurnsToTomorrowAt6pm` opens at 5:58pm with `-clock run` and waits up to three
+  minutes for 6pm: the middle page turns to tomorrow where it is. `testNearbyLoadsInPlace` taps
+  the first place under "Nearby:" and reads its answer, and the chosen place on the top bar;
+  `testNearbyLoadsInPlaceOnThisWeek` does it from This week, which stays on screen. The two
+  tests with a running clock (this flip, and `OfflineTests`' end of the saved answer's hours)
+  start `RUNNING_LEAD_MS` (packages/mobile `vectors.ts`, two minutes) before their moment, so a
+  slow launch can't pass it before the test has read the screen.
+- `OfflineTests`: each first saves aberdeen-snow from its fixture, then opens again over the
+  app's own transport with the network stubbed. `testOfflineAnHourOnShowsThatHour` (`-network
+off` at 10:30am): the 10am hour on Now and Today, and the offline line on every page.
+  `testPastItsLastHourNoRecentForecastOnEveryPage` (`-network off`, two minutes before
+  `usableUntil`, clock running): the answer with the offline line, then no recent forecast on
+  Now, the middle page and the week. `testOfflineWithNothingSaved`: no recent forecast and Retry
+  on every page. `testAFailureOverTheAnswerKeepsItWithRetry` (`-network unavailable`, a quarter
+  of an hour on): the answer stays on every page, with "Forecasts are unavailable…" and Retry,
+  and stays when Retry fails again.
+- `HomeAuditTests` (spec 17.2's `AccessibilityAuditTests` for the home screen): each page of the
+  three fixtures at Large and at AX3 (`-UIPreferredContentSizeCategoryName` with
+  `UICTContentSizeCategoryAccessibilityXL`; the test checks the switcher is buttons at AX3 and not
+  at Large, so the size reached the app), with `performAccessibilityAudit(for: .all)` on every
+  screenful, from the page's top to the end of its credits (an audit reads only what is on
+  screen). Every issue fails the test, once per fixture and size, listing each with its page and
+  screenful, kind (`contrast`, `hitRegion`, `dynamicType`, …), Apple's descriptions and the
+  element's identifier and label, except those in `HomeAuditTests.exceptions`, each with why it
+  isn't a fault to fix: the segmented control's own type size (`dynamicType`; section 10.2's
+  segmented picker, buttons that scale at accessibility sizes) and the credits' inline links
+  (`hitRegion`). The log names an exception a test didn't need. For a new issue, fix the app, or,
+  when it isn't a fault, add it there with its reason.
+
+**The contact sheet** tiles every attachment in its names' order (`ci/contact-sheet.mjs`, five
+screens to a row). `HomeAuditTests` attaches every screenful it audits as
+`home-<fixture>-<n>-<size>-<m>-<tab>-<k>`: `home-aberdeen-snow-1-large-1-now-01`, `…-1-now-02`,
+…, `…-1-large-2-today-01`, …, `…-1-large-3-this-week-01`, …, `…-2-ax3-1-now-01` and so on, then
+durham-tomorrow (whose middle tab is `2-tomorrow`) and leeds-dry: eighteen pages top to bottom,
+fixture by fixture, Large before AX3, each in the switcher's order, after the `app-…` and
+`glyph-…` attachments and before the widgets'. Phase 5's exit asks for these.
+
+**On Linux** (`swift test` in IsItCore): `ClockTests.swift` (`FixedClock`: one moment, work for a
+later time never runs, the model on it asks once; `MinuteTick.anchor`: each tick a twentieth of
+a second into one of the model's minutes, whatever the clocks' offset, and Durham's next tick
+from 5:59:30pm turning the page), `PaletteToneTests` (which pages are light ink on dark, so the
+system's controls on them take the dark colour scheme) and `PageVectorTests` (the model lines'
+names and amounts, and `HomeTopBar`).
+
 ## Phase 6: the place picker and Settings
 
 The top bar's two sheets, built side by side and then connected (below, "How they meet").
@@ -489,7 +640,9 @@ iPhone app's place picker").
   (`recent.v1`, the last five, `RecentPlaces` with the `RecentDefaults` store in the app's own
   defaults), and phase 8's `syncAlerts` hook, which decides whether a notification place
   follows. A search result is `Target(search:)`: its city page's slug, or its point on the grid
-  with what the search said. The sheet closes as the place is chosen, before its answer.
+  with what the search said. The sheet closes as the place is chosen, before its answer, and
+  the answer comes on the view on screen, as a place under "Nearby:" does (phase 5.2): a place
+  chosen from This week shows its week.
 - **The location** is `LocationService` (IsItState) in `AppEnvironment`, which replaces
   `AppHooks.locate`: `CoreLocationService` in IsItLocation, an IsItKit module the app links and
   the widget never does. "Use my location" asks for When In Use permission only at that tap and
@@ -567,7 +720,8 @@ Credits and licences, a licence in full, Your privacy and both fallbacks. The sc
 `app-settings`, `app-how-it-works`, `app-credits`, `app-notice`, `app-your-privacy`,
 `app-report-ad-fallback` and `app-contact-us-fallback`.
 
-**The audits** (both classes) go through `auditAccessibility(of:on:)` (`UITests/ScreenAudit.swift`):
+**The audits** (`PickerTests` and `SettingsTests`; `HomeAuditTests` has its own, with its
+exceptions, above) go through `auditAccessibility(of:on:)` (`UITests/ScreenAudit.swift`):
 `performAccessibilityAudit(for: .all)`, every kind of issue, with a handler that notes each issue
 with its type, its element's identifier and label and Apple's description, then one failure that
 lists them all. The tests stop at their first failure, so without it a run would show one issue
@@ -578,13 +732,28 @@ a screen.
 - **One sheet at a time.** `HomeView` holds one `HomeSheet?`: `.picker(PickerRequest)` opens the
   picker as a full-screen cover, `.settings` Settings as a sheet, and each closes only itself.
   The place button and the approximate line's "Use my location" (with `locating`) open the
-  picker; the gear opens Settings. Both sheets follow the system's colours, not the page's.
+  picker; the gear opens Settings. The top bar is `HomeShell`'s, over the switcher and the
+  pager, so all three open their sheets from every page. Both sheets follow the system's
+  colours, not the page's: they are presented from outside `HomeShell`, so the dark colour
+  scheme it gives the system's controls on a dark page (phase 5.4) doesn't reach them. While
+  one is open, the home screen under it is out of the accessibility tree, as VoiceOver already
+  treats it, so the sheets' audits read only the sheet.
+- **One view.** Choosing a place (`AppModel.choose(_:name:)`, through `select(_:)`) keeps the
+  view on screen, as a place under "Nearby:" does; only the first answer shown, before anything
+  chose a view, opens on the view for the time of day (`AppModelViewTests`: a place chosen from
+  This week stays there, and one chosen after a failed launch, before any move, opens on the
+  evening's Now).
 - **One Debug recorder.** `HomeView` applies `debugRecorder()` to both sheets where it presents
   them, so under `-openURLs` the picker's Open Settings is recorded as Settings' rows are.
 - **One search stub.** `-fixture` and `-network` answer the picker's searches alike, from the
   search fixtures (`SearchStub`, below).
 - **The tests.** `PickerTests` and `SettingsTests` launch the same app; the picker's Open
   Settings is read from the recorder (`testOpenSettingsOpensTheAppsPage`), as Settings' rows are.
+  Phase 5.4's tests and phase 6's share the launch arguments (below, "Debug hooks"): `-network`
+  takes a comma list of fixtures, or `off` or `unavailable`; `-clock fixed` and `-now` fix the
+  moment; `-resetStore` forgets the recent places too. Their identifiers differ, and the pager
+  keeps only the page on screen in the accessibility tree, so the picker's and Settings' tests
+  find one `heading` and one `verdict`, the page on screen's.
 
 ### No words typed in the Swift (phase 6's exit)
 
@@ -621,7 +790,8 @@ allowlist. What still passes is one lowercase word or a symbol alone outside any
 = "cm"`), which can't be told from a key by its shape; given to a view, it fails. When phase 6 was
 put together the Swift had no stray prose: every literal the guard flags is a crash's or a
 decoding error's message, or one of the names above; and no literal is given to
-`Text(verbatim:)`.
+`Text(verbatim:)`. Phase 5's pages, merged in after, passed it unchanged: their one new literal
+of the kind is a bad `-clock`'s crash message.
 
 ## CI (`.github/workflows/ios.yml`)
 
@@ -744,7 +914,8 @@ Every test and debug hook is in `Apps/Snow/App/DebugHooks.swift`, inside `#if DE
 section 9.8). A Release build compiles a stub with the same names that does nothing and names no
 launch argument. So far there are these:
 
-- `-uitest` turns animations off;
+- `-uitest` turns animations off, and keeps the glyphs' flakes still (`stillMotion()`), as
+  `-now` does too;
 - `-resetStore` forgets the place, the units, the saved answer and the recent places before the
   model reads them, for a first launch (not `unlock.v1`, which only StoreKit's code writes);
   every UI test's first launch passes it;
@@ -763,14 +934,21 @@ launch argument. So far there are these:
   other place a 400, and another path or search a 404, so an answer on screen means the app asked
   for the right place. Nothing is forgotten, so a relaunch paints and reuses what was saved.
   `-network off` has no connection (`URLError.notConnectedToInternet`);
+- `-network unavailable` answers every request, searches too, as the server does when it can't
+  get the forecasts: 503 with `upstream_unavailable` and core's message, over the app's own
+  transport as `-network off` is (phase 5.4, for a failure over a saved answer);
 - `-location <lat>,<lon>|denied|unavailable` stands in for Core Location, so a UI test never
   sees the system's prompt: permission given and a fix there; permission off; or permission
   given and no fix;
-- with `-fixture` or `-network <name>`, the model's clock starts at the (first) fixture's own moment
+- with `-fixture` or `-network <name>[,<name>…]`, the model's clock starts at the (first)
+  fixture's own moment
   (`_fixture.now`) and runs on (`SystemClock(startingAt:)`), so on any day the fixture shows the
   state it was made for: the hour picked, Tomorrow from 6pm at the place, no recent forecast for
-  `old-forecast`. `-now <iso>` starts it at that moment instead. Spec 9.8's `-clock fixed` comes
-  with phase 5.4; the clock always runs;
+  `old-forecast`. `-now <iso>` starts it at that moment instead. `-clock fixed` keeps it at that
+  moment (or the launch's own, without either), so nothing changes or falls due while a test
+  reads the screen (`FixedClock`, IsItState); `-clock run`, the default, runs on. The minute tick
+  counts the model's minutes (`MinuteTick`), so a clock started at 5:59:30pm turns the middle
+  tab to Tomorrow 30 seconds later, not at the system's next minute;
 - `-apiOrigin <url>` asks a deploy preview's API instead of willitsnow.today's (spec section 4);
 - `-openURLs record` (SettingsTests, PickerTests): each sheet, Settings and the picker, records
   each web page, email and Settings page it would open instead of leaving the app, and shows
@@ -783,9 +961,9 @@ launch argument. So far there are these:
   the hosted tests have the App Group to themselves; a launch with `-fixture` or `-network`
   always launches.
 
-A fixture name that doesn't exist or doesn't decode, a `-now` that isn't a moment, a `-location`
-that is none of its forms, or a saved answer `-resetStore` can't remove stops the app, so a UI
-test can't pass on the wrong screen.
+A fixture name that doesn't exist or doesn't decode, a `-now` that isn't a moment, a `-clock`
+that is neither `fixed` nor `run`, a `-location` that is none of its forms, or a saved answer
+`-resetStore` can't remove stops the app, so a UI test can't pass on the wrong screen.
 
 The fixtures are the ones `pnpm mobile:generate` writes for IsItCore's tests: 21 answers from
 the real server (two with a block deleted), each with a `_fixture` note saying what it shows
@@ -834,11 +1012,12 @@ Each comes with the phase that needs it, so nothing in the skeleton is dormant:
 - the widget planner in the widget (ported in phase 3, used in phase 7), so the skeleton's
   widget shows one entry, whatever the hour: it may show an answer past its hours until the app
   saves another;
-- the switcher and the pager of Now, Today and This week, with the Now and week bodies (phase
-  5.2); the announcement when the picked hour changes the answer, `-clock fixed` and the home
-  screen's audits (5.4); in Settings, the notifications section (phase 8), the upgrade and
-  "Restore purchase" (phase 7), "Privacy choices" and the data kept for notifications with its
-  delete button (phase 8);
+- the `ImageRenderer` snapshots of every page, band and text size in the Unit plan (spec
+  sections 16 and 17.2, Large, XXXL and AX3): the pages scroll, and `ImageRenderer` doesn't draw
+  a scroll view, so they wait for the page's content to be drawn apart from its scroll view;
+  until then the UI tests' screens at Large and AX3 are the contact sheet's (phase 5.4);
+- in Settings, the notifications section (phase 8), the upgrade and "Restore purchase" (phase
+  7), "Privacy choices" and the data kept for notifications with its delete button (phase 8);
 - the rest of `SnowKit`, StoreKit (`Snow.storekit`), notifications (the picker and the units
   call phase 8's `syncAlerts` hook), `AdsService` and the banner, `SKAdNetworkItems`, the push
   token in the app's privacy manifest, and coarse location in the widget's (phase 7, when the

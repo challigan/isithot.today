@@ -38,12 +38,14 @@ struct PageFooterView: View {
         VStack(alignment: .leading, spacing: 6) {
           Text(verbatim: footer.outboundIntro)
             .fixedSize(horizontal: false, vertical: true)
-          FlowLayout(spacing: 16, lineSpacing: 6) {
+          FlowLayout(spacing: 16, lineSpacing: 0) {
             ForEach(Array(footer.links.enumerated()), id: \.offset) { _, link in
               Link(destination: link.url) {
                 Text(verbatim: link.name)
                   .fontWeight(.semibold)
                   .underline()
+                  .frame(minHeight: HitTarget.minimum)
+                  .contentShape(Rectangle())
               }
             }
           }
@@ -52,13 +54,15 @@ struct PageFooterView: View {
       if !footer.nearby.isEmpty {
         VStack(alignment: .leading, spacing: 6) {
           Text(verbatim: footer.nearbyLabel)
-          FlowLayout(spacing: 16, lineSpacing: 6) {
+          FlowLayout(spacing: 16, lineSpacing: 0) {
             ForEach(Array(footer.nearby.enumerated()), id: \.offset) { _, city in
               Button {
                 actions.selectNearby(city)
               } label: {
                 Text(verbatim: city.name)
                   .underline()
+                  .frame(minHeight: HitTarget.minimum)
+                  .contentShape(Rectangle())
               }
             }
           }
@@ -71,6 +75,9 @@ struct PageFooterView: View {
         }
       }
       .font(.footnote)
+      // The page's last lines, which the audits scroll to, and whose links they know by it.
+      .accessibilityElement(children: .contain)
+      .accessibilityIdentifier("credits")
     }
     .environment(
       \.openURL,

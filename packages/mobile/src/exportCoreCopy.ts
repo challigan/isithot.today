@@ -16,6 +16,7 @@ import {
   UNIT_NAMES,
   VIEWS,
   VIEW_LABELS,
+  WEEKDAYS,
 } from '@isithot/core';
 import {
   generatedHeader,
@@ -113,6 +114,12 @@ export function coreCopySwift(): string {
     '',
     "  /// The middle view's label while it answers for tomorrow (core `TOMORROW_LABEL`).",
     ...swiftLet('  ', 'public static let tomorrowLabel', swiftString(TOMORROW_LABEL)),
+    '',
+    "  /// The days of the week, Sunday first (core `WEEKDAYS`): a day of the week's rows as",
+    '  /// VoiceOver reads it, "Tuesday" for the row labelled "Tue".',
+    '  public static let weekdays: [String] = [',
+    ...WEEKDAYS.map((day) => `    ${swiftString(day)},`),
+    '  ]',
     '',
     "  /// A view's tab label (core `VIEW_LABELS`). `MiddleDay.label` says when Today reads",
     '  /// `tomorrowLabel` instead.',

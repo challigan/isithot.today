@@ -120,10 +120,10 @@ public enum DeepLink {
   /// only when `toISOString` gives it back, which leaves exactly the real dates from 0000 to
   /// 9999.
   private static func calendarDay(_ text: String) -> Int? {
-    guard let (year, month, day) = dateParts(text), day <= daysIn(month, of: year) else {
+    guard let (year, month, day) = CivilDate.parts(text), day <= daysIn(month, of: year) else {
       return nil
     }
-    return daysSinceEpoch(year: year, month: month, day: day) * dayMs
+    return CivilDate.daysSinceEpoch(year: year, month: month, day: day) * dayMs
   }
 
   /// A place's date as JavaScript's `Date.parse` reads it, in epoch milliseconds: YYYY-MM-DD as
@@ -133,28 +133,8 @@ public enum DeepLink {
   /// takes one, rather than any text, so the app passes `PlaceTime.local(_:in:)` and not, say,
   /// an ISO formatter's output.
   private static func parsedDate(_ text: String) -> Int? {
-    guard let (year, month, day) = dateParts(text) else { return nil }
-    return daysSinceEpoch(year: year, month: month, day: day) * dayMs
-  }
-
-  /// YYYY-MM-DD in ASCII digits (`/^\d{4}-\d{2}-\d{2}$/`, whose `\d` is ASCII only), with a
-  /// month from 1 to 12 and a day from 1 to 31.
-  private static func dateParts(_ text: String) -> (year: Int, month: Int, day: Int)? {
-    let bytes = Array(text.utf8)
-    guard bytes.count == 10, bytes[4] == UInt8(ascii: "-"), bytes[7] == UInt8(ascii: "-")
-    else { return nil }
-    func number(_ range: Range<Int>) -> Int? {
-      var value = 0
-      for byte in bytes[range] {
-        guard (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(byte) else { return nil }
-        value = value * 10 + Int(byte - UInt8(ascii: "0"))
-      }
-      return value
-    }
-    guard let year = number(0..<4), let month = number(5..<7), let day = number(8..<10),
-      (1...12).contains(month), (1...31).contains(day)
-    else { return nil }
-    return (year, month, day)
+    guard let (year, month, day) = CivilDate.parts(text) else { return nil }
+    return CivilDate.daysSinceEpoch(year: year, month: month, day: day) * dayMs
   }
 
   private static func daysIn(_ month: Int, of year: Int) -> Int {
@@ -163,17 +143,6 @@ public enum DeepLink {
     case 4, 6, 9, 11: 30
     default: 31
     }
-  }
-
-  /// Days from 1 January 1970 to the date, in the proleptic Gregorian calendar; a day past the
-  /// month's end counts on into the next.
-  private static func daysSinceEpoch(year: Int, month: Int, day: Int) -> Int {
-    let y = month <= 2 ? year - 1 : year
-    let era = (y >= 0 ? y : y - 399) / 400
-    let yearOfEra = y - era * 400
-    let dayOfYear = (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1
-    let dayOfEra = yearOfEra * 365 + yearOfEra / 4 - yearOfEra / 100 + dayOfYear
-    return era * 146_097 + dayOfEra - 719_468
   }
 }
 

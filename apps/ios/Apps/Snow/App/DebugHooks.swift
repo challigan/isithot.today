@@ -54,7 +54,8 @@ enum DebugHooks {
     ///   fixture's own place with that fixture, the picker's search for a search fixture's text
     ///   with that search fixture (`Fixtures/Search`), and any other request with an error.
     ///   Nothing is forgotten, so a launch paints and reuses what was saved, as it does for real.
-    ///   `-network off` has no connection at all.
+    ///   `-network off` has no connection at all; `-network unavailable` answers every request
+    ///   as the server does when the forecasts can't be had (503 `upstream_unavailable`).
     ///
     /// A name with no fixture, or one that doesn't decode, stops the app, so a UI test can't pass
     /// on the wrong screen. Nil, for willitsnow.today, without either.
@@ -76,21 +77,31 @@ enum DebugHooks {
     }
 
     /// The model's clock: from `-now <iso>` when given, else from the moment of the fixture
-    /// `-fixture` names, or the first `-network` names (`_fixture.now`), running on from there,
-    /// so a fixture launched on any day shows the state it was made for (the hour picked,
-    /// Tomorrow from 6pm at the place, no recent forecast). Nil, for the system's clock, without
-    /// either.
+    /// `-fixture` names, or the first `-network` names (`_fixture.now`), so a fixture launched
+    /// on any day shows the state it was made for (the hour picked, Tomorrow from 6pm at the
+    /// place, no recent forecast). `-clock run`, the default, runs on from there; `-clock fixed`
+    /// stays at that moment (from the launch's own without either), so a UI test reads the
+    /// screen its moment shows and nothing falls due meanwhile (`FixedClock`). Nil, for the
+    /// system's clock, without any of them.
     static func clock(arguments: [String] = ProcessInfo.processInfo.arguments) -> (any AppClock)? {
+      let mode = value(after: "-clock", in: arguments)
+      if let mode, mode != "fixed", mode != "run" {
+        fatalError("-clock: \(mode) isn't fixed or run")
+      }
+      let start: Date?
       if let text = value(after: "-now", in: arguments) {
-        guard let start = ApiJSON.parseDate(text) else {
+        guard let moment = ApiJSON.parseDate(text) else {
           fatalError("-now: \(text) isn't an ISO 8601 moment")
         }
-        return SystemClock(startingAt: start)
+        start = moment
+      } else {
+        let network = value(after: "-network", in: arguments).flatMap {
+          StubServer.modes.contains($0) ? nil : StubServer.fixtureNames($0).first
+        }
+        start = (value(after: "-fixture", in: arguments) ?? network).map { fixtureMoment($0) }
       }
-      let network = value(after: "-network", in: arguments).flatMap { $0 == "off" ? nil : $0 }
-        .flatMap { $0.split(separator: ",").first.map(String.init) }
-      guard let name = value(after: "-fixture", in: arguments) ?? network else { return nil }
-      return SystemClock(startingAt: fixtureMoment(name))
+      if mode == "fixed" { return FixedClock(at: start ?? Date()) }
+      return start.map { SystemClock(startingAt: $0) }
     }
 
     /// The phone's location without Core Location, so a UI test never sees the system's prompt
@@ -141,6 +152,13 @@ enum DebugHooks {
         fatalError("-openURLs: \(mode) is neither record nor nomail")
       }
       return known
+    }
+
+    /// Whether the glyphs keep still, their flakes never drifting (section 10.2): in a test
+    /// launched at a set moment (`-now`), whose screens are compared as they are, and under
+    /// `-uitest`, which turns animations off.
+    static func stillMotion(arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+      arguments.contains("-now") || arguments.contains("-uitest")
     }
 
     /// Whether the app launches (`AppModel.launch()`): not while it only hosts the unit tests,
@@ -233,6 +251,8 @@ enum DebugHooks {
 
     static func apiOrigin() -> URL? { nil }
 
+    static func stillMotion() -> Bool { false }
+
     nonisolated static func launches() -> Bool { true }
 
     static func location() -> (any LocationService)? { nil }
@@ -282,34 +302,46 @@ enum DebugHooks {
       case answer(status: Int, body: Data)
     }
 
-    /// The fixture it answers the request for approximate IP location with; nil for `-network
-    /// off`.
-    let fixture: Data?
-    /// The other fixtures, each for its own place (`place(_:)`).
-    let places: [String: Data]
+    /// What `-network` names: no connection, the server failing, or its fixtures.
+    enum Mode {
+      case off
+      case unavailable
+      /// The fixture it answers the request for approximate IP location with, and the others,
+      /// each for its own place (`place(_:)`).
+      case fixtures(ip: Data, places: [String: Data])
+    }
+
+    /// The names `-network` takes that aren't a fixture's.
+    static let modes: Set<String> = ["off", "unavailable"]
+
+    let mode: Mode
     /// The picker's searches.
-    let searches: SearchStub
+    let searches = SearchStub()
 
     /// The server `-network` names in `arguments`, or nil without it.
     init?(arguments: [String]) {
-      guard let mode = DebugHooks.value(after: "-network", in: arguments) else { return nil }
-      guard mode != "off" else {
-        fixture = nil
-        places = [:]
-        searches = SearchStub()
-        return
-      }
-      let names = mode.split(separator: ",").map(String.init)
-      fixture = DebugHooks.answerData(names[0])
-      var places: [String: Data] = [:]
-      for name in names.dropFirst() {
-        guard let target = Target(query: DebugHooks.fixtureQuery(name)) else {
-          fatalError("-network: \(name).json asks for no place")
+      guard let name = DebugHooks.value(after: "-network", in: arguments) else { return nil }
+      switch name {
+      case "off": mode = .off
+      case "unavailable": mode = .unavailable
+      default:
+        let names = Self.fixtureNames(name)
+        guard let first = names.first else { fatalError("-network: \(name) names no fixture") }
+        var places: [String: Data] = [:]
+        for other in names.dropFirst() {
+          guard let target = Target(query: DebugHooks.fixtureQuery(other)) else {
+            fatalError("-network: \(other).json asks for no place")
+          }
+          places[Self.place(target)] = DebugHooks.answerData(other)
         }
-        places[Self.place(target)] = DebugHooks.answerData(name)
+        mode = .fixtures(ip: DebugHooks.answerData(first), places: places)
       }
-      self.places = places
-      searches = SearchStub()
+    }
+
+    /// The fixtures `-network <name>[,<name>…]` names, in order: the first for approximate IP
+    /// location.
+    static func fixtureNames(_ value: String) -> [String] {
+      value.split(separator: ",").map(String.init)
     }
 
     /// A place as the stub tells places apart: a city by its slug, coordinates by their point
@@ -323,14 +355,28 @@ enum DebugHooks {
       }
     }
 
-    /// No connection for `-network off`. Otherwise, for `GET /api/v1/today` with `ahead=snow`:
+    /// No connection for `-network off`. For `-network unavailable`, every request answered as
+    /// the server answers when the forecasts can't be had: 503, with its `upstream_unavailable`
+    /// error and core's message for it. Otherwise, for `GET /api/v1/today` with `ahead=snow`:
     /// the first fixture for approximate IP location (`units` once they are known, or `t` past
     /// the caches, but no place), and another fixture for its own place; for `GET
     /// /api/v1/search`, the search fixture asked with the same query. A 404 for another path or
     /// search, and a 400 for any other request, both with no body, so a request for the wrong
     /// place shows the error, never an answer.
     func reply(to request: URLRequest) -> Reply {
-      guard let fixture else { return .failure(.notConnectedToInternet) }
+      let fixture: Data
+      let places: [String: Data]
+      switch mode {
+      case .off:
+        return .failure(.notConnectedToInternet)
+      case .unavailable:
+        let code = "upstream_unavailable"
+        let error = ApiError(code: code, message: CoreCopy.errorMessage(code: code) ?? "")
+        return .answer(status: 503, body: (try? JSONEncoder().encode(error)) ?? Data())
+      case .fixtures(let ip, let others):
+        fixture = ip
+        places = others
+      }
       guard request.httpMethod == "GET", let url = request.url,
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
       else { return .answer(status: 404, body: Data()) }

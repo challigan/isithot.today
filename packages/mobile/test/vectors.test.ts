@@ -10,6 +10,7 @@ import {
   question,
   roundToGrid,
   showsTomorrow,
+  snowAgreementLine,
   viewDisplay,
   viewLabel,
   type TodayResponse,
@@ -45,7 +46,7 @@ import {
 } from '@isithot/client';
 import { APP_COPY } from '../src/appCopy';
 import { FIXTURES, fixtureJson, makeFixture, type Fixture } from '../src/fixtures';
-import { homePage } from '../src/page';
+import { fill, homePage, homeTopBar } from '../src/page';
 import {
   addDays,
   assertSpecParse,
@@ -117,6 +118,7 @@ const replay: Record<string, (i: In) => unknown> = {
   searchInput: (i) => searchInput(i.text),
   resultDetail: (i) => resultDetail(i.result),
   homePage: (i) => homePage(i.fixture === null ? null : res(i), i),
+  homeTopBar: (i) => homeTopBar(i.placeName, i.approximate, i.notice),
   creditParts: (i) => creditParts(i.text),
 };
 
@@ -180,7 +182,7 @@ const CORE = [
 ];
 
 /** The functions whose reference is packages/mobile's own, built on core's and the client's. */
-const MOBILE = ['homePage'];
+const MOBILE = ['homePage', 'homeTopBar'];
 
 const file = (name: string) => files.find((f) => f.name === name)!.vectors;
 const casesFor = (name: string, fn: string) => file(name).cases.filter((c) => c.fn === fn);
@@ -684,9 +686,120 @@ describe('the cases cover what section 7.4 asks for', () => {
         noUpdated ? null : true,
       );
     }
+    // Now's rows and the week's, only on their own pages with an answer to show.
+    for (const c of cases) {
+      const o = c.out as any;
+      const view = (c.in as In).view;
+      expect(o.hours === null, `hours on ${view}, ${o.state}`).toBe(
+        !(view === 'now' && o.state === 'ready'),
+      );
+      expect(o.week === null, `week on ${view}, ${o.state}`).toBe(
+        !(view === 'week' && o.state === 'ready'),
+      );
+      // Up to six 2-hour rows (fewer where the forecast ends), "6pm · 60%", read as "60% chance
+      // at 6pm": core's words, which the app's templates (the Swift's) reproduce.
+      if (o.hours) {
+        expect(o.hours.heading).toBe(COPY.nextHoursSnow);
+        expect(o.hours.rows.length).toBeLessThanOrEqual(6);
+        for (const row of o.hours.rows) {
+          expect(row.value).toBe(fill(APP_COPY.percent, { value: String(row.chance) }));
+          expect(row.spoken).toBe(
+            fill(APP_COPY.hourRowLabel, { chance: row.value, time: row.label }),
+          );
+        }
+      }
+      // Up to seven days (fewer where the forecast ends), each with its agreement and never a
+      // percentage.
+      if (o.week) {
+        expect(o.week.rows.length).toBeLessThanOrEqual(7);
+        for (const row of o.week.rows) {
+          expect(row.snowy).toBeLessThanOrEqual(row.total);
+          expect(row.spoken).toMatch(/^[A-Z][a-z]+day, /);
+          expect(row.spoken).not.toContain('%');
+          expect(row.spoken.endsWith(snowAgreementLine(row.snowy, row.total))).toBe(true);
+        }
+      }
+    }
+    // The spec's examples, from the answers themselves: Durham's week, read in full.
+    const durhamWeek = cases.find(
+      (c) =>
+        (c.in as In).fixture === 'durham-tomorrow' &&
+        (c.in as In).view === 'week' &&
+        (c.out as any).state === 'ready',
+    )!.out as any;
+    expect(durhamWeek.week.rows.slice(0, 3).map((r: any) => r.spoken)).toEqual([
+      'Today, 0cm, too warm, 0 of 6 forecasts expect snow',
+      'Thursday, 4cm, snow, 6 of 6 forecasts expect snow',
+      'Friday, 8cm, heavy snow, 6 of 6 forecasts expect snow',
+    ]);
+    expect(durhamWeek.week.rows[1]).toMatchObject({
+      label: 'Thu',
+      amount: '4cm',
+      bandLabel: 'Snow',
+      snowy: 6,
+      total: 6,
+    });
+    expect(
+      cases.some((c) =>
+        (c.out as any).hours?.rows.some(
+          (r: any) => r.spoken === `${r.chance}% chance at ${r.label}`,
+        ),
+      ),
+    ).toBe(true);
+    expect(cases.some((c) => (c.out as any).hours?.rows.length === 6)).toBe(true);
+    expect(cases.some((c) => (c.out as any).week?.rows.length === 7)).toBe(true);
+    // The app's agreement templates say what core's line says, one forecast or more.
+    for (let total = 0; total <= 6; total++) {
+      for (let snowy = 0; snowy <= total; snowy++) {
+        const values = { snowy: String(snowy), total: String(total) };
+        const template = snowy === 1 ? APP_COPY.dayAgreementOne : APP_COPY.dayAgreement;
+        expect(fill(template, values)).toBe(snowAgreementLine(snowy, total));
+      }
+    }
     // Each credit the API gives, with something to link.
     const credits = casesFor('page', 'creditParts').map((c) => (c.in as In).text);
     for (const credit of ATTRIBUTION) expect(credits).toContain(credit);
+    // A model's row is its name and amount, apart as VoiceOver reads them and together on screen.
+    const lines = outs.flatMap((o) => o.day?.lines ?? []);
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) {
+      expect(line.text).toBe(fill(APP_COPY.modelLine, { name: line.name, value: line.value }));
+      expect(line.name.length && line.value.length).toBeTruthy();
+    }
+  });
+
+  it('homeTopBar: the place or "Finding you…", the approximate line or the notice', () => {
+    const cases = casesFor('page', 'homeTopBar');
+    const bar = (placeName: string | null, approximate: boolean, notice: string | null) =>
+      cases.find(
+        (c) =>
+          (c.in as In).placeName === placeName &&
+          (c.in as In).approximate === approximate &&
+          (c.in as In).notice === notice,
+      )?.out as any;
+    expect(bar('Leeds', true, null)).toEqual({
+      place: 'Leeds',
+      placeLabel: 'Place: Leeds. Change place.',
+      approximate: COPY.approximate,
+      useMyLocation: COPY.useMyLocation,
+      settings: APP_COPY.settings,
+    });
+    expect(bar('Leeds', false, null)).toMatchObject({ approximate: null, useMyLocation: null });
+    for (const unknown of [null, '']) {
+      expect(bar(unknown, true, null)).toMatchObject({
+        place: COPY.locating,
+        placeLabel: fill(APP_COPY.placeButtonUnknown, { status: COPY.locating }),
+      });
+    }
+    // The notice takes the approximate line's place, and shows on a chosen place too.
+    expect(bar(null, true, APP_COPY.slugGone)).toMatchObject({
+      approximate: APP_COPY.slugGone,
+      useMyLocation: COPY.useMyLocation,
+    });
+    expect(bar('Leeds', false, APP_COPY.slugGone)).toMatchObject({
+      approximate: APP_COPY.slugGone,
+      useMyLocation: null,
+    });
   });
 
   it("search: JavaScript's trim and length, and each part of a result's line left out", () => {

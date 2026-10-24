@@ -7,6 +7,7 @@
 import { APP_COPY, APP_INTENT_KEYS } from './appCopy';
 import {
   generatedHeader,
+  swiftCall,
   swiftIdentifier,
   swiftLet,
   swiftString,
@@ -18,14 +19,17 @@ export const APP_COPY_PATH = 'apps/ios/Packages/IsItCore/Sources/IsItModel/Gener
 
 export const APP_COPY_SOURCE = 'packages/mobile/src/appCopy.ts';
 
-/** The Swift for one string: a `static let`, or a `static func` that fills its slots. */
+/**
+ * The Swift for one string: a `static let`, or a `static func` that fills its slots, its
+ * parameters on one line when the signature fits in 100 columns, and otherwise each on its own.
+ */
 export function appCopyMember(key: string, text: string): string[] {
   const name = swiftIdentifier(key);
   const slots = templateSlots(text);
   if (!slots.length) return swiftLet('  ', `public static let ${name}`, swiftString(text));
-  const params = slots.map((slot) => `${swiftIdentifier(slot)}: String`).join(', ');
+  const params = slots.map((slot) => `${swiftIdentifier(slot)}: String`);
   return [
-    `  public static func ${name}(${params}) -> String {`,
+    ...swiftCall('  ', `public static func ${name}`, params, ' -> String {'),
     `    ${swiftTemplate(text)}`,
     '  }',
   ];
