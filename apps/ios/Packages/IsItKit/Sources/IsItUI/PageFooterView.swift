@@ -103,7 +103,11 @@ struct PageFooterView: View {
 }
 
 /// Lays its views out left to right, wrapping onto the next line when one doesn't fit, as text
-/// wraps: the footer's links and places at any text size.
+/// wraps, and a view wider than the line onto lines of its own: the footer's links and places at
+/// any text size, the top bar's approximate line, and at accessibility sizes the switcher's
+/// buttons and a week row's day and amount. Each view is laid out once, wherever it goes, so the
+/// accessibility audit follows one element as the text grows, where `ViewThatFits` chooses
+/// between copies of it.
 struct FlowLayout: Layout {
   var spacing: CGFloat
   var lineSpacing: CGFloat

@@ -7,8 +7,8 @@ import XCTest
 /// at AX3 (an accessibility size, set through UIKit's preferred content size category), each on
 /// its fixture at its own moment with the clock fixed: XCUITest's
 /// `performAccessibilityAudit()` (iOS 17) for every kind of issue on each screenful of the page,
-/// from its top down to the credits at its end, since an audit reads only what is on screen; and
-/// each screenful attached.
+/// from its top down to the credits at its end, since an audit can judge only what the screen
+/// shows; and each screenful attached.
 ///
 /// The attachments are named so that the contact sheet, which tiles them in their names' order
 /// (`ci/contact-sheet.mjs`), shows them fixture by fixture, Large then AX3, each page in the
@@ -17,7 +17,8 @@ import XCTest
 /// `home-<fixture>-2-ax3-1-now-01` and so on.
 ///
 /// Every issue an audit finds fails the test, but for the exceptions in `exceptions`, each with
-/// why it isn't a fault to fix in the app.
+/// why it isn't a fault to fix in the app. An element of the page is judged on a screenful that
+/// shows it whole (`AuditLog`).
 final class HomeAuditTests: XCTestCase {
   override func setUpWithError() throws {
     continueAfterFailure = true
@@ -135,8 +136,11 @@ final class HomeAuditTests: XCTestCase {
 
   /// Audits the page on screen a screenful at a time, from its top (where it is on its first
   /// showing) down to the end of the credits, its last lines, attaching each screenful as
-  /// `<name>-<k>`, k from 01. Fails when the credits aren't there, or their end never comes into
-  /// view.
+  /// `<name>-<k>`, k from 01. An element of the page that a screenful cuts at the page's edge, or
+  /// shows not at all, is judged on a screenful that shows it whole (`AuditLog.settle`). Fails,
+  /// with where the page and its credits were, when the credits aren't there, the app has left
+  /// the foreground, an audit can't run, the page stops scrolling before its end, or its end
+  /// never comes into view.
   @MainActor
   private func audit(
     _ page: HomeScreen.Page,
@@ -144,28 +148,106 @@ final class HomeAuditTests: XCTestCase {
     in app: XCUIApplication,
     noting found: AuditLog
   ) throws {
-    let shown = app.find("page-\(page.view)")
     let credits = app.find("credits")
     guard credits.exists else {
       XCTFail("\(page.view) page: no credits at its end")
       return
     }
-    for screenful in 1...Self.screenfuls {
-      attach(app, as: "\(name)-\(String(format: "%02d", screenful))")
-      let place = "\(page.view) page, screenful \(screenful)"
-      let creditsFrame = credits.frame
-      try app.performAccessibilityAudit(for: .all) { issue in
-        found.note(issue, on: place, credits: creditsFrame)
-        return true
+    var seen: [Screenful] = []
+    defer { found.settle(on: seen) }
+    for number in 1...Self.screenfuls {
+      let place = "\(page.view) page, screenful \(number)"
+      // A drag that reached a system gesture would leave the audit nothing of the app's to read.
+      guard app.state == .runningForeground else {
+        XCTFail("\(place): the app isn't in the foreground (state \(app.state.rawValue))")
+        return
+      }
+      attach(app, as: "\(name)-\(String(format: "%02d", number))")
+      let screenful = Screenful(page: onScreen(page, in: app), credits: credits.frame)
+      guard !screenful.page.isEmpty else {
+        XCTFail("\(place): no page-\(page.view) on screen")
+        return
+      }
+      seen.append(screenful)
+      do {
+        try app.performAccessibilityAudit(for: .all) { issue in
+          found.note(issue, on: place, in: screenful)
+          return true
+        }
+      } catch {
+        XCTFail(
+          "\(place): the audit didn't run (\(error)); the app's state is \(app.state.rawValue), "
+            + Screenful.describe(seen))
+        return
       }
       // The credits' end is on screen: the whole page has been audited.
-      if credits.frame.maxY <= shown.frame.maxY { return }
-      let before = credits.frame
-      scrollDown(page, in: app)
-      // The page scrolls no further: its end is under the bottom edge's inset, and on screen.
-      if credits.frame == before { return }
+      if screenful.credits.maxY <= screenful.page.maxY { return }
+      scrollDown(page, by: step(page, from: screenful, in: app), in: app)
+      if settledFrame(of: credits) == screenful.credits {
+        XCTFail(
+          "\(page.view) page: it scrolls no further, but its end isn't on screen; "
+            + Screenful.describe(seen))
+        return
+      }
     }
-    XCTFail("\(page.view) page: its end never came into view in \(Self.screenfuls) screenfuls")
+    XCTFail(
+      "\(page.view) page: its end never came into view in \(Self.screenfuls) screenfuls; "
+        + Screenful.describe(seen))
+  }
+
+  /// How far to scroll the page from `screenful` for the next one: so the first of the page's
+  /// elements that this one doesn't show whole, cut at the bottom edge or below it, comes to the
+  /// top, 8 points down, and the next screenful shows it whole if it is no taller than the page
+  /// on screen. From a quarter to four fifths of the page on screen, so the page always moves
+  /// and the drag stays on it. An element is a leaf of the page's accessibility tree, read from
+  /// one snapshot (a row, a heading, a place, a line of the credits).
+  @MainActor
+  private func step(
+    _ page: HomeScreen.Page,
+    from screenful: Screenful,
+    in app: XCUIApplication
+  ) -> CGFloat {
+    let shown = screenful.page
+    let least = shown.height * 0.25
+    let most = shown.height * 0.8
+    guard let root = try? app.find("page-\(page.view)").snapshot() else { return most }
+    var pending = root.children
+    var top: CGFloat?
+    while let element = pending.popLast() {
+      guard element.children.isEmpty else {
+        pending.append(contentsOf: element.children)
+        continue
+      }
+      let frame = element.frame
+      if !frame.isEmpty, frame.maxY > shown.maxY + 1 {
+        top = min(top ?? frame.minY, frame.minY)
+      }
+    }
+    guard let top else { return most }
+    return min(max(top - shown.minY - 8, least), most)
+  }
+}
+
+/// A screenful as it was audited: where the page was on screen, and where its credits were, by
+/// whose moves an element's place on the page follows from one screenful to the next.
+struct Screenful {
+  /// The part of the page on screen.
+  let page: CGRect
+  let credits: CGRect
+
+  /// Whether this screenful shows whole what was at `frame` on `screenful`, moved with the page
+  /// by as much as the credits moved (to within a point).
+  func showsWhole(_ frame: CGRect, from screenful: Screenful) -> Bool {
+    guard !frame.isNull, !frame.isEmpty else { return false }
+    let moved = frame.offsetBy(dx: 0, dy: credits.minY - screenful.credits.minY)
+    return page.insetBy(dx: -1, dy: -1).contains(moved)
+  }
+
+  /// Where the page was and the credits were on each screenful, for a failure to say.
+  static func describe(_ seen: [Screenful]) -> String {
+    let page = seen.first.map { "\($0.page)" } ?? "unknown"
+    let credits = seen.map { "\($0.credits)" }.joined(separator: ", ")
+    return "the page on screen at \(page), the credits on each screenful at \(credits)"
   }
 }
 
@@ -181,33 +263,89 @@ struct AuditedElement {
 
 /// What the audits found: the issues that fail the test, and those allowed, each described with
 /// its kind, its element and the page it was on; and which exceptions allowed any.
+///
+/// An issue is judged on the screenful that shows its element whole. The top bar and the
+/// switcher are always whole on screen. An element of the page that the screenful cuts at the
+/// page's edge, or that is off it (above, under the switcher, or below the screen), is held
+/// until the page's last screenful: if another screenful showed it whole, that screenful's audit
+/// judged it, and the held issue goes; if none did, it is judged as it was. The audit reads
+/// elements the screen doesn't show whole, and measures their contrast against whatever the
+/// screen has where they are: on PR #31's macOS run the answer and the question passed on each
+/// page's first screenful, where they were whole, and failed contrast on every screenful after
+/// it, scrolled off the page's top; the places nearby and the links failed it on the first
+/// screenful, at the screen's bottom edge or under it.
 @MainActor
 private final class AuditLog {
+  /// An issue whose element wasn't whole on its screenful.
+  private struct Held {
+    let element: AuditedElement
+    let type: XCUIAccessibilityAuditType
+    let text: String
+    let on: Screenful
+  }
+
+  /// The identifiers of the top bar's and the switcher's elements, which don't scroll.
+  private static let fixed: Set<String> = [
+    "place", "settings", "approximate", "use-my-location", "views",
+  ]
+
   /// The switcher's tabs, as the screen's pages label themselves.
   let tabs: [String]
   private(set) var unexpected: [String] = []
   private(set) var allowed: [String] = []
   /// The indexes of the exceptions that allowed an issue.
   private(set) var used: Set<Int> = []
+  /// The page's issues held until its last screenful.
+  private var held: [Held] = []
 
   init(tabs: [String]) {
     self.tabs = tabs
   }
 
-  func note(_ issue: XCUIAccessibilityAuditIssue, on page: String, credits: CGRect) {
+  func note(_ issue: XCUIAccessibilityAuditIssue, on page: String, in screenful: Screenful) {
     let element = AuditedElement(
       identifier: issue.element?.identifier ?? "",
       label: issue.element?.label ?? "",
       frame: issue.element?.frame ?? .null,
       tabs: tabs,
-      credits: credits
+      credits: screenful.credits
     )
     let kind = Self.name(of: issue.auditType)
     let text =
       "\(page): \(kind): \(issue.compactDescription) (element \"\(element.identifier)\", "
       + "\"\(element.label)\"): \(issue.detailedDescription)"
+    // A segment of the switcher's segmented control: a button with a tab's label, and no
+    // identifier of its own.
+    let segment =
+      issue.element?.elementType == .button && element.identifier.isEmpty
+      && tabs.contains(element.label)
+    let fixed =
+      Self.fixed.contains(element.identifier) || element.identifier.hasPrefix("view-") || segment
+    if fixed || element.frame.isNull || screenful.showsWhole(element.frame, from: screenful) {
+      judge(element, issue.auditType, text)
+    } else {
+      held.append(Held(element: element, type: issue.auditType, text: text, on: screenful))
+    }
+  }
+
+  /// The page's last screenful has been audited (`seen` is every one): judges each held issue
+  /// whose element no screenful showed whole.
+  func settle(on seen: [Screenful]) {
+    for item in held
+    where !seen.contains(where: { $0.showsWhole(item.element.frame, from: item.on) }) {
+      judge(item.element, item.type, "\(item.text) (no screenful showed it whole)")
+    }
+    held = []
+  }
+
+  /// Notes an issue as allowed, by the first exception that matches it, or as unexpected.
+  private func judge(
+    _ element: AuditedElement,
+    _ type: XCUIAccessibilityAuditType,
+    _ text: String
+  ) {
     let exception = HomeAuditTests.exceptions.firstIndex {
-      $0.type == issue.auditType && $0.matches(element)
+      $0.type == type && $0.matches(element)
     }
     if let exception {
       used.insert(exception)

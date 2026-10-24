@@ -47,7 +47,8 @@ public struct HomeShell<Content: View>: View {
 
 /// The top bar: the place as a button that opens the picker ("Place: Leeds. Change place."),
 /// wrapping to two lines at large text sizes; the gear for Settings; and on the approximate IP
-/// place, the line beneath with "Use my location".
+/// place, the line beneath with "Use my location", which goes under the line's text when the two
+/// don't fit side by side.
 struct TopBarView: View {
   let topBar: HomeTopBar
   let actions: HomeActions
@@ -85,13 +86,14 @@ struct TopBarView: View {
         .accessibilityIdentifier("settings")
       }
       if let approximate = topBar.approximate {
-        ViewThatFits(in: .horizontal) {
-          HStack(alignment: .firstTextBaseline, spacing: 6) {
-            approximateLine(approximate)
-          }
-          VStack(alignment: .leading, spacing: 2) {
-            approximateLine(approximate)
-          }
+        // One text and one button, side by side while they fit and the button under the text
+        // when they don't, the text wrapping as it must: the footer's way with its links, which
+        // the audit passes. Not `ViewThatFits`, a choice between two copies of the same views:
+        // inside it, the audit on PR #31's macOS run found both elements' Dynamic Type
+        // "partially unsupported" on every page, and "Use my location" short of contrast on
+        // the pale ones.
+        FlowLayout(spacing: 6, lineSpacing: 0) {
+          approximateLine(approximate)
         }
         .font(.footnote)
       }
@@ -101,10 +103,12 @@ struct TopBarView: View {
     .padding(.bottom, 4)
   }
 
-  /// "Using approximate location." and its button.
+  /// "Using approximate location." and its button, each centred in a line as tall as the
+  /// button's hit region, so the two read as one line when they share it.
   @ViewBuilder private func approximateLine(_ text: String) -> some View {
     Text(verbatim: text)
       .fixedSize(horizontal: false, vertical: true)
+      .frame(minHeight: HitTarget.minimum)
       .accessibilityIdentifier("approximate")
     if let useMyLocation = topBar.useMyLocation {
       Button {

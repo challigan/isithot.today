@@ -34,13 +34,11 @@ public struct ViewSwitcher: View {
   public var body: some View {
     Group {
       if typeSize.isAccessibilitySize {
-        ViewThatFits(in: .horizontal) {
-          HStack(alignment: .firstTextBaseline, spacing: 16) {
-            buttons
-          }
-          VStack(alignment: .leading, spacing: 8) {
-            buttons
-          }
+        // A row that wraps, as the footer's links do, rather than `ViewThatFits` between a row
+        // and a column of the same buttons: the audit found the top bar's texts inside one
+        // "partially unsupported" for Dynamic Type.
+        FlowLayout(spacing: 16, lineSpacing: 8) {
+          buttons
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)

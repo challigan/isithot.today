@@ -125,15 +125,11 @@ struct WeekRowView: View {
     Group {
       if stacked {
         VStack(alignment: .leading, spacing: 4) {
-          ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-              day
-              amount
-            }
-            VStack(alignment: .leading, spacing: 2) {
-              day
-              amount
-            }
+          // The day and the amount side by side while they fit, wrapping as text does: not
+          // `ViewThatFits` between two copies of them (why: the top bar's, in HomeShell.swift).
+          FlowLayout(spacing: 12, lineSpacing: 2) {
+            day
+            amount
           }
           band
           dots
