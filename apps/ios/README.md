@@ -552,7 +552,8 @@ What section 16 asks of the home screen, proven where it can only be proven, on 
 page.json: for each screen a UI test opens, its fixture, the moment as `-now` takes it, how its
 request went, the view it opens on (core `defaultView`), the top bar (`homeTopBar`, a reference new
 in 5.4 for IsItLogic's `HomeTopBar`) and its three pages (`homePage`), exactly as page.json has
-them. The screens are listed in `homeScreens` (packages/mobile `vectors.ts`), which adds each to
+them, and beside the screens each band's palette (`homePalettes`), which the home audit's
+contrast failures read the screen's pixels against. The screens are listed in `homeScreens` (packages/mobile `vectors.ts`), which adds each to
 page.json, so the Swift on Linux is held to the same cases (`PageVectorTests`). The UI test bundle
 carries the file (project.yml), and `HomeScreens.swift` reads it (`HomeScreen.named`) and compares
 the screen with it, from one snapshot of the accessibility tree for each check (`ShownScreen`), in
@@ -597,8 +598,15 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   three fixtures at Large and at AX3 (`-UIPreferredContentSizeCategoryName` with
   `UICTContentSizeCategoryAccessibilityXL`; the test checks the switcher is buttons at AX3 and not
   at Large, so the size reached the app, and that the home screen fits the screen at that size,
-  `expectFits`), with `performAccessibilityAudit(for: .all)` on every screenful, from the page's
-  top to the end of its credits, in at most 20 screenfuls. The page on screen is the part of its
+  `expectFits`), with `performAccessibilityAudit(for:)` for every kind on every screenful, from
+  the page's top to the end of its credits, in at most 20 screenfuls. Each screenful is audited
+  in two calls (`AuditKinds`, `UITests/ScreenAudit.swift`): every kind but two on the screen as
+  attached, and an audit that moves the page there fails; then the Dynamic Type and clipped-text
+  checks, which lay the app out at a smaller text size, where a page scrolled past that size's end
+  comes back to it. Each issue's element is noted where it was on the screenful, moved back with
+  the credits, and the page is dragged back to where the screenful had it before the next scroll
+  (`restore`; on PR #33's macOS run, with one call, every AX3 page went back to that end before
+  each drag and failed "scrolls no further"). The page on screen is the part of its
   frame a user sees, within the window and below the switcher, whether the frame XCUITest gives
   the page's scroll view is its viewport or its content. Each scroll brings the first element
   the screen doesn't show whole to the top of that part (a drag in the page's left margin, clear
@@ -608,20 +616,24 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   contrast on every screenful that had scrolled it off the top). Every issue fails the test, once
   per fixture and size, listing each with its page and screenful, kind (`contrast`, `hitRegion`,
   `dynamicType`, …), Apple's descriptions and the element's type, identifier, label and frame on
-  screen (with the part of the page on screen, for one no screenful showed whole), except those in
+  the screenful (with where it was once the audit had moved the page, and the part of the page on
+  screen, for one no screenful showed whole), a contrast issue with the screenful's darkest and
+  lightest pixels inside the element and the contrast between them, beside the page's ink and its
+  background at the element's centre (`PixelRange`, `PageColours`), except those in
   `HomeAuditTests.exceptions`, each with why it isn't a fault to fix: the segmented control's own
   type size (`dynamicType`; section 10.2's segmented picker, buttons that scale at accessibility
   sizes) and the credits' inline links (`hitRegion`). The log names an exception a test didn't
   need. A page that stops scrolling short of its end, an app that has left the foreground or an
   audit that can't run fails with where the page and its credits were on each screenful, and the
-  page's frame on each (one that moves is its content's). A page
+  page's frame on each (the scroll view's viewport, PR #33's run showed). A page
   that stops short, or never reaches its end, also says the page's whole frame and the window's,
-  each drag, the page's four lowest elements and where a swipe by XCUITest's own gesture then
-  moved the credits (a page at the end of its scroll range, or a drag it didn't take), and
-  attaches the app's element tree as `<name>-tree`. For a new issue, fix the app, or, when it
-  isn't a fault, add it there with its reason. All six are expected to fail on the next run
-  still, on issues the log couldn't explain (DECISIONS, "The iPhone app's UI tests, reviewed"):
-  read the run's `home-*` screens and its xcresult before changing the app for them.
+  each drag (those that put the page back marked so), the page's four lowest elements and where
+  a swipe by XCUITest's own gesture then moved the credits (a page at the end of its scroll range,
+  or a drag it didn't take), and attaches the app's element tree as `<name>-tree`. For a new
+  issue, fix the app, or, when it isn't a fault, add it there with its reason. The three Large
+  tests may fail still on the home's text buttons' contrast and five two-line details, which the
+  log couldn't explain: read their pixels in the next log before changing the app for them
+  (DECISIONS, "The iPhone app's UI tests, after PR #33's macOS run").
 
 **The contact sheet** tiles every attachment in its names' order (`ci/contact-sheet.mjs`, five
 screens to a row). `HomeAuditTests` attaches every screenful it audits as
@@ -762,10 +774,15 @@ Credits and licences, a licence in full, Your privacy and both fallbacks. The sc
 
 **The audits** (`PickerTests` and `SettingsTests`; `HomeAuditTests` has its own, with its
 exceptions, above) go through `auditAccessibility(of:on:)` (`UITests/ScreenAudit.swift`):
-`performAccessibilityAudit(for: .all)`, every kind of issue, with a handler that notes each issue
-with its kind (named as `HomeAuditTests` names it), its element's type, identifier, label and
-frame, and Apple's description, then one failure that lists them all with the window's frame. The
-tests stop at their first failure, so without it a run would show one issue a screen.
+`performAccessibilityAudit(for:)` for every kind of issue, in the home audit's two calls
+(`AuditKinds`), with a handler that notes each issue with its kind (named as `HomeAuditTests`
+names it), its element's type, identifier, label and frame, and Apple's description, a contrast
+issue with the screen's darkest and lightest pixels inside the element, then one failure that
+lists them all with the window's frame. The tests stop at their first failure, so without it a
+run would show one issue a screen. One exception is allowed, and printed when it is used
+(`SheetAudit.exceptions`): Dynamic Type on a toolbar button in the navigation bar (Close), which
+UIKit draws as a bar button at the bar's own type size, showing it in the Large Content Viewer
+at accessibility sizes instead; any other issue is the app's to fix.
 
 ### How they meet
 
@@ -998,7 +1015,8 @@ launch argument. So far there are these:
 - `-apiOrigin <url>` asks a deploy preview's API instead of willitsnow.today's (spec section 4);
 - `-openURLs record` (SettingsTests, PickerTests): each sheet, Settings and the picker, records
   each web page, email and Settings page it would open instead of leaving the app, and shows
-  the last one at the bottom of the sheet
+  the last one below the sheet's content, on an opaque background in `subheadline`, so no row
+  runs under it and its text follows every text size
   (`debug-opened`), with the units the last request to the server asked in (`debug-units`: `c`,
   `f`, or `none`); `-openURLs nomail` also refuses every `mailto:` URL, as a phone with no mail
   app does, so the fallback sheet shows. Any other value stops the app;

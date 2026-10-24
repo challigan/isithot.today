@@ -227,19 +227,37 @@ final class SettingsTests: XCTestCase {
     app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", words)).firstMatch
   }
 
-  /// Scrolls until `element` can be tapped, up then down.
+  /// Scrolls until a tap on `element` lands on it (`reachable`), up then down.
   @MainActor
   private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
     var swipes = 0
-    while !(element.exists && element.isHittable) && swipes < 6 {
+    while !reachable(element, in: app) && swipes < 6 {
       app.swipeUp()
       swipes += 1
     }
-    while !(element.exists && element.isHittable) && swipes < 12 {
+    while !reachable(element, in: app) && swipes < 12 {
       app.swipeDown()
       swipes += 1
     }
-    XCTAssertTrue(element.exists && element.isHittable, "Can't reach \(element)")
+    let recorder = app.staticTexts["debug-opened"]
+    XCTAssertTrue(
+      reachable(element, in: app),
+      "Can't reach \(element), at \(element.exists ? "\(element.frame)" : "nowhere"), with the "
+        + "Debug recorder's lines at \(recorder.exists ? "\(recorder.frame)" : "nowhere")")
+  }
+
+  /// Whether a tap on `element` would land on it: it is there and hittable, it has stopped moving
+  /// (a tap on a list still moving only stops it), and it lies whole above the Debug recorder's
+  /// lines when they show. `isHittable` is XCUITest's accessibility hit test, which finds an
+  /// element under a view with no element of its own: on PR #33's macOS run, Support, Settings'
+  /// last row, was hittable at the sheet's foot under the recorder's bar, which then took the tap,
+  /// so the row never opened (the recorder now sits under the sheet's content, DebugHooks.swift).
+  @MainActor
+  private func reachable(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
+    guard element.exists, element.isHittable else { return false }
+    let frame = settledFrame(of: element)
+    let recorder = app.staticTexts["debug-opened"]
+    return !recorder.exists || frame.maxY <= recorder.frame.minY
   }
 
   /// Taps the row or button identified `id`, scrolling to it first.
@@ -262,7 +280,9 @@ final class SettingsTests: XCTestCase {
     let reads = NSPredicate(format: "exists == true AND label == %@", label)
     let expectation = XCTNSPredicateExpectation(predicate: reads, object: element)
     let done = XCTWaiter.wait(for: [expectation], timeout: 10)
-    XCTAssertEqual(done, .completed, "\(element) never read \(label)")
+    XCTAssertEqual(
+      done, .completed,
+      "\(element) never read \(label); it reads \"\(element.exists ? element.label : "nothing")\"")
   }
 
   /// No text or button Settings shows names another weather type, website or app (section

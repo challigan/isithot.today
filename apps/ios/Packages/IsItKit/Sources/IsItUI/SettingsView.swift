@@ -280,8 +280,10 @@ struct MailFallbackView: View {
         }
       }
     }
-    // A sheet of its own, so Settings' tint is given again, for Close.
+    // A sheet of its own, so Settings' tint is given again, for Close. Full height, as a sheet
+    // opens by default: at the medium detent iOS 26 draws a sheet as a card inset over Settings,
+    // scaled to 96%, with Settings showing through its glass, which the audit found on PR #33's
+    // macOS run as clipped text, text no element holds, and Close short of contrast.
     .tint(SheetStyle.accent)
-    .presentationDetents([.medium, .large])
   }
 }

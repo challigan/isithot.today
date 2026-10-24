@@ -505,33 +505,42 @@ enum DebugHooks {
 
   /// Under `-openURLs`: every URL the view opens is recorded instead of opened, a mail URL
   /// refused too under `nomail`, and the recorder's two lines show below the content.
+  ///
+  /// Below it, not over it: the lines were a bottom `safeAreaInset` on a translucent bar, which
+  /// insets a list's content but not its frame, so a sheet's last rows ran under the bar. On PR
+  /// #33's macOS run a tap on Support, Settings' last row, landed on the bar, the full policy's
+  /// row in Your privacy sat 1 point under it, and the audit found text under it short of
+  /// contrast. Opaque, and in a text style that changes at every text size (subheadline,
+  /// 12 to 15 points from the smallest to Large): `caption2` keeps 11 points from the smallest
+  /// size to Large, which the audit's Dynamic Type check failed on both lines.
   @MainActor
   private struct URLRecorder: ViewModifier {
     let mode: DebugHooks.OpenURLs
 
     func body(content: Content) -> some View {
       let recorder = DebugRecorder.shared
-      content
-        .environment(
-          \.openURL,
-          OpenURLAction { url in
-            recorder.opened = url.absoluteString
-            return mode == .nomail && url.scheme == "mailto" ? .discarded : .handled
-          }
-        )
-        .safeAreaInset(edge: .bottom) {
-          VStack(alignment: .leading, spacing: 2) {
-            Text(verbatim: recorder.opened)
-              .accessibilityIdentifier("debug-opened")
-            Text(verbatim: recorder.units)
-              .accessibilityIdentifier("debug-units")
-          }
-          .font(.caption2)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal, 16)
-          .padding(.vertical, 4)
-          .background(.bar)
+      VStack(spacing: 0) {
+        content
+          .environment(
+            \.openURL,
+            OpenURLAction { url in
+              recorder.opened = url.absoluteString
+              return mode == .nomail && url.scheme == "mailto" ? .discarded : .handled
+            }
+          )
+        VStack(alignment: .leading, spacing: 2) {
+          Text(verbatim: recorder.opened)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("debug-opened")
+          Text(verbatim: recorder.units)
+            .accessibilityIdentifier("debug-units")
         }
+        .font(.subheadline)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+        .background(.background)
+      }
     }
   }
 #endif

@@ -37,7 +37,12 @@ enum HitTarget {
 /// The website's page background (`global.css`): a linear gradient from `g1` to `g2` at 168°
 /// (down, a little to the right), and over it a radial glow of `g3` centred at (88%, 6%), from
 /// the palette's `glow` opacity to clear at 52% of the distance to the farthest corner. Full
-/// bleed, decorative, and left alone by Smart Invert.
+/// bleed, decorative, and left alone by Smart Invert. Out of the accessibility tree, hidden last:
+/// with `accessibilityIgnoresInvertColors()` after `accessibilityHidden(true)`, the hidden
+/// modifier had nothing to hide (a gradient has no element), and the one after it made the
+/// background an element of its own, the window's size with no label, which the audit failed on
+/// every screenful of every page on PR #33's macOS run (`sufficientElementDescription`, an
+/// `other` element at (0, 0, 402, 874)).
 struct PageBackground: View {
   let theme: PageTheme
 
@@ -64,7 +69,7 @@ struct PageBackground: View {
       }
     }
     .ignoresSafeArea()
-    .accessibilityHidden(true)
     .accessibilityIgnoresInvertColors()
+    .accessibilityHidden(true)
   }
 }

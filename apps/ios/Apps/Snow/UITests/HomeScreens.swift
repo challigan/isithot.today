@@ -20,6 +20,9 @@ struct HomeScreen: Decodable {
     let tomorrow: Bool
     /// The view's tab: "Now", "Today" or "Tomorrow", "This week".
     let label: String
+    /// The band shown ("nosnow", "snow"…), whose palette the page is drawn in; nil without an
+    /// answer, when the page draws as no snow.
+    let band: String?
     let question: String
     let answer: String
     /// The question and the answer, one heading with the place, as VoiceOver reads it.
@@ -92,25 +95,50 @@ struct HomeScreen: Decodable {
 
   /// The screen named `name` in `HomeScreens.json`.
   static func named(_ name: String) throws -> HomeScreen {
-    guard let screen = try all().first(where: { $0.name == name }) else {
+    guard let screen = try file().screens.first(where: { $0.name == name }) else {
       throw HomeScreenError("HomeScreens.json has no screen \(name)")
     }
     return screen
   }
 
-  /// Every screen, from the UI test bundle.
-  private static func all() throws -> [HomeScreen] {
-    struct File: Decodable {
-      let screens: [HomeScreen]
+  /// The colours `page` is drawn in: its band's palette, or no snow's for a page with no band, as
+  /// the app draws it (packages/mobile `UNKNOWN_BAND_DRAWS_AS`).
+  static func palette(of page: Page) throws -> HomePalette {
+    let band = page.band ?? "nosnow"
+    guard let palette = try file().palettes[band] else {
+      throw HomeScreenError("HomeScreens.json has no palette for \(band)")
     }
+    return palette
+  }
+
+  /// The file: every band's palette, and every screen.
+  private struct File: Decodable {
+    let palettes: [String: HomePalette]
+    let screens: [HomeScreen]
+  }
+
+  /// The file, from the UI test bundle.
+  private static func file() throws -> File {
     guard
       let url = Bundle(for: BundleToken.self).url(
         forResource: "HomeScreens",
         withExtension: "json"
       )
     else { throw HomeScreenError("The UI tests have no HomeScreens.json") }
-    return try JSONDecoder().decode(File.self, from: Data(contentsOf: url)).screens
+    return try JSONDecoder().decode(File.self, from: Data(contentsOf: url))
   }
+}
+
+/// A band's colours as a page draws them (IsItUI's `PageBackground`, core `SNOW_PALETTES`): the
+/// gradient from `g1` to `g2`, the glow of `g3` at `glow` opacity (0 to 1) at its centre, and the
+/// text in `ink`, each `#rrggbb`. What the home audit's contrast failures set the screen's pixels
+/// beside (`PageColours`).
+struct HomePalette: Decodable {
+  let g1: String
+  let g2: String
+  let g3: String
+  let glow: Double
+  let ink: String
 }
 
 /// A screen that never appeared, or a file that isn't there: the test stops, with why.
@@ -184,12 +212,16 @@ extension XCUIApplication {
   }
 }
 
-/// A drag that scrolled a page: where it started and ended on screen.
+/// A drag that scrolled a page: where it started and ended on screen, and whether it was putting
+/// the page back where an audit had moved it from (`HomeAuditTests.restore`).
 struct Drag: CustomStringConvertible {
   let from: CGPoint
   let to: CGPoint
+  var restoring = false
 
-  var description: String { "(\(from.x), \(from.y)) to (\(to.x), \(to.y))" }
+  var description: String {
+    "(\(from.x), \(from.y)) to (\(to.x), \(to.y))" + (restoring ? " putting the page back" : "")
+  }
 }
 
 extension XCTestCase {
@@ -467,14 +499,18 @@ extension XCTestCase {
   }
 
   /// Attaches the screen to the result bundle as a PNG, kept, named for the contact sheet, which
-  /// tiles attachments in their names' order.
+  /// tiles attachments in their names' order; and gives the screenshot, whose pixels a contrast
+  /// failure reads (`PixelRange`).
   @MainActor
-  func attach(_ app: XCUIApplication, as name: String) {
-    let png = app.screenshot().pngRepresentation
-    let attachment = XCTAttachment(data: png, uniformTypeIdentifier: "public.png")
+  @discardableResult
+  func attach(_ app: XCUIApplication, as name: String) -> XCUIScreenshot {
+    let shot = app.screenshot()
+    let attachment = XCTAttachment(
+      data: shot.pngRepresentation, uniformTypeIdentifier: "public.png")
     attachment.name = name
     attachment.lifetime = .keepAlways
     add(attachment)
+    return shot
   }
 }
 

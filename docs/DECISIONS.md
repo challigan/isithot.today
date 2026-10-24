@@ -3429,6 +3429,141 @@ was given an exception, and no test asks less.
   `shown(_:in:)`, the issue text and the held-issue logic ran against fake trees and issues as
   above; the strict swift format lint passed; and IsItCore's 317 tests passed.
 
+## The iPhone app's UI tests, after PR #33's macOS run
+
+PR #33's own `ios` run (40073206108, job 120811218473, on 4b67a27) built, passed the 20 unit tests
+and the Release check, and failed the UI plan: 39 tests, 27 passed, 12 failed (21 failure
+records). The build's one warning, "'IsItLogic' is missing a dependency on 'IsItModel'", is Xcode's
+dependency scan of the generated project: IsItCore's Package.swift declares it. The pager's fix
+held: `expectFits` passed at every launch of HomeTests and HomeAuditTests, the pages begin at
+y=203 (Large) and 425.33 (AX3) and end at the window's bottom edge, and the place button and the
+gear take their taps. Six of main's 18 failures now pass (PickerTests' `testTooShortAndNoResults`,
+`testChoosingACityResult`, `testChoosingAPointResult`, `testOpenSettingsOpensTheAppsPage`,
+`testRecentPlaces` and `testUseMyLocation`), and so do FixtureLaunchTests, HomeTests, LaunchTests
+and OfflineTests. The other twelve fail further on: the six HomeAuditTests, the picker's two
+audits and the four SettingsTests, the sheets now opening and audited for the first time. The
+fixes, with one exception, for a limitation of UIKit's:
+
+- **The audit moved the page, and the test assumed it didn't.** The page's frame was the same on
+  every screenful, (0, 425.33, 402, 448.67) at AX3, so it is the scroll view's fixed viewport, and
+  the clip to `pageWindow` changes nothing. Each drag moved the credits 339 to 346 points, but the
+  next screenful began where the one before had, and XCUITest's own swipe up then moved them 661
+  to 689 points further on all nine AX3 pages. What put the page back was the audit:
+  `performAccessibilityAudit(for: .all)` lays the app out at a text size below Large for its
+  Dynamic Type check, where each page is 65 to 100 points shorter, and the scroll view keeps that
+  size's end, M, once the size is put back. Two measurements agree page by page, to within the
+  drags' slack: M from the AX3 drags, and where the Large pages' second screenfuls' issue frames
+  put them (250.33 and 250.34 for the Now pages of aberdeen-snow and leeds-dry, 294.33 for
+  durham-tomorrow's Now, 331.67 and 331.66 for leeds-dry's Today). On the week pages, step()'s
+  snapshot, taken after the audit, gave the same distance on two screenfuls the page had been
+  dragged 177 to 229 points apart. So every AX3 page went back to M before each drag (leeds-dry's
+  Now nine times), and the test called the page "no further"; very likely this is also what PR
+  #31's note read as a page that stood still. The issues' frames were read after the move too, so
+  the held logic compared them with screenfuls recorded before it: answers and verdicts under the
+  switcher when attached were judged whole where the move had brought them, and the "Contrast
+  failed (no element)" issues came only on screenfuls the audit had moved, never on a first. Now
+  each screenful is audited in two calls (`AuditKinds`, ScreenAudit.swift): every kind but two
+  first, on the screen as attached, and a move by it fails the test with the numbers; then
+  `.dynamicType` and `.textClipped`, the two that change the text size. Each issue's element is
+  noted where it was on the screenful, moved back by as much as the audit moved the credits (the
+  top bar and the switcher don't scroll), and before the next scroll `restore` drags the page back
+  to within 24 points short of where the screenful had it (a drag spends 13 to 20 points before
+  the page moves, so it never overshoots, and the next scroll is worked out from where the page
+  then is, so nothing goes unaudited). The two calls are `.all` between them, so every kind still
+  runs on every screenful. A page that stops now compares its credits with where the drag began,
+  and its drags say which put the page back. AX3 pages are about nine screenfuls now, each with up
+  to eight restoring drags: HomeAuditTests, 11 minutes on this run, should take about 30, within
+  the job's 90 (the job took 41.5).
+- **The page's background was an element.** An `other` element at (0, 0, 402, 874), with no
+  identifier or label, failed `sufficientElementDescription` on every screenful of every page, 30
+  of the 107 home issues. Only `PageBackground` is drawn edge to edge, and it isn't the pager,
+  which is `pager` now. Its gradients have no element, so `.accessibilityHidden(true)` had nothing
+  to hide, and the `.accessibilityIgnoresInvertColors()` after it left the view a node of its own;
+  under the sheets, where the home screen is hidden, it was gone. The hidden modifier now comes
+  last, in `PageBackground` and in `GlyphView` (whose image the old order did hide), and
+  `HomeShell` hides its whole background, cross-fade and all.
+- **The results' keyboard.** `testResultsAccessibilityAudit` found the results but the keyboard
+  stayed up after a drag on them: the list had the default keyboard dismissal, and a user who
+  wanted to read past the keyboard couldn't put it away but by Search, which chooses the first
+  result. The picker's list has `.scrollDismissesKeyboard(.immediately)` and
+  `.scrollBounceBehavior(.always)`, so a drag on a list shorter than the screen is still a scroll.
+  The test is as it was; its comment, which said a scroll dismisses the keyboard by default, is
+  corrected.
+- **The picker's location row.** "Use my location", a `Label`'s title and the picker's only one,
+  was the one text the audit expected to clip at larger sizes. It is now the icon and a wrapping
+  text side by side, as the other rows' text is.
+- **The mail fallback opened as an inset card.** `.presentationDetents([.medium, .large])` opened
+  it at the medium detent, which iOS 26 draws as a card 8 points in from each side over Settings,
+  its content laid out full width and drawn at 0.9602 (386/402) of it: every frame started at
+  x=27.20 and Close was 34.57 points tall of 36. Two texts clipped, two texts of Settings around
+  and through the card with no element of their own, and Close short of contrast on the glass
+  came from that. The modifier is gone, so the fallback opens full height, opaque, as a sheet does
+  by default; section 10.7 asks only for a sheet.
+- **The toolbar's Close buttons: the one exception.** `picker-close`, `close-settings` and
+  `close-fallback` failed Dynamic Type ("partially unsupported"). They are toolbar items, which
+  UIKit draws as the navigation bar's bar buttons, whose titles keep the bar's own type size
+  rather than following the text styles; at accessibility sizes iOS shows them in the Large
+  Content Viewer on a long press instead, as it does every bar item. They were the only buttons
+  any sheet's audit flagged, beside rows, Open Settings, Copy address and cm and in in the same
+  text styles, which passed. `SheetAudit.exceptions` (ScreenAudit.swift) allows `.dynamicType`
+  on a button that a navigation bar holds by its identifier, and nothing else; the sheets' audits
+  print what it allowed. Without it, Close would be a button in each sheet's content rather than
+  the toolbar's, which departs from the platform: Carl's call.
+- **The Debug recorder lay over the sheets' last rows.** Under `-openURLs`, its two lines were a
+  bottom `safeAreaInset` on a translucent bar, which insets a list's content but not its frame.
+  `testRowsOpenWhatTheySay` opened Privacy policy and Terms, but Support, Settings' last row,
+  never opened: `isHittable` is an accessibility hit test, which passes through a view with no
+  element, so the row was hittable under the bar, and the tap landed on the bar. Your privacy's
+  full-policy row ended 1 point under the bar's top, and was the one row there "unsupported" for
+  Dynamic Type; the two "Contrast failed (no element)" issues on Settings are most likely Help's
+  rows under it. And the lines were `caption2`, which is 11 points from the smallest size to
+  Large, the one text style that doesn't change below Large, so both failed Dynamic Type. The
+  lines now sit below the sheet's content on an opaque background, in `subheadline` (12 to 15
+  points from the smallest size to Large). Debug code only: Release has no recorder. SettingsTests
+  taps a row only once it has stopped moving and lies whole above the recorder's lines, and a
+  line that never reads its URL says what it read.
+- **Not fixed: what the next log will say.** Every home text passes WCAG at full ink with the
+  glow, by the diagnosis's calculator: 5.42:1 at the least ("Use my location" on snow, under the
+  glow), the places nearby 8.73:1 or more. So no palette changed and no exception was added for:
+  - **The home's text buttons at Large.** "Use my location" and the places nearby (44 of the
+    issues) failed contrast, while plain text and the footer's links beside them, in the same ink,
+    size and weight, passed: "Using approximate location." on the same line, and the outbound
+    links whose label modifiers are those of "Use my location". "Use my location" passed only on
+    heavysnow, the darkest page there. The log can't say whether the audit measured a Button's
+    label drawn lighter than the ink (a dimmed or pressed state) or caught it as the Dynamic Type
+    check redrew the screen; the first call now runs before any size change, which tests the
+    second.
+  - **Five two-line details at y=510** on the first screenful of the middle and week pages at
+    Large (plain body text, 9.49:1 to 13.53:1, no glow there, and the page not scrolled), while
+    the one-line details at the same place passed.
+  - **Settings' "About" header** ("partially unsupported" for Dynamic Type), while the Privacy and
+    Help headers, the same view and style, passed; and "Copied." in the fallback, "Label not
+    human-readable", which may have been the scaled card.
+
+  For these, each contrast failure now says what the screenful's screenshot shows inside the
+  element (`PixelRange`: its darkest and lightest pixels, and the WCAG contrast between them)
+  beside the page's ink and its background at the element's centre, as `PageBackground` draws it
+  (`PageColours`), from each band's palette, which `HomeScreens.json` now carries (packages/mobile
+  `homePalettes`, tested in `homeScreens.test.ts`); the sheets' contrast failures give the pixels
+  too. Pixels at the ink's full contrast mean the audit measured something the screen doesn't
+  show; pixels short of it show what was drawn. Should the buttons be drawn lighter, the next
+  step is a button style that draws their labels in the page's ink in every state, marking a
+  press another way. Should Settings' "no element" contrast remain with the recorder moved,
+  LeavingRow's arrow, in the system's `.secondary`, is the next candidate; should "Copied." still
+  fail, its identifier, `copied`, the only one in the app that is its label's own word; should
+  "About" remain, the run's xcresult (`ios-results`, for Carl) shows it.
+
+- **Not proven here:** IsItUI, the app and the UI tests compile only on the macOS jobs. On Linux,
+  the nine UI test files type-checked against stubs of XCUITest and of the UIKit and Core Graphics
+  calls the pixel reading makes; copies ran against fakes: the two calls are `.all` between them,
+  `RGB`'s WCAG figures match the generator's (13.62:1 for no snow's ink on its `g1`),
+  `PixelRange` finds the extremes, `PageColours` matches the diagnosis's calculator (5.72:1 for
+  "Use my location" on snow, 10.71:1 for a place nearby on no snow), AX3's "It'll snow." read at
+  y=469 after a 343-point move is noted at 126, held and dropped as the first screenful showed it
+  whole, the top bar's elements aren't moved, the toolbar exception matches a navigation bar's
+  button and nothing else, and the regenerated `HomeScreens.json` decodes with every page's band
+  having its palette. The strict swift format lint passed, and IsItCore's tests passed.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,

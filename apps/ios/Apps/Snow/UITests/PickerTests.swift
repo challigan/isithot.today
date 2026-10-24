@@ -185,8 +185,9 @@ final class PickerTests: XCTestCase {
   }
 
   /// The search's results pass the audit too, with the keyboard down: a drag on the list puts it
-  /// away (scrollable content dismisses the keyboard on a scroll from iOS 16), and the results
-  /// stay, with "Leeds" still in the search box.
+  /// away, as the picker's list asks (`scrollDismissesKeyboard(.immediately)`, PlacePickerView;
+  /// on PR #33's macOS run, without it, the keyboard stayed up), and the results stay, with
+  /// "Leeds" still in the search box.
   @MainActor
   func testResultsAccessibilityAudit() throws {
     let app = launch(["-resetStore", "-network", "ip-first-launch"])

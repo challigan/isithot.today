@@ -35,8 +35,10 @@ struct GlyphView: View {
   var body: some View {
     drawing
       .frame(width: size, height: size)
-      .accessibilityHidden(true)
+      // Hidden last, as the page's background is (PageTheme.swift), so nothing of the glyph is
+      // left in the accessibility tree whatever the modifiers before it add.
       .accessibilityIgnoresInvertColors()
+      .accessibilityHidden(true)
       .onAppear { drawn() }
       .onChange(of: glyph.band) { drawn() }
       .onChange(of: reduceMotion) {

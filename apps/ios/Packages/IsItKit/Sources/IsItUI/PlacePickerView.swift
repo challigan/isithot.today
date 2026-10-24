@@ -106,6 +106,11 @@ public struct PlacePickerView: View {
         }
       }
       .listStyle(.insetGrouped)
+      // A drag on the list puts the keyboard away, so the results under it can be read and the
+      // audit reads them with it down; with the default, a drag on the results left the keyboard
+      // up on PR #33's macOS run. The list bounces however short it is, so the drag is a scroll.
+      .scrollDismissesKeyboard(.immediately)
+      .scrollBounceBehavior(.always)
       .navigationTitle(Text(verbatim: picker.title))
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
@@ -133,18 +138,20 @@ public struct PlacePickerView: View {
   }
 
   /// "Use my location", with the line beneath it while the fix is out or when it came to
-  /// nothing, and "Open Settings" while location access is off.
+  /// nothing, and "Open Settings" while location access is off. The title wraps beside its icon
+  /// as the other rows' text does: as a `Label`'s title, the picker's only one, it was the one text
+  /// the audit expected to be clipped at larger sizes on PR #33's macOS run.
   @ViewBuilder private var locationRow: some View {
     let row = picker.location
     Button {
       actions.useMyLocation()
     } label: {
       HStack {
-        Label {
-          Text(verbatim: row.title)
-        } icon: {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
           Image(systemName: "location.fill")
             .accessibilityHidden(true)
+          Text(verbatim: row.title)
+            .fixedSize(horizontal: false, vertical: true)
         }
         if row.busy {
           Spacer(minLength: 8)

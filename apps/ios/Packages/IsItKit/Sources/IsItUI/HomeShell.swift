@@ -45,6 +45,8 @@ public struct HomeShell<Content: View>: View {
           .transition(.opacity)
       }
       .animation(reduceMotion ? nil : .easeInOut(duration: 0.9), value: theme)
+      // Decoration, all of it, cross-fade and all: nothing here for VoiceOver or the audit.
+      .accessibilityHidden(true)
     }
   }
 }
