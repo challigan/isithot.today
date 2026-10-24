@@ -118,7 +118,7 @@ public struct PlacePickerView: View {
           Button {
             actions.close()
           } label: {
-            Text(verbatim: picker.close)
+            CloseLabel(title: picker.close)
           }
           .accessibilityIdentifier("picker-close")
         }

@@ -3442,7 +3442,8 @@ gear take their taps. Six of main's 18 failures now pass (PickerTests' `testTooS
 `testRecentPlaces` and `testUseMyLocation`), and so do FixtureLaunchTests, HomeTests, LaunchTests
 and OfflineTests. The other twelve fail further on: the six HomeAuditTests, the picker's two
 audits and the four SettingsTests, the sheets now opening and audited for the first time. The
-fixes, with one exception, for a limitation of UIKit's:
+fixes, with no exception (the toolbar's Close buttons were one until the review, in the next
+section):
 
 - **The audit moved the page, and the test assumed it didn't.** The page's frame was the same on
   every screenful, (0, 425.33, 402, 448.67) at AX3, so it is the scroll view's fixed viewport, and
@@ -3469,8 +3470,8 @@ fixes, with one exception, for a limitation of UIKit's:
   top bar and the switcher don't scroll), and before the next scroll `restore` drags the page back
   to within 24 points short of where the screenful had it (a drag spends 13 to 20 points before
   the page moves, so it never overshoots, and the next scroll is worked out from where the page
-  then is, so nothing goes unaudited). The two calls are `.all` between them, so every kind still
-  runs on every screenful. A page that stops now compares its credits with where the drag began,
+  then is, so nothing goes unaudited). The two calls hold every kind iOS defines between them, so
+  every kind still runs on every screenful. A page that stops now compares its credits with where the drag began,
   and its drags say which put the page back. AX3 pages are about nine screenfuls now, each with up
   to eight restoring drags: HomeAuditTests, 11 minutes on this run, should take about 30, within
   the job's 90 (the job took 41.5).
@@ -3499,16 +3500,12 @@ fixes, with one exception, for a limitation of UIKit's:
   and through the card with no element of their own, and Close short of contrast on the glass
   came from that. The modifier is gone, so the fallback opens full height, opaque, as a sheet does
   by default; section 10.7 asks only for a sheet.
-- **The toolbar's Close buttons: the one exception.** `picker-close`, `close-settings` and
-  `close-fallback` failed Dynamic Type ("partially unsupported"). They are toolbar items, which
-  UIKit draws as the navigation bar's bar buttons, whose titles keep the bar's own type size
-  rather than following the text styles; at accessibility sizes iOS shows them in the Large
-  Content Viewer on a long press instead, as it does every bar item. They were the only buttons
-  any sheet's audit flagged, beside rows, Open Settings, Copy address and cm and in in the same
-  text styles, which passed. `SheetAudit.exceptions` (ScreenAudit.swift) allows `.dynamicType`
-  on a button that a navigation bar holds by its identifier, and nothing else; the sheets' audits
-  print what it allowed. Without it, Close would be a button in each sheet's content rather than
-  the toolbar's, which departs from the platform: Carl's call.
+- **The toolbar's Close buttons.** `picker-close`, `close-settings` and `close-fallback` failed
+  Dynamic Type ("partially unsupported"): a toolbar draws a text item at the bar's own type size,
+  whatever the text size. They were the only buttons any sheet's audit flagged, beside rows, Open
+  Settings, Copy address and cm and in in the same text styles, which passed. This round first
+  allowed it as a limitation of UIKit's; the review found the app can avoid it, so each Close is
+  now the xmark with "Close" as its label, and the sheets' audits allow nothing (next section).
 - **The Debug recorder lay over the sheets' last rows.** Under `-openURLs`, its two lines were a
   bottom `safeAreaInset` on a translucent bar, which insets a list's content but not its frame.
   `testRowsOpenWhatTheySay` opened Privacy policy and Terms, but Support, Settings' last row,
@@ -3538,7 +3535,8 @@ fixes, with one exception, for a limitation of UIKit's:
     the one-line details at the same place passed.
   - **Settings' "About" header** ("partially unsupported" for Dynamic Type), while the Privacy and
     Help headers, the same view and style, passed; and "Copied." in the fallback, "Label not
-    human-readable", which may have been the scaled card.
+    human-readable", which may have been the scaled card (its identifier is no longer its own
+    word either, next section).
 
   For these, each contrast failure now says what the screenful's screenshot shows inside the
   element (`PixelRange`: its darkest and lightest pixels, and the WCAG contrast between them)
@@ -3549,20 +3547,71 @@ fixes, with one exception, for a limitation of UIKit's:
   show; pixels short of it show what was drawn. Should the buttons be drawn lighter, the next
   step is a button style that draws their labels in the page's ink in every state, marking a
   press another way. Should Settings' "no element" contrast remain with the recorder moved,
-  LeavingRow's arrow, in the system's `.secondary`, is the next candidate; should "Copied." still
-  fail, its identifier, `copied`, the only one in the app that is its label's own word; should
-  "About" remain, the run's xcresult (`ios-results`, for Carl) shows it.
+  LeavingRow's arrow, in the system's `.secondary`, is the next candidate; should "About" or
+  "Copied." remain, the run's xcresult (`ios-results`, for Carl) shows them.
 
 - **Not proven here:** IsItUI, the app and the UI tests compile only on the macOS jobs. On Linux,
   the nine UI test files type-checked against stubs of XCUITest and of the UIKit and Core Graphics
-  calls the pixel reading makes; copies ran against fakes: the two calls are `.all` between them,
-  `RGB`'s WCAG figures match the generator's (13.62:1 for no snow's ink on its `g1`),
+  calls the pixel reading makes; copies ran against fakes: the two calls hold every kind between
+  them, `RGB`'s WCAG figures match the generator's (13.62:1 for no snow's ink on its `g1`),
   `PixelRange` finds the extremes, `PageColours` matches the diagnosis's calculator (5.72:1 for
   "Use my location" on snow, 10.71:1 for a place nearby on no snow), AX3's "It'll snow." read at
   y=469 after a 343-point move is noted at 126, held and dropped as the first screenful showed it
-  whole, the top bar's elements aren't moved, the toolbar exception matches a navigation bar's
-  button and nothing else, and the regenerated `HomeScreens.json` decodes with every page's band
-  having its palette. The strict swift format lint passed, and IsItCore's tests passed.
+  whole, the top bar's elements aren't moved, and the regenerated `HomeScreens.json` decodes with
+  every page's band having its palette. The strict swift format lint passed, and IsItCore's tests
+  passed.
+
+## The iPhone app's UI tests after PR #33's macOS run, reviewed
+
+What the review of that fix found, and what changed for it. No test asks less, and the one
+exception the fix had added is gone.
+
+- **The recorder's lines would have squeezed three audits.** The Debug recorder now sits below a
+  sheet's content and shows the whole URL, so the height its lines take is the content's.
+  `testRowsOpenWhatTheySay` audited How it works, Credits and licences and the licence after
+  Report an ad's tap, with its email recorded: 201 characters with no space, about 5 lines (some
+  130 points) at Large, about 11 at AX3 and taller than the 874-point window at AX5, where the
+  audit's text-size checks lay a sheet out and where the sheet's navigation stack would be
+  squeezed to nothing. None of the three has run on macOS: the test stopped at Support. It now taps
+  Contact us and Report an ad after the pages' audits, every assertion as it was, so the pages are
+  audited with Support's address recorded, three lines or so at AX5. The other audits had short
+  lines already ("none" or "f" in `testUnitsChangeAsksInTheNewUnits` and `testYourPrivacy`), and
+  the mail fallback, audited with an email recorded, covers Settings and its lines. The lines are
+  not held to a few in a scroll view, as the review also offered: a long URL would then be cut at
+  their foot, which is what the clipped-text check fails.
+- **The toolbar's Close was the app's to change, so it isn't an exception.** The exception called
+  Dynamic Type on a toolbar button a limitation the app couldn't change, and the run doesn't show
+  that: Your privacy, on Settings' stack, has a bar button of its own, the back button in the same
+  navigation bar, and its audit didn't flag it; the three Closes flagged were SwiftUI buttons with
+  a text label. Drawn as an icon, as iOS 26 draws its own close control, Close has no text to stay
+  at the bar's size. `CloseLabel` (IsItUI, SheetStyle.swift) is an icon-only `Label`: the xmark,
+  with `CoreCopy.close` ("Close") as its title, which VoiceOver reads. The identifiers and the
+  toolbar placements are as they were, and no test read the word on screen. `SheetAudit` is
+  gone, and the sheets' audits allow nothing. Its matcher also needed a non-empty identifier,
+  which a system control may lack, such as the active search bar's cancel button in
+  `testResultsAccessibilityAudit`, whose audit has never run: should a system control the app
+  can't change fail there, its exception is to match it by its place in the navigation bar or the
+  search bar, with the run's evidence.
+- **The first call's kinds are named.** `AuditKinds.inPlace` was `.all` less the two resizing
+  kinds, so every bit set but two, macOS's `action` and `parentChild` and bits no kind has among
+  them. Apple documents the kinds and `.all`, and shows explicit sets; such a mask had never run,
+  and should XCTest check one against the kinds the platform has, every audited test would fail
+  before its first issue, the six HomeAuditTests and every sheet's. It now names its five:
+  `.contrast`, `.elementDetection`, `.hitRegion`, `.sufficientElementDescription` and `.trait`;
+  with `resizing`'s two, the seven kinds the iOS SDK defines, which `names` lists too. Nothing is
+  skipped; a kind a later SDK adds is to be added there.
+- **"Copied." has an identifier of its own.** It failed "Label not human-readable", and the fix
+  rested on the scaled card being the cause, which the log doesn't show. Its identifier was
+  `copied`, the label's own word, the one text in the app like that; it is `copy-confirmation`
+  now, and the test reads the same text by it. A guess, which costs nothing: the gear's
+  identifier, `settings`, is its label's word too, and it passed on every home screenful. Should
+  "Copied." fail again, the test stops there once more, and the Contact us fallback's audit after
+  it, which has never run, waits another round.
+- **Checked on Linux:** the nine UI test files type-check against the stubs, and the copies'
+  checks pass: the two calls are the seven kinds between them, once (`.all` less two fails that
+  check), and the sheets' notes fail every issue, Close's Dynamic Type and a button with no
+  identifier included. IsItUI and the UI tests compile only on macOS: the icons are for the next
+  run's screens (`app-settings`, the picker's and the fallbacks') to show.
 
 ## API contract
 

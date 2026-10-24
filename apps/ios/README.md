@@ -770,19 +770,23 @@ Contact us's fallback with "Copied."; Your privacy's lines; the version line; no
 another weather type on screen; and the accessibility audit on Settings, How it works,
 Credits and licences, a licence in full, Your privacy and both fallbacks. The screens are
 `app-settings`, `app-how-it-works`, `app-credits`, `app-notice`, `app-your-privacy`,
-`app-report-ad-fallback` and `app-contact-us-fallback`.
+`app-report-ad-fallback` and `app-contact-us-fallback`. `testRowsOpenWhatTheySay` taps the two
+emails after its pages' audits: the recorder's lines show the whole URL below the sheet's content,
+and Report an ad's, 201 characters, would take most of the screen at the audit's largest sizes.
 
 **The audits** (`PickerTests` and `SettingsTests`; `HomeAuditTests` has its own, with its
 exceptions, above) go through `auditAccessibility(of:on:)` (`UITests/ScreenAudit.swift`):
 `performAccessibilityAudit(for:)` for every kind of issue, in the home audit's two calls
-(`AuditKinds`), with a handler that notes each issue with its kind (named as `HomeAuditTests`
+(`AuditKinds`: contrast, element detection, hit regions, descriptions and traits, then Dynamic
+Type and clipped text, the seven kinds the iOS SDK defines, each named rather than `.all` less
+two), with a handler that notes each issue with its kind (named as `HomeAuditTests`
 names it), its element's type, identifier, label and frame, and Apple's description, a contrast
 issue with the screen's darkest and lightest pixels inside the element, then one failure that
 lists them all with the window's frame. The tests stop at their first failure, so without it a
-run would show one issue a screen. One exception is allowed, and printed when it is used
-(`SheetAudit.exceptions`): Dynamic Type on a toolbar button in the navigation bar (Close), which
-UIKit draws as a bar button at the bar's own type size, showing it in the Large Content Viewer
-at accessibility sizes instead; any other issue is the app's to fix.
+run would show one issue a screen. Nothing is allowed: every issue is the app's to fix. The
+sheets' Close buttons (`picker-close`, `close-settings`, `close-fallback`) are the xmark with
+"Close" as their label (`CloseLabel`, IsItUI), not the word on screen, which a toolbar draws at
+the bar's own type size and the audit failed for Dynamic Type.
 
 ### How they meet
 
@@ -1018,8 +1022,9 @@ launch argument. So far there are these:
   the last one below the sheet's content, on an opaque background in `subheadline`, so no row
   runs under it and its text follows every text size
   (`debug-opened`), with the units the last request to the server asked in (`debug-units`: `c`,
-  `f`, or `none`); `-openURLs nomail` also refuses every `mailto:` URL, as a phone with no mail
-  app does, so the fallback sheet shows. Any other value stops the app;
+  `f`, or `none`); the URL wraps whole, so its height is taken from the content's, and no test
+  audits a sheet over an email's lines; `-openURLs nomail` also refuses every `mailto:` URL, as a
+  phone with no mail app does, so the fallback sheet shows. Any other value stops the app;
 - the unit tests' host: when the app only hosts the unit tests (XCTest's
   `XCTestConfigurationFilePath` in its environment), it doesn't launch (`AppModel.launch()`), so
   the hosted tests have the App Group to themselves; a launch with `-fixture` or `-network`

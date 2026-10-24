@@ -34,6 +34,25 @@ enum SheetStyle {
   static let filled = Color(uiColor: UIColor(rgb: SheetColours.accentLight))
 }
 
+/// A sheet's Close as its toolbar shows it (the picker's, Settings' and the mail fallback's): the
+/// xmark, as iOS 26 draws its own close control, with the word ("Close") as the button's label,
+/// which VoiceOver reads. Not the word on screen: a toolbar draws a text item at the bar's own
+/// type size whatever the text size, and on PR #33's macOS run the audit failed all three Closes
+/// for Dynamic Type, the only buttons it failed in any sheet. An icon has no text to stay small,
+/// and Your privacy's back button, a bar button too, passed.
+struct CloseLabel: View {
+  let title: String
+
+  var body: some View {
+    Label {
+      Text(verbatim: title)
+    } icon: {
+      Image(systemName: "xmark")
+    }
+    .labelStyle(.iconOnly)
+  }
+}
+
 extension UIColor {
   /// A 0xRRGGBB colour in sRGB, opaque.
   fileprivate convenience init(rgb: UInt32) {

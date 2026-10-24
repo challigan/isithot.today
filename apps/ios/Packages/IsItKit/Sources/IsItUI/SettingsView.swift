@@ -61,7 +61,7 @@ public struct SettingsView: View {
           Button {
             dismiss()
           } label: {
-            Text(verbatim: screen.close)
+            CloseLabel(title: screen.close)
           }
           .accessibilityIdentifier("close-settings")
         }
@@ -260,8 +260,12 @@ struct MailFallbackView: View {
           .tint(SheetStyle.filled)
           .accessibilityIdentifier("copy-address")
           if copied {
+            // Not `copied`, the label's own word: on PR #33's macOS run the audit found "Copied."
+            // "not human-readable", in the card the sheet was then drawn as (below). A label
+            // that is its identifier is the one other cause the log leaves open, though the
+            // gear's ("settings", "Settings") passed on every home screen.
             Text(verbatim: fallback.copied)
-              .accessibilityIdentifier("copied")
+              .accessibilityIdentifier("copy-confirmation")
           }
         }
         .padding(20)
@@ -274,7 +278,7 @@ struct MailFallbackView: View {
           Button {
             dismiss()
           } label: {
-            Text(verbatim: fallback.close)
+            CloseLabel(title: fallback.close)
           }
           .accessibilityIdentifier("close-fallback")
         }

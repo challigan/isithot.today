@@ -513,6 +513,14 @@ enum DebugHooks {
   /// contrast. Opaque, and in a text style that changes at every text size (subheadline,
   /// 12 to 15 points from the smallest to Large): `caption2` keeps 11 points from the smallest
   /// size to Large, which the audit's Dynamic Type check failed on both lines.
+  ///
+  /// The URL wraps whole, so the lines take what height it needs, from the sheet's content:
+  /// Report an ad's email, 201 characters with no space, is about 5 lines at Large and taller
+  /// than the window at AX5. So no audit reads a sheet over lines that hold an email:
+  /// `SettingsTests.testRowsOpenWhatTheySay` taps the emails after its pages' audits, and the
+  /// mail fallback, audited with one recorded, covers Settings and its lines. Not held to a few
+  /// lines in a scroll view: the URL would then be cut at the lines' foot, which is what the
+  /// audit's clipped-text check fails.
   @MainActor
   private struct URLRecorder: ViewModifier {
     let mode: DebugHooks.OpenURLs

@@ -7,13 +7,16 @@ import XCTest
 /// label and frame on screen) and Apple's description, and a contrast issue with the screen's
 /// pixels inside its element (`PixelRange`); then the test fails once, listing them all, so one
 /// run shows every issue on the screen rather than stopping at the first (these tests stop at
-/// their first failure). The one exception is `SheetAudit.exceptions`'s, a limitation of UIKit's
-/// own bar buttons; any other issue is fixed in the app.
+/// their first failure). Nothing is allowed: every issue is the app's to fix. (The toolbars'
+/// Close buttons, which failed Dynamic Type as text on PR #33's macOS run, are icons now; Your
+/// privacy's back button, a bar button too, passed.) Should a system control the app can't change
+/// fail, its exception would match it as one of `app.navigationBars`' or the search bar's by its
+/// place, with the run's evidence, not by an identifier it may not have.
 @MainActor
 func auditAccessibility(
   of app: XCUIApplication, on screen: String, file: StaticString = #filePath, line: UInt = #line
 ) throws {
-  let found = AuditIssues(app: app)
+  let found = AuditIssues()
   // The screen as the first call audits it, for a contrast issue's pixels.
   let shot = app.screenshot()
   let window = app.frame
@@ -29,9 +32,6 @@ func auditAccessibility(
     "\(found.lines.count) accessibility issues on \(screen), in the window at \(app.frame):\n"
       + found.lines.joined(separator: "\n"),
     file: file, line: line)
-  for allowed in found.allowed {
-    print("Allowed accessibility issue on \(screen): \(allowed)")
-  }
 }
 
 /// The audit's kinds, in the two calls the UI tests make for each screen, which together are all
@@ -44,54 +44,22 @@ func auditAccessibility(
 enum AuditKinds {
   /// The checks that change the text size.
   static let resizing: XCUIAccessibilityAuditType = [.dynamicType, .textClipped]
-  /// Everything else: contrast, element detection, hit regions, descriptions and traits, and any
-  /// kind a later SDK adds.
-  static let inPlace = XCUIAccessibilityAuditType.all.subtracting(resizing)
+  /// The others: contrast, element detection, hit regions, descriptions and traits. Named one by
+  /// one, not `.all` less `resizing`: `.all` is every bit set, so that would ask for macOS's own
+  /// kinds (`action`, `parentChild`) and bits no kind has, a set Apple neither documents nor
+  /// shows, where these are the kinds the iOS SDK defines, all seven of them with `resizing`'s
+  /// (`names` lists the same seven). A kind a later SDK adds is to be added here.
+  static let inPlace: XCUIAccessibilityAuditType = [
+    .contrast, .elementDetection, .hitRegion, .sufficientElementDescription, .trait,
+  ]
   /// The calls, in order.
   static let passes = [inPlace, resizing]
 }
 
-/// The sheets' audits' exceptions: an issue that isn't a fault to fix in the app, and why, matched
-/// as narrowly as its element allows. An exception no audit needed is printed, so one the app
-/// outgrows can go.
-enum SheetAudit {
-  struct Exception {
-    let type: XCUIAccessibilityAuditType
-    /// Whether an issue of `type` on `element` is this exception.
-    let matches: @MainActor (_ element: XCUIElement, _ app: XCUIApplication) -> Bool
-    let why: String
-  }
-
-  static let exceptions: [Exception] = [
-    Exception(
-      type: .dynamicType,
-      matches: { element, app in
-        // A button of a navigation bar: a toolbar item (Close), never a button of the sheet's
-        // content, whose labels are the system's text styles and scale.
-        element.elementType == .button && !element.identifier.isEmpty
-          && app.navigationBars.buttons[element.identifier].exists
-      },
-      why:
-        "a toolbar item in the navigation bar is UIKit's bar button, whose title keeps the bar's "
-        + "own type size rather than following the text styles; at accessibility sizes iOS "
-        + "shows it in the Large Content Viewer on a long press instead, as it does every bar "
-        + "item. On PR #33's macOS run the three toolbar Close buttons (picker-close, "
-        + "close-settings, close-fallback) were the only buttons any sheet's audit flagged for "
-        + "Dynamic Type, beside rows and buttons in the same text styles that passed"
-    )
-  ]
-}
-
-/// The issues one screen's audits found, each described, and those an exception allowed.
+/// The issues one screen's audits found, each described.
 @MainActor
 private final class AuditIssues {
-  let app: XCUIApplication
   private(set) var lines: [String] = []
-  private(set) var allowed: [String] = []
-
-  init(app: XCUIApplication) {
-    self.app = app
-  }
 
   func note(_ issue: XCUIAccessibilityAuditIssue, shot: XCUIScreenshot, window: CGRect) {
     var text =
@@ -101,14 +69,7 @@ private final class AuditIssues {
       let pixels = PixelRange(shot, in: element.frame, window: window)
       text += "; the screen's pixels there: " + (pixels.map(\.description) ?? "can't be read")
     }
-    let exception = issue.element.flatMap { element in
-      SheetAudit.exceptions.first { $0.type == issue.auditType && $0.matches(element, app) }
-    }
-    if let exception {
-      allowed.append("\(text). Allowed: \(exception.why)")
-    } else {
-      lines.append(text)
-    }
+    lines.append(text)
   }
 }
 

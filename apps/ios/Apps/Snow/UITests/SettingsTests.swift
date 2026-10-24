@@ -48,6 +48,13 @@ final class SettingsTests: XCTestCase {
 
   /// Each row opens what it says: willitsnow.today's own pages in Safari, the emails to the
   /// support address, and the pages on Settings' own stack.
+  ///
+  /// The emails come last, after the pages' audits. The Debug recorder's lines sit below the
+  /// sheet's content and wrap to show the whole URL, so the height they take is the content's:
+  /// Report an ad's email is 201 characters with no space, about 5 lines at Large and taller
+  /// than the window at AX5, where the audit's text-size checks lay the sheet out. Audited with
+  /// it recorded, How it works, Credits and licences and the licence would be squeezed under
+  /// it; with Support's address recorded, the lines are three or so at AX5.
   @MainActor
   func testRowsOpenWhatTheySay() throws {
     let app = launch(["-resetStore", "-fixture", "leeds-dry", "-openURLs", "record"])
@@ -60,21 +67,6 @@ final class SettingsTests: XCTestCase {
     waitFor(opened(app), label: "https://willitsnow.today/terms")
     tap("support", in: app)
     waitFor(opened(app), label: "https://willitsnow.today/support")
-    tap("contact-us", in: app)
-    waitFor(opened(app), label: "mailto:support@willitsnow.today")
-    tap("report-ad", in: app)
-    let report = opened(app)
-    let mail = NSPredicate(format: "label BEGINSWITH %@", "mailto:support@willitsnow.today?")
-    wait(for: [expectation(for: mail, evaluatedWith: report)], timeout: 5)
-    // Section 10.7's subject and body, encoded: the version, the time on the phone, the place.
-    XCTAssertTrue(
-      report.label.hasPrefix(
-        "mailto:support@willitsnow.today?subject=Report%20an%20ad%20(willitsnow.today%201.0)"
-          + "&body=Time%3A%20"),
-      report.label)
-    XCTAssertTrue(
-      report.label.hasSuffix("%0APlace%3A%20Leeds%0AWhat%20was%20wrong%20with%20the%20ad%3A%0A"),
-      report.label)
 
     let version = app.staticTexts["version"]
     reveal(version, in: app)
@@ -114,6 +106,23 @@ final class SettingsTests: XCTestCase {
     XCTAssertTrue(app.staticTexts["notice-text"].label.contains("Apache License"))
     back(in: app)
     back(in: app)
+
+    // The emails, with no audit after them (above).
+    tap("contact-us", in: app)
+    waitFor(opened(app), label: "mailto:support@willitsnow.today")
+    tap("report-ad", in: app)
+    let report = opened(app)
+    let mail = NSPredicate(format: "label BEGINSWITH %@", "mailto:support@willitsnow.today?")
+    wait(for: [expectation(for: mail, evaluatedWith: report)], timeout: 5)
+    // Section 10.7's subject and body, encoded: the version, the time on the phone, the place.
+    XCTAssertTrue(
+      report.label.hasPrefix(
+        "mailto:support@willitsnow.today?subject=Report%20an%20ad%20(willitsnow.today%201.0)"
+          + "&body=Time%3A%20"),
+      report.label)
+    XCTAssertTrue(
+      report.label.hasSuffix("%0APlace%3A%20Leeds%0AWhat%20was%20wrong%20with%20the%20ad%3A%0A"),
+      report.label)
     XCTAssertTrue(app.buttons["close-settings"].waitForExistence(timeout: 5))
   }
 
@@ -127,9 +136,9 @@ final class SettingsTests: XCTestCase {
     XCTAssertEqual(
       app.staticTexts["fallback-body"].label,
       "Email support@willitsnow.today with a screenshot of the ad and the time you saw it.")
-    XCTAssertFalse(app.staticTexts["copied"].exists)
+    XCTAssertFalse(app.staticTexts["copy-confirmation"].exists)
     app.buttons["copy-address"].tap()
-    let copied = app.staticTexts["copied"]
+    let copied = app.staticTexts["copy-confirmation"]
     XCTAssertTrue(copied.waitForExistence(timeout: 5), "No confirmation")
     XCTAssertEqual(copied.label, "Copied.")
     try auditAccessibility(of: app, on: "Report an ad's fallback")
