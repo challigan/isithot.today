@@ -71,9 +71,9 @@ describe('constantsSwift', () => {
     expect(members(swift, 'Widget')).toEqual(
       Object.entries(WIDGET).map(([k, v]) => `public static let ${k} = ${v}`),
     );
-    expect(members(swift, 'Alerts')).toEqual(
-      Object.entries(ALERTS).map(([k, v]) => `public static let ${k} = ${v}`),
-    );
+    expect(members(swift, 'Alerts')).toEqual([
+      `public static let heartbeatDays = ${ALERTS.heartbeatDays}`,
+    ]);
   });
 
   it("writes snow's shares and thresholds as Double, whole numbers too", () => {

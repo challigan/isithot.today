@@ -25,6 +25,8 @@ export interface Platform {
   /** Netlify deploy context: "production", "deploy-preview", "branch-deploy" or "dev". */
   deployContext?: string | undefined;
   waitUntil?: ((promise: Promise<unknown>) => void) | undefined;
+  /** Where messages go; "[isithot] …" on the console unless a caller (the alert run) words its own. */
+  log?: ((message: string) => void) | undefined;
 }
 
 // Per-instance memory cache; survives between requests on a warm function.
@@ -45,7 +47,7 @@ function sharedCache(production: boolean, log: (m: string) => void): KV | null {
 
 export function createDeps(platform: Platform): ServerDeps {
   const config = resolveServerConfig(platform.env);
-  const log = (message: string): void => console.log(`[isithot] ${message}`);
+  const log = platform.log ?? ((message: string): void => console.log(`[isithot] ${message}`));
   const far =
     config.dataSource === 'live' ? sharedCache(platform.deployContext === 'production', log) : null;
   const fetcher: FetchLike =

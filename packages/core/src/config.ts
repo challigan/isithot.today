@@ -547,10 +547,43 @@ export const SEARCH = {
 export const WIDGET = { refreshHours: 4, reuseMinutes: 60, retryMinutes: 60 } as const;
 
 /**
- * Snow notifications in the native apps. An app registers again whenever what it registered
- * changes, and otherwise at least every `heartbeatDays` while it is used.
+ * Snow notifications in the native apps (core `alerts.ts`, and the server's run every 15
+ * minutes). Hours are local hours at the place, not on the phone, as for the 6pm switch to
+ * Tomorrow.
  */
-export const ALERTS = { heartbeatDays: 7 } as const;
+export const ALERTS = {
+  /**
+   * When each notification is sent, end exclusive, and the hour Apple stops trying to deliver it
+   * (`apns-expiration`). The evening starts at TOMORROW_FROM_HOUR, when the app's middle view
+   * becomes Tomorrow, so a tapped evening notification opens on the day it is about.
+   */
+  windows: {
+    evening: { from: 18, to: 20, expireAt: 21 },
+    morning: { from: 7, to: 9, expireAt: 11 },
+  },
+  /** Never send from `from` until `to`, whatever the windows say: the sender asserts it. */
+  quiet: { from: 21, to: 7 },
+  /** The scheduled run starts no new work after this, ms (a scheduled function gets 30 s). */
+  runBudgetMs: 20_000,
+  /** The same for a run started by a request, ms (the fallback trigger, if it is ever needed). */
+  syncBudgetMs: 7_000,
+  /** Forecasts fetched (cache misses) per run: on Open-Meteo's free tier, and once paid for. */
+  maxForecastFetchesPerRun: { free: 60, paid: 300 },
+  fetchConcurrency: 4,
+  /** Pushes in flight at once, and never more than Apple's connection allows. */
+  apnsConcurrency: 20,
+  /** A registration not seen for this many days is deleted. */
+  staleAfterDays: 90,
+  /**
+   * An app registers again whenever what it registered changes, and otherwise at least every
+   * `heartbeatDays` while it is used.
+   */
+  heartbeatDays: 7,
+  /** Apple's priority: 5 (when it suits the phone) for the evening, 10 (at once) for the morning. */
+  apnsPriority: { evening: 5, morning: 10 },
+  /** Test notifications a registration may ask for in an hour. */
+  testPerHour: 3,
+} as const;
 
 /**
  * Countries that use °F by default. The spec asks for the US; its territories and the
