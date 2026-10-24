@@ -3702,14 +3702,17 @@ recordings) and run 1's element trees were read for each cause. The fixes:
     on the 44-point line still acts (`.contentShape(.interaction, …)`), while the element is the
     band of it the words take (`ContentShapeKinds.accessibility`, iOS 17), no shorter than 34
     points (`HitTarget.shortestElement`), so its frame is more ink than gradient. Not the words'
-    own height, which the diagnosis proposed: the hit-region check failed elements 18 to 19.67
-    points tall (the clear button below; another app's 18-point button), "Use my location"'s
-    words are about 16 to 18, and 34 is clear of them by "Copy address"'s 32.97, which passed on
-    run 1.
-    `testNearbyLoadsInPlaceOnThisWeek` checks the place's element is under 44 points and taps its
-    line above the words, outside the element, as `testUseMyLocationDenied` taps "Use my
-    location": the whole line is still the button. The places nearby have identifiers
-    (`nearby-<slug>`).
+    own height, which the diagnosis proposed: the hit-region check failed the picker's clear
+    button, 19.67 by 19 (below), "Use my location"'s words are about 16 to 18, and 34 is clear of
+    them by "Copy address"'s 32.97, which passed on run 1. Only for words 44 points wide or more:
+    every element the check passed had a side of 44 or more (York 34 by 44 and Perth 41 by 44 on
+    this run, "Copy address" 123.9 by 32.97 on run 1) and the one it failed had neither, so words
+    narrower than 44 (York and Perth at Large) keep the whole 44-point line, which passed hit
+    regions on both runs, and their contrast is left to the `DrawnText` exception below.
+    `testNearbyLoadsInPlaceOnThisWeek` checks the place's element (Dundee's, about 61 points wide
+    at Large) is under 44 points and taps its line above the words, outside the element, as
+    `testUseMyLocationDenied` taps "Use my location": the whole line is still the button. The
+    places nearby have identifiers (`nearby-<slug>`).
   - **An exception that proves each issue false** (`HomeAuditTests.exceptions`, `DrawnText`):
     contrast on a `detail`, "Use my location" or a place nearby is allowed only when the
     screenful shows, inside its frame, the ink on 2% or more of the pixels (within 3 levels a
@@ -3764,11 +3767,11 @@ recordings) and run 1's element trees were read for each cause. The fixes:
   The sheets' audits attach the screen as audited and the element tree (`audit-<screen>`,
   `audit-<screen>-tree`): each failing sheet's test stopped at its audit, so none showed what it
   read. And `SettingsTests.headersGrow`, an exception for this audit only: "partially unsupported"
-  on a static text labelled "About" or "Help", standing only while "Privacy", the control, is on
-  screen as the audit begins and the audit raises no Dynamic Type issue on it (`ScreenException`,
-  ScreenAudit.swift). Should the headers stop growing, Privacy, on screen at every size, fails too,
-  and the exception no longer applies; the allowed issue and an exception not needed are attached
-  (`audit-<screen>-allowed`) and listed in the failure.
+  on a static text labelled "About", standing only while "Privacy", the control, is on screen as
+  the audit begins and the audit raises no Dynamic Type issue on it (`ScreenException`,
+  ScreenAudit.swift); not Help, which never failed. Should About stop growing, Privacy, on screen
+  at every size, fails too, and the exception no longer applies; the allowed issue and an
+  exception not needed are attached (`audit-<screen>-allowed`) and listed in the failure.
 - **Your privacy is a page that scrolls.** `testYourPrivacy` scrolls to the page's end before its
   audit, so the full policy's row was at y=738. The recording shows the `Form` jump back to its top
   as the Dynamic Type check began and stay there through all twelve sizes, so the row was on
@@ -3777,7 +3780,7 @@ recordings) and run 1's element trees were read for each cause. The fixes:
   wrong: the recorder now sits below the content and the row failed again. `YourPrivacyView` is
   now a scroll view of paragraphs, as How it works is, the policy's row 44 points tall: a scroll
   view keeps its offset, held to its end, and no text a scroll view had brought into view was
-  failed so (the home pages' second screenfuls, How it works).
+  failed so (the home pages' second screenfuls, scrolled to their ends).
 - **What the next run settles:** whether any bare element is left (`expectNoBareElements`, with
   its path) and the trees; whether the band alone cleared the buttons' contrast, its frame in the
   tree and the hit-region check passing it at 34 points; the search box's type, height and hit
@@ -3790,10 +3793,10 @@ recordings) and run 1's element trees were read for each cause. The fixes:
   synthetic frames as above, the contrast exception's match (a verdict, an unproven place and
   an element with no reading refused), `bareElements` against run 1's tree (the background's
   node found, a row's bar not), the header exception (allowed with its control, refused when
-  Privacy failed or wasn't read, for another kind, message, text or type), and the edge tap's
-  offset (19.5 points above a 34-point band's centre). IsItUI, the app and the UI tests compile
-  only on macOS: `WordsButton`'s shape, `SearchBox` and the scrolling privacy page are for the
-  next run's trees and screens to show.
+  Privacy failed or wasn't read, for another kind, message, text, Help's among them, or type),
+  and the edge tap's offset (19.5 points above a 34-point band's centre). IsItUI, the app and the
+  UI tests compile only on macOS: `WordsButton`'s shape, `SearchBox` and the scrolling privacy
+  page are for the next run's trees and screens to show.
 
 ## API contract
 
@@ -4204,3 +4207,7 @@ index the crawler's own US town; see "Search engines").
   Settings' units are (buttons in a segmented track whose labels grow with the text), which
   would let `HomeAuditTests` drop its one Dynamic Type exception ("The iPhone app's phases 5 and
   6, reviewed").
+- The iPhone app: whether to restore spec section 16's Smart Invert exemption for the glyph and
+  the gradients, which the app now inverts with the text. Restored, it is for the page as a
+  whole, its text too, and only once the window-sized element the audit fails is settled ("The
+  iPhone app's UI tests, after PR #33's second macOS run").

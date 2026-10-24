@@ -587,7 +587,8 @@ file and line):
   place's element is its words' band, under 44 points, and tapping its line outside that band
   (IsItUI's `WordsButton`, which "Use my location" and the places nearby are: a tap anywhere on
   the 44-point line acts, while the element, which VoiceOver outlines and the audit measures, is
-  the band the words take, no shorter than 34 points). The two
+  the band the words take, no shorter than 34 points, or the whole line for words narrower than
+  44, as York and Perth are at Large). The two
   tests with a running clock (this flip, and `OfflineTests`' end of the saved answer's hours)
   start `RUNNING_LEAD_MS` (packages/mobile `vectors.ts`, two minutes) before their moment, so a
   slow launch can't pass it before the test has read the screen.
@@ -804,8 +805,8 @@ issue with the screen's darkest and lightest pixels inside the element, then one
 lists them all with the window's frame. The tests stop at their first failure, so without it a
 run would show one issue a screen. Each audit first attaches the screen as audited and the
 element tree (`audit-<screen>`, `audit-<screen>-tree`). Every issue is the app's to fix but one,
-for Settings' audit alone: "partially unsupported" for Dynamic Type on the "About" or "Help"
-header, standing only while "Privacy", the same text in the same style, is on screen and passes
+for Settings' audit alone: "partially unsupported" for Dynamic Type on the "About" header,
+standing only while "Privacy", the same text in the same style, is on screen and passes
 (`SettingsTests.headersGrow`, a `ScreenException`; what it allowed is attached as
 `audit-<screen>-allowed`). The
 sheets' Close buttons (`picker-close`, `close-settings`, `close-fallback`) are the xmark with

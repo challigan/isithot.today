@@ -109,7 +109,8 @@ final class HomeTests: XCTestCase {
   /// the view stays where the user put it while the new place loads (as on the website, the app
   /// opens on the view for the time of day only once). The place's element is its words' band
   /// of its line, shorter than the 44 points a tap takes (IsItUI's `WordsButton`), and the tap is
-  /// on the line outside that band, so the whole line is still the button.
+  /// on the line outside that band, so the whole line is still the button. Dundee, about 61
+  /// points wide at Large, has a band: words narrower than 44 keep the whole line.
   @MainActor
   func testNearbyLoadsInPlaceOnThisWeek() throws {
     let aberdeen = try HomeScreen.named("aberdeen-snow")

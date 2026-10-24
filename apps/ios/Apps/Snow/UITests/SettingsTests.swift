@@ -12,22 +12,22 @@ final class SettingsTests: XCTestCase {
     continueAfterFailure = false
   }
 
-  /// Settings' section headers below Privacy's, which the audit found "partially unsupported"
-  /// for Dynamic Type ("About", on PR #33's two macOS runs, the frame the same in both), though
-  /// they grow with the text: run 2's recording shows "About" at every size it is on screen,
-  /// from the smallest to AX2, 0.80 to 0.84 of the width of "Privacy", the same view in the same
-  /// style, which grows to AX5 and passes. "About" is below the form's visible part from AX3 at
-  /// the audit's sizes, and Help from xxL; the rule that failed About and passed Help and rows
-  /// that left as late is the audit's own. Allowed only while "Privacy", the control, is on
-  /// screen as the audit begins and passes: should the headers stop growing, it fails too
+  /// Settings' "About" header, which the audit found "partially unsupported" for Dynamic Type
+  /// (on PR #33's two macOS runs, the frame the same in both), though it grows with the text:
+  /// run 2's recording shows it at every size it is on screen, from the smallest to AX2, 0.80 to
+  /// 0.84 of the width of "Privacy", the same view in the same style, which grows to AX5 and
+  /// passes. "About" is below the form's visible part from AX3 at the audit's sizes, and Help
+  /// from xxL; the rule that failed About and passed Help and rows that left as late is the
+  /// audit's own. Help, never failed, isn't allowed. Allowed only while "Privacy", the control,
+  /// is on screen as the audit begins and passes: should the header stop growing, it fails too
   /// (DECISIONS, "The iPhone app's UI tests, after PR #33's second macOS run").
   static let headersGrow = ScreenException(
     type: .dynamicType,
     says: "partially unsupported",
-    labels: ["About", "Help"],
+    labels: ["About"],
     control: "Privacy",
     why:
-      "a section header below Privacy's, the same text in the same style, which the recording "
+      "the About header, the same text in the same style as Privacy's, which the recording "
       + "shows growing with every text size at which it is on screen; the audit's Dynamic Type "
       + "check passed Privacy's, on screen at every size"
   )

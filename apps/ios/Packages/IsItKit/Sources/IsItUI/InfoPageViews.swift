@@ -139,8 +139,8 @@ struct NoticeView: View {
 /// a `Form` jumped back to its top and stayed there through every size, so the full policy's
 /// row, at its foot where the test had scrolled, was on screen at no other size, and was failed
 /// for Dynamic Type and as clipped on PR #33's two macOS runs. A scroll view keeps its offset,
-/// held to its end: no text a scroll view had brought into view was failed so (the home pages,
-/// How it works).
+/// held to its end: no text a scroll view had brought into view was failed so (the home pages'
+/// last screenfuls).
 struct YourPrivacyView: View {
   let page: YourPrivacy
   /// Turn off notifications and delete my data; nil until phase 8.

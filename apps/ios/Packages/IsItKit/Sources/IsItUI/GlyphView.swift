@@ -22,7 +22,8 @@ public struct PageGlyph {
 /// 3.2 s in all (`GlyphDrift`), on its first paint and when its band changes (`GlyphMotion`);
 /// never with Reduce Motion, and never when `still` (a test's still screens). Decorative, as on
 /// the website: VoiceOver skips it. Smart Invert inverts it with the page and the text, whose ink
-/// it is drawn in: exempt, it stayed dark ink on the inverted, dark page (PageTheme.swift).
+/// it is drawn in: exempt alone, it would stay dark ink on the inverted, dark page
+/// (PageTheme.swift).
 struct GlyphView: View {
   let glyph: PageGlyph
   let size: CGFloat

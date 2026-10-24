@@ -32,25 +32,29 @@ public struct PageTheme: Hashable {
 /// audit's hit regions ask: the footer's links and places, and "Use my location".
 enum HitTarget {
   static let minimum: CGFloat = 44
-  /// The shortest a `WordsButton`'s accessibility element is, however short its words. The
-  /// audit's hit-region check failed elements 18 to 19.67 points tall (the picker's clear button
-  /// on PR #33's second macOS run) and passed "Copy address" at 32.97 (its first): 34 is clear of
-  /// what it fails, by what it passed.
+  /// The shortest a `WordsButton`'s accessibility element is, however short its words, for words
+  /// `minimum` wide or more. The audit's hit-region check failed the picker's clear button, 19.67
+  /// by 19 (PR #33's second macOS run), and every element it passed had a side of 44 or more, the
+  /// shortest on record "Copy address", 123.9 by 32.97 (its first): 34 is clear of what it failed,
+  /// by what it passed. Words narrower than 44 (York and Perth at Large) keep the whole 44-point
+  /// line, which passed the check on both runs, and their contrast is left to `HomeAuditTests`'
+  /// `DrawnText` exception.
   static let shortestElement: CGFloat = 34
 }
 
 /// A button drawn as its words, as the website draws its links: a tap anywhere on the
 /// `HitTarget.minimum` line they are centred in acts, and its accessibility element (VoiceOver's
 /// outline, and what the audit measures) is the band of that line the words take, no shorter
-/// than `HitTarget.shortestElement` (`ContentShapeKinds.accessibility`, iOS 17). As one element
-/// with the whole line, mostly the page's gradient, "Use my location" and the places nearby
-/// failed the audit's contrast on PR #33's two macOS runs, drawn at 5.3:1 to 14.6:1 in every
-/// pixel of it (DECISIONS, "The iPhone app's UI tests, after PR #33's second macOS run").
+/// than `HitTarget.shortestElement` (`ContentShapeKinds.accessibility`, iOS 17), or the whole line
+/// for words narrower than `HitTarget.minimum`. As one element with the whole line, mostly the
+/// page's gradient, "Use my location" and the places nearby failed the audit's contrast on
+/// PR #33's two macOS runs, drawn at 5.3:1 to 14.6:1 in every pixel of it (DECISIONS, "The
+/// iPhone app's UI tests, after PR #33's second macOS run").
 struct WordsButton<Label: View>: View {
   let action: () -> Void
   let label: Label
-  /// The words' height as laid out, which grows with the text size.
-  @State private var words: CGFloat = 0
+  /// The words' size as laid out, which grows with the text size.
+  @State private var words: CGSize = .zero
 
   init(action: @escaping () -> Void, @ViewBuilder label: () -> Label) {
     self.action = action
@@ -60,15 +64,22 @@ struct WordsButton<Label: View>: View {
   var body: some View {
     Button(action: action) {
       label
-        .onGeometryChange(for: CGFloat.self) { proxy in
-          proxy.size.height
-        } action: { height in
-          words = height
+        .onGeometryChange(for: CGSize.self) { proxy in
+          proxy.size
+        } action: { size in
+          words = size
         }
         .frame(minHeight: HitTarget.minimum)
         .contentShape(.interaction, Rectangle())
     }
-    .contentShape(.accessibility, WordsBand(height: max(words, HitTarget.shortestElement)))
+    .contentShape(.accessibility, WordsBand(height: band))
+  }
+
+  /// 0, the whole line, for words narrower than `HitTarget.minimum`: every element the hit-region
+  /// check passed had a side of 44 or more (York 34 by 44, "Copy address" 123.9 by 32.97), and the
+  /// one it failed had neither (the clear button, 19.67 by 19).
+  private var band: CGFloat {
+    words.width < HitTarget.minimum ? 0 : max(words.height, HitTarget.shortestElement)
   }
 }
 
