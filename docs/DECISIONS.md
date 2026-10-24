@@ -2620,6 +2620,39 @@ What the review of phases 5.2 to 5.4 found, and what changed for it.
   the corrected stubs, and the exceptions' matching ran there. Everything in IsItCore ran on
   Linux.
 
+## The iPhone app's home audits, after PR #31's first macOS run
+
+PR #31's first `ios` run (40047913226) built, passed the unit tests and the Release check, and
+failed the UI plan: 26 tests, 20 passed, and the 6 that failed were all `HomeAuditTests`. HomeTests,
+OfflineTests, LaunchTests and FixtureLaunchTests passed. The fixes, none of them an exception:
+
+- **At Large the pages never scrolled to their end.** From the second screenful on, every audit
+  found the same issues, so the page had stood still. The drag ran down the page's middle, across
+  buttons and links, from near the screen's bottom edge. It is now a drag in the page's left
+  margin, where no control is, starting well clear of the bottom edge; its length brings the first
+  element not shown whole to the top. A page that stops short of its end fails at once with the
+  geometry of each screenful, so the next log says where things were.
+- **At AX3 every audit after the first scroll threw** `-902 "Invalid target app"`. The drag at AX3
+  started still closer to the bottom edge, so a system gesture is the likely cause, and the new drag
+  avoids it. Each audit now checks the app is in the foreground first, and an audit that throws
+  fails its page with the app's state and moves on to the next page.
+- **An element a screenful cuts is judged where it is whole.** The audit measured contrast on the
+  answer and question once they had scrolled under the switcher, and on the nearby places and
+  links at the screen's bottom edge. The palettes give the ink 6.26:1 or more on both ends of every
+  gradient, so no colour changed. An issue on a page element is now judged at once only on a
+  screenful that shows the element whole; otherwise it is held until the page's last screenful and
+  dropped if another screenful showed the element whole. The top bar and the switcher, which don't
+  scroll, are always judged at once.
+- **The top bar's approximate line was the one real fault.** "Using approximate location." and
+  "Use my location" failed Dynamic Type on every page, and "Use my location" failed contrast on
+  the pale pages. Both sat inside a `ViewThatFits` choosing between a row and a column of copies
+  of the same two views. The line is now one `FlowLayout`, the footer's way with its links, which
+  passed both checks: each view is laid out once, so the audit follows one element. The switcher's
+  accessibility-size buttons and the week rows use the same layout for the same reason.
+
+These were found and fixed while phase 6 was put together with this branch, and are ported here so
+this PR can pass on its own. They are unproven until the next macOS run.
+
 ## The iPhone app's place picker (phase 6.1)
 
 The iOS build spec's PR 6.1: the full-screen picker behind the top bar's place button and the
