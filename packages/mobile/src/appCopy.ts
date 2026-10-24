@@ -49,6 +49,11 @@ export const APP_COPY = {
   // access off, and Close. The two here are for a search the phone couldn't send and a location
   // fix that found nothing with permission given: neither blames the forecasts.
   recent: 'Recent',
+  // The search box is the app's own, not the system's search (`.searchable`), whose clear
+  // button, about 20 points square, the accessibility audit failed as too small to tap on PR
+  // #33's second macOS run, and which SwiftUI doesn't let the app change: this is its own clear
+  // button's label, read by VoiceOver beside its icon.
+  clearSearch: 'Clear search',
   searchOffline: "You're offline. Connect to the internet to search.",
   locationUnavailable: "Couldn't find your location. Search for a place instead.",
   // The location permission's purpose string (15.2), `NSLocationWhenInUseUsageDescription`, which
@@ -146,7 +151,10 @@ export const APP_COPY = {
   reportAdMail: 'Time: {time}\nPlace: {place}\nWhat was wrong with the ad:\n',
   reportAdBody: 'Email {email} with a screenshot of the ad and the time you saw it.',
   copyAddress: 'Copy address',
-  copied: 'Copied.',
+  // Not section 10.9's "Copied.": one word with a full stop was "not human-readable" to the
+  // accessibility audit on PR #33's two macOS runs, whatever its identifier and its sheet, where
+  // every label of more than one word passed. On screen and as VoiceOver's announcement.
+  copied: 'Address copied.',
 
   // About and help (10.4, 10.6). Contact us opens an email; with no mail app, a sheet says where
   // to write instead, as Report an ad's does (the support page's words).
@@ -200,6 +208,13 @@ export const APP_COPY = {
   // credits.ts's (AppCredits), and the licences' full texts are bundled files.
   creditsData: 'Forecasts and data',
   creditsSoftware: 'Typeface and software',
+
+  // The Debug recorder's two lines (`-openURLs`, DebugHooks.swift), in Debug builds only, for the
+  // UI tests: their labels, whose values are the last URL the app would have opened and the
+  // units the last request asked in. A URL as a label was "not human-readable" to the audit on PR
+  // #33's second macOS run.
+  recorderOpened: 'Last link opened',
+  recorderUnits: 'Units last asked for',
 
   // Widgets (11)
   widgetName: 'Snow forecast',

@@ -30,21 +30,22 @@ Configs/                 Base (every target), Team (Carl's team ID, not a secret
                          Generated/Copy.xcconfig (the Info.plist's strings: the location purpose string)
 Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API models; generated CoreCopy,
                          Questions, AppCopy, AppCredits, Constants, Keys and Palettes; the ports, the
-                         home screen's, the picker's and Settings' presenters, the glyph's drift and which
-                         pages are light ink on dark (IsItLogic); AppModel, its API client, the launch and
-                         refresh rules, what VoiceOver is told, the clocks and the minute tick, the
-                         picker's search and the location rules (IsItState); in Tests/IsItTestSupport the
-                         fixtures (the search answers in Fixtures/Search) and golden vectors with their
-                         loaders; in Tests/IsItLogicTests the ports' golden tests and the guard that every
-                         vector file is ported (below); in Tests/IsItStateTests AppModel with fakes, and
-                         the home screen drawn from it
+                         home screen's, the picker's and Settings' presenters, the glyph's drift, which
+                         pages are light ink on dark and the sheets' colours (IsItLogic); AppModel, its
+                         API client, the launch and refresh rules, what VoiceOver is told, the clocks
+                         and the minute tick, the picker's search and the location rules (IsItState); in
+                         Tests/IsItTestSupport the fixtures (the search answers in Fixtures/Search) and
+                         golden vectors with their loaders; in Tests/IsItLogicTests the ports' golden
+                         tests and the guard that every vector file is ported (below); in
+                         Tests/IsItStateTests AppModel with fakes, and the home screen drawn from it
 Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore, URLSessionTransport,
                          WidgetCenterReloader, RecentDefaults: AppModel's services), IsItLocation
                          (CoreLocationService, the app's only), IsItAds (Google's SDKs),
                          IsItUI (the home screen: HomeShell, ViewSwitcher, HomePager and ForecastPageView
                          with its bodies and GlyphView, drawing IsItLogic's HomePage and HomeTopBar, with
                          HomeActions; the picker: PlacePickerView, drawing PlacePicker, with
-                         PlacePickerActions; Settings: SettingsView and its pages, with SettingsActions),
+                         PlacePickerActions; Settings: SettingsView and its pages, with SettingsActions;
+                         SheetStyle, both sheets' colours at WCAG AA),
                          IsItWidgetUI (the widget's entry, provider, view), SnowKit (Glyphs, Color(rgb:)
                          for the palettes, and the glyph catalogues, generated)
 Apps/Snow/App/           WillItSnowApp (the services and the scene's phases), HomeView (the home screen,
@@ -491,9 +492,13 @@ brought forward the minute's tick, pull to refresh, the footer and the loading a
   labels (the middle one "Tomorrow" from 6pm), which at accessibility text sizes becomes a row
   of buttons that wraps so no label is cut short; and `HomePager`, the three pages side by side
   in a horizontal `ScrollView` paged with `.scrollTargetBehavior(.paging)` and
-  `.scrollPosition(id:)`. Both are bound to `AppModel.view` (`$model.view` in `HomeView`), so a
-  tap, a swipe, a widget's route (`.view`, which now sets the view) and the return after more
-  than 30 minutes away (the view for the time of day) move both. The app opens on
+  `.scrollPosition(id:)`, each page the pager's own size, which a `GeometryReader` reads (since
+  main's first macOS run: sized to the screen's safe area, the pages pushed the top bar under the
+  status bar; DECISIONS, "The iPhone app's UI tests, after main's first macOS run"). The
+  horizontal scroll view is `pager` to the UI tests, which read its edges, and an audit issue on
+  it names it. Both are bound to `AppModel.view` (`$model.view` in `HomeView`), so a tap, a swipe, a widget's route
+  (`.view`, which now sets the view) and the return after more than 30 minutes away (the view
+  for the time of day) move both. The app opens on
   `MiddleDay.defaultView`, Today or Now from 6pm, once: from the saved answer it paints, or else
   from its first answer, unless the user or a route has chosen a view by then, as the website
   does; a place under "Nearby:", a place chosen in the picker (phase 6) and Retry answer on the
@@ -547,7 +552,8 @@ What section 16 asks of the home screen, proven where it can only be proven, on 
 page.json: for each screen a UI test opens, its fixture, the moment as `-now` takes it, how its
 request went, the view it opens on (core `defaultView`), the top bar (`homeTopBar`, a reference new
 in 5.4 for IsItLogic's `HomeTopBar`) and its three pages (`homePage`), exactly as page.json has
-them. The screens are listed in `homeScreens` (packages/mobile `vectors.ts`), which adds each to
+them, and beside the screens each band's palette (`homePalettes`), which the home audit's
+contrast failures read the screen's pixels against. The screens are listed in `homeScreens` (packages/mobile `vectors.ts`), which adds each to
 page.json, so the Swift on Linux is held to the same cases (`PageVectorTests`). The UI test bundle
 carries the file (project.yml), and `HomeScreens.swift` reads it (`HomeScreen.named`) and compares
 the screen with it, from one snapshot of the accessibility tree for each check (`ShownScreen`), in
@@ -563,14 +569,26 @@ difference is reported and the test goes on to the next; a screen that never com
 file and line):
 
 - `HomeTests`: `testAberdeenSnow`, `testDurhamTomorrow` and `testLeedsDry` open each fixture at
-  its own moment with `-clock fixed`, check the top bar, the tabs and the page it opens on (Today,
-  or Now from 6pm), then each page by its tab, then back from This week to Now by swiping and on
-  again, each tab selected as it shows. `testDefaultViewEitherSideOf6pm` opens Durham at 5:59pm
-  (Today; Now, Today, This week) and at 6pm (Now; the middle tab Tomorrow).
+  its own moment with `-clock fixed`, check the top bar, that the home screen fits the screen
+  (`expectFits`: the place button, the gear and the switcher within the window, the pager
+  between the switcher and the window's bottom edge, and the page on screen starting under the
+  switcher; not the page's bottom, as XCUITest may give its scroll view its content's frame,
+  nor the status bar, whose frame XCUITest doesn't give, which the picker's and Settings' taps
+  guard), that no element with neither an identifier nor a label sits under no labelled one
+  (`expectNoBareElements`, which names its path: PR #33's runs had one, the page's background),
+  the tabs and the page it opens on (Today, or Now from 6pm), then each page by its tab, then back
+  from This week to Now by swiping and on again, each tab selected as it shows.
+  `testDefaultViewEitherSideOf6pm` opens Durham at 5:59pm (Today; Now, Today, This week) and at
+  6pm (Now; the middle tab Tomorrow).
   `testTheMiddleTabTurnsToTomorrowAt6pm` opens at 5:58pm with `-clock run` and waits up to three
   minutes for 6pm: the middle page turns to tomorrow where it is. `testNearbyLoadsInPlace` taps
   the first place under "Nearby:" and reads its answer, and the chosen place on the top bar;
-  `testNearbyLoadsInPlaceOnThisWeek` does it from This week, which stays on screen. The two
+  `testNearbyLoadsInPlaceOnThisWeek` does it from This week, which stays on screen, checking the
+  place's element is its words' band, under 44 points, and tapping its line outside that band
+  (IsItUI's `WordsButton`, which "Use my location" and the places nearby are: a tap anywhere on
+  the 44-point line acts, while the element, which VoiceOver outlines and the audit measures, is
+  the band the words take, no shorter than 34 points, or the whole line for words narrower than
+  44, as York and Perth are at Large). The two
   tests with a running clock (this flip, and `OfflineTests`' end of the saved answer's hours)
   start `RUNNING_LEAD_MS` (packages/mobile `vectors.ts`, two minutes) before their moment, so a
   slow launch can't pass it before the test has read the screen.
@@ -586,21 +604,47 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
 - `HomeAuditTests` (spec 17.2's `AccessibilityAuditTests` for the home screen): each page of the
   three fixtures at Large and at AX3 (`-UIPreferredContentSizeCategoryName` with
   `UICTContentSizeCategoryAccessibilityXL`; the test checks the switcher is buttons at AX3 and not
-  at Large, so the size reached the app), with `performAccessibilityAudit(for: .all)` on every
-  screenful, from the page's top to the end of its credits. Each scroll brings the first element
-  the screen doesn't show whole to the top (a drag in the page's left margin, clear of the home
-  indicator, read from one snapshot of the page), and an issue on an element the screenful cuts
-  at the page's edge, or doesn't show, is judged on a screenful that shows it whole (an audit
+  at Large, so the size reached the app, and that the home screen fits the screen at that size,
+  `expectFits`, with no bare element, `expectNoBareElements`), with
+  `performAccessibilityAudit(for:)` for every kind on every screenful, from
+  the page's top to the end of its credits, in at most 20 screenfuls. Each screenful is audited
+  in two calls (`AuditKinds`, `UITests/ScreenAudit.swift`): every kind but two on the screen as
+  attached, and an audit that moves the page there fails; then the Dynamic Type and clipped-text
+  checks, which lay the app out at a smaller text size, where a page scrolled past that size's end
+  comes back to it. Each issue's element is noted where it was on the screenful, moved back with
+  the credits, and the page is dragged back to where the screenful had it before the next scroll
+  (`restore`; on PR #33's macOS run, with one call, every AX3 page went back to that end before
+  each drag and failed "scrolls no further"). The page on screen is the part of its
+  frame a user sees, within the window and below the switcher, whether the frame XCUITest gives
+  the page's scroll view is its viewport or its content. Each scroll brings the first element
+  the screen doesn't show whole to the top of that part (a drag in the page's left margin, clear
+  of the home indicator, read from one snapshot of the page), and an issue on an element the
+  screenful cuts at its edge, or doesn't show, is judged on a screenful that shows it whole (an audit
   measures what the screen has where the element is: on PR #31's macOS run, the answer failed
   contrast on every screenful that had scrolled it off the top). Every issue fails the test, once
   per fixture and size, listing each with its page and screenful, kind (`contrast`, `hitRegion`,
-  `dynamicType`, …), Apple's descriptions and the element's identifier and label, except those in
-  `HomeAuditTests.exceptions`, each with why it isn't a fault to fix: the segmented control's own
-  type size (`dynamicType`; section 10.2's segmented picker, buttons that scale at accessibility
-  sizes) and the credits' inline links (`hitRegion`). The log names an exception a test didn't
-  need. A page that stops scrolling short of its end, an app that has left the foreground or an
-  audit that can't run fails with where the page and its credits were on each screenful. For a
-  new issue, fix the app, or, when it isn't a fault, add it there with its reason.
+  `dynamicType`, …), Apple's descriptions and the element's type, identifier, label and frame on
+  the screenful (with where it was once the audit had moved the page, and the part of the page on
+  screen, for one no screenful showed whole), a contrast issue with the screenful's darkest and
+  lightest pixels inside the element and the contrast between them, beside the page's ink and its
+  background at the element's centre (`PixelRange`, `PageColours`) and what text it shows drawn
+  there (`DrawnText`), except those in `HomeAuditTests.exceptions`, each with why it isn't a fault
+  to fix: the segmented control's own type size (`dynamicType`; section 10.2's segmented picker,
+  buttons that scale at accessibility sizes), the credits' inline links (`hitRegion`), and
+  contrast on a detail, "Use my location" or a place nearby that the screenful shows drawn in the
+  page's ink over its background at 4.5:1 or more at every corner, proven again on each issue
+  (`contrast`). The issues allowed and any exception a test didn't need are attached
+  (`home-<fixture>-<size>-allowed`) and listed in its failure. Each page's first screenful also
+  attaches the app's element tree (`<page>-tree`). A page that stops scrolling short of its end,
+  an app that has left the foreground or an
+  audit that can't run fails with where the page and its credits were on each screenful, and the
+  page's frame on each (the scroll view's viewport, PR #33's run showed). A page
+  that stops short, or never reaches its end, also says the page's whole frame and the window's,
+  each drag (those that put the page back marked so), the page's four lowest elements and where
+  a swipe by XCUITest's own gesture then moved the credits (a page at the end of its scroll range,
+  or a drag it didn't take), and attaches the app's element tree as `<name>-tree-stopped`. For a
+  new issue, fix the app, or, when it is proven not a fault, add it there with its reason and its
+  evidence (DECISIONS, "The iPhone app's UI tests, after PR #33's second macOS run").
 
 **The contact sheet** tiles every attachment in its names' order (`ci/contact-sheet.mjs`, five
 screens to a row). `HomeAuditTests` attaches every screenful it audits as
@@ -630,17 +674,22 @@ location" (spec sections 4, 9.4 step 4, 10.3, 15.2 and 16). DECISIONS has the ch
 iPhone app's place picker").
 
 - **The rules are in IsItCore, tested on Linux.** `PlaceSearch.input(_:)` and `.detail(_:)`
-  (IsItLogic) are the ports of client `searchInput` and `resultDetail`, which the website's
-  picker now uses too, checked against `search.json`: the text trimmed as JavaScript trims it,
-  2 letters or more counted in UTF-16 code units, and "England, United Kingdom" under "Leeds".
-  `PlacePicker` (IsItLogic) is the sheet as plain values: the title, the prompt, "Use my
+  (IsItLogic) are the ports of client `searchInput` and `resultDetail`, which the website's picker
+  now uses too, checked against `search.json`: the text trimmed as JavaScript trims it, 2 letters or
+  more counted in UTF-16 code units, and "England, United Kingdom" under "Leeds". `PlacePicker`
+  (IsItLogic) is the sheet as plain values: the title, the prompt, the clear button's label, "Use my
   location" first (with "Finding you…", location access off and Open Settings, or no fix), the
-  search's line (too short, no places, why it failed) or its results, and with nothing typed
-  the recent places under "Recent". `PlacePickerModel` (IsItState, from `AppModel.makePicker()`)
-  runs the search: 250 ms after the last keystroke (`Constants.Search.debounceMs`, on the
-  model's clock, so the tests move it), each keystroke cancelling the wait and the request
-  before it, only the newest answer shown, and the last results kept while the next search is
-  out.
+  search's line (too short, no places, why it failed) or its results, and with nothing typed the
+  recent places under "Recent". `PlacePickerModel` (IsItState, from `AppModel.makePicker()`) runs
+  the search: 250 ms after the last keystroke (`Constants.Search.debounceMs`, on the model's clock,
+  so the tests move it), each keystroke cancelling the wait and the request before it, only the
+  newest answer shown, and the last results kept while the next search is out.
+- **The search box is the app's own** (`SearchBox`, IsItUI's PlacePickerView.swift): UIKit's
+  rounded text field under the navigation bar, above the list, its prompt in
+  `SheetStyle.secondary`, the keyboard's Search key choosing the first result, and while it holds
+  text a clear button 44 points square ("Clear search"). Not the system's search
+  (`.searchable`), whose own clear button, about 20 points square, the audit failed as too small
+  to tap, and which SwiftUI can't resize or remove.
 - **Choosing a place** is `AppModel.choose(_:name:)`: `place.v1`, the fetch in place
   (`select(_:)`, which saves the answer for the widgets and reloads them), the recent places
   (`recent.v1`, the last five, `RecentPlaces` with the `RecentDefaults` store in the app's own
@@ -670,8 +719,10 @@ while the fix is out (the fix then chooses nothing), and a launch that never ask
 `Tests/IsItLogicTests/PlacePickerTests.swift` (the content and `recent.v1`'s reading) and the
 `search.json` port. On the macOS CI, `PickerTests` (UI plan), over `-network
 ip-first-launch,leeds-dry` or `…,kathmandu-0545` and `-location`: too short and no results;
-choosing Leeds (a city page) and Kathmandu (a point); a recent place kept across a relaunch, then
-swiped away; Use my location denied, from the approximate line and the picker's own row; Use my
+choosing Leeds (a city page) and Kathmandu (a point); a recent place kept across a relaunch, the
+box's clear button (44 by 44, "Clear search", back to the recent places with the keyboard up), then
+the place swiped away; Use my location denied, from the approximate line (tapped above its words)
+and the picker's own row; Use my
 location with a fix; and the accessibility audit of the sheet, with a recent place and location
 access off, and of its results with the keyboard put away by a drag. Their screens are
 `picker-no-results`, `picker-results`, `picker-recent`, `picker-location-denied`,
@@ -704,6 +755,18 @@ the choices ("The iPhone app's Settings").
   `HowItWorks()`, `CreditsPage()` and `YourPrivacy(adsOn:privacyChoices:kept:)`.
 - **IsItUI:** `SettingsView(screen:privacy:actions:)`, with the pages on its own stack
   (`YourPrivacyView`, `HowItWorksView`, `CreditsView`, `NoticeView`) and `MailFallbackView`.
+  Credits and licences gives each credit's words whole, then each of its sources and licences
+  as a row of its own that opens it, not as links inside the sentence; a notice's project link
+  is 44 points tall. Your privacy is a page of paragraphs that scrolls, as How it works is, not a
+  `Form`, whose jump to its top during the audit's text-size check left its last row unmeasured.
+  A section of Settings has a header only when it has a heading.
+- **The sheets' colours** (the picker's too) are the system's but where those fall short of
+  WCAG AA's 4.5:1 for text under 18 points in the light appearance: `SheetStyle` (IsItUI) draws
+  the headers, footers and secondary lines in `SheetColours.secondaryLight` (5.36:1 on a grouped
+  list's background, where the system's secondary label gives 3.28:1) and tints the buttons,
+  links and toolbar items with the system's blue as Increase Contrast draws it (the default
+  gives 3.59:1 there), from IsItLogic's `SheetColours`, which `SheetColoursTests` holds to it on
+  Linux. The dark appearance keeps the system's secondary label, which passes.
 - **The units** go through `AppModel.setUnits(_:)` (IsItState): kept in `units.v1`, the answer
   asked for again in them with what is on screen kept meanwhile, then the notifications' sync
   hook (phase 8), since a registration carries the units.
@@ -715,25 +778,40 @@ the choices ("The iPhone app's Settings").
 `InfoPagesTests.swift` (every row and its action, the free and bought versions, the emails'
 subject, body and encoded URL, the phone's time, How it works word for word with the
 constants' numbers, the credits and their links, Your privacy's lines, and no word naming another
-app, site or weather), `Tests/IsItStateTests/UnitsTests.swift` (the units kept, asked for and
+app, site or weather), `SheetColoursTests.swift` (the sheets' colours on each system background),
+`Tests/IsItStateTests/UnitsTests.swift` (the units kept, asked for and
 saved, the answer kept meanwhile, offline, the same units), and in packages/mobile the copy,
 the credits, the constants, Your privacy against the website's privacy notice, and the guard
 that no Swift view or label is given a string literal (`swiftLiterals.test.ts`, below).
 
 **On the macOS CI:** `SettingsTests` (UI plan), with `-openURLs`: the units switch, the refetch
 in inches and the choice kept at the next launch; every row's URL or page; Report an ad's and
-Contact us's fallback with "Copied."; Your privacy's lines; the version line; no word naming
+Contact us's fallback with "Address copied."; Your privacy's lines; the version line; no word naming
 another weather type on screen; and the accessibility audit on Settings, How it works,
 Credits and licences, a licence in full, Your privacy and both fallbacks. The screens are
 `app-settings`, `app-how-it-works`, `app-credits`, `app-notice`, `app-your-privacy`,
-`app-report-ad-fallback` and `app-contact-us-fallback`.
+`app-report-ad-fallback` and `app-contact-us-fallback`. `testRowsOpenWhatTheySay` taps the two
+emails after its pages' audits: the recorder's lines show the whole URL below the sheet's content,
+and Report an ad's, 201 characters, would take most of the screen at the audit's largest sizes.
 
 **The audits** (`PickerTests` and `SettingsTests`; `HomeAuditTests` has its own, with its
 exceptions, above) go through `auditAccessibility(of:on:)` (`UITests/ScreenAudit.swift`):
-`performAccessibilityAudit(for: .all)`, every kind of issue, with a handler that notes each issue
-with its type, its element's identifier and label and Apple's description, then one failure that
-lists them all. The tests stop at their first failure, so without it a run would show one issue
-a screen.
+`performAccessibilityAudit(for:)` for every kind of issue, in the home audit's two calls
+(`AuditKinds`: contrast, element detection, hit regions, descriptions and traits, then Dynamic
+Type and clipped text, the seven kinds the iOS SDK defines, each named rather than `.all` less
+two), with a handler that notes each issue with its kind (named as `HomeAuditTests`
+names it), its element's type, identifier, label and frame, and Apple's description, a contrast
+issue with the screen's darkest and lightest pixels inside the element, then one failure that
+lists them all with the window's frame. The tests stop at their first failure, so without it a
+run would show one issue a screen. Each audit first attaches the screen as audited and the
+element tree (`audit-<screen>`, `audit-<screen>-tree`). Every issue is the app's to fix but one,
+for Settings' audit alone: "partially unsupported" for Dynamic Type on the "About" header,
+standing only while "Privacy", the same text in the same style, is on screen and passes
+(`SettingsTests.headersGrow`, a `ScreenException`; what it allowed is attached as
+`audit-<screen>-allowed`). The
+sheets' Close buttons (`picker-close`, `close-settings`, `close-fallback`) are the xmark with
+"Close" as their label (`CloseLabel`, IsItUI), not the word on screen, which a toolbar draws at
+the bar's own type size and the audit failed for Dynamic Type.
 
 ### How they meet
 
@@ -759,6 +837,8 @@ a screen.
   search fixtures (`SearchStub`, below).
 - **The tests.** `PickerTests` and `SettingsTests` launch the same app; the picker's Open
   Settings is read from the recorder (`testOpenSettingsOpensTheAppsPage`), as Settings' rows are.
+  When a tap on the place button or the gear opens nothing, the failure says where the window,
+  the top bar's controls, the switcher, the pager and the page were (`homeGeometry`).
   Phase 5.4's tests and phase 6's share the launch arguments (below, "Debug hooks"): `-network`
   takes a comma list of fixtures, or `off` or `unavailable`; `-clock fixed` and `-now` fix the
   moment; `-resetStore` forgets the recent places too. Their identifiers differ, and the pager
@@ -962,12 +1042,15 @@ launch argument. So far there are these:
   counts the model's minutes (`MinuteTick`), so a clock started at 5:59:30pm turns the middle
   tab to Tomorrow 30 seconds later, not at the system's next minute;
 - `-apiOrigin <url>` asks a deploy preview's API instead of willitsnow.today's (spec section 4);
-- `-openURLs record` (SettingsTests, PickerTests): each sheet, Settings and the picker, records
-  each web page, email and Settings page it would open instead of leaving the app, and shows
-  the last one at the bottom of the sheet
-  (`debug-opened`), with the units the last request to the server asked in (`debug-units`: `c`,
-  `f`, or `none`); `-openURLs nomail` also refuses every `mailto:` URL, as a phone with no mail
-  app does, so the fallback sheet shows. Any other value stops the app;
+- `-openURLs record` (SettingsTests, PickerTests): each sheet, Settings and the picker, records each
+  web page, email and Settings page it would open instead of leaving the app, and shows the last one
+  below the sheet's content, on an opaque background in `subheadline`, so no row runs under it and
+  its text follows every text size (`debug-opened`), with the units the last request to the server
+  asked in (`debug-units`: `c`, `f`, or `none`); each line's label says what it holds ("Last link
+  opened", "Units last asked for"), and its value is the URL or the units, which the tests read; the
+  URL wraps whole, so its height is taken from the content's, and no test audits a sheet over an
+  email's lines; `-openURLs nomail` also refuses every `mailto:` URL, as a phone with no mail app
+  does, so the fallback sheet shows. Any other value stops the app;
 - the unit tests' host: when the app only hosts the unit tests (XCTest's
   `XCTestConfigurationFilePath` in its environment), it doesn't launch (`AppModel.launch()`), so
   the hosted tests have the App Group to themselves; a launch with `-fixture` or `-network`

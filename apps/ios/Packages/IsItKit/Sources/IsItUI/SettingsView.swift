@@ -8,7 +8,8 @@ import UIKit
 /// About and Help, and the version. Pages open on the sheet's own stack (Your privacy, How it
 /// works, Credits and licences); willitsnow.today's pages open in Safari and the emails in the
 /// mail app, through `openURL`, and with no mail app the fallback sheet says where to write.
-/// Everything shown is the presenters'.
+/// Everything shown is the presenters'. The headers, the footer and the tint are `SheetStyle`'s,
+/// which meet WCAG AA where the system's light ones don't.
 public struct SettingsView: View {
   let screen: SettingsScreen
   let privacy: YourPrivacy
@@ -32,15 +33,23 @@ public struct SettingsView: View {
           UnitsRow(control: screen.units, setUnits: actions.setUnits)
         } footer: {
           Text(verbatim: screen.units.footnote)
+            .foregroundStyle(SheetStyle.secondary)
         }
         ForEach(screen.sections) { section in
-          Section {
-            ForEach(section.rows) { row in
-              rowView(row)
-            }
-          } header: {
-            if let heading = section.heading {
+          // A header only for a section with a heading. "About", the one header after the
+          // heading-less Report an ad's empty one, was the one the audit found "partially
+          // unsupported" for Dynamic Type on PR #33's two macOS runs, though it grew at every size
+          // the recording shows it, as Privacy's and Help's did (DECISIONS).
+          if let heading = section.heading {
+            Section {
+              rows(section)
+            } header: {
               Text(verbatim: heading)
+                .foregroundStyle(SheetStyle.secondary)
+            }
+          } else {
+            Section {
+              rows(section)
             }
           }
         }
@@ -58,7 +67,7 @@ public struct SettingsView: View {
           Button {
             dismiss()
           } label: {
-            Text(verbatim: screen.close)
+            CloseLabel(title: screen.close)
           }
           .accessibilityIdentifier("close-settings")
         }
@@ -67,8 +76,18 @@ public struct SettingsView: View {
         destination(page)
       }
     }
+    // The rows that leave the app, Close, and the pages' links and buttons: the system's blue
+    // gives 4.01:1 on a row and 3.59:1 on the form's background (`SheetStyle`).
+    .tint(SheetStyle.accent)
     .sheet(item: $fallback) { fallback in
       MailFallbackView(fallback: fallback, copy: actions.copy)
+    }
+  }
+
+  /// A section's rows.
+  private func rows(_ section: SettingsScreen.Section) -> some View {
+    ForEach(section.rows) { row in
+      rowView(row)
     }
   }
 
@@ -225,9 +244,9 @@ struct LeavingRow: View {
 }
 
 /// What shows when no mail app can open an email (section 10.7): where to write, and "Copy
-/// address", which says "Copied." once it has, on screen and to VoiceOver. The announcement is
-/// UIKit's: iOS 17's `AccessibilityNotification` is the Accessibility framework's, which SwiftUI
-/// isn't known to re-export.
+/// address", which says "Address copied." once it has, on screen and to VoiceOver. The
+/// announcement is UIKit's: iOS 17's `AccessibilityNotification` is the Accessibility
+/// framework's, which SwiftUI isn't known to re-export.
 struct MailFallbackView: View {
   let fallback: MailFallback
   let copy: @MainActor (String) -> Void
@@ -250,10 +269,16 @@ struct MailFallbackView: View {
             Text(verbatim: fallback.copyAddress)
           }
           .buttonStyle(.borderedProminent)
+          // White on the fill, 7.56:1 in both appearances (`SheetStyle.filled`).
+          .tint(SheetStyle.filled)
           .accessibilityIdentifier("copy-address")
           if copied {
+            // "Address copied.", not section 10.9's "Copied.": the audit found that one word
+            // with its full stop "not human-readable" on PR #33's two macOS runs, with the
+            // identifier `copied` in the card the sheet was then drawn as, and with this one at
+            // full height; every label of more than one word passed (packages/mobile appCopy.ts).
             Text(verbatim: fallback.copied)
-              .accessibilityIdentifier("copied")
+              .accessibilityIdentifier("copy-confirmation")
           }
         }
         .padding(20)
@@ -266,12 +291,16 @@ struct MailFallbackView: View {
           Button {
             dismiss()
           } label: {
-            Text(verbatim: fallback.close)
+            CloseLabel(title: fallback.close)
           }
           .accessibilityIdentifier("close-fallback")
         }
       }
     }
-    .presentationDetents([.medium, .large])
+    // A sheet of its own, so Settings' tint is given again, for Close. Full height, as a sheet
+    // opens by default: at the medium detent iOS 26 draws a sheet as a card inset over Settings,
+    // scaled to 96%, with Settings showing through its glass, which the audit found on PR #33's
+    // macOS run as clipped text, text no element holds, and Close short of contrast.
+    .tint(SheetStyle.accent)
   }
 }

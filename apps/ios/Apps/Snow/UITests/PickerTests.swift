@@ -43,7 +43,7 @@ final class PickerTests: XCTestCase {
     XCTAssertFalse(app.buttons["result-1"].exists, "More than search-leeds's one result")
     attachScreen(of: app, named: "picker-results")
     result.tap()
-    waitUntilGone(app.searchFields.firstMatch, "The picker is still open")
+    waitUntilGone(searchField(in: app), "The picker is still open")
     wait(for: heading(in: app), label: "Leeds. Will it snow today? No.")
     XCTAssertEqual(app.buttons["place"].label, "Place: Leeds. Change place.")
     XCTAssertFalse(app.buttons["use-my-location"].exists, "Still on approximate location")
@@ -93,11 +93,27 @@ final class PickerTests: XCTestCase {
     XCTAssertEqual(leeds.label, "Leeds")
     attachScreen(of: app, named: "picker-recent")
 
-    // Typing hides them.
+    // Typing hides them, and shows the box's clear button, 44 points square (the system's
+    // search, whose clear button was about 20, is gone: PlacePickerView's `SearchBox`).
     field.typeText("Le")
     waitUntilGone(recent, "Recent places while typing")
+    let clear = app.buttons["clear-search"]
+    XCTAssertTrue(clear.waitForExistence(timeout: 5), "No clear button with text typed")
+    XCTAssertEqual(clear.label, "Clear search")
+    XCTAssertGreaterThanOrEqual(clear.frame.width, 44, "The clear button at \(clear.frame)")
+    XCTAssertGreaterThanOrEqual(clear.frame.height, 44, "The clear button at \(clear.frame)")
     field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 2))
     XCTAssertTrue(leeds.waitForExistence(timeout: 10), "No recent places once cleared")
+    waitUntilGone(clear, "The clear button with nothing typed")
+
+    // The clear button clears the box, and leaves it ready to type in.
+    field.typeText("Le")
+    waitUntilGone(recent, "Recent places while typing")
+    XCTAssertTrue(clear.waitForExistence(timeout: 5), "No clear button with text typed")
+    clear.tap()
+    XCTAssertTrue(leeds.waitForExistence(timeout: 10), "No recent places once cleared")
+    waitUntilGone(clear, "The clear button after clearing")
+    XCTAssertTrue(app.keyboards.firstMatch.exists, "The keyboard went with the text")
 
     // Swiped away.
     leeds.swipeLeft()
@@ -109,11 +125,13 @@ final class PickerTests: XCTestCase {
   }
 
   /// With location access off, "Use my location" says so, with Open Settings, and the search
-  /// still works. Opened from the approximate line's "Use my location", the picker starts there.
+  /// still works. Opened from the approximate line's "Use my location", the picker starts there:
+  /// tapped on its line above its words, outside its element (IsItUI's `WordsButton`), as the
+  /// whole 44-point line is the button.
   @MainActor
   func testUseMyLocationDenied() throws {
     let app = launch(["-resetStore", "-network", "ip-first-launch", "-location", "denied"])
-    app.buttons["use-my-location"].tap()
+    tapOutsideItsWords(app.buttons["use-my-location"])
     let detail = app.staticTexts["location-detail"]
     XCTAssertTrue(detail.waitForExistence(timeout: 10), "No line for location access off")
     XCTAssertEqual(detail.label, "Location access is off. Search for a place instead.")
@@ -121,7 +139,7 @@ final class PickerTests: XCTestCase {
     // The picker's own row says the same.
     app.buttons["picker-use-my-location"].tap()
     wait(for: detail, label: "Location access is off. Search for a place instead.")
-    XCTAssertTrue(app.searchFields.firstMatch.exists, "The picker closed")
+    XCTAssertTrue(searchField(in: app).exists, "The picker closed")
     attachScreen(of: app, named: "picker-location-denied")
     // Close: still on approximate location.
     app.buttons["picker-close"].tap()
@@ -139,14 +157,16 @@ final class PickerTests: XCTestCase {
     _ = openPicker(in: app, focusing: false)
     let opened = app.staticTexts["debug-opened"]
     XCTAssertTrue(opened.waitForExistence(timeout: 10), "No Debug recorder on the picker")
-    XCTAssertEqual(opened.label, "none")
+    // The URL is the line's value; its label says what it holds.
+    XCTAssertEqual(opened.value as? String, "none")
+    XCTAssertEqual(opened.label, "Last link opened")
     app.buttons["picker-use-my-location"].tap()
     let open = app.buttons["open-settings"]
     XCTAssertTrue(open.waitForExistence(timeout: 10), "No Open Settings")
     open.tap()
-    let settingsPage = NSPredicate(format: "label BEGINSWITH %@", "app-settings:")
+    let settingsPage = NSPredicate(format: "value BEGINSWITH %@", "app-settings:")
     wait(for: [expectation(for: settingsPage, evaluatedWith: opened)], timeout: 10)
-    XCTAssertTrue(app.searchFields.firstMatch.exists, "The picker closed")
+    XCTAssertTrue(searchField(in: app).exists, "The picker closed")
   }
 
   /// With a fix, the sheet closes and the phone's place loads, rounded to the grid.
@@ -185,8 +205,9 @@ final class PickerTests: XCTestCase {
   }
 
   /// The search's results pass the audit too, with the keyboard down: a drag on the list puts it
-  /// away (scrollable content dismisses the keyboard on a scroll from iOS 16), and the results
-  /// stay, with "Leeds" still in the search box.
+  /// away, as the picker's list asks (`scrollDismissesKeyboard(.immediately)`, PlacePickerView;
+  /// on PR #33's macOS run, without it, the keyboard stayed up), and the results stay, with
+  /// "Leeds" still in the search box.
   @MainActor
   func testResultsAccessibilityAudit() throws {
     let app = launch(["-resetStore", "-network", "ip-first-launch"])
@@ -214,16 +235,28 @@ final class PickerTests: XCTestCase {
   }
 
   /// Opens the picker with the place button, and gives its search field, focused unless not
-  /// `focusing`.
+  /// `focusing`, with no clear button while it is empty. With no picker, the failure says where
+  /// the top bar was: on main's first macOS run the place button was under the status bar, where
+  /// the tap never reached it.
   @MainActor
   private func openPicker(in app: XCUIApplication, focusing: Bool = true) -> XCUIElement {
     app.buttons["place"].tap()
-    let field = app.searchFields.firstMatch
-    XCTAssertTrue(field.waitForExistence(timeout: 10), "No picker")
+    let field = searchField(in: app)
+    XCTAssertTrue(
+      field.waitForExistence(timeout: 10),
+      "No picker after tapping the place button; \(app.homeGeometry)")
     XCTAssertEqual(field.placeholderValue, "Town or city")
+    XCTAssertFalse(app.buttons["clear-search"].exists, "A clear button with nothing typed")
     XCTAssertTrue(app.buttons["picker-use-my-location"].exists, "No Use my location")
     if focusing { field.tap() }
     return field
+  }
+
+  /// The picker's search box (`place-search`), whatever type XCUITest gives it: a text field
+  /// marked as a search field, the app's own since the system's search went.
+  @MainActor
+  private func searchField(in app: XCUIApplication) -> XCUIElement {
+    app.descendants(matching: .any).matching(identifier: "place-search").firstMatch
   }
 
   /// The question and the answer: one heading element, whatever type XCUITest gives it.

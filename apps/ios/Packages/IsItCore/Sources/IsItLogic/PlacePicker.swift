@@ -2,9 +2,10 @@ import Foundation
 import IsItModel
 
 /// The place picker as plain values (iOS build spec, section 10.3), from where its search and its
-/// location fix are and the recent places: the title, the search box's prompt, "Use my
-/// location" first, then the search's line and its results, or with nothing typed, the recent
-/// places under "Recent". IsItUI draws it; the app's model says what each row does.
+/// location fix are and the recent places: the title, the search box's prompt and its clear
+/// button's label, "Use my location" first, then the search's line and its results, or with
+/// nothing typed, the recent places under "Recent". IsItUI draws it; the app's model says what
+/// each row does.
 public struct PlacePicker: Sendable, Equatable {
   /// "Search for a place".
   public let title: String
@@ -12,6 +13,8 @@ public struct PlacePicker: Sendable, Equatable {
   public let close: String
   /// The search box's prompt, "Town or city".
   public let prompt: String
+  /// "Clear search", the label of the search box's clear button, the app's own (IsItUI).
+  public let clear: String
   /// "Use my location", always the first row.
   public let location: LocationRow
   /// A line in place of results: "Type at least 2 letters.", "No places found." or why the
@@ -68,6 +71,7 @@ public struct PlacePicker: Sendable, Equatable {
     title = CoreCopy.searchLabel
     close = CoreCopy.close
     prompt = CoreCopy.searchPlaceholder
+    clear = AppCopy.clearSearch
     self.location = LocationRow(location)
     let shown: [SearchResult]
     switch search {

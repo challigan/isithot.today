@@ -32,12 +32,80 @@ public struct PageTheme: Hashable {
 /// audit's hit regions ask: the footer's links and places, and "Use my location".
 enum HitTarget {
   static let minimum: CGFloat = 44
+  /// The shortest a `WordsButton`'s accessibility element is, however short its words, for words
+  /// `minimum` wide or more. The audit's hit-region check failed the picker's clear button, 19.67
+  /// by 19 (PR #33's second macOS run), and every element it passed had a side of 44 or more, the
+  /// shortest on record "Copy address", 123.9 by 32.97 (its first): 34 is clear of what it failed,
+  /// by what it passed. Words narrower than 44 (York and Perth at Large) keep the whole 44-point
+  /// line, which passed the check on both runs, and their contrast is left to `HomeAuditTests`'
+  /// `DrawnText` exception.
+  static let shortestElement: CGFloat = 34
+}
+
+/// A button drawn as its words, as the website draws its links: a tap anywhere on the
+/// `HitTarget.minimum` line they are centred in acts, and its accessibility element (VoiceOver's
+/// outline, and what the audit measures) is the band of that line the words take, no shorter
+/// than `HitTarget.shortestElement` (`ContentShapeKinds.accessibility`, iOS 17), or the whole line
+/// for words narrower than `HitTarget.minimum`. As one element with the whole line, mostly the
+/// page's gradient, "Use my location" and the places nearby failed the audit's contrast on
+/// PR #33's two macOS runs, drawn at 5.3:1 to 14.6:1 in every pixel of it (DECISIONS, "The
+/// iPhone app's UI tests, after PR #33's second macOS run").
+struct WordsButton<Label: View>: View {
+  let action: () -> Void
+  let label: Label
+  /// The words' size as laid out, which grows with the text size.
+  @State private var words: CGSize = .zero
+
+  init(action: @escaping () -> Void, @ViewBuilder label: () -> Label) {
+    self.action = action
+    self.label = label()
+  }
+
+  var body: some View {
+    Button(action: action) {
+      label
+        .onGeometryChange(for: CGSize.self) { proxy in
+          proxy.size
+        } action: { size in
+          words = size
+        }
+        .frame(minHeight: HitTarget.minimum)
+        .contentShape(.interaction, Rectangle())
+    }
+    .contentShape(.accessibility, WordsBand(height: band))
+  }
+
+  /// 0, the whole line, for words narrower than `HitTarget.minimum`: every element the hit-region
+  /// check passed had a side of 44 or more (York 34 by 44, "Copy address" 123.9 by 32.97), and the
+  /// one it failed had neither (the clear button, 19.67 by 19).
+  private var band: CGFloat {
+    words.width < HitTarget.minimum ? 0 : max(words.height, HitTarget.shortestElement)
+  }
+}
+
+/// The band `height` tall across the middle of a rect, as the words sit in their taller line;
+/// the whole rect when it is no taller.
+struct WordsBand: Shape {
+  var height: CGFloat
+
+  func path(in rect: CGRect) -> Path {
+    guard height > 0, height < rect.height else { return Path(rect) }
+    return Path(rect.insetBy(dx: 0, dy: (rect.height - height) / 2))
+  }
 }
 
 /// The website's page background (`global.css`): a linear gradient from `g1` to `g2` at 168°
 /// (down, a little to the right), and over it a radial glow of `g3` centred at (88%, 6%), from
 /// the palette's `glow` opacity to clear at 52% of the distance to the farthest corner. Full
-/// bleed, decorative, and left alone by Smart Invert.
+/// bleed and decorative, with no accessibility modifier, and it must keep none: a gradient has
+/// no accessibility element, and an accessibility modifier on a view without one makes it one.
+/// On PR #33's two macOS runs `.accessibilityHidden(true)` here, before and then after
+/// `.accessibilityIgnoresInvertColors()`, was the window-sized `other` element with no label that
+/// the audit failed on every screenful of every page (`sufficientElementDescription`), as the
+/// same modifier made an element of each hour bar and row of agreement dots it hid (DECISIONS,
+/// "The iPhone app's UI tests, after PR #33's second macOS run"). Smart Invert inverts it with the
+/// text on it, as Safari inverts the website: exempt, it kept its colours under ink Smart Invert
+/// had inverted, pale on pale or dark on dark (about 1:1 to 3.7:1, modelled).
 struct PageBackground: View {
   let theme: PageTheme
 
@@ -64,7 +132,5 @@ struct PageBackground: View {
       }
     }
     .ignoresSafeArea()
-    .accessibilityHidden(true)
-    .accessibilityIgnoresInvertColors()
   }
 }

@@ -12,6 +12,26 @@ final class SettingsTests: XCTestCase {
     continueAfterFailure = false
   }
 
+  /// Settings' "About" header, which the audit found "partially unsupported" for Dynamic Type
+  /// (on PR #33's two macOS runs, the frame the same in both), though it grows with the text:
+  /// run 2's recording shows it at every size it is on screen, from the smallest to AX2, 0.80 to
+  /// 0.84 of the width of "Privacy", the same view in the same style, which grows to AX5 and
+  /// passes. "About" is below the form's visible part from AX3 at the audit's sizes, and Help
+  /// from xxL; the rule that failed About and passed Help and rows that left as late is the
+  /// audit's own. Help, never failed, isn't allowed. Allowed only while "Privacy", the control,
+  /// is on screen as the audit begins and passes: should the header stop growing, it fails too
+  /// (DECISIONS, "The iPhone app's UI tests, after PR #33's second macOS run").
+  static let headersGrow = ScreenException(
+    type: .dynamicType,
+    says: "partially unsupported",
+    labels: ["About"],
+    control: "Privacy",
+    why:
+      "the About header, the same text in the same style as Privacy's, which the recording "
+      + "shows growing with every text size at which it is on screen; the audit's Dynamic Type "
+      + "check passed Privacy's, on screen at every size"
+  )
+
   /// Changing the units keeps them, asks the server again in them, and they stay chosen at the
   /// next launch. `-network` runs the app's own client and transport over the stubbed network,
   /// so the request is the app's: the recorder shows the units the last one asked in.
@@ -26,14 +46,17 @@ final class SettingsTests: XCTestCase {
     // The first launch asked by IP with no units, and kept the server's choice.
     XCTAssertTrue(units.buttons["cm"].isSelected, "cm isn't chosen")
     XCTAssertFalse(units.buttons["in"].isSelected, "in is chosen as well")
-    XCTAssertEqual(app.staticTexts["debug-units"].label, "none")
+    // The recorder's lines say what they hold, and hold it as their values.
+    XCTAssertEqual(recorded(app.staticTexts["debug-units"]), "none")
+    XCTAssertEqual(app.staticTexts["debug-units"].label, "Units last asked for")
+    XCTAssertEqual(opened(app).label, "Last link opened")
     XCTAssertTrue(
       app.staticTexts["Temperatures follow: cm with °C, inches with °F."].exists, "No footnote")
     units.buttons["in"].tap()
-    waitFor(app.staticTexts["debug-units"], label: "f")
+    waitFor(app.staticTexts["debug-units"], value: "f")
     XCTAssertTrue(units.buttons["in"].isSelected, "in isn't chosen")
     XCTAssertFalse(units.buttons["cm"].isSelected, "cm is still chosen")
-    try auditAccessibility(of: app, on: "Settings")
+    try auditAccessibility(of: app, on: "Settings", allowing: [Self.headersGrow])
     attachScreen(of: app, named: "app-settings")
     app.terminate()
 
@@ -43,11 +66,19 @@ final class SettingsTests: XCTestCase {
     let kept = again.find("units")
     XCTAssertTrue(kept.waitForExistence(timeout: 5), "No snow units control")
     XCTAssertTrue(kept.buttons["in"].isSelected, "in isn't kept")
-    XCTAssertEqual(again.staticTexts["debug-units"].label, "f", "The launch didn't ask in inches")
+    XCTAssertEqual(
+      recorded(again.staticTexts["debug-units"]), "f", "The launch didn't ask in inches")
   }
 
   /// Each row opens what it says: willitsnow.today's own pages in Safari, the emails to the
   /// support address, and the pages on Settings' own stack.
+  ///
+  /// The emails come last, after the pages' audits. The Debug recorder's lines sit below the
+  /// sheet's content and wrap to show the whole URL, so the height they take is the content's:
+  /// Report an ad's email is 201 characters with no space, about 5 lines at Large and taller
+  /// than the window at AX5, where the audit's text-size checks lay the sheet out. Audited with
+  /// it recorded, How it works, Credits and licences and the licence would be squeezed under
+  /// it; with Support's address recorded, the lines are three or so at AX5.
   @MainActor
   func testRowsOpenWhatTheySay() throws {
     let app = launch(["-resetStore", "-fixture", "leeds-dry", "-openURLs", "record"])
@@ -55,26 +86,11 @@ final class SettingsTests: XCTestCase {
     assertSnowOnly(app)
 
     tap("privacy-policy", in: app)
-    waitFor(opened(app), label: "https://willitsnow.today/privacy")
+    waitFor(opened(app), value: "https://willitsnow.today/privacy")
     tap("terms", in: app)
-    waitFor(opened(app), label: "https://willitsnow.today/terms")
+    waitFor(opened(app), value: "https://willitsnow.today/terms")
     tap("support", in: app)
-    waitFor(opened(app), label: "https://willitsnow.today/support")
-    tap("contact-us", in: app)
-    waitFor(opened(app), label: "mailto:support@willitsnow.today")
-    tap("report-ad", in: app)
-    let report = opened(app)
-    let mail = NSPredicate(format: "label BEGINSWITH %@", "mailto:support@willitsnow.today?")
-    wait(for: [expectation(for: mail, evaluatedWith: report)], timeout: 5)
-    // Section 10.7's subject and body, encoded: the version, the time on the phone, the place.
-    XCTAssertTrue(
-      report.label.hasPrefix(
-        "mailto:support@willitsnow.today?subject=Report%20an%20ad%20(willitsnow.today%201.0)"
-          + "&body=Time%3A%20"),
-      report.label)
-    XCTAssertTrue(
-      report.label.hasSuffix("%0APlace%3A%20Leeds%0AWhat%20was%20wrong%20with%20the%20ad%3A%0A"),
-      report.label)
+    waitFor(opened(app), value: "https://willitsnow.today/support")
 
     let version = app.staticTexts["version"]
     reveal(version, in: app)
@@ -114,6 +130,24 @@ final class SettingsTests: XCTestCase {
     XCTAssertTrue(app.staticTexts["notice-text"].label.contains("Apache License"))
     back(in: app)
     back(in: app)
+
+    // The emails, with no audit after them (above).
+    tap("contact-us", in: app)
+    waitFor(opened(app), value: "mailto:support@willitsnow.today")
+    tap("report-ad", in: app)
+    let report = opened(app)
+    let mail = NSPredicate(format: "value BEGINSWITH %@", "mailto:support@willitsnow.today?")
+    wait(for: [expectation(for: mail, evaluatedWith: report)], timeout: 5)
+    // Section 10.7's subject and body, encoded: the version, the time on the phone, the place.
+    let email = recorded(report)
+    XCTAssertTrue(
+      email.hasPrefix(
+        "mailto:support@willitsnow.today?subject=Report%20an%20ad%20(willitsnow.today%201.0)"
+          + "&body=Time%3A%20"),
+      email)
+    XCTAssertTrue(
+      email.hasSuffix("%0APlace%3A%20Leeds%0AWhat%20was%20wrong%20with%20the%20ad%3A%0A"),
+      email)
     XCTAssertTrue(app.buttons["close-settings"].waitForExistence(timeout: 5))
   }
 
@@ -127,11 +161,11 @@ final class SettingsTests: XCTestCase {
     XCTAssertEqual(
       app.staticTexts["fallback-body"].label,
       "Email support@willitsnow.today with a screenshot of the ad and the time you saw it.")
-    XCTAssertFalse(app.staticTexts["copied"].exists)
+    XCTAssertFalse(app.staticTexts["copy-confirmation"].exists)
     app.buttons["copy-address"].tap()
-    let copied = app.staticTexts["copied"]
+    let copied = app.staticTexts["copy-confirmation"]
     XCTAssertTrue(copied.waitForExistence(timeout: 5), "No confirmation")
-    XCTAssertEqual(copied.label, "Copied.")
+    XCTAssertEqual(copied.label, "Address copied.")
     try auditAccessibility(of: app, on: "Report an ad's fallback")
     attachScreen(of: app, named: "app-report-ad-fallback")
     app.buttons["close-fallback"].tap()
@@ -187,8 +221,10 @@ final class SettingsTests: XCTestCase {
     assertSnowOnly(app)
     try auditAccessibility(of: app, on: "Your privacy")
     attachScreen(of: app, named: "app-your-privacy")
+    let policy = app.buttons["full-policy"]
+    XCTAssertGreaterThanOrEqual(policy.frame.height, 44, "The full policy's row at \(policy.frame)")
     tap("full-policy", in: app)
-    waitFor(opened(app), label: "https://willitsnow.today/privacy")
+    waitFor(opened(app), value: "https://willitsnow.today/privacy")
   }
 
   // MARK: - Helpers
@@ -203,17 +239,27 @@ final class SettingsTests: XCTestCase {
     return app
   }
 
-  /// Taps the gear, and waits for the sheet.
+  /// Taps the gear, and waits for the sheet. With no sheet, the failure says where the top bar
+  /// was: on main's first macOS run the gear was under the status bar, where the tap never
+  /// reached it.
   @MainActor
   private func openSettings(_ app: XCUIApplication) {
     app.buttons["settings"].tap()
-    XCTAssertTrue(app.buttons["close-settings"].waitForExistence(timeout: 5), "No Settings")
+    XCTAssertTrue(
+      app.buttons["close-settings"].waitForExistence(timeout: 5),
+      "No Settings after tapping the gear; \(app.homeGeometry)")
   }
 
-  /// The recorder's line: the last URL the app would have opened.
+  /// The recorder's line whose value is the last URL the app would have opened.
   @MainActor
   private func opened(_ app: XCUIApplication) -> XCUIElement {
     app.staticTexts["debug-opened"]
+  }
+
+  /// What a recorder's line holds, its value (its label says what it is).
+  @MainActor
+  private func recorded(_ line: XCUIElement) -> String {
+    line.value as? String ?? ""
   }
 
   /// A text on screen whose own label contains `words` (`matching`, not `containing`, which
@@ -223,19 +269,37 @@ final class SettingsTests: XCTestCase {
     app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", words)).firstMatch
   }
 
-  /// Scrolls until `element` can be tapped, up then down.
+  /// Scrolls until a tap on `element` lands on it (`reachable`), up then down.
   @MainActor
   private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
     var swipes = 0
-    while !(element.exists && element.isHittable) && swipes < 6 {
+    while !reachable(element, in: app) && swipes < 6 {
       app.swipeUp()
       swipes += 1
     }
-    while !(element.exists && element.isHittable) && swipes < 12 {
+    while !reachable(element, in: app) && swipes < 12 {
       app.swipeDown()
       swipes += 1
     }
-    XCTAssertTrue(element.exists && element.isHittable, "Can't reach \(element)")
+    let recorder = app.staticTexts["debug-opened"]
+    XCTAssertTrue(
+      reachable(element, in: app),
+      "Can't reach \(element), at \(element.exists ? "\(element.frame)" : "nowhere"), with the "
+        + "Debug recorder's lines at \(recorder.exists ? "\(recorder.frame)" : "nowhere")")
+  }
+
+  /// Whether a tap on `element` would land on it: it is there and hittable, it has stopped moving
+  /// (a tap on a list still moving only stops it), and it lies whole above the Debug recorder's
+  /// lines when they show. `isHittable` is XCUITest's accessibility hit test, which finds an
+  /// element under a view with no element of its own: on PR #33's macOS run, Support, Settings'
+  /// last row, was hittable at the sheet's foot under the recorder's bar, which then took the tap,
+  /// so the row never opened (the recorder now sits under the sheet's content, DebugHooks.swift).
+  @MainActor
+  private func reachable(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
+    guard element.exists, element.isHittable else { return false }
+    let frame = settledFrame(of: element)
+    let recorder = app.staticTexts["debug-opened"]
+    return !recorder.exists || frame.maxY <= recorder.frame.minY
   }
 
   /// Taps the row or button identified `id`, scrolling to it first.
@@ -252,13 +316,14 @@ final class SettingsTests: XCTestCase {
     app.navigationBars.buttons.element(boundBy: 0).tap()
   }
 
-  /// Waits until `element` reads `label`.
+  /// Waits until `element`, a recorder's line, holds `value`.
   @MainActor
-  private func waitFor(_ element: XCUIElement, label: String) {
-    let reads = NSPredicate(format: "exists == true AND label == %@", label)
-    let expectation = XCTNSPredicateExpectation(predicate: reads, object: element)
+  private func waitFor(_ element: XCUIElement, value: String) {
+    let holds = NSPredicate(format: "exists == true AND value == %@", value)
+    let expectation = XCTNSPredicateExpectation(predicate: holds, object: element)
     let done = XCTWaiter.wait(for: [expectation], timeout: 10)
-    XCTAssertEqual(done, .completed, "\(element) never read \(label)")
+    let held = element.exists ? recorded(element) : "nothing"
+    XCTAssertEqual(done, .completed, "\(element) never held \(value); it holds \"\(held)\"")
   }
 
   /// No text or button Settings shows names another weather type, website or app (section
