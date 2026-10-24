@@ -8,7 +8,8 @@ import UIKit
 /// About and Help, and the version. Pages open on the sheet's own stack (Your privacy, How it
 /// works, Credits and licences); willitsnow.today's pages open in Safari and the emails in the
 /// mail app, through `openURL`, and with no mail app the fallback sheet says where to write.
-/// Everything shown is the presenters'.
+/// Everything shown is the presenters'. The headers, the footer and the tint are `SheetStyle`'s,
+/// which meet WCAG AA where the system's light ones don't.
 public struct SettingsView: View {
   let screen: SettingsScreen
   let privacy: YourPrivacy
@@ -32,6 +33,7 @@ public struct SettingsView: View {
           UnitsRow(control: screen.units, setUnits: actions.setUnits)
         } footer: {
           Text(verbatim: screen.units.footnote)
+            .foregroundStyle(SheetStyle.secondary)
         }
         ForEach(screen.sections) { section in
           Section {
@@ -41,6 +43,7 @@ public struct SettingsView: View {
           } header: {
             if let heading = section.heading {
               Text(verbatim: heading)
+                .foregroundStyle(SheetStyle.secondary)
             }
           }
         }
@@ -67,6 +70,9 @@ public struct SettingsView: View {
         destination(page)
       }
     }
+    // The rows that leave the app, Close, and the pages' links and buttons: the system's blue
+    // gives 4.01:1 on a row and 3.59:1 on the form's background (`SheetStyle`).
+    .tint(SheetStyle.accent)
     .sheet(item: $fallback) { fallback in
       MailFallbackView(fallback: fallback, copy: actions.copy)
     }
@@ -250,6 +256,8 @@ struct MailFallbackView: View {
             Text(verbatim: fallback.copyAddress)
           }
           .buttonStyle(.borderedProminent)
+          // White on the fill, 7.56:1 in both appearances (`SheetStyle.filled`).
+          .tint(SheetStyle.filled)
           .accessibilityIdentifier("copy-address")
           if copied {
             Text(verbatim: fallback.copied)
@@ -272,6 +280,8 @@ struct MailFallbackView: View {
         }
       }
     }
+    // A sheet of its own, so Settings' tint is given again, for Close.
+    .tint(SheetStyle.accent)
     .presentationDetents([.medium, .large])
   }
 }

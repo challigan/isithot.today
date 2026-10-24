@@ -30,21 +30,22 @@ Configs/                 Base (every target), Team (Carl's team ID, not a secret
                          Generated/Copy.xcconfig (the Info.plist's strings: the location purpose string)
 Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API models; generated CoreCopy,
                          Questions, AppCopy, AppCredits, Constants, Keys and Palettes; the ports, the
-                         home screen's, the picker's and Settings' presenters, the glyph's drift and which
-                         pages are light ink on dark (IsItLogic); AppModel, its API client, the launch and
-                         refresh rules, what VoiceOver is told, the clocks and the minute tick, the
-                         picker's search and the location rules (IsItState); in Tests/IsItTestSupport the
-                         fixtures (the search answers in Fixtures/Search) and golden vectors with their
-                         loaders; in Tests/IsItLogicTests the ports' golden tests and the guard that every
-                         vector file is ported (below); in Tests/IsItStateTests AppModel with fakes, and
-                         the home screen drawn from it
+                         home screen's, the picker's and Settings' presenters, the glyph's drift, which
+                         pages are light ink on dark and the sheets' colours (IsItLogic); AppModel, its
+                         API client, the launch and refresh rules, what VoiceOver is told, the clocks
+                         and the minute tick, the picker's search and the location rules (IsItState); in
+                         Tests/IsItTestSupport the fixtures (the search answers in Fixtures/Search) and
+                         golden vectors with their loaders; in Tests/IsItLogicTests the ports' golden
+                         tests and the guard that every vector file is ported (below); in
+                         Tests/IsItStateTests AppModel with fakes, and the home screen drawn from it
 Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore, URLSessionTransport,
                          WidgetCenterReloader, RecentDefaults: AppModel's services), IsItLocation
                          (CoreLocationService, the app's only), IsItAds (Google's SDKs),
                          IsItUI (the home screen: HomeShell, ViewSwitcher, HomePager and ForecastPageView
                          with its bodies and GlyphView, drawing IsItLogic's HomePage and HomeTopBar, with
                          HomeActions; the picker: PlacePickerView, drawing PlacePicker, with
-                         PlacePickerActions; Settings: SettingsView and its pages, with SettingsActions),
+                         PlacePickerActions; Settings: SettingsView and its pages, with SettingsActions;
+                         SheetStyle, both sheets' colours at WCAG AA),
                          IsItWidgetUI (the widget's entry, provider, view), SnowKit (Glyphs, Color(rgb:)
                          for the palettes, and the glyph catalogues, generated)
 Apps/Snow/App/           WillItSnowApp (the services and the scene's phases), HomeView (the home screen,
@@ -493,8 +494,9 @@ brought forward the minute's tick, pull to refresh, the footer and the loading a
   in a horizontal `ScrollView` paged with `.scrollTargetBehavior(.paging)` and
   `.scrollPosition(id:)`, each page the pager's own size, which a `GeometryReader` reads (since
   main's first macOS run: sized to the screen's safe area, the pages pushed the top bar under the
-  status bar; DECISIONS, "The iPhone app's UI tests, after main's first macOS run"). Both are
-  bound to `AppModel.view` (`$model.view` in `HomeView`), so a tap, a swipe, a widget's route
+  status bar; DECISIONS, "The iPhone app's UI tests, after main's first macOS run"). The
+  horizontal scroll view is `pager` to the UI tests, which read its edges, and an audit issue on
+  it names it. Both are bound to `AppModel.view` (`$model.view` in `HomeView`), so a tap, a swipe, a widget's route
   (`.view`, which now sets the view) and the return after more than 30 minutes away (the view
   for the time of day) move both. The app opens on
   `MiddleDay.defaultView`, Today or Now from 6pm, once: from the saved answer it paints, or else
@@ -567,8 +569,11 @@ file and line):
 
 - `HomeTests`: `testAberdeenSnow`, `testDurhamTomorrow` and `testLeedsDry` open each fixture at
   its own moment with `-clock fixed`, check the top bar, that the home screen fits the screen
-  (`expectFits`: the place button, the gear and the page on screen each within the window), the
-  tabs and the page it opens on (Today, or Now from 6pm), then each page by its tab, then back
+  (`expectFits`: the place button, the gear and the switcher within the window, the pager
+  between the switcher and the window's bottom edge, and the page on screen starting under the
+  switcher; not the page's bottom, as XCUITest may give its scroll view its content's frame,
+  nor the status bar, whose frame XCUITest doesn't give, which the picker's and Settings' taps
+  guard), the tabs and the page it opens on (Today, or Now from 6pm), then each page by its tab, then back
   from This week to Now by swiping and on again, each tab selected as it shows.
   `testDefaultViewEitherSideOf6pm` opens Durham at 5:59pm (Today; Now, Today, This week) and at
   6pm (Now; the middle tab Tomorrow).
@@ -593,10 +598,12 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   `UICTContentSizeCategoryAccessibilityXL`; the test checks the switcher is buttons at AX3 and not
   at Large, so the size reached the app, and that the home screen fits the screen at that size,
   `expectFits`), with `performAccessibilityAudit(for: .all)` on every screenful, from the page's
-  top to the end of its credits, in at most 20 screenfuls. Each scroll brings the first element
-  the screen doesn't show whole to the top (a drag in the page's left margin, clear of the home
-  indicator, read from one snapshot of the page), and an issue on an element the screenful cuts
-  at the page's edge, or doesn't show, is judged on a screenful that shows it whole (an audit
+  top to the end of its credits, in at most 20 screenfuls. The page on screen is the part of its
+  frame a user sees, within the window and below the switcher, whether the frame XCUITest gives
+  the page's scroll view is its viewport or its content. Each scroll brings the first element
+  the screen doesn't show whole to the top of that part (a drag in the page's left margin, clear
+  of the home indicator, read from one snapshot of the page), and an issue on an element the
+  screenful cuts at its edge, or doesn't show, is judged on a screenful that shows it whole (an audit
   measures what the screen has where the element is: on PR #31's macOS run, the answer failed
   contrast on every screenful that had scrolled it off the top). Every issue fails the test, once
   per fixture and size, listing each with its page and screenful, kind (`contrast`, `hitRegion`,
@@ -606,12 +613,15 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   type size (`dynamicType`; section 10.2's segmented picker, buttons that scale at accessibility
   sizes) and the credits' inline links (`hitRegion`). The log names an exception a test didn't
   need. A page that stops scrolling short of its end, an app that has left the foreground or an
-  audit that can't run fails with where the page and its credits were on each screenful. A page
+  audit that can't run fails with where the page and its credits were on each screenful, and the
+  page's frame on each (one that moves is its content's). A page
   that stops short, or never reaches its end, also says the page's whole frame and the window's,
   each drag, the page's four lowest elements and where a swipe by XCUITest's own gesture then
   moved the credits (a page at the end of its scroll range, or a drag it didn't take), and
   attaches the app's element tree as `<name>-tree`. For a new issue, fix the app, or, when it
-  isn't a fault, add it there with its reason.
+  isn't a fault, add it there with its reason. All six are expected to fail on the next run
+  still, on issues the log couldn't explain (DECISIONS, "The iPhone app's UI tests, reviewed"):
+  read the run's `home-*` screens and its xcresult before changing the app for them.
 
 **The contact sheet** tiles every attachment in its names' order (`ci/contact-sheet.mjs`, five
 screens to a row). `HomeAuditTests` attaches every screenful it audits as
@@ -715,6 +725,16 @@ the choices ("The iPhone app's Settings").
   `HowItWorks()`, `CreditsPage()` and `YourPrivacy(adsOn:privacyChoices:kept:)`.
 - **IsItUI:** `SettingsView(screen:privacy:actions:)`, with the pages on its own stack
   (`YourPrivacyView`, `HowItWorksView`, `CreditsView`, `NoticeView`) and `MailFallbackView`.
+  Credits and licences gives each credit's words whole, then each of its sources and licences
+  as a row of its own that opens it, not as links inside the sentence; a notice's project link
+  is 44 points tall.
+- **The sheets' colours** (the picker's too) are the system's but where those fall short of
+  WCAG AA's 4.5:1 for text under 18 points in the light appearance: `SheetStyle` (IsItUI) draws
+  the headers, footers and secondary lines in `SheetColours.secondaryLight` (5.36:1 on a grouped
+  list's background, where the system's secondary label gives 3.28:1) and tints the buttons,
+  links and toolbar items with the system's blue as Increase Contrast draws it (the default
+  gives 3.59:1 there), from IsItLogic's `SheetColours`, which `SheetColoursTests` holds to it on
+  Linux. The dark appearance keeps the system's secondary label, which passes.
 - **The units** go through `AppModel.setUnits(_:)` (IsItState): kept in `units.v1`, the answer
   asked for again in them with what is on screen kept meanwhile, then the notifications' sync
   hook (phase 8), since a registration carries the units.
@@ -726,7 +746,8 @@ the choices ("The iPhone app's Settings").
 `InfoPagesTests.swift` (every row and its action, the free and bought versions, the emails'
 subject, body and encoded URL, the phone's time, How it works word for word with the
 constants' numbers, the credits and their links, Your privacy's lines, and no word naming another
-app, site or weather), `Tests/IsItStateTests/UnitsTests.swift` (the units kept, asked for and
+app, site or weather), `SheetColoursTests.swift` (the sheets' colours on each system background),
+`Tests/IsItStateTests/UnitsTests.swift` (the units kept, asked for and
 saved, the answer kept meanwhile, offline, the same units), and in packages/mobile the copy,
 the credits, the constants, Your privacy against the website's privacy notice, and the guard
 that no Swift view or label is given a string literal (`swiftLiterals.test.ts`, below).
@@ -771,7 +792,7 @@ tests stop at their first failure, so without it a run would show one issue a sc
 - **The tests.** `PickerTests` and `SettingsTests` launch the same app; the picker's Open
   Settings is read from the recorder (`testOpenSettingsOpensTheAppsPage`), as Settings' rows are.
   When a tap on the place button or the gear opens nothing, the failure says where the window,
-  the top bar's controls, the switcher and the page were (`homeGeometry`).
+  the top bar's controls, the switcher, the pager and the page were (`homeGeometry`).
   Phase 5.4's tests and phase 6's share the launch arguments (below, "Debug hooks"): `-network`
   takes a comma list of fixtures, or `off` or `unavailable`; `-clock fixed` and `-now` fix the
   moment; `-resetStore` forgets the recent places too. Their identifiers differ, and the pager

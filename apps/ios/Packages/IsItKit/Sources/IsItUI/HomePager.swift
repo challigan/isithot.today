@@ -97,6 +97,13 @@ public struct ViewSwitcher: View {
 /// screen by the top bar and the switcher. The window centred it, which put the top bar's place
 /// button and gear under the status bar, where a tap never reaches the app, and every page's end
 /// below the screen (DECISIONS, "The iPhone app's UI tests, after main's first macOS run").
+///
+/// The horizontal scroll view is `pager` to the UI tests: `expectFits` reads its top and bottom
+/// edges, and an issue the audit finds on it names it. On main's first macOS run an element with
+/// neither an identifier nor a label failed `sufficientElementDescription` once on every
+/// screenful, never whole on screen, as this scroll view, then taller than the screen, was; with
+/// the identifier, the next run's log says whether it is (DECISIONS, "The iPhone app's UI tests,
+/// reviewed").
 public struct HomePager: View {
   let pages: [PageContent]
   @Binding var selection: AppView
@@ -144,6 +151,7 @@ public struct HomePager: View {
         .scrollTargetBehavior(.paging)
         .scrollPosition(id: position)
         .scrollIndicators(.hidden)
+        .accessibilityIdentifier("pager")
         .onAppear { proxy.scrollTo(selection, anchor: .leading) }
       }
     }

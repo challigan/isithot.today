@@ -3289,12 +3289,14 @@ and the audit's issues). FixtureLaunchTests, HomeTests, LaunchTests and OfflineT
   safe area. `HomeShell` says beside its frame that its content must take the height it is
   offered.
 - **A guard for it.** `expectFits` (`HomeScreens.swift`) checks the place button, the gear and the
-  page on screen each lie within the window. It runs in HomeTests' three fixture tests and at each
-  of HomeAuditTests' launches, at Large and at AX3. With main's geometry from the log, place and
-  gear at y=-4.33 (Large) and -115.67 (AX3) and the page running to 910.67 or 1022, it fails on
-  each of the three. With the top bar at the safe area's top and the page ending at 840 or 874,
-  it passes (run on Linux against stubs of XCUITest, below). When a tap on the place button or
-  the gear opens nothing, PickerTests' and SettingsTests' failures now give the same geometry.
+  page on screen each lie within the window (since its review, the pager's bottom edge in the
+  page's place: "The iPhone app's UI tests, reviewed", below). It runs in HomeTests' three
+  fixture tests and at each of HomeAuditTests' launches, at Large and at AX3. With main's
+  geometry from the log, place and gear at y=-4.33 (Large) and -115.67 (AX3) and the page running
+  to 910.67 or 1022, it fails on each of the three. With the top bar at the safe area's top and
+  the page ending at 840 or 874, it passes (run on Linux against stubs of XCUITest, below). When
+  a tap on the place button or the gear opens nothing, PickerTests' and SettingsTests' failures
+  now give the same geometry.
 - **What the log can't say, and what the next run will show.** Three things.
   - **AX3's scroll ranges ended early.** The credits stopped 1,000 to 1,600 points short of
     each page's end, in both runs, ending in a 3.33-point bounce. The stops don't follow the
@@ -3331,6 +3333,101 @@ and the audit's issues). FixtureLaunchTests, HomeTests, LaunchTests and OfflineT
   stubs of XCUITest (with `XCTAttachment(string:)` and the element types they name). A copy of
   `expectFits`, `homeGeometry` and the audit's issue text ran there against fake trees with main's
   geometry (failing) and the fixed one (passing), and IsItCore's tests passed.
+
+## The iPhone app's UI tests, reviewed
+
+What the review of the fix for main's first macOS run found, and what changed for it. Nothing
+was given an exception, and no test asks less.
+
+- **The next run won't pass the home audits.** The pager's fix explains the top bar's issues and
+  the pages' ends at Large, not three others, and nothing changed the app for those on a guess:
+  - **The places nearby at Large** failed contrast on each page's last screenful, judged at
+    once, so whole on screen, at about y=650 to 780, clear of the status bar and the home
+    indicator; the pager's fix moves them about 70 points and changes no colour. They are
+    underlined buttons in text under 18 points (17 points, regular), as "Use my location" is (13
+    points, semibold), whose failures at Large may be this rather than the status bar's edge. The
+    underlined outbound links (17 points, semibold) pass, as does the plain footnote "Using
+    approximate location." at Large, and at AX3, where all of them are large text, no place
+    fails. The ink gives 6.26:1 or more on every page, so what the
+    audit measured there is for the screens to show.
+  - **`sufficientElementDescription`** on an element with neither an identifier nor a label, once
+    on each screenful of every page of all six tests, never whole on screen. HomePager's
+    horizontal scroll view had neither and, taller than the screen, was never whole. Fitting the
+    screen now, it would be judged at once and fail still, if it is the one; it is `pager` now,
+    so the next log names it if so.
+  - **AX3's scroll ranges.** At Large, each page's scroll range and the 778.33-point viewport add
+    up to its content's height from the credits' frames (aberdeen-snow's Now: 177 + 778.33 =
+    955). At AX3 they add up to 1,354 to 1,488 points on every page, where the content is 2,345 to
+    3,027 points tall, and they don't follow the heights (aberdeen-snow's tallest page has the
+    shortest range). So at accessibility sizes the scroll view's scrollable height or the
+    elements' accessibility frames are wrong, whatever the page's frame, which is all the pager's
+    fix touched. The three AX3 tests are expected to fail again, "scrolls no further", sooner now
+    that about 415 points of page are on screen; `stopped` says what it finds.
+
+  **Left for Carl:** the `ios-attachments` and `ios-results` artefacts of run 40061399787, the
+  `home-*` screens (`home-*-2-ax3-*` for AX3) and the xcresult, which the network policy keeps
+  from agents. They show what the audit measured and whether each stopped page shows the region
+  of its end. The app is to be fixed from them, with an exception only where they prove an issue
+  false, and only with Carl's agreement; without them, the next run is for the diagnostics, not a
+  pass.
+
+- **The page on screen is the part a user can see.** `onScreen` took the page's frame within the
+  window, as if it were the scroll view's fixed viewport. On main's run, durham-tomorrow's
+  Tomorrow page at Large had scrolled 312.33 points by its second screenful (its credits from
+  1,114 to 801.67) when its verdict, about 264 points down the content and so near y=84 under
+  the switcher, was judged at once; aberdeen-snow's week judged "Yes." at about y=68 the same
+  way. With a viewport from y=132.33 both would have been held, then dropped, as the first
+  screenful showed them whole. So the frame XCUITest gives the page's scroll view most likely
+  moves with its content (or XCUITest gave those elements no frame, which `note` also judges at
+  once; each issue's frame now says which). With a content frame, a scrolled page took in the top
+  bar and the switcher: elements under the switcher were judged whole there (the answer and
+  verdict failures), and each scroll brought the next element to y≈8, at AX3 under 363 points of
+  top bar and switcher, never audited in view. `shown(_:in:)` now clips the page's frame to the
+  window below the switcher (`pageWindow`), for the held issues, the scroll's length and the
+  drag; should the frame be the viewport, it changes nothing. Each failure gives the page's frame
+  on every screenful, which settles it.
+- **`expectFits` reads the page's top, not its bottom.** A content frame runs below the screen
+  from the page's top however well the page fits, so the guard would have failed HomeTests'
+  three fixture tests, which pass on main, and every HomeAuditTests launch. It now checks that
+  the place button, the gear and the switcher lie within the window; that the pager, whose
+  frame doesn't move as it scrolls only across, runs from under the switcher to no lower than
+  the window's bottom edge; and that the page starts under the switcher. A page's end is
+  HomeAuditTests' to check. On Linux against fake trees: main's geometry fails at Large (the
+  place button, the gear and the pager) and at AX3; the fixed layout passes, the pager to 840 or
+  874 and the page's frame its viewport or its 955-point content.
+- **What the guard can't see, it says.** It doesn't prove the place button and the gear are below
+  the status bar, whose frame XCUITest doesn't give. On the iPhone 17 a home screen 50 to 70
+  points too tall would put their centres, where a tap lands, under it, with them and the pager
+  within the window (if the pager ends at the safe area's bottom edge; one 60 points too tall
+  passes on Linux). PickerTests' and SettingsTests' taps are the real guard, and their failures
+  give the geometry, the pager's now too.
+- **The sheets' audits run for the first time on the next run**, allowing nothing, and each test
+  stops at its first failure. Three likely failures are fixed in the app:
+  - **A notice's project link** (`NoticeView`) was a line of footnote text, about 18 points
+    tall, and now is 44, as the footer's links are.
+  - **Credits and licences' links sat inside their sentences**, as tall as their line: the hit
+    regions that phase 5.4 expected the audit to flag on the home screen, where an exception lets
+    them through. Nothing on this page needs them inside the sentence, so each credit is now its
+    words whole, then each of its sources and licences as a row of its own that opens it in
+    Safari (`LeavingRow`, as Settings' rows that leave the app). SettingsTests reads the credits'
+    words as before.
+  - **Secondary text and the tint.** In the light appearance the system's secondary label (60% of
+    0x3c3c43) blends to 3.28:1 on a grouped list's background and 3.43:1 on its rows, and its blue,
+    the default tint, gives 3.59:1 and 4.01:1, under 4.5:1 for text under 18 points.
+    `SheetStyle` (IsItUI) draws the picker's search, location and results' second lines, and the
+    headers and footers of Settings, Credits and Your privacy, in 0x636366 (5.36:1 and 5.98:1),
+    and tints both sheets with the system's blue as Increase Contrast draws it: 0x0040dd light
+    (6.77:1 and 7.56:1), 0x409cff dark (4.92:1 or more, where the default gives 3.82:1 on a
+    sheet's rows). The dark appearance keeps the system's secondary label, 5.29:1 or more. "Copy
+    address", white on its fill, takes 0x0040dd in both (7.56:1): no blue reads at 4.5:1 both
+    under white and on a dark row. The values are IsItLogic's `SheetColours`, which
+    `SheetColoursTests` holds to 4.5:1 on Linux, with the system's they replace.
+  - **Not changed:** the search field's placeholder, the system's, about 1.7:1, which
+    `.searchable` doesn't let the app colour. Should the audit flag it, the next run will say.
+- **Not proven here:** IsItUI and the UI tests compile only on the macOS jobs. On Linux, the nine
+  UI test files type-checked against stubs of XCUITest; `expectFits`, `pageWindow`,
+  `shown(_:in:)`, the issue text and the held-issue logic ran against fake trees and issues as
+  above; the strict swift format lint passed; and IsItCore's 317 tests passed.
 
 ## API contract
 

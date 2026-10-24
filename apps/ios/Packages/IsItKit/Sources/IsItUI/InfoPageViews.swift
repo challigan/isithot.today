@@ -33,9 +33,16 @@ struct HowItWorksView: View {
   }
 }
 
-/// "Credits and licences" (section 10.6): the forecast data's credits, their sources and
-/// licences linked (a tap opens them in Safari), and the typeface and software, each opening its
-/// notice in full.
+/// "Credits and licences" (section 10.6): the forecast data's credits, each with its sources and
+/// licences as rows of their own, which a tap opens in Safari; and the typeface and software,
+/// each opening its notice in full.
+///
+/// A credit's words are whole in its first row, its linked phrases plain, and each phrase is a
+/// row under it: not links inside the sentence, as the home screen's footer has them, whose hit
+/// regions are only as tall as their line. The footer's are an exception its audit allows, as
+/// WCAG 2.2's target size allows a link inside a sentence, and the attribution belongs beside the
+/// data there; this page's audit allows nothing, and nothing here asks for the links to sit in
+/// the sentence, so each is a row at least 44 points tall.
 struct CreditsView: View {
   let page: CreditsPage
   /// A bundled notice's text, by its resource name.
@@ -46,12 +53,22 @@ struct CreditsView: View {
       Section {
         Text(verbatim: page.models)
           .fixedSize(horizontal: false, vertical: true)
-        ForEach(Array(page.data.enumerated()), id: \.offset) { _, credit in
-          Text(PageFooterView.attributed(credit))
-            .fixedSize(horizontal: false, vertical: true)
-        }
       } header: {
         Text(verbatim: page.dataHeading)
+          .foregroundStyle(SheetStyle.secondary)
+      }
+      ForEach(Array(page.data.enumerated()), id: \.offset) { _, credit in
+        Section {
+          Text(verbatim: credit.map(\.text).joined())
+            .fixedSize(horizontal: false, vertical: true)
+          ForEach(Array(credit.enumerated()), id: \.offset) { _, part in
+            if let url = part.url {
+              Link(destination: url) {
+                LeavingRow(title: part.text)
+              }
+            }
+          }
+        }
       }
       Section {
         ForEach(page.notices) { item in
@@ -71,6 +88,7 @@ struct CreditsView: View {
         }
       } header: {
         Text(verbatim: page.softwareHeading)
+          .foregroundStyle(SheetStyle.secondary)
       }
     }
     .navigationTitle(Text(verbatim: page.title))
@@ -88,10 +106,14 @@ struct NoticeView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 16) {
         if let url {
+          // As tall as a tap needs, as the footer's links are: one line of footnote text is
+          // about half that, under the audit's hit region.
           Link(destination: url) {
             Text(verbatim: url.absoluteString)
               .font(.footnote)
               .multilineTextAlignment(.leading)
+              .frame(minHeight: HitTarget.minimum)
+              .contentShape(Rectangle())
           }
         }
         if let text {
@@ -144,6 +166,7 @@ struct YourPrivacyView: View {
           }
         } header: {
           Text(verbatim: kept.heading)
+            .foregroundStyle(SheetStyle.secondary)
         }
       }
       if let policy = page.policy, let url = policyURL {

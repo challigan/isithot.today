@@ -44,7 +44,8 @@ public struct PlacePickerActions {
 /// the first row, then the search's line or its results ("Leeds", with "England, United
 /// Kingdom" beneath), or with nothing typed, the recent places under "Recent", each of which can
 /// be swiped away. A native `List`, so it follows Dark Mode, Dynamic Type and the system's
-/// accessibility settings.
+/// accessibility settings; its secondary lines and its tint are `SheetStyle`'s, which meet WCAG
+/// AA where the system's light ones don't.
 public struct PlacePickerView: View {
   let picker: PlacePicker
   @Binding var text: String
@@ -65,7 +66,7 @@ public struct PlacePickerView: View {
         if let status = picker.status {
           Section {
             Text(verbatim: status)
-              .foregroundStyle(.secondary)
+              .foregroundStyle(SheetStyle.secondary)
               .accessibilityIdentifier("search-status")
           }
         }
@@ -99,6 +100,7 @@ public struct PlacePickerView: View {
             // As written: section headers are capitalised otherwise.
             Text(verbatim: heading)
               .textCase(nil)
+              .foregroundStyle(SheetStyle.secondary)
               .accessibilityIdentifier("recent-heading")
           }
         }
@@ -125,6 +127,9 @@ public struct PlacePickerView: View {
       .autocorrectionDisabled()
       .onSubmit(of: .search) { actions.submit() }
     }
+    // Use my location, Open Settings and Close: the system's blue gives 3.59:1 on the list's
+    // background (`SheetStyle`).
+    .tint(SheetStyle.accent)
   }
 
   /// "Use my location", with the line beneath it while the fix is out or when it came to
@@ -152,7 +157,7 @@ public struct PlacePickerView: View {
     if let detail = row.detail {
       Text(verbatim: detail)
         .font(.subheadline)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(SheetStyle.secondary)
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityIdentifier("location-detail")
     }
@@ -180,7 +185,7 @@ private struct PlaceRowLabel: View {
       if let detail {
         Text(verbatim: detail)
           .font(.subheadline)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(SheetStyle.secondary)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)

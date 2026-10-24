@@ -149,30 +149,38 @@ extension XCUIApplication {
   static let homeBar = ["place", "settings", "approximate", "use-my-location", "views"]
 
   /// Where the home screen's parts are, from one snapshot of the app: the window, then the top
-  /// bar's controls, the switcher and the page on screen (`page-<view>`), each with its frame or
-  /// "no <identifier>", for a failure to say where things were when a tap opened nothing or a
-  /// page didn't fit.
+  /// bar's controls, the switcher, the pager (HomePager's horizontal scroll view) and the page on
+  /// screen (`page-<view>`), each with its frame or "no <identifier>", for a failure to say where
+  /// things were when a tap opened nothing or a page didn't fit.
   var homeGeometry: String {
     guard let root = try? snapshot() else { return "the screen can't be read" }
     let frames = Self.homeFrames(in: root)
-    let parts = Self.homeBar + frames.keys.filter { $0.hasPrefix("page-") }.sorted()
+    let parts = Self.homeBar + ["pager"] + frames.keys.filter { $0.hasPrefix("page-") }.sorted()
     let found = parts.map { id in frames[id].map { "\(id) at \($0)" } ?? "no \(id)" }
     return "the window at \(root.frame); " + found.joined(separator: ", ")
   }
 
-  /// The frame of the first element with each of the top bar's and switcher's identifiers, and
-  /// of each page in the tree, under `root`.
+  /// The frame of the first element with each of the top bar's and switcher's identifiers, the
+  /// pager's, and each page's in the tree, under `root`.
   static func homeFrames(in root: any XCUIElementSnapshot) -> [String: CGRect] {
     var frames: [String: CGRect] = [:]
     var pending = [root]
     while let element = pending.popLast() {
       let id = element.identifier
-      if frames[id] == nil, homeBar.contains(id) || id.hasPrefix("page-") {
+      if frames[id] == nil, homeBar.contains(id) || id == "pager" || id.hasPrefix("page-") {
         frames[id] = element.frame
       }
       pending.append(contentsOf: element.children)
     }
     return frames
+  }
+
+  /// The part of the screen a page shows through: the window below the switcher. A page's
+  /// scroll view shows nothing above it, whatever frame XCUITest gives the scroll view.
+  var pageWindow: CGRect {
+    let window = frame
+    let top = min(max(find("views").frame.maxY, window.minY), window.maxY)
+    return CGRect(x: window.minX, y: top, width: window.width, height: window.maxY - top)
   }
 }
 
@@ -245,10 +253,24 @@ extension XCTestCase {
     XCTAssertTrue(tab.isSelected, "The \(page.label) tab isn't selected")
   }
 
-  /// Where `page`, the page on screen (`page-<view>`), is on screen: its frame within the app's.
+  /// Where `page`, the page on screen (`page-<view>`), is on screen: the part of its frame a user
+  /// can see, within the window and below the switcher (`shown(_:in:)`).
   @MainActor
   func onScreen(_ page: HomeScreen.Page, in app: XCUIApplication) -> CGRect {
-    app.find("page-\(page.view)").frame.intersection(app.frame)
+    shown(app.find("page-\(page.view)").frame, in: app)
+  }
+
+  /// The part of a page's `frame` a user can see: within the window, and below the switcher
+  /// (`pageWindow`). Not the frame within the window alone: on main's first macOS run, once a
+  /// page had scrolled, the audit judged the answer and the verdict whole on screen when they
+  /// were under the switcher, so the frame XCUITest gave the page's scroll view most likely moved
+  /// with its content, taking in the top bar and the switcher above it. The page's elements were
+  /// then judged where a user can't see them, and each scroll brought the next element up under
+  /// the top bar. Should the frame be the scroll view's fixed viewport, below the switcher, this
+  /// changes nothing.
+  @MainActor
+  func shown(_ frame: CGRect, in app: XCUIApplication) -> CGRect {
+    frame.intersection(app.pageWindow)
   }
 
   /// Scrolls `page`, the page on screen, down by `distance` points: a drag up the page by that
@@ -276,12 +298,27 @@ extension XCTestCase {
     return Drag(from: CGPoint(x: x, y: start), to: CGPoint(x: x, y: start - distance))
   }
 
-  /// Checks the home screen fits the screen: the top bar's place button and gear, and the page on
-  /// screen, each lie within the window. On main's first macOS run they didn't: each of the
-  /// pager's pages was the height of the screen's safe area, so the home screen was taller than
-  /// the screen by the top bar and the switcher, and the window centred it. The place button and
-  /// the gear were under the status bar, where taps never reached them, and every page ran past
-  /// the screen's bottom edge, its end never on screen.
+  /// Checks the home screen fits the screen, as it is at launch, before any page has scrolled:
+  /// the top bar's place button and gear, and the switcher, each lie within the window; the
+  /// pager (HomePager's horizontal scroll view, which never scrolls vertically) runs from under
+  /// the switcher to no lower than the window's bottom edge; and the page on screen starts under
+  /// the switcher, within the window. On main's first macOS run the home screen didn't fit: each
+  /// of the pager's pages was the height of the screen's safe area, so the home screen was taller
+  /// than the screen by the top bar and the switcher, and the window centred it. The place button
+  /// and the gear were under the status bar, where taps never reached them, and the pager, every
+  /// page with it, ran past the screen's bottom edge, the page's end never on screen.
+  ///
+  /// Only the page's top is checked against its frame, which may be its content's (the page's
+  /// scroll view's, `shown(_:in:)`): from its top, a frame that is the content's runs below the
+  /// screen however well the page fits. A page's end is HomeAuditTests' to check, its credits
+  /// coming into view.
+  ///
+  /// It doesn't prove the place button and the gear are below the status bar, whose frame
+  /// XCUITest doesn't give. On the iPhone 17, a home screen about 50 to 70 points too tall would
+  /// put their centres, where a tap lands, under the status bar, with them and the pager still
+  /// within the window (should the pager end at the safe area's bottom edge, 34 points above the
+  /// window's). PickerTests' and SettingsTests' taps on them are the real guard, and their
+  /// failures give the same geometry (`homeGeometry`).
   @MainActor
   func expectFits(
     _ app: XCUIApplication,
@@ -298,17 +335,37 @@ extension XCTestCase {
     }
     let window = root.frame
     let frames = XCUIApplication.homeFrames(in: root)
-    let pages = frames.keys.filter { $0.hasPrefix("page-") }.sorted()
-    XCTAssertFalse(pages.isEmpty, "\(what): no page on screen", file: file, line: line)
-    for id in ["place", "settings"] + pages {
+    let doesntFit = "so the home screen doesn't fit the screen; \(app.homeGeometry)"
+    for id in ["place", "settings", "views"] {
       guard let frame = frames[id] else {
         XCTFail("\(what): no \(id) on screen; \(app.homeGeometry)", file: file, line: line)
         continue
       }
       XCTAssertTrue(
         window.insetBy(dx: -0.5, dy: -0.5).contains(frame),
-        "\(what): \(id) at \(frame) isn't within the window at \(window), so the home screen "
-          + "doesn't fit the screen; \(app.homeGeometry)",
+        "\(what): \(id) at \(frame) isn't within the window at \(window), \(doesntFit)",
+        file: file, line: line)
+    }
+    guard let views = frames["views"] else { return }
+    // Half a point either way, as a frame read on a 3x screen may round.
+    let under = views.maxY - 0.5
+    if let pager = frames["pager"] {
+      XCTAssertTrue(
+        pager.minY >= under && pager.maxY <= window.maxY + 0.5,
+        "\(what): the pager at \(pager) isn't between the switcher's bottom edge at "
+          + "\(views.maxY) and the window's at \(window.maxY), \(doesntFit)",
+        file: file, line: line)
+    } else {
+      XCTFail("\(what): no pager on screen; \(app.homeGeometry)", file: file, line: line)
+    }
+    let pages = frames.keys.filter { $0.hasPrefix("page-") }.sorted()
+    XCTAssertFalse(pages.isEmpty, "\(what): no page on screen", file: file, line: line)
+    for id in pages {
+      guard let page = frames[id] else { continue }
+      XCTAssertTrue(
+        page.minY >= under && page.minY < window.maxY,
+        "\(what): \(id) at \(page) doesn't start between the switcher's bottom edge at "
+          + "\(views.maxY) and the window's at \(window.maxY), \(doesntFit)",
         file: file, line: line)
     }
   }

@@ -170,7 +170,8 @@ final class HomeAuditTests: XCTestCase {
         return
       }
       attach(app, as: "\(name)-\(String(format: "%02d", number))")
-      let screenful = Screenful(page: onScreen(page, in: app), credits: credits.frame)
+      let whole = app.find("page-\(page.view)").frame
+      let screenful = Screenful(page: shown(whole, in: app), frame: whole, credits: credits.frame)
       guard !screenful.page.isEmpty else {
         XCTFail("\(place): no page-\(page.view) on screen")
         return
@@ -252,10 +253,11 @@ final class HomeAuditTests: XCTestCase {
 
   /// How far to scroll the page from `screenful` for the next one: so the first of the page's
   /// elements that this one doesn't show whole, cut at the bottom edge or below it, comes to the
-  /// top, 8 points down, and the next screenful shows it whole if it is no taller than the page
-  /// on screen. From a quarter to four fifths of the page on screen, so the page always moves
-  /// and the drag stays on it. An element is a leaf of the page's accessibility tree, read from
-  /// one snapshot (a row, a heading, a place, a line of the credits).
+  /// top of the part on screen, 8 points under the switcher, and the next screenful shows it
+  /// whole if it is no taller than the page on screen. From a quarter to four fifths of the page
+  /// on screen, so the page always moves and the drag stays on it. An element is a leaf of the
+  /// page's accessibility tree, read from one snapshot (a row, a heading, a place, a line of the
+  /// credits).
   @MainActor
   private func step(
     _ page: HomeScreen.Page,
@@ -286,8 +288,12 @@ final class HomeAuditTests: XCTestCase {
 /// A screenful as it was audited: where the page was on screen, and where its credits were, by
 /// whose moves an element's place on the page follows from one screenful to the next.
 struct Screenful {
-  /// The part of the page on screen.
+  /// The part of the page a user sees, within the window and below the switcher
+  /// (`shown(_:in:)`).
   let page: CGRect
+  /// The page's frame as XCUITest gave it, for a failure to say: one that moves from screenful to
+  /// screenful is its content's, one that stays put its scroll view's viewport.
+  let frame: CGRect
   let credits: CGRect
 
   /// Whether this screenful shows whole what was at `frame` on `screenful`, moved with the page
@@ -301,8 +307,10 @@ struct Screenful {
   /// Where the page was and the credits were on each screenful, for a failure to say.
   static func describe(_ seen: [Screenful]) -> String {
     let page = seen.first.map { "\($0.page)" } ?? "unknown"
+    let frames = seen.map { "\($0.frame)" }.joined(separator: ", ")
     let credits = seen.map { "\($0.credits)" }.joined(separator: ", ")
-    return "the page on screen at \(page), the credits on each screenful at \(credits)"
+    return "the page on screen at \(page), the page's frame on each screenful at \(frames), the "
+      + "credits on each screenful at \(credits)"
   }
 }
 
@@ -321,7 +329,8 @@ struct AuditedElement {
 ///
 /// An issue is judged on the screenful that shows its element whole. The top bar and the
 /// switcher are always whole on screen. An element of the page that the screenful cuts at the
-/// page's edge, or that is off it (above, under the switcher, or below the screen), is held
+/// edge of the part of the page a user sees (`Screenful.page`: within the window, below the
+/// switcher), or that is off it (above, under the switcher, or below the screen), is held
 /// until the page's last screenful: if another screenful showed it whole, that screenful's audit
 /// judged it, and the held issue goes; if none did, it is judged as it was. The audit reads
 /// elements the screen doesn't show whole, and measures their contrast against whatever the
