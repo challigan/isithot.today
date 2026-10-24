@@ -7,6 +7,7 @@ import {
   SNOW_REASON_LABELS,
   UNITS_LABELS,
   VIEWS,
+  WEEKDAYS,
   question,
 } from '@isithot/core';
 import { APP_COPY, APP_INTENT_KEYS, type AppCopyKey } from '../src/appCopy';
@@ -95,6 +96,14 @@ describe('coreCopySwift', () => {
         '    public let url: String\n' +
         '  }\n',
     );
+  });
+
+  it("writes the days of the week, Sunday first, in core's words", () => {
+    expect(block(swift, '  public static let weekdays: [String] = [', '  ]')).toEqual(
+      WEEKDAYS.map((day) => `    ${swiftString(day)},`),
+    );
+    expect(WEEKDAYS[0]).toBe('Sunday');
+    expect(WEEKDAYS).toHaveLength(7);
   });
 
   it("writes the snow units' label once, from UNITS_LABELS", () => {
@@ -243,6 +252,13 @@ describe('APP_COPY', () => {
       upgradeRow: ['price'],
       headingLabel: ['place', 'question', 'answer'],
       modelLine: ['name', 'value'],
+      announcement: ['heading', 'verdict'],
+      percent: ['value'],
+      hourRowLabel: ['chance', 'time'],
+      weekRowLabel: ['day', 'amount', 'band', 'agreement'],
+      weekRowLabelShort: ['day', 'amount', 'band'],
+      dayAgreement: ['snowy', 'total'],
+      dayAgreementOne: ['snowy', 'total'],
       upgradeSettings: ['price'],
       notifyPlaceOnScreen: ['place'],
       reportAdSubject: ['version'],
@@ -342,6 +358,17 @@ describe('appCopySwift', () => {
     expect(appCopyMember('version', APP_COPY.version)).toEqual([
       '  public static func version(version: String, build: String) -> String {',
       '    "Version \\(version) (\\(build))"',
+      '  }',
+    ]);
+    // A signature too long for 100 columns has a parameter on each line.
+    expect(appCopyMember('weekRowLabel', APP_COPY.weekRowLabel)).toEqual([
+      '  public static func weekRowLabel(',
+      '    day: String,',
+      '    amount: String,',
+      '    band: String,',
+      '    agreement: String',
+      '  ) -> String {',
+      '    "\\(day), \\(amount), \\(band), \\(agreement)"',
       '  }',
     ]);
     expect(appCopyMember('reportAdMail', APP_COPY.reportAdMail)[1]).toBe(

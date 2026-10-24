@@ -2,25 +2,36 @@ import IsItLogic
 import IsItModel
 import SwiftUI
 
-/// One forecast page (iOS build spec, section 10.2), scrolling, top to bottom: the glyph; the
-/// question and the answer, one heading for VoiceOver with the place; the verdict and the detail;
-/// the body (the middle page's agreement, strip and model list; phase 5.2 adds Now's hours and
-/// the week's days); Retry in the error state; and the footer, with Retry under its line after a
-/// failed request while an answer shows. Everything shown is `page`'s, so the page reads as the
-/// website does for the same answer.
+/// One forecast page (iOS build spec, section 10.2), scrolling, top to bottom: the glyph, its
+/// flakes drifting on first paint and when the band changes; the question and the answer, one
+/// heading for VoiceOver with the place; the verdict and the detail; the body (the middle page's
+/// agreement, strip and model list, Now's next hours, or the week's days); Retry in the error
+/// state; and the footer, with Retry under its line after a failed request while an answer
+/// shows. Everything shown is `page`'s, so the page reads as the website does for the same
+/// answer. Up to the largest accessibility text size nothing is cut short: text wraps, the
+/// answer word shrinks to fit its line rather than break, and the page scrolls.
 public struct ForecastPageView: View {
   let page: HomePage
   let theme: PageTheme
-  /// The band's glyph, a template image the page tints in `theme.ink`; nil without an answer.
-  let glyph: Image?
+  /// The band's glyph, template images the page tints in `theme.ink`; nil without an answer.
+  let glyph: PageGlyph?
+  /// Never drift the glyph: a test's still screens.
+  let still: Bool
   let actions: HomeActions
 
   @ScaledMetric(relativeTo: .largeTitle) private var glyphSize: CGFloat = 112
 
-  public init(page: HomePage, theme: PageTheme, glyph: Image?, actions: HomeActions) {
+  public init(
+    page: HomePage,
+    theme: PageTheme,
+    glyph: PageGlyph?,
+    still: Bool = false,
+    actions: HomeActions
+  ) {
     self.page = page
     self.theme = theme
     self.glyph = glyph
+    self.still = still
     self.actions = actions
   }
 
@@ -30,6 +41,12 @@ public struct ForecastPageView: View {
         header
         if let day = page.day {
           DayBodyView(day: day, ink: theme.ink)
+        }
+        if let hours = page.hours {
+          NowBodyView(hours: hours, ink: theme.ink)
+        }
+        if let week = page.week {
+          WeekBodyView(week: week, ink: theme.ink)
         }
         if let retry = page.retry, page.footer == nil {
           RetryButton(title: retry, action: actions.retry)
@@ -46,6 +63,7 @@ public struct ForecastPageView: View {
     }
     .foregroundStyle(theme.ink)
     .tint(theme.ink)
+    .environment(\.colorScheme, theme.controls)
     .accessibilityIdentifier("page-\(page.view.rawValue)")
   }
 
@@ -54,12 +72,7 @@ public struct ForecastPageView: View {
   @ViewBuilder private var header: some View {
     let size = min(glyphSize, 160)
     if let glyph {
-      glyph
-        .resizable()
-        .scaledToFit()
-        .frame(width: size, height: size)
-        .accessibilityHidden(true)
-        .accessibilityIgnoresInvertColors()
+      GlyphView(glyph: glyph, size: size, still: still)
     } else if page.state == .loading {
       Circle()
         .fill(theme.ink.opacity(0.12))
@@ -69,9 +82,18 @@ public struct ForecastPageView: View {
     VStack(alignment: .leading, spacing: 2) {
       Text(verbatim: page.question)
         .font(.title3)
-      Text(verbatim: page.answer)
-        .font(answerFont)
         .fixedSize(horizontal: false, vertical: true)
+      if page.state == .ready {
+        // One word ("Maybe."), which at the largest sizes shrinks to fit rather than breaking.
+        Text(verbatim: page.answer)
+          .font(answerFont)
+          .lineLimit(1)
+          .minimumScaleFactor(0.5)
+      } else {
+        Text(verbatim: page.answer)
+          .font(answerFont)
+          .fixedSize(horizontal: false, vertical: true)
+      }
     }
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(Text(verbatim: page.headingLabel))
@@ -135,8 +157,9 @@ struct DayBodyView: View {
         .accessibilityIdentifier("agreement")
       ModelStripView(strip: day.strip, ink: ink)
       VStack(alignment: .leading, spacing: typeSize.isAccessibilitySize ? 12 : 6) {
-        ForEach(Array(day.lines.enumerated()), id: \.offset) { _, line in
+        ForEach(Array(day.lines.enumerated()), id: \.offset) { index, line in
           ModelLineView(line: line, stacked: typeSize.isAccessibilitySize)
+            .accessibilityIdentifier("model-\(index)")
         }
       }
       .padding(.top, 4)
@@ -236,6 +259,8 @@ struct RetryButton: View {
         .padding(.horizontal, 8)
     }
     .buttonStyle(.bordered)
+    // The large size's bezel is taller than the 44 points a control is tapped by.
+    .controlSize(.large)
     .accessibilityIdentifier("retry")
   }
 }

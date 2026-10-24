@@ -145,8 +145,9 @@ public struct StripGeometry: Codable, Sendable, Equatable {
     return { value in Swift.min(100, Swift.max(0, ((value - lo) / span) * 100)) }
   }
 
-  /// "2cm": the amount as JavaScript writes the number, then the unit (core `amountText`).
-  private static func amountText(_ amount: Double, _ unit: SnowUnit) -> String {
+  /// "2cm": the amount as JavaScript writes the number, then the unit (core `amountText`). The
+  /// week's rows write their amounts so too (`HomePage.WeekRow`).
+  static func amountText(_ amount: Double, _ unit: SnowUnit) -> String {
     JavaScriptNumber.string(amount) + unit.rawValue
   }
 }

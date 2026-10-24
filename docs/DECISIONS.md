@@ -2347,6 +2347,311 @@ What the review of PR 5.1 found, and what changed for it.
   label are Apple only, so the macOS jobs prove them; IsItUI's changes were not compiled here.
   Everything else ran on Linux.
 
+## The iPhone app's pages, switcher and pager (IsItCore, IsItKit, apps/ios; phases 5.2 and 5.3)
+
+The iOS build spec's PRs 5.2 and 5.3, less what 5.1 brought forward (the minute's tick, pull to
+refresh, the footer, the loading and error states, and the refresh rules, above): the Now and
+This week pages, the switcher and the pager, the 6pm flip, the glyph's drift, changes announced
+once to VoiceOver, and every text size up to AX5 (sections 9.5, 10.1, 10.2 and 16).
+
+- **The bodies are the presenter's, the TypeScript first.** packages/mobile `page.ts` gives each
+  page `hours` and `week`: Now's rows from core `viewDisplay` (the label, "60%", and its `sr`,
+  "60% chance at 6pm", the website's screen-reader line) with the hour's chance for the row's
+  bar; the week's rows from `viewDisplay` too ("Tue", "2cm", the band label) with the day's
+  `snowy` and `total` (S1) and what VoiceOver reads, built of core's words: the day in full
+  (`WEEKDAYS` of its date, or "Today", the server's label for the week's first day), the amount,
+  the band label starting in lower case as it is mid-sentence, and `snowAgreementLine` ("4 of 6
+  forecasts expect snow", "1 of 5 forecasts expects snow"); never a percentage.
+  `pnpm mobile:generate` rewrote `page.json` (the same 255 page cases, with the new fields),
+  and `HomePage` ports it: `HomePage.Hours`, `HourRow`, `Week` and `WeekRow`.
+- **The Swift's words are the app's copy, proven to be core's.** Core words the rows in
+  TypeScript only (`sr` is built inline in `display.ts`, `snowAgreementLine` is a function), so
+  appCopy.ts has six templates for the Swift: `percent`, `hourRowLabel`, `weekRowLabel`,
+  `weekRowLabelShort`, `dayAgreement` and `dayAgreementOne`; a vitest fills them for every row in
+  `page.json` and every agreement from 0 to 6 forecasts and compares them with core's, and the
+  vectors compare the Swift's code unit for code unit. `CoreCopy.weekdays` is core's `WEEKDAYS`,
+  generated. The generator now puts a parameter on each line when a function's signature would
+  pass 100 columns (`weekRowLabel`), as swift-format does.
+- **Beyond the reference: an answer saved before S1.** The Swift decodes the week's days without
+  `snowy` and `total`, as IsItModel always has; their rows have no dots and are read without
+  the agreement (`weekRowLabelShort`). The TypeScript's types always have them, so this is
+  `HomePageTests`', not a vector's.
+- **The dots are the forecasts with data.** Section 10.2 says six dots; a day a model has no
+  data for has `total` 5, so the row draws five, `snowy` of them filled, and says "of 5", rather
+  than an empty sixth that would read as a forecast saying no.
+- **`CivilDate`** (IsItLogic) is the links' date reading moved out of `DeepLink`, unchanged, so
+  the week's rows find a date's weekday the same way, with no calendar or locale.
+- **The switcher** (`ViewSwitcher`, IsItUI) is the segmented picker section 10.2 asks for, of the
+  pages' own labels, so the middle one reads Tomorrow from 6pm. At accessibility text sizes a
+  segment would cut "This week" short, and section 16 wants full labels, so there it is a row of
+  buttons that wraps, the one on screen underlined and marked selected.
+- **The pager** (`HomePager`, IsItUI) is a horizontal `ScrollView` of the three pages, each the
+  container's size, with `.scrollTargetBehavior(.paging)` and `.scrollPosition(id:)`, plus a
+  `ScrollViewReader` scroll on first appearance in case the initial position isn't applied.
+  Switcher and pager share one binding to `AppModel.view`, so a tap, a swipe, a route and the
+  return after 30 minutes away (5.1's rule, unchanged) always agree. A tap moves the pages
+  without animation: an animated programmatic scroll passes Today on its way from Now to the
+  week, and the position it reports on the way could set the view mid-scroll.
+- **Only the page on screen is in the accessibility tree.** The other two are hidden from
+  VoiceOver (which changes page with the switcher, as with a system page view) and so from the UI
+  tests, whose identifiers (`heading`, `verdict`, …) stay unique. Pull to refresh is on each
+  page's own scroll view, not the pager's.
+- **The view it opens on** is `MiddleDay.defaultView`, as 5.1 set it; 5.1 drew only the middle
+  page, so the app now opens on Now from 6pm. A route to a view (a widget's `.view`) now sets the
+  view in the model, at once or at the launch's end, and still goes to the later phases' hooks.
+  The view never moves by itself while the app is open: at 6pm the middle tab becomes Tomorrow
+  where it is. (Until the review, "The iPhone app's home screen, reviewed (phases 5.2 to 5.4)",
+  below, any answer arriving with nothing on screen moved it, a nearby place's and Retry's too.)
+- **The 6pm flip is the minute's tick alone**: each minute every page is drawn at the model's
+  clock, so the middle page shows `snow.days[1]` from 6pm at the place with no request (the
+  quiet refresh is at the next forecast hour). `FlipTests` prove it at 5:59pm and 6pm in Durham
+  (with the clock 6 minutes behind its answer, as `page.json` has Durham across 6pm), minute by
+  minute from 5:30pm in London on the day the clocks went back, and in Kathmandu (UTC+5:45,
+  where 6pm is 12:15 UTC), each with no request and the view unmoved.
+- **The drift is the website's CSS** (`.glyph .drift`): `GlyphDrift` (IsItLogic) has its
+  keyframes (down 6 and right 3 as it fades by 45%, back in from 4 above and 2 left at 46%),
+  `ease-in-out` as CSS's `cubic-bezier(0.42, 0, 0.58, 1)`, 1.6 s twice: 3.2 s, under 5 s. The
+  app's flakes are one layer (SnowKit's `-drift` image), so they move together rather than a
+  little out of step. `GlyphMotion` says when: on the glyph's first paint (its first band, also
+  after a new place's loading state) and when the band changes, never with Reduce Motion, which
+  also stops a drift under way. `GlyphView` (IsItUI) draws it with `TimelineView(.animation)`,
+  paused when still. Under `-now` and, beyond the task, `-uitest` (which already turns
+  animations off) the glyphs never drift (`DebugHooks.stillMotion()`), so no attached screen
+  catches the flakes faded.
+- **Changes are announced once** (sections 9.5 and 16): `Announcements` (IsItState) is handed
+  the page on screen each time it is drawn, and gives its heading when it says something new on
+  the same view, which `HomeView` posts as an announcement: the answer arriving after
+  "Checking…", a refresh's new answer, a failure with nothing to show, the hour picked changing
+  the answer, Tomorrow from 6pm, and no recent forecast once the answer's hours run out. Nothing
+  for the first page drawn, a tick or refresh that changed nothing, the loading state, or a move
+  to another view (the user's, a route's, or the return's: VoiceOver reads the page from there).
+  `AnnouncementTests` drive the model through each, minute by minute where it matters, and
+  count one announcement for each change. The app posts it with UIKit's
+  `UIAccessibility.post(notification:argument:)` and `.announcement`: the same notification as
+  SwiftUI's `AccessibilityNotification`, which section 16 names, by an API certain on iOS 17.
+  (Since the review, below, the verdict is announced with the heading, and the answer after
+  "Checking…" on whichever view it opens.)
+- **Text sizes up to AX5.** Every text wraps (`fixedSize(horizontal: false, vertical: true)`),
+  the question included; the answer word, one word in the answer font, keeps to its line and
+  shrinks to fit (to half) rather than break mid-word; the pages scroll. Now's rows put the bar
+  under the hour and chance, and the week's rows stack (the day and amount, wrapping if they
+  must, then the band, then the dots) at accessibility sizes, as the model list already did.
+- **The UI tests changed where the screen did.** `testDurhamTomorrow` and `testOldForecast`
+  launch at 6:05pm in Durham, so the app now opens on Now: each first reads Now's heading, then
+  taps Tomorrow and reads the middle page's heading and verdict, every 5.1 assertion kept. New:
+  `testSwitcherAndSwipe` (each tab, the next hours on Now, swipes back to Today and Now, each tab
+  selected), which attaches Now and This week for the contact sheet. Phase 5.4's `HomeTests`
+  will build on the identifiers listed in `apps/ios/README.md`.
+- **Not proven here:** IsItUI and the app compile only on the macOS jobs, so the switcher, the
+  pager and its initial position, the bodies' layouts at each text size, the drift, the
+  announcement and the three changed or new UI tests (whether a segment reports `isSelected`,
+  and whether `swipeRight()` on the app pages the outer scroll view) are unproven until the
+  first `ios` run. Everything in IsItCore ran on Linux, and every Swift file was linted.
+
+## The iPhone app's home accessibility and its UI tests (IsItCore, IsItKit, apps/ios; phase 5.4)
+
+The iOS build spec's PR 5.4: the home screen's accessibility (section 16) proven on the
+simulator by `HomeTests`, `OfflineTests` and the audits (section 17.2), with every page on the
+contact sheet at Large and AX3 (phase 5's exit). `apps/ios/README.md` ("Phase 5.4") says how to
+read them.
+
+- **What a page should say is generated from page.json.** A UI test can't call the presenter
+  (it drives the app from another process), and typing a page's words into a test would check
+  the app against the test's copy rather than the reference. packages/mobile now writes
+  `apps/ios/Apps/Snow/UITests/Generated/HomeScreens.json` (`exportHomeScreens.ts`): for each
+  screen a test opens, its fixture, the moment as `-now` takes it, how its request went, the
+  view it opens on (core `defaultView`), its top bar and its three pages, the very outputs of
+  page.json's cases. The screens are listed once (`homeScreens`, vectors.ts), which also adds
+  each to page.json, so the Swift on Linux is held to the same inputs; a screen page.json has no
+  case for stops the generator. JSON in the test bundle rather than generated Swift: there is no
+  swift-format layout to reproduce, and XcodeGen puts a `.json` in the folder into the UI test
+  bundle's resources (checked with XcodeGen 2.46.0 built from source). Prettier ignores the
+  folder, as it does the other generated resources.
+- **Two references grow, TypeScript first.** A model line in page.ts now has its `name` and
+  `value` as well as its `text`, as the Swift's `HomePage.ModelLine` always had, since VoiceOver
+  reads a row as its name with the amount as its value; and the top bar has a reference,
+  `homeTopBar` (the place or "Finding you…", the place button's label, the approximate line or
+  the notice, "Use my location", Settings), with cases in page.json, which `PageVectorTests` now
+  holds `HomeTopBar` to. Nothing the app shows changed.
+- **`-clock fixed`** (spec 9.8): `FixedClock` (IsItState) reads one moment; work scheduled for
+  a time it has reached runs at once and work for any later time never runs, so a test on it
+  never meets the quiet refresh or the retry, and reads the screen its moment shows however
+  slowly the simulator goes. `-clock run`, which 5.1's tests rely on, stays the default; the
+  flip and the end of `usableUntil` are tested with it.
+- **The minute tick counts the model's minutes.** `TimelineView(.everyMinute)` ticked on the
+  system's minutes, so a Debug clock started at 5:59:30pm reached 6pm 30 seconds in and turned
+  the page only at the system's next minute, up to a minute later. The tick is now
+  `TimelineView(.periodic(from: MinuteTick.anchor(…), by: 60))`, from a moment when the model's
+  clock read a whole minute, plus 50 ms so that rounding in the two clocks' arithmetic never
+  ticks a hair before the minute. In the app the two clocks are the same, so it is the system's
+  minute, as before.
+- **`-network unavailable`** answers every request as the server does when the forecasts can't
+  be had without a cache (503, `upstream_unavailable`, core's message), over the app's own
+  transport as `-network off` is: a failure over a saved answer, which section 4 says keeps the
+  answer, says forecasts are unavailable, and offers Retry.
+- **The system's controls take the page's tone.** The pages always use their band's palette (section
+  10.1), but the switcher's segmented control and the bordered Retry draw their own text in the
+  system's colour scheme: black on the snow bands' purple in light mode, and white on no snow's
+  lilac in dark mode, which the contrast audit would very likely fail. `Palette.inkIsLight`
+  (IsItLogic, light ink on a dark page, by WCAG luminance, tested on Linux) sets `PageTheme.dark`,
+  and the shell and each page set the colour scheme for what they hold. The status bar is the
+  system's, and `preferredColorScheme` would also turn phase 6's sheets, which follow Dark Mode, so
+  it is left as it is. Fixed before the first audit rather than waiting for it to say so.
+- **Hit regions.** The footer's links and places, "Use my location" and the switcher's buttons
+  at accessibility sizes are at least 44 points tall (`HitTarget.minimum`), and Retry is the
+  large control size. The credits' links stay inside their text, beside the data as the licence
+  asks; if the audit flags them, that is the reason to give.
+- **The audits** (`HomeAuditTests`, spec 17.2's `AccessibilityAuditTests` for the home screen,
+  named apart so the later phases' audits of their own screens don't meet it in one file):
+  `performAccessibilityAudit(for: .all)` on each page of the three fixtures at Large and at AX3
+  (`-UIPreferredContentSizeCategoryName`, UIKit's own default); the handler keeps every issue
+  rather than stopping at the first, and the test fails once with them all, each with its page,
+  kind, Apple's descriptions and the element. `HomeAuditTests.exceptions` takes an issue that is
+  the audit's mistake, with its reason; it is empty, since no issue has been seen yet, and none
+  is allowed on a guess. The first run may show the segmented control's fixed font at Large (a
+  system control; at accessibility sizes the switcher is buttons) and the credits' links. (The
+  review, below, gave those two their exceptions, corrected AX3's value, and has every
+  screenful of each page audited.)
+- **The contact sheet** sorts attachments by name, so each audited page is attached as
+  `home-<fixture>-<n>-<size>-<m>-<tab>` (`home-aberdeen-snow-1-large-1-now` …
+  `home-leeds-dry-2-ax3-3-this-week`): fixture by fixture, Large before AX3, in the switcher's
+  order. Phase 5's exit asks for Large and AX3; section 16's XXXL belongs to the `ImageRenderer`
+  snapshots, which wait for the page's content to be drawn apart from its scroll view, which
+  `ImageRenderer` doesn't draw. (Since the review, below, each screenful, `…-1-now-01` on.)
+- **Time in the tests.** The flip and the end of the saved answer's hours start half a minute
+  before with `-clock run` (the spec's example has 10 seconds before 6pm), so a slow launch on the
+  runner can't pass the moment before the first check, and wait up to 75 seconds for it (two
+  minutes before, and up to three minutes, since the review, below). The new tests carry on after
+  a difference, so one run lists every one; a screen that never comes throws, which stops the
+  test.
+- **Not proven here:** everything Apple only. The UI tests were type-checked on Linux against stubs
+  of XCUITest written from Apple's documentation (with `NSPredicate(format:)`, which Linux lacks,
+  stubbed), and their types decoded `HomeScreens.json` there; `DebugHooks.swift` was type-checked in
+  Debug and Release against stub UIKit and WidgetKit. A page is read from one snapshot of the
+  accessibility tree (`XCUIElement.snapshot()`), rather than an element query for each of its forty
+  or so checks, which would each ask the app, and an identifier checked must be in it once, which
+  also proves the pages off screen are out of the tree. Unproven until the first `ios` run: the
+  periodic timeline, the colour scheme on the system's controls, the hit regions, what the audits
+  find, whether a segment reports `isSelected`, whether a swipe on a page's scroll view pages the
+  pager, and whether the AX3 argument reaches SwiftUI's text sizes.
+
+## The iPhone app's home screen, reviewed (phases 5.2 to 5.4)
+
+What the review of phases 5.2 to 5.4 found, and what changed for it.
+
+- **The UI tests wouldn't have compiled.** `HomeAuditTests` named the audit kinds `.action` and
+  `.parentChild`, which XCTest has for macOS only, so `build-for-testing`, and every test after
+  it, would have failed on the first run. The audit now names iOS's seven kinds; any other still
+  reads "type <raw value>". The Linux stubs of XCUITest had both kinds, which is how the
+  type-check missed it: they now have the iOS SDK's alone.
+- **AX3 is `UICTContentSizeCategoryAccessibilityXL`.** UIKit's raw values abbreviate the sizes
+  (`…AccessibilityM` to `…AccessibilityXXXL` for AX1 to AX5), so the spelled-out
+  `…AccessibilityExtraExtraExtraLarge` matched nothing, and the AX3 audits ran at Large (and would
+  have been AX5). Each audit now checks first that the switcher is the one for its size: the
+  buttons (`view-now`) at AX3, and not at Large. A size that doesn't reach the app fails the test.
+- **The two issues 5.4 foresaw have exceptions**, each matched narrowly and given its reason.
+  The first is `dynamicType` on the segmented control or its segments. Section 10.2 asks for a
+  segmented picker, and UIKit's control keeps its own type size; at accessibility sizes the
+  switcher is buttons whose labels scale, and those are never excused. The second is `hitRegion`
+  on a link inside the credits (`credits`, a new identifier on their lines). They are the
+  attribution beside the data that the licence asks for, and WCAG 2.2's target size (2.5.8)
+  allows a target inside a sentence. 5.4 allowed nothing ("none on a guess"), so the first run
+  would almost surely have failed on the segmented control, which is on every page at Large.
+  Drawing the switcher as buttons at every size would remove the first exception, but the spec
+  asks for the segmented picker, so that is Carl's call. An exception no audit in a test needed is
+  printed at its end, so one the app outgrows can go. Any other issue fails the test.
+- **Every screenful is audited.** An audit reads only what is on screen, so 5.4 audited and
+  attached each page's first screen alone. At AX3 that missed Now's rows, the week's rows (both
+  stacked at that size) and every footer. At Large it missed the footer's links and places, whose
+  44-point hit regions 5.4 had made for the audit. `HomeAuditTests` now audits and attaches each
+  screenful, from the page's top down to the end of the credits. It scrolls four fifths of the
+  page at a time, with a slow drag that holds before it lifts so the page can't fling past a
+  screenful, and fails if the end hasn't come after 15. The attachments are
+  `home-<fixture>-<n>-<size>-<m>-<tab>-<k>`, with k from 01, so the contact sheet keeps the order.
+- **The running clocks start two minutes before their moment.** The flip test opened at
+  5:59:30pm, and the end of the saved answer's hours started half a minute before `usableUntil`.
+  Both had to launch, find the screen and check it before that moment passed, on a runner whose
+  simulator took six minutes to boot on the last run on main. `RUNNING_LEAD_MS` (packages/mobile)
+  is now two minutes: `durham-flip-start` is at 5:58pm, and `aberdeen-snow-last-minutes-offline`
+  (renamed from `…-last-seconds-…`) at 3:03pm. Each test waits up to three minutes for the
+  moment.
+- **The `ios` job's timeout is 90 minutes**, up from 45. The UI plan grew from 8 tests to 26, its
+  audits now cover every screenful, and two tests wait two minutes. A slow first run reports its
+  results rather than being cancelled with none.
+- **The app opens on the view for the time of day once.** `AppModel` moved to that view whenever
+  an answer arrived with nothing on screen, which showed once the pager followed `model.view`.
+  Three things put the user back on Today, or on Now from 6pm, without a word: moving during the
+  launch's "Checking…", choosing a place under "Nearby:" from a page other than the default one
+  (whose answer starts from nothing, as it must), and Retry after a failed launch. The website
+  opens on its view once, and never after the visitor has moved (`openOnDefault`,
+  `views.moved()`), and now the model does the same. The view is chosen by the saved answer
+  painted at launch, or else by the first answer shown, unless the user or a route has chosen one
+  first. A user's choice is the pager or switcher setting a different view; writing back the
+  view on screen is not a move. After that only the user, a route and the return after 30
+  minutes away (section 9.5) move it. `AppModelViewTests` cover a move while the launch checks,
+  the same view written back, a nearby place from This week and from Tomorrow in the evening,
+  Retry from Now, Retry's first answer with no move (Now in the evening, as on the website), a
+  route's view across a failed launch, and a painted answer then a move. On the simulator,
+  `HomeTests.testNearbyLoadsInPlaceOnThisWeek` covers the nearby place.
+- **The answer after "Checking…" is announced on whichever view it opens.** `Announcements`
+  said nothing for a page on a different view from the last one drawn. So the evening's first
+  answer was silent, because it moves the view from Today (where the loading state is) to Now,
+  and so was a widget's view at launch. It now keeps whether the last page was checking: after
+  the loading state, the new page is announced whatever its view. Between two answered pages a
+  move still says nothing. The rule against announcing "Checking…" had no test: with it removed,
+  every IsItState suite passed. `checkingSaysNothing` now draws a nearby place's Checking… page
+  between two answers.
+- **The verdict is announced with the heading.** The website's live region holds the heading and
+  the verdict (`#live`, aria-atomic), so a change to either is read, both together. The app
+  compared and announced the heading alone, so at 2pm in leeds-dry, where "Rain, not snow."
+  becomes "It won't snow." under "No.", VoiceOver heard nothing. It now compares both and says
+  "<heading> <verdict>" (`AppCopy.announcement`, new), for example "Leeds. Will it snow today?
+  No. It won't snow." `hourChanges` now counts three announcements on aberdeen-snow's Now,
+  including the 10am verdict.
+- **A move between views is still not announced.** The website reads out the answer of the view
+  a reader moves to, 400 ms after it settles. Section 16 asks for an announcement when the hour
+  picked changes the answer. A move is the user's own action, VoiceOver already speaks the tab
+  it selects ("This week, selected"), and an announcement over that would cut it off. This is
+  left for the device checklist (section 17.4) to judge.
+- **Not proven here:** everything Apple only. That covers what the audits find beyond the two
+  exceptions, the drag, whether the AX3 value reaches SwiftUI, the credits' container, and the
+  new UI test. IsItUI's one change wasn't compiled. The UI tests type-checked on Linux against
+  the corrected stubs, and the exceptions' matching ran there. Everything in IsItCore ran on
+  Linux.
+
+## The iPhone app's home audits, after PR #31's first macOS run
+
+PR #31's first `ios` run (40047913226) built, passed the unit tests and the Release check, and
+failed the UI plan: 26 tests, 20 passed, and the 6 that failed were all `HomeAuditTests`. HomeTests,
+OfflineTests, LaunchTests and FixtureLaunchTests passed. The fixes, none of them an exception:
+
+- **At Large the pages never scrolled to their end.** From the second screenful on, every audit
+  found the same issues, so the page had stood still. The drag ran down the page's middle, across
+  buttons and links, from near the screen's bottom edge. It is now a drag in the page's left
+  margin, where no control is, starting well clear of the bottom edge; its length brings the first
+  element not shown whole to the top. A page that stops short of its end fails at once with the
+  geometry of each screenful, so the next log says where things were.
+- **At AX3 every audit after the first scroll threw** `-902 "Invalid target app"`. The drag at AX3
+  started still closer to the bottom edge, so a system gesture is the likely cause, and the new drag
+  avoids it. Each audit now checks the app is in the foreground first, and an audit that throws
+  fails its page with the app's state and moves on to the next page.
+- **An element a screenful cuts is judged where it is whole.** The audit measured contrast on the
+  answer and question once they had scrolled under the switcher, and on the nearby places and
+  links at the screen's bottom edge. The palettes give the ink 6.26:1 or more on both ends of every
+  gradient, so no colour changed. An issue on a page element is now judged at once only on a
+  screenful that shows the element whole; otherwise it is held until the page's last screenful and
+  dropped if another screenful showed the element whole. The top bar and the switcher, which don't
+  scroll, are always judged at once.
+- **The top bar's approximate line was the one real fault.** "Using approximate location." and
+  "Use my location" failed Dynamic Type on every page, and "Use my location" failed contrast on
+  the pale pages. Both sat inside a `ViewThatFits` choosing between a row and a column of copies
+  of the same two views. The line is now one `FlowLayout`, the footer's way with its links, which
+  passed both checks: each view is laid out once, so the audit follows one element. The switcher's
+  accessibility-size buttons and the week rows use the same layout for the same reason.
+
+These were found and fixed while phase 6 was put together with this branch, and are ported here so
+this PR can pass on its own. They are unproven until the next macOS run.
+
 ## The app's support page and privacy notice (S8)
 
 App Store Connect needs a Support URL with real contact details and a Privacy Policy URL, so

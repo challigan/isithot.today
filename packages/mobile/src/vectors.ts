@@ -76,8 +76,9 @@ import {
   type Target,
   type WidgetEntry,
 } from '@isithot/client';
+import { APP_COPY } from './appCopy';
 import type { Fixture } from './fixtures';
-import { homePage, type PageInput, type PagePhase } from './page';
+import { homePage, homeTopBar, type PageInput, type PagePhase } from './page';
 
 export interface VectorCase {
   /** The function this case is for. */
@@ -1089,6 +1090,109 @@ const PAGE_FIXTURES = [
 
 const PHASES: readonly PagePhase[] = ['loading', 'ready', 'error', 'offline', 'limited'];
 
+/**
+ * A screen the app's UI tests open (WillItSnowUITests, phase 5.4): the fixture the app is
+ * launched on, or null for nothing saved; the moment its clock reads (`-now`, epoch ms); how its
+ * request went; the place's name when the top bar names another than the answer's (a place under
+ * "Nearby:"); and whether that place is approximate IP location, as every UI test's first launch
+ * is (`-resetStore`). page.json has each screen's three pages and its top bar, and
+ * `HomeScreens.json` hands them to the tests (exportHomeScreens.ts), so no test types what a
+ * page says.
+ */
+export interface HomeScreenSpec {
+  name: string;
+  fixture: string | null;
+  now: number;
+  phase: PagePhase;
+  placeName?: string;
+  approximate: boolean;
+}
+
+/**
+ * How long before 6pm, or before the saved answer's hours end, a UI test's running clock starts.
+ */
+export const RUNNING_LEAD_MS = 2 * MINUTE;
+
+/**
+ * Every screen the UI tests open: HomeTests' three fixtures at their own moments, Durham either
+ * side of 6pm and from two minutes before it as the clock runs, and the first place under
+ * "Nearby:"; OfflineTests' saved answer an hour on with no connection, its last two minutes and
+ * its end (`usableUntil`) offline, a failed request over it, and nothing saved with no
+ * connection. The two clocks that run start `RUNNING_LEAD_MS` before their moment, so that a
+ * slow launch on the CI's simulator can't pass it before the test has read the screen before it.
+ */
+export function homeScreens(fixtures: FixtureSet): HomeScreenSpec[] {
+  const get = (name: string): Fixture => {
+    const f = fixtures.get(name);
+    if (!f) throw new Error(`No fixture ${name}`);
+    return f;
+  };
+  const own = (name: string): number => Date.parse(get(name)._fixture.now);
+  const screens: HomeScreenSpec[] = ['aberdeen-snow', 'durham-tomorrow', 'leeds-dry'].map(
+    (name) => ({ name, fixture: name, now: own(name), phase: 'ready', approximate: true }),
+  );
+  const durham = get('durham-tomorrow');
+  const evening = (hh: number, mm: number) => localMoment(zoneOf(durham), dateOf(durham), hh, mm);
+  const durhamAt = (name: string, now: number): HomeScreenSpec => ({
+    name,
+    fixture: 'durham-tomorrow',
+    now,
+    phase: 'ready',
+    approximate: true,
+  });
+  screens.push(
+    durhamAt('durham-before-6pm', evening(17, 59)),
+    durhamAt('durham-at-6pm', evening(18, 0)),
+    durhamAt('durham-flip-start', evening(18, 0) - RUNNING_LEAD_MS),
+  );
+  const aberdeen = get('aberdeen-snow');
+  const nearby = aberdeen.nearby?.[0]?.name;
+  if (!nearby) throw new Error('aberdeen-snow has no place nearby');
+  const first = aberdeen.snow?.ahead?.[0];
+  if (!first) throw new Error('aberdeen-snow has no hours ahead');
+  const until = usableUntil(aberdeen);
+  const at = (name: string, now: number, phase: PagePhase): HomeScreenSpec => ({
+    name,
+    fixture: 'aberdeen-snow',
+    now,
+    phase,
+    approximate: true,
+  });
+  screens.push(
+    // A place under "Nearby:" is a city page's, so no longer approximate.
+    {
+      ...at('aberdeen-snow-nearby', own('aberdeen-snow'), 'ready'),
+      placeName: nearby,
+      approximate: false,
+    },
+    at('aberdeen-snow-hour-ahead-offline', Date.parse(first.time) + 30 * MINUTE, 'offline'),
+    at('aberdeen-snow-last-minutes-offline', until - RUNNING_LEAD_MS, 'offline'),
+    at('aberdeen-snow-past-offline', until, 'offline'),
+    at('aberdeen-snow-unavailable', own('aberdeen-snow') + 15 * MINUTE, 'error'),
+    {
+      name: 'nothing-offline',
+      fixture: null,
+      now: own('aberdeen-snow'),
+      phase: 'offline',
+      approximate: true,
+    },
+  );
+  return screens;
+}
+
+/** The top bar a screen shows: its place's name, or the answer's, on its kind of place. */
+export function screenTopBar(
+  fixtures: FixtureSet,
+  screen: HomeScreenSpec,
+): { placeName: string | null; approximate: boolean; notice: null } {
+  const res = screen.fixture === null ? null : fixtures.get(screen.fixture);
+  return {
+    placeName: screen.placeName ?? res?.location.name ?? null,
+    approximate: screen.approximate,
+    notice: null,
+  };
+}
+
 function pageVectors(fixtures: FixtureSet): VectorFile {
   const { cases, add } = collector();
   for (const text of CREDITS) add('creditParts', { text }, creditParts(text));
@@ -1171,9 +1275,30 @@ function pageVectors(fixtures: FixtureSet): VectorFile {
   }
   page(null, { now: at, phase: 'error', message, placeName: 'Leeds' });
   page(null, { now: at, phase: 'error', message: '' });
+  // Every screen the UI tests open (HomeScreens.json), each page and its top bar.
+  const topBar = (placeName: string | null, approximate: boolean, notice: string | null) =>
+    add(
+      'homeTopBar',
+      { placeName, approximate, notice },
+      homeTopBar(placeName, approximate, notice),
+    );
+  for (const screen of homeScreens(fixtures)) {
+    const { fixture, now, phase, placeName } = screen;
+    page(fixture, placeName === undefined ? { now, phase } : { now, phase, placeName });
+    const bar = screenTopBar(fixtures, screen);
+    topBar(bar.placeName, bar.approximate, bar.notice);
+  }
+  // The top bar before the place is known, on a chosen place, and with the notice that the
+  // city page's place has gone.
+  for (const placeName of [null, '', 'Leeds']) {
+    for (const approximate of [true, false]) topBar(placeName, approximate, null);
+  }
+  topBar(null, true, APP_COPY.slugGone);
+  topBar('Leeds', false, APP_COPY.slugGone);
   return vectorFile(
     [
       ['mobile', 'homePage'],
+      ['mobile', 'homeTopBar'],
       ['core', 'creditParts'],
     ],
     cases,

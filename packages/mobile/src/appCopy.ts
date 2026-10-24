@@ -29,6 +29,20 @@ export const APP_COPY = {
   // 16), and a row of the model list under the strip (10.2).
   headingLabel: '{place}. {question} {answer}',
   modelLine: '{name} · {value}',
+  // What VoiceOver is told when the page says something new (16): the heading, then the verdict,
+  // as the website's live region holds and reads the two.
+  announcement: '{heading} {verdict}',
+  // Now's rows and the week's (10.2, 16). An hour's chance on screen ("60%"), and as VoiceOver
+  // reads the row ("60% chance at 6pm", as the website's screen readers hear it); a day of the
+  // week as VoiceOver reads it ("Tuesday, 2cm, snow, 4 of 6 forecasts expect snow"), without the
+  // agreement for an answer from before the week's days had one. The agreement is core's
+  // `snowAgreementLine`, which the server words for a day but not for the week's days.
+  percent: '{value}%',
+  hourRowLabel: '{chance} chance at {time}',
+  weekRowLabel: '{day}, {amount}, {band}, {agreement}',
+  weekRowLabelShort: '{day}, {amount}, {band}',
+  dayAgreement: '{snowy} of {total} forecasts expect snow',
+  dayAgreementOne: '{snowy} of {total} forecasts expects snow',
 
   // Place picker (10.3)
   recent: 'Recent',

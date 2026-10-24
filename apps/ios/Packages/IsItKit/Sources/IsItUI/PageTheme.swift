@@ -10,14 +10,28 @@ public struct PageTheme: Hashable {
   /// The glow's opacity at its centre, 0 to 1.
   public var glow: Double
   public var ink: Color
+  /// The page is dark under light ink (IsItLogic's `Palette.inkIsLight`): the system's controls
+  /// on it (the switcher's segmented control, Retry) take the dark colour scheme, so their own
+  /// text keeps its contrast on the page whatever the phone's appearance (section 16).
+  public var dark: Bool
 
-  public init(g1: Color, g2: Color, g3: Color, glow: Double, ink: Color) {
+  public init(g1: Color, g2: Color, g3: Color, glow: Double, ink: Color, dark: Bool = false) {
     self.g1 = g1
     self.g2 = g2
     self.g3 = g3
     self.glow = glow
     self.ink = ink
+    self.dark = dark
   }
+
+  /// The colour scheme the system's controls on the page take.
+  var controls: ColorScheme { dark ? .dark : .light }
+}
+
+/// The smallest a control is tapped by, in points, as Apple's guidelines and the accessibility
+/// audit's hit regions ask: the footer's links and places, and "Use my location".
+enum HitTarget {
+  static let minimum: CGFloat = 44
 }
 
 /// The website's page background (`global.css`): a linear gradient from `g1` to `g2` at 168°

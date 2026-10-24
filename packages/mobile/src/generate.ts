@@ -13,6 +13,7 @@ import {
   SNOW_KIT_GENERATED_DIR,
   glyphFiles,
 } from './exportGlyphs';
+import { HOME_SCREENS_PATH, UI_TESTS_GENERATED_DIR, homeScreensJson } from './exportHomeScreens';
 import { ASSETS_DIR, iconFiles } from './exportIcon';
 import { KEYS_PATH, keysSwift } from './exportKeys';
 import { PALETTES_PATH, palettesSwift } from './exportPalettes';
@@ -49,6 +50,7 @@ export const OWNED_DIRS: readonly string[] = [
   SNOW_KIT_GENERATED_DIR,
   ASSETS_DIR,
   FONTS_DIR,
+  UI_TESTS_GENERATED_DIR,
 ];
 
 export interface GeneratedFile {
@@ -67,8 +69,8 @@ export interface AssetSources {
 
 /**
  * Every file but the answer font, in order: IsItModel's Swift (the palettes last), each
- * fixture, each vector file, worked out from the fixtures exactly as their files have them, then
- * the glyphs and the app icon.
+ * fixture, each vector file, worked out from the fixtures exactly as their files have them, the
+ * UI tests' screens (from page.json), then the glyphs and the app icon.
  */
 export async function generatedFiles(sources: AssetSources): Promise<GeneratedFile[]> {
   const files: GeneratedFile[] = [
@@ -85,9 +87,13 @@ export async function generatedFiles(sources: AssetSources): Promise<GeneratedFi
     files.push({ path: `${FIXTURES_DIR}/${spec.name}.json`, contents });
     fixtures.set(spec.name, JSON.parse(contents) as Fixture);
   }
-  for (const { name, vectors } of vectorFiles(fixtures)) {
-    files.push({ path: `${VECTORS_DIR}/${name}.json`, contents: vectorJson(vectors) });
+  const vectors = vectorFiles(fixtures);
+  for (const { name, vectors: file } of vectors) {
+    files.push({ path: `${VECTORS_DIR}/${name}.json`, contents: vectorJson(file) });
   }
+  const page = vectors.find((v) => v.name === 'page');
+  if (!page) throw new Error('No page.json');
+  files.push({ path: HOME_SCREENS_PATH, contents: homeScreensJson(fixtures, page.vectors) });
   files.push(...glyphFiles(sources.glyphs), ...iconFiles(sources.favicon));
   return files;
 }
