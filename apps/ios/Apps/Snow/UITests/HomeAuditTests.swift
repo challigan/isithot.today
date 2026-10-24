@@ -242,10 +242,14 @@ final class HomeAuditTests: XCTestCase {
       drags += restore(page, to: screenful, in: app, credits: credits)
       let before = settledFrame(of: credits)
       drags.append(scrollDown(page, by: step(page, from: screenful, in: app), in: app))
-      if abs(settledFrame(of: credits).minY - before.minY) < 1 {
+      let after = settledFrame(of: credits)
+      // Restore leaves the page at most restoringSlack short of the screenful, and the step moves
+      // it at least a quarter of the page on screen less a drag's slack: a page that moves ends
+      // well past the screenful.
+      if after.minY > screenful.credits.minY - 1 {
         XCTFail(
-          "\(page.view) page: it scrolls no further, but its end isn't on screen; "
-            + Screenful.describe(seen) + "; "
+          "\(page.view) page: it scrolls no further, but its end isn't on screen; put back to "
+            + "\(before), the drag left the credits at \(after); " + Screenful.describe(seen) + "; "
             + stopped(page, as: name, in: app, credits: credits, drags: drags))
         return
       }

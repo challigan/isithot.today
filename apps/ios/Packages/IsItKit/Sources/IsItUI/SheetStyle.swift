@@ -38,8 +38,8 @@ enum SheetStyle {
 /// xmark, as iOS 26 draws its own close control, with the word ("Close") as the button's label,
 /// which VoiceOver reads. Not the word on screen: a toolbar draws a text item at the bar's own
 /// type size whatever the text size, and on PR #33's macOS run the audit failed all three Closes
-/// for Dynamic Type, the only buttons it failed in any sheet. An icon has no text to stay small,
-/// and Your privacy's back button, a bar button too, passed.
+/// for Dynamic Type, the only buttons it failed for Dynamic Type in any sheet. An icon has no
+/// text to stay small, and Your privacy's back button, a bar button too, passed.
 struct CloseLabel: View {
   let title: String
 

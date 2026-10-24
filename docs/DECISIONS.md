@@ -3471,10 +3471,10 @@ section):
   to within 24 points short of where the screenful had it (a drag spends 13 to 20 points before
   the page moves, so it never overshoots, and the next scroll is worked out from where the page
   then is, so nothing goes unaudited). The two calls hold every kind iOS defines between them, so
-  every kind still runs on every screenful. A page that stops now compares its credits with where the drag began,
-  and its drags say which put the page back. AX3 pages are about nine screenfuls now, each with up
-  to eight restoring drags: HomeAuditTests, 11 minutes on this run, should take about 30, within
-  the job's 90 (the job took 41.5).
+  every kind still runs on every screenful. A page that stops now compares its credits after the
+  drag with where the screenful had them, and its drags say which put the page back. AX3 pages are
+  about nine screenfuls now, each with up to eight restoring drags: HomeAuditTests, 11 minutes on
+  this run, should take about 30, within the job's 90 (the job took 41.5).
 - **The page's background was an element.** An `other` element at (0, 0, 402, 874), with no
   identifier or label, failed `sufficientElementDescription` on every screenful of every page, 30
   of the 107 home issues. Only `PageBackground` is drawn edge to edge, and it isn't the pager,
@@ -3502,10 +3502,11 @@ section):
   by default; section 10.7 asks only for a sheet.
 - **The toolbar's Close buttons.** `picker-close`, `close-settings` and `close-fallback` failed
   Dynamic Type ("partially unsupported"): a toolbar draws a text item at the bar's own type size,
-  whatever the text size. They were the only buttons any sheet's audit flagged, beside rows, Open
-  Settings, Copy address and cm and in in the same text styles, which passed. This round first
-  allowed it as a limitation of UIKit's; the review found the app can avoid it, so each Close is
-  now the xmark with "Close" as its label, and the sheets' audits allow nothing (next section).
+  whatever the text size. They were the only buttons any sheet's audit flagged for Dynamic Type;
+  rows (but for Your privacy's full-policy row under the recorder, below), Open Settings, Copy
+  address and cm and in, in the same text styles, passed that check. This round first allowed it
+  as a limitation of UIKit's; the review found the app can avoid it, so each Close is now the xmark
+  with "Close" as its label, and the sheets' audits allow nothing (next section).
 - **The Debug recorder lay over the sheets' last rows.** Under `-openURLs`, its two lines were a
   bottom `safeAreaInset` on a translucent bar, which insets a list's content but not its frame.
   `testRowsOpenWhatTheySay` opened Privacy policy and Terms, but Support, Settings' last row,
@@ -3607,6 +3608,16 @@ exception the fix had added is gone.
   identifier, `settings`, is its label's word too, and it passed on every home screenful. Should
   "Copied." fail again, the test stops there once more, and the Contact us fallback's audit after
   it, which has never run, waits another round.
+- **A page that stops would have run to the screenfuls' bound.** "Scrolls no further" compared
+  the credits after the step's drag with where `restore` left them, and `restore` stops up to 24
+  points short of the screenful on purpose (13 to 20 with this run's drags). At a scroll end short
+  of the credits' end, the drag still moved the page those points, so the check never fired, and
+  each screenful after paid two audits and a full restore until the 20th: some 6 to 9 minutes an
+  AX3 page, which, should main's first-run fault come back, would take the job past its 90
+  minutes, and a cancelled job uploads neither its summary nor its xcresult. It now compares them
+  with where the screenful had them: from at most 24 points short, a step of a quarter of the page
+  on screen or more, less a drag's 20, leaves a page that scrolls at least 68 points past it at
+  AX3, so only a page at the end of its scroll range fails there.
 - **Checked on Linux:** the nine UI test files type-check against the stubs, and the copies'
   checks pass: the two calls are the seven kinds between them, once (`.all` less two fails that
   check), and the sheets' notes fail every issue, Close's Dynamic Type and a button with no
