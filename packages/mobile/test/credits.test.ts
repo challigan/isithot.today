@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { COPY, CREDIT_LINKS, MODELS, MODEL_AGENCIES } from '@isithot/core';
+import { ALERTS, COPY, CREDIT_LINKS, MODELS, MODEL_AGENCIES } from '@isithot/core';
 import { APP_COPY } from '../src/appCopy';
 import { DATA_CREDITS, LICENCES_DIR, NOTICES, modelAgencies } from '../src/credits';
 import {
@@ -228,5 +228,7 @@ describe("Your privacy and the website's privacy notice", () => {
     const days = (text: string) => [...text.matchAll(/(\d+) days/g)].map((m) => m[1]);
     expect(days(APP_COPY.privacyNotifications)).toEqual(['90']);
     expect(new Set(days(notice))).toEqual(new Set(['90']));
+    // The days the notifications run keeps a registration that has not checked in (core ALERTS).
+    expect(days(APP_COPY.privacyNotifications)).toEqual([String(ALERTS.staleAfterDays)]);
   });
 });

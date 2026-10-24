@@ -7,6 +7,7 @@ export default defineConfig({
       'functions/test/**/*.test.ts',
       'netlify/test/**/*.test.ts',
       'scripts/test/**/*.test.mjs',
+      'scripts/test/**/*.test.ts',
     ],
     environment: 'node',
     coverage: {

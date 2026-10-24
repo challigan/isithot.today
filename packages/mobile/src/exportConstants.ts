@@ -2,9 +2,11 @@
  * `Constants.swift` (iOS build spec, section 7.1): the numbers the app shares with the server and
  * the website, from core's `config.ts` (and the models' agencies from `copy.ts`) and the client's
  * `config.ts`, under the same names, and willitsnow.today's pages and support address (core
- * `SITES.snow` and `CONTACT_EMAIL`), which the app's Settings open, so no URL is typed in Swift. A group written whole (`SEARCH`, `AHEAD`, `WIDGET`, `ALERTS`,
- * `CLIENT`) gains a member when core adds a key, and stops the generator if the new value isn't a
- * whole number, so a Swift type is chosen for it rather than guessed.
+ * `SITES.snow` and `CONTACT_EMAIL`), which the app's Settings open, so no URL is typed in Swift.
+ * A group written whole (`SEARCH`, `AHEAD`, `WIDGET`, `CLIENT`) gains a member when core adds a
+ * key, and stops the generator if the new value isn't a whole number, so a Swift type is chosen
+ * for it rather than guessed. `ALERTS` is not written whole: it holds the notifications run's
+ * windows, quiet hours and budgets too, and the app needs only `heartbeatDays`.
  */
 import {
   AHEAD,
@@ -131,7 +133,7 @@ export function constantsSwift(): string {
     ...group(
       ['Core `ALERTS`: how often an app registers for notifications again while it is used.'],
       'Alerts',
-      ints('    ', ALERTS),
+      ints('    ', { heartbeatDays: ALERTS.heartbeatDays }),
     ),
     ...group(
       [

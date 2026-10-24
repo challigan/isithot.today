@@ -908,11 +908,19 @@ The apps' snow notifications are sent by a Netlify scheduled function through Ap
 service (APNs). Two things were unverified on Carl's legacy Netlify plan, so a small probe lands
 first (iOS build spec, phase 1.5) and the full job follows.
 
+The notifications' decisions are in five sections, in the order a notification travels: this
+probe; when, whether and the words (core); the store and the sender; the devices endpoints, which
+register a phone for a place; and the run, which reads those registrations and sends. One
+record, one store, one sender, one quiet-hours rule and one dry-run rule run through all of them
+("Notifications: the run", how the parts fit). SETUP section 5 has the checks and the rollout.
+
 - **V8, does the schedule run?** `functions/api/alerts-run.mts` runs every 15 minutes (UTC) and,
-  until the full job lands, only logs `alerts-run: disabled (production)`. The Netlify Functions
+  until the full job landed, only logged `alerts-run: disabled (production)`. The Netlify Functions
   page should list it as scheduled, with a log line every 15 minutes in production. About 2,900
   invocations a month. Elsewhere the line says what it saw, for example
-  `(deploy-preview, ALERTS_SMOKE unset)`, so a preview check that sends nothing shows why.
+  `(deploy-preview, ALERTS_SMOKE unset)`, so a preview check that sends nothing shows why. (Yes,
+  on 23 October; the full run keeps these lines, naming `ALERTS_ENABLED` too: "Notifications: the
+  run".)
 - **V9, can a function reach APNs over HTTP/2?** On a deploy preview with `ALERTS_SMOKE=1`,
   **Run now** sends one push with the sandbox key to a made-up device (`apnsSmoke`). Apple's
   `400 BadDeviceToken` proves egress, TLS, HTTP/2 and that Apple took the key's token (a refused
@@ -926,6 +934,358 @@ first (iOS build spec, phase 1.5) and the full job follows.
   schedule). The production key is only ever in Netlify.
 - **The topic is the app's bundle ID,** `today.willitsnow.app`. Until it is registered under the
   team, Apple may refuse it (a 400 naming the topic, or a 403); the smoke says so.
+
+## Notifications: when, whether and the words (core alerts.ts)
+
+The server's run decides and words every notification with core (iOS build spec, sections 8.4
+and 8.6), so the apps never judge or word one, and the constants are `ALERTS` in `config.ts`.
+
+- **No new thresholds.** The evening (18:00 to 19:59 at the place) reads tomorrow's whole day,
+  `snow.days[1]`; the morning (07:00 to 08:59) the rest of today from the run's moment,
+  `snow.days[0]`. Snow, heavy snow and deep snow always send; "Snow possible" only for those who
+  asked for it; a few flakes and no snow never. A notification never says more than the page.
+- **The page's words.** The title names the band and the day ("Heavy snow likely in Leeds
+  tomorrow", "Snow possible in Leeds today"); the body is the day's own detail and agreement, so
+  the Durham example reads "1 to 2cm of snow. Mostly between 2am and 6am. 5 of 6 forecasts expect
+  snow.", in inches with °F. In the morning, while Now is snow or more, the title is "Snowing in
+  Leeds now". A device location without a town's name (the API's "Your location") reads "near
+  you": "Snow likely near you tomorrow". Nothing says "warning", "danger" or "alert", or names
+  another weather type, app or website; a test checks every title and body the rule produces for
+  days of every band, at different times of day, in both units.
+- **Choices the spec left open.**
+  - `snowAlert` sends nothing when that kind's switch is off, so it decides from all three
+    switches. The test endpoint, which sends the evening's real notification whatever the
+    evening switch says (with the record's "possible" choice), passes `{ ...prefs, evening: true }`.
+  - "Snowing now" goes with any band that sends, though in practice Today is never less snowy
+    than Now.
+  - The result carries the date it is about (tomorrow's in the evening) as well as the title,
+    body, band and relevance, for the payload and the collapse id, so the run never picks the day
+    again.
+  - `expiresAt` is in Unix seconds, as `apns-expiration` takes it: 21:00 at the place for the
+    evening, 11:00 for the morning, on the day it is sent. It reads the zone's offset twice, so a
+    clock change between its first guess and the answer is allowed for (Adak in March is the
+    test).
+  - Relevance: deep snow 1, heavy 0.8, snow 0.6, possible 0.3 (`SNOW_RELEVANCE`).
+  - The windows and the quiet hours (21:00 to 06:59, `inQuietHours`, which the sender asserts) are
+    tested at their edges across the UK's clock changes on 25 October 2026 and 28 March 2027 and
+    Adelaide's, and in Kolkata, Kathmandu, Kiritimati and Pago Pago. An unknown time zone reads as
+    UTC, as everywhere in core.
+- **Other topics later.** A `TopicAlertRule<T>` picks its topic's answers from a response and
+  decides its notification from its own verdict. Only snow's exists (`SNOW_ALERT_RULE`).
+- **Size.** None of it reaches the website: the site's JavaScript is byte for byte the same.
+
+## Notifications: the alert store and the push layer (packages/server alertStore.ts, apns.ts)
+
+The storage and sending half of the full job (iOS build spec, sections 8.3 and 8.5). The run
+(`runAlerts`), the devices handlers and core's rules build on it.
+
+- **One store, `isithot-alerts`, strongly consistent.** Production uses the site-wide store;
+  previews, branch deploys and `netlify dev` get a deploy-scoped one, chosen as the cache's is, so
+  a preview never reads or writes a real registration. Unlike the cache, it never falls back to
+  memory when Blobs is missing: two instances with their own memory would both send.
+  - That choice is this code's, not Netlify's: any deploy of the site can open the site-wide
+    store. It holds every device token, each place (a device location as its 0.05° point) and,
+    for up to 50 minutes, the provider token, which together could send to every device. The
+    repository is public and every pull request gets a preview, so Netlify must not build one
+    from outside the team until Carl has read it (SETUP section 1, before notifications go
+    live). Encrypting the tokens and places with a key only production holds would be a second
+    guard; it is not built.
+- **Every call either answers or fails, within 1.5 s.** `get` gives null only when Blobs said the
+  key is absent; `set` with `onlyIfNew` gives false only when Blobs said the key exists. A failure
+  or a timeout rejects (and is logged once, with ids cut to 8 characters). A call that times out
+  may still land later, so callers do only what is safe either way: a claim that fails is not a
+  claim, so nothing is sent; a read that fails is not "absent", so nothing is deleted and no zone
+  is marked done; a release that fails keeps its claim, so that push is not retried today. A
+  failure can cost a notification, but never sends one twice or deletes a registration wrongly.
+- **What `@netlify/blobs` 11.1.3 does,** read from its source: `getStore` and `getDeployStore` both
+  take `consistency`, and set on the store it sends every get, list, set and delete through the
+  uncached edge (a test against Netlify's own local Blobs server proves it: with a dead cached
+  edge, every call still works). A conditional write sends `if-none-match: *` and reports
+  `modified: false` for a 412, but `modified: true` for any other answer, errors included, so a
+  claim is believed only with the etag a real write returns, and otherwise read back. `list` with
+  `directories` gives full paths without a trailing slash. The client retries 429s, 5xxs and
+  network failures five times, 5 s apart, hence the timeout.
+- **Keys.** As in section 8.3, with the zone `encodeURIComponent`'d wherever it appears (in `done/`
+  keys too), so a zone is always one path segment, and one more key, the run's `judged/`
+  ("Notifications: the run"). A test send claims one of the hour's slots,
+  `test/v1/<id>/<yyyy-mm-ddThh>.<n>`, because one key an hour would allow one send an hour, not
+  three, and a counter would be a read-modify-write. Unverified: that Netlify's service keeps
+  `%2F` in a key as it is. Netlify's local server does (`Europe%2FLondon` is one directory); a
+  deploy preview check (register, then list `reg/v1/`) settles it.
+- **Deleting a registration re-reads it first.** A record written or refreshed since the run read
+  it (a new `updatedAt` or `seenAt`) is kept, and the `ids` key goes only while it still names the
+  same zone.
+- **The provider token is shared through the store** (`apns/v1/jwt/<env>`), reused under 50
+  minutes and only when it was made with the current key for the current team, so a rotated key
+  takes effect at once. A 403 drops it, unless another run has already made a new one. No copy is
+  kept in module memory: one strong read per run is cheap, and a copy could outlive a token Apple
+  refused.
+- **The sender.** One HTTP/2 session per APNs environment. The first push goes alone (Apple allows
+  one stream until a valid provider token arrives), then up to min(`apnsConcurrency`, the
+  session's `maxConcurrentStreams`) at once; Node itself queues requests past the server's limit,
+  so the test counts them on the sending side. Each of the run's pushes is claimed just before
+  it goes; a test send, already counted by its slot in the hour, goes unclaimed
+  (`claimKey: null`). A 403, a 429 `TooManyProviderTokenUpdates` or no answer stops that
+  environment for the run, leaving the rest unclaimed for the next. After a 429 or a 5xx it stays
+  at one stream. A push that timed out is released and retried by the next run, as Apple advises
+  for 5xxs; if Apple had in fact taken it, the same collapse id makes the second replace the first
+  on the phone rather than stack.
+- **Quiet hours are asserted in the sender,** with core's `inQuietHours`, the run's own rule:
+  nothing goes from 21:00 to 06:59 at the place, test sends included, and a zone the runtime
+  does not know reads as UTC, as the windows read it ("Notifications: the run").
+- **The payload** is section 8.5's, key for key. It stays under 1,024 bytes for the longest city
+  (Las Palmas de Gran Canaria) and for a searched place at the server's 80-character limits;
+  80 three-byte characters for both name and region stay under Apple's 4,096, and `alertPush`
+  refuses anything over 4,096 before a claim is written.
+- **Logs** carry id prefixes, statuses, reasons, zones, the APNs environment and the app version;
+  never a device token, a provider token, a key, a full id or a place query (which can hold
+  coordinates). A test checks every line the tests log.
+
+## Notifications: the devices endpoints (packages/server devices.ts)
+
+How the apps register for notifications (iOS build spec, sections 8.2 and 8.3): `PUT` and
+`DELETE /api/v1/devices` and `POST /api/v1/devices/test`, two thin functions over
+`@isithot/server`, each limited by Netlify to 10 requests a minute per IP on each domain.
+
+- **The body is checked whole before anything is read or written,** and is at most 2 KB (413
+  `too_large`). It has the app, the platform (`ios`), the environment, a hex token of 64 to 200
+  characters, the units, the three switches (booleans only), an optional app version, and the
+  place in one of its three forms.
+  - Anything but letters, digits, spaces and `. ( ) _ + -` in the app version ("1.0 (112)", at
+    most 40 characters) is a 400 `bad_request`. It is logged with Apple's refusals, and a line
+    separator (U+2028), a C1 control (U+0085) or a direction override (U+202E) in it could forge
+    a log line or reverse how one reads.
+  - Only `snow` is live: `wet`, `wind`, `hot` and `all` are a 400 `app_not_live`.
+  - The token is lower-cased first, so a device has one id whichever case it sends.
+  - No place, or the IP location's empty one, is a 400 `bad_location`. So is a slug with no page:
+    where `/api/v1/today` says 404, a registration says the place is wrong.
+  - Fields it does not know are ignored.
+  - A contract test sends it every body the client's `registrationBody` makes: each place form,
+    unnamed searched places, both units and environments, and every switch combination.
+- **The place is canonicalised as `/api/v1/today` locates it,** with `locateCity` and
+  `locateFromCoords` (now exported from `today.ts`):
+  - a slug becomes its page's (`place=leeds-gb`);
+  - coordinates are rounded again to 0.05°;
+  - a searched place keeps its cleaned name, region, country, GeoNames id and height, and one sent
+    without a name takes the nearest town's, as the API names it. Cleaning (`/api/v1/today`'s
+    too) strips angle brackets, every control (C0 and C1), line and paragraph separators and the
+    invisible format characters, direction overrides and zero-width spaces among them, but keeps
+    the zero-width joiner and non-joiner that some scripts spell with. A name reaches logs and
+    notifications as well as pages;
+  - a device location is its point only (`lat=53.8&lon=-1.55&source=device`), whatever else it
+    carries.
+
+  The query is in the client's order, so a tap on the notification opens the app's own place
+  (the tests check that `notificationRoute` gives the same `targetKey`). The zone and the name
+  come from `getToday` on that query, with no wait for climate normals.
+
+- **Every switch off is a delete (204),** and so is "also when snow is possible" alone. That
+  switch only widens the other two, the app's sync already deletes then, and a record that can
+  never send is data kept for nothing.
+- **One write per id a minute** (429 `rate_limited`, with `Retry-After`), checked against the
+  stored record's `updatedAt`, so it needs no key of its own. A delete is never refused. Two
+  writes in the same instant both pass; Netlify's rule bounds those.
+- **Keys and moves.** Only these handlers write `reg/` and `ids/`, and each write replaces the
+  value whole.
+  - A new registration writes its ids key first, then the record, so a DELETE after a failure
+    between the two still finds it.
+  - A move between zones takes four steps: the ids key naming the new zone and the ones left
+    (`{ tz, from }`), the new record, deleting the old one, then the ids key naming the new zone
+    alone. Whichever step fails, a DELETE removes every copy, and the next PUT finishes the move.
+  - `createdAt` is kept; `updatedAt` and `seenAt` are set on every write.
+- **A store failure is a 503 `store_unavailable`** with the JSON error, never a 200 for a write
+  that did not land. No Blobs environment gives the same 503, not a crash. Production uses the
+  site-wide store; previews, branch deploys and `netlify dev` the deploy's own, decided from the
+  deploy context as for the run. A test against Netlify's local Blobs server checks each context.
+- **The test send.** 404 `not_registered` without a registration. 429 `test_limited` after 3 in
+  the hour (UTC) for the id, with `Retry-After` to the next hour. Otherwise one push at once, and
+  202 `{ sent: true }`. It sends tomorrow's real evening notification when the rule sends one for
+  the place (with the record's "possible" choice, whatever its evening switch says), and
+  otherwise "Test notification".
+  - **It goes through the run's sender** (`sendAlerts`, with no claim key, since the hour's slot
+    has already counted it). So Apple's answers mean what they mean for the run, the provider
+    token is the run's, shared through the store and dropped on a 403, and the quiet hours are
+    asserted by the same code.
+  - **The quiet hours apply** (21:00 to 06:59 at the place, core's `inQuietHours`): 409
+    `quiet_hours`, with `Retry-After` to 07:00 there. They are checked before the slot is
+    claimed, so a test pressed at night costs none of the three. Section 8.6 has the sender never
+    send in those hours, and one rule for every push keeps that true. The cost is that App Review,
+    pressing the button at night at the place it chose, sees a failure, so the review notes say
+    so; the app shows `testFailed` until it has words of its own for this code.
+  - Priority 10, and Apple stops trying after 15 minutes: a test that arrived hours later would
+    only confuse, and a real evening notification's 21:00 would have passed for a late test.
+  - The real notification keeps its collapse id (`snow-evening-<date>`), so the scheduled one
+    replaces it on the phone. The fixed words use `snow-test`, so tests replace each other rather
+    than pile up. They have relevance 0.3 (the lowest band's) and today's date at the place.
+  - The forecast is waited for 3 s, and Apple 5 s. A forecast that is slow or fails gives the
+    fixed words: the test is of notifications, not of the forecast.
+  - The key is checked before the claim, so a missing key (503 `push_unavailable`; the log names
+    the missing settings, never a value) costs no test.
+  - Apple's answer is acted on as for the run. A refused device is deleted, and the answer is 404
+    `not_registered`. A 403, a 429, a 5xx or no answer is 503 `push_unavailable`; any other
+    refusal 502 `push_refused`. The sender logs Apple's answer as it does for the run
+    (`alerts: deleted …`, `alerts: error: …`), and the endpoint adds one line of its own:
+    `devices: test sent to snow.3f9c1a2b… (…)`, or `devices: test not sent to … (…): <outcome>`.
+    A failed send still counts towards the three.
+  - **`ALERTS_DRY_RUN` is read by the run's rule** (`alertsDryRun`): nothing is sent unless it is
+    `false`, in any context, so a production that is still a dry run sends no tests either.
+    Unlike the run, a test follows `false` on previews, branch deploys and `netlify dev` too:
+    that is how a preview checks the whole path to Apple with a made-up device (SETUP section 5).
+    A dry test claims its slot and decides its words as usual, the sender logs them
+    (`alerts: dry run: …`), and it answers 202 `{ sent: false, dryRun: true }`, with no key
+    needed.
+  - `ALERTS_ENABLED`, the run's switch, does not apply to registrations or tests: registrations
+    are kept whatever it says, so they are there when the run starts.
+- **The test endpoint has the same Netlify limit** (10 a minute per IP). The spec names one only
+  for `devices.mts`, but each test reads the store and may push.
+- **Logs** carry id prefixes, zones, Apple's answers and the app version; never a device token, a
+  key, a provider token, a full id, a place query or coordinates. The forecast code and the cache
+  name an entry by its grid cell ("forecast/v7/54.80,-1.60/50"), so every line the handlers log
+  goes through `placeLess` (the run's `scrub`, and any other pair of numbers). That includes
+  `createDeps`'s own: a cache read slower than 1.5 s logs its key, and the handlers used to leave
+  those to the plain console. A test checks every line the tests log, and one runs a PUT and a
+  test send on the functions' own dependencies with a slow Blobs edge.
+- **Junk registrations. Needs a decision before the public launch.** A made-up token is a new id,
+  so the one-write-a-minute rule never applies to it, and only Netlify's 10 a minute per IP on
+  each domain bounds them. Junk at a place with no snow is never pushed, so Apple never refuses
+  it, and it stays for 90 days. Since the run judges each registration once a window, each costs
+  at most one forecast a window (and none where it shares a place), the run's cap still bounds a
+  run (60 forecasts free, 300 with the key), and a zone gets through 480 or 2,400 places a window.
+  Past that, junk padding one zone would push real registrations out. Two ways to close it, both
+  Carl's call: App Attest or DeviceCheck (an app change, the real fix), or a daily limit of new
+  registrations per IP, which means keeping a keyed hash of the IP for a day (research section
+  11 promises the IP is never stored, so the privacy notice would change) and could refuse people
+  behind one mobile network's address.
+
+## Notifications: the run (packages/server alerts.ts)
+
+The scheduled function `alerts-run` (every 15 minutes, UTC) calls `alertsRun`, which reads the
+switches and calls `runAlerts`, section 8.6's run. `runAlerts` takes no input but the clock, so
+any other trigger could call it.
+
+- **The switches** (Netlify, Functions scope; a change needs a redeploy):
+  - `ALERTS_ENABLED` must be `true` (any case), or the run returns at once with one line saying
+    why: `alerts-run: disabled (production, ALERTS_ENABLED unset)`, or on a preview
+    `(deploy-preview, ALERTS_ENABLED unset, ALERTS_SMOKE unset)`. These are the probe's lines with
+    the new switch named, so V8's check still reads the same.
+  - `ALERTS_DRY_RUN` is read by `alertsDryRun`, one rule with the test endpoint's: nothing is
+    sent until it is `false` (any case), so unset or a typo stays dry. The run is also forced dry
+    by code in every context but production, whatever it says (it logs that it ignored a
+    `false`).
+  - `ALERTS_SMOKE=1` still makes a preview's run send only the smoke push, as for V9. Production
+    never smokes, whatever the setting.
+  - `ALERTS_FORCE_IDS`: below.
+- **Order.** As section 8.6, with one change: today's claims (`sent/`) and judgements
+  (`judged/`, below) for each due window are listed before the zone's records are read, and a
+  registration already notified or judged is skipped unread. A record not seen for 90 days that
+  was already notified or judged today is deleted at its next window instead.
+- **Each registration is judged once a window, a key of its own (`judged/`).** Section 8.3 keeps
+  no record of a registration judged with nothing to send, and only a claim or the zone's done
+  marker showed progress. A zone too big for one run (the budget, the fetch cap) was then judged
+  again from its first group every run: free while the forecasts were cached, but the cache keeps
+  one for an hour, so the first groups cost the cap again and the last were never reached, for any
+  band, all window, every day (about 4 × the cap distinct forecasts: 240 a window on the free API).
+  So a run that leaves a zone unfinished writes
+  `judged/v1/<localDate>/snow.<kind>/<app>.<id>` (`{ at }`, a plain write: every writer writes the
+  same) for each of its registrations judged with nothing to send, or logged by a dry run. A
+  zone picked up again after a stop then reads only what it has left, so it gets through a big
+  zone over several runs: at most 8 runs a window, so 480 forecasts on the free API and 2,400 with
+  the key. A run that finishes its zone writes none (its done marker says it all), so a normal
+  evening costs no more writes than before. They are the first thing a short run gives up (none
+  once the pushes' 4 s of grace are over), since they only save the next run work, and a listing
+  of them that fails only means judging again.
+- **One moment.** `now` is read once and given to `getToday` as `deps.now`, with
+  `climateWaitMs: 0`: the normals only word a day without snow, which never sends.
+- **Groups** are `query` + `units`, the biggest first, so a run stopped by its cap or budget has
+  notified the most it could. Groups for one place in °C and °F share one forecast fetch.
+  `ALERTS.fetchConcurrency` (4) run at a time.
+- **The fetch cap** counts each distinct forecast URL requested (a hedged second request is the
+  same fetch), plus each group still running, so a run never goes over it: 300 a run
+  (`ALERTS.maxForecastFetchesPerRun.paid`) with `OPEN_METEO_API_KEY`, 60 without. Groups not
+  started are left, with their zones, for the next run.
+- **The budget** (`ALERTS.runBudgetMs`, 20 s) stops new record reads and new groups. Pushes for
+  groups already judged may start for 4 s more (`PUSH_GRACE_MS`), and each push waits at most
+  4 s for Apple (`APNS_RUN_TIMEOUT_MS`). A group started just before the budget can take about
+  7.5 s more (a 1.5 s cache read, then the 6 s forecast timeout), so even then the run ends
+  inside Netlify's 30 s; its pushes are left for the next run.
+- **Done markers** are written only when every due registration in the zone is finished with:
+  sent, refused for good, held, quiet, judged, or with nothing to send. These leave the zone for
+  the next run: a failed listing or read, a forecast that failed (503), a released claim or a
+  deferred push. The claims stop the next run from sending twice. A place that no longer exists
+  (404) and a record the run cannot read are logged as errors and do not hold the zone up. A
+  failed read leaves its zone unfinished, but the zone's other registrations still go.
+- **Overlapping runs** (a late scheduled run, or **Run now** during one) send once, by the claims,
+  and no longer lose a notification. A run counts another run's claim as finished, whether it
+  found the claim in its listing or found it taken, but that run may yet get a 429, a 5xx, a 403
+  or no answer and release it. Marking the zone done on it lost the notification for the day: the
+  marker stood, the claim was gone, and Apple never had the push. So both sides act. A run that
+  marked a zone done counting on others' claims lists the window's claims again once the marker
+  is written, and takes the marker back if one has gone. A run that releases a claim deletes its
+  zone's done marker. Whichever order the two runs' steps fall in, one of them sees the other's
+  (the tests hold each order). A lease that stopped a second run starting was the other way, but
+  **Run now** in the same quarter of an hour, the preview check in SETUP section 5, would then do
+  nothing.
+- **Stale.** A record whose `seenAt` (else `updatedAt`) is more than 90 days old is deleted when
+  read, whatever its switches, through `forgetRegistration`, which keeps one refreshed since.
+- **ALERTS_FORCE_IDS** takes prefixes of 8 to 32 hex characters, in any case. A shorter one would
+  force many registrations at once, so it is ignored and counted as an error, without being
+  quoted. A forced registration gets one notification per window per day whatever the band: the
+  real one when the rule sends one, otherwise the test copy ("Test notification", relevance 0.3,
+  dated as the real one would be). Its own switches still apply: a window switched off gets
+  nothing.
+- **The dry run** logs each notification
+  (`alerts: dry run: snow.3f9c1a2b… sandbox evening 2026-10-19: <title> / <body>`). It claims
+  nothing, makes no provider token and sends nothing. It still writes done markers, and judged
+  markers where a zone is left unfinished, so each notification is logged once a window, and it
+  still deletes stale records and cleans up.
+- **The cleanup** runs in the 03:00 UTC hour. The first run then claims
+  `done/v1/<UTC date>/cleanup` (`onlyIfNew`), lists `sent/v1/`, `judged/v1/` and `done/v1/` by
+  date and `test/v1/` whole, and deletes the keys of dates more than 2 days before the UTC date:
+  at 03:00 on 1 December, 27 and 28 November go, 29 November on stay. Cut short or failed, it
+  releases its marker, so the next run in the hour carries on. The marker goes with its day's
+  `done/` keys. That is at most four conditional writes a day, and no other run pays anything.
+- **The log line**, one a run:
+  `alerts-run: zones 1, records 2, groups 2, fetches 2, sent 1, deleted 0, errors 0; 812 ms`.
+  Notes follow when they apply: `dry run, 3 logged`, `2 forced`,
+  `1 zone left for the next run (out of time)` or `(fetch cap 60)`, and
+  `cleanup deleted 120 old keys`. `errors` counts the lines logged as errors
+  (`alerts-run: error: …` and the sender's `alerts: error: …`), each failure once. Those event
+  lines (deletions, refusals, errors, a dry run's notifications) come before it; a clean run that
+  sends logs only the summary.
+- **Public logs.** Every line goes through `redact` (ids and JWTs) and a scrub of coordinates (a
+  cache key's cell, `lat=`, `lon=`, `apikey=`). So do the forecast code's own messages
+  (`forecast unavailable for forecast/v7/<cell>/…`), through `createDeps`'s new `log` option. An
+  error about a group names its first registration's id prefix ("and 2 more"), never the place.
+- **One quiet-hours rule.** Core's `inQuietHours` is the only one; it takes `ALERTS.quiet`, or the
+  sender's `quiet`. An unknown zone reads as UTC there, as `alertWindows` reads it, so the run and
+  the sender agree. The sender's own copy used to count an unknown zone as always quiet, which
+  could have refused every push in a zone the run thought was in its window. The test endpoint
+  checks it too, before it claims a slot, and its push goes through the same sender.
+- **One record.** The devices handlers write `DeviceRecord`, which is the run's `AlertRecord`
+  (section 8.2's record) narrowed, so the compiler keeps the two together. The run checks the
+  token (hex), `env`, `query`, `units`, `updatedAt` and `alerts` as it reads one, and takes the
+  zone, app and id from the key.
+- **How the parts fit** is tested end to end (`test/notifications.test.ts`), with the real
+  handlers and the real run on one memory store and the fake APNs. A registration made with
+  `PUT` gets one push at the place's 18:05, with section 8.5's payload and headers, and none at
+  18:20. After a `DELETE`, the next evening's run sends it nothing even when forced, while a
+  device still registered there gets its forced one. Every place form and both units go through
+  as the handler canonicalised them (the tap opens the place the `PUT` answered with); a move to
+  another zone is notified only in its new zone; and a test send and the run use one provider
+  token, whichever made it.
+- **The dry-run script,** `pnpm tsx scripts/alerts-dry-run.ts --now <ISO>`, registers every city
+  page's place in °C and °F with every switch on (zones from `getToday`, as the devices handler
+  reads them), on synthetic forecasts with the fixed clock, and prints each notification.
+  `--now 2026-10-18T18:05:00Z` gives section 8.5's Durham example exactly ("Snow likely in Durham
+  tomorrow" / "1 to 2cm of snow. Mostly between 2am and 6am. 5 of 6 forecasts expect snow.",
+  "About 0.5in of snow. …" in °F); the spec's 2026-12-01T18:05:00Z has no snow in Durham in
+  synthetic data. A test pins that output.
+- **Preview checks.** A preview's run is always dry, so section 8.7 item 4's forced run shows the
+  notification in its log rather than Apple's `400 BadDeviceToken`. The test endpoint covers
+  Apple's half on the same preview: with `ALERTS_DRY_RUN=false` for Deploy Previews, a test to
+  the same made-up device goes through the same sender to Apple's sandbox, which refuses it, and
+  the registration is deleted (SETUP section 5). The run's own path to Apple can be checked on
+  production once it sends, with the same device.
 
 ## The iPhone app's foundations (packages/mobile, apps/ios)
 
@@ -1232,10 +1592,11 @@ strings are not in `AppCopy`: see "The iPhone app's phases 2 and 3, reviewed".)
   Google, UK, °C, °F), and no other weather type, website or app.
 - **`Constants`** keeps the TypeScript's names and units (`Constants.Client.refreshAfterMs`,
   ms; `Constants.Cache.forecastStale`, seconds). The groups written whole (`SEARCH`, `AHEAD`,
-  `WIDGET`, `ALERTS`, `CLIENT`) gain a member when a key is added, and stop the generator when
-  the new value isn't a whole number, so a type is chosen rather than guessed; snow's shares and
-  thresholds are declared `Double`, whole numbers too. `ALERTS` has only `heartbeatDays` until
-  the notifications work adds the windows.
+  `WIDGET`, `CLIENT`) gain a member when a key is added, and stop the generator when the new
+  value isn't a whole number, so a type is chosen rather than guessed; snow's shares and
+  thresholds are declared `Double`, whole numbers too. `Constants.Alerts` names its one value,
+  `heartbeatDays`, as `Cache` and `Grid` do: the notifications work (PR #30) added the run's
+  windows, quiet hours and budgets to core's `ALERTS`, and the app needs none of them.
 - **The models' agencies move into core** (`MODEL_AGENCIES` in `copy.ts`) from the About page,
   which now reads them there, unchanged: the spec's `MODELS (names and agencies)` assumed core had
   them, and the app's credits must say the same. Data only, so core's coverage is unchanged;
@@ -2186,8 +2547,8 @@ and licences, the static lines of Your privacy, and Report an ad (sections 10.4,
   about 90 days after you last open it" (the 90 days count from the last PUT, at most a week
   old while the app is used), and "If you turn notifications off in your iPhone's Settings
   instead, we delete them the next time you open the app." `credits.test.ts` holds each fact to
-  the notice's own words, and the 90 to the notice's. The 90 is written out: `ALERTS.staleAfterDays`
-  is on the notifications branch, not main, so once it lands the test should check it too.
+  the notice's own words, and the 90 to the notice's and to `ALERTS.staleAfterDays`, the days
+  the notifications run keeps a registration that has not checked in.
 - **"See Privacy choices." is a line of its own** (`APP_COPY.seePrivacyChoices`), shown after the
   ads line only while the Privacy choices row is in Settings: outside the UK and the EEA,
   Google's form isn't required and there is no row to see. Section 10.6 had it in the ads line.
@@ -2345,9 +2706,9 @@ it.
   forecast line adds the notice's other two facts about the app: place names searched for go to
   Open-Meteo, and the app keeps the place, units, recent places and last forecast on the iPhone
   (still five lines, as section 10.6 has them). `credits.test.ts` holds each to the notice's
-  words; "Open-Meteo" joins the sentence-case test's names. The 90 days are still written out:
-  `ALERTS.staleAfterDays` is on main but not yet on this branch, so the test should check the
-  number against it once main is merged in.
+  words; "Open-Meteo" joins the sentence-case test's names. The 90 days are written out in the
+  copy, and since main (PR #30) was merged in, the test checks them against
+  `ALERTS.staleAfterDays` as well as against the notice.
 - **The literal guard catches a word however a view is given it.** It missed a lowercase word
   passed to `Text(verbatim:)` (how every view here draws text) or to an accessibility label,
   a unit beside an interpolation (`"\(depth) cm"`, `"\(snowy) of \(total)"`), and a capitalised
