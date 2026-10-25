@@ -24,7 +24,7 @@ targets:
     platform: iOS
     sources:
       - path: Apps/Snow/App
-      # Also the generated Assets.xcassets (the app icon) and Fonts/BricolageAnswer.ttf.
+      # Also the generated Assets.xcassets (the app icon) and Fonts/ (BrandFont's four files).
       - path: Apps/Snow/Resources
         excludes: ['Info.plist', '*.entitlements']
       # The fixtures pnpm mobile:generate writes, for -fixture (DebugHooks.swift). Release builds
@@ -57,8 +57,8 @@ targets:
     sources:
       - path: Apps/Snow/Widgets
         excludes: ['Info.plist', '*.entitlements']
-      # The answer font is a resource of both targets: an extension can't load fonts from the
-      # app's bundle (section 9.7).
+      # The fonts are resources of both targets: an extension can't load fonts from the app's
+      # bundle (section 9.7).
       - path: Apps/Snow/Resources/Fonts
         buildPhase: resources
     settings:

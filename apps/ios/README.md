@@ -54,10 +54,11 @@ Apps/Snow/App/           WillItSnowApp (the services and the scene's phases), Ho
                          debug hook)
 Apps/Snow/Resources/     the app's Info.plist, entitlements and privacy manifest; Licences/ (the notices
                          Credits and licences shows in full, copied whole); generated: Assets.xcassets
-                         (the app icon) and Fonts/BricolageAnswer.ttf (the app's and the widget's)
+                         (the app icon) and Fonts/ (the app's and the widget's: BricolageAnswer.ttf and
+                         the text faces BricolageText-{Regular,Medium,SemiBold}.ttf)
 Apps/Snow/Widgets/       the widget extension, its Info.plist, entitlements and privacy manifest
 Apps/Snow/Tests/         app-hosted unit tests: the App Group round trip (V1), widget and glyph snapshots,
-                         palette contrast, the answer font, the built Info.plist's purpose string
+                         palette contrast, the brand fonts, the built Info.plist's purpose string
 Apps/Snow/UITests/       FixtureLaunchTests (fixtures at their own moments, and a place nearby),
                          LaunchTests (the real launch over a stubbed network); HomeTests, OfflineTests and
                          HomeAuditTests (phase 5.4), which read what each screen should say from
@@ -82,7 +83,7 @@ The release checks are in the repo's `scripts/`: `check-archive.sh`, with `swift
 
 The widget never links IsItAds or IsItLocation. Both the app and the widget have the App Group
 `group.today.willitsnow.app`; only the app has `aps-environment`. The name under the icon is
-"will it snow?" (`CFBundleDisplayName`). Both bundle the answer font and list it in `UIAppFonts`,
+"will it snow?" (`CFBundleDisplayName`). Both bundle the fonts and list each in `UIAppFonts`,
 since an extension can't load the app's fonts; only the app has an icon.
 
 ## Building on a Mac (Carl, optional)
@@ -185,12 +186,14 @@ docker run --rm -v "$PWD/apps/ios/Packages/IsItCore":/w -w /w swift:6.3.3-noble 
 That `swift test` runs the vector guard too, which checks every vector file with its port
 (below).
 
-**The answer font.** `pnpm mobile:check` never needs Python: it checks the font by the recipe
-stamped in it (`packages/mobile/src/exportFont.ts`). `pnpm mobile:generate` runs
-`scripts/make-answer-font.py --ttf` only when the font is out of date, which needs python3 with
-fontTools 4.66.1 and brotli (`pip install fonttools==4.66.1 brotli`; the agents' container has
-them). After changing the woff2's instance or subset, build the woff2 first (the script with no
-arguments): `--ttf` refuses to build a font that differs from it.
+**The fonts.** `pnpm mobile:check` never needs Python: it checks each font by the recipe stamped
+in it and its tables' checksums (`packages/mobile/src/exportFont.ts`). `pnpm mobile:generate` runs
+`scripts/make-answer-font.py --ttf` or `scripts/make-text-fonts.py` only when one of its fonts is
+missing or out of date, which needs python3 with fontTools 4.66.1 and brotli
+(`pip install fonttools==4.66.1 brotli`; the agents' container has them). After changing the
+answer woff2's instance or subset, build the woff2 first (the script with no arguments): `--ttf`
+refuses to build a font that differs from it. After changing `make-text-fonts.py`, run it twice
+with `--out` into two folders and `cmp` the files: its builds are byte for byte the same.
 
 **XcodeGen on Linux.** XcodeGen is a Swift package and builds on Linux, so `project.yml` can be
 checked here. Build 2.46.0 once (`git clone --branch 2.46.0
@@ -1000,7 +1003,7 @@ Xcode's as the `package-resolved` artefact. The next agent:
    downloaded, otherwise from the diff, which is short JSON);
 4. commits it, and pushes; `Resolve packages` must then pass.
 
-## Glyphs, icon and answer font
+## Glyphs, icon and fonts
 
 `pnpm mobile:generate` writes all three from the website (spec section 7.1); never edit them.
 
@@ -1016,6 +1019,15 @@ Xcode's as the `package-resolved` artefact. The next agent:
 - **Answer font:** `Apps/Snow/Resources/Fonts/BricolageAnswer.ttf`, the website's answer font
   (`apps/web/src/fonts/bricolage-answer.woff2`) as TrueType, named `BricolageAnswer` for
   `Font.custom`.
+- **Text faces:** `Apps/Snow/Resources/Fonts/BricolageText-{Regular,Medium,SemiBold}.ttf`, built
+  by `scripts/make-text-fonts.py` from the website's variable font: static instances at wght 400,
+  500 and 600 and opsz 16, each the latin and latin-ext subsets merged, so Łódź and Météo-France
+  never fall back to SF Pro. Family "Bricolage Text", each named by its PostScript name.
+- **`BrandFont`** (`IsItModel/Generated/BrandFonts.swift`) names all four for the Swift, with
+  their files. Both Info.plists list every file in `UIAppFonts` (`packages/mobile`'s
+  `appFonts.test.ts` checks them); the app-hosted `BrandFontTests` checks each is registered under
+  its PostScript name and that the text faces draw latin-ext. Nothing draws in the text faces yet
+  (DECISIONS, "The iPhone app in the website's look").
 
 ## Debug hooks and Release builds
 

@@ -47,6 +47,9 @@
 	<string>$(LOCATION_PURPOSE)</string>
 	<key>UIAppFonts</key>
 	<array>
+		<string>BricolageText-Regular.ttf</string>
+		<string>BricolageText-Medium.ttf</string>
+		<string>BricolageText-SemiBold.ttf</string>
 		<string>BricolageAnswer.ttf</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>

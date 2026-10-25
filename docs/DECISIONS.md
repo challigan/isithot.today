@@ -3955,6 +3955,70 @@ screen recordings, screenshots and element trees, and run 2's, were read for eac
   compile only on macOS: `SheetPage`, the Settings and Credits pages and the recorder's lines are
   for the next run's screens and trees to show.
 
+## The iPhone app in the website's look (apps/ios, packages/mobile, scripts)
+
+Carl asked for the iPhone app to look as close to the website as possible, with the cm/in toggle
+kept in Settings and no name at the top; for a more modern Settings ("very retro iOS and boring
+at the moment"); and for saved places beside the picker's recent ones. The design was measured
+against the website's own CSS and is built in seven steps, each pushed so the macOS job compiles
+it. This section grows with each step.
+
+**Step 1: the brand fonts.** The website sets every word in Bricolage Grotesque; the app had only
+the answer word's subset (`BricolageAnswer.ttf`). The step adds the text faces and names every
+font for the Swift. No screen uses them yet: the home screen moves to them in step 3.
+
+- **Static instances, not the variable font.** What ships is what is drawn, whether or not Core
+  Text applies the optical size of a custom variable font, and however SwiftUI would map a
+  weight onto one. The website sets text between 12.5 and 24 px, where "Will it snow today?" at
+  wght 400 is 8.733 em wide at opsz 14, 8.710 at 16 and 8.689 at 18: one optical size, 16, draws
+  every size within 1% of the website's continuous one.
+- **Three faces, not the design's six.** `BricolageText-Regular` (400), `-Medium` (500) and
+  `-SemiBold` (600), all at opsz 16, beside `BricolageAnswer` (780, opsz 96). A Book (450) face
+  for the question and Display (opsz 22) cuts for the verdict and the grid's values change widths
+  by under 1% and the weight by a step nobody sees at those sizes: the question takes Regular and
+  the verdict and values SemiBold. If the contact sheet beside the website shows a difference,
+  they come back.
+- **Latin and latin-ext merged.** The website loads the two subsets as it needs them; each app
+  face is both, merged with fontTools' merger (374 code points, 476 glyphs, about 71 KB a face),
+  so Łódź, Reykjavík and Météo-France never fall back to SF Pro mid-word. Scripts beyond latin-ext
+  fall back to the system font, as on the website. The faces keep every feature the subsets have:
+  `kern`, `mark`, `mkmk`, `ccmp`, `locl`, `tnum`, `pnum`, `frac`, `numr` and `dnom` (tabular
+  figures for the grids and week amounts through `.monospacedDigit()`).
+- **The name table is rewritten.** Every instance comes out of the instancer named "Bricolage
+  Grotesque 96pt ExtraBold", so the three would collide when registered. Each face is named
+  family "Bricolage Text" with its style, and its PostScript name (`Font.custom`'s and
+  `UIFont(name:)`'s, and the file's name) is its own. The copyright and the licence's URL stay,
+  and the licence's description is added, as for the answer font; the axes' names go, since
+  nothing in a static font points to them. `OS/2`'s regular bit is set only on the 400 face and
+  `head.macStyle` is 0. The font has no reserved name, so the OFL allows the renamed, modified
+  versions (below, "Credits and licences").
+- **Byte for byte the same each build.** The merger stamps `head.modified` with the time of the
+  build (two prototype builds differed only there), so the script sets `created` and `modified`
+  to the source's, as the answer font keeps its. The script was run twice and the outputs
+  compared with `cmp`: identical, and identical to the committed files.
+- **Checked without Python.** As with the answer font, each face's version string (name ID 5)
+  ends with its recipe, a SHA-256 of `scripts/make-text-fonts.py` and the two subset files, and
+  `pnpm mobile:check` checks each file's recipe and every table's checksum in Node
+  (`exportFont.ts`, `TEXT_FONTS`, which names the faces as the script's `FACES` does; a vitest
+  holds the two together). `pnpm mobile:generate` runs the script only when a face is missing or
+  stale. It builds all three at once, into a folder of its own, and writes only those that
+  differ. The fonts folder is the generator's, so a face no longer listed is stale.
+- **`BrandFont`, generated.** `IsItModel/Generated/BrandFonts.swift` names every face by its
+  PostScript name, with its `file`, so no face's name is typed in the app's Swift (the literal
+  guard) and the widget, which links IsItModel, can name the same faces when it moves to them.
+- **Registered by the app and the widget.** Both Info.plists list all four files in
+  `UIAppFonts`, since an extension can't load the app's fonts; `project.yml` needed no change,
+  as the Fonts folder was already a resource of both. `check-archive.sh` still checks only the
+  answer font in a Release bundle (on the Later list).
+- **Tested where it can be.** On Linux: `exportFont.test.ts` (each face current, stale and
+  missing; its names, weight and regular bit; a glyph for every letter of "Météo-France Łódź
+  Reykjavík Kraków Malmö 0.9cm 100% ° ’ … · –" in its cmap), `appFonts.test.ts` (both plists'
+  `UIAppFonts` are `BrandFont`'s files, in order), `generate.test.ts` (the Swift) and IsItModel's
+  `GeneratedFontTests`. On macOS, `AnswerFontTests` became `BrandFontTests`: every face is
+  registered under its PostScript name in its own family, each text face has a glyph for every
+  character of "Météo-France Łódź 0.9cm 100% ° ’ … ·" (`CTFontGetGlyphsForCharacters`), and the
+  built Info.plist lists every file. A plist or resource slip fails these before any UI test.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,
@@ -4180,11 +4244,12 @@ checks it answers `text/plain` on all four hosts).
   the API's `attribution` lines as they are, with the same phrases linked: the phrases and their
   links are core's (`CREDIT_LINKS`, split by `creditParts`), which the website's `Credit.astro`
   reads too.
-- **The answer font in the apps.** Bricolage Grotesque is under the SIL Open Font License 1.1,
-  with no reserved font name. The iPhone app bundles the answer's subset as `BricolageAnswer.ttf`,
-  renamed and so a modified version, which the OFL allows; its name table keeps the copyright
-  and carries the licence's description and URL. The app's credits screen (spec section 10.6)
-  gives the licence's full text.
+- **The fonts in the apps.** Bricolage Grotesque is under the SIL Open Font License 1.1, with
+  no reserved font name. The iPhone app bundles the answer's subset as `BricolageAnswer.ttf` and
+  three static text faces as `BricolageText-{Regular,Medium,SemiBold}.ttf`, each renamed and so a
+  modified version, which the OFL allows; each name table keeps the copyright and carries the
+  licence's description and URL. The app's credits screen (spec section 10.6) gives the licence's
+  full text, which covers every face.
 - **Fair use, not non-commercial.** ShareAlike attaches only to adapted material, and a verdict
   or a median of 8 models very likely is not (a reading, not legal advice). The per-model
   figures the pages and `models[]` show are the closest thing to passing on Met Office data,
