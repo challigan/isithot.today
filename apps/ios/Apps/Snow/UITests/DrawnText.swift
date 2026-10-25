@@ -334,17 +334,23 @@ struct SurfaceColours {
 /// those colours (within 6 of the line between them) with a pixel of each within 2 pixels, in the
 /// frame or the point round it read with it, as a glyph's anti-aliasing is; or **other**: none of
 /// them. It proves when its frame is whole on the screen and at least a short line's size (10 by
-/// 10 points); the text colours are on 1% of its pixels or more; other pixels are 0.5% of them at
-/// the most; and each text colour drawn gives `minimum` or more with each fill shown clear of what
-/// is drawn on it (no pixel but a fill's within 2), measured on the pixels: the text pixel nearest
-/// the fill in luminance against the fill pixel nearest the text.
+/// 10 points); the text colours are on 1% of its pixels or more; other pixels are no more than
+/// 0.5% of them, nor 2% of the text colours' pixels; and each text colour drawn on 9 pixels or
+/// more gives `minimum` or more with each fill shown clear of what is drawn on it (no pixel but a
+/// fill's within 2) on 1% of the frame or more, measured on the pixels: the text pixel nearest the
+/// fill in luminance against the fill pixel nearest the text.
 ///
-/// So it refuses text dimmed, in another colour, over a fill the surface hasn't, or in a palette
-/// short of contrast, an element with no text drawn, and a frame empty, tiny or off the screen.
-/// On PR #34's first full run, all 28 contrast issues proved (the text on 2.5 to 25.6% of their
-/// pixels, other pixels 0.03% at the most, 5.55:1 at the least); and the same pixels dimmed to
-/// 50, 60 or 70%, in a lighter grey, over another fill, with no ink, or on another band, a dimmed
-/// copy of a row's words beside them, and the website's ink-at-10% Retry fill on maybesnow, 4.03:1
+/// So it refuses an element whose text is dimmed, greyed, in another colour or over a fill the
+/// surface hasn't (other pixels over 0.5% of the frame or 2% of its text), one with no text drawn,
+/// a frame empty, tiny or off the screen, and a palette short of contrast. Only the tokens' text
+/// colours, ink and soft, are measured; and as pixels are classed by colour alone, text drawn in
+/// exactly one of the surface's own fill or line colours (the wash, the field, a chip, the card,
+/// the track, an edge or a hairline) is taken for that fill or line, and isn't measured. On PR
+/// #34's first full run, all 28 contrast issues proved (the text on 2.5 to 25.6% of their pixels,
+/// other pixels 0.03% of them and 0.18% of their text's at the most, 5.55:1 at the least); and the
+/// same pixels dimmed to 50, 60 or 70%, in a lighter grey, over another fill, with no ink, or on
+/// another band, a dimmed copy of a row's words, or of a few letters of them, beside them, a few
+/// of its letters dimmed in place, and the website's ink-at-10% Retry fill on maybesnow, 4.03:1
 /// where it was drawn, all failed it (the Linux harness's checks).
 struct DrawnText: CustomStringConvertible {
   /// The smallest frame that holds a line of the smallest text the app draws (12.8 points at
@@ -356,6 +362,12 @@ struct DrawnText: CustomStringConvertible {
   /// The most other pixels: the run's 28 issues had 0.03% at the most, and a dimmed copy of "Use
   /// my location"'s words beside them made 3.17%.
   static let mostOther = 0.005
+  /// The most other pixels as a share of the text colours' pixels, as the frame's share alone
+  /// lets a sparse frame through: "Use my location" has its words on 2.5% of its row, so 0.5% of
+  /// it is a sixth of its words. On PR #34's first full run the 28 issues had other pixels at no
+  /// more than 0.18% of their text pixels, while one letter's width of "Use my location" dimmed
+  /// to 50% in place made 5 to 6%.
+  static let mostOtherOfText = 0.02
   /// How near a fill a pixel is to be that fill, and a blend to the line between two colours, in
   /// levels a channel: the background models land within 2 of the screenshot's gradients.
   static let fillLevels = 6
@@ -608,9 +620,10 @@ struct DrawnText: CustomStringConvertible {
       return "its surface's text colours are on \(percent(textShare)) of its pixels, under "
         + "\(percent(Self.leastText)): no text is drawn in them"
     }
-    if others > Self.mostOther {
+    if others > Self.mostOther || others > Self.mostOtherOfText * textShare {
       return "\(percent(others, places: 2)) of its pixels are none of its surface's colours, "
-        + "nor a blend of two beside them, over \(percent(Self.mostOther, places: 2))"
+        + "nor a blend of two beside them: over \(percent(Self.mostOther, places: 2)) of its "
+        + "frame or \(percent(Self.mostOtherOfText)) of its text"
     }
     guard let least else { return "none of its surface's fills shows clear of what is on it" }
     if least.ratio < minimum {
@@ -648,7 +661,8 @@ func percent(_ share: Double, places: Int = 1) -> String {
 /// its own fills at 4.5:1 or more (`DrawnText`). No other kind is: hit regions, Dynamic Type,
 /// clipped text, descriptions, traits and element detection still fail.
 enum MeasuredContrast {
-  /// Whether `element` is text: a static text, or a button or link whose label is words.
+  /// Whether `element` is text: a static text, or a button or link with a label, icons included
+  /// (the gear, the stars, clear-search), each held to 4.5:1.
   static func isText(_ element: AuditedElement) -> Bool {
     guard let type = element.type, !element.label.isEmpty else { return false }
     return [.staticText, .button, .link].contains(type)

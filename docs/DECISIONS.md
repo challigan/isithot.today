@@ -4474,13 +4474,13 @@ these backgrounds. It had already failed two-line details and the old 44-point t
 
 **The decision (Carl's, told to him).** Wherever Apple's contrast check fails a text element, the
 test judges it by WCAG on the screenshot's own pixels instead, on every audited screen: the home
-screen, the picker, Settings and its pages, and the mail fallback, and for every text element (a
-static text, or a button or link whose label is words), not only listed identifiers. It stays a
-proof: the issue is allowed only when the pixels prove the element is text drawn in its surface's
-own colours over its surface's own fills at 4.5:1 or more, throughout (no 3:1 for large text).
-Every allowed issue is listed in the failure message and attached. Hit regions, Dynamic Type,
-clipped text, descriptions, traits and element detection are never allowed, and no other check
-changes.
+screen, the picker, Settings and its pages, and the mail fallback, and for every text element,
+not only listed identifiers: a static text, or a button or link with a label, icons included (the
+gear, the stars, clear-search), each held to 4.5:1. It stays a proof: the issue is allowed only
+when the pixels prove the element is text drawn in its surface's own colours over its surface's
+own fills at 4.5:1 or more, throughout (no 3:1 for large text). Every allowed issue is listed in
+the failure message and attached. Hit regions, Dynamic Type, clipped text, descriptions, traits
+and element detection are never allowed, and no other check changes.
 
 - **One proof, one place** (`UITests/DrawnText.swift`). `DrawnText` classes each pixel of the
   frame against its surface's model at that point: one of the surface's fills (within 6 levels a
@@ -4494,10 +4494,23 @@ changes.
   colours; with it, none). It proves when the frame is whole on the screen and at least 10 by 10
   points (the smallest text is 12.8 points at Large); the text colours are on 1% of the frame or
   more ("Use my location", a row 370 points wide, has its words and icon on 2.5%); pixels of none
-  are 0.5% at the most; and each text colour drawn gives 4.5:1 or more against each fill shown
-  clear of what is drawn on it (no pixel but a fill's within 2), measured on the pixels themselves:
-  the text pixel nearest the fill in luminance against the fill pixel nearest the text.
-  `MeasuredContrast` is the exception every audit shares: a text element with the proof.
+  are no more than 0.5% of the frame nor 2% of its text pixels; and each text colour drawn on 9
+  pixels or more gives 4.5:1 or more against each fill shown clear of what is drawn on it (no
+  pixel but a fill's within 2) on 1% of the frame or more, measured on the pixels themselves: the
+  text pixel nearest the fill in luminance against the fill pixel nearest the text. The bound on
+  the text is a review's: the frame's share alone let a sparse frame through, as "Use my
+  location"'s 0.5% is a sixth of its words, so a few letters dimmed to 50% in place proved; the
+  run's 28 issues have pixels of none at 0.18% of their text pixels at the most, and one letter's
+  width of "Use my location" dimmed in place makes 5 to 6%.
+  So it refuses an element whose text is dimmed, greyed, in another colour or over a fill the
+  surface hasn't (pixels of none over 0.5% of the frame or 2% of its text), one with no text
+  drawn, a tiny or off-screen frame, and a palette short of contrast. Only the tokens' text
+  colours, ink and soft, are measured; and as pixels are classed by colour alone, text drawn in
+  exactly one of the surface's own fill or line colours (the wash, the field, a chip, the card,
+  the track, an edge or a hairline) is taken for that fill or line, and isn't measured. An icon
+  button with a label is text to it (the gear, the stars, clear-search), held to 4.5:1, stricter
+  than WCAG's 3:1 for graphics. `MeasuredContrast` is the exception every audit shares: a text
+  element with the proof.
   `HomeAuditTests.exceptions` keeps the credits' hit regions and takes it in place of PR #33's
   details-and-places clause; the picker's and Settings' audits (`auditAccessibility(of:on:surface:)`)
   allow it and nothing else, and now list and attach what they allowed (`audit-<screen>-allowed`)
@@ -4541,10 +4554,11 @@ type-checked against XCUITest stubs, and checks against fakes and the run's pixe
   attached, at the frame its failure gives and a point round it (pixels at 3x, frames in points):
   the 19 that failed (12 on the picker, 6 on the home screen, How it works' title) and the 9
   details PR #33's exception allowed. The text colours are on 2.5% ("Use my location") to 25.6%
-  (How it works' title) of a frame, pixels of none 0.03% at the most, and the least contrast is
-  5.55:1 (the title's white on the content gradient, nearest the glow); on the sheet, 6.61:1
-  (soft on Close's wash). `MeasuredContrast` allows each, and the home's log notes the verdict as
-  allowed with its proof. PR #33's second run's 50 home issues prove as well (5.21:1 at the least).
+  (How it works' title) of a frame, pixels of none 0.03% of a frame and 0.18% of its text pixels
+  at the most, and the least contrast is 5.55:1 (the title's white on the content gradient,
+  nearest the glow); on the sheet, 6.61:1 (soft on Close's wash). `MeasuredContrast` allows
+  each, and the home's log notes the verdict as allowed with its proof. PR #33's second run's 50
+  home issues prove as well (5.21:1 at the least).
 - **The same pixels made wrong are all refused.** Dimmed to 50, 60 and 70% over their fill, as
   `.opacity` draws: no pixel is a text colour any more. In a lighter grey (`#767676` on the light
   bands, 4.54:1 on white, `#c8c8c8` on the dark): the same. In the ink over a fill the surface
@@ -4552,7 +4566,11 @@ type-checked against XCUITest stubs, and checks against fakes and the run's pixe
   pixels are none of the sheet's colours. With the text taken away: no text. Judged as another
   band's or surface's: the fills don't match (a snow page's detail does prove on content, which
   is the snow palette's own gradient and glow, as it should). A dimmed copy of "Use my
-  location"'s words beside them: 3.17% of its pixels none of the sheet's colours, over 0.5%.
+  location"'s words beside them: 3.17% of its pixels none of the sheet's colours, over 0.5%. A
+  few of its letters dimmed to 50% in place (3.04:1), over 5, 10 or 15% of its words' span from
+  30, 60 or 85% of the way along, or a 50% copy of the first 5 or 10% of its words beside them:
+  0.12 to 0.52% of the row none of the sheet's colours, under the frame's 0.5% in nine of the
+  eleven, but 4.9 to 25.6% of its text pixels, so all eleven are refused.
 - **Synthetic frames are all refused.** No frame, an empty one, 9 by 40 and 200 by 6 points; one
   partly off the screen; the website's ink-at-10% Retry fill on maybesnow by the glow (89% of the
   frame none of the page's colours, and, declared a fill of the page, refused for its 4.03:1); a
@@ -4560,12 +4578,13 @@ type-checked against XCUITest stubs, and checks against fakes and the run's pixe
 - **The model is TypeScript's.** The Swift works out all 78 samples as brandColours.ts did, and
   a sample changed by one level is caught; a sheet's contrast issue whose pixels can't be read is
   noted as unexpected, with why. The largest frame, an AX3 detail of 330 by 160 points, takes
-  1.1 seconds in the harness's unoptimised build.
+  1.1 to 1.3 seconds in the harness's unoptimised build.
 
 **For the next macOS run to show.** That the 19 issues are allowed with their proofs listed,
-the home's nine details too, and the nine tests pass; how long the proof takes in the UI tests'
-unoptimised build, about 1.1 seconds for the largest frame on the Linux harness; and that
-`SurfaceFile.bundled` finds the bundle's Surfaces.json and its samples agree.
+the home's nine details too, and the nine tests pass; that the tests' durations stay well inside
+the job's (the proof isn't timed on its own: it runs after each audit call, outside `AuditTimes`,
+and took 1.1 to 1.3 seconds for the largest frame in the Linux harness's unoptimised build); and
+that `SurfaceFile.bundled` finds the bundle's Surfaces.json and its samples agree.
 
 ## API contract
 

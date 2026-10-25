@@ -966,18 +966,23 @@ a channel), one of its text colours (within 3: the ink, or soft on a flat fill),
 link one of the lines it draws (its edge, a hairline, a chevron), a blend of two of those with a
 pixel of each within 2 pixels (anti-aliasing; the screenshot is read a point round the frame for
 these neighbours only), or none of them. It proves when the frame is whole on screen and at least
-10 by 10 points, the text colours are on 1% of it or more, pixels of none are 0.5% at the most,
-and every text colour drawn gives 4.5:1 or more with every fill shown clear of it, measured on the
-pixels. So dimmed or secondary text below 4.5:1, text over a fill the surface hasn't, a wrong
-colour, an empty or tiny frame, an element with no text drawn and a palette short of contrast all
-fail; hit regions, Dynamic Type, clipped text, descriptions, traits and element detection are
-never allowed. The surfaces come from one source: packages/mobile `brandColours.ts` `SURFACES`
-(the page: the band's gradient and glow and its opaque chips; the sheet: the band's pill fading
-towards g2, the wash and the field; content: the content palette's gradient and glow, the plum
-cards and the units track), written with every band's palette and the background models' numbers
-into `Generated/Surfaces.json` (`surfacesJson`), whose sample colours the Swift reproduces before
-judging a pixel (`SurfaceFile.bundled`), so the proof and the tokens can't part; `brandColours.test.ts`
-holds every text pair the proof can allow to 4.5:1 on every band.
+10 by 10 points, the text colours are on 1% of it or more, pixels of none are no more than 0.5% of
+the frame nor 2% of its text pixels, and each text colour drawn on 9 pixels or more gives 4.5:1 or
+more with each fill shown clear of what's drawn on it on 1% of the frame or more, measured on the
+pixels. So it refuses an element whose text is dimmed, greyed, in another colour or over a fill
+the surface hasn't (pixels of none over 0.5% of the frame or 2% of its text), one with no text
+drawn, a tiny or off-screen frame, and a palette short of contrast. Only the tokens' text colours,
+ink and soft, are measured; and as pixels are classed by colour alone, text drawn in exactly one
+of the surface's own fill or line colours (the wash, the field, a chip, the card, the track, an
+edge or a hairline) is taken for that fill or line, and isn't measured. Hit regions, Dynamic Type,
+clipped text, descriptions, traits and element detection are never allowed. The surfaces come from
+one source: packages/mobile `brandColours.ts` `SURFACES` (the page: the band's gradient and glow
+and its opaque chips; the sheet: the band's pill fading towards g2, the wash and the field;
+content: the content palette's gradient and glow, the plum cards and the units track), written
+with every band's palette and the background models' numbers into `Generated/Surfaces.json`
+(`surfacesJson`), whose sample colours the Swift reproduces before judging a pixel
+(`SurfaceFile.bundled`), so the proof and the tokens can't part; `brandColours.test.ts` holds every
+text pair the proof can allow to 4.5:1 on every band.
 
 ### How they meet
 
