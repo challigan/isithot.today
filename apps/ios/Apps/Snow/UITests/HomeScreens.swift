@@ -188,6 +188,29 @@ extension XCUIApplication {
     return frames
   }
 
+  /// Nil when `page-<view>`, the chosen view's page, starts at the window's left edge, as it does
+  /// once the pages have followed the view chosen; otherwise where it is, with `homeGeometry`.
+  /// The tree holds the chosen view's page wherever the pages are, as HomePager hides the others
+  /// by the view chosen, not by where the pages are: only this frame shows the page is the one on
+  /// screen, which no heading, label or selected tab can.
+  func pageOffScreen(_ view: String) -> String? {
+    guard let root = try? snapshot() else { return "the screen can't be read" }
+    guard let page = Self.homeFrames(in: root)["page-\(view)"] else {
+      return "no page-\(view) on screen; \(homeGeometry)"
+    }
+    return Self.offScreen("page-\(view)", at: page, window: root.frame).map {
+      "\($0); \(homeGeometry)"
+    }
+  }
+
+  /// Nil when a page's `frame` starts at the `window`'s left edge, within half a point, as a
+  /// frame read on a 3x screen may round; otherwise what is wrong.
+  static func offScreen(_ id: String, at frame: CGRect, window: CGRect) -> String? {
+    guard abs(frame.minX - window.minX) > 0.5 else { return nil }
+    return "\(id) at \(frame) doesn't start at the window's left edge at \(window.minX), so "
+      + "the pages aren't on the view chosen"
+  }
+
   /// The part of the screen a page shows through: the window below the switcher. A page's
   /// scroll view shows nothing above it, whatever frame XCUITest gives the scroll view.
   var pageWindow: CGRect {
@@ -258,9 +281,10 @@ extension XCTestCase {
   }
 
   /// Taps `page`'s tab in the switcher (a tab, a button labelled as the tab reads, on the track or
-  /// at accessibility sizes a chip of its own), waits for its heading, and checks the tab is the
-  /// one selected. A heading that never comes fails with where the tab was, the tab the app has
-  /// chosen and where the pages are (`homeGeometry`: the page in the tree is the chosen view's).
+  /// at accessibility sizes a chip of its own), waits for its heading, and checks its page is the
+  /// one on screen (`pageOffScreen`) and the tab is the one selected. A heading that never comes
+  /// fails with where the tab was, the tab the app has chosen and where the pages are
+  /// (`homeGeometry`: the page in the tree is the chosen view's).
   @MainActor
   func tap(_ page: HomeScreen.Page, in app: XCUIApplication) throws {
     let tab = app.buttons[page.label]
@@ -279,6 +303,11 @@ extension XCTestCase {
       throw HomeScreenError(
         "\(error) after a tap on \(page.label) at \(tab.frame); the tab chosen: "
           + (chosen.isEmpty ? "none" : chosen.joined(separator: ", ")) + "; \(app.homeGeometry)")
+    }
+    // The heading is read from the chosen view's page wherever the pages are: only the page's
+    // frame shows they followed the tap.
+    if let off = app.pageOffScreen(page.view) {
+      throw HomeScreenError("After a tap on \(page.label), \(off)")
     }
     XCTAssertTrue(tab.isSelected, "The \(page.label) tab isn't selected")
   }
@@ -331,17 +360,19 @@ extension XCTestCase {
   /// Checks the home screen fits the screen, as it is at launch, before any page has scrolled:
   /// the top bar's place button and gear, and the switcher, each lie within the window; the
   /// pager (HomePager's horizontal scroll view, which never scrolls vertically) runs from under
-  /// the switcher to no lower than the window's bottom edge; and the page on screen starts under
-  /// the switcher, within the window. On main's first macOS run the home screen didn't fit: each
-  /// of the pager's pages was the height of the screen's safe area, so the home screen was taller
-  /// than the screen by the top bar and the switcher, and the window centred it. The place button
-  /// and the gear were under the status bar, where taps never reached them, and the pager, every
-  /// page with it, ran past the screen's bottom edge, the page's end never on screen.
+  /// the switcher to no lower than the window's bottom edge; and the page in the tree, the chosen
+  /// view's, starts under the switcher, within the window, and at its left edge, so it is the
+  /// page on screen (`offScreen`): pages that didn't follow the view the app opens on fail here.
+  /// On main's first macOS run the home screen didn't fit: each of the pager's pages was the
+  /// height of the screen's safe area, so the home screen was taller than the screen by the top
+  /// bar and the switcher, and the window centred it. The place button and the gear were under
+  /// the status bar, where taps never reached them, and the pager, every page with it, ran past
+  /// the screen's bottom edge, the page's end never on screen.
   ///
-  /// Only the page's top is checked against its frame, which may be its content's (the page's
-  /// scroll view's, `shown(_:in:)`): from its top, a frame that is the content's runs below the
-  /// screen however well the page fits. A page's end is HomeAuditTests' to check, its credits
-  /// coming into view.
+  /// Only the page's top and left edge are checked against its frame, which may be its
+  /// content's (the page's scroll view's, `shown(_:in:)`): from its top, a frame that is the
+  /// content's runs below the screen however well the page fits. A page's end is
+  /// HomeAuditTests' to check, its credits coming into view.
   ///
   /// It doesn't prove the place button and the gear are below the status bar, whose frame
   /// XCUITest doesn't give. On the iPhone 17, a home screen about 50 to 70 points too tall would
@@ -397,6 +428,9 @@ extension XCTestCase {
         "\(what): \(id) at \(page) doesn't start between the switcher's bottom edge at "
           + "\(views.maxY) and the window's at \(window.maxY), \(doesntFit)",
         file: file, line: line)
+      if let off = XCUIApplication.offScreen(id, at: page, window: window) {
+        XCTFail("\(what): \(off); \(app.homeGeometry)", file: file, line: line)
+      }
     }
   }
 

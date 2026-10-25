@@ -517,25 +517,28 @@ brought forward the minute's tick, pull to refresh, the footer and the loading a
   labels (the middle one "Tomorrow" from 6pm), which at accessibility text sizes becomes a row
   of buttons that wraps so no label is cut short (since the website's look, the website's tabs:
   below, "The home screen in the website's look"); and `HomePager`, the three pages side by side
-  in a horizontal `ScrollView` paged with `.scrollTargetBehavior(.paging)` and
-  `.scrollPosition(id:)`, each page the pager's own size, which a `GeometryReader` reads (since
-  main's first macOS run: sized to the screen's safe area, the pages pushed the top bar under the
-  status bar; DECISIONS, "The iPhone app's UI tests, after main's first macOS run"). The
+  in a horizontal `ScrollView` paged with `.scrollTargetBehavior(.paging)` (and on iOS 17 only
+  `.scrollPosition(id:)`, which reports the page it is on), each page the pager's own size,
+  which a `GeometryReader` reads (since main's first macOS run: sized to the screen's safe area,
+  the pages pushed the top bar under the status bar; DECISIONS, "The iPhone app's UI tests,
+  after main's first macOS run"). The
   horizontal scroll view is `pager` to the UI tests, which read its edges, and an audit issue on
   it names it. Both are bound to `AppModel.view` (`$model.view` in `HomeView`), so a tap, a swipe, a widget's route
   (`.view`, which now sets the view) and the return after more than 30 minutes away (the view
-  for the time of day) move both. Since PR #34's second full macOS run, on iOS 18 a change to the
-  view moves the pages at once through the `ScrollViewReader`, and the pages set the view only as
-  a scroll comes to rest, to the page they rest on (`PagerRest`, IsItLogic, held on Linux by
-  `PagerRestTests`), never from what the scroll view reports on the way: `.scrollPosition(id:)`'s
-  setter, which took that, most likely wrote Now back over a tap on Today there (DECISIONS,
-  "After #34's second full run"). iOS 17, with no scroll phases, keeps `.scrollPosition(id:)`.
-  The app opens on
+  for the time of day) move both. Since PR #34's second full macOS run a change to the view moves
+  the pages at once through the `ScrollViewReader`, and the pages set the view only from where
+  they are: on iOS 18 as a scroll comes to rest, to the page they rest on (`PagerRest`, IsItLogic,
+  held on Linux by `PagerRestTests`), never from what the scroll view reports on the way; on iOS
+  17, with no scroll phases, from `.scrollPosition(id:)`'s reports into a position of its own,
+  which the app never writes (`PagerPosition`). Shared with the view, `.scrollPosition(id:)`'s
+  setter most likely wrote Now back over a tap on Today (DECISIONS, "After #34's second full
+  run"). The app opens on
   `MiddleDay.defaultView`, Today or Now from 6pm, once: from the saved answer it paints, or else
   from its first answer, unless the user or a route has chosen a view by then, as the website
   does; a place under "Nearby:", a place chosen in the picker (phase 6) and Retry answer on the
-  view the user is on. Only the page on screen is in the accessibility tree, so VoiceOver and
-  the UI tests read that one.
+  view the user is on. Only the chosen view's page is in the accessibility tree, so VoiceOver and
+  the UI tests read that one: the page on screen, except while a swipe is still moving, so
+  `expectFits` and `tap(_:in:)` check its frame starts at the window's left edge.
 - **The 6pm flip** needs nothing new: the minute's tick draws every page at the model's clock,
   so at 6pm at the place the middle tab reads Tomorrow and shows `snow.days[1]`, with no request.
   `FlipTests` (IsItStateTests) prove it at 5:59pm and 6pm in Durham (GMT), minute by minute in
@@ -714,9 +717,10 @@ shared parts; step 3 draws the home screen with them, as the website draws the s
 - **Type**: every word through `.brandFont(TextRole)` (BrandType.swift), Bricolage throughout,
   the answer word 0.3 of the page's width (`HomePager` passes `pageWidth` to `ForecastPageView`).
   A role's text is drawn at whole points, so each must come to different sizes at Medium and
-  Large, or the audit finds it "partially unsupported" for Dynamic Type: the `button` role (14.4
-  with subheadline, 14 at both) is gone, Close and Retry in `label` and a notice's project page in
-  `labelStrong` (DECISIONS, "After #34's second full run").
+  Large, or the audit finds it "partially unsupported" for Dynamic Type: no role is 14.4 with
+  subheadline (14 at both), the `button` role gone, Close and Retry in `label` and a notice's
+  project page in `labelStrong`, and `small` gone, the limited line and the week's bands in
+  `line`, 15.2 (DECISIONS, "After #34's second full run").
 - **The top bar** (`TopBarView`, HomeShell.swift): the place in a pill with the website's pin
   (`PillButton`, `PinShape`), the gear in a round chip (`IconPillButton`), trailing; beneath
   them a notice chip (`approximate`) and, on approximate IP location, the "Use my exact

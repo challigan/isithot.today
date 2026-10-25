@@ -2414,16 +2414,20 @@ once to VoiceOver, and every text size up to AX5 (sections 9.5, 10.1, 10.2 and 1
   animated programmatic scroll passes Today on its way from Now to the week, and the position it
   reports on the way could set the view mid-scroll. Until PR #34's second full macOS run the two
   shared one binding through `.scrollPosition(id:)`, whose setter wrote whatever page the scroll
-  view reported into the view; on that run it most likely wrote Now back over a tap on Today. On
-  iOS 18 the view now moves the pages through the `ScrollViewReader`, and the pages set the view
-  only as a scroll comes to rest, to the page they rest on (`PagerRest`); iOS 17, with no scroll
-  phases, keeps `.scrollPosition(id:)` ("After #34's second full run", below). (The container's
-  size, `containerRelativeFrame`, turned out to be the screen's safe area in height, which put
-  the top bar under the status bar; each page has been the pager's own size since main's first
-  macOS run: "The iPhone app's UI tests, after main's first macOS run", below.)
-- **Only the page on screen is in the accessibility tree.** The other two are hidden from
-  VoiceOver (which changes page with the switcher, as with a system page view) and so from the UI
-  tests, whose identifiers (`heading`, `verdict`, …) stay unique. Pull to refresh is on each
+  view reported into the view; on that run it most likely wrote Now back over a tap on Today. The
+  view now moves the pages through the `ScrollViewReader`, and the pages set the view only from
+  where they are: on iOS 18 as a scroll comes to rest, to the page they rest on (`PagerRest`); on
+  iOS 17, with no scroll phases, from `.scrollPosition(id:)`'s reports into a position of its
+  own, which the app never writes (`PagerPosition`) ("After #34's second full run", below). (The
+  container's size, `containerRelativeFrame`, turned out to be the screen's safe area in height,
+  which put the top bar under the status bar; each page has been the pager's own size since
+  main's first macOS run: "The iPhone app's UI tests, after main's first macOS run", below.)
+- **Only the chosen view's page is in the accessibility tree**: the page on screen, except while
+  a swipe is still moving, as the view follows a swipe only when the pages settle (on iOS 17,
+  when the scroll view reports the next page). The other two are hidden from VoiceOver (which
+  changes page with the switcher, as with a system page view) and so from the UI tests, whose
+  identifiers (`heading`, `verdict`, …) stay unique; since "After #34's second full run" the
+  tests check that page's frame starts at the window's left edge. Pull to refresh is on each
   page's own scroll view, not the pager's.
 - **The view it opens on** is `MiddleDay.defaultView`, as 5.1 set it; 5.1 drew only the middle
   page, so the app now opens on Now from 6pm. A route to a view (a widget's `.view`) now sets the
@@ -4643,23 +4647,40 @@ TypeScript and the docs).
   its phases ever reach the pager's handler). A change to the view moves the pages at once through
   the `ScrollViewReader`, with nothing to write back; a tab's jump rests on the page chosen, so it
   is never undone. Whatever moved the pages, XCUITest's swipe or a user's drag, the page they rest
-  on is followed. iOS 17 has no scroll phases, so it keeps `scrollPosition(id:)`, and the race may
-  remain there; the UI tests run on iOS 26.5. `PagerRestTests` holds the rule on Linux: each page
-  at rest, the halves, both ends, half a point of rounding, and every case with nothing to follow.
+  on is followed. `PagerRestTests` holds the rule on Linux: each page at rest, the halves, both
+  ends, half a point of rounding, and every case with nothing to follow.
+- **On iOS 17**, the deployment target, there are no scroll phases, and the same race could undo
+  a user's tap. There the scroll view still reports the page it is on through
+  `scrollPosition(id:)`, but into a position of its own (`PagerPosition`), set at first to the
+  view the app opens on and never written by the app; only a change there sets the view, and a
+  change to the view moves the pages through the `ScrollViewReader`, as on iOS 18, unless a
+  swipe's report has put them there already. A report of the page the pages are still on is the
+  position already held, so it changes nothing, where through the shared binding it could write
+  that page back over a tap's. It relies on the scroll view reporting the reader's moves as it
+  does a swipe's, which nothing here checks: the UI tests run on iOS 26.5 only. A swipe still
+  sets the view when the scroll view reports the next page, before the pages rest, as it did.
 - **What stays.** A tap on the tab of the page being swiped away from, while the pages still
   coast, gives way to where they come to rest, as the website's look has it: the thumb moves when
   the pager settles.
 - **The risk.** On iOS 18 the page the app opens on now rests on the `onAppear` scroll alone,
-  until now a backup to `scrollPosition(id:)`'s first position. Should the app open on Now instead
-  of Today, `testDefaultViewEitherSideOf6pm` and every home test that reads every page fail at
-  once; `onChange(of:initial: true)` is then the next to try.
-- **The test is unchanged**, with no wait or retry added: the tap came on a screen still for 2.1
-  seconds, as a user's would, so it was right to fail, and tapping again would hide exactly this.
-  `tap(_:in:)`'s failure now also says where the tab was, the tab the app has chosen and where the
-  pages are (`homeGeometry`, whose `page-<view>` is the chosen view's page). The old tab still
-  chosen is a tap that never took or was undone; the new one chosen with its page off the screen
-  is pages that didn't follow. Should the failure come back with Now chosen, the action never ran,
-  which points to the touch, not the pager.
+  until now a backup to `scrollPosition(id:)`'s first position. Should the pages open on Now with
+  Today chosen, no heading, label or selected tab would show it: HomePager hides the pages by the
+  view chosen (`accessibilityHidden`), not by where they are, so the tree holds Today's page
+  wherever the pages are, and the first tap on a tab puts the two back in step. So `expectFits`
+  and `tap(_:in:)` also check that the chosen view's `page-<view>` starts at the window's left
+  edge, within half a point (`offScreen`; every page frame in cf4eb74's and 3405dd3's trees
+  starts at 0), and `testDefaultViewEitherSideOf6pm` calls `expectFits` after each launch. Pages
+  that didn't follow the launch then fail that test, the three `everyPage` tests and the home
+  audits at once, with the page's frame; pages that didn't follow a tap fail the tap.
+  `onChange(of:initial: true)` is then the next to try.
+- **No wait or retry is added**: the tap came on a screen still for 2.1 seconds, as a user's
+  would, so it was right to fail, and tapping again would hide exactly this. `tap(_:in:)`'s
+  failure now also says where the tab was, the tab the app has chosen and where the pages are
+  (`homeGeometry`, whose `page-<view>` is the chosen view's page). The old tab still chosen is a
+  tap that never took or was undone; the new one chosen with its page off the screen is pages
+  that didn't follow, which `offScreen` now fails as soon as the heading comes. Should the
+  failure come back with Now chosen, the action never ran, which points to the touch, not the
+  pager.
 
 **A licence's URL "partially unsupported" for Dynamic Type
 (`SettingsTests.testRowsOpenWhatTheySay`).** On the typeface's licence (`NoticeView`), the
@@ -4702,15 +4723,19 @@ project-page button's URL text, at (20, 200.3, 362, 52), in `button` type: Brico
   in the same type, takes `label`, as the picker's plan said whichever change cleared Close would
   (`label` did on 3405dd3's run); with no text left in it, the `button` role is gone. No test
   changes and no exception: the licence's audit is what proves the fix on the next run.
-- **Left as it is.** `small` keeps the website's 14.4 for the week's bands, judged as their rows,
-  and the limited line, which will fail the same way when a limited fixture is audited and should
-  then move to `line` (15.2, which passes as the picker's `location-detail`).
+- **The limited line and the week's bands too.** They were the `small` role's, also 14.4 with
+  subheadline. The bands are judged as their rows, but the limited line is its own element and
+  would fail the same way once a limited fixture is audited, so both are in `line` now, 15.2 with
+  subheadline, drawn at 15 points at Large and passing as the picker's `location-detail`, and
+  `small` is gone. It departs from the website's 14.4, as Retry's `label` does: a little larger,
+  still Regular, and still smaller than the 16-point texts around them.
 
 **For the next macOS run to show.** That the home tests that read every page,
 `testDefaultViewEitherSideOf6pm`, `testTheMiddleTabTurnsToTomorrowAt6pm`,
 `testNearbyLoadsInPlaceOnThisWeek`, `FixtureLaunchTests.testSwitcherAndSwipe`, the offline tests'
 swipes and the home audits' taps pass with the pages setting the view only at rest; that the app
-still opens on Today before 6pm; and that the licence's audit passes, and the picker's still do.
+still opens on Today before 6pm, its pages on it after every launch and tap (`offScreen`); and
+that the licence's audit passes, and the picker's still do.
 
 ## API contract
 

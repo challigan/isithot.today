@@ -121,7 +121,7 @@ struct WeekRowView: View {
 
   private var band: some View {
     Text(verbatim: row.bandLabel)
-      .brandFont(.small)
+      .brandFont(.line)
       .fixedSize(horizontal: false, vertical: true)
   }
 }

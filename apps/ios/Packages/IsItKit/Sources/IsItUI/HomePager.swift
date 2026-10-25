@@ -121,8 +121,10 @@ private struct TabChip: View {
 /// (iOS build spec, section 10.2): a swipe sets `selection` as the pages come to rest, to the
 /// page they rest on, and setting it (the switcher, a route, the return after a long time away)
 /// moves the pages to it at once, so the two always agree (`pagerFollows`). Each page scrolls
-/// vertically and pulls to refresh (`refresh`). Only the page on screen is in the accessibility
-/// tree, so VoiceOver and the UI tests read that one; VoiceOver moves between pages with the
+/// vertically and pulls to refresh (`refresh`). Only the chosen view's page is in the
+/// accessibility tree, so VoiceOver and the UI tests read that one: the page on screen, except
+/// while a swipe is still moving, as `selection` follows a swipe only when the pages settle (on
+/// iOS 17, when the scroll view reports the next page). VoiceOver moves between pages with the
 /// switcher.
 ///
 /// Each page is exactly the pager's size: the space the home screen leaves it under the top bar
@@ -190,8 +192,8 @@ public struct HomePager: View {
         .scrollIndicators(.hidden)
         .accessibilityIdentifier("pager")
         // The pages on the view the app opens on: on iOS 18 the only move that does it, as
-        // `pagerFollows` moves them only when `selection` changes; on iOS 17 in case
-        // `scrollPosition(id:)`'s first position isn't applied.
+        // `pagerFollows` moves them only when `selection` changes; on iOS 17 in case the first
+        // position `scrollPosition(id:)` is given isn't applied.
         .onAppear { proxy.scrollTo(selection, anchor: .leading) }
       }
     }
@@ -207,8 +209,8 @@ extension View {
   /// scroll view reported: on PR #34's macOS run on cf4eb74 a tap on Today was drawn pressed and
   /// let go with nothing else moving, and Now was still chosen in the next frame, most likely
   /// written back over it in the same update, as only the Now tab and that setter could choose
-  /// it (DECISIONS, "After #34's second full run"). iOS 17 has no scroll phases, so there the two
-  /// still share `scrollPosition(id:)`.
+  /// it (DECISIONS, "After #34's second full run"). iOS 17 has no scroll phases: there the
+  /// scroll view's reports go into a position of their own (`PagerPosition`).
   @ViewBuilder
   fileprivate func pagerFollows(
     _ selection: Binding<AppView>,
@@ -235,13 +237,43 @@ extension View {
           selection.wrappedValue = rest
         }
     } else {
-      scrollPosition(
-        id: Binding<AppView?>(
-          get: { selection.wrappedValue },
-          set: { shown in
-            if let shown { selection.wrappedValue = shown }
-          }
-        ))
+      modifier(PagerPosition(selection: selection, proxy: proxy))
     }
+  }
+}
+
+/// `pagerFollows` on iOS 17, with no scroll phases to say when the pages rest. The scroll view
+/// reports the page it is on through `scrollPosition(id:)` into a position of its own, `shown`,
+/// and only a change there sets `selection`; the app moves the pages through the
+/// `ScrollViewReader`, as on iOS 18, and never writes `shown`. While `scrollPosition(id:)` shared
+/// `selection`, a report of the page the pages were still on could write it back over a tap's
+/// view in the update that set it (DECISIONS, "After #34's second full run"); here that page is
+/// already `shown`, so the report changes nothing. It relies on the scroll view reporting the
+/// reader's moves as it does a swipe's; the UI tests run on iOS 26.5, so none checks it.
+private struct PagerPosition: ViewModifier {
+  @Binding var selection: AppView
+  let proxy: ScrollViewProxy
+  /// The page the scroll view reports it is on: at first the view the app opens on, which it
+  /// then scrolls to, as it did when it shared `selection`.
+  @State private var shown: AppView?
+
+  init(selection: Binding<AppView>, proxy: ScrollViewProxy) {
+    _selection = selection
+    self.proxy = proxy
+    _shown = State(initialValue: selection.wrappedValue)
+  }
+
+  func body(content: Content) -> some View {
+    content
+      .scrollPosition(id: $shown)
+      .onChange(of: selection) { _, view in
+        // Set from a swipe's report, the pages are there already: moving them again would jump
+        // them under the finger.
+        guard view != shown else { return }
+        proxy.scrollTo(view, anchor: .leading)
+      }
+      .onChange(of: shown) { _, page in
+        if let page, page != selection { selection = page }
+      }
   }
 }

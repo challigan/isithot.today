@@ -204,8 +204,10 @@ struct DayBodyView: View {
       }
       .padding(.top, 24)
       if let limited = day.limited {
+        // In `line`, 15.2, not the website's 14.4, which is drawn at 14 points at Medium and
+        // Large alike, and which the audit fails in a text of its own, as this is (`TextRole`).
         Text(verbatim: limited)
-          .brandFont(.small)
+          .brandFont(.line)
           .fixedSize(horizontal: false, vertical: true)
           .accessibilityIdentifier("limited")
           .padding(.top, 12)

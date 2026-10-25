@@ -16,9 +16,10 @@ extension Font {
 /// is drawn at whole points, so its size and style must come to different sizes at Medium and
 /// Large: 14.4 with subheadline came to 14 at both, and the audit failed both texts in it that
 /// it judged as elements of their own, the picker's Close and a notice's project page, as
-/// "partially unsupported" (DECISIONS, "After #34's second full run"). `small` is still that
-/// size: the week's bands, inside each row's one element, and the limited line, not yet
-/// audited.
+/// "partially unsupported" (DECISIONS, "After #34's second full run"). So no role is that
+/// size: the limited line and the week's bands, the website's other 14.4 texts, are in `line`,
+/// 15.2, which passes as the picker's location line, as the limited line is its own element and
+/// would fail the same way.
 enum TextRole: CaseIterable {
   /// The answer word: 0.30 of the page's width, 96 to 208 (`answerSize(pageWidth:)`), one line.
   case answer
@@ -50,10 +51,8 @@ enum TextRole: CaseIterable {
   /// A week's day, "Use my location", the links, the units, page buttons, a notice's project
   /// page.
   case labelStrong
-  /// Nearby; the picker's status, location and saved lines.
+  /// Nearby; the picker's status, location and saved lines; the limited line, a week's band.
   case line
-  /// The limited line, a week's band.
-  case small
   /// Updated, notices, rows' details, the units footnote, the version.
   case note
   case tab
@@ -67,7 +66,7 @@ enum TextRole: CaseIterable {
     case .verdict, .value, .pageHeading, .amount, .sheetTitle, .heading, .labelStrong, .tab:
       .textSemiBold
     case .row: .textMedium
-    case .valueOut, .question, .detail, .field, .label, .line, .small, .note, .caption:
+    case .valueOut, .question, .detail, .field, .label, .line, .note, .caption:
       .textRegular
     }
   }
@@ -84,7 +83,6 @@ enum TextRole: CaseIterable {
     case .detail, .row, .sheetTitle, .field: 17.6
     case .heading, .label, .labelStrong: 16
     case .line: 15.2
-    case .small: 14.4
     case .note: 13.6
     case .tab, .caption: 12.8
     }
@@ -99,7 +97,7 @@ enum TextRole: CaseIterable {
     case .verdict, .value, .valueOut, .pageHeading: .title2
     case .question, .amount, .detail, .row, .sheetTitle, .field: .body
     case .heading, .label, .labelStrong: .callout
-    case .line, .small: .subheadline
+    case .line: .subheadline
     case .note, .tab, .caption: .footnote
     }
   }
