@@ -4872,13 +4872,59 @@ and e1bc88e's (session scratchpad: hang-wk4).
 
 PR #34's last macOS run (1e7b5fd) passed every test, but its screenshots showed the home screen's
 place pill breaking "Aberdeen" inside the word, "Aberdee" over "n", 119 by 44, with half the top
-bar empty; Leeds and Durham fitted on one line, 36 tall. The pill shares its row with a spacer
-that pushes it to the trailing edge, and at the same layout priority the row divided what was
-left between the two, so a name a little wider than its share wrapped wherever the width ran
-out. The pill now has `layoutPriority(1)` (`TopBarView`), so it is offered its whole width before
-the spacer; at accessibility sizes, where it leads, it still wraps, between words. No audit kind
-catches a word broken across lines, so `HomeTests` now checks that the pill is under 44 points
-tall at the standard size on every fixture (`expectPlaceOnOneLine`), which Aberdeen's failed.
+bar empty; Leeds and Durham fitted on one line, 36 tall. Its AX3 screenshots show the same break
+(`testAberdeenSnowAtAX3`, the tree home-aberdeen-snow-2-ax3-1-now), the "n" hanging below the pill
+and under the "Use my exact location" chip. No audit kind catches a word broken across lines, so
+`HomeTests` checks that the pill is under 44 points tall at the standard size on every fixture
+(`expectPlaceOnOneLine`). At AX3 the broken pill kept its one-line height, 52.0 against Leeds'
+51.9, so no height check can see it there; the fix below doesn't depend on the text size, and the
+check at Large fails without it.
+
+The first fix was wrong. It gave the pill `layoutPriority(1)` (`TopBarView`), on the idea that it
+shared the bar with the spacer beside it and wrapped at its share. PR #35's first macOS run
+(1d6e30f) failed the new check on Aberdeen at the same 119 by 44. The pill's share, half of what
+the gear leaves on the 402-point screen, about 150 points, was already more than Aberdeen needs.
+The priority stays, for a name wider than that half, which would otherwise wrap beside an empty
+half.
+
+The cause was a fraction of a point. Shaped with HarfBuzz in BricolageText-Regular at 16 points
+(the label's face and size at Large), the three names are 44.144, 59.376 and 72.656 points. The
+pill adds 46.4 (12 of padding each side, the 16-point pin and a 6.4 gap). In the trees attached to
+#34's last run, the pills were Leeds 90.7 wide (the trees print tenths), Durham 106.0 and Aberdeen
+119.0. Every width fits one model: the text's width rounded up to the next third of a point
+(44.333, 59.667, 72.667); the pill asking that plus 46.4 (90.733, 106.067, 119.067); and the pill
+drawn on the screen's pixels 0.067 narrower, the 6.4 gap's part of a pixel. That left Leeds 44.267
+and Durham 59.6, more than their words, and Aberdeen 72.6, 0.056 under its words, so the last
+letter wrapped. At AX3 (35 points, with a 35-point pin) the same model gives the trees' 162.0,
+195.3 and 224.3, and leaves Aberdeen's 158.935 points of words 158.933. Where SwiftUI rounds is
+inferred from those widths, not read from its source.
+
+The place's text is now laid out by `OneLineWhenItFits` (Layouts.swift). When the text's own width
+is no more than a point over the width offered, the text is offered no width at all, so it takes
+its own and doesn't wrap; a line kept whole runs into the pill's 12-point padding by at most that
+point. Otherwise it wraps at the width offered, as before, and is placed with the point added,
+since a wrapped text measures its longest line the same way and, drawn a fraction narrower, would
+break that line again, inside its word. At accessibility sizes, where the pill leads, a name too
+long for the bar wraps between words; a single word wider than the line still breaks inside it, as
+before (Southampton at AX3, 223.8 points of words in 212.6), which no check covers. The other pills
+(Retry, Close, "Use my exact location") hold only their words, in 12 points of padding each side
+with no pin or gap, so by this model they ask a whole number of pixels and are drawn at what they
+ask; none has wrapped on a run, and they are left as they are.
+
+- **Checked on Linux:** a copy of `OneLineWhenItFits`, compiled against a stub of SwiftUI's
+  `Layout` (session scratchpad: oneline-check), with a fake text that breaks between words
+  greedily, inside a word wider than the line, and measures to the next third of a point. Aberdeen
+  at Large, sized with the bar's room, came out on one line, and placed in 72.6 it was offered no
+  width; at AX3, placed 0.002 short, it stayed on one line. A text a point over the width offered
+  was kept whole, and one 1.5 over was wrapped and placed with the point added. A made-up
+  three-word name wrapped at 212.6 onto two lines kept them placed 0.067 under its longest line,
+  where offered only that width its first word broke inside. Southampton at AX3 still breaks inside
+  the word.
+
+**For the next macOS run to show.** That SwiftUI draws the place on one line when it is offered no
+width inside the pill's narrower bounds, so that `expectPlaceOnOneLine` passes on Aberdeen as well
+as Leeds and Durham, the pills 36 tall at Large; and that the AX3 screenshots show Aberdeen whole.
+Unproven until then.
 
 ## API contract
 

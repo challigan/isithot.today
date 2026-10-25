@@ -174,7 +174,8 @@ final class HomeTests: XCTestCase {
 
   /// At the standard text size the place pill holds the name on one line, as the website's does:
   /// 36 points tall on one line (Leeds, 90.7 by 36, on PR #34's last macOS run), and 44 once the
-  /// name wrapped (Aberdeen, 119 by 44, broken inside the word, "Aberdee" over "n").
+  /// name wrapped (Aberdeen, 119 by 44, broken inside the word, "Aberdee" over "n", and again on
+  /// PR #35's first run, a fraction of a point short of its words: `OneLineWhenItFits`).
   @MainActor
   private func expectPlaceOnOneLine(_ app: XCUIApplication, _ name: String) {
     let place = app.buttons["place"]

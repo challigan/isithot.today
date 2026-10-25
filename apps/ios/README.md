@@ -60,7 +60,8 @@ Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore, UR
                          the type scale, and brandFont), PageTheme (a surface's colours, Surface and
                          the tokens, BrandTokens), Backgrounds (PageBackground, SheetBackground),
                          Buttons (PillButton, IconPillButton, PressStyle, RowPressStyle, PinShape),
-                         PillSegments, and Layouts (FlowLayout, EqualColumns, LimitedWidth)),
+                         PillSegments, and Layouts (FlowLayout, EqualColumns, LimitedWidth,
+                         OneLineWhenItFits)),
                          IsItWidgetUI (the widget's entry, provider, view), SnowKit (Glyphs, Color(rgb:)
                          for the palettes, and the glyph catalogues, generated)
 Apps/Snow/App/           WillItSnowApp (the services and the scene's phases), HomeView (the home screen,
@@ -607,7 +608,9 @@ difference is reported and the test goes on to the next; a screen that never com
 file and line):
 
 - `HomeTests`: `testAberdeenSnow`, `testDurhamTomorrow` and `testLeedsDry` open each fixture at
-  its own moment with `-clock fixed`, check the top bar, that the home screen fits the screen
+  its own moment with `-clock fixed`, check the top bar, that the place pill holds its name on
+  one line at the standard size, under 44 points tall (`expectPlaceOnOneLine`; DECISIONS, "The
+  place pill on one line, after #34 merged"), that the home screen fits the screen
   (`expectFits`: the place button, the gear and the switcher within the window, the pager
   between the switcher and the window's bottom edge, and the page on screen starting under the
   switcher; not the page's bottom, as XCUITest may give its scroll view its content's frame,
