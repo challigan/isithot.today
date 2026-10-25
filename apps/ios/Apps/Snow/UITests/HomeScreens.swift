@@ -7,6 +7,9 @@ import XCTest
 /// verdict and every row's label from here, and compares what VoiceOver would hear.
 struct HomeScreen: Decodable {
   struct TopBar: Decodable {
+    /// "willitsnow" and ".today", the app's name, which the bar shows as one text.
+    let name: String
+    let nameEnd: String
     let place: String
     let placeLabel: String
     let approximate: String?
@@ -158,8 +161,8 @@ extension XCUIApplication {
   /// The question and the answer: one heading element.
   var heading: XCUIElement { find("heading") }
 
-  /// The top bar's controls and the switcher, which don't scroll, by identifier.
-  static let homeBar = ["place", "settings", "approximate", "use-my-location", "views"]
+  /// The top bar's name and controls and the switcher, which don't scroll, by identifier.
+  static let homeBar = ["app-name", "place", "settings", "approximate", "use-my-location", "views"]
 
   /// Where the home screen's parts are, from one snapshot of the app: the window, then the top
   /// bar's controls, the switcher, the pager (HomePager's horizontal scroll view) and the page on
@@ -361,7 +364,7 @@ extension XCTestCase {
   }
 
   /// Checks the home screen fits the screen, as it is at launch, before any page has scrolled:
-  /// the top bar's place button and gear, and the switcher, each lie within the window; the
+  /// the top bar's name, place button and gear, and the switcher, each lie within the window; the
   /// pager (HomePager's horizontal scroll view, which never scrolls vertically) runs from under
   /// the switcher to no lower than the window's bottom edge; and the page in the tree, the chosen
   /// view's, starts under the switcher, within the window, and at its left edge, so it is the
@@ -400,7 +403,7 @@ extension XCTestCase {
     let window = root.frame
     let frames = XCUIApplication.homeFrames(in: root)
     let doesntFit = "so the home screen doesn't fit the screen; \(app.homeGeometry)"
-    for id in ["place", "settings", "views"] {
+    for id in ["app-name", "place", "settings", "views"] {
       guard let frame = frames[id] else {
         XCTFail("\(what): no \(id) on screen; \(app.homeGeometry)", file: file, line: line)
         continue
@@ -589,8 +592,8 @@ extension XCTestCase {
     }
   }
 
-  /// Checks the top bar: the place pill's label, the notice about the place, "Use my exact
-  /// location" on approximate location, and the Settings button's label.
+  /// Checks the top bar: the app's name, the place pill's label, the notice about the place, "Use
+  /// my exact location" on approximate location, and the Settings button's label.
   @MainActor
   func expect(
     _ topBar: HomeScreen.TopBar,
@@ -599,6 +602,7 @@ extension XCTestCase {
     line: UInt = #line
   ) {
     guard let shown = ShownScreen(app, file: file, line: line) else { return }
+    shown.check("app-name", reads: topBar.name + topBar.nameEnd, "the app's name", file, line)
     shown.check("place", reads: topBar.placeLabel, "the place button", file, line)
     shown.check("approximate", reads: topBar.approximate, "the notice", file, line)
     shown.check(

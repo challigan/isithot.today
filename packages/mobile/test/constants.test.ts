@@ -110,13 +110,15 @@ describe('constantsSwift', () => {
     expect(swift).toContain('    public static let warmAboveC: Double = 2.5\n');
   });
 
-  it("writes willitsnow.today's pages and the support address, from core", () => {
+  it("writes willitsnow.today's name, pages and support address, from core", () => {
     expect(members(swift, 'Site')).toEqual([
+      'public static let name = "willitsnow.today"',
       'public static let privacy = "https://willitsnow.today/privacy"',
       'public static let terms = "https://willitsnow.today/terms"',
       'public static let support = "https://willitsnow.today/support"',
       'public static let contactEmail = "support@willitsnow.today"',
     ]);
+    expect(SITES.snow.name).toBe('willitsnow.today');
     expect(SITES.snow.url).toBe('https://willitsnow.today');
     expect(CONTACT_EMAIL).toBe('support@willitsnow.today');
     expect(Object.keys(SITE_PAGES)).toEqual(['privacy', 'terms', 'support']);

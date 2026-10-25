@@ -124,9 +124,11 @@ public enum Constants {
     public static let savedMax = 10
   }
 
-  /// willitsnow.today (core `SITES.snow`): the pages Settings opens in Safari, and the address
-  /// people write to (core `CONTACT_EMAIL`), for Contact us and Report an ad.
+  /// willitsnow.today (core `SITES.snow`): its name, which the top bar shows as the website's
+  /// header does, the pages Settings opens in Safari, and the address people write to (core
+  /// `CONTACT_EMAIL`), for Contact us and Report an ad.
   public enum Site {
+    public static let name = "willitsnow.today"
     public static let privacy = "https://willitsnow.today/privacy"
     public static let terms = "https://willitsnow.today/terms"
     public static let support = "https://willitsnow.today/support"

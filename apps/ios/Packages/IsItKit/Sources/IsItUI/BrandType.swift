@@ -58,15 +58,21 @@ enum TextRole: CaseIterable {
   case tab
   /// The note chip, the strip's scale, a grid's names, the credits.
   case caption
+  /// The app's name at the top bar's leading edge, as the website's `.brand` (1.05rem, tracked
+  /// -0.01em): "willitsnow" at the website's 650, here SemiBold, and ".today" (`appNameEnd`) at
+  /// its 400.
+  case appName
+  case appNameEnd
 
   /// Its face, at the regular legibility weight.
   var face: BrandFont {
     switch self {
     case .answer, .answerState, .title: .answer
-    case .verdict, .value, .pageHeading, .amount, .sheetTitle, .heading, .labelStrong, .tab:
+    case .verdict, .value, .pageHeading, .amount, .sheetTitle, .heading, .labelStrong, .tab,
+      .appName:
       .textSemiBold
     case .row: .textMedium
-    case .valueOut, .question, .detail, .field, .label, .line, .note, .caption:
+    case .valueOut, .question, .detail, .field, .label, .line, .note, .caption, .appNameEnd:
       .textRegular
     }
   }
@@ -81,6 +87,7 @@ enum TextRole: CaseIterable {
     case .value, .valueOut, .pageHeading: 21.6
     case .question, .amount: 18.4
     case .detail, .row, .sheetTitle, .field: 17.6
+    case .appName, .appNameEnd: 16.8
     case .heading, .label, .labelStrong: 16
     case .line: 15.2
     case .note: 13.6
@@ -96,7 +103,7 @@ enum TextRole: CaseIterable {
     case .answerState: .title
     case .verdict, .value, .valueOut, .pageHeading: .title2
     case .question, .amount, .detail, .row, .sheetTitle, .field: .body
-    case .heading, .label, .labelStrong: .callout
+    case .heading, .label, .labelStrong, .appName, .appNameEnd: .callout
     case .line: .subheadline
     case .note, .tab, .caption: .footnote
     }
@@ -107,7 +114,7 @@ enum TextRole: CaseIterable {
     switch self {
     case .answer: -0.055
     case .answerState, .verdict: -0.02
-    case .title: -0.01
+    case .title, .appName, .appNameEnd: -0.01
     default: 0
     }
   }
@@ -145,6 +152,16 @@ extension BrandFont {
   }
 }
 
+extension TextRole {
+  /// Its font at `size` (its own unless given), growing with Dynamic Type as its text style does,
+  /// a face up under Bold Text: what `brandFont(_:)` sets, and a run of an attributed text whose
+  /// runs differ in face takes (the app's name, `AppNameView`).
+  func font(size: CGFloat? = nil, boldText: Bool) -> Font {
+    let font = Font.brand(boldText ? face.bolder : face, size ?? self.size, relativeTo: style)
+    return tabular ? font.monospacedDigit() : font
+  }
+}
+
 extension View {
   /// Sets `role`'s face, size, tracking and line spacing, all growing with Dynamic Type as its
   /// text style does, and steps the face up under Bold Text, which a custom font doesn't follow
@@ -173,10 +190,8 @@ private struct BrandFontModifier: ViewModifier {
   }
 
   func body(content: Content) -> some View {
-    let face = legibilityWeight == .bold ? role.face.bolder : role.face
-    let font = Font.brand(face, size, relativeTo: role.style)
     content
-      .font(role.tabular ? font.monospacedDigit() : font)
+      .font(role.font(size: size, boldText: legibilityWeight == .bold))
       .tracking(role.tracking * scaled)
       .lineSpacing(lineSpacing * scaled)
   }

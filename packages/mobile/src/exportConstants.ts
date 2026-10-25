@@ -1,8 +1,9 @@
 /**
  * `Constants.swift` (iOS build spec, section 7.1): the numbers the app shares with the server and
  * the website, from core's `config.ts` (and the models' agencies from `copy.ts`) and the client's
- * `config.ts`, under the same names, and willitsnow.today's pages and support address (core
- * `SITES.snow` and `CONTACT_EMAIL`), which the app's Settings open, so no URL is typed in Swift.
+ * `config.ts`, under the same names, and willitsnow.today's name, which the top bar shows, and its
+ * pages and support address (core `SITES.snow` and `CONTACT_EMAIL`), which the app's Settings
+ * open, so no URL or name is typed in Swift.
  * A group written whole (`SEARCH`, `AHEAD`, `WIDGET`, `CLIENT`, `PLACES`) gains a member when core adds a
  * key, and stops the generator if the new value isn't a whole number, so a Swift type is chosen
  * for it rather than guessed. `ALERTS` is not written whole: it holds the notifications run's
@@ -213,11 +214,13 @@ export function constantsSwift(): string {
     ),
     ...group(
       [
-        'willitsnow.today (core `SITES.snow`): the pages Settings opens in Safari, and the address',
-        'people write to (core `CONTACT_EMAIL`), for Contact us and Report an ad.',
+        "willitsnow.today (core `SITES.snow`): its name, which the top bar shows as the website's",
+        'header does, the pages Settings opens in Safari, and the address people write to (core',
+        '`CONTACT_EMAIL`), for Contact us and Report an ad.',
       ],
       'Site',
       [
+        ...swiftLet('    ', 'public static let name', swiftString(SITES.snow.name)),
         ...Object.entries(SITE_PAGES).flatMap(([name, path]) =>
           swiftLet(
             '    ',

@@ -192,6 +192,8 @@ extension VectorPort {
       }
     }
     struct TopBar: Decodable, Sendable, Equatable {
+      let name: String
+      let nameEnd: String
       let place: String
       let placeLabel: String
       let approximate: String?
@@ -205,6 +207,8 @@ extension VectorPort {
         notice: bar.notice
       )
       return TopBar(
+        name: top.name,
+        nameEnd: top.nameEnd,
         place: top.place,
         placeLabel: top.placeLabel,
         approximate: top.approximate,

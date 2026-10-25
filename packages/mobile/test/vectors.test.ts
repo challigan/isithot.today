@@ -4,6 +4,7 @@ import {
   COPY,
   ERROR_MESSAGES,
   GRID,
+  SITES,
   creditParts,
   defaultView,
   localDateTime,
@@ -801,7 +802,7 @@ describe('the cases cover what section 7.4 asks for', () => {
     }
   });
 
-  it('homeTopBar: the place or "Finding you…", the exact-location chip and the notice', () => {
+  it('homeTopBar: the name, the place or "Finding you…", the exact-location chip and the notice', () => {
     const cases = casesFor('page', 'homeTopBar');
     const bar = (placeName: string | null, approximate: boolean, notice: string | null) =>
       cases.find(
@@ -813,6 +814,8 @@ describe('the cases cover what section 7.4 asks for', () => {
     // On approximate location, the website's chip and no line: VoiceOver hears "Using
     // approximate location." as the chip's hint.
     expect(bar('Leeds', true, null)).toEqual({
+      name: 'willitsnow',
+      nameEnd: '.today',
       place: 'Leeds',
       placeLabel: 'Place: Leeds. Change place.',
       approximate: null,
@@ -820,6 +823,10 @@ describe('the cases cover what section 7.4 asks for', () => {
       settings: APP_COPY.settings,
     });
     expect(COPY.useExactLocation).toBe('Use my exact location');
+    // The name as the website's header shows it (Header.astro), the same on every bar.
+    for (const c of cases) {
+      expect(`${(c.out as any).name}${(c.out as any).nameEnd}`).toBe(SITES.snow.name);
+    }
     expect(bar('Leeds', false, null)).toMatchObject({ approximate: null, useMyLocation: null });
     for (const unknown of [null, '']) {
       expect(bar(unknown, true, null)).toMatchObject({

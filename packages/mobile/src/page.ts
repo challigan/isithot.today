@@ -13,6 +13,7 @@
 import {
   COPY,
   ERROR_MESSAGES,
+  SITES,
   WEEKDAYS,
   localDateTime,
   parseDate,
@@ -339,15 +340,18 @@ export function homePage(res: TodayResponse | null, o: PageInput): HomePage {
 }
 
 /**
- * The home screen's top bar (10.2), the reference for IsItLogic's `HomeTopBar`: the place as a
- * button that opens the picker, labelled for VoiceOver "Place: Leeds. Change place.", or while no
- * place is known core's "Finding you…" and "Finding you…, change place."; on approximate IP
- * location the website's chip beneath it, "Use my exact location" (VoiceOver hears core's
- * "Using approximate location." as its hint, so the line itself isn't shown); a notice to tell
- * the user about the place, while there is one (`APP_COPY.slugGone`), above the chip or on its
- * own; and the gear's label.
+ * The home screen's top bar (10.2), the reference for IsItLogic's `HomeTopBar`: the app's name at
+ * its leading edge, split as the website's header splits it (Header.astro), "willitsnow" and
+ * ".today" in a lighter face; the place as a button that opens the picker, labelled for VoiceOver
+ * "Place: Leeds. Change place.", or while no place is known core's "Finding you…" and "Finding
+ * you…, change place."; on approximate IP location the website's chip beneath it, "Use my exact
+ * location" (VoiceOver hears core's "Using approximate location." as its hint, so the line itself
+ * isn't shown); a notice to tell the user about the place, while there is one
+ * (`APP_COPY.slugGone`), above the chip or on its own; and the gear's label.
  */
 export interface HomeTopBar {
+  name: string;
+  nameEnd: string;
   place: string;
   placeLabel: string;
   approximate: string | null;
@@ -366,7 +370,10 @@ export function homeTopBar(
   notice: string | null = null,
 ): HomeTopBar {
   const known = placeName ? placeName : null;
+  const [name, end] = SITES.snow.name.split('.');
   return {
+    name: name!,
+    nameEnd: `.${end}`,
     place: known ?? COPY.locating,
     placeLabel: known
       ? fill(APP_COPY.placeButtonLabel, { place: known })
