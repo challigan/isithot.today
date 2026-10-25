@@ -29,6 +29,9 @@ export const APP_COPY = {
   // 16), and a row of the model list under the strip (10.2).
   headingLabel: '{place}. {question} {answer}',
   modelLine: '{name} · {value}',
+  // After each place under "Nearby:" but the last, outside its underline, as the website joins
+  // them (Views.astro, ", "): the space after it is the layout's.
+  listComma: ',',
   // What VoiceOver is told when the page says something new (16): the heading, then the verdict,
   // as the website's live region holds and reads the two.
   announcement: '{heading} {verdict}',

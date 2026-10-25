@@ -70,26 +70,15 @@ final class HomeAuditTests: XCTestCase {
   }
 
   /// The issues allowed, each matched as narrowly as its element allows, with its reason: the
-  /// two phase 5.4 foresaw (DECISIONS, "The iPhone app's home accessibility and its UI tests"),
-  /// and contrast on text the screenful shows drawn in the page's ink at 4.5:1 or more, proven
-  /// again on each issue (`DrawnText`; DECISIONS, "The iPhone app's UI tests, after PR #33's
-  /// second macOS run"). The issues allowed and the exceptions no audit of a test needed are
-  /// attached at its end (`home-<fixture>-<size>-allowed`) and listed in its failure, so that one
-  /// the app no longer needs can go.
+  /// credits' links, which phase 5.4 foresaw (DECISIONS, "The iPhone app's home accessibility and
+  /// its UI tests"), and contrast on text the screenful shows drawn in the page's ink at 4.5:1 or
+  /// more, proven again on each issue (`DrawnText`; DECISIONS, "The iPhone app's UI tests, after
+  /// PR #33's second macOS run"). The switcher's Dynamic Type exception, phase 5.4's other, went
+  /// with the segmented picker it allowed: the website's tabs that replace it scale (DECISIONS,
+  /// "The iPhone app in the website's look"). The issues allowed and the exceptions no audit of a
+  /// test needed are attached at its end (`home-<fixture>-<size>-allowed`) and listed in its
+  /// failure, so that one the app no longer needs can go.
   static let exceptions: [Exception] = [
-    Exception(
-      type: .dynamicType,
-      matches: { element in
-        // The segmented control, or one of its segments; never the buttons that stand for it
-        // at accessibility sizes, `view-now` and so on, whose labels scale.
-        !element.identifier.hasPrefix("view-")
-          && (element.identifier == "views" || element.tabs.contains(element.label))
-      },
-      why:
-        "the switcher at standard text sizes is the segmented picker section 10.2 asks for, "
-        + "UIKit's control, which keeps its own type size; at accessibility sizes it is a row "
-        + "of buttons whose labels scale (section 16)"
-    ),
     Exception(
       type: .hitRegion,
       matches: { element in
@@ -149,17 +138,17 @@ final class HomeAuditTests: XCTestCase {
     case .large: order = "1-large"
     case .ax3: order = "2-ax3"
     }
-    // At an accessibility size the switcher is a row of buttons (`view-now`…), and at Large the
-    // segmented control: so the size reached the app.
+    // At an accessibility size the switcher's tabs wrap onto a second line, and at Large they
+    // share the track's one: so the size reached the app.
     XCTAssertEqual(
-      app.buttons["view-now"].exists, size == .ax3,
+      switcherWraps(app), size == .ax3,
       "The switcher isn't the one for \(order): the text size didn't reach the app")
     // The top bar under the status bar, and every page's end below the screen, at both sizes on
     // main's first macOS run.
     expectFits(app, "\(name) at \(order)")
     // The window-sized element with no label, on every screenful of PR #33's two macOS runs.
     expectNoBareElements(app, "\(name) at \(order)")
-    let found = AuditLog(tabs: screen.pages.map(\.label))
+    let found = AuditLog()
     let times = AuditTimes()
     // Every call's time, however the test ends (ci/xcresult-summary.mjs `timings` lists them).
     defer { attachText(times.text, as: "home-\(name)-\(order)-audit-times") }
@@ -346,7 +335,7 @@ final class HomeAuditTests: XCTestCase {
     guard app.state == .runningForeground else {
       return "the app isn't in the foreground (state \(app.state.rawValue))"
     }
-    guard app.buttons["view-now"].exists == (size == .ax3) else {
+    guard switcherWraps(app) == (size == .ax3) else {
       return "the switcher isn't the one for the test's text size"
     }
     let now = settledFrame(of: credits)
@@ -354,6 +343,19 @@ final class HomeAuditTests: XCTestCase {
       return "the page isn't where the screenful had it, the credits at \(now)"
     }
     return nil
+  }
+
+  /// Whether the switcher's tabs wrap, as they do at accessibility sizes: This week's tab starts
+  /// at or below the bottom of Now's (half a point either way, as a frame read on a 3x screen may
+  /// round). At standard sizes the three share the track's one line. The tabs are buttons with
+  /// the same identifiers at every size, so their places, not their being there, tell the two
+  /// apart.
+  @MainActor
+  private func switcherWraps(_ app: XCUIApplication) -> Bool {
+    let now = app.buttons["view-now"]
+    let week = app.buttons["view-week"]
+    guard now.exists, week.exists else { return false }
+    return week.frame.minY >= now.frame.maxY - 0.5
   }
 
   /// What a page that stopped short of its end shows, for its failure to say, beyond where the
@@ -464,14 +466,13 @@ struct Screenful {
 }
 
 /// What an exception knows of an issue's element: its type, identifier, label and frame on
-/// screen, the screen's switcher tabs and its credits, where they are on screen (`.null`
-/// without), and for a contrast issue, what the screenful shows drawn in its frame.
+/// screen, the screen's credits, where they are on screen (`.null` without), and for a contrast
+/// issue, what the screenful shows drawn in its frame.
 struct AuditedElement {
   let type: XCUIElement.ElementType?
   let identifier: String
   let label: String
   let frame: CGRect
-  let tabs: [String]
   let credits: CGRect
   var drawn: DrawnText?
 }
@@ -511,18 +512,12 @@ private final class AuditLog {
     "place", "settings", "approximate", "use-my-location", "views",
   ]
 
-  /// The switcher's tabs, as the screen's pages label themselves.
-  let tabs: [String]
   private(set) var unexpected: [String] = []
   private(set) var allowed: [String] = []
   /// The indexes of the exceptions that allowed an issue.
   private(set) var used: Set<Int> = []
   /// The page's issues held until its last screenful.
   private var held: [Held] = []
-
-  init(tabs: [String]) {
-    self.tabs = tabs
-  }
 
   /// Notes `issue`, found on `screenful` by an audit after which the page's content was `moved`
   /// points lower than on the screenful (the credits' move): an element of the page is noted
@@ -541,13 +536,10 @@ private final class AuditLog {
     let label = issue.element?.label ?? ""
     let read = issue.element?.frame ?? .null
     let type = issue.element?.elementType
-    // A segment of the switcher's segmented control: a button with a tab's label, and no
-    // identifier of its own.
-    let segment = type == .button && identifier.isEmpty && tabs.contains(label)
-    let fixed = Self.fixed.contains(identifier) || identifier.hasPrefix("view-") || segment
+    let fixed = Self.fixed.contains(identifier) || identifier.hasPrefix("view-")
     let frame = fixed || read.isNull || moved == 0 ? read : read.offsetBy(dx: 0, dy: -moved)
     var element = AuditedElement(
-      type: type, identifier: identifier, label: label, frame: frame, tabs: tabs,
+      type: type, identifier: identifier, label: label, frame: frame,
       credits: screenful.credits)
     // The element's type and frame as well as its identifier and label, so that one with
     // neither can be told apart (DECISIONS, "The iPhone app's UI tests, after main's first macOS

@@ -133,4 +133,14 @@ extension View {
       self
     }
   }
+
+  /// `value` as the view's accessibility value, when there is one: none rather than an empty
+  /// one, which VoiceOver and the UI tests would read as a value.
+  @ViewBuilder func accessibilityValue(ifAny value: String?) -> some View {
+    if let value {
+      accessibilityValue(Text(verbatim: value))
+    } else {
+      self
+    }
+  }
 }

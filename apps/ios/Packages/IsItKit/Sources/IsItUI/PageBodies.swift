@@ -2,150 +2,105 @@ import IsItLogic
 import IsItModel
 import SwiftUI
 
-/// Now's body (iOS build spec, section 10.2): "Chance of snow, next 12 hours", then the 2-hour
-/// rows ("6pm · 60%"), each one element read as "60% chance at 6pm" (section 16), with a bar for
-/// its chance. At accessibility text sizes a row puts its bar under its hour and chance.
+/// Now's body, the website's Now (`.ahead`, `hoursHtml`): "Chance of snow, next 12 hours", then
+/// the grid of 2-hour blocks, each its chance over its time ("20%" over "10am"), three columns and
+/// two at accessibility sizes. Each cell is one element, read as "20% chance at 10am" (section
+/// 16). The chance bars the app drew before are gone, as the website has none (DECISIONS, "The
+/// iPhone app in the website's look").
 struct NowBodyView: View {
   let hours: HomePage.Hours
-  let ink: Color
 
   @Environment(\.dynamicTypeSize) private var typeSize
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
+    VStack(alignment: .leading, spacing: 0) {
       Text(verbatim: hours.heading)
-        .font(.headline)
+        .brandFont(.heading)
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityAddTraits(.isHeader)
         .accessibilityIdentifier("hours-heading")
-      VStack(alignment: .leading, spacing: typeSize.isAccessibilitySize ? 14 : 8) {
+      EqualColumns(
+        columns: typeSize.isAccessibilitySize ? 2 : 3, spacing: 20, lineSpacing: 14.4
+      ) {
         ForEach(Array(hours.rows.enumerated()), id: \.offset) { index, row in
-          HourRowView(row: row, ink: ink, stacked: typeSize.isAccessibilitySize)
-            .accessibilityIdentifier("hour-\(index)")
+          ValueCell(
+            value: row.value, name: row.label, out: false, spoken: row.spoken, spokenValue: nil,
+            identifier: "hour-\(index)")
         }
       }
+      .padding(.top, 12)
     }
   }
 }
 
-/// One of Now's 2-hour rows: the hour, a bar for the chance, and the chance.
-struct HourRowView: View {
-  let row: HomePage.HourRow
-  let ink: Color
-  let stacked: Bool
-
-  @ScaledMetric(relativeTo: .body) private var columnWidth: CGFloat = 52
-  @ScaledMetric(relativeTo: .body) private var barHeight: CGFloat = 8
-
-  var body: some View {
-    Group {
-      if stacked {
-        VStack(alignment: .leading, spacing: 4) {
-          HStack(alignment: .firstTextBaseline, spacing: 8) {
-            hour
-            Spacer(minLength: 8)
-            chance
-          }
-          bar
-        }
-      } else {
-        HStack(alignment: .center, spacing: 12) {
-          hour
-            .frame(minWidth: columnWidth, alignment: .leading)
-          bar
-          chance
-            .frame(minWidth: columnWidth, alignment: .trailing)
-        }
-      }
-    }
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel(Text(verbatim: row.spoken))
-  }
-
-  private var hour: some View {
-    Text(verbatim: row.label)
-      .font(.body)
-      .fixedSize(horizontal: false, vertical: true)
-  }
-
-  private var chance: some View {
-    Text(verbatim: row.value)
-      .font(.body.weight(.semibold))
-      .monospacedDigit()
-      .fixedSize(horizontal: false, vertical: true)
-  }
-
-  /// The chance as a filled share of a track, decorative: the row's label says it, and its
-  /// shapes have no accessibility element. No accessibility modifier: `.accessibilityHidden(true)`
-  /// here made the bar an unlabelled element under its row on PR #33's first macOS run (its
-  /// trees), as it made the page's background one (Backgrounds.swift).
-  private var bar: some View {
-    GeometryReader { proxy in
-      ZStack(alignment: .leading) {
-        Capsule()
-          .fill(ink.opacity(0.18))
-        Capsule()
-          .fill(ink)
-          .frame(width: proxy.size.width * CGFloat(min(max(row.chance, 0), 100)) / 100)
-      }
-    }
-    .frame(height: barHeight)
-  }
-}
-
-/// The week's body (iOS build spec, section 10.2), under its verdict and detail: a row for each
-/// day, "Tue", "2cm", "Snow" and an agreement dot for each forecast with data, filled for each
-/// that expects snow, so it says how many agree and never a percentage. Each row is one element,
-/// read as "Tuesday, 2cm, snow, 4 of 6 forecasts expect snow" (section 16). At accessibility text
-/// sizes a row stacks rather than clips: the day and the amount, then the band, then the dots.
+/// The week's body, the website's week (`.ahead`, `weekHtml`): "The week ahead", then a row for
+/// each day: its name, a track with a dot from none to the week's snowiest day, the amount and
+/// the band ("Tue", the dot, "2cm", "Snow"). Each row is one element, read as "Tuesday, 2cm,
+/// snow, 4 of 6 forecasts expect snow" (section 16): how many forecasts agree, which spec 10.2
+/// drew as a row of dots, is now spoken only, as the website shows none. At accessibility text
+/// sizes a row stacks rather than clips, without the track, as the website drops it when the
+/// text is large: the day and the amount, then the band.
 struct WeekBodyView: View {
   let week: HomePage.Week
-  let ink: Color
 
   @Environment(\.dynamicTypeSize) private var typeSize
 
   var body: some View {
-    VStack(alignment: .leading, spacing: typeSize.isAccessibilitySize ? 18 : 10) {
-      ForEach(Array(week.rows.enumerated()), id: \.offset) { index, row in
-        WeekRowView(row: row, ink: ink, stacked: typeSize.isAccessibilitySize)
-          .accessibilityIdentifier("day-\(index)")
+    let stacked = typeSize.isAccessibilitySize
+    VStack(alignment: .leading, spacing: 0) {
+      Text(verbatim: week.heading)
+        .brandFont(.heading)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier("week-heading")
+      VStack(alignment: .leading, spacing: stacked ? 12 : 0) {
+        ForEach(Array(week.rows.enumerated()), id: \.offset) { index, row in
+          WeekRowView(row: row, stacked: stacked)
+            .accessibilityIdentifier("day-\(index)")
+        }
       }
+      .padding(.top, 12)
     }
   }
 }
 
-/// One day of the week.
+/// One day of the week, at least 32 points tall. Its columns are the website's least widths
+/// (52, 44 and 76) raised to the widest snow labels ("0.2cm", "A few flakes") and grown with the
+/// text, so they line up row to row; the track takes what is left, at least 24 points.
 struct WeekRowView: View {
   let row: HomePage.WeekRow
-  let ink: Color
   let stacked: Bool
 
-  @ScaledMetric(relativeTo: .body) private var dayWidth: CGFloat = 56
-  @ScaledMetric(relativeTo: .body) private var amountWidth: CGFloat = 60
+  @ScaledMetric(relativeTo: .callout) private var dayWidth: CGFloat = 52
+  @ScaledMetric(relativeTo: .body) private var amountWidth: CGFloat = 54
+  @ScaledMetric(relativeTo: .subheadline) private var bandWidth: CGFloat = 83
+  @ScaledMetric(relativeTo: .body) private var trackHeight: CGFloat = 16
 
   var body: some View {
     Group {
       if stacked {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 2) {
           // The day and the amount side by side while they fit, wrapping as text does: not
-          // `ViewThatFits` between two copies of them (why: the top bar's, in HomeShell.swift).
+          // `ViewThatFits` between two copies of them (why: the switcher's, HomePager.swift).
           FlowLayout(spacing: 12, lineSpacing: 2) {
             day
             amount
           }
           band
-          dots
         }
       } else {
         HStack(alignment: .center, spacing: 12) {
           day
             .frame(minWidth: dayWidth, alignment: .leading)
+          WeekTrack(left: row.left)
+            .frame(minWidth: 24, maxWidth: .infinity)
+            .frame(height: trackHeight)
           amount
-            .frame(minWidth: amountWidth, alignment: .leading)
+            .frame(minWidth: amountWidth, alignment: .trailing)
           band
-            .frame(maxWidth: .infinity, alignment: .leading)
-          dots
+            .frame(minWidth: bandWidth, alignment: .leading)
         }
+        .frame(minHeight: 32)
       }
     }
     .accessibilityElement(children: .ignore)
@@ -154,50 +109,48 @@ struct WeekRowView: View {
 
   private var day: some View {
     Text(verbatim: row.label)
-      .font(.headline)
+      .brandFont(.labelStrong)
       .fixedSize(horizontal: false, vertical: true)
   }
 
   private var amount: some View {
     Text(verbatim: row.amount)
-      .font(.body.weight(.semibold))
-      .monospacedDigit()
+      .brandFont(.amount)
       .fixedSize(horizontal: false, vertical: true)
   }
 
   private var band: some View {
     Text(verbatim: row.bandLabel)
-      .font(.body)
+      .brandFont(.small)
       .fixedSize(horizontal: false, vertical: true)
-  }
-
-  /// An answer saved before the week's days had their agreement has no dots.
-  @ViewBuilder private var dots: some View {
-    if let snowy = row.snowy, let total = row.total, total > 0 {
-      AgreementDots(snowy: snowy, total: total, ink: ink)
-    }
   }
 }
 
-/// A dot for each forecast with data for the day, filled for each that expects snow, outlined
-/// for the others. Decorative: the row's label says how many. No accessibility modifier, as the
-/// hour bar has none (above): hidden, the dots were one unlabelled element under their row.
-struct AgreementDots: View {
-  let snowy: Int
-  let total: Int
-  let ink: Color
+/// A day's track, the website's `.days .track`: a 2-point line at a quarter of the ink, and the
+/// day's dot at `left`% of it, the snowiest day of the week at its end. Shapes only, with no
+/// accessibility modifier, so no element: hidden, the dots the rows drew before made an
+/// unlabelled element under each row (DECISIONS, PR #33's second run; Backgrounds.swift).
+struct WeekTrack: View {
+  /// From 0, no snow, to 100, the week's snowiest day.
+  let left: Double
 
-  @ScaledMetric(relativeTo: .body) private var size: CGFloat = 10
+  @SurfaceTokens private var tokens
+  @ScaledMetric(relativeTo: .body) private var dot: CGFloat = 12.8
 
   var body: some View {
-    HStack(spacing: size / 2) {
-      ForEach(0..<total, id: \.self) { index in
+    GeometryReader { proxy in
+      let width = proxy.size.width
+      let middle = proxy.size.height / 2
+      ZStack(alignment: .topLeading) {
+        Capsule()
+          .fill(tokens.ink.opacity(0.25))
+          .frame(width: width, height: 2)
+          .position(x: width / 2, y: middle)
         Circle()
-          .strokeBorder(ink, lineWidth: max(1, size / 6))
-          .background(Circle().fill(index < snowy ? ink : Color.clear))
-          .frame(width: size, height: size)
+          .fill(tokens.ink)
+          .frame(width: dot, height: dot)
+          .position(x: width * CGFloat(min(max(left, 0), 100)) / 100, y: middle)
       }
     }
-    .fixedSize()
   }
 }

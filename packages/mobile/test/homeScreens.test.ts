@@ -98,11 +98,14 @@ describe('HomeScreens.json', () => {
       for (const p of [now, middle, week]) expect(p.state, `${name} ${p.view}`).toBe('ready');
       expect(now.hours.rows.length).toBeGreaterThan(0);
       expect(middle.day.lines.length).toBeGreaterThan(0);
+      expect(week.week.heading).toBe(COPY.nextDays);
       expect(week.week.rows.length).toBe(7);
       expect((s.topBar as any).placeLabel).toBe(
         fill(APP_COPY.placeButtonLabel, { place: fixtures.get(name)!.location.name }),
       );
-      expect((s.topBar as any).approximate).toBe(COPY.approximate);
+      // On approximate location: the website's chip, and no line beside it.
+      expect((s.topBar as any).approximate).toBeNull();
+      expect((s.topBar as any).useMyLocation).toBe(COPY.useExactLocation);
     }
     expect(pages('durham-tomorrow')[1].label).toBe('Tomorrow');
     expect(pages('aberdeen-snow')[1].label).toBe('Today');

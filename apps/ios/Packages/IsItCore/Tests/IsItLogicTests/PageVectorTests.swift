@@ -66,11 +66,13 @@ extension VectorPort {
       let label: String
       let amount: String
       let bandLabel: String
+      let left: Double
       let snowy: Int
       let total: Int
       let spoken: String
     }
     struct Week: Decodable, Sendable {
+      let heading: String
       let rows: [WeekRow]
     }
     struct Page: Decodable, Sendable {
@@ -130,7 +132,8 @@ extension VectorPort {
       #expect(texts == want, "\(label): text")
       #expect(sameText(texts, want), "\(label): text code unit for code unit")
       #expect((page.day == nil) == (expected.day == nil), "\(label): day")
-      // Now's rows and the week's: every string, and the numbers they're drawn from.
+      // Now's rows and the week's: every string, and the numbers they're drawn from (an hour's
+      // chance, a day's dot on the week's track).
       #expect((page.hours == nil) == (expected.hours == nil), "\(label): hours")
       let hourRows = page.hours?.rows.map {
         HourRow(label: $0.label, value: $0.value, chance: $0.chance, spoken: $0.spoken)
@@ -146,12 +149,14 @@ extension VectorPort {
           label: $0.label,
           amount: $0.amount,
           bandLabel: $0.bandLabel,
+          left: $0.left,
           snowy: $0.snowy ?? -1,
           total: $0.total ?? -1,
           spoken: $0.spoken
         )
       }
       #expect(weekRows == expected.week?.rows, "\(label): week's rows")
+      #expect(sameText([page.week?.heading], [expected.week?.heading]), "\(label): week")
       let weekTexts = (page.week?.rows ?? []).flatMap { [$0.label, $0.amount, $0.spoken] }
       let wantWeek = (expected.week?.rows ?? []).flatMap { [$0.label, $0.amount, $0.spoken] }
       #expect(sameText(weekTexts, wantWeek), "\(label): week code unit for code unit")
@@ -174,8 +179,8 @@ extension VectorPort {
       }
     }
 
-    // The top bar (`HomeTopBar`): the place or "Finding you…", its button's label, and the
-    // approximate line or the notice in its place.
+    // The top bar (`HomeTopBar`): the place or "Finding you…", its button's label, the notice,
+    // and on approximate location the exact-location chip.
     struct Bar: Decodable, Sendable, CustomStringConvertible {
       let placeName: String?
       let approximate: Bool

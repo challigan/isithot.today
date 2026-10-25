@@ -4,11 +4,13 @@
 /// themselves, and the app's own strings are `AppCopy`.
 public enum CoreCopy {
   public static let viewsLabel = "Forecast period"
+  public static let nextDays = "The week ahead"
   public static let notAvailable = "Not available right now."
   public static let checking = "Checking…"
   public static let unavailable = "Forecasts are unavailable right now. Try again in a few minutes."
   public static let retry = "Retry"
   public static let approximate = "Using approximate location."
+  public static let useExactLocation = "Use my exact location"
   public static let useMyLocation = "Use my location"
   public static let locating = "Finding you…"
   public static let locationDenied = "Location access is off. Search for a place instead."

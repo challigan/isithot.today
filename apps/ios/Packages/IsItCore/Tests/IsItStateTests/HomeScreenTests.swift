@@ -33,7 +33,9 @@ struct HomeScreenTests {
     #expect(h.model.topBar == HomeTopBar(placeName: nil, approximate: true))
     #expect(h.model.topBar.place == "Finding you…")
     #expect(h.model.topBar.placeLabel == "Finding you…, change place.")
-    #expect(h.model.topBar.approximate == "Using approximate location.")
+    // The website's chip, with no line beside it: "Using approximate location." is its hint.
+    #expect(h.model.topBar.approximate == nil)
+    #expect(h.model.topBar.useMyLocation == "Use my exact location")
     let checking = h.model.page(.today, at: h.model.now)
     #expect(checking.state == .loading)
     #expect(checking.headingLabel == "Will it snow today? Checking…")
@@ -43,8 +45,8 @@ struct HomeScreenTests {
     #expect(h.model.placeName == "Leeds")
     let bar = h.model.topBar
     #expect(bar.placeLabel == "Place: Leeds. Change place.")
-    #expect(bar.approximate == "Using approximate location.")
-    #expect(bar.useMyLocation == "Use my location")
+    #expect(bar.approximate == nil)
+    #expect(bar.useMyLocation == "Use my exact location")
     let page = h.model.page(.today, at: h.model.now)
     #expect(
       page
@@ -83,6 +85,7 @@ struct HomeScreenTests {
     // A city page's place is named before its answer, and isn't approximate.
     #expect(h.model.topBar.place == "Leeds")
     #expect(h.model.topBar.approximate == nil)
+    #expect(h.model.topBar.useMyLocation == nil)
 
     // Retry.
     await h.model.refresh()
@@ -340,6 +343,7 @@ struct HomeScreenTests {
     )
     #expect(searched.model.placeName == "Denver")
     #expect(searched.model.topBar.approximate == nil)
+    #expect(searched.model.topBar.useMyLocation == nil)
   }
 }
 
@@ -376,6 +380,7 @@ struct NearbyTests {
     #expect(h.widgets.reloads == 1)
     #expect(h.model.topBar.place == "Dundee")
     #expect(h.model.topBar.approximate == nil)
+    #expect(h.model.topBar.useMyLocation == nil)
     let page = h.model.page(.today, at: h.model.now)
     #expect(page.state == .ready)
     #expect(page.headingLabel == "Dundee. Will it snow today? Yes.")
@@ -464,12 +469,13 @@ struct NearbyTests {
     #expect(
       h.model.topBar.approximate
         == "That place is no longer available. Showing your approximate location.")
-    #expect(h.model.topBar.useMyLocation == "Use my location")
+    #expect(h.model.topBar.useMyLocation == "Use my exact location")
     #expect(h.model.topBar.place == "Leeds")
     let nearby = try #require(h.model.page(.today, at: h.model.now).footer?.nearby.first)
     await h.model.select(.city(slug: nearby.slug, name: nearby.name))
     #expect(h.model.notice == nil)
     #expect(h.model.topBar.approximate == nil)
+    #expect(h.model.topBar.useMyLocation == nil)
   }
 }
 

@@ -40,6 +40,8 @@ public enum AppCopy {
     "\(name) · \(value)"
   }
 
+  public static let listComma = ","
+
   public static func announcement(heading: String, verdict: String) -> String {
     "\(heading) \(verdict)"
   }

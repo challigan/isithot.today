@@ -17,8 +17,10 @@ accessibility audits at Large and AX3, and every page on the contact sheet (belo
 and phase 6, the sheets behind the top bar, over every page: the place picker (6.1: search, "Use
 my location" and the recent places) and Settings (6.2 and 6.3: the snow units, the privacy rows,
 Report an ad, About and Help, the version, How it works, Credits and licences and Your privacy's
-lines) (below, "Phase 6"). A Debug build can be answered by a fixture or a stubbed network
-instead (below, "Debug hooks"). Everything else comes in later phases.
+lines) (below, "Phase 6"). The home screen is drawn in the website's look: its type, pills, tabs,
+grids and week rows (below, "The home screen in the website's look"). A Debug build can be
+answered by a fixture or a stubbed network instead (below, "Debug hooks"). Everything else comes
+in later phases.
 
 ## What is where
 
@@ -48,11 +50,11 @@ Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore, UR
                          HomeActions; the picker: PlacePickerView, drawing PlacePicker, with
                          PlacePickerActions; Settings: SettingsView and its pages, with SettingsActions;
                          SheetStyle, both sheets' colours at WCAG AA; the parts every screen is to share,
-                         in the website's look: BrandType (TextRole, the type scale, and brandFont),
-                         PageTheme (a surface's colours, Surface and the tokens, BrandTokens),
-                         Backgrounds (PageBackground, SheetBackground), Buttons (PillButton,
-                         IconPillButton, PressStyle, RowPressStyle, PinShape), PillSegments, and
-                         Layouts (FlowLayout, EqualColumns)),
+                         in the website's look, which the home screen draws with: BrandType (TextRole,
+                         the type scale, and brandFont), PageTheme (a surface's colours, Surface and
+                         the tokens, BrandTokens), Backgrounds (PageBackground, SheetBackground),
+                         Buttons (PillButton, IconPillButton, PressStyle, RowPressStyle, PinShape),
+                         PillSegments, and Layouts (FlowLayout, EqualColumns, LimitedWidth)),
                          IsItWidgetUI (the widget's entry, provider, view), SnowKit (Glyphs, Color(rgb:)
                          for the palettes, and the glyph catalogues, generated)
 Apps/Snow/App/           WillItSnowApp (the services and the scene's phases), HomeView (the home screen,
@@ -417,8 +419,9 @@ The top bar and the Today page (spec section 10.2), drawn from plain values:
 - **The first launch** has no `place.v1`, so the target is approximate IP location: the app asks
   `/api/v1/today?ahead=snow`, the server places the phone and chooses the units, which the app
   then keeps. The top bar shows "Finding you…" (which VoiceOver reads as "Finding you…, change
-  place.") until the answer names the place, then the place with "Using approximate location."
-  beneath it. No picker, and no prompt.
+  place.") until the answer names the place, then the place with the "Use my exact location"
+  chip beneath it (before the website's look, the line "Using approximate location.", now the
+  chip's VoiceOver hint). No picker, and no prompt.
 - **The home screen** (`HomeView.swift`) draws `model.topBar`, and the Today page at the
   model's clock (`model.page(.today, at: model.now)`), with IsItUI's `HomeShell` and
   `ForecastPageView`, inside a `TimelineView(.everyMinute)`, so the hour picked, Tomorrow from
@@ -438,11 +441,11 @@ The top bar and the Today page (spec section 10.2), drawn from plain values:
 - **The actions:** Retry calls `refresh()`; pulling the page down (`.refreshable`, on the page's
   scroll view) calls it too, keeping what is on screen; a place under "Nearby:" calls
   `select(.city(slug:name:))`, which keeps it as the place and shows the loading state under its
-  name until its answer arrives; links open in Safari. The place button and "Use my location"
-  open the place picker, and the gear Settings (phase 6, below).
+  name until its answer arrives; links open in Safari. The place pill and "Use my exact
+  location" open the place picker, and the gear Settings (phase 6, below).
 - **The notice** (`AppCopy.slugGone`, when a city page's place has gone and the app fell back to
-  approximate location) takes the approximate line's place in the top bar until a place is
-  chosen.
+  approximate location) shows in the top bar, above the "Use my exact location" chip, until a
+  place is chosen.
 
 ### Reading 5.1's tests
 
@@ -492,15 +495,17 @@ brought forward the minute's tick, pull to refresh, the footer and the loading a
 - **Now and This week** (spec section 10.2) come from the same presenter, `HomePage`, which now
   has `hours` (Now: "Chance of snow, next 12 hours" and up to six `HourRow`s, "6pm" and "60%",
   each read "60% chance at 6pm") and `week` (a `WeekRow` a day: "Tue", "2cm", "Snow", the
-  forecasts expecting snow of those with data, `snowy` of `total`, drawn as dots, and read
-  "Tuesday, 2cm, snow, 4 of 6 forecasts expect snow", never a percentage). Its reference,
+  forecasts expecting snow of those with data, `snowy` of `total`, drawn as dots until the
+  website's look, and read "Tuesday, 2cm, snow, 4 of 6 forecasts expect snow", never a
+  percentage). Its reference,
   packages/mobile `page.ts`, takes them from core (`viewDisplay`'s rows and their `sr`,
   `snowAgreementLine`, `WEEKDAYS`), and `page.json` holds the Swift to them case by case; the
   Swift words them with `AppCopy.percent`, `hourRowLabel`, `weekRowLabel`, `dayAgreement` and
   `dayAgreementOne` and `CoreCopy.weekdays`, which a vitest proves say what core says.
 - **The switcher and the pager** (IsItUI): `ViewSwitcher`, a segmented picker of the pages'
   labels (the middle one "Tomorrow" from 6pm), which at accessibility text sizes becomes a row
-  of buttons that wraps so no label is cut short; and `HomePager`, the three pages side by side
+  of buttons that wraps so no label is cut short (since the website's look, the website's tabs:
+  below, "The home screen in the website's look"); and `HomePager`, the three pages side by side
   in a horizontal `ScrollView` paged with `.scrollTargetBehavior(.paging)` and
   `.scrollPosition(id:)`, each page the pager's own size, which a `GeometryReader` reads (since
   main's first macOS run: sized to the screen's safe area, the pages pushed the top bar under the
@@ -543,14 +548,16 @@ each announcement once, and only then) and `AppModelTests` (a route to a view). 
 
 **Accessibility identifiers** for phase 5.4's tests, besides 5.1's (`place`, `settings`,
 `use-my-location`, `heading`, `verdict`, `detail`, `agreement`, `strip`, `limited`, `retry`,
-`updated`, `notice`): `views` (the switcher; its segments are buttons labelled as the tabs read,
-"Now", "Today" or "Tomorrow", "This week"), `view-now`, `view-today` and `view-week` (its buttons
-at accessibility sizes), `page-now`, `page-today` and `page-week` (each page's scroll view, only
-the one on screen), `hours-heading` and `hour-0` to `hour-5` (Now's rows), and `day-0` to
-`day-6` (the week's rows). Phase 5.4 added `model-0` onwards (the middle page's model list, each
-read as the model's name with its amount as the value) and `approximate` (the top bar's
-"Using approximate location." or the notice in its place), and its review `credits` (the
-footer's credits, a container of their lines, the last on the page).
+`updated`, `notice`): `views` (the switcher, the tab bar; its tabs are buttons labelled as the
+tabs read, "Now", "Today" or "Tomorrow", "This week"), `view-now`, `view-today` and `view-week`
+(its tabs, at every size since the website's look; at accessibility sizes only before),
+`page-now`, `page-today` and `page-week` (each page's scroll view, only the one on screen),
+`hours-heading` and `hour-0` to `hour-5` (Now's cells), and `day-0` to `day-6` (the week's rows).
+Phase 5.4 added `model-0` onwards (the middle page's models, each read as the model's name with
+its amount as the value) and `approximate` (the top bar's notice; before the website's look,
+"Using approximate location." too), its review `credits` (the footer's credits, a container of
+their lines, the last on the page), and the website's look `week-heading` ("The week ahead"), with
+`use-my-location` now the "Use my exact location" chip.
 
 ## Phase 5.4: the home screen's accessibility, and its UI tests
 
@@ -570,9 +577,9 @@ the screen with it, from one snapshot of the accessibility tree for each check (
 which each identifier checked must be there once: `expect(page, in:)` checks the heading (the
 question and the answer, with the place), the verdict and the detail, the agreement, the strip's
 summary, each model's name and amount (`model-0`…), Now's rows (`hour-0`…) and the week's (`day-0`…)
-as VoiceOver reads them, the Updated line, the offline, unavailable or stale line and Retry, and
-that nothing else of them is there; `expect(topBar, in:)` the place button's label, the approximate
-line (`approximate`), "Use my location" and Settings. Nothing in a test types a page's words. A
+as VoiceOver reads them, the week's heading, the Updated line, the offline, unavailable or stale
+line and Retry, and that nothing else of them is there; `expect(topBar, in:)` the place pill's
+label, the notice (`approximate`), "Use my exact location" and Settings. Nothing in a test types a page's words. A
 difference is reported and the test goes on to the next; a screen that never comes stops it.
 
 **The tests** (the UI test plan; `### UI:` in the `ios` job's log names each failure with its
@@ -595,7 +602,7 @@ file and line):
   the first place under "Nearby:" and reads its answer, and the chosen place on the top bar;
   `testNearbyLoadsInPlaceOnThisWeek` does it from This week, which stays on screen, checking the
   place's element is its words' band, under 44 points, and tapping its line outside that band
-  (IsItUI's `WordsButton`, which "Use my location" and the places nearby are: a tap anywhere on
+  (IsItUI's `WordsButton`, which the places nearby are: a tap anywhere on
   the 44-point line acts, while the element, which VoiceOver outlines and the audit measures, is
   the band the words take, no shorter than 34 points, or the whole line for words narrower than
   44, as York and Perth are at Large). The two
@@ -613,8 +620,8 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   and stays when Retry fails again.
 - `HomeAuditTests` (spec 17.2's `AccessibilityAuditTests` for the home screen): each page of the
   three fixtures at Large and at AX3 (`-UIPreferredContentSizeCategoryName` with
-  `UICTContentSizeCategoryAccessibilityXL`; the test checks the switcher is buttons at AX3 and not
-  at Large, so the size reached the app, and that the home screen fits the screen at that size,
+  `UICTContentSizeCategoryAccessibilityXL`; the test checks the switcher's tabs wrap onto a
+  second line at AX3 and not at Large (`switcherWraps`), so the size reached the app, and that the home screen fits the screen at that size,
   `expectFits`, with no bare element, `expectNoBareElements`), with
   `performAccessibilityAudit(for:)` for every kind on every screenful, from
   the page's top to the end of its credits, in at most 20 screenfuls. Each screenful is audited
@@ -640,11 +647,10 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   lightest pixels inside the element and the contrast between them, beside the page's ink and its
   background at the element's centre (`PixelRange`, `PageColours`) and what text it shows drawn
   there (`DrawnText`), except those in `HomeAuditTests.exceptions`, each with why it isn't a fault
-  to fix: the segmented control's own type size (`dynamicType`; section 10.2's segmented picker,
-  buttons that scale at accessibility sizes), the credits' inline links (`hitRegion`), and
-  contrast on a detail, "Use my location" or a place nearby that the screenful shows drawn in the
-  page's ink over its background at 4.5:1 or more at every corner, proven again on each issue
-  (`contrast`). The issues allowed and any exception a test didn't need are attached
+  to fix: the credits' inline links (`hitRegion`), and contrast on a detail, "Use my location" or
+  a place nearby that the screenful shows drawn in the page's ink over its background at 4.5:1 or
+  more at every corner, proven again on each issue (`contrast`). (The segmented control's own
+  type size, `dynamicType`, was a third until the website's tabs replaced it.) The issues allowed and any exception a test didn't need are attached
   (`home-<fixture>-<size>-allowed`) and listed in its failure. Each page's first screenful also
   attaches the app's element tree (`<page>-tree`). Each call goes through `runAudit`
   (ScreenAudit.swift), which times it and reads its issues once it is done, outside XCTest's
@@ -680,6 +686,38 @@ from 5:59:30pm turning the page), `PaletteToneTests` (which pages are light ink 
 system's controls on them take the dark colour scheme) and `PageVectorTests` (the model lines'
 names and amounts, and `HomeTopBar`).
 
+## The home screen in the website's look
+
+Carl asked for the app to look as close to the website as possible (DECISIONS, "The iPhone app
+in the website's look", which has the why). Steps 1 and 2 brought the fonts, the colours and the
+shared parts; step 3 draws the home screen with them, as the website draws the same answer at
+402 points wide:
+
+- **Type**: every word through `.brandFont(TextRole)` (BrandType.swift), Bricolage throughout,
+  the answer word 0.3 of the page's width (`HomePager` passes `pageWidth` to `ForecastPageView`).
+- **The top bar** (`TopBarView`, HomeShell.swift): the place in a pill with the website's pin
+  (`PillButton`, `PinShape`), the gear in a round chip (`IconPillButton`), trailing; beneath
+  them a notice chip (`approximate`) and, on approximate IP location, the "Use my exact
+  location" chip (`use-my-location`), whose VoiceOver hint is "Using approximate location.".
+- **The switcher** (`ViewSwitcher`): the website's track and ink thumb (`PillSegments`) at
+  standard sizes, chips that wrap at accessibility sizes, one tab bar (`views`) holding
+  `view-now`, `view-today` and `view-week` at every size. The segmented `Picker` is gone, and
+  with it `HomeAuditTests`' Dynamic Type exception.
+- **The pages** (`ForecastPageView`, `PageBodies.swift`): the glyph at the question's top right
+  (above it at accessibility sizes), in full ink; Today's models and Now's hours as the website's
+  grid of values over names (`EqualColumns`, `ValueCell`, one element a cell); the week under
+  "The week ahead" (`week-heading`) as rows of day, track and dot (`WeekTrack`, `WeekRow.left`),
+  amount and band, the agreement spoken only; the footer in the website's type, Retry a bordered
+  chip, the places nearby one run with commas (`AppCopy.listComma`), a hairline over the credits.
+- **The presenters, TypeScript first**: `homeTopBar` (`approximate` only a notice,
+  `useMyLocation` the chip's words) and `homePage` (`week.heading`, each row's `left`, from
+  core's track from none to the snowiest day), ported as `HomeTopBar` and `HomePage`, with
+  `StripGeometry.track` shared. `CoreCopy` gains `nextDays` and `useExactLocation`.
+
+What changes for the UI tests: `HomeAuditTests` knows the text size reached the app by whether
+the tabs wrap (`switcherWraps`), and allows two kinds of issue, not three; `HomeScreens.swift`
+checks the week's heading. The rest read the regenerated `HomeScreens.json` unchanged.
+
 ## Phase 6: the place picker and Settings
 
 The top bar's two sheets, built side by side and then connected (below, "How they meet").
@@ -688,8 +726,8 @@ and how they were put together ("The iPhone app's phase 6, put together").
 
 ### 6.1: the place picker
 
-The full-screen sheet behind the top bar's place button and the approximate line's "Use my
-location" (spec sections 4, 9.4 step 4, 10.3, 15.2 and 16). DECISIONS has the choices ("The
+The full-screen sheet behind the top bar's place pill and its "Use my exact location" chip (spec
+sections 4, 9.4 step 4, 10.3, 15.2 and 16). DECISIONS has the choices ("The
 iPhone app's place picker").
 
 - **The rules are in IsItCore, tested on Linux.** `PlaceSearch.input(_:)` and `.detail(_:)`
@@ -740,8 +778,8 @@ while the fix is out (the fix then chooses nothing), and a launch that never ask
 ip-first-launch,leeds-dry` or `…,kathmandu-0545` and `-location`: too short and no results;
 choosing Leeds (a city page) and Kathmandu (a point); a recent place kept across a relaunch, the
 box's clear button (44 by 44, "Clear search", back to the recent places with the keyboard up), then
-the place swiped away; Use my location denied, from the approximate line (tapped above its words)
-and the picker's own row; Use my
+the place swiped away; Use my location denied, from the top bar's chip (tapped above it, on its
+line) and the picker's own row; Use my
 location with a fix; and the accessibility audit of the sheet, with a recent place and location
 access off, and of its results with the keyboard put away by a drag. Their screens are
 `picker-no-results`, `picker-results`, `picker-recent`, `picker-location-denied`,
@@ -843,7 +881,7 @@ Type.
 
 - **One sheet at a time.** `HomeView` holds one `HomeSheet?`: `.picker(PickerRequest)` opens the
   picker as a full-screen cover, `.settings` Settings as a sheet, and each closes only itself.
-  The place button and the approximate line's "Use my location" (with `locating`) open the
+  The place pill and the "Use my exact location" chip (with `locating`) open the
   picker; the gear opens Settings. The top bar is `HomeShell`'s, over the switcher and the
   pager, so all three open their sheets from every page. Both sheets follow the system's
   colours, not the page's: they are presented from outside `HomeShell`, so the dark colour

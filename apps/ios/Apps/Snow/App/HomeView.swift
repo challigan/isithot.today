@@ -15,9 +15,9 @@ import UIKit
 /// hour picked, Tomorrow from 6pm and the stale state follow the time while the app is open. Its
 /// minutes are the model's (`MinuteTick`): the system's own in the app, and a Debug build's clock
 /// started at `-now` turns the page on its own minute too. The top bar, over every page, opens
-/// the two sheets (`HomeSheet`), one at a time: the place button, and the approximate line's
-/// "Use my location", the place picker, full screen (section 10.3, `PickerSheet`); the gear,
-/// Settings (section 10.4, `SettingsSheet`).
+/// the two sheets (`HomeSheet`), one at a time: the place pill, and on approximate location the
+/// "Use my exact location" chip, the place picker, full screen (section 10.3, `PickerSheet`);
+/// the gear, Settings (section 10.4, `SettingsSheet`).
 struct HomeView: View {
   let model: AppModel
   /// The sheet open over the home screen, if any.
@@ -108,9 +108,11 @@ private struct HomeContent: View {
     let now = model.now
     let pages = AppView.allCases.map { model.page($0, at: now) }
     let shown = pages.first { $0.view == model.view } ?? pages[1]
-    HomeShell(topBar: model.topBar, theme: PageTheme(shown.palette), actions: actions) {
+    // The page on screen's colours, which the top bar and the switcher wear over every page.
+    let theme = PageTheme(shown.palette)
+    HomeShell(topBar: model.topBar, theme: theme, actions: actions) {
       VStack(spacing: 0) {
-        ViewSwitcher(pages: pages, selection: $model.view)
+        ViewSwitcher(pages: pages, selection: $model.view, theme: theme)
         HomePager(
           pages: pages.map { page in
             PageContent(
@@ -136,8 +138,8 @@ private struct HomeContent: View {
     }
   }
 
-  /// What the screen's taps do: Retry asks again; the place button opens the picker, and "Use
-  /// my location" opens it finding the phone's place; the gear opens Settings; a place under
+  /// What the screen's taps do: Retry asks again; the place pill opens the picker, and "Use my
+  /// exact location" opens it finding the phone's place; the gear opens Settings; a place under
   /// "Nearby:" loads in place; links open in Safari.
   private var actions: HomeActions {
     let model = model

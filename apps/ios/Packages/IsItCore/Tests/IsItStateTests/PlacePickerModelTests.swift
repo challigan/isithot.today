@@ -290,6 +290,7 @@ struct PlacePickerChoiceTests {
     #expect(h.hooks.calls == ["syncAlerts city:leeds-gb c"])
     #expect(h.model.topBar.placeLabel == "Place: Leeds. Change place.")
     #expect(h.model.topBar.approximate == nil)
+    #expect(h.model.topBar.useMyLocation == nil)
     #expect(h.model.page(.today, at: h.model.now).headingLabel == "Leeds. Will it snow today? No.")
   }
 

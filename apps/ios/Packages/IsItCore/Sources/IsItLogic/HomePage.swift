@@ -138,16 +138,21 @@ public struct HomePage: Sendable, Equatable {
     }
   }
 
-  /// A day of the week (spec 10.2): its label ("Today", "Tue"), amount ("2cm") and band label
-  /// ("Snow", or for a day without snow why: "Too warm"), the models expecting snow of those
-  /// with data, drawn as `total` dots with `snowy` filled, and what VoiceOver reads for the row:
-  /// "Tuesday, 2cm, snow, 4 of 6 forecasts expect snow", never a percentage.
+  /// A day of the week (spec 10.2), as the website draws it: its label ("Today", "Tue"), its
+  /// dot on the week's track, its amount ("2cm") and band label ("Snow", or for a day without
+  /// snow why: "Too warm"); the models expecting snow of those with data; and what VoiceOver
+  /// reads for the row: "Tuesday, 2cm, snow, 4 of 6 forecasts expect snow", never a percentage.
+  /// The agreement is spoken only: the website's track has no dots for it (DECISIONS, "The
+  /// iPhone app in the website's look").
   public struct WeekRow: Sendable, Equatable {
     public let label: String
     public let amount: String
     public let bandLabel: String
+    /// Where the day's dot sits on the week's track, in % from none (0) to the snowiest day of
+    /// the week (100), as core `viewDisplay` places it (`WeekItem.left`).
+    public let left: Double
     /// Models expecting snow, and models with data for the day (S1); nil in an answer saved
-    /// before the week's days had them, which then has no dots, and isn't read with them.
+    /// before the week's days had them, which isn't read with them.
     public let snowy: Int?
     public let total: Int?
     public let spoken: String
@@ -156,6 +161,7 @@ public struct HomePage: Sendable, Equatable {
       label: String,
       amount: String,
       bandLabel: String,
+      left: Double,
       snowy: Int?,
       total: Int?,
       spoken: String
@@ -163,16 +169,18 @@ public struct HomePage: Sendable, Equatable {
       self.label = label
       self.amount = amount
       self.bandLabel = bandLabel
+      self.left = left
       self.snowy = snowy
       self.total = total
       self.spoken = spoken
     }
 
-    /// The row for `day` of `week`, in the answer's unit. VoiceOver hears the day's name in full
-    /// ("Today" for the week's first day, which the server labels so, else the weekday of its
-    /// date), the amount, the band label starting in lower case, as it is mid-sentence, and the
-    /// agreement (core `snowAgreementLine`, which `AppCopy.dayAgreement` words as core does).
-    public init(day: ApiSnowWeekDay, of week: ApiSnowWeek, unit: SnowUnit) {
+    /// The row for `day` of `week`, in the answer's unit, its dot at `left` (`Week`'s, from the
+    /// week's snowiest day). VoiceOver hears the day's name in full ("Today" for the week's
+    /// first day, which the server labels so, else the weekday of its date), the amount, the
+    /// band label starting in lower case, as it is mid-sentence, and the agreement (core
+    /// `snowAgreementLine`, which `AppCopy.dayAgreement` words as core does).
+    public init(day: ApiSnowWeekDay, of week: ApiSnowWeek, unit: SnowUnit, left: Double) {
       let amount = StripGeometry.amountText(day.amount, unit)
       let name =
         day.date == week.from
@@ -193,6 +201,7 @@ public struct HomePage: Sendable, Equatable {
         label: day.label,
         amount: amount,
         bandLabel: day.bandLabel,
+        left: left,
         snowy: day.snowy,
         total: day.total,
         spoken: spoken
@@ -200,17 +209,27 @@ public struct HomePage: Sendable, Equatable {
     }
   }
 
-  /// What the week page shows below its verdict and detail: a row for each day.
+  /// What the week page shows below its verdict and detail: "The week ahead", then a row for
+  /// each day.
   public struct Week: Sendable, Equatable {
+    public let heading: String
     public let rows: [WeekRow]
 
-    public init(rows: [WeekRow]) {
+    public init(heading: String, rows: [WeekRow]) {
+      self.heading = heading
       self.rows = rows
     }
 
-    /// The days of `week`, the picked hour's week, in the answer's unit.
+    /// The days of `week`, the picked hour's week, in the answer's unit, each dot placed from
+    /// none to the snowiest day (core `weekParts`' `track(0, max)`).
     public init(week: ApiSnowWeek, unit: SnowUnit) {
-      self.init(rows: week.days.map { WeekRow(day: $0, of: week, unit: unit) })
+      let position = StripGeometry.track(0, week.days.map(\.amount).max() ?? 0)
+      self.init(
+        heading: CoreCopy.nextDays,
+        rows: week.days.map { day in
+          WeekRow(day: day, of: week, unit: unit, left: position(day.amount))
+        }
+      )
     }
   }
 

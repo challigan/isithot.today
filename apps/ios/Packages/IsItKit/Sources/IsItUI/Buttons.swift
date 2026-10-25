@@ -111,6 +111,14 @@ struct IconPillButton: View {
   @ScaledMetric(relativeTo: .callout) private var circle: CGFloat = 36
   @ScaledMetric(relativeTo: .callout) private var symbol: CGFloat = 18
 
+  /// Spelt out, since the top bar makes one from another file, and the private tokens could
+  /// leave the memberwise initialiser private to this one.
+  init(systemName: String, label: String, action: @escaping () -> Void) {
+    self.systemName = systemName
+    self.label = label
+    self.action = action
+  }
+
   var body: some View {
     Button(action: action) {
       Image(systemName: systemName)

@@ -184,7 +184,7 @@ struct SurfaceTokens: DynamicProperty {
 }
 
 /// The smallest a control is tapped by, in points, as Apple's guidelines and the accessibility
-/// audit's hit regions ask: the footer's links and places, and "Use my location".
+/// audit's hit regions ask: the pills, and the footer's links and places.
 enum HitTarget {
   static let minimum: CGFloat = 44
   /// The shortest a `WordsButton`'s accessibility element is, however short its words, for words

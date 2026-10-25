@@ -79,6 +79,13 @@ describe('coreCopySwift', () => {
     }
   });
 
+  it("has the website's top bar chip and week heading, which the home screen shows", () => {
+    expect(swift).toContain('  public static let useExactLocation = "Use my exact location"');
+    expect(swift).toContain('  public static let nextDays = "The week ahead"');
+    // The picker's row keeps its own words.
+    expect(swift).toContain('  public static let useMyLocation = "Use my location"');
+  });
+
   it('writes a long string whole, on a line of its own', () => {
     expect(swift).toContain(
       `  public static let metOfficeCredit =\n    ${swiftString(COPY.metOfficeCredit)}\n`,
@@ -241,6 +248,10 @@ describe('APP_COPY', () => {
         /\b(websites?|isithot|isitwet|isitwindy|hot|wet|wind|windy|rain|rainy|android)\b/i,
       );
     }
+  });
+
+  it('separates the places nearby as the website does, the space left to the layout', () => {
+    expect(APP_COPY.listComma).toBe(',');
   });
 
   it('names its slots, and only these strings have them', () => {

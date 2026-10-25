@@ -55,6 +55,8 @@ struct HomeScreen: Decodable {
   }
 
   struct Week: Decodable {
+    /// "The week ahead".
+    let heading: String
     let rows: [Row]
   }
 
@@ -272,8 +274,9 @@ extension XCTestCase {
     }
   }
 
-  /// Taps `page`'s tab in the switcher (a segment, or at accessibility sizes a button, either
-  /// labelled as the tab reads), waits for its heading, and checks the tab is the one selected.
+  /// Taps `page`'s tab in the switcher (a tab, a button labelled as the tab reads, on the track or
+  /// at accessibility sizes a chip of its own), waits for its heading, and checks the tab is the
+  /// one selected.
   @MainActor
   func tap(_ page: HomeScreen.Page, in app: XCUIApplication) throws {
     let tab = app.buttons[page.label]
@@ -403,8 +406,8 @@ extension XCTestCase {
   }
 
   /// Checks the app has no bare element: a leaf of the accessibility tree of type `other` with
-  /// neither an identifier nor a label, under no element with a label (a row's bar or dots are
-  /// under their row's). On PR #33's two macOS runs one such, the window's size, failed the
+  /// neither an identifier nor a label, under no element with a label (a week row's track is
+  /// under its row's). On PR #33's two macOS runs one such, the window's size, failed the
   /// audit's `sufficientElementDescription` on every screenful of every page: the page's
   /// background, made an element by its own accessibility modifiers (Backgrounds.swift). Read from
   /// one snapshot, outside the audit, and failing with each one's place from its window, every
@@ -505,9 +508,9 @@ extension XCTestCase {
 
   /// Checks that the page on screen says what `page` says: the heading (the question and the
   /// answer, with the place), the verdict and the detail; the middle page's agreement, strip,
-  /// model list and limited line; Now's next hours and the week's days, each row as VoiceOver
-  /// reads it; the footer's Updated and offline, unavailable or stale line; and Retry. What
-  /// `page` hasn't is checked not to be there. Read from one snapshot of the screen
+  /// grid of models and limited line; Now's grid of hours, and the week's heading and days, each
+  /// cell or row as VoiceOver reads it; the footer's Updated and offline, unavailable or stale
+  /// line; and Retry. What `page` hasn't is checked not to be there. Read from one snapshot of the screen
   /// (`ShownScreen`), so the many checks don't each ask the app.
   @MainActor
   func expect(
@@ -527,6 +530,7 @@ extension XCTestCase {
       ("verdict", page.verdict), ("detail", page.detail),
       ("agreement", page.day?.heading), ("strip", page.day?.summary),
       ("limited", page.day?.limited), ("hours-heading", page.hours?.heading),
+      ("week-heading", page.week?.heading),
       ("updated", page.footer?.updated), ("notice", page.footer?.notice),
       ("retry", page.retry),
     ]
@@ -553,8 +557,8 @@ extension XCTestCase {
     }
   }
 
-  /// Checks the top bar: the place button's label, the approximate line or the notice in its
-  /// place, "Use my location", and the Settings button's label.
+  /// Checks the top bar: the place pill's label, the notice about the place, "Use my exact
+  /// location" on approximate location, and the Settings button's label.
   @MainActor
   func expect(
     _ topBar: HomeScreen.TopBar,
@@ -564,8 +568,9 @@ extension XCTestCase {
   ) {
     guard let shown = ShownScreen(app, file: file, line: line) else { return }
     shown.check("place", reads: topBar.placeLabel, "the place button", file, line)
-    shown.check("approximate", reads: topBar.approximate, "the approximate line", file, line)
-    shown.check("use-my-location", reads: topBar.useMyLocation, "Use my location", file, line)
+    shown.check("approximate", reads: topBar.approximate, "the notice", file, line)
+    shown.check(
+      "use-my-location", reads: topBar.useMyLocation, "Use my exact location", file, line)
     shown.check("settings", reads: topBar.settings, "the Settings button", file, line)
   }
 

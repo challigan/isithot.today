@@ -4091,6 +4091,115 @@ step 5 and Settings in step 6.
   `GeneratedPaletteTests`' content palette and card. IsItUI compiles only on macOS: the existing
   39 UI tests are to stay green and look unchanged, since nothing on screen uses the new parts.
 
+**Step 3: the home screen in the website's look.** The top bar, the switcher and the three
+pages, drawn as the website draws them for the same answer (Header.astro, ViewTabs.astro,
+Views.astro, Now.astro, Week.astro, `view.ts`), measured at 402 points wide, where a CSS pixel is
+a point. The design's mock, drawn by the website itself with the app's changes, is the target.
+This supersedes spec 10.1 and 10.2 on type, colours, the switcher, Now and the week.
+
+- **Rules every screen follows**, the audit's lessons so far, binding on steps 5 and 6 as well:
+  no lazy container (a page is a `ScrollView` and a `VStack`); each element laid out once, with
+  accessibility sizes a branch on `isAccessibilitySize`, never `ViewThatFits`; no accessibility
+  modifier on a view with no element (shapes, gradients, tracks, thumbs, cards); every visible
+  word inside some element's frame, so a grid cell is one element over both its lines; an
+  element on a page's gradient hugs its words, any `.frame(maxWidth: .infinity)` outside it, and
+  text that can run to two lines at Large sits on a flat fill (the detail and Nearby, proven by
+  the `DrawnText` exception, are the only exceptions); tap regions 44 points each way and
+  elements at least 34 on their short side; pressed states wash or scale, never dim; and every
+  word from the generated copy.
+- **Type.** Every word is in a `TextRole` through `.brandFont`: the question in Regular, the
+  verdict, the grid's values, the headings, the tabs and the week's days and amounts in
+  SemiBold, a model that disagrees in Regular, Retry in Medium, the answer word in
+  `BricolageAnswer` at 0.3 of the page's width (120.6 points on a 402-point iPhone, 96 to 208,
+  growing with the large title) on one line, shrinking rather than breaking, and "Checking…" and
+  the error words in it at 28. SwiftUI can't set the answer's 0.86 line height, so 0.17 of its
+  size comes off the space above and below it instead, every text keeping its whole frame.
+- **The top bar** is the website's pills, trailing: the place in a chip with the website's pin
+  (no chevron, wrapping in its pill, never cut short) and the gear in a round chip beside it, in
+  the place of the website's cm | in pill, which stays in Settings. On approximate IP location
+  the website's "Use my exact location" chip sits beneath them (`CoreCopy.useExactLocation`),
+  and "Using approximate location." is no longer shown: it is the chip's VoiceOver hint, so the
+  user still hears why. A notice about the place (`AppCopy.slugGone`) is a chip of words above
+  it. `homeTopBar` and `HomeTopBar` say so (`approximate` is now only the notice). At
+  accessibility sizes the bar is leading, the gear trailing, so wrapped words read from the
+  left. Every word in it sits on a chip's flat fill, 8.18:1 or more on every band, where bare
+  ink under maybesnow's glow at the bar's right end is 4.87.
+- **The switcher is the website's tabs, and the segmented `Picker` is gone.** At standard sizes
+  a chip track at most 352 wide, centred, in equal thirds, the view on screen on an ink thumb
+  with its words in `pill`, sliding on the website's 300 ms curve (`PillSegments`); at
+  accessibility sizes, where a third would cut a label short, separate chips that wrap (This week
+  on a second line at AX3), not the website's smaller words broken mid-word. One container, the
+  tab bar (`.isTabBar`), labelled "Forecast period" (`views`), holds the three buttons,
+  `view-now`, `view-today` and `view-week` at every size, each `.isSelected` when shown. UIKit's
+  segmented control kept its own type size as the text grew, which `HomeAuditTests` allowed as
+  its one Dynamic Type exception; the tabs' words scale, so that exception is deleted and the
+  audit allows the home screen one fewer. The open decision about it ("The iPhone app's phases 5
+  and 6, reviewed") is closed by Carl's "as close to the website as possible".
+- **The hero.** The glyph sits at the top right, 35 below the page's top and 8 into the gutter,
+  in full ink (not the website's 0.95, so it matches the text it is tinted with), at 112 points
+  growing with the text to 176 and at most 0.4 of the width; the question sits 35 below it,
+  wrapping short of the glyph. At accessibility sizes the glyph has a line of its own above the
+  question. The question is offered the width beside the glyph and keeps its own
+  (`LimitedWidth`, IsItUI), so the heading's element hugs its words rather than reaching over the
+  glyph or across the gradient; the design's `.frame(maxWidth:)` would have grown it to the
+  whole width beside the glyph. The loading skeleton and its placeholder circle are gone, as the
+  website shows none, and the loading word doesn't pulse.
+- **Today's models and Now's hours are the website's grid**: three equal columns (two at
+  accessibility sizes, where "Météo-France" wraps after its hyphen), each cell its value over its
+  name, never lazy (`EqualColumns`, `ValueCell`). Each cell is one element over both lines, its
+  frame hugging them: a model read as its name with its amount as the value (`model-<i>`), an
+  hour as "20% chance at 10am" (`hour-<i>`). Now's chance bars are gone, as the website has
+  none; `HourRow.chance` stays in the presenter and the vectors.
+- **The week is the website's rows, and spec 10.2's agreement dots go.** Under "The week ahead"
+  (`CoreCopy.nextDays`, `week-heading`), each day is its name, a track with a dot from none to
+  the week's snowiest day (core `weekParts`' `track(0, max)`, ported as `WeekRow.left` through
+  `StripGeometry.track`, now internal and shared), its amount and its band; at accessibility
+  sizes the track goes, as the website drops it under 19 em, and the row stacks. How many
+  forecasts expect snow, which spec 10.2 made each day's signature, is now spoken only: each row
+  is one element, still read "Tuesday, 2cm, snow, 4 of 6 forecasts expect snow". The columns are
+  the website's least widths raised to the widest snow labels, so they line up row to row, which
+  the website's per-row grids don't quite do. `HomePage.week` is `{ heading, rows }` in the
+  TypeScript and the Swift, and `left` is a number, never null: core's is null only on a
+  placeholder row, which `homePage` never shows, so `page.ts` throws rather than pass one on.
+- **The footer** has the website's type and spacing: Updated and the notice 12 apart; Retry the
+  website's chip (`PillButton`, the page's chip colour with the `border` edge, at least 44 tall,
+  also under the error state's words); "Want the full picture?" 44 below with its links each on
+  a 44-point line; "Nearby:" and its places as one run that wraps, each place underlined with a
+  comma after all but the last (`AppCopy.listComma`, outside the underline and outside the
+  place's spoken label, so `app.buttons["Dundee"]` still finds it), two texts side by side
+  rather than `Text + Text`, which the iOS 26 SDK deprecates; a hairline 40 above the credits;
+  and the credits' links underlined rather than bold.
+- **Two website values are not copied**, as step 2 measured: the detail and the agreement
+  heading are full ink, not 0.9 (4.31:1 under snow's glow, and `DrawnText` matches pixels
+  against the exact ink), and Retry is filled with the chip colour, not 10% ink (4.01:1 on
+  maybesnow).
+- **What can't match the website.** No wordmark, Hot | Wet | Snow | Wind bar, city links, "All
+  places" or site links (Carl's rule); the gear has no website counterpart; the top bar and the
+  switcher stay pinned, as iOS's convention and the UI tests' (`pageWindow`) expect, where the
+  website's scroll away; the thumb moves when the pager settles, not with the finger; every
+  control is 44 points to tap (pills drawn 36, the chip 34, Retry 44, where the website's are 32,
+  about 20 and 32), and the links and places sit on 44-point lines, so the footer is airier; no
+  ellipsis on a long place; underlines at the font's own position and thickness; the optical size
+  fixed per face; the answer's 0.86 line height emulated; at large text sizes the app stacks where
+  the website shrinks its tabs and overlaps; the week's columns line up; the vh-based spacing is
+  fixed at the iPhone 17's values; and the website's intro, ad slot and places hub aren't pages of
+  the app. The 0.3 s colour fade on a view change and the loading word's pulse are on the Later
+  list.
+- **Tests.** TypeScript: `vectors.test.ts` (the chip without the line, the notice above it, the
+  week's heading and every dot between 0 and 100, Durham's at 0, 50 and 100, every snowless week
+  at 0), `homeScreens.test.ts` and the copy tests. Linux: `PageVectorTests` (the week's heading
+  and each dot against `page.json`), `HomePageTests` (the dots of Durham, Leeds and a snowless
+  week; the top bar's chip and notice) and the state tests, which now check `useMyLocation` to
+  know a chosen place isn't approximate, since `approximate` is nil either way. On macOS:
+  `HomeAuditTests` loses `exceptions[0]`, the segment term in `AuditLog.note` and the tabs it
+  matched by; it knows the size reached the app by whether This week's tab starts at or below
+  Now's bottom (`switcherWraps`), now that the tabs are buttons at both sizes. `HomeScreens.swift`
+  reads the week's heading and checks it (`week-heading`), and `HomeScreens.json` is regenerated
+  (the chip's words, no approximate line, the week's heading and dots). The other home tests need
+  no change: their labels, identifiers and the `WordsButton` geometry hold. The first macOS run
+  is to show whether the grids' cells, the pills and the tab bar's trait pass as the design
+  expects (its section 5's risks and fallbacks).
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,
@@ -4497,10 +4606,6 @@ index the crawler's own US town; see "Search engines").
 - The iPhone app: whether a recent place that came from "Use my location", chosen again from the
   list, follows the phone at the next launch (as now) or stays put ("The iPhone app's phase 6,
   reviewed").
-- The iPhone app: whether the home switcher, section 10.2's segmented `Picker`, is drawn as
-  Settings' units are (buttons in a segmented track whose labels grow with the text), which
-  would let `HomeAuditTests` drop its one Dynamic Type exception ("The iPhone app's phases 5 and
-  6, reviewed").
 - The iPhone app: whether to restore spec section 16's Smart Invert exemption for the glyph and
   the gradients, which the app now inverts with the text. Restored, it is for the page as a
   whole, its text too, and only once the window-sized element the audit fails is settled ("The

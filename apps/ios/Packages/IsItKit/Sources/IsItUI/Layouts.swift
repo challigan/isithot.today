@@ -2,10 +2,9 @@ import SwiftUI
 
 /// Lays its views out left to right, wrapping onto the next line when one doesn't fit, as text
 /// wraps, and a view wider than the line onto lines of its own: the footer's links and places at
-/// any text size, the top bar's approximate line, and at accessibility sizes the switcher's
-/// buttons and a week row's day and amount. Each view is laid out once, wherever it goes, so the
-/// accessibility audit follows one element as the text grows, where `ViewThatFits` chooses
-/// between copies of it.
+/// any text size, and at accessibility sizes the switcher's tabs and a week row's day and amount.
+/// Each view is laid out once, wherever it goes, so the accessibility audit follows one element
+/// as the text grows, where `ViewThatFits` chooses between copies of it.
 struct FlowLayout: Layout {
   var spacing: CGFloat
   var lineSpacing: CGFloat
@@ -119,5 +118,33 @@ struct EqualColumns: Layout {
   private func idealWidth(of subviews: Subviews) -> CGFloat {
     let widest = subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
     return widest * CGFloat(count) + spacing * CGFloat(count - 1)
+  }
+}
+
+/// Offers its one view no more than `width`, and takes the view's own size: a text wraps short of
+/// `width` and its frame still hugs its words, where `.frame(maxWidth:)` would grow to `width` and
+/// take the page's gradient beside a short line into the text's accessibility element. The
+/// question beside the glyph: an element on a page's gradient hugs its words (DECISIONS, "The
+/// iPhone app in the website's look").
+struct LimitedWidth: Layout {
+  var width: CGFloat
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    subviews.first?.sizeThatFits(offer(proposal)) ?? .zero
+  }
+
+  func placeSubviews(
+    in bounds: CGRect,
+    proposal: ProposedViewSize,
+    subviews: Subviews,
+    cache: inout ()
+  ) {
+    subviews.first?.place(at: bounds.origin, proposal: offer(proposal))
+  }
+
+  /// The width offered, at most `width`; `width` when none is.
+  private func offer(_ proposal: ProposedViewSize) -> ProposedViewSize {
+    let most = max(width, 0)
+    return ProposedViewSize(width: min(proposal.width ?? most, most), height: proposal.height)
   }
 }

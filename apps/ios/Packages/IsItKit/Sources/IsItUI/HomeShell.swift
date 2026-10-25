@@ -1,10 +1,13 @@
 import IsItLogic
+import IsItModel
 import SwiftUI
 
 /// The home screen's frame (iOS build spec, section 10.2): the background of the page on
 /// screen, full bleed, cross-fading in 0.9 s when its band changes (at once with Reduce Motion),
 /// with the top bar above the pages. The pages are `content`: the switcher (`ViewSwitcher`) over
-/// the pager of Now, Today and This week (`HomePager`), with `theme` the page on screen's.
+/// the pager of Now, Today and This week (`HomePager`), with `theme` the page on screen's. The
+/// top bar's chips take their fills from it, on the page surface (DECISIONS, "The iPhone app in
+/// the website's look").
 public struct HomeShell<Content: View>: View {
   let topBar: HomeTopBar
   let theme: PageTheme
@@ -27,7 +30,7 @@ public struct HomeShell<Content: View>: View {
 
   public var body: some View {
     VStack(spacing: 0) {
-      TopBarView(topBar: topBar, actions: actions)
+      TopBarView(topBar: topBar, theme: theme, actions: actions)
       // The content must take the height it is offered, no more: this frame doesn't clamp a view
       // taller than its offer, and a home screen taller than the screen is centred in it, the
       // top bar pushed under the status bar (as the pager's pages did until main's first macOS
@@ -38,6 +41,8 @@ public struct HomeShell<Content: View>: View {
     .foregroundStyle(theme.ink)
     .tint(theme.ink)
     .environment(\.colorScheme, theme.controls)
+    .environment(\.pageTheme, theme)
+    .environment(\.surface, .page)
     .background {
       ZStack {
         PageBackground(theme: theme)
@@ -52,81 +57,80 @@ public struct HomeShell<Content: View>: View {
   }
 }
 
-/// The top bar: the place as a button that opens the picker ("Place: Leeds. Change place."),
-/// wrapping to two lines at large text sizes; the gear for Settings; and on the approximate IP
-/// place, the line beneath with "Use my location", which goes under the line's text when the two
-/// don't fit side by side.
+/// The top bar, in the website's arrangement (Header.astro; DECISIONS, "The iPhone app in the
+/// website's look"): a 44-point line holding the place as a pill with the website's pin, which
+/// opens the picker ("Place: Leeds. Change place."), and beside it the gear for Settings in a
+/// round chip; beneath them, a notice about the place while there is one, and on the approximate
+/// IP place the website's "Use my exact location" chip, whose VoiceOver hint says the place is
+/// approximate. Trailing, where the website puts its pills; at accessibility text sizes leading,
+/// with the gear trailing, so wrapped words read from the left. A long place name wraps in its
+/// pill, never cut short. Every word sits on a chip's flat fill, never on the page's gradient,
+/// and each pill is its own accessibility element (`PillButton`). Its colours follow the page on
+/// screen's, fading as the background does.
 struct TopBarView: View {
   let topBar: HomeTopBar
+  let theme: PageTheme
   let actions: HomeActions
 
-  @ScaledMetric(relativeTo: .title3) private var tapSize: CGFloat = 44
+  @Environment(\.dynamicTypeSize) private var typeSize
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @SurfaceTokens private var tokens
+  /// The pin, the website's 16 points beside the place's words, growing with them.
+  @ScaledMetric(relativeTo: .callout) private var pin: CGFloat = 16
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 2) {
-      HStack(alignment: .center, spacing: 12) {
-        Button {
-          actions.openPlacePicker()
-        } label: {
-          HStack(alignment: .firstTextBaseline, spacing: 6) {
+    let accessibilitySize = typeSize.isAccessibilitySize
+    VStack(alignment: accessibilitySize ? .leading : .trailing, spacing: 0) {
+      HStack(alignment: .center, spacing: 8) {
+        if !accessibilitySize {
+          Spacer(minLength: 0)
+        }
+        PillButton(.chip(minHeight: 36), action: actions.openPlacePicker) {
+          HStack(spacing: 6.4) {
+            // Stroked 2 units in 24, with round caps and joins, as the website strokes it.
+            PinShape()
+              .stroke(style: StrokeStyle(lineWidth: pin / 12, lineCap: .round, lineJoin: .round))
+              .frame(width: pin, height: pin)
             Text(verbatim: topBar.place)
-              .font(.title3.weight(.semibold))
-              .lineLimit(2)
-              .multilineTextAlignment(.leading)
-            Image(systemName: "chevron.down")
-              .font(.footnote.weight(.semibold))
-              .accessibilityHidden(true)
+              .brandFont(.label)
           }
-          .frame(minHeight: tapSize, alignment: .leading)
         }
         .accessibilityLabel(Text(verbatim: topBar.placeLabel))
         .accessibilityIdentifier("place")
-        Spacer(minLength: 8)
-        Button {
-          actions.openSettings()
-        } label: {
-          Image(systemName: "gearshape")
-            .font(.title3)
-            .frame(minWidth: tapSize, minHeight: tapSize)
+        if accessibilitySize {
+          Spacer(minLength: 8)
         }
-        .accessibilityLabel(Text(verbatim: topBar.settings))
+        IconPillButton(
+          systemName: "gearshape", label: topBar.settings, action: actions.openSettings
+        )
         .accessibilityIdentifier("settings")
       }
-      if let approximate = topBar.approximate {
-        // One text and one button, side by side while they fit and the button under the text
-        // when they don't, the text wrapping as it must: the footer's way with its links, which
-        // the audit passes. Not `ViewThatFits`, a choice between two copies of the same views:
-        // inside it, the audit on PR #31's macOS run found both elements' Dynamic Type
-        // "partially unsupported" on every page, and "Use my location" short of contrast on
-        // the pale ones.
-        FlowLayout(spacing: 6, lineSpacing: 0) {
-          approximateLine(approximate)
+      if let notice = topBar.approximate {
+        // Words, not a control: the chip is their flat fill, and the text alone their element.
+        Text(verbatim: notice)
+          .brandFont(.note)
+          .fixedSize(horizontal: false, vertical: true)
+          .accessibilityIdentifier("approximate")
+          .padding(.vertical, 6)
+          .padding(.horizontal, 12)
+          .background(tokens.chip, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+          .padding(.top, 4)
+      }
+      if let exact = topBar.useMyLocation {
+        // The website's `.place-note`, drawn 34 tall, the shortest element the audit's
+        // hit-region check has passed (`HitTarget.shortestElement`), and tapped on its 44-point
+        // line.
+        PillButton(.chip(minHeight: HitTarget.shortestElement), action: actions.useMyLocation) {
+          Text(verbatim: exact)
+            .underline()
+            .brandFont(.caption)
         }
-        .font(.footnote)
+        .accessibilityHint(Text(verbatim: CoreCopy.approximate))
+        .accessibilityIdentifier("use-my-location")
       }
     }
     .padding(.horizontal, 20)
-    .padding(.top, 4)
-    .padding(.bottom, 4)
-  }
-
-  /// "Using approximate location." and its button, each centred in a line as tall as the
-  /// button's hit region, so the two read as one line when they share it. The button's element is
-  /// its words' band of the line (`WordsButton`), as the text's is its own.
-  @ViewBuilder private func approximateLine(_ text: String) -> some View {
-    Text(verbatim: text)
-      .fixedSize(horizontal: false, vertical: true)
-      .frame(minHeight: HitTarget.minimum)
-      .accessibilityIdentifier("approximate")
-    if let useMyLocation = topBar.useMyLocation {
-      WordsButton {
-        actions.useMyLocation()
-      } label: {
-        Text(verbatim: useMyLocation)
-          .fontWeight(.semibold)
-          .underline()
-      }
-      .accessibilityIdentifier("use-my-location")
-    }
+    .padding(.top, 6)
+    .animation(reduceMotion ? nil : .easeInOut(duration: 0.9), value: theme)
   }
 }

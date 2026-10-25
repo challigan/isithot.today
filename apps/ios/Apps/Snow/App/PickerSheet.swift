@@ -5,8 +5,9 @@ import IsItUI
 import SwiftUI
 import UIKit
 
-/// Why the picker opened: the top bar's place button, or "Use my location" on the approximate
-/// line, which starts the location fix as the picker opens (permission is asked at that tap).
+/// Why the picker opened: the top bar's place pill, or its "Use my exact location" chip on
+/// approximate location, which starts the location fix as the picker opens (permission is asked
+/// at that tap).
 /// Each opening is a request of its own.
 struct PickerRequest: Identifiable, Equatable {
   let id = UUID()

@@ -708,11 +708,14 @@ describe('the cases cover what section 7.4 asks for', () => {
           );
         }
       }
-      // Up to seven days (fewer where the forecast ends), each with its agreement and never a
-      // percentage.
+      // "The week ahead", then up to seven days (fewer where the forecast ends), each with its
+      // dot on the week's track and its agreement, never a percentage.
       if (o.week) {
+        expect(o.week.heading).toBe(COPY.nextDays);
         expect(o.week.rows.length).toBeLessThanOrEqual(7);
         for (const row of o.week.rows) {
+          expect(row.left).toBeGreaterThanOrEqual(0);
+          expect(row.left).toBeLessThanOrEqual(100);
           expect(row.snowy).toBeLessThanOrEqual(row.total);
           expect(row.spoken).toMatch(/^[A-Z][a-z]+day, /);
           expect(row.spoken).not.toContain('%');
@@ -739,6 +742,23 @@ describe('the cases cover what section 7.4 asks for', () => {
       snowy: 6,
       total: 6,
     });
+    // Each dot from none to the snowiest day: the snowiest at the track's end, a day without
+    // snow at its start, the rest in proportion, as the website draws them (core `track`).
+    const amounts = durhamWeek.week.rows.map((r: any) => Number.parseFloat(r.amount));
+    const most = Math.max(...amounts);
+    expect(durhamWeek.week.rows.map((r: any) => r.left)).toEqual(
+      amounts.map((a: number) => (a / most) * 100),
+    );
+    expect(durhamWeek.week.rows[0].left).toBe(0);
+    expect(Math.max(...durhamWeek.week.rows.map((r: any) => r.left))).toBe(100);
+    // A week without snow keeps every dot at the start (core's track divides by 1).
+    const dry = cases.filter((c) =>
+      (c.out as any).week?.rows.every((r: any) => r.amount === '0cm'),
+    );
+    expect(dry.length).toBeGreaterThan(0);
+    for (const c of dry) {
+      expect((c.out as any).week.rows.every((r: any) => r.left === 0)).toBe(true);
+    }
     expect(
       cases.some((c) =>
         (c.out as any).hours?.rows.some(
@@ -768,7 +788,7 @@ describe('the cases cover what section 7.4 asks for', () => {
     }
   });
 
-  it('homeTopBar: the place or "Finding you…", the approximate line or the notice', () => {
+  it('homeTopBar: the place or "Finding you…", the exact-location chip and the notice', () => {
     const cases = casesFor('page', 'homeTopBar');
     const bar = (placeName: string | null, approximate: boolean, notice: string | null) =>
       cases.find(
@@ -777,13 +797,16 @@ describe('the cases cover what section 7.4 asks for', () => {
           (c.in as In).approximate === approximate &&
           (c.in as In).notice === notice,
       )?.out as any;
+    // On approximate location, the website's chip and no line: VoiceOver hears "Using
+    // approximate location." as the chip's hint.
     expect(bar('Leeds', true, null)).toEqual({
       place: 'Leeds',
       placeLabel: 'Place: Leeds. Change place.',
-      approximate: COPY.approximate,
-      useMyLocation: COPY.useMyLocation,
+      approximate: null,
+      useMyLocation: COPY.useExactLocation,
       settings: APP_COPY.settings,
     });
+    expect(COPY.useExactLocation).toBe('Use my exact location');
     expect(bar('Leeds', false, null)).toMatchObject({ approximate: null, useMyLocation: null });
     for (const unknown of [null, '']) {
       expect(bar(unknown, true, null)).toMatchObject({
@@ -791,10 +814,10 @@ describe('the cases cover what section 7.4 asks for', () => {
         placeLabel: fill(APP_COPY.placeButtonUnknown, { status: COPY.locating }),
       });
     }
-    // The notice takes the approximate line's place, and shows on a chosen place too.
+    // The notice shows above the chip on approximate location, and on a chosen place alone.
     expect(bar(null, true, APP_COPY.slugGone)).toMatchObject({
       approximate: APP_COPY.slugGone,
-      useMyLocation: COPY.useMyLocation,
+      useMyLocation: COPY.useExactLocation,
     });
     expect(bar('Leeds', false, APP_COPY.slugGone)).toMatchObject({
       approximate: APP_COPY.slugGone,
