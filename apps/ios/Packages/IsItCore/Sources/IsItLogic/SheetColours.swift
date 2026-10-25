@@ -1,8 +1,8 @@
 import Foundation
 import IsItModel
 
-/// The colours the sheets (the place picker, Settings with its pages, and the mail fallback)
-/// draw their own text in where the system's fall short of WCAG AA's 4.5:1 for text under 18
+/// The colours Settings' sheets (Settings with its pages, and the mail fallback; the place picker
+/// wears the page's band now) draw their own text in where the system's fall short of WCAG AA's 4.5:1 for text under 18
 /// points (iOS build spec, section 16), each 0xRRGGBB in sRGB, with the system backgrounds that
 /// text sits on, which a Linux test holds them to. The sheets follow the system's appearance,
 /// not a page's palette, and in the light appearance two system colours fail: the secondary

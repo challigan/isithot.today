@@ -1,7 +1,6 @@
 import IsItLogic
 import IsItModel
 import SwiftUI
-import UIKit
 
 /// What the place picker asks the app to do (iOS build spec, section 10.3). The picker keeps no
 /// state of its own but the search box's text, which the app's model holds through `text`.
@@ -16,8 +15,17 @@ public struct PlacePickerActions {
   public var choose: (SearchResult) -> Void
   /// A recent place.
   public var chooseRecent: (RecentPlace) -> Void
-  /// A recent place swiped away.
-  public var removeRecent: (RecentPlace) -> Void
+  /// A saved place.
+  public var chooseSaved: (SavedPlace) -> Void
+  /// A result's empty star: saves it, choosing nothing.
+  public var saveResult: (SearchResult) -> Void
+  /// A recent place's empty star, or "Save {place}" in its menu: it moves to Saved.
+  public var saveRecent: (RecentPlace) -> Void
+  /// A filled star, or "Remove {place} from saved places" in a saved place's menu: it goes back
+  /// on top of Recent.
+  public var unsave: (Target) -> Void
+  /// "Delete" in a recent place's menu: it is forgotten.
+  public var deleteRecent: (RecentPlace) -> Void
   /// Close.
   public var close: () -> Void
 
@@ -27,7 +35,11 @@ public struct PlacePickerActions {
     openSettings: @escaping () -> Void,
     choose: @escaping (SearchResult) -> Void,
     chooseRecent: @escaping (RecentPlace) -> Void,
-    removeRecent: @escaping (RecentPlace) -> Void,
+    chooseSaved: @escaping (SavedPlace) -> Void,
+    saveResult: @escaping (SearchResult) -> Void,
+    saveRecent: @escaping (RecentPlace) -> Void,
+    unsave: @escaping (Target) -> Void,
+    deleteRecent: @escaping (RecentPlace) -> Void,
     close: @escaping () -> Void
   ) {
     self.submit = submit
@@ -35,231 +47,251 @@ public struct PlacePickerActions {
     self.openSettings = openSettings
     self.choose = choose
     self.chooseRecent = chooseRecent
-    self.removeRecent = removeRecent
+    self.chooseSaved = chooseSaved
+    self.saveResult = saveResult
+    self.saveRecent = saveRecent
+    self.unsave = unsave
+    self.deleteRecent = deleteRecent
     self.close = close
   }
 }
 
-/// The place picker, a full-screen sheet (iOS build spec, section 10.3), drawn from IsItLogic's
-/// `PlacePicker`: the search box under the navigation bar ("Town or city", `SearchBox`), "Use my
-/// location" as the first row, then the search's line or its results ("Leeds", with "England,
-/// United Kingdom" beneath), or with nothing typed, the recent places under "Recent", each of
-/// which can be swiped away. A native `List`, so it follows Dark Mode, Dynamic Type and the
-/// system's accessibility settings; its secondary lines and its tint are `SheetStyle`'s, which
-/// meet WCAG AA where the system's light ones don't.
+/// The place picker, a full-screen sheet in the website's look (`SearchSheet.astro`; DECISIONS,
+/// "The iPhone app in the website's look", step 5), drawn from IsItLogic's `PlacePicker` on the
+/// sheet surface: the band of the page on screen (`theme`), the website's `.sheet` gradient
+/// (`SheetBackground`), every word in its ink and Bricolage, no cards and no hairlines. The title
+/// row with its Close pill (`SheetHeader`) and the search box (`SearchBox`) stay put; beneath them
+/// a page of rows scrolls: "Use my location", the search's line or its results, or with nothing
+/// typed, the saved places under "Saved" and the recent places under "Recent", each place with
+/// its star (PickerChrome.swift).
+///
+/// A `ScrollView` and a `VStack`, every row made at once, not a `List`: a lazy container's text
+/// was "partially unsupported" by the audit's Dynamic Type check though it grew (PR #33's runs),
+/// and the saved places make the list longer than any the audit passed. So there are no swipes:
+/// a recent place is saved by its star or its press-and-hold menu and forgotten by Delete there,
+/// a saved place removed by its star or its menu, each item a VoiceOver action as well. The
+/// keyboard stays down as the sheet opens, so Saved and Recent show whole, and a drag on the rows
+/// puts it away. It follows the band if it changes while open, fading in 0.9 s as the pages do
+/// (at once under Reduce Motion), and never Dark Mode: the system's parts on it (the status bar,
+/// the keyboard, the spinner, the menus) take the band's colour scheme.
 public struct PlacePickerView: View {
   let picker: PlacePicker
   @Binding var text: String
+  let theme: PageTheme
   let actions: PlacePickerActions
 
-  public init(picker: PlacePicker, text: Binding<String>, actions: PlacePickerActions) {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  public init(
+    picker: PlacePicker, text: Binding<String>, theme: PageTheme, actions: PlacePickerActions
+  ) {
     self.picker = picker
     _text = text
+    self.theme = theme
     self.actions = actions
   }
 
   public var body: some View {
-    NavigationStack {
-      // The box above the list, not in a `safeAreaInset`, so no row runs under it (the Debug
-      // recorder's lesson, DebugHooks.swift).
-      VStack(spacing: 0) {
-        SearchBox(
-          text: $text, prompt: picker.prompt, clear: picker.clear, submit: actions.submit
-        )
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        list
+    VStack(spacing: 0) {
+      SheetHeader(title: picker.title, close: picker.close, action: actions.close)
+      // Above the rows, not in a `safeAreaInset`, so no row runs under it (the Debug recorder's
+      // lesson, DebugHooks.swift).
+      SearchBox(text: $text, prompt: picker.prompt, clear: picker.clear, submit: actions.submit)
+        .padding(.top, 12)
+      ScrollView {
+        rows
+          .padding(.top, 12)
+          .padding(.bottom, 24)
       }
-      .background(Color(uiColor: .systemGroupedBackground))
-      .navigationTitle(Text(verbatim: picker.title))
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button {
-            actions.close()
-          } label: {
-            CloseLabel(title: picker.close)
-          }
-          .accessibilityIdentifier("picker-close")
-        }
-      }
+      // A drag on the rows puts the keyboard away, so the results under it can be read and the
+      // audit reads them with it down; with the default, a drag on the results left the keyboard
+      // up on PR #33's macOS run. The rows bounce however few they are, so the drag is a scroll.
+      .scrollDismissesKeyboard(.immediately)
+      .scrollBounceBehavior(.always)
     }
-    // Use my location, Open Settings and Close: the system's blue gives 3.59:1 on the list's
-    // background (`SheetStyle`).
-    .tint(SheetStyle.accent)
+    .padding(.horizontal, 16)
+    .padding(.top, 12)
+    .foregroundStyle(theme.ink)
+    .tint(theme.ink)
+    .animation(fade, value: theme)
+    .environment(\.colorScheme, theme.controls)
+    .environment(\.pageTheme, theme)
+    .environment(\.surface, .sheet)
+    .background {
+      ZStack {
+        SheetBackground(theme: theme)
+          .id(theme)
+          .transition(.opacity)
+      }
+      .animation(fade, value: theme)
+      // Decoration with no accessibility element, and no accessibility modifier here or in
+      // `SheetBackground`: one on views without an element makes one (Backgrounds.swift).
+    }
   }
 
-  /// "Use my location", then the search's line, its results or the recent places.
-  private var list: some View {
-    List {
-      Section {
-        locationRow
-      }
+  /// The band's cross-fade, none under Reduce Motion.
+  private var fade: Animation? {
+    reduceMotion ? nil : .easeInOut(duration: 0.9)
+  }
+
+  /// A change that moves a row between Saved and Recent, animated as the system animates one,
+  /// at once under Reduce Motion.
+  private func moving(_ change: () -> Void) {
+    withAnimation(reduceMotion ? nil : .default, change)
+  }
+
+  /// "Use my location", then the search's line, its results, or the saved and recent places.
+  private var rows: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      locationRows
       if let status = picker.status {
-        Section {
-          Text(verbatim: status)
-            .foregroundStyle(SheetStyle.secondary)
-            .accessibilityIdentifier("search-status")
-        }
+        PickerLine(text: status, identifier: "search-status")
       }
-      if !picker.results.isEmpty {
-        Section {
-          ForEach(picker.results) { row in
-            Button {
-              actions.choose(row.result)
-            } label: {
-              PlaceRowLabel(name: row.name, detail: row.detail)
+      ForEach(picker.results) { row in
+        PlaceRow(
+          name: row.name,
+          detail: row.detail,
+          value: row.value,
+          identifier: "result-\(row.id)",
+          star: row.star,
+          menu: [],
+          choose: { actions.choose(row.result) },
+          toggleStar: {
+            // In place: the sheet stays open on the same results.
+            if row.star?.saved == true {
+              actions.unsave(Target(search: row.result))
+            } else {
+              actions.saveResult(row.result)
             }
-            .accessibilityIdentifier("result-\(row.id)")
           }
-        }
+        )
       }
-      if let heading = picker.recentHeading {
-        Section {
-          ForEach(picker.recents) { row in
-            Button {
-              actions.chooseRecent(row.place)
-            } label: {
-              PlaceRowLabel(name: row.name, detail: nil)
-            }
-            .accessibilityIdentifier("recent-\(row.id)")
-          }
-          .onDelete { offsets in
-            let places = offsets.map { picker.recents[$0].place }
-            for place in places { actions.removeRecent(place) }
-          }
-        } header: {
-          // As written: section headers are capitalised otherwise.
-          Text(verbatim: heading)
-            .textCase(nil)
-            .foregroundStyle(SheetStyle.secondary)
-            .accessibilityIdentifier("recent-heading")
-        }
-      }
+      savedRows
+      recentRows
     }
-    .listStyle(.insetGrouped)
-    // A drag on the list puts the keyboard away, so the results under it can be read and the
-    // audit reads them with it down; with the default, a drag on the results left the keyboard
-    // up on PR #33's macOS run. The list bounces however short it is, so the drag is a scroll.
-    .scrollDismissesKeyboard(.immediately)
-    .scrollBounceBehavior(.always)
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
-  /// "Use my location", with the line beneath it while the fix is out or when it came to
-  /// nothing, and "Open Settings" while location access is off. The title wraps beside its icon
-  /// as the other rows' text does: as a `Label`'s title, the picker's only one, it was the one text
-  /// the audit expected to be clipped at larger sizes on PR #33's macOS run.
-  @ViewBuilder private var locationRow: some View {
+  /// "Use my location", the website's first row: semibold, no icon, washed while pressed, with an
+  /// ink spinner while the fix is out (when a second tap does nothing); then its line ("Finding
+  /// you…", location access off, no fix) and, while access is off, "Open Settings", drawn as the
+  /// pages draw a link.
+  @ViewBuilder private var locationRows: some View {
     let row = picker.location
-    Button {
-      actions.useMyLocation()
-    } label: {
-      HStack {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-          Image(systemName: "location.fill")
-            .accessibilityHidden(true)
-          Text(verbatim: row.title)
-            .fixedSize(horizontal: false, vertical: true)
-        }
+    Button(action: actions.useMyLocation) {
+      HStack(spacing: 8) {
+        Text(verbatim: row.title)
+          .brandFont(.labelStrong)
+          .fixedSize(horizontal: false, vertical: true)
+        Spacer(minLength: 0)
         if row.busy {
-          Spacer(minLength: 8)
           ProgressView()
         }
       }
+      .padding(.horizontal, 8)
+      .padding(.vertical, 10.4)
+      .frame(maxWidth: .infinity, minHeight: HitTarget.minimum, alignment: .leading)
+      .contentShape(Rectangle())
     }
+    .buttonStyle(RowPressStyle(cornerRadius: 9.6))
     .disabled(row.busy)
     .accessibilityIdentifier("picker-use-my-location")
     if let detail = row.detail {
-      Text(verbatim: detail)
-        .font(.subheadline)
-        .foregroundStyle(SheetStyle.secondary)
-        .fixedSize(horizontal: false, vertical: true)
-        .accessibilityIdentifier("location-detail")
+      PickerLine(text: detail, identifier: "location-detail")
     }
     if let openSettings = row.openSettings {
-      Button {
-        actions.openSettings()
-      } label: {
+      WordsButton(action: actions.openSettings) {
         Text(verbatim: openSettings)
+          .underline()
+          .brandFont(.labelStrong)
       }
       .accessibilityIdentifier("open-settings")
+      .padding(.horizontal, 8)
+    }
+  }
+
+  /// With nothing typed, "Saved" and the saved places, each removed by its filled star or its
+  /// menu; the hint with none saved, and the line once the list is full.
+  @ViewBuilder private var savedRows: some View {
+    if let heading = picker.savedHeading {
+      PickerHeading(text: heading, identifier: "saved-heading")
+    }
+    ForEach(picker.saved) { row in
+      let remove = { moving { actions.unsave(row.place.target) } }
+      PlaceRow(
+        name: row.name,
+        detail: row.detail,
+        value: nil,
+        identifier: "saved-\(row.id)",
+        star: row.star,
+        menu: [RowAction(label: row.star.label, run: remove)],
+        choose: { actions.chooseSaved(row.place) },
+        toggleStar: remove
+      )
+    }
+    if let hint = picker.savedHint {
+      PickerLine(text: hint, identifier: "saved-hint")
+    }
+    if let full = picker.savedFull {
+      PickerLine(text: full, identifier: "saved-full")
+    }
+  }
+
+  /// With nothing typed and some to show, "Recent" and the recent places, each saved by its empty
+  /// star or its menu, and forgotten by Delete in its menu.
+  @ViewBuilder private var recentRows: some View {
+    if let heading = picker.recentHeading {
+      PickerHeading(text: heading, identifier: "recent-heading")
+    }
+    ForEach(picker.recents) { row in
+      let save = { moving { actions.saveRecent(row.place) } }
+      let delete = RowAction(label: picker.deleteRecent, destructive: true) {
+        moving { actions.deleteRecent(row.place) }
+      }
+      PlaceRow(
+        name: row.name,
+        detail: row.detail,
+        value: nil,
+        identifier: "recent-\(row.id)",
+        star: row.star,
+        menu: row.star.map { [RowAction(label: $0.label, run: save), delete] } ?? [delete],
+        choose: { actions.chooseRecent(row.place) },
+        toggleStar: save
+      )
     }
   }
 }
 
-/// The search box, the app's own: a text field with its prompt ("Town or city"), the keyboard's
-/// Search key choosing the first result, and while it holds text, the box's clear button
-/// ("Clear search", the xmark), 44 points square. Not the system's search (`.searchable`), whose
-/// field keeps its own clear button about 20 points square, which the accessibility audit
-/// failed as too small to tap on PR #33's second macOS run, and which SwiftUI doesn't let the
-/// app resize or remove. The field is UIKit's rounded one, at its own height (about 34 points at
-/// the default text size, growing with it): a plain field is only as tall as its line, under
-/// what the audit's hit-region check has passed (`HitTarget.shortestElement`). Its prompt is in
-/// `SheetStyle.secondary`, where the system's placeholder gives about 1.7:1.
-private struct SearchBox: View {
-  @Binding var text: String
-  let prompt: String
-  let clear: String
-  let submit: () -> Void
-
-  @FocusState private var focused: Bool
+/// A heading over a list of places, "Saved" or "Recent", as written (no capitals), with the
+/// header trait so the rotor moves between the lists.
+private struct PickerHeading: View {
+  let text: String
+  let identifier: String
 
   var body: some View {
-    HStack(spacing: 4) {
-      TextField(
-        text: $text,
-        prompt: Text(verbatim: prompt).foregroundStyle(SheetStyle.secondary)
-      ) {
-        Text(verbatim: prompt)
-      }
-      .textFieldStyle(.roundedBorder)
-      .focused($focused)
-      .submitLabel(.search)
-      .onSubmit(submit)
-      .textInputAutocapitalization(.words)
-      .autocorrectionDisabled()
-      .accessibilityAddTraits(.isSearchField)
-      .accessibilityIdentifier("place-search")
-      if !text.isEmpty {
-        Button {
-          text = ""
-          focused = true
-        } label: {
-          Label {
-            Text(verbatim: clear)
-          } icon: {
-            Image(systemName: "xmark.circle.fill")
-          }
-          .labelStyle(.iconOnly)
-          .foregroundStyle(SheetStyle.secondary)
-          .frame(minWidth: HitTarget.minimum, minHeight: HitTarget.minimum)
-          .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("clear-search")
-      }
-    }
-    .frame(minHeight: HitTarget.minimum)
+    Text(verbatim: text)
+      .brandFont(.heading)
+      .fixedSize(horizontal: false, vertical: true)
+      .accessibilityAddTraits(.isHeader)
+      .accessibilityIdentifier(identifier)
+      .padding(.horizontal, 8)
+      .padding(.top, 16)
+      .padding(.bottom, 4)
   }
 }
 
-/// A place's row: its name, and the region and country beneath when known. Read as one
-/// element, the name first.
-private struct PlaceRowLabel: View {
-  let name: String
-  let detail: String?
+/// A line of words in place of rows, the website's `.status`: the search's line, the location's,
+/// the saved places' hint and full line.
+private struct PickerLine: View {
+  let text: String
+  let identifier: String
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 2) {
-      Text(verbatim: name)
-        .foregroundStyle(.primary)
-      if let detail {
-        Text(verbatim: detail)
-          .font(.subheadline)
-          .foregroundStyle(SheetStyle.secondary)
-      }
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .contentShape(Rectangle())
+    Text(verbatim: text)
+      .brandFont(.line)
+      .fixedSize(horizontal: false, vertical: true)
+      .accessibilityIdentifier(identifier)
+      .padding(.horizontal, 8)
+      .padding(.vertical, 10.4)
   }
 }

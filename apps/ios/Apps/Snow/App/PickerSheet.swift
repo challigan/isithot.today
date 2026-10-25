@@ -15,10 +15,13 @@ struct PickerRequest: Identifiable, Equatable {
 }
 
 /// The place picker's sheet (iOS build spec, section 10.3): a picker model of its own
-/// (`AppModel.makePicker()`, IsItState) drawn by IsItUI's `PlacePickerView`. It closes when a
-/// place is chosen (`finished`), and its search stops with it; the chosen place goes on loading
-/// on the home screen.
+/// (`AppModel.makePicker()`, IsItState) drawn by IsItUI's `PlacePickerView`, in the colours of the
+/// page on screen (`theme`), read from the app's model in the body, so the picker follows a
+/// refresh that changes the band while it is open. It closes when a place is chosen (`finished`),
+/// and its search stops with it; the chosen place goes on loading on the home screen. A star
+/// saves or removes a place and chooses nothing.
 struct PickerSheet: View {
+  let model: AppModel
   let request: PickerRequest
   @State private var picker: PlacePickerModel
   /// Whether the request's location fix has started, so it starts once.
@@ -28,8 +31,14 @@ struct PickerSheet: View {
   @Environment(\.openURL) private var openURL
 
   init(model: AppModel, request: PickerRequest) {
+    self.model = model
     self.request = request
     _picker = State(initialValue: model.makePicker())
+  }
+
+  /// The page on screen's colours, as the home screen draws it: the picker wears its band.
+  private var theme: PageTheme {
+    PageTheme(model.page(model.view, at: model.now).palette)
   }
 
   var body: some View {
@@ -37,6 +46,7 @@ struct PickerSheet: View {
     PlacePickerView(
       picker: picker.content,
       text: Binding(get: { picker.text }, set: { picker.type($0) }),
+      theme: theme,
       actions: PlacePickerActions(
         submit: { Task { await picker.submit() } },
         useMyLocation: { Task { await picker.useMyLocation() } },
@@ -45,7 +55,11 @@ struct PickerSheet: View {
         },
         choose: { result in Task { await picker.choose(result) } },
         chooseRecent: { place in Task { await picker.choose(place) } },
-        removeRecent: { picker.remove($0) },
+        chooseSaved: { place in Task { await picker.choose(saved: place) } },
+        saveResult: { result in picker.save(result) },
+        saveRecent: { place in picker.save(place) },
+        unsave: { target in picker.unsave(target) },
+        deleteRecent: { place in picker.remove(place) },
         close: { dismiss() }
       )
     )

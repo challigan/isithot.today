@@ -4265,6 +4265,73 @@ fields. "Saved places (the iPhone app)" above says what they are.
   for a change that changes nothing). Three state tests now expect a chosen result's line among
   the recent places.
 
+**Step 5: the picker in the website's look, with saved places.** The full-screen picker drawn
+as the website's (`SearchSheet.astro`, `.sheet`), with step 4's saved places in it. This
+supersedes spec 10.3 on the picker's look: no navigation bar, no grouped list, no system blue.
+
+- **Its surface is the sheet**, in the band of the page on screen when it opens (Now, Today or
+  This week, whichever is showing), followed if a refresh changes it while open, fading in 0.9 s
+  as the pages do (at once under Reduce Motion), as the website's picker takes `:root`'s palette.
+  `PickerSheet` reads the theme from the model in its own body, so the cover follows the model.
+  The background is `SheetBackground` (the band's `pill` to 15% `g2`, no glow), every word is in
+  its ink, and the system's parts on it (the status bar, the keyboard, the spinner, the menus)
+  take the band's colour scheme. It never follows Dark Mode, as the pages don't; spec 10.1's
+  "sheets follow Dark Mode" no longer holds for it. Settings follows in step 6.
+- **Not a `List`.** A `ScrollView` and a `VStack` below the title row and the box, every row made
+  at once, as the build plan's rule 1 asks of every page: a lazy container's text was "partially
+  unsupported" by the audit's Dynamic Type check though it grew (PR #33's runs), and saved places
+  make the list longer than any the audit passed. The keyboard still goes with a drag
+  (`scrollDismissesKeyboard(.immediately)`) and the rows still bounce.
+- **Press and hold instead of swipes**, which only a `List` has (Carl's open question 3, on its
+  default). A recent place's menu holds "Save {place}" when it can be saved and "Delete"
+  (`AppCopy.deleteRecent`, destructive); a saved place's holds "Remove {place} from saved
+  places". Each item is the same row's VoiceOver action (`accessibilityAction(named:)`), and the
+  star stays the main way to save and remove.
+- **The parts** (PickerChrome.swift). `SheetHeader`: "Search for a place" (`sheetTitle`, a
+  heading) and the website's Close pill (`PillButton` on the sheet: the wash with the `border`
+  edge, at least 44 by 44, `picker-close`), the word in `button` type on the title's first
+  baseline, so both scale with the text where the toolbar's xmark couldn't. `SearchBox` around
+  `BoxTextField`, a `UITextField` in a representable: as tall as the box (`sizeThatFits`, at
+  least 44) so its own element is, its text inset inside it so the whole box but the clear
+  button is the field to tap, in the `field` role's face through `UIFontMetrics(.body)` (a face up
+  under Bold Text), its prompt in `soft`, the caret ink, the keyboard dark on a dark band, the
+  search-field trait, and the model's text written back only when it differs, so the caret never
+  jumps. The clear button is an ink xmark, 44 by 44, that asks for the keyboard again. `PlaceRow`:
+  the place as one button (`label` name, `note` line in `soft`, washed when pressed, at least 44
+  tall), read "Leeds, England, United Kingdom", with "Saved" as a saved result's value;
+  `StarButton` beside it (`star` or `star.fill` in ink, at least 44 by 44, growing with
+  `.body`), its own button with its own style, so a tap on the star never chooses the place.
+- **Rows.** "Use my location" in `labelStrong` with no icon (the website has none) and an ink
+  spinner while the fix is out; its line and the search's in `line`; "Open Settings" a
+  `WordsButton` in `labelStrong`, underlined, as the pages draw a link; "Saved" and "Recent" in
+  `heading`, as written, with the header trait; the hint and the full line in `line`.
+  Identifiers: `saved-heading`, `saved-<key>`, `saved-hint`, `saved-full`, and each star
+  `star-<its row's identifier>` (`star-result-<i>`, `star-saved-<key>`, `star-recent-<key>`);
+  every older one is kept.
+- **VoiceOver.** After a star, the presenter's announcement is posted ("Leeds saved.", "Leeds
+  removed from saved places."); focus isn't moved to a row that moved (the Later list). Rows
+  that move between Saved and Recent animate as the system animates a change, at once under
+  Reduce Motion.
+- **Contrast.** Every text pair on the sheet is 5.19:1 or more on every band (step 2's table:
+  ink on the sheet 8.97 at least, `soft` 7.02, ink on the wash 6.46, `soft` on a pressed row
+  5.19, the placeholder on the field 5.71), and the field's edge at least 3.43, so nothing like
+  `SheetStyle.secondary` is needed, and the picker no longer uses `SheetStyle`.
+- **Tests.** `PickerTests`: `testRecentPlaces` reads Leeds with its line and deletes it from its
+  menu (`press(forDuration: 1.2)`, then Delete); new are `testSavingAResult` (a result's star in
+  place, nothing chosen, the row's value "Saved", kept across a relaunch, chosen from Saved and
+  staying there), `testSavingARecentAndRemovingIt` (to Saved by the star and back, the hint, and
+  the menu's Remove), `testSavedPlacesAccessibilityAudit` and `…AtAX3` (Kathmandu saved, Leeds a
+  recent place, location access off, the keyboard down: `picker-saved`, `picker-saved-ax3`), and
+  `testPickerOnADarkBand` (`-fixture aberdeen-snow`, Leeds saved: `picker-dark`). The UI plan
+  goes from 39 tests to 44. A menu item is found by its words among buttons that aren't a star,
+  since "Remove Leeds from saved places" is the star's label too. The Linux harness's XCUITest
+  stub gains `press(forDuration:)`, as the SDK has it.
+- **For the first macOS run to show.** `BoxTextField`'s element at 44 or more (else the fallback
+  is a container view the field fills); the menus' items as buttons to XCUITest (else the
+  accessibility actions, tested on Linux through the presenter); the long Saved and Recent lists
+  at AX3; the Close pill's and the stars' contrast on the wash; and the status bar on a dark band,
+  on the contact sheet.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,

@@ -2,8 +2,8 @@ import IsItLogic
 import SwiftUI
 import UIKit
 
-/// The sheets' own colours (the place picker, Settings with its pages, and the mail fallback),
-/// where the system's fall short of WCAG AA's 4.5:1 for text under 18 points in the light
+/// Settings' sheets' own colours (Settings with its pages, and the mail fallback; the place
+/// picker wears the page's band, PlacePickerView), where the system's fall short of WCAG AA's 4.5:1 for text under 18 points in the light
 /// appearance (section 16): IsItLogic's `SheetColours`, which a Linux test holds to it. The
 /// sheets otherwise draw in the system's colours, and follow its appearance.
 enum SheetStyle {
@@ -34,8 +34,8 @@ enum SheetStyle {
   static let filled = Color(uiColor: UIColor(rgb: SheetColours.accentLight))
 }
 
-/// A sheet's Close as its toolbar shows it (the picker's, Settings' and the mail fallback's): the
-/// xmark, as iOS 26 draws its own close control, with the word ("Close") as the button's label,
+/// A sheet's Close as its toolbar shows it (Settings' and the mail fallback's; the picker has the
+/// website's Close pill, `SheetHeader`): the xmark, as iOS 26 draws its own close control, with the word ("Close") as the button's label,
 /// which VoiceOver reads. Not the word on screen: a toolbar draws a text item at the bar's own
 /// type size whatever the text size, and on PR #33's macOS run the audit failed all three Closes
 /// for Dynamic Type, the only buttons it failed for Dynamic Type in any sheet. An icon has no

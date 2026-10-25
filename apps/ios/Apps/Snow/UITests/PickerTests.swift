@@ -8,7 +8,9 @@ import XCTest
 /// picker's searches are answered by the search fixtures (`search-leeds`, `search-kathmandu`,
 /// `search-none`), any other with an error. `-location` stands in for Core Location, so the
 /// system's prompt never shows. Every launch starts from a clean store (`-resetStore`, the
-/// recent places too) unless a test relaunches on purpose.
+/// recent and saved places too) unless a test relaunches on purpose. The picker is a page of rows
+/// in the website's look (IsItUI's PlacePickerView): a place's star saves or removes it, and a
+/// row's press-and-hold menu holds the same and Delete, since the rows aren't a `List` to swipe.
 final class PickerTests: XCTestCase {
   override func setUpWithError() throws {
     continueAfterFailure = false
@@ -68,8 +70,8 @@ final class PickerTests: XCTestCase {
     XCTAssertTrue(app.staticTexts["verdict"].waitForExistence(timeout: 10), "No answer")
   }
 
-  /// A chosen place is a recent place, kept across launches, chosen again from there, and
-  /// swiped away.
+  /// A chosen place is a recent place, kept across launches with its line, chosen again from
+  /// there, and deleted from its press-and-hold menu.
   @MainActor
   func testRecentPlaces() throws {
     let first = launch(["-resetStore", "-network", "ip-first-launch,leeds-dry"])
@@ -90,7 +92,8 @@ final class PickerTests: XCTestCase {
     XCTAssertEqual(recent.label, "Recent")
     let leeds = app.buttons["recent-city:leeds-gb"]
     XCTAssertTrue(leeds.exists, "Leeds isn't a recent place")
-    XCTAssertEqual(leeds.label, "Leeds")
+    // With the line beneath its name, kept from its search result.
+    XCTAssertEqual(leeds.label, "Leeds, England, United Kingdom")
     attachScreen(of: app, named: "picker-recent")
 
     // Typing hides them, and shows the box's clear button, 44 points square (the system's
@@ -115,13 +118,103 @@ final class PickerTests: XCTestCase {
     waitUntilGone(clear, "The clear button after clearing")
     XCTAssertTrue(app.keyboards.firstMatch.exists, "The keyboard went with the text")
 
-    // Swiped away.
-    leeds.swipeLeft()
-    let delete = app.buttons["Delete"]
-    XCTAssertTrue(delete.waitForExistence(timeout: 5), "No swipe to delete")
+    // Deleted: press and hold, then Delete in its menu.
+    leeds.press(forDuration: 1.2)
+    let delete = menuItem("Delete", in: app)
+    XCTAssertTrue(delete.waitForExistence(timeout: 5), "No Delete on press and hold")
     delete.tap()
     waitUntilGone(leeds, "Leeds is still a recent place")
     XCTAssertFalse(recent.exists, "Recent, over no recent places")
+  }
+
+  /// A result's star saves it in place: the sheet stays open on the same results and nothing is
+  /// chosen. The place is then under Saved, not Recent, kept across launches, and chosen from
+  /// there, staying under Saved.
+  @MainActor
+  func testSavingAResult() throws {
+    let first = launch(["-resetStore", "-network", "ip-first-launch,leeds-dry"])
+    let field = openPicker(in: first)
+    field.typeText("Leeds")
+    let star = first.buttons["star-result-0"]
+    XCTAssertTrue(star.waitForExistence(timeout: 10), "No star beside Leeds")
+    XCTAssertEqual(star.label, "Save Leeds")
+    XCTAssertNotEqual(
+      first.buttons["result-0"].value as? String, "Saved", "Leeds reads as saved already")
+    star.tap()
+    wait(for: star, label: "Remove Leeds from saved places")
+    XCTAssertEqual(first.buttons["result-0"].value as? String, "Saved")
+    XCTAssertTrue(searchField(in: first).exists, "The star closed the picker")
+    first.buttons["clear-search"].tap()
+    let saved = first.buttons["saved-city:leeds-gb"]
+    XCTAssertTrue(saved.waitForExistence(timeout: 10), "Leeds isn't under Saved")
+    XCTAssertEqual(saved.label, "Leeds, England, United Kingdom")
+    XCTAssertEqual(first.staticTexts["saved-heading"].label, "Saved")
+    XCTAssertFalse(first.buttons["recent-city:leeds-gb"].exists, "Leeds is under Recent too")
+    // The star chose nothing: still on approximate location.
+    first.buttons["picker-close"].tap()
+    XCTAssertTrue(
+      first.buttons["use-my-location"].waitForExistence(timeout: 10),
+      "No longer on approximate location")
+    first.terminate()
+
+    // Kept: opened again, Leeds is still saved; chosen, the sheet closes and Leeds loads.
+    let app = launch(["-network", "ip-first-launch,leeds-dry"])
+    _ = openPicker(in: app, focusing: false)
+    let kept = app.buttons["saved-city:leeds-gb"]
+    XCTAssertTrue(kept.waitForExistence(timeout: 10), "Leeds isn't saved after a relaunch")
+    kept.tap()
+    waitUntilGone(searchField(in: app), "The picker is still open")
+    wait(for: heading(in: app), label: "Leeds. Will it snow today? No.")
+    XCTAssertEqual(app.buttons["place"].label, "Place: Leeds. Change place.")
+    // Still under Saved, and not under Recent.
+    _ = openPicker(in: app, focusing: false)
+    XCTAssertTrue(kept.waitForExistence(timeout: 10), "Leeds is no longer saved")
+    XCTAssertFalse(app.buttons["recent-city:leeds-gb"].exists, "A saved place joined Recent")
+    XCTAssertFalse(app.staticTexts["recent-heading"].exists, "Recent, with nothing to show")
+  }
+
+  /// A recent place's star moves it to Saved, and the saved place's star brings it back to the
+  /// top of Recent, with the hint under Saved again; saved again, its press-and-hold menu
+  /// removes it too.
+  @MainActor
+  func testSavingARecentAndRemovingIt() throws {
+    let app = launch(["-resetStore", "-network", "ip-first-launch,leeds-dry"])
+    let field = openPicker(in: app)
+    field.typeText("Leeds")
+    XCTAssertTrue(app.buttons["result-0"].waitForExistence(timeout: 10), "No results")
+    app.buttons["result-0"].tap()
+    wait(for: app.buttons["place"], label: "Place: Leeds. Change place.")
+
+    _ = openPicker(in: app, focusing: false)
+    let hint = app.staticTexts["saved-hint"]
+    XCTAssertTrue(hint.waitForExistence(timeout: 10), "No hint under Saved")
+    XCTAssertEqual(hint.label, "Tap the star beside a place to save it here.")
+    let recentStar = app.buttons["star-recent-city:leeds-gb"]
+    XCTAssertEqual(recentStar.label, "Save Leeds")
+    recentStar.tap()
+    let saved = app.buttons["saved-city:leeds-gb"]
+    XCTAssertTrue(saved.waitForExistence(timeout: 10), "Leeds didn't move to Saved")
+    waitUntilGone(app.staticTexts["recent-heading"], "Recent, with its only place saved")
+    XCTAssertFalse(hint.exists, "The hint, with a place saved")
+
+    // Removed by its star: back under Recent, the hint under Saved again.
+    let savedStar = app.buttons["star-saved-city:leeds-gb"]
+    XCTAssertEqual(savedStar.label, "Remove Leeds from saved places")
+    savedStar.tap()
+    let recent = app.buttons["recent-city:leeds-gb"]
+    XCTAssertTrue(recent.waitForExistence(timeout: 10), "Leeds isn't back under Recent")
+    XCTAssertTrue(hint.waitForExistence(timeout: 5), "No hint once nothing is saved")
+    XCTAssertFalse(saved.exists, "Leeds is still saved")
+
+    // Saved again, then removed from its press-and-hold menu.
+    recentStar.tap()
+    XCTAssertTrue(saved.waitForExistence(timeout: 10), "Leeds didn't move to Saved again")
+    saved.press(forDuration: 1.2)
+    let remove = menuItem("Remove Leeds from saved places", in: app)
+    XCTAssertTrue(remove.waitForExistence(timeout: 5), "No Remove on press and hold")
+    remove.tap()
+    waitUntilGone(saved, "Leeds is still saved")
+    XCTAssertTrue(recent.waitForExistence(timeout: 10), "Leeds isn't back under Recent")
   }
 
   /// With location access off, "Use my location" says so, with Open Settings, and the search
@@ -222,7 +315,89 @@ final class PickerTests: XCTestCase {
     try auditAccessibility(of: app, on: "the picker's results")
   }
 
+  /// The picker passes the audit with saved and recent places, at Large and at AX3: Kathmandu
+  /// saved from a search, Leeds a recent place, location access off, and the keyboard down.
+  @MainActor
+  func testSavedPlacesAccessibilityAudit() throws {
+    try auditSavedPlaces(at: .large, named: "picker-saved")
+  }
+
+  @MainActor
+  func testSavedPlacesAccessibilityAuditAtAX3() throws {
+    try auditSavedPlaces(at: .ax3, named: "picker-saved-ax3")
+  }
+
+  /// On a dark band (`aberdeen-snow`, the snow band, light ink on deep purple), the picker
+  /// wears the page's colours: audited at Large with a place saved from a search.
+  @MainActor
+  func testPickerOnADarkBand() throws {
+    let app = launch(["-resetStore", "-fixture", "aberdeen-snow"])
+    let field = openPicker(in: app)
+    field.typeText("Leeds")
+    let star = app.buttons["star-result-0"]
+    XCTAssertTrue(star.waitForExistence(timeout: 10), "No star beside Leeds")
+    star.tap()
+    wait(for: star, label: "Remove Leeds from saved places")
+    app.buttons["clear-search"].tap()
+    XCTAssertTrue(
+      app.buttons["saved-city:leeds-gb"].waitForExistence(timeout: 10), "Leeds isn't under Saved")
+    putTheKeyboardAway(app)
+    attachScreen(of: app, named: "picker-dark")
+    try auditAccessibility(of: app, on: "the picker on a dark band, with a saved place")
+  }
+
   // MARK: - Helpers
+
+  /// Saves Kathmandu from a search and chooses Leeds, a recent place, at `size`, with location
+  /// access off and its line and Open Settings showing, then audits the picker with the
+  /// keyboard down, attaching its screen as `name`.
+  @MainActor
+  private func auditSavedPlaces(at size: TextSize, named name: String) throws {
+    let app = launch(
+      ["-resetStore", "-network", "ip-first-launch,leeds-dry", "-location", "denied"]
+        + size.arguments)
+    var field = openPicker(in: app)
+    field.typeText("Leeds")
+    XCTAssertTrue(app.buttons["result-0"].waitForExistence(timeout: 10), "No results")
+    app.buttons["result-0"].tap()
+    wait(for: app.buttons["place"], label: "Place: Leeds. Change place.")
+    field = openPicker(in: app)
+    field.typeText("Kathmandu")
+    let star = app.buttons["star-result-0"]
+    XCTAssertTrue(star.waitForExistence(timeout: 10), "No star beside Kathmandu")
+    star.tap()
+    wait(for: star, label: "Remove Kathmandu from saved places")
+    app.buttons["clear-search"].tap()
+    let saved = app.buttons["saved-search:27.7,85.3"]
+    XCTAssertTrue(saved.waitForExistence(timeout: 10), "Kathmandu isn't under Saved")
+    XCTAssertEqual(saved.label, "Kathmandu, Bagmati Province, Nepal")
+    XCTAssertTrue(app.buttons["recent-city:leeds-gb"].exists, "Leeds isn't under Recent")
+    app.buttons["picker-use-my-location"].tap()
+    XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10), "No Open Settings")
+    putTheKeyboardAway(app)
+    attachScreen(of: app, named: name)
+    let at = size == .ax3 ? "AX3" : "Large"
+    try auditAccessibility(of: app, on: "the picker, with saved and recent places, at \(at)")
+  }
+
+  /// Puts the keyboard away with a drag on the rows, as they ask
+  /// (`scrollDismissesKeyboard(.immediately)`): on "Use my location", the first row, which the
+  /// keyboard never covers, at any text size.
+  @MainActor
+  private func putTheKeyboardAway(_ app: XCUIApplication) {
+    let row = app.buttons["picker-use-my-location"]
+    row.swipeDown()
+    waitUntilGone(app.keyboards.firstMatch, "The keyboard is still up")
+    XCTAssertTrue(row.exists, "The rows went with the keyboard")
+  }
+
+  /// An item of a row's press-and-hold menu, by its words: a button with that label that isn't a
+  /// place's star, whose label a menu item may share ("Remove Leeds from saved places").
+  @MainActor
+  private func menuItem(_ label: String, in app: XCUIApplication) -> XCUIElement {
+    let format = "label == %@ AND NOT (identifier BEGINSWITH %@)"
+    return app.buttons.matching(NSPredicate(format: format, label, "star-")).firstMatch
+  }
 
   /// Launches the app with `-uitest` and `arguments`, and waits for the heading.
   @MainActor

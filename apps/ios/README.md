@@ -15,10 +15,11 @@ announced once to VoiceOver, and every text size up to AX5 (below, "Phases 5.2 a
 VoiceOver hears it against the TypeScript's words, the offline and failure states, the
 accessibility audits at Large and AX3, and every page on the contact sheet (below, "Phase 5.4");
 and phase 6, the sheets behind the top bar, over every page: the place picker (6.1: search, "Use
-my location" and the recent places) and Settings (6.2 and 6.3: the snow units, the privacy rows,
+my location", the recent places and the saved places) and Settings (6.2 and 6.3: the snow units, the privacy rows,
 Report an ad, About and Help, the version, How it works, Credits and licences and Your privacy's
 lines) (below, "Phase 6"). The home screen is drawn in the website's look: its type, pills, tabs,
-grids and week rows (below, "The home screen in the website's look"). A Debug build can be
+grids and week rows (below, "The home screen in the website's look"), and so is the picker, in
+the band of the page on screen (below, "6.1: the place picker"). A Debug build can be
 answered by a fixture or a stubbed network instead (below, "Debug hooks"). Everything else comes
 in later phases.
 
@@ -50,9 +51,10 @@ Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore, UR
                          IsItUI (the home screen: HomeShell, ViewSwitcher, HomePager and ForecastPageView
                          with its bodies and GlyphView, drawing IsItLogic's HomePage and HomeTopBar, with
                          HomeActions; the picker: PlacePickerView, drawing PlacePicker, with
-                         PlacePickerActions; Settings: SettingsView and its pages, with SettingsActions;
-                         SheetStyle, both sheets' colours at WCAG AA; the parts every screen is to share,
-                         in the website's look, which the home screen draws with: BrandType (TextRole,
+                         PlacePickerActions and PickerChrome (SheetHeader, SearchBox, BoxTextField,
+                         PlaceRow, StarButton); Settings: SettingsView and its pages, with SettingsActions;
+                         SheetStyle, Settings' colours at WCAG AA; the parts every screen is to share,
+                         in the website's look, which the home screen and the picker draw with: BrandType (TextRole,
                          the type scale, and brandFont), PageTheme (a surface's colours, Surface and
                          the tokens, BrandTokens), Backgrounds (PageBackground, SheetBackground),
                          Buttons (PillButton, IconPillButton, PressStyle, RowPressStyle, PinShape),
@@ -746,12 +748,26 @@ iPhone app's place picker").
   the search: 250 ms after the last keystroke (`Constants.Search.debounceMs`, on the model's clock,
   so the tests move it), each keystroke cancelling the wait and the request before it, only the
   newest answer shown, and the last results kept while the next search is out.
-- **The search box is the app's own** (`SearchBox`, IsItUI's PlacePickerView.swift): UIKit's
-  rounded text field under the navigation bar, above the list, its prompt in
-  `SheetStyle.secondary`, the keyboard's Search key choosing the first result, and while it holds
-  text a clear button 44 points square ("Clear search"). Not the system's search
-  (`.searchable`), whose own clear button, about 20 points square, the audit failed as too small
-  to tap, and which SwiftUI can't resize or remove.
+- **The picker is in the website's look** (the website's look, step 5; DECISIONS, "The iPhone
+  app in the website's look"): the band of the page on screen, read from the model as the sheet
+  draws (`PickerSheet`), so it follows a refresh, on the sheet surface (`SheetBackground`, every
+  word in its ink and Bricolage, no cards, no hairlines, never Dark Mode). `PlacePickerView`
+  draws the title row (`SheetHeader`: "Search for a place" and the website's Close pill,
+  `picker-close`), the search box, then a `ScrollView` of rows made at once, not a `List`: "Use
+  my location", its line and Open Settings, the search's line or its results, or with nothing
+  typed Saved and Recent. Each place is a `PlaceRow` (the name, the line beneath in `soft`, the
+  wash when pressed) with its `StarButton` (`star-<row>`), and a press-and-hold menu whose items
+  are VoiceOver actions too: "Save {place}" and Delete on a recent place, "Remove {place} from
+  saved places" on a saved one. After a star, VoiceOver is told what it did. The parts are in
+  PickerChrome.swift.
+- **The search box is the app's own** (`SearchBox`, PickerChrome.swift): the website's box (the
+  `field` tint, the 1.5-point `fieldBorder` edge, corners of 12) around `BoxTextField`, UIKit's
+  `UITextField` in a representable, as tall as the box (at least 44, `sizeThatFits`) so its own
+  element is too, in the `field` role's face scaled with `.body`, its prompt in `soft`, the
+  keyboard's Search key choosing the first result, and while it holds text an ink xmark 44 points
+  square ("Clear search") that keeps the keyboard up. Not the system's search (`.searchable`),
+  whose own clear button, about 20 points square, the audit failed as too small to tap, and
+  which SwiftUI can't resize or remove.
 - **Choosing a place** is `AppModel.choose(_:name:)`: `place.v1`, the fetch in place
   (`select(_:)`, which saves the answer for the widgets and reloads them), the recent places
   (`recent.v1`, the last five, `RecentPlaces` with the `RecentDefaults` store in the app's own
@@ -811,14 +827,18 @@ writes, saved places first), `Tests/IsItLogicTests/PlacePickerTests.swift` (the 
 Saved section and stars, and `recent.v1`'s and `savedPlaces.v1`'s reading) and the
 `search.json` and `saved.json` ports. On the macOS CI, `PickerTests` (UI plan), over `-network
 ip-first-launch,leeds-dry` or `…,kathmandu-0545` and `-location`: too short and no results;
-choosing Leeds (a city page) and Kathmandu (a point); a recent place kept across a relaunch, the
-box's clear button (44 by 44, "Clear search", back to the recent places with the keyboard up), then
-the place swiped away; Use my location denied, from the top bar's chip (tapped above it, on its
-line) and the picker's own row; Use my
+choosing Leeds (a city page) and Kathmandu (a point); a recent place kept across a relaunch with
+its line, the box's clear button (44 by 44, "Clear search", back to the recent places with the
+keyboard up), then the place deleted from its press-and-hold menu; a result's star saving it in
+place (nothing chosen, the sheet open, the row's value "Saved"), kept across a relaunch, chosen
+from Saved and still there, not under Recent; a recent place's star moving it to Saved, the
+saved place's star bringing it back with the hint, and its menu's Remove; Use my location
+denied, from the top bar's chip (tapped above it, on its line) and the picker's own row; Use my
 location with a fix; and the accessibility audit of the sheet, with a recent place and location
-access off, and of its results with the keyboard put away by a drag. Their screens are
+access off, of its results with the keyboard put away by a drag, with saved and recent places at
+Large and at AX3, and on a dark band (`-fixture aberdeen-snow`). Their screens are
 `picker-no-results`, `picker-results`, `picker-recent`, `picker-location-denied`,
-`picker-audit` and `picker-results-audit`.
+`picker-audit`, `picker-results-audit`, `picker-saved`, `picker-saved-ax3` and `picker-dark`.
 
 ### 6.2 and 6.3: Settings
 
@@ -907,10 +927,10 @@ run would show one issue a screen. Each audit first attaches the screen as audit
 element tree (`audit-<screen>`, `audit-<screen>-tree`), and each call goes through `runAudit`, as
 the home audit's do: timed (`audit-<screen>-times`), and run again once after a timeout only
 while the screen's elements are where they were as audited. Every issue is the app's to fix: the
-sheets' audits allow none. The sheets' Close buttons (`picker-close`, `close-settings`,
-`close-fallback`) are the xmark with "Close" as their label (`CloseLabel`, IsItUI), not the word
-on screen, which a toolbar draws at the bar's own type size and the audit failed for Dynamic
-Type.
+sheets' audits allow none. Settings' Close buttons (`close-settings`, `close-fallback`) are the
+xmark with "Close" as their label (`CloseLabel`, IsItUI), not the word on screen, which a toolbar
+draws at the bar's own type size and the audit failed for Dynamic Type; the picker, with no
+toolbar, has the website's Close pill (`picker-close`), whose word scales with the text.
 
 ### How they meet
 
@@ -918,9 +938,11 @@ Type.
   picker as a full-screen cover, `.settings` Settings as a sheet, and each closes only itself.
   The place pill and the "Use my exact location" chip (with `locating`) open the
   picker; the gear opens Settings. The top bar is `HomeShell`'s, over the switcher and the
-  pager, so all three open their sheets from every page. Both sheets follow the system's
-  colours, not the page's: they are presented from outside `HomeShell`, so the dark colour
-  scheme it gives the system's controls on a dark page (phase 5.4) doesn't reach them. While
+  pager, so all three open their sheets from every page. The picker wears the band of the page
+  on screen and gives its own system controls the band's colour scheme, as `HomeShell` does;
+  Settings follows the system's colours, not the page's, until step 6 of the website's look: it
+  is presented from outside `HomeShell`, so the dark colour scheme it gives the system's controls
+  on a dark page (phase 5.4) doesn't reach it. While
   one is open, the home screen under it is out of the accessibility tree, as VoiceOver already
   treats it, so the sheets' audits read only the sheet, and its changes (the 6pm flip, a quiet
   refresh's new answer) aren't announced over the sheet, then or once it closes
