@@ -81,6 +81,7 @@ describe('generatedFiles', () => {
     const vectors = [
       ...['grid', 'target', 'query', 'placeTime', 'tomorrow', 'freshness', 'hours'],
       ...['questions', 'strip', 'widget', 'alerts', 'links', 'recent', 'page', 'search'],
+      'saved',
     ];
     const resourcePaths = [
       ...FIXTURES.map((s) => `${resources}/Fixtures/${s.name}.json`),

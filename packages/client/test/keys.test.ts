@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CLIENT } from '../src/config';
+import { CLIENT, PLACES } from '../src/config';
 import { APP_GROUP_KEYS, APP_KEYS, STORE_VERSION } from '../src/keys';
 
 describe('keys', () => {
@@ -12,6 +12,7 @@ describe('keys', () => {
     });
     expect(APP_KEYS).toEqual({
       recent: 'recent.v1',
+      savedPlaces: 'savedPlaces.v1',
       alerts: 'alerts.v1',
       alertSync: 'alertSync.v1',
       lastView: 'ui.lastView',
@@ -32,5 +33,11 @@ describe('CLIENT', () => {
       requestTimeoutMs: 12 * 1000,
       retryAfterMs: 60 * 1000,
     });
+  });
+});
+
+describe('PLACES', () => {
+  it('keeps five recent places and ten saved ones', () => {
+    expect(PLACES).toEqual({ recentMax: 5, savedMax: 10 });
   });
 });

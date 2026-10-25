@@ -3,7 +3,7 @@
  * the website, from core's `config.ts` (and the models' agencies from `copy.ts`) and the client's
  * `config.ts`, under the same names, and willitsnow.today's pages and support address (core
  * `SITES.snow` and `CONTACT_EMAIL`), which the app's Settings open, so no URL is typed in Swift.
- * A group written whole (`SEARCH`, `AHEAD`, `WIDGET`, `CLIENT`) gains a member when core adds a
+ * A group written whole (`SEARCH`, `AHEAD`, `WIDGET`, `CLIENT`, `PLACES`) gains a member when core adds a
  * key, and stops the generator if the new value isn't a whole number, so a Swift type is chosen
  * for it rather than guessed. `ALERTS` is not written whole: it holds the notifications run's
  * windows, quiet hours and budgets too, and the app needs only `heartbeatDays`.
@@ -22,7 +22,7 @@ import {
   TOMORROW_FROM_HOUR,
   WIDGET,
 } from '@isithot/core';
-import { CLIENT } from '@isithot/client';
+import { CLIENT, PLACES } from '@isithot/client';
 import {
   generatedHeader,
   swiftCall,
@@ -202,6 +202,14 @@ export function constantsSwift(): string {
       ],
       'Client',
       ints('    ', CLIENT),
+    ),
+    ...group(
+      [
+        "The picker's lists (client `PLACES`): the most recent places kept, and the most saved",
+        'places.',
+      ],
+      'Places',
+      ints('    ', PLACES),
     ),
     ...group(
       [

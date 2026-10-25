@@ -76,6 +76,30 @@ public enum AppCopy {
   }
 
   public static let recent = "Recent"
+  public static let saved = "Saved"
+  public static let savedHint = "Tap the star beside a place to save it here."
+
+  public static func savedFull(max: String) -> String {
+    "You can save up to \(max) places. Remove one to save another."
+  }
+
+  public static func savePlace(place: String) -> String {
+    "Save \(place)"
+  }
+
+  public static func unsavePlace(place: String) -> String {
+    "Remove \(place) from saved places"
+  }
+
+  public static func placeSaved(place: String) -> String {
+    "\(place) saved."
+  }
+
+  public static func placeUnsaved(place: String) -> String {
+    "\(place) removed from saved places."
+  }
+
+  public static let deleteRecent = "Delete"
   public static let clearSearch = "Clear search"
   public static let searchOffline = "You're offline. Connect to the internet to search."
   public static let locationUnavailable = "Couldn't find your location. Search for a place instead."
@@ -128,7 +152,7 @@ public enum AppCopy {
   public static let yourPrivacy = "Your privacy"
   public static let privacyPolicy = "Privacy policy"
   public static let privacyForecast =
-    "To get the forecast, the app sends the place (a town, or your location rounded to about 5 km) and your units to our server. Until you choose a place, our server estimates a rough one from your internet connection. Place names you search for go to Open-Meteo, our forecast provider, to find matching places. The app keeps your place, units, recent places and the last forecast on your iPhone."
+    "To get the forecast, the app sends the place (a town, or your location rounded to about 5 km) and your units to our server. Until you choose a place, our server estimates a rough one from your internet connection. Place names you search for go to Open-Meteo, our forecast provider, to find matching places. The app keeps your place, units, recent and saved places and the last forecast on your iPhone."
   public static let privacyNotifications =
     "Only while notifications are on, we keep your device's notification token, an ID made from it, the place, its time zone, your units and which notifications you chose, with a few details such as the app's version and when it last checked in. We delete them when you turn notifications off in the app, when Apple tells us the app is no longer installed, or about 90 days after you last open it. If you turn notifications off in your iPhone's Settings instead, we delete them the next time you open the app. For a few days after each notification and each test, and after some forecast checks that found nothing to send, we also keep a note of it, even once the rest is deleted. It holds no token or place."
   public static let privacyAds =

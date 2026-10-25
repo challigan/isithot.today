@@ -34,7 +34,8 @@ Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API
                          Questions, AppCopy, AppCredits, Constants, Keys, BrandFonts (every font's name),
                          Palettes (with Palettes.content, the app's own pages') and BrandColours (the
                          surfaces' shares and the content card); the ports, the
-                         home screen's, the picker's and Settings' presenters, the glyph's drift, which
+                         home screen's, the picker's and Settings' presenters, the saved places'
+                         rules (SavedPlaces), the glyph's drift, which
                          pages are light ink on dark and the sheets' colours (IsItLogic); AppModel, its
                          API client, the launch and refresh rules, what VoiceOver is told, the clocks
                          and the minute tick, the picker's search and the location rules (IsItState); in
@@ -43,7 +44,8 @@ Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API
                          tests and the guard that every vector file is ported (below); in
                          Tests/IsItStateTests AppModel with fakes, and the home screen drawn from it
 Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore, URLSessionTransport,
-                         WidgetCenterReloader, RecentDefaults: AppModel's services), IsItLocation
+                         WidgetCenterReloader, RecentDefaults, SavedPlaceDefaults: AppModel's
+                         services), IsItLocation
                          (CoreLocationService, the app's only), IsItAds (Google's SDKs),
                          IsItUI (the home screen: HomeShell, ViewSwitcher, HomePager and ForecastPageView
                          with its bodies and GlyphView, drawing IsItLogic's HomePage and HomeTopBar, with
@@ -289,23 +291,24 @@ To port a file:
 included. Until the last port landed it failed, with one issue for each file not yet ported; on
 23 October 2026 that was all 13, each marked done here as its port landed:
 
-| Vector file      | Ported by | Swift                                               |
-| ---------------- | --------- | --------------------------------------------------- |
-| `grid.json`      | 3.2, done | `GridRounding.round`                                |
-| `target.json`    | 3.2, done | `Target.key`, `Target(query:)`, `Target(search:)`   |
-| `query.json`     | 3.2, done | `TodayQuery.build`                                  |
-| `placeTime.json` | 3.3, done | `PlaceTime.local(_:in:)`                            |
-| `tomorrow.json`  | 3.3, done | `MiddleDay.showsTomorrow`, `.defaultView`, `.label` |
-| `freshness.json` | 3.3, done | `Freshness`                                         |
-| `hours.json`     | 3.3, done | `HourPicker.pick`, `UpdatedLine.text`               |
-| `questions.json` | 3.3, done | `Questions.snow`                                    |
-| `strip.json`     | 3.3, done | `StripGeometry`                                     |
-| `widget.json`    | 3.4, done | `WidgetPlanner.entries`                             |
-| `alerts.json`    | 3.4, done | `AlertSync.action`, `.body`, `.fingerprint`         |
-| `links.json`     | 3.4, done | `DeepLink.parse`, `.route(payload:placeNow:)`       |
-| `recent.json`    | 3.4, done | `RecentPlaces`                                      |
-| `page.json`      | 5.1, done | `HomePage`, `Credits.parts`                         |
-| `search.json`    | 6.1, done | `PlaceSearch.input`, `.detail`                      |
+| Vector file      | Ported by    | Swift                                               |
+| ---------------- | ------------ | --------------------------------------------------- |
+| `grid.json`      | 3.2, done    | `GridRounding.round`                                |
+| `target.json`    | 3.2, done    | `Target.key`, `Target(query:)`, `Target(search:)`   |
+| `query.json`     | 3.2, done    | `TodayQuery.build`                                  |
+| `placeTime.json` | 3.3, done    | `PlaceTime.local(_:in:)`                            |
+| `tomorrow.json`  | 3.3, done    | `MiddleDay.showsTomorrow`, `.defaultView`, `.label` |
+| `freshness.json` | 3.3, done    | `Freshness`                                         |
+| `hours.json`     | 3.3, done    | `HourPicker.pick`, `UpdatedLine.text`               |
+| `questions.json` | 3.3, done    | `Questions.snow`                                    |
+| `strip.json`     | 3.3, done    | `StripGeometry`                                     |
+| `widget.json`    | 3.4, done    | `WidgetPlanner.entries`                             |
+| `alerts.json`    | 3.4, done    | `AlertSync.action`, `.body`, `.fingerprint`         |
+| `links.json`     | 3.4, done    | `DeepLink.parse`, `.route(payload:placeNow:)`       |
+| `recent.json`    | 3.4, done    | `RecentPlaces`                                      |
+| `page.json`      | 5.1, done    | `HomePage`, `Credits.parts`                         |
+| `search.json`    | 6.1, done    | `PlaceSearch.input`, `.detail`                      |
+| `saved.json`     | look 4, done | `SavedPlaces`                                       |
 
 While a file was still to port, `ios.yml`'s `swift-linux` job failed at its Test step, and the
 jobs that need it (`ios`, `archive-check`, and so `contact-sheet`) didn't run. A new vector file
@@ -340,8 +343,10 @@ links and recent places"):
   **`DeepLink.route(payload:placeNow:)`** a notification's `userInfo`, given the place's time
   now as `PlaceTime.local(_:in:)` gives it; a place route's view is nil for the place's view for
   the time of day.
-- **`RecentPlaces.adding(_:name:to:max:)` and `.removing(_:from:)`** keep `recent.v1`'s
-  `[RecentPlace]`, which is `Codable` as the client's JSON.
+- **`RecentPlaces.adding(_:name:detail:to:max:)` and `.removing(_:from:)`** keep `recent.v1`'s
+  `[RecentPlace]`, which is `Codable` as the client's JSON. Each place's `detail` (the line
+  beneath its name) came with the saved places, in the website's look's step 4; older entries
+  have none.
 
 ## Phase 5.1: the data, the launch and the home screen
 
@@ -755,6 +760,20 @@ iPhone app's place picker").
   with what the search said. The sheet closes as the place is chosen, before its answer, and
   the answer comes on the view on screen, as a place under "Nearby:" does (phase 5.2): a place
   chosen from This week shows its week.
+- **Saved places** (the website's look, step 4; DECISIONS, "Saved places") sit above Recent
+  with nothing typed: at most ten (client `PLACES.savedMax`, `Constants.Places`), in the order
+  saved with the newest last. The rules are client `saved.ts` (`isSaved`, `canSave`,
+  `savePlace`, `unsavePlace`, `choosePlace`, `shownRecent`), ported as `SavedPlaces`
+  (IsItLogic) and checked against `saved.json`: saving takes a place out of Recent, removing it
+  puts it back on top of Recent (so one more tap on its star undoes it), choosing a saved place
+  leaves both lists alone, and Recent never shows a saved place. Approximate IP location and the
+  phone's own point are never saved: a device fix follows the phone, so its Recent row has no
+  star. `PlacePicker` gives the Saved heading, its hint with none saved and its line when full,
+  each row's star (`Star`: its label and what VoiceOver is told after a tap) and a saved
+  result's value; `PlacePickerModel.save(_:)`, `.unsave(_:)` and `.choose(saved:)` call
+  `AppModel.save(_:)`, `.unsave(_:)` and `.choose(_:name:detail:)`. A star chooses nothing and
+  asks the server nothing. Recent places now keep the line beneath their name (`detail`), so two
+  Newcastles can be told apart.
 - **The location** is `LocationService` (IsItState) in `AppEnvironment`, which replaces
   `AppHooks.locate`: `CoreLocationService` in IsItLocation, an IsItKit module the app links and
   the widget never does. "Use my location" asks for When In Use permission only at that tap and
@@ -769,12 +788,28 @@ iPhone app's place picker").
   app's string is the copy. The app's privacy manifest now declares coarse location (section
   15.1).
 
+**Where the picker's lists are kept**, both in the app's own defaults, as the client's JSON,
+written whole after each change (the saved places first) and read leniently (anything that
+isn't a list is none; bad entries, approximate IP location, repeats and, for saved places, the
+phone's point and empty names are skipped; the list is cut to its most):
+
+| Key              | What                                                  | Store (IsItServices) |
+| ---------------- | ----------------------------------------------------- | -------------------- |
+| `recent.v1`      | the last five places chosen, newest first, with lines | `RecentDefaults`     |
+| `savedPlaces.v1` | up to ten saved places, the newest last, with lines   | `SavedPlaceDefaults` |
+
+Neither is in the App Group: no widget reads them, as the widget follows the place on screen.
+`-resetStore` forgets both.
+
 **Its tests.** On Linux: `Tests/IsItStateTests/PlacePickerModelTests.swift` (the search's pause,
 cancelling and failures, choosing a city and a point, the recent places, Use my location
 granted, denied, refused, without a fix and tapped twice, the sheet closed or a place chosen
-while the fix is out (the fix then chooses nothing), and a launch that never asks),
-`Tests/IsItLogicTests/PlacePickerTests.swift` (the content and `recent.v1`'s reading) and the
-`search.json` port. On the macOS CI, `PickerTests` (UI plan), over `-network
+while the fix is out (the fix then chooses nothing), a launch that never asks, and saved
+places: a result's star saving in place, a recent place moved to Saved and back, a full list,
+a saved place chosen, both lists kept and read back), `AppModelTests.swift` (the two lists'
+writes, saved places first), `Tests/IsItLogicTests/PlacePickerTests.swift` (the content, its
+Saved section and stars, and `recent.v1`'s and `savedPlaces.v1`'s reading) and the
+`search.json` and `saved.json` ports. On the macOS CI, `PickerTests` (UI plan), over `-network
 ip-first-launch,leeds-dry` or `…,kathmandu-0545` and `-location`: too short and no results;
 choosing Leeds (a city page) and Kathmandu (a point); a recent place kept across a relaunch, the
 box's clear button (44 by 44, "Clear search", back to the recent places with the keyboard up), then
@@ -905,9 +940,9 @@ Type.
   the top bar's controls, the switcher, the pager and the page were (`homeGeometry`).
   Phase 5.4's tests and phase 6's share the launch arguments (below, "Debug hooks"): `-network`
   takes a comma list of fixtures, or `off` or `unavailable`; `-clock fixed` and `-now` fix the
-  moment; `-resetStore` forgets the recent places too. Their identifiers differ, and the pager
-  keeps only the page on screen in the accessibility tree, so the picker's and Settings' tests
-  find one `heading` and one `verdict`, the page on screen's.
+  moment; `-resetStore` forgets the recent and saved places too. Their identifiers differ, and
+  the pager keeps only the page on screen in the accessibility tree, so the picker's and
+  Settings' tests find one `heading` and one `verdict`, the page on screen's.
 
 ### No words typed in the Swift (phase 6's exit)
 
@@ -1082,8 +1117,8 @@ launch argument. So far there are these:
 
 - `-uitest` turns animations off, and keeps the glyphs' flakes still (`stillMotion()`), as
   `-now` does too;
-- `-resetStore` forgets the place, the units, the saved answer and the recent places before the
-  model reads them, for a first launch (not `unlock.v1`, which only StoreKit's code writes);
+- `-resetStore` forgets the place, the units, the saved answer and the recent and saved places
+  before the model reads them, for a first launch (not `unlock.v1`, which only StoreKit's code writes);
   every UI test's first launch passes it;
 - `-fixture <name>` answers every request for an answer with that fixture (a transport of its
   own), after forgetting the saved answer, so the launch fetches it rather than painting an

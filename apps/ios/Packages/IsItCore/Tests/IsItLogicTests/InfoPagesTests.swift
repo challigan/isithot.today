@@ -134,7 +134,7 @@ struct InfoPagesTests {
           + "5 km) and your units to our server. Until you choose a place, our server estimates a "
           + "rough one from your internet connection. Place names you search for go to Open-Meteo, "
           + "our forecast provider, to find matching places. The app keeps your place, units, "
-          + "recent places and the last forecast on your iPhone.",
+          + "recent and saved places and the last forecast on your iPhone.",
         "Only while notifications are on, we keep your device's notification token, an ID made "
           + "from it, the place, its time zone, your units and which notifications you chose, "
           + "with a few details such as the app's version and when it last checked in. We delete "

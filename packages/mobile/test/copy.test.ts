@@ -10,6 +10,7 @@ import {
   WEEKDAYS,
   question,
 } from '@isithot/core';
+import { PLACES } from '@isithot/client';
 import { APP_COPY, APP_INTENT_KEYS, INFO_PLIST_SETTINGS, type AppCopyKey } from '../src/appCopy';
 import { APP_COPY_PATH, APP_COPY_SOURCE, appCopyMember, appCopySwift } from '../src/exportAppCopy';
 import { CONFIG_COPY_PATH, configCopy, xcconfigSetting } from '../src/exportConfigCopy';
@@ -272,6 +273,11 @@ describe('APP_COPY', () => {
       weekRowLabelShort: ['day', 'amount', 'band'],
       dayAgreement: ['snowy', 'total'],
       dayAgreementOne: ['snowy', 'total'],
+      savedFull: ['max'],
+      savePlace: ['place'],
+      unsavePlace: ['place'],
+      placeSaved: ['place'],
+      placeUnsaved: ['place'],
       upgradeSettings: ['price'],
       notifyPlaceOnScreen: ['place'],
       reportAdSubject: ['version'],
@@ -472,6 +478,21 @@ describe('the picker’s strings', () => {
 
   it('labels the search box’s own clear button', () => {
     expect(APP_COPY.clearSearch).toBe('Clear search');
+  });
+
+  it('words saved places beside Recent, the limit from PLACES', () => {
+    expect(APP_COPY.saved).toBe('Saved');
+    expect(APP_COPY.savedHint).toBe('Tap the star beside a place to save it here.');
+    expect(fill(APP_COPY.savedFull, { max: String(PLACES.savedMax) })).toBe(
+      'You can save up to 10 places. Remove one to save another.',
+    );
+    expect(fill(APP_COPY.savePlace, { place: 'Leeds' })).toBe('Save Leeds');
+    expect(fill(APP_COPY.unsavePlace, { place: 'Leeds' })).toBe('Remove Leeds from saved places');
+    expect(fill(APP_COPY.placeSaved, { place: 'Leeds' })).toBe('Leeds saved.');
+    expect(fill(APP_COPY.placeUnsaved, { place: 'Leeds' })).toBe(
+      'Leeds removed from saved places.',
+    );
+    expect(APP_COPY.deleteRecent).toBe('Delete');
   });
 });
 

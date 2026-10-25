@@ -177,8 +177,8 @@ describe("Your privacy and the website's privacy notice", () => {
       ['a rough one from your internet connection', 'a rough location from your IP address'],
       ['Place names you search for go to Open-Meteo', 'place searches go to Open-Meteo'],
       [
-        'The app keeps your place, units, recent places and the last forecast on your iPhone.',
-        'it keeps your place, units, recent places and last answer on your iPhone',
+        'The app keeps your place, units, recent and saved places and the last forecast on your iPhone.',
+        'it keeps your place, units, recent and saved places and last answer on your iPhone',
       ],
       ["your device's notification token, an ID made from it", 'an ID made from the token'],
       [

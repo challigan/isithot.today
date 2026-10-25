@@ -103,7 +103,7 @@ test.describe('the legal pages', () => {
         'Your rights',
       ]);
       await expect(main.locator('h2:text-is("Our apps") + p')).toHaveText(
-        'The willitsnow.today app for iPhone works like this website: it sends the place you ask about (a town, or your location rounded to about 5 km) and your units to our server to get the forecast. As on the website, until you choose a place it uses a rough location from your IP address, place searches go to Open-Meteo, and it keeps your place, units, recent places and last answer on your iPhone. It has no accounts.',
+        'The willitsnow.today app for iPhone works like this website: it sends the place you ask about (a town, or your location rounded to about 5 km) and your units to our server to get the forecast. As on the website, until you choose a place it uses a rough location from your IP address, place searches go to Open-Meteo, and it keeps your place, units, recent and saved places and last answer on your iPhone. It has no accounts.',
       );
       const items = main.locator('h2:text-is("Our apps") + p + ul > li');
       await expect(items).toHaveText([

@@ -36,7 +36,7 @@ let package = Package(
   ],
   targets: [
     // The services behind AppModel's protocols (IsItState): URLSession, the App Group,
-    // WidgetKit's reloads and the recent places (IsItLogic's codec).
+    // WidgetKit's reloads and the recent and saved places (IsItLogic's codecs).
     .target(
       name: "IsItServices",
       dependencies: [

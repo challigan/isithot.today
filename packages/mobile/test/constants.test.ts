@@ -15,7 +15,7 @@ import {
   TOMORROW_FROM_HOUR,
   WIDGET,
 } from '@isithot/core';
-import { CLIENT } from '@isithot/client';
+import { CLIENT, PLACES } from '@isithot/client';
 import {
   CONSTANTS_PATH,
   CONSTANTS_SOURCE,
@@ -153,6 +153,16 @@ describe('constantsSwift', () => {
       Object.entries(CLIENT).map(([k, v]) => `public static let ${k} = ${swiftInt(v)}`),
     );
     expect(swift).toContain('    public static let refreshAfterMs = 1_800_000\n');
+  });
+
+  it("writes the picker's limits on recent and saved places", () => {
+    expect(members(swift, 'Places')).toEqual(
+      Object.entries(PLACES).map(([k, v]) => `public static let ${k} = ${v}`),
+    );
+    expect(members(swift, 'Places')).toEqual([
+      'public static let recentMax = 5',
+      'public static let savedMax = 10',
+    ]);
   });
 
   it('is the same every time, within 100 columns but for the header', () => {

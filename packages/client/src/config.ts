@@ -1,6 +1,6 @@
 /**
- * The clients' own timings. The website uses `refreshAfterMs`; the rest are the native apps', and
- * reach Swift with core's constants.
+ * The clients' own timings and limits. The website uses `refreshAfterMs`; the rest are the native
+ * apps', and reach Swift with core's constants.
  */
 
 const MINUTE = 60 * 1000;
@@ -16,4 +16,15 @@ export const CLIENT = {
   requestTimeoutMs: 12 * 1000,
   /** Asked too often (429), an app keeps its saved answer and asks again after this, and jitter. */
   retryAfterMs: 60 * 1000,
+} as const;
+
+/**
+ * The picker's two lists in the apps: the most recent places it keeps, and the most saved places.
+ * Both reach Swift with core's constants (`Constants.Places`).
+ */
+export const PLACES = {
+  /** Recent places: the last five chosen, newest first. */
+  recentMax: 5,
+  /** Saved places: ten, in the order saved, so the list never scrolls far. */
+  savedMax: 10,
 } as const;

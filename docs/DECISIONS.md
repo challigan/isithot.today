@@ -292,8 +292,8 @@ is Today again. This settles the spec's open question about the evening.
   emulated phones, including a keyboard-sized resize; not yet on a real iPhone or Android
   phone.
 - **Room for saved places.** The picker's body is in sections ("Use my location", then the
-  results), so a saved list can go between them later. Nothing is built for it yet (see "Saved
-  places").
+  results), so a saved list can go between them later. Nothing is built for it on the web; the
+  iPhone app has one (see "Saved places (the iPhone app)").
 
 ## Fixes after the round 2 review
 
@@ -842,21 +842,39 @@ from, in words and with an arrow. Hot, Wet and Snow, and the week, are unchanged
   model list (every topic) still runs past the gutters at 320px with 200% text, and wind's at
   1280px with three-figure km/h gusts; the same column steps would fix it.
 
-## Saved places (planned for the apps)
+## Saved places (the iPhone app)
 
-Carl wants to save places in the native apps. Nothing is built for it on the web.
+Carl wanted to save places in the native apps, beside the picker's recent ones. The iPhone app
+has them now (built in "The iPhone app in the website's look", step 4); the website has none.
 
-- The full-screen picker is where the saved list goes: a "Saved places" section between the
-  search box and the results (in `SearchSheet.astro`, between "Use my location" and the
-  results list).
-- The API needs nothing new: a saved place is a city slug or rounded coordinates, which
-  `/api/v1/today` already takes.
-- On the web each domain has its own storage, so places saved on isithot.today would not show
-  on isitwet.today or willitsnow.today. A web version would need the same address-carrying
-  approach as F8 above (clumsier for a list than for one place) or the sites on one shared
-  domain.
-- The iPhone app's recent places (the last five, newest first, one per place) are a rule in
-  `packages/client` (`addRecent`), below.
+- **Where they show**: in the full-screen picker, with nothing typed, a "Saved" section between
+  "Use my location" and "Recent", where `SearchSheet.astro` would put one on the web. A star
+  beside a place saves or removes it.
+- **The rules** are one pure function per action in `packages/client/src/saved.ts`, ported to
+  Swift and checked by golden vectors (`saved.json`), as the recent places are: at most ten
+  (`PLACES.savedMax`), in the order saved with the newest last, one per place (`targetKey`).
+  The two lists change together (`PlaceLists`): saving takes a place out of Recent; removing it
+  puts it back on top of Recent, so one more tap undoes it; choosing a saved place leaves both
+  alone, so the list doesn't shuffle under the thumb; and Recent never shows a saved place
+  (`shownRecent`). A saved place keeps the name and line it was saved with.
+- **The phone's own point is never saved**, nor is approximate IP location. A device fix
+  follows the phone: a saved "my location" that moved would mislead, and one that stood still
+  would mislead under that name. So the Recent row a location fix made has no star; to keep the
+  town you are in, search for it and save that. This is Carl's open question 1 in the build
+  plan, built on its default; saving the point as a fixed place is on the Later list.
+- **Kept in the app's own defaults** (`savedPlaces.v1`, beside `recent.v1`), not the App Group:
+  no widget reads them, as the v1 widget follows the place on screen, and the spec keeps widgets
+  that choose a place for the all-in-one app. Read leniently, as `recent.v1` is, and written
+  whole after each change, the saved places first, so a write cut short leaves a place in both
+  lists, which `shownRecent` shows once.
+- **Free**, like Recent: the upgrade stays "no ads, plus widgets" (open question 2's default).
+- **The API needs nothing new**: a saved place is a city slug or rounded coordinates, which
+  `/api/v1/today` already takes. They never leave the phone; only the place chosen is asked
+  about. Your privacy and the website's privacy notice now say the app keeps "recent and saved
+  places".
+- **On the web** each domain has its own storage, so a web version would need the same
+  address-carrying approach as F8 above (clumsier for a list than for one place) or the sites on
+  one shared domain. Nothing is built there.
 
 ## The client package (packages/client)
 
@@ -4199,6 +4217,53 @@ This supersedes spec 10.1 and 10.2 on type, colours, the switcher, Now and the w
   no change: their labels, identifiers and the `WordsButton` geometry hold. The first macOS run
   is to show whether the grids' cells, the pills and the tab bar's trait pass as the design
   expects (its section 5's risks and fallbacks).
+
+**Step 4: saved places' rules and storage.** The rules, the copy and the store, with no change
+to the picker's look yet (step 5 draws it); the picker as it is ignores the presenter's new
+fields. "Saved places (the iPhone app)" above says what they are.
+
+- **TypeScript first.** `packages/client`: `PLACES = { recentMax: 5, savedMax: 10 }`
+  (`config.ts`), `saved.ts` (`isSaved`, `canSave`, `savePlace`, `unsavePlace`, `choosePlace`,
+  `shownRecent`), `RecentPlace.detail` and `addRecent`'s last argument, and
+  `APP_KEYS.savedPlaces = 'savedPlaces.v1'`, all at 100% coverage. `packages/mobile`: `saved.json`
+  (an empty and a full list, the tenth and eleventh save, a place saved twice under two names,
+  approximate IP location, the phone's point named and not, a searched point at the phone's
+  coordinates, saving from Recent and from a search, removing with the sixth recent place cut,
+  choosing saved and unsaved places, and overlapping lists), `recent.json`'s cases with a line
+  (every older case kept), `Constants.Places`, and the copy (`saved`, `savedHint`, `savedFull`,
+  `savePlace`, `unsavePlace`, `placeSaved`, `placeUnsaved`, `deleteRecent`).
+- **A recent place keeps its line** ("England, United Kingdom"), so Recent tells two Newcastles
+  apart as the results do. The field is optional, as the stored shape only ever gains optional
+  fields: `recent.v1`'s older entries read as they are, and a place without a line is written
+  without one.
+- **`savePlace` also refuses a place with no name**, which `canSave` (a target alone) can't see,
+  so the lenient reader, which skips empty names, always reads back a list `savePlace` could
+  have made.
+- **Swift.** `SavedPlaces` (IsItLogic) is the port, with `savedPlaces.v1`'s codec; `RecentPlaces`
+  keeps the line and reads its limit from `Constants.Places`; `PlaceSearch.line(_:)` gives a
+  result's line or none. `PlacePicker` gains the Saved section (its heading always with nothing
+  typed, the hint with none saved, the line when full), every row's `Star` (filled or empty, its
+  label, which a row's press-and-hold menu reuses, and what VoiceOver is told after a tap), a
+  saved result's value "Saved", the recent places through `shownRecent`, and "Delete". IsItState
+  gains `SavedPlaceStore` and `MemorySavedPlaces` (`AppEnvironment.saved`); `AppModel.saved`,
+  `.lists`, `.save(_:)`, `.unsave(_:)` and `choose(_:name:detail:)`, which follows
+  `choosePlace`; and `PlacePickerModel.save(_:)` (a result or a recent place), `.unsave(_:)` and
+  `.choose(saved:)`. `AppModel` writes only the lists that changed, the saved places first.
+  IsItServices gains `SavedPlaceDefaults`; the app wires it in, and `-resetStore` forgets it.
+- **Privacy.** "recent places" becomes "recent and saved places" in Your privacy
+  (`privacyForecast`), the website's privacy notice (`PrivacyBody.astro`, its date moved on),
+  `e2e/credits.spec.ts`, `credits.test.ts`'s pair, Linux's `InfoPagesTests` and the first line
+  `SettingsTests.testYourPrivacy` reads. Nothing new leaves the phone.
+- **Tests.** Linux: `SavedVectorTests` (listed in `PortedVectors`), `RecentVectorTests` with the
+  line, the saved places' codec (a round trip, nothing or not a list, the entries skipped, at
+  most ten), `PlacePickerTests` (Saved over Recent, a place in both shown once, the stars and
+  their words, the hint, a full list with no empty stars, a result's value, typing, every new
+  word in sentence case and about snow alone), `PlacePickerModelTests` (a star saving a result in
+  place with nothing chosen or asked, a recent place moved to Saved and back, Recent cut to five,
+  a saved place chosen, the line kept, the phone's point refused, a full list, both lists read
+  back by a new model) and `AppModelTests` (the writes, saved places first, and nothing written
+  for a change that changes nothing). Three state tests now expect a chosen result's line among
+  the recent places.
 
 ## API contract
 

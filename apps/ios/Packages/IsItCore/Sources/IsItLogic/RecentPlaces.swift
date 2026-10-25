@@ -7,31 +7,37 @@ public struct RecentPlace: Codable, Sendable, Equatable {
   public var target: Target
   /// The place's name as it was shown (a device location's comes from its answer).
   public var name: String
+  /// The line beneath it ("England, United Kingdom"), when it was chosen from a search result or
+  /// came back from the saved places, so two places of one name can be told apart. Older entries
+  /// have none, and none is written then: the stored shape only ever gains optional fields.
+  public var detail: String?
 
-  public init(target: Target, name: String) {
+  public init(target: Target, name: String, detail: String? = nil) {
     self.target = target
     self.name = name
+    self.detail = detail
   }
 }
 
 /// The picker's recent places: newest first, one entry per place (`Target.key`), and never
 /// approximate IP location. The port of client `recent.ts`, checked against `recent.json`.
 public enum RecentPlaces {
-  /// The most the list keeps.
-  public static let defaultMax = 5
+  /// The most the list keeps (client `PLACES.recentMax`).
+  public static let defaultMax = Constants.Places.recentMax
 
-  /// The list with `target` first, without any older entry for the same place, at most `max`
-  /// long (client `addRecent`). Approximate IP location is never added: the list is only cut to
-  /// `max`.
+  /// The list with `target` first (with `detail` when given), without any older entry for the
+  /// same place, at most `max` long (client `addRecent`). Approximate IP location is never
+  /// added: the list is only cut to `max`.
   public static func adding(
     _ target: Target,
     name: String,
+    detail: String? = nil,
     to list: [RecentPlace],
     max: Int = defaultMax
   ) -> [RecentPlace] {
     if case .ip = target { return prefix(list, max) }
     let others = removing(target, from: list)
-    return prefix([RecentPlace(target: target, name: name)] + others, max)
+    return prefix([RecentPlace(target: target, name: name, detail: detail)] + others, max)
   }
 
   /// The list without `target` (client `removeRecent`).

@@ -117,6 +117,13 @@ public enum Constants {
     public static let retryAfterMs = 60_000
   }
 
+  /// The picker's lists (client `PLACES`): the most recent places kept, and the most saved
+  /// places.
+  public enum Places {
+    public static let recentMax = 5
+    public static let savedMax = 10
+  }
+
   /// willitsnow.today (core `SITES.snow`): the pages Settings opens in Safari, and the address
   /// people write to (core `CONTACT_EMAIL`), for Contact us and Report an ad.
   public enum Site {

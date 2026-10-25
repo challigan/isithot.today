@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PLACES } from '../src/config';
 import { addRecent, removeRecent, type RecentPlace } from '../src/recent';
 import { deviceTarget, type PlaceTarget } from '../src/target';
 
@@ -40,6 +41,30 @@ describe('addRecent', () => {
     const list = [place('a'), place('b')];
     expect(addRecent(list, { kind: 'ip' }, 'London')).toEqual(list);
     expect(addRecent(list, { kind: 'ip' }, 'London', 1)).toEqual([place('a')]);
+  });
+
+  it('keeps a place’s line when given, and the newer entry’s when chosen again', () => {
+    const newcastle = city('newcastle-gb');
+    let list = addRecent([], newcastle, 'Newcastle', undefined, 'England, United Kingdom');
+    expect(list).toEqual([
+      { target: newcastle, name: 'Newcastle', detail: 'England, United Kingdom' },
+    ]);
+    // Without one, the entry has no `detail` at all, as older stored entries have none.
+    list = addRecent(list, city('york-gb'), 'York');
+    expect(list[0]).toEqual({ target: city('york-gb'), name: 'York' });
+    expect(Object.keys(list[0]!)).toEqual(['target', 'name']);
+    // Chosen again, the newer entry replaces the older, line and all.
+    list = addRecent(list, newcastle, 'Newcastle', 3, 'New South Wales, Australia');
+    expect(list.map((r) => r.detail)).toEqual(['New South Wales, Australia', undefined]);
+    expect(addRecent(list, newcastle, 'Newcastle')[0]).toEqual({
+      target: newcastle,
+      name: 'Newcastle',
+    });
+  });
+
+  it('keeps PLACES.recentMax by default', () => {
+    const many = Array.from({ length: PLACES.recentMax + 2 }, (_, i) => place(`p${i}`));
+    expect(addRecent(many, city('q'), 'q')).toHaveLength(PLACES.recentMax);
   });
 
   it('leaves the list it was given alone', () => {

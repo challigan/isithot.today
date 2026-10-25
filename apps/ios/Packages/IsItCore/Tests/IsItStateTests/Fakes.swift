@@ -300,6 +300,8 @@ struct Harness {
   let hooks: RecordingHooks
   /// The recent places kept (`recent.v1`).
   let recents: MemoryRecents
+  /// The saved places kept (`savedPlaces.v1`).
+  let saved: MemorySavedPlaces
   let model: AppModel
 
   /// The jitter every draw gives: half the range.
@@ -310,13 +312,15 @@ struct Harness {
     store: FakeState.Contents = FakeState.Contents(),
     replies: [FakeTransport.Reply],
     hooks: RecordingHooks = RecordingHooks(),
-    recents: [RecentPlace] = []
+    recents: [RecentPlace] = [],
+    saved: [SavedPlace] = []
   ) {
     transport = FakeTransport(replies)
     clock = TestClock(now)
     self.store = FakeState(store)
     self.hooks = hooks
     self.recents = MemoryRecents(recents)
+    self.saved = MemorySavedPlaces(saved)
     model = AppModel(
       environment: AppEnvironment(
         client: APIClient(transport: transport),
@@ -325,6 +329,7 @@ struct Harness {
         widgets: widgets,
         location: hooks,
         recents: self.recents,
+        saved: self.saved,
         hooks: hooks,
         random: { range in
           precondition(range == 0...90_000, "the jitter is 0 to 90 s")

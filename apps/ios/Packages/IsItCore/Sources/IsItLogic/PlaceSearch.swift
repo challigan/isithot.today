@@ -33,6 +33,13 @@ public enum PlaceSearch {
       .filter { !$0.isEmpty }
       .joined(separator: ", ")
   }
+
+  /// A result's line as a row shows it and a recent or saved place keeps it: `detail(_:)`, or
+  /// nil when it has neither region nor country, so no row draws an empty line.
+  public static func line(_ result: SearchResult) -> String? {
+    let line = detail(result)
+    return line.isEmpty ? nil : line
+  }
 }
 
 extension PlaceSearch.Input: Decodable {

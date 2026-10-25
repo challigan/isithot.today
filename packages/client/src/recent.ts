@@ -4,24 +4,36 @@
  *
  * Swift: `IsItLogic/RecentPlaces.swift`, checked against the golden vectors in `recent.json`.
  */
+import { PLACES } from './config';
 import { targetKey, type PlaceTarget, type Target } from './target';
 
 export interface RecentPlace {
   target: PlaceTarget;
   /** The place's name as it was shown (a device location's comes from its answer). */
   name: string;
+  /**
+   * The line beneath it ("England, United Kingdom"), when it was chosen from a search result or
+   * came back from the saved places, so two places of one name can be told apart. Optional, as
+   * what is stored only ever gains optional fields: older entries have none.
+   */
+  detail?: string;
 }
 
-/** The list with `target` first, without any older entry for the same place, at most `max` long. */
+/**
+ * The list with `target` first (with `detail` when given), without any older entry for the same
+ * place, at most `max` long.
+ */
 export function addRecent(
   list: readonly RecentPlace[],
   target: Target,
   name: string,
-  max = 5,
+  max: number = PLACES.recentMax,
+  detail?: string,
 ): RecentPlace[] {
   if (target.kind === 'ip') return list.slice(0, max);
   const key = targetKey(target);
-  return [{ target, name }, ...list.filter((r) => targetKey(r.target) !== key)].slice(0, max);
+  const place: RecentPlace = detail === undefined ? { target, name } : { target, name, detail };
+  return [place, ...list.filter((r) => targetKey(r.target) !== key)].slice(0, max);
 }
 
 /** The list without `target`. */

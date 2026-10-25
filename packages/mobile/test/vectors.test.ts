@@ -16,15 +16,19 @@ import {
   type TodayResponse,
 } from '@isithot/core';
 import {
+  PLACES,
   addRecent,
   alertAction,
   alertPlaceAllowed,
+  canSave,
+  choosePlace,
   dayUntil,
   deviceTarget,
   fingerprint,
   freshQuery,
   hold,
   hourUntil,
+  isSaved,
   middleDay,
   nextRefreshAt,
   notificationRoute,
@@ -34,12 +38,15 @@ import {
   registrationBody,
   removeRecent,
   resultDetail,
+  savePlace,
   searchInput,
   searchQuery,
   searchTarget,
+  shownRecent,
   targetFromQuery,
   targetKey,
   todayQuery,
+  unsavePlace,
   updatedLine,
   usableUntil,
   widgetEntries,
@@ -113,7 +120,13 @@ const replay: Record<string, (i: In) => unknown> = {
   alertAction: (i) => alertAction(i),
   parseDeepLink: (i) => parseDeepLink(i.url),
   notificationRoute: (i) => notificationRoute(i.payload, () => i.placeToday),
-  addRecent: (i) => addRecent(i.list, i.target, i.name, i.max),
+  addRecent: (i) => addRecent(i.list, i.target, i.name, i.max, i.detail),
+  isSaved: (i) => isSaved(i.saved, i.target),
+  canSave: (i) => canSave(i.saved, i.target),
+  savePlace: (i) => savePlace(i.lists, i.place),
+  unsavePlace: (i) => unsavePlace(i.lists, i.target),
+  choosePlace: (i) => choosePlace(i.lists, i.target, i.name, i.detail),
+  shownRecent: (i) => shownRecent(i.lists),
   removeRecent: (i) => removeRecent(i.list, i.target),
   searchInput: (i) => searchInput(i.text),
   resultDetail: (i) => resultDetail(i.result),
@@ -166,8 +179,8 @@ const SPEC_FILES = [
 /** Phase 5's, after section 7.4's: the app's page. */
 const PAGE_FILES = ['page'];
 
-/** Phase 6's: the picker's search box. */
-const PICKER_FILES = ['search'];
+/** Phase 6's: the picker's search box; then its saved places (the website's look, step 4). */
+const PICKER_FILES = ['search', 'saved'];
 
 /** The functions whose reference is core's; the rest are the client's. */
 const CORE = [
@@ -192,7 +205,7 @@ const local = (zone: string, now: number) => {
 };
 
 describe('vectorFiles', () => {
-  it('writes every file section 7.4 names, in its order, then the page and the search box', () => {
+  it('writes every file section 7.4 names, in its order, then the page and the picker’s', () => {
     expect(files.map((f) => f.name)).toEqual([...SPEC_FILES, ...PAGE_FILES, ...PICKER_FILES]);
   });
 
@@ -854,5 +867,55 @@ describe('the cases cover what section 7.4 asks for', () => {
       added.some((c) => (c.out as unknown[]).length === 5 && (c.in as In).list.length === 5),
     ).toBe(true);
     expect(added.some((c) => (c.in as In).max === 0)).toBe(true);
+  });
+
+  it('recent: a line kept, replaced by the newer entry’s, and absent when not given', () => {
+    const added = casesFor('recent', 'addRecent');
+    const withLine = added.filter((c) => (c.in as In).detail !== undefined);
+    expect(withLine.length).toBeGreaterThanOrEqual(5);
+    expect(withLine.some((c) => (c.in as In).max === undefined)).toBe(true);
+    for (const c of withLine) {
+      const first = (c.out as In[])[0];
+      if ((c.in as In).target.kind !== 'ip') expect(first.detail).toBe((c.in as In).detail);
+    }
+    // Chosen again without a line, a place that had one loses it: the newer entry wins.
+    const again = added.find(
+      (c) => (c.in as In).detail === undefined && (c.in as In).list[0]?.detail !== undefined,
+    )!;
+    expect(Object.keys((again.out as In[])[0])).toEqual(['target', 'name']);
+  });
+
+  it('saved: the limit, no IP or phone point, back on top of Recent, and choosing', () => {
+    const saves = casesFor('saved', 'savePlace');
+    // The tenth saved, the eleventh refused.
+    expect(
+      saves.some(
+        (c) =>
+          (c.in as In).lists.saved.length === PLACES.savedMax - 1 &&
+          (c.out as In).saved.length === PLACES.savedMax,
+      ),
+    ).toBe(true);
+    const full = saves.find((c) => (c.in as In).lists.saved.length === PLACES.savedMax)!;
+    expect(full.out).toEqual(full.in.lists);
+    // The phone's point is never saved, named or not; nor is approximate IP location.
+    const phone = casesFor('saved', 'canSave').filter(
+      (c) => (c.in as In).target.source === 'device' || (c.in as In).target.kind === 'ip',
+    );
+    expect(phone.length).toBeGreaterThan(0);
+    expect(phone.every((c) => c.out === false)).toBe(true);
+    // Removing puts the place back on top of Recent, with its line; the sixth is cut.
+    const unsaved = casesFor('saved', 'unsavePlace').filter(
+      (c) => (c.out as In).saved.length < (c.in as In).lists.saved.length,
+    );
+    expect(unsaved.length).toBeGreaterThanOrEqual(3);
+    expect(unsaved.some((c) => (c.out as In).recent.length === PLACES.recentMax)).toBe(true);
+    expect(unsaved.some((c) => (c.out as In).recent[0].detail !== undefined)).toBe(true);
+    // Choosing a saved place changes nothing.
+    expect(
+      casesFor('saved', 'choosePlace').some(
+        (c) => JSON.stringify(c.out) === JSON.stringify(c.in.lists),
+      ),
+    ).toBe(true);
+    expect(casesFor('saved', 'shownRecent').length).toBeGreaterThanOrEqual(4);
   });
 });
