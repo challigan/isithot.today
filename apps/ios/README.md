@@ -526,11 +526,12 @@ brought forward the minute's tick, pull to refresh, the footer and the loading a
   it names it. Both are bound to `AppModel.view` (`$model.view` in `HomeView`), so a tap, a swipe, a widget's route
   (`.view`, which now sets the view) and the return after more than 30 minutes away (the view
   for the time of day) move both. Since PR #34's second full macOS run a change to the view moves
-  the pages at once through the `ScrollViewReader`, and the pages set the view only from where
-  they are: on iOS 18 as a scroll comes to rest, to the page they rest on (`PagerRest`, IsItLogic,
-  held on Linux by `PagerRestTests`), never from what the scroll view reports on the way; on iOS
-  17, with no scroll phases, from `.scrollPosition(id:)`'s reports into a position of its own,
-  which the app never writes (`PagerPosition`). Shared with the view, `.scrollPosition(id:)`'s
+  the pages at once through the `ScrollViewReader`, and the scroll view reports through
+  `.scrollPosition(id:)` into a position of its own, which places the pages at launch and which
+  the app never writes (`PagerSync`). On iOS 18 only a swipe, as it comes to rest, sets the view,
+  to the page it rests on (`PagerRest`, IsItLogic, held on Linux by `PagerRestTests`); a rest no
+  finger led to, as at launch, changes nothing. On iOS 17, with no scroll phases, the page the
+  scroll view reports sets it. Shared with the view, `.scrollPosition(id:)`'s
   setter most likely wrote Now back over a tap on Today (DECISIONS, "After #34's second full
   run"). The app opens on
   `MiddleDay.defaultView`, Today or Now from 6pm, once: from the saved answer it paints, or else

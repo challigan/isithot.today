@@ -2415,10 +2415,11 @@ once to VoiceOver, and every text size up to AX5 (sections 9.5, 10.1, 10.2 and 1
   reports on the way could set the view mid-scroll. Until PR #34's second full macOS run the two
   shared one binding through `.scrollPosition(id:)`, whose setter wrote whatever page the scroll
   view reported into the view; on that run it most likely wrote Now back over a tap on Today. The
-  view now moves the pages through the `ScrollViewReader`, and the pages set the view only from
-  where they are: on iOS 18 as a scroll comes to rest, to the page they rest on (`PagerRest`); on
-  iOS 17, with no scroll phases, from `.scrollPosition(id:)`'s reports into a position of its
-  own, which the app never writes (`PagerPosition`) ("After #34's second full run", below). (The
+  view now moves the pages through the `ScrollViewReader`, and the scroll view reports through
+  `.scrollPosition(id:)` into a position of its own, which places the pages at launch and which
+  the app never writes (`PagerSync`). On iOS 18 only a swipe, as it comes to rest, sets the view,
+  to the page it rests on (`PagerRest`); on iOS 17, with no scroll phases, the page the scroll
+  view reports does ("After #34's second full run" and its correction after the third, below). (The
   container's size, `containerRelativeFrame`, turned out to be the screen's safe area in height,
   which put the top bar under the status bar; each page has been the pager's own size since
   main's first macOS run: "The iPhone app's UI tests, after main's first macOS run", below.)
@@ -4638,7 +4639,7 @@ TypeScript and the docs).
   update, so it happens only now and then; neither the artifacts nor Linux can show that order. It
   may first show on this PR because the tabs are now SwiftUI buttons (`PillSegments`) where they
   were UIKit's segmented control; that is not verified.
-- **The fix** (`HomePager.pagerFollows`). On iOS 18 the pages set the view only as a scroll comes
+- **The fix** (`HomePager.pagerFollows`, since replaced by `PagerSync`; see the correction below). On iOS 18 the pages set the view only as a scroll comes
   to rest (`onScrollPhaseChange`, at `.idle`), to the page under the middle of what the scroll view
   shows then, never from what it reports on the way. `PagerRest` (IsItLogic) finds it: the page
   whose span holds the visible rect's middle, the end page past either end, and nothing to follow
@@ -4651,8 +4652,8 @@ TypeScript and the docs).
   ends, half a point of rounding, and every case with nothing to follow.
 - **On iOS 17**, the deployment target, there are no scroll phases, and the same race could undo
   a user's tap. There the scroll view still reports the page it is on through
-  `scrollPosition(id:)`, but into a position of its own (`PagerPosition`), set at first to the
-  view the app opens on and never written by the app; only a change there sets the view, and a
+  `scrollPosition(id:)`, but into a position of its own (`PagerPosition`, since folded into
+  `PagerSync`), set at first to the view the app opens on and never written by the app; only a change there sets the view, and a
   change to the view moves the pages through the `ScrollViewReader`, as on iOS 18, unless a
   swipe's report has put them there already. A report of the page the pages are still on is the
   position already held, so it changes nothing, where through the shared binding it could write
@@ -4681,6 +4682,19 @@ TypeScript and the docs).
   that didn't follow, which `offScreen` now fails as soon as the heading comes. Should the
   failure come back with Now chosen, the action never ran, which points to the touch, not the
   pager.
+- **Corrected after #34's third full run (8bcc82b).** Every launch opened on Now: 30 UI tests
+  failed with the heading on Now where Today was due, and `offScreen` agreed. Following every rest
+  followed the scroll view's first rest too, at launch, on Now, before the `onAppear` scroll moved
+  it to the view the app opens on, and wrote Now over the view. Now one modifier, `PagerSync`,
+  serves both versions. The scroll view reports into a position of its own through
+  `.scrollPosition(id:)`, set at first to the view the app opens on, so it opens there as it did
+  before this PR, and the app never writes it, so no report can be written back over a tap. On
+  iOS 18 the view follows only a swipe: `onScrollPhaseChange` notes `.interacting`, a finger
+  moving the pages, and at the `.idle` after it sets the view to the page they rest on
+  (`PagerRest`); a rest no finger led to, at launch or after a tab's jump, changes nothing. On
+  iOS 17 the page the scroll view reports sets the view, as described above. "The risk" above no
+  longer holds: the first position is the scroll view's own again, with the `onAppear` scroll as
+  its backup, and `offScreen` still checks it.
 
 **A licence's URL "partially unsupported" for Dynamic Type
 (`SettingsTests.testRowsOpenWhatTheySay`).** On the typeface's licence (`NoticeView`), the
