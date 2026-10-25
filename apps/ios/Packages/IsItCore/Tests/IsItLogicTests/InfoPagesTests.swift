@@ -107,6 +107,11 @@ struct InfoPagesTests {
       page.notices.map(\.file) == [
         "BricolageGrotesque-OFL", "Google-Mobile-Ads-LICENSE", "Google-UMP-LICENSE",
       ])
+    // The whole app's typeface, not only the answer's: every page sets its words in it.
+    #expect(
+      page.notices[0].summary
+        == "The app's typeface. Copyright 2022 The Bricolage Grotesque Project Authors, "
+        + "licensed under the SIL Open Font License, Version 1.1.")
     #expect(page.notices[0].summary.contains("SIL Open Font License, Version 1.1"))
     #expect(page.notices[1].summary.contains("Apache License, Version 2.0"))
     #expect(page.notices.allSatisfy { $0.url?.scheme == "https" })

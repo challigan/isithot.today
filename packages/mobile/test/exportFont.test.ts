@@ -23,6 +23,7 @@ import {
   textFontRecipe,
   textFontSourcePaths,
 } from '../src/exportFont';
+import { cmapCodePoints } from './fontTables';
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url));
 const TTF = new Uint8Array(repo(FONT_PATH));
@@ -34,43 +35,6 @@ const textRecipeNow = () => {
 };
 /** Each text face as committed. */
 const faces = TEXT_FONTS.map((face) => ({ face, ttf: new Uint8Array(repo(fontPath(face.name))) }));
-
-/**
- * The code points a font's Windows Unicode BMP cmap (format 4) gives a glyph, as Core Text finds
- * them: the text faces have only that subtable.
- */
-function cmapCodePoints(ttf: Uint8Array): Set<number> {
-  const cmap = readSfnt(ttf).tables.get('cmap')!;
-  const view = new DataView(cmap.buffer, cmap.byteOffset, cmap.byteLength);
-  const found = new Set<number>();
-  for (let i = 0; i < view.getUint16(2); i++) {
-    const record = 4 + 8 * i;
-    if (view.getUint16(record) !== 3 || view.getUint16(record + 2) !== 1) continue;
-    const table = view.getUint32(record + 4);
-    expect(view.getUint16(table)).toBe(4);
-    const segments = view.getUint16(table + 6) / 2;
-    const ends = table + 14;
-    const starts = ends + 2 * segments + 2;
-    const deltas = starts + 2 * segments;
-    const rangeOffsets = deltas + 2 * segments;
-    for (let s = 0; s < segments; s++) {
-      const [start, end] = [view.getUint16(starts + 2 * s), view.getUint16(ends + 2 * s)];
-      const delta = view.getUint16(deltas + 2 * s);
-      const rangeOffset = view.getUint16(rangeOffsets + 2 * s);
-      for (let c = start; c <= end && c !== 0xffff; c++) {
-        let glyph: number;
-        if (rangeOffset === 0) glyph = (c + delta) & 0xffff;
-        else {
-          const at = rangeOffsets + 2 * s + rangeOffset + 2 * (c - start);
-          const raw = view.getUint16(at);
-          glyph = raw === 0 ? 0 : (raw + delta) & 0xffff;
-        }
-        if (glyph !== 0) found.add(c);
-      }
-    }
-  }
-  return found;
-}
 
 describe('fontSourcePath', () => {
   it('finds the one Bricolage Grotesque variable package', () => {

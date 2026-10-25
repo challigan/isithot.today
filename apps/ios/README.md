@@ -18,8 +18,9 @@ and phase 6, the sheets behind the top bar, over every page: the place picker (6
 my location", the recent places and the saved places) and Settings (6.2 and 6.3: the snow units, the privacy rows,
 Report an ad, About and Help, the version, How it works, Credits and licences and Your privacy's
 lines) (below, "Phase 6"). The home screen is drawn in the website's look: its type, pills, tabs,
-grids and week rows (below, "The home screen in the website's look"), and so is the picker, in
-the band of the page on screen (below, "6.1: the place picker"). A Debug build can be
+grids and week rows (below, "The home screen in the website's look"); so is the picker, in
+the band of the page on screen (below, "6.1: the place picker"), and so are Settings and its
+pages, in the website's content pages' palette (below, "6.2 and 6.3: Settings"). A Debug build can be
 answered by a fixture or a stubbed network instead (below, "Debug hooks"). Everything else comes
 in later phases.
 
@@ -37,7 +38,7 @@ Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API
                          surfaces' shares and the content card); the ports, the
                          home screen's, the picker's and Settings' presenters, the saved places'
                          rules (SavedPlaces), the glyph's drift, which
-                         pages are light ink on dark and the sheets' colours (IsItLogic); AppModel, its
+                         pages are light ink on dark (IsItLogic); AppModel, its
                          API client, the launch and refresh rules, what VoiceOver is told, the clocks
                          and the minute tick, the picker's search and the location rules (IsItState); in
                          Tests/IsItTestSupport the fixtures (the search answers in Fixtures/Search) and
@@ -52,9 +53,10 @@ Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore, UR
                          with its bodies and GlyphView, drawing IsItLogic's HomePage and HomeTopBar, with
                          HomeActions; the picker: PlacePickerView, drawing PlacePicker, with
                          PlacePickerActions and PickerChrome (SheetHeader, SearchBox, BoxTextField,
-                         PlaceRow, StarButton); Settings: SettingsView and its pages, with SettingsActions;
-                         SheetStyle, Settings' colours at WCAG AA; the parts every screen is to share,
-                         in the website's look, which the home screen and the picker draw with: BrandType (TextRole,
+                         PlaceRow, StarButton); Settings: SettingsView and its pages, with SettingsActions,
+                         and SheetStyle, their parts (SheetPage, PageTitle, SheetSection, SheetCard,
+                         RowLabel, ReadingCard, sheetChrome, SheetCloseButton); the parts every screen
+                         shares, in the website's look: BrandType (TextRole,
                          the type scale, and brandFont), PageTheme (a surface's colours, Surface and
                          the tokens, BrandTokens), Backgrounds (PageBackground, SheetBackground),
                          Buttons (PillButton, IconPillButton, PressStyle, RowPressStyle, PinShape),
@@ -842,15 +844,18 @@ Large and at AX3, and on a dark band (`-fixture aberdeen-snow`). Their screens a
 
 ### 6.2 and 6.3: Settings
 
-The gear opens the Settings sheet (spec sections 10.4, 10.6 and 10.7): sections of rows on cards,
-drawn as an inset grouped list draws them, in system materials, on a page that scrolls
-(`SheetPage`, not a `Form`). As on the home screen, IsItLogic makes the content as plain values
-(Linux-tested), IsItUI draws it, and the app connects them in one file (`SettingsSheet.swift`).
-DECISIONS has the choices ("The iPhone app's Settings").
+The gear opens the Settings sheet (spec sections 10.4, 10.6 and 10.7) in the website's look:
+the website's content pages' palette (`PageTheme.content`, core's `snow`), the same in Light and
+Dark Mode, each page's title on the page in the answer's face, and rows with icons on plum cards
+under their headings, on a page that scrolls (`SheetPage`, not a `Form`). As on the home screen,
+IsItLogic makes the content as plain values (Linux-tested), IsItUI draws it, and the app connects
+them in one file (`SettingsSheet.swift`). DECISIONS has the choices ("The iPhone app's Settings",
+and its look in "The iPhone app in the website's look", step 6).
 
-- **The rows, in order:** Snow units (cm | in, the footnote beneath: `UnitsSegments`, a
-  segmented control drawn as two buttons whose labels grow with the text, the one chosen marked
-  selected; not UIKit's segmented control, whose type size is fixed); Privacy ("Your privacy",
+- **The rows, in order:** Snow units (cm | in, the footnote beneath: `UnitsSegments`, the
+  website's cm | in pill, `PillSegments` on the card, two buttons at least 56 by 44 whose words
+  grow with the text, the one chosen on the ink thumb and marked selected; not UIKit's segmented
+  control, whose type size is fixed); Privacy ("Your privacy",
   "Privacy policy"); "Report an ad", in the free version only; About ("How it works", "Credits
   and licences", "Terms"); Help ("Contact us", "Support"); and "Version 1.0 (112)" from the
   bundle. willitsnow.today's pages open in Safari and the emails in the mail app, through
@@ -863,30 +868,39 @@ DECISIONS has the choices ("The iPhone app's Settings").
   `SettingsActions` the two actions, nil until then.
 - **IsItLogic:** `SettingsScreen(units:unlocked:privacyChoices:version:)` (the sections and
   rows, each with its action: a page, a web page, an email, Report an ad, Google's form),
-  `AppVersion`, `MailDraft` (`contactUs()`, `reportAd(version:place:at:zone:)`, its `mailto:` URL
+  each row's icon (`SettingsScreen.Icon`, one a row, the units' too), `AppVersion`, `MailDraft`
+  (`contactUs()`, `reportAd(version:place:at:zone:)`, its `mailto:` URL
   encoded as `encodeURIComponent` encodes, and the `MailFallback` to show without a mail app),
   `HowItWorks()`, `CreditsPage()` and `YourPrivacy(adsOn:privacyChoices:kept:)`.
 - **IsItUI:** `SettingsView(screen:privacy:actions:)`, with the pages on its own stack
-  (`YourPrivacyView`, `HowItWorksView`, `CreditsView`, `NoticeView`) and `MailFallbackView`.
-  Credits and licences gives each credit's words whole, then each of its sources and licences
-  as a row of its own that opens it, not as links inside the sentence; a notice's project link
-  is 44 points tall, shows the URL and is labelled in words ("Bricolage Grotesque's project
-  page", `CreditsPage.Notice.urlLabel`), the URL its value. No page of the sheet is a `Form`:
-  each scrolls (`SheetPage`, SheetStyle.swift). Settings and Credits and licences are sections of
-  rows on cards (`SheetSection`), each row at least 52 points tall (`sheetRow()`) and each that
-  does something a button the whole row wide (`SheetRowStyle`); the others are not buttons:
-  Settings' units row (its label beside the two units' buttons) and version line, and Credits
-  and licences' models line and each credit's words. How it works, Your privacy and a notice are
-  paragraphs. The audit's Dynamic Type check failed a `Form`'s rows and headers that grew with the
-  text, and passed a scroll view's text on screen or not (DECISIONS). A section of Settings has a
-  header only when it has a heading.
-- **The sheets' colours** (the picker's too) are the system's but where those fall short of
-  WCAG AA's 4.5:1 for text under 18 points in the light appearance: `SheetStyle` (IsItUI) draws
-  the headers, footers and secondary lines in `SheetColours.secondaryLight` (5.36:1 on a grouped
-  list's background, where the system's secondary label gives 3.28:1) and tints the buttons,
-  links and toolbar items with the system's blue as Increase Contrast draws it (the default
-  gives 3.59:1 there), from IsItLogic's `SheetColours`, which `SheetColoursTests` holds to it on
-  Linux. The dark appearance keeps the system's secondary label, which passes.
+  (`YourPrivacyView`, `HowItWorksView`, `CreditsView`, `NoticeView`) and `MailFallbackView`,
+  built from SheetStyle.swift's parts. `sheetChrome()` puts a sheet on the content surface, its
+  system parts in the dark scheme and ink. `SheetPage(title:)` scrolls over `PageBackground`
+  with the content palette, under its `PageTitle` (the answer's face at 35, a heading,
+  `page-title`); the navigation bar keeps its buttons and the title for VoiceOver and the back
+  menu, but draws none. `SheetCloseButton` is the toolbar's xmark (`CloseLabel`), top right,
+  tinted with the card colour, which iOS 26 draws as a plum glass circle. `SheetSection` is a
+  heading over a `SheetCard` (opaque `card`, corners of 24); its rows are `RowLabel`s (the icon,
+  dropped at accessibility sizes, the title in `row`, a detail in `note` and `soft`, a chevron
+  for a page on the stack or an arrow out) in `SheetRowStyle` (the whole row at least 54 tall,
+  washed while pressed), with a `SheetDivider` (a 22% hairline) between each two. How it works,
+  Your privacy, the credits' models line and the fallback's words are paragraphs on a
+  `ReadingCard`; Credits and licences gives each credit's words whole on a card, then each of
+  its sources and licences as a row of its own that opens it, not as links inside the sentence.
+  The privacy policy and a notice's project page are page buttons (`PillButton(.wide)` in the
+  card colour), the project page's showing its URL underlined and labelled in words ("Bricolage
+  Grotesque's project page", `CreditsPage.Notice.urlLabel`), the URL its value; "Copy address"
+  is the primary pill (ink, its words in the pill colour). A notice's text is on a card in the
+  system's monospaced footnote type, the one text not in Bricolage. The audit's Dynamic Type
+  check failed a `Form`'s rows and headers that grew with the text, and passed a scroll view's
+  text on screen or not (DECISIONS).
+- **The colours** are the content surface's tokens (`BrandTokens`, step 2's
+  `brandColours.test.ts`): ink on a card 14.20:1, `soft` 10.62, ink on the wash 10.00, the pill
+  colour on ink 11.54. Only single lines sit on the gradient (titles, headings, the version,
+  "Address copied."), 4.88:1 at the glow's centre and 7.32 under Increase Contrast, which drops
+  the glow; anything that can wrap is on a card, as the audit has only passed such text on flat
+  fills. Nothing follows Dark Mode, so the system colours `SheetColours` once corrected are gone
+  with it.
 - **The units** go through `AppModel.setUnits(_:)` (IsItState): kept in `units.v1`, the answer
   asked for again in them with what is on screen kept meanwhile, then the notifications' sync
   hook (phase 8), since a registration carries the units.
@@ -897,15 +911,18 @@ DECISIONS has the choices ("The iPhone app's Settings").
 **On Linux:** `Tests/IsItLogicTests/SettingsScreenTests.swift`, `MailDraftTests.swift` and
 `InfoPagesTests.swift` (every row and its action, the free and bought versions, the emails'
 subject, body and encoded URL, the phone's time, How it works word for word with the
-constants' numbers, the credits and their links, Your privacy's lines, and no word naming another
-app, site or weather), `SheetColoursTests.swift` (the sheets' colours on each system background),
+constants' numbers, the credits and their links, "The app's typeface.", Your privacy's lines,
+each row's own icon, and no word naming another app, site or weather),
 `Tests/IsItStateTests/UnitsTests.swift` (the units kept, asked for and
 saved, the answer kept meanwhile, offline, the same units), and in packages/mobile the copy,
-the credits, the constants, Your privacy against the website's privacy notice, and the guard
+the credits, the constants, Your privacy against the website's privacy notice, every title drawn
+in the answer's face inside its subset and its font's cmap (`titleFont.test.ts`), and the guard
 that no Swift view or label is given a string literal (`swiftLiterals.test.ts`, below).
 
-**On the macOS CI:** `SettingsTests` (UI plan), with `-openURLs`: the units switch, the refetch
-in inches and the choice kept at the next launch; every row's URL or page; Report an ad's and
+**On the macOS CI:** `SettingsTests` (UI plan), with `-openURLs`: the units switch (each unit
+at least 44 by 44), the refetch in inches and the choice kept at the next launch; every row's URL
+or page, each page known by its title on the page (`page(titled:in:)`, `page-title`), since the
+bar draws none; Report an ad's and
 Contact us's fallback with "Address copied."; Your privacy's lines; the version line; no word naming
 another weather type on screen; and the accessibility audit on Settings, How it works,
 Credits and licences, a licence in full, Your privacy and both fallbacks. The screens are
@@ -940,9 +957,9 @@ toolbar, has the website's Close pill (`picker-close`), whose word scales with t
   picker; the gear opens Settings. The top bar is `HomeShell`'s, over the switcher and the
   pager, so all three open their sheets from every page. The picker wears the band of the page
   on screen and gives its own system controls the band's colour scheme, as `HomeShell` does;
-  Settings follows the system's colours, not the page's, until step 6 of the website's look: it
-  is presented from outside `HomeShell`, so the dark colour scheme it gives the system's controls
-  on a dark page (phase 5.4) doesn't reach it. While
+  Settings wears the website's content palette whatever the band, and gives its own controls the
+  dark scheme itself (`sheetChrome()`), since it is presented from outside `HomeShell`, whose
+  scheme doesn't reach it. While
   one is open, the home screen under it is out of the accessibility tree, as VoiceOver already
   treats it, so the sheets' audits read only the sheet, and its changes (the 6pm flip, a quiet
   refresh's new answer) aren't announced over the sheet, then or once it closes
@@ -1120,7 +1137,8 @@ Xcode's as the `package-resolved` artefact. The next agent:
   in the pull request.
 - **Answer font:** `Apps/Snow/Resources/Fonts/BricolageAnswer.ttf`, the website's answer font
   (`apps/web/src/fonts/bricolage-answer.woff2`) as TrueType, named `BricolageAnswer` for
-  `Font.custom`.
+  `Font.custom`. Settings' page titles are in it too: a subset of letters, digits and a little
+  punctuation, so `packages/mobile`'s `titleFont.test.ts` holds every title to it.
 - **Text faces:** `Apps/Snow/Resources/Fonts/BricolageText-{Regular,Medium,SemiBold}.ttf`, built
   by `scripts/make-text-fonts.py` from the website's variable font: static instances at wght 400,
   500 and 600 and opsz 16, each the latin and latin-ext subsets merged, so Łódź and Météo-France
@@ -1128,8 +1146,9 @@ Xcode's as the `package-resolved` artefact. The next agent:
 - **`BrandFont`** (`IsItModel/Generated/BrandFonts.swift`) names all four for the Swift, with
   their files. Both Info.plists list every file in `UIAppFonts` (`packages/mobile`'s
   `appFonts.test.ts` checks them); the app-hosted `BrandFontTests` checks each is registered under
-  its PostScript name and that the text faces draw latin-ext. Nothing draws in the text faces yet
-  (DECISIONS, "The iPhone app in the website's look").
+  its PostScript name and that the text faces draw latin-ext. Every word of the home screen, the
+  picker and Settings is in them, through `TextRole` (DECISIONS, "The iPhone app in the
+  website's look").
 
 ## Debug hooks and Release builds
 

@@ -4332,6 +4332,105 @@ supersedes spec 10.3 on the picker's look: no navigation bar, no grouped list, n
   at AX3; the Close pill's and the stars' contrast on the wash; and the status bar on a dark band,
   on the contact sheet.
 
+**Step 6: Settings and its pages in the website's look.** Settings, How it works, Your privacy,
+Credits and licences, a notice in full and the no-mail fallback, drawn as the website draws its
+own content pages (About, Privacy, Support and Terms: `.prose`, `.models h2`, `.units`,
+`.tabs`). Carl found Settings "very retro iOS and boring"; the website has no settings page, but
+the pages Settings opens share one look there, and that look is the answer. This supersedes spec
+10.1's "sheets follow Dark Mode" and 10.4's "native Form" for Settings; 10.4's order and
+contents, and every row's action, are unchanged.
+
+- **The content palette, fixed.** Every page wears `PageTheme.content` (core's `snow`, the
+  website's `LOOKS.snow.content`) over `PageBackground`, its gradient and glow fixed to the
+  screen, the same in Light and Dark Mode, as the website's content pages never follow the
+  forecast's band. It is already a dark page, so at night it is no brighter than a dark sheet;
+  following the band would change legal and help text with the weather. `sheetChrome()` puts a
+  sheet on the content surface and gives its system parts the dark scheme and ink, since
+  Settings is presented from outside `HomeShell`; each page gives the navigation bar the same
+  scheme (`toolbarColorScheme`).
+- **Only single lines on the gradient, every paragraph on a card.** At Large the page carries
+  only titles, headings, the version and "Address copied." (4.88:1 at the glow's centre, 7.32
+  under Increase Contrast, which drops the glow). Everything that can wrap sits on an opaque,
+  flat card in the `card` colour (`#401a4f`, ink on it 14.20:1): the units' footnote, How it
+  works', Your privacy's and the fallback's paragraphs (`ReadingCard`), each credit's words, the
+  notices' summaries and a notice's text. On PR #33's last green run (run 4) Apple's contrast
+  check still failed each fixture's two-line detail drawn on the forecast pages' gradient at
+  9.65:1 ("3 to 4cm still to come…" on snow), 13.68:1 (heavy snow) and 11.43:1 (no snow), and
+  passed one-line texts in the same ink and every text at AX3; multi-line text on flat colours
+  has never failed, which includes the old How it works and Your privacy and the credits on
+  white cards. Settings' audits allow nothing, so the website's bare prose is the one thing the
+  app doesn't copy: How it works reads as reading cards. If a card's paragraph still fails, the
+  next step is the darker card `#2a1230` (17.1:1), then no glow on content; never an exception.
+- **Titles in the answer's face.** Each page's title is its own heading on the page
+  (`PageTitle`: `BricolageAnswer` at 35 points, growing with the large title, -0.01 em, a
+  heading to VoiceOver, `page-title`), the website's 750 h1, and it scrolls away as the
+  website's does. The answer's 780 face is the nearest built one, so no new font file ships.
+  It is a subset of letters, digits, `.,'’!?…-` and the space, and every title Settings shows
+  ("Settings", "How it works", "Your privacy", "Credits and licences", the three notices' names,
+  "Report an ad" and "Contact us") is inside it: `titleFont.test.ts` reads the subset from
+  `make-answer-font.py` and the glyphs from the bundled font's cmap, so a title with a letter
+  outside it fails on Linux. Page headings are `pageHeading` (21.6 SemiBold), section headings
+  `heading` (16 SemiBold, the website's `.models h2`, flush with the cards, not the system's grey
+  insets).
+- **The toolbar keeps its buttons and draws no title.** The `NavigationStack` stays for the back
+  gesture, VoiceOver's escape and the back button's history menu, and `navigationTitle` still
+  names each page there; the principal item is a clear point with no element, so the only
+  title drawn is the page's own. Close is the system's xmark (`CloseLabel`, its label the word)
+  in the confirming action's place, top right, on Settings and now on the fallback too (it was
+  leading there), tinted with the card colour: on iOS 26 a prominent plum glass circle (white on
+  it 14.20:1) where plain glass would leave white at about 4.88:1 under the glow; before iOS 26 a
+  white xmark. `#available(iOS 26, *)` is used for that tint alone, so the bar's background is
+  the system's (iOS 26's scroll-edge effect, before it the bar's material once content scrolls
+  under), not the design's card-coloured bar on iOS 17 and 18. The picker, with no toolbar,
+  keeps the website's Close pill. Should iOS 26 still draw a title, or the audit flag the clear
+  principal item, the fallback is `.navigationTitle(Text(verbatim: ""))`; the tests already wait
+  for `page-title`, not the bar.
+- **Rows with icons on plum cards.** Each row is one button the card's width, at least 54
+  points tall (`SheetRowStyle`, washed edge to edge while pressed, never dimmed): an SF Symbol in
+  ink (`SettingsScreen.Icon`, one a row and one for the units, an IsItLogic enum the Linux tests
+  hold to one each; IsItUI draws them in one switch that names every case), its title in `row`
+  (17.6 Medium), a detail in `note` and `soft` (10.62:1), and a chevron for a page on the stack
+  or an arrow out for Safari or mail, in `affordance` and hidden from VoiceOver. The icons go at
+  accessibility sizes, where the words need the card's width; the chevrons stay. A 22% hairline
+  runs from the words to the card's edge between rows (`SheetDivider`). The icons answer Carl's
+  "more modern", as the build plan settled.
+- **Units is the website's cm | in pill**, the shared `PillSegments` on the card: the wash's
+  track (10.00:1 for the unchosen word), the chosen unit on the ink thumb in the pill colour
+  (11.54:1), sliding on the website's curve (at once under Reduce Motion) when the model has
+  saved the choice. Each segment hugs its word and is at least 56 by 44; the group keeps `units`
+  and its two `.isSelected` buttons, and at accessibility sizes "Snow units" sits over it with
+  no icon.
+- **Buttons on a page are the shared pills.** The privacy policy and a notice's project page are
+  `PillButton(.wide)` in the card colour (words in ink, at least 52 tall, the arrow out kept);
+  "Copy address" is the primary pill, the website's selected tab (ink, its words in the pill
+  colour, 11.54:1). The design's own `PillButtonStyle` isn't built. `PillButton` gains an
+  optional role, for phase 8's destructive "Turn off notifications and delete my data".
+- **The copy and the colours' code.** Bricolage's credit becomes "The app's typeface.", since
+  every page now sets its words in it (`credits.ts`, regenerated `AppCredits.swift`).
+  `SheetStyle.swift` is rewritten as Settings' parts (`sheetChrome`, `SheetCloseButton`,
+  `SheetPage`, `PageTitle`, `PageHeading`, `SheetSection`, `SheetCard`, `SheetDivider`,
+  `RowLabel`, `RowIcon`, `SheetRowStyle`, `ReadingCard`, `LeavingLabel`; `CloseLabel` kept),
+  every colour from the content surface's tokens. The `SheetStyle` enum and IsItLogic's
+  `SheetColours` with its tests go: they corrected the system's light-appearance colours, and
+  nothing draws in the system's colours now. The pairs Settings uses are step 2's, already held
+  by `brandColours.test.ts`; the design's separate `BrandSheet` Swift tests and its vitest tying
+  `Palettes.content` to the website's `LOOKS` are not built (the latter is on the Later list).
+- **Tests.** Linux: `SettingsScreenTests` (each row's icon, the units' ruler, no two alike,
+  every case used, the other versions only dropping rows, and Your privacy's policy button
+  with the policy row's), `InfoPagesTests` (the new summary); `titleFont.test.ts` and
+  `credits.test.ts`
+  (`fontTables.ts` now holds the cmap reader both font tests use). On macOS, `SettingsTests`
+  waits for each page by its title on the page (`page(titled:in:)`, which lists the titles on
+  screen when it fails) instead of the five `app.navigationBars[…]` waits, `openSettings` waits
+  for "Settings" as well as Close, and `testUnitsChangeAsksInTheNewUnits` holds both units to
+  44 by 44. Every identifier is kept, `page-title` is new, and the audits still allow nothing;
+  their screens (`app-settings` and the rest) become the contact sheet's new look.
+- **For the first macOS run to show.** Whether the cards' paragraphs and the single lines on the
+  gradient pass contrast as the evidence says; whether iOS 26 draws the clear principal item
+  without a glass capsule or a title; the plum glass Close against the glow; the titles' fit
+  and the icons' alignment on the contact sheet; and that the thumb doesn't animate on first
+  appearance.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,
@@ -4562,7 +4661,8 @@ checks it answers `text/plain` on all four hosts).
   three static text faces as `BricolageText-{Regular,Medium,SemiBold}.ttf`, each renamed and so a
   modified version, which the OFL allows; each name table keeps the copyright and carries the
   licence's description and URL. The app's credits screen (spec section 10.6) gives the licence's
-  full text, which covers every face.
+  full text, which covers every face, under "The app's typeface.", since every page sets its
+  words in it.
 - **Fair use, not non-commercial.** ShareAlike attaches only to adapted material, and a verdict
   or a median of 8 models very likely is not (a reading, not legal advice). The per-model
   figures the pages and `models[]` show are the closest thing to passing on Met Office data,

@@ -145,7 +145,8 @@ public struct YourPrivacy: Sendable, Equatable {
       Kept(heading: AppCopy.keptForNotifications, lines: $0, delete: AppCopy.deleteMyData)
     }
     policy = URL(string: Constants.Site.privacy).map {
-      SettingsScreen.Row(id: "full-policy", title: AppCopy.privacyPolicy, action: .open($0))
+      SettingsScreen.Row(
+        id: "full-policy", title: AppCopy.privacyPolicy, action: .open($0), icon: .policy)
     }
   }
 }

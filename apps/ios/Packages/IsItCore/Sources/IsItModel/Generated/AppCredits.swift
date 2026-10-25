@@ -48,7 +48,7 @@ public enum AppCredits {
     Notice(
       name: "Bricolage Grotesque",
       summary:
-        "The answer's typeface. Copyright 2022 The Bricolage Grotesque Project Authors, licensed under the SIL Open Font License, Version 1.1.",
+        "The app's typeface. Copyright 2022 The Bricolage Grotesque Project Authors, licensed under the SIL Open Font License, Version 1.1.",
       url: "https://github.com/ateliertriay/bricolage",
       file: "BricolageGrotesque-OFL"
     ),

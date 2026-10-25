@@ -28,6 +28,8 @@ struct PillButton<Label: View>: View {
   let style: PillStyle
   /// A 1-point edge in `BrandTokens.border`: a page's Retry and the sheet's Close.
   let bordered: Bool
+  /// The button's role: destructive for "Turn off notifications and delete my data" (phase 8).
+  let role: ButtonRole?
   let action: () -> Void
   let label: Label
 
@@ -39,19 +41,21 @@ struct PillButton<Label: View>: View {
     _ size: PillSize,
     _ style: PillStyle = .secondary,
     bordered: Bool = false,
+    role: ButtonRole? = nil,
     action: @escaping () -> Void,
     @ViewBuilder label: () -> Label
   ) {
     self.size = size
     self.style = style
     self.bordered = bordered
+    self.role = role
     self.action = action
     self.label = label()
   }
 
   var body: some View {
     let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-    Button(action: action) {
+    Button(role: role, action: action) {
       label
         .multilineTextAlignment(.leading)
         .fixedSize(horizontal: false, vertical: true)

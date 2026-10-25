@@ -34,11 +34,12 @@ struct HomeView: View {
     }
     // The picker wears the band of the page on screen, which `PickerSheet` reads from the model
     // in its own body, so it follows a refresh while open and never follows Dark Mode, as the
-    // pages don't (the sheet surface, IsItUI's PlacePickerView). Settings is drawn outside the
-    // page's colours, so it follows the system's, and Dark Mode. Both are under the Debug
-    // recorder (`debugRecorder()`, DebugHooks.swift), so under `-openURLs` every URL either would
-    // open is recorded instead, the picker's Open Settings as well as Settings' rows. A Release
-    // build draws them as they are.
+    // pages don't (the sheet surface, IsItUI's PlacePickerView). Settings wears the website's
+    // content pages' palette whatever the band, and doesn't follow Dark Mode either (the content
+    // surface, IsItUI's SettingsView). Both are under the Debug recorder (`debugRecorder()`,
+    // DebugHooks.swift), so under `-openURLs` every URL either would open is recorded instead,
+    // the picker's Open Settings as well as Settings' rows. A Release build draws them as they
+    // are.
     .fullScreenCover(item: $sheet.picker) { request in
       PickerSheet(model: model, request: request)
         .debugRecorder()
