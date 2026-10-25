@@ -174,12 +174,13 @@ final class HomeAuditTests: XCTestCase {
   /// should an audit have moved it (`restore`). A call that doesn't finish in time isn't run again
   /// on the same screen: the screenful's other calls aren't made, and the page is moved a few
   /// points, showing whole what the screenful showed whole, and audited again in all three calls
-  /// as a screenful of its own, `<name>-<k>-moved` (`auditAgain`); the next scroll starts from
-  /// there. Fails, with where the page and its credits were, when the credits aren't there, the
-  /// app has left the foreground, an audit can't run, a call doesn't finish in time on the moved
-  /// screenful too or the page can't be moved so, a call but the resizing one moves the page, the
-  /// page stops scrolling before its end, or its end never comes into view; for the last two,
-  /// with what `stopped` finds too.
+  /// as a screenful of its own, `<name>-<k>-moved`, what the stopped screenful's calls done found
+  /// dropped so that none is counted twice (`auditAgain`); the next scroll starts from there.
+  /// Fails, with where the page and its credits were, when the credits aren't there, the app has
+  /// left the foreground, an audit can't run, a call doesn't finish in time on the moved screenful
+  /// too or the page can't be moved so, a call but the resizing one moves the page, the page stops
+  /// scrolling before its end, or its end never comes into view; for the last two, with what
+  /// `stopped` finds too.
   @MainActor
   private func audit(
     _ page: HomeScreen.Page,
@@ -217,13 +218,16 @@ final class HomeAuditTests: XCTestCase {
       else { return }
       seen.append(attached)
       var screenful = attached
+      // What was noted before this screenful's calls: should one stop, `auditAgain` drops what
+      // those done found, which the moved screenful's calls find again.
+      let noted = found.mark
       do {
         try auditCalls(on: attached, shot: shot, at: place, with: run)
       } catch let failure as AuditFailure where isAuditTimeout(failure.first) {
         guard
           let moved = auditAgain(
-            after: failure, on: attached, as: label, at: place, with: run, seen: &seen,
-            drags: &drags)
+            after: failure, on: attached, as: label, at: place, with: run, noted: noted,
+            seen: &seen, drags: &drags)
         else { return }
         screenful = moved
       } catch {
@@ -280,7 +284,8 @@ final class HomeAuditTests: XCTestCase {
   /// (`AuditLog.note`), a contrast issue with the screenshot's pixels. Fails when a call but the
   /// resizing one moves the page. Throws a call's failure (`AuditFailure`) as it comes: one that
   /// didn't finish in time isn't run again on this screen (`OnAuditTimeout.handBack`), the
-  /// screenful's later calls aren't made, and the issues of those done stay noted.
+  /// screenful's later calls aren't made, and the issues of those done stay noted, for
+  /// `auditAgain` to drop once it audits the screenful again a few points away.
   @MainActor
   private func auditCalls(
     on screenful: Screenful,
@@ -316,21 +321,29 @@ final class HomeAuditTests: XCTestCase {
     }
   }
 
-  /// After a call on `screenful` (attached as `label`) didn't finish in time (`failure`): the
-  /// screenful's other calls not made, and the issues of those done noted against it, attaches
-  /// the app's element tree as `<label>-tree`, what was on screen as the call stopped; puts the
-  /// page back should the call have moved it (`restore`); checks the app is as the test had it
-  /// (`unsettled`); moves the page a few points so that it shows whole exactly the elements the
-  /// screenful showed whole (`moveAFewPoints`); and attaches the screen as `<label>-moved` and
-  /// audits it in all three calls, a screenful of its own in `seen`, so every kind runs on the
-  /// same content and the proof reads the pixels audited. Gives it, for the next scroll to start
-  /// from; nil, having failed the test with each attempt's time and where the credits were, when
-  /// the page can't be moved so or a call on the moved screenful fails too.
+  /// After a call on `screenful` (attached as `label`) didn't finish in time (`failure`), the
+  /// screenful's other calls not made: attaches the app's element tree as `<label>-tree`, what
+  /// was on screen as the call stopped; puts the page back should the call have moved it
+  /// (`restore`); checks the app is as the test had it (`unsettled`); moves the page a few points
+  /// so that it shows whole exactly the elements the screenful showed whole (`moveAFewPoints`);
+  /// and attaches the screen as `<label>-moved` and audits it in all three calls, a screenful of
+  /// its own in `seen`, so every kind runs on the same content and the proof reads the pixels
+  /// audited. Before those calls it drops what was noted since `noted`, what the stopped
+  /// screenful's calls done found (`AuditLog.drop`), which the moved screenful's calls find again
+  /// on the same whole elements: so none is counted twice, as `runAudit` drops a sheet's first
+  /// attempt's. Gives the moved screenful, for the next scroll to start from; nil, having failed
+  /// the test with each attempt's time and where the credits were, when the page can't be moved
+  /// so (the stopped screenful's issues then kept) or a call on the moved screenful fails too.
   ///
   /// Not the same call again on the same screen: on PR #34's run on c74aa22 the contrast call on
   /// leeds-dry's week page at AX3, fourth screenful, stopped for XCTest's 15 seconds twice, run
-  /// again on the same still screen, as it had on fdb3182's fifth; the screens a few points from
-  /// it in other runs passed in under a second (DECISIONS, "After #34's fourth full run").
+  /// again on the same still screen, as it had on fdb3182's fifth. The screens near them that
+  /// passed were other builds': with shorter week rows (87.3 points at AX3 against c74aa22's
+  /// 89.7), so that "BBC Weather" showed whole where c74aa22's cut it, or another tree (50
+  /// contrast candidates against 36). No run has audited the same content a few points away, so
+  /// this is a test of the idea that the stall needs that exact screen, not a cure for a cause
+  /// shown: should the moved screenful stop too, the stall follows what the screen shows, and
+  /// this is no fix (DECISIONS, "After #34's fourth full run").
   @MainActor
   private func auditAgain(
     after failure: AuditFailure,
@@ -338,6 +351,7 @@ final class HomeAuditTests: XCTestCase {
     as label: String,
     at place: String,
     with run: PageRun,
+    noted: AuditLog.Mark,
     seen: inout [Screenful],
     drags: inout [Drag]
   ) -> Screenful? {
@@ -362,6 +376,7 @@ final class HomeAuditTests: XCTestCase {
         as: "\(label)-moved", at: again, with: run, tree: nil)
     else { return nil }
     seen.append(moved)
+    run.found.drop(since: noted)
     do {
       try auditCalls(on: moved, shot: shot, at: again, with: run)
     } catch {
@@ -382,13 +397,13 @@ final class HomeAuditTests: XCTestCase {
   /// the elements the screenful showed whole (`Screenful.showsWhole`), and gives how far its
   /// content moved up the screen (down, should it be negative). From one snapshot of the page,
   /// how far it may move each way (`PageRoom`) gives the moves to aim for (`PageRoom.windows`,
-  /// `nudge`), the way with more room first. Each drag aims for the middle of the moves allowed,
-  /// longer by what a drag spends before the page moves: reckoned at first as `deadTravel`, then
-  /// as the last drag's, measured from where the credits went; at most `nudgingDrags` drags a
-  /// way. The page's place is read from the credits once it has settled (`settledFrame`), and
-  /// once it is among the moves allowed, a second snapshot must show whole the same elements, by
-  /// type, identifier, label and place on the page (`PageElements.change`). Throws, with what
-  /// each way came to, when no way gets there.
+  /// `nudge`), the way with the wider band of moves first (up on a tie). Each drag aims for the
+  /// middle of the moves allowed, longer by what a drag spends before the page moves: reckoned at
+  /// first as `deadTravel`, then as the last drag's, measured from where the credits went; at
+  /// most `nudgingDrags` drags a way. The page's place is read from the credits once it has
+  /// settled (`settledFrame`), and once it is among the moves allowed, a second snapshot must show
+  /// whole the same elements, by type, identifier, label and place on the page
+  /// (`PageElements.change`). Throws, with what each way came to, when no way gets there.
   @MainActor
   func moveAFewPoints(
     _ page: HomeScreen.Page,
@@ -844,6 +859,28 @@ private final class AuditLog {
   private(set) var used: Set<Int> = []
   /// The page's issues held until its last screenful.
   private var held: [Held] = []
+
+  /// How much had been noted at a moment of a page's audit, for `drop(since:)`.
+  struct Mark {
+    let unexpected: Int
+    let allowed: Int
+    let held: Int
+    let used: Set<Int>
+  }
+
+  var mark: Mark {
+    Mark(unexpected: unexpected.count, allowed: allowed.count, held: held.count, used: used)
+  }
+
+  /// Drops every issue noted since `mark`, judged or held, and the exceptions' use by them: those
+  /// of a screenful whose call stopped, whose content is audited again in all three calls a few
+  /// points away (`HomeAuditTests.auditAgain`), so that none is counted twice.
+  func drop(since mark: Mark) {
+    unexpected = Array(unexpected.prefix(mark.unexpected))
+    allowed = Array(allowed.prefix(mark.allowed))
+    held = Array(held.prefix(mark.held))
+    used = mark.used
+  }
 
   /// Notes `issue`, found on `screenful` by an audit after which the page's content was `moved`
   /// points lower than on the screenful (the credits' move): an element of the page is noted

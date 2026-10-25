@@ -680,9 +680,11 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   in time", -56) isn't run again on the same screen, where on PR #34's runs on fdb3182 and c74aa22
   it stopped again: the screenful's other calls aren't made, the app's element tree is attached
   (`…-<k>-tree`), and once the app is in the foreground at the test's size, the page is moved 3 to
-  12 points, the way with more room first, so that it shows whole exactly the elements the screenful
-  showed whole (`PageRoom`, checked again on a second snapshot), attached as `…-<k>-moved` and
-  audited in all three calls as a screenful of its own; the next scroll starts from there
+  12 points, the way with the wider band of moves first (up on a tie), so that it shows whole
+  exactly the elements the screenful showed whole (`PageRoom`, checked again on a second snapshot),
+  attached as `…-<k>-moved` and audited in all three calls as a screenful of its own, what the
+  stopped screenful's calls done found dropped so that none is counted twice; the next scroll
+  starts from there. That tests whether the stall needs that exact screen, which no run has shown
   (DECISIONS, "After #34's fourth full run"). The times are attached
   (`home-<fixture>-<size>-audit-times`, a line a call), and the slowest call and any that timed
   out are named in `-allowed`. A page that stops scrolling short of its end, an app that has left

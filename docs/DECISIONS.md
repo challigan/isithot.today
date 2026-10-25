@@ -4782,43 +4782,61 @@ and e1bc88e's (session scratchpad: hang-wk4).
   drag until the status bar's minute; XCTest's wait for the app to idle took no time; the app
   answered every query between the attempts in 0.12 to 0.23 seconds, and its minute tick drew during
   the second attempt without freeing it.
-- **What it depends on: that screen, to the point.** fdb3182's run stopped the same way, twice, on
-  the same page's fifth screenful (50 candidates). The screens a few points from c74aa22's (the page
-  1299.67 points down) passed on cf4eb74 and e1bc88e, 1304.33 and 1296.0 down, in 0.71 and 0.58
-  seconds, and those runs' fifth screenfuls, near fdb3182's, in under 0.8. Both stopped screens are
-  the week page at AX3 with the sources' sentence and its 44-point link rows, and a link or linked
-  text cut by the screen's bottom edge; each of those, alone or together, is on screens that passed
-  (AccuWeather cut at 867 to 911, durham-tomorrow's credits' links, slivers of 2 to 3 points at the
-  page's top, about 50 screens with an element across the window's top). Nor do the candidates'
-  counts tell: 33 stopped where 34 to 36 passed, 50 where 41 to 43 did. So the stall is in Apple's
-  judging of that exact screenshot; which element sets it off the artefacts can't say. A spindump of
-  testmanagerd during a stall, or the same screen in Xcode, could.
-- **So no app change.** Nothing in the app was busy, and what the two screens share passes
-  elsewhere: a change aimed at the cut "BBC Weather" link or the 0.83-point sliver of "Fri" at the
-  page's top would be a guess. Page breaks that never cut an element (`step`) might avoid it, but
-  screens with cuts pass far more often than not.
-- **The fix: the same content, a few points away** (`HomeAuditTests.auditAgain` and
-  `moveAFewPoints`; `runAudit`'s `OnAuditTimeout`). A home call that doesn't finish in time isn't
-  run again on the same screen, which stopped again both times it was tried. The screenful's other
-  calls aren't made, and the issues of those done stay noted against it. The app's element tree is
-  attached (`<name>-<k>-tree`), the page put back should the call have moved it (`restore`), and the
-  app checked in the foreground at the test's text size. From one snapshot of the page, `PageRoom`
-  finds how far it may move each way and still show whole exactly the elements the screenful showed
-  whole (`Screenful.showsWhole`'s rule): short of the first element shown whole that a move would
-  cut, of the first not shown whole that it would show whole, and of the page's ends (a drag down at
-  its top would pull at the refresh). On c74aa22's screen that is 9.5 points up, to "Rain" 8.5 under
-  the page's top edge, and 32.3 down, to the sources' sentence 31.3 above the window's bottom edge;
-  on fdb3182's, 17.0 up and 2.6 down. The page is dragged to move 3 to 12 points (9 to 36 pixels), a
-  point short of the room, the way with the wider band first. A drag spends 13 to 20 points before
-  the page moves, so each drag is the move still wanted and 16.5 points more, then the last drag's
-  measured dead travel more, at most three a way, the page's place read from the credits once it has
-  settled. There, a second snapshot must show whole the same elements, by type, identifier, label
-  and place on the page (`PageElements.change`). The screen is then attached as `<name>-<k>-moved`
-  (after `-<k>` on the contact sheet), added as a screenful of its own, and audited in all three
-  calls, so every kind runs on the same whole content and the contrast proof reads the pixels
-  audited. The page's audit goes on from there: the next scroll is worked out from the moved
-  screenful (`step`), and elements cut at its edges are judged on a screenful that shows them whole
-  (`AuditLog.settle`), as before. Nothing is skipped and nothing new is allowed.
+- **What it depends on: not shown.** fdb3182's run stopped the same way, twice, on the same page's
+  fifth screenful (50 candidates). Screens near the two that stopped passed, but each on another
+  build, whose content or element tree differs, so no run has audited the same content a few points
+  away (hang-wk4: the `tree-week-*` trees, compared with their addresses stripped). cf4eb74's and
+  e1bc88e's week pages, the same as each other, are from before 8bcc82b set the week's bands in
+  `line`: there each row is 87.3 points tall at AX3 and its band 37.3, where c74aa22's are 89.7 and
+  39.7, so their sources sit about 16 points higher on the page ("Want the full picture?" at 2027.7
+  against 2044.1, "BBC Weather" at 2126.0 against 2142.3). Their fourth screenfuls, the page 1304.33
+  and 1296.0 points down against c74aa22's 1299.67, passed in 0.71 and 0.58 seconds showing "BBC
+  Weather" whole, at about 822 to 866 and 830 to 874, where c74aa22's cuts it at 842.6 to 886.6;
+  cf4eb74's cuts "Met Office" instead, at 865.7 to 909.7 (hang-wk4: `hung-vs-pass.png`,
+  `cf4eb74-cuts.txt`). Their fifth screenfuls passed in under 0.8 seconds, and cf4eb74's is 1.33
+  points from fdb3182's, but fdb3182's tree is another: each nearby place's button holds its name
+  and a 5-point comma as texts of their own, so that screen has 50 contrast candidates where
+  cf4eb74's has 36 (`leeds-counts.tsv`). In every pair the content or the candidates differ. Both
+  stopped screens are the week page at AX3 with the sources' sentence and its 44-point link rows,
+  and a link or linked text cut by the screen's bottom edge; each of those, alone or together, is on
+  screens that passed (AccuWeather cut at 867 to 911, durham-tomorrow's credits' links, slivers of 2
+  to 3 points at the page's top, about 50 screens with an element across the window's top). Nor do
+  the candidates' counts tell: 33 stopped where 34 to 36 passed, 50 where 41 to 43 did. So the
+  artefacts show neither which element sets the stall off nor that it needs that exact screen: that
+  the stall is in Apple's judging of that one screenshot, and that the same content a few points
+  away would pass, is a hypothesis, which the test change below puts to the test. A spindump of
+  testmanagerd during a stall, or the same screen in Xcode, could say more.
+- **So no app change yet.** Nothing in the app was busy, and what the two screens share passes
+  elsewhere: a change aimed at the cut "BBC Weather" link (whole on cf4eb74's and e1bc88e's passing
+  screens, but links cut by the bottom edge pass on other pages) or the 0.83-point sliver of "Fri"
+  at the page's top would be a guess. Page breaks that never cut an element (`step`) might avoid it,
+  but screens with cuts pass far more often than not.
+- **The test change: the same content, a few points away** (`HomeAuditTests.auditAgain` and
+  `moveAFewPoints`; `runAudit`'s `OnAuditTimeout`). A retry with a nudge, to test the hypothesis
+  above, not a fix for a cause shown. A home call that doesn't finish in time isn't run again on the
+  same screen, which stopped again both times it was tried. The screenful's other calls aren't made.
+  The app's element tree is attached (`<name>-<k>-tree`), the page put back should the call have
+  moved it (`restore`), and the app checked in the foreground at the test's text size. From one
+  snapshot of the page, `PageRoom` finds how far it may move each way and still show whole exactly
+  the elements the screenful showed whole (`Screenful.showsWhole`'s rule): short of the first
+  element shown whole that a move would cut, of the first not shown whole that it would show whole,
+  and of the page's ends (a drag down at its top would pull at the refresh). On c74aa22's screen
+  that is 9.5 points up, to "Rain" 8.5 under the page's top edge, and 32.3 down, to the sources'
+  sentence 31.3 above the window's bottom edge; on fdb3182's, 17.0 up and 2.6 down. The page is
+  dragged to move 3 to 12 points (9 to 36 pixels), a point short of the room, the way with the wider
+  band first. A drag spends 13 to 20 points before the page moves, so each drag is the move still
+  wanted and 16.5 points more, then the last drag's measured dead travel more, at most three a way,
+  the page's place read from the credits once it has settled. There, a second snapshot must show
+  whole the same elements, by type, identifier, label and place on the page (`PageElements.change`).
+  The screen is then attached as `<name>-<k>-moved` (after `-<k>` on the contact sheet), added as a
+  screenful of its own, and audited in all three calls, so every kind runs on the same whole content
+  and the contrast proof reads the pixels audited. Before those calls, what the stopped screenful's
+  calls done had found is dropped (`AuditLog.mark` and `drop`), as the moved screenful's calls find
+  it again on the same whole elements: so none is counted twice, as `runAudit` drops a sheet's first
+  attempt's. (Should the page not move, it stays noted, for the test's failure to list.) The page's
+  audit goes on from there: the next scroll is worked out from the moved screenful (`step`), and
+  elements cut at its edges are judged on a screenful that shows them whole (`AuditLog.settle`), as
+  before. Nothing is skipped and nothing new is allowed.
 - **When it fails.** A call on the moved screenful that fails too fails the test with both attempts,
   each with its kinds, time and where the credits were (`AuditFailure.elsewhere`); a page that can't
   be moved so fails it with what each way came to (`notRunAgain`). The times attachment says what
@@ -4835,12 +4853,20 @@ and e1bc88e's (session scratchpad: hang-wk4).
   with its note; the failure's words; and the week page's whole audit against a fake app scrolled by
   its drags, each spending 13 to 20 points, on c74aa22's tree: the fourth screenful's contrast call
   stopping, its other calls not made, the page moved 5 points with the same elements whole and
-  audited in all three calls, and the audit going on to the page's end; the moved screen stopping
-  too, failing once with both attempts and where the credits were for each; and a page that won't
-  move, failing with what each way came to.
-- **For the next run to show:** that the moved screenful passes. Should it stop too, the stall is
-  less exact than one screen, and the trees and `-moved` screens attached, with a spindump of
-  testmanagerd, are the next to read.
+  audited in all three calls, and the audit going on to the page's end; the fourth screenful's
+  second call stopping instead, the issue its contrast call had found counted once, not twice; the
+  moved screen stopping too, failing once with both attempts and where the credits were for each;
+  and a page that won't move, failing with what each way came to, and, when its second call had
+  stopped, keeping the issue its first had found.
+- **What the next run will tell.** The moved screenful shows whole the same elements as the one that
+  stopped, a few points away ("BBC Weather" still cut by the bottom edge, whichever way the page
+  moves): it tests whether the stall needs that exact screen. Should it pass, the hypothesis stands,
+  still unproven, and the page's audit goes on to its end. Should its contrast call stop too, the
+  hypothesis is wrong: the stall follows what the screen shows, not where to the point, so the move
+  is no fix and is to come out, and the next change is to that content, in the app (what the two
+  stopped screens share: the sources' sentence and its link rows at AX3, a link cut by the screen's
+  bottom edge) or in where the pages break (`step`), read first from the trees and `-moved` screens
+  attached and a spindump of testmanagerd.
 
 ## API contract
 

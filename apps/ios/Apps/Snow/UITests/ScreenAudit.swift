@@ -92,7 +92,9 @@ extension XCTestCase {
   /// third macOS run"); no sheet's call has timed out on any run, and a second timeout on the same
   /// screen at least tells a call that stops from one that is slow. Any other error, a second
   /// failure, or a screen that isn't the one to audit throws (`AuditFailure`), with each attempt's
-  /// error and time: every kind runs on every screen the test attaches, or the test fails.
+  /// error and time. Every kind runs on every screenful's content, or the test fails: a home
+  /// screenful whose call stopped is audited in full on its `-moved` twin, which shows whole the
+  /// same elements.
   @MainActor
   func runAudit(
     of app: XCUIApplication,
