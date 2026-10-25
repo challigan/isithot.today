@@ -113,8 +113,8 @@ extension EnvironmentValues {
 /// A surface's tokens (DECISIONS, "The iPhone app in the website's look"): each a share of its
 /// theme's ink or pill (IsItModel's `BrandShares`, which packages/mobile measures on every band),
 /// as the phone's accessibility settings change them. Under Increase Contrast, soft text,
-/// affordances and the search box's edge are full ink, and hairlines and borders heavier; under
-/// Reduce Transparency, a chip is opaque.
+/// affordances and the search box's edge are full ink, and hairlines and borders heavier. A chip
+/// is opaque whatever the settings (`BrandShares.chip` is 1).
 struct BrandTokens {
   let theme: PageTheme
   let surface: Surface
@@ -123,7 +123,9 @@ struct BrandTokens {
 
   /// Every word, icon, star, caret, spinner and tick.
   var ink: Color { theme.ink }
-  /// A page's chips: the place, the gear, notes and notices, the tab track, Retry.
+  /// A page's chips: the place, the gear, notes and notices, the tab track, Retry. Opaque, as
+  /// Apple's contrast check failed the website's 85% over the gradient (PR #34's macOS runs);
+  /// Reduce Transparency would still make it so should the share go below 1 again.
   var chip: Color {
     reduceTransparency ? theme.pill : theme.pill.opacity(BrandShares.chip)
   }

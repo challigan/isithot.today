@@ -1,6 +1,7 @@
 import IsItLogic
 import IsItModel
 import SwiftUI
+import UIKit
 
 /// What the place picker asks the app to do (iOS build spec, section 10.3). The picker keeps no
 /// state of its own but the search box's text, which the app's model holds through `text`.
@@ -140,6 +141,16 @@ public struct PlacePickerView: View {
     withAnimation(reduceMotion ? nil : .default, change)
   }
 
+  /// A row's menu item and VoiceOver action: `run`, then VoiceOver told `words`, as after a star
+  /// (`StarButton`), since the row moves or goes with the focus on it. Only here: the star posts
+  /// its own, and runs the same `save` and `remove`, which post nothing.
+  private func announcing(_ words: String, _ run: @escaping () -> Void) -> () -> Void {
+    {
+      run()
+      UIAccessibility.post(notification: .announcement, argument: words)
+    }
+  }
+
   /// "Use my location", then the search's line, its results, or the saved and recent places.
   private var rows: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -224,7 +235,7 @@ public struct PlacePickerView: View {
         value: nil,
         identifier: "saved-\(row.id)",
         star: row.star,
-        menu: [RowAction(label: row.star.label, run: remove)],
+        menu: [RowAction(label: row.star.label, run: announcing(row.star.announcement, remove))],
         choose: { actions.chooseSaved(row.place) },
         toggleStar: remove
       )
@@ -245,16 +256,18 @@ public struct PlacePickerView: View {
     }
     ForEach(picker.recents) { row in
       let save = { moving { actions.saveRecent(row.place) } }
-      let delete = RowAction(label: picker.deleteRecent, destructive: true) {
-        moving { actions.deleteRecent(row.place) }
-      }
+      let delete = RowAction(
+        label: picker.deleteRecent, destructive: true,
+        run: announcing(row.deleted) { moving { actions.deleteRecent(row.place) } })
       PlaceRow(
         name: row.name,
         detail: row.detail,
         value: nil,
         identifier: "recent-\(row.id)",
         star: row.star,
-        menu: row.star.map { [RowAction(label: $0.label, run: save), delete] } ?? [delete],
+        menu: row.star.map {
+          [RowAction(label: $0.label, run: announcing($0.announcement, save)), delete]
+        } ?? [delete],
         choose: { actions.chooseRecent(row.place) },
         toggleStar: save
       )

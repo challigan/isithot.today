@@ -28,11 +28,11 @@ final class SettingsTests: XCTestCase {
     // The first launch asked by IP with no units, and kept the server's choice.
     XCTAssertTrue(units.buttons["cm"].isSelected, "cm isn't chosen")
     XCTAssertFalse(units.buttons["in"].isSelected, "in is chosen as well")
-    // Each a tap's size, though the pill hugs its words.
+    // Each a tap's size, though the pill hugs its words, to the pixel (`onPixels`).
     for choice in ["cm", "in"] {
       let frame = units.buttons[choice].frame
-      XCTAssertGreaterThanOrEqual(frame.width, 44, "\(choice) at \(frame)")
-      XCTAssertGreaterThanOrEqual(frame.height, 44, "\(choice) at \(frame)")
+      XCTAssertGreaterThanOrEqual(onPixels(frame.width), 44, "\(choice) at \(frame)")
+      XCTAssertGreaterThanOrEqual(onPixels(frame.height), 44, "\(choice) at \(frame)")
     }
     // The recorder's lines say what they hold, and hold it as their values.
     XCTAssertEqual(recorded(app.staticTexts["debug-units"]), "none")

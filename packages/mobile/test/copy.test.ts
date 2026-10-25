@@ -278,6 +278,7 @@ describe('APP_COPY', () => {
       unsavePlace: ['place'],
       placeSaved: ['place'],
       placeUnsaved: ['place'],
+      placeDeleted: ['place'],
       upgradeSettings: ['price'],
       notifyPlaceOnScreen: ['place'],
       reportAdSubject: ['version'],
@@ -493,6 +494,9 @@ describe('the picker’s strings', () => {
       'Leeds removed from saved places.',
     );
     expect(APP_COPY.deleteRecent).toBe('Delete');
+    expect(fill(APP_COPY.placeDeleted, { place: 'Leeds' })).toBe(
+      'Leeds deleted from recent places.',
+    );
   });
 });
 

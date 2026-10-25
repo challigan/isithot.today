@@ -56,7 +56,8 @@ export const APP_COPY = {
   // VoiceOver reads the row), the line with none saved yet, and the line once the list is full,
   // `max` being client `PLACES.savedMax`. A star saves or removes the place beside it: its
   // VoiceOver label, the same words in a row's press-and-hold menu, and what VoiceOver is told
-  // after a tap. Recent's own menu forgets a place (`deleteRecent`).
+  // after a tap. Recent's own menu forgets a place (`deleteRecent`), and VoiceOver is told so
+  // (`placeDeleted`), as after a star: the row leaves the list with the focus on it.
   saved: 'Saved',
   savedHint: 'Tap the star beside a place to save it here.',
   savedFull: 'You can save up to {max} places. Remove one to save another.',
@@ -65,6 +66,7 @@ export const APP_COPY = {
   placeSaved: '{place} saved.',
   placeUnsaved: '{place} removed from saved places.',
   deleteRecent: 'Delete',
+  placeDeleted: '{place} deleted from recent places.',
   // The search box is the app's own, not the system's search (`.searchable`), whose clear
   // button, about 20 points square, the accessibility audit failed as too small to tap on PR
   // #33's second macOS run, and which SwiftUI doesn't let the app change: this is its own clear

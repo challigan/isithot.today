@@ -37,14 +37,18 @@ import { generatedHeader } from '../src/swift';
 /** A ratio rounded down to one decimal, as the design's floors are. */
 const floor = (ratio: number) => Math.floor(ratio * 10 + 1e-9) / 10;
 
-/** The design's table (DESIGN.md section 1.3), each figure rounded down to one decimal. */
+/**
+ * The design's table (DESIGN.md section 1.3), each figure rounded down to one decimal, but for
+ * ink on a chip: the chip is opaque `pill` since PR #34's macOS runs, so that pair is `pill` on
+ * ink.
+ */
 const BAND_FLOORS: Record<SnowBand, BandPairs> = {
-  nosnow: pairs(10.0, 13.0, 13.6, 13.0, 8.5, 10.3, 7.1, 7.6, 3.4),
-  flakes: pairs(8.2, 12.3, 13.1, 12.3, 8.3, 9.8, 6.9, 7.3, 3.4),
-  maybesnow: pairs(4.8, 8.1, 8.9, 8.9, 7.0, 6.4, 5.1, 5.7, 3.9),
-  snow: pairs(4.8, 10.1, 11.5, 11.5, 8.7, 8.2, 6.4, 7.1, 4.6),
-  heavysnow: pairs(6.1, 13.8, 15.4, 15.4, 11.3, 10.9, 8.4, 9.4, 5.5),
-  deepsnow: pairs(6.1, 17.0, 19.0, 19.0, 13.8, 13.9, 10.5, 11.7, 6.2),
+  nosnow: pairs(10.0, 13.6, 13.6, 13.0, 8.5, 10.3, 7.1, 7.6, 3.4),
+  flakes: pairs(8.2, 13.1, 13.1, 12.3, 8.3, 9.8, 6.9, 7.3, 3.4),
+  maybesnow: pairs(4.8, 8.9, 8.9, 8.9, 7.0, 6.4, 5.1, 5.7, 3.9),
+  snow: pairs(4.8, 11.5, 11.5, 11.5, 8.7, 8.2, 6.4, 7.1, 4.6),
+  heavysnow: pairs(6.1, 15.4, 15.4, 15.4, 11.3, 10.9, 8.4, 9.4, 5.5),
+  deepsnow: pairs(6.1, 19.0, 19.0, 19.0, 13.8, 13.9, 10.5, 11.7, 6.2),
 };
 
 function pairs(...ratios: number[]): BandPairs {
@@ -91,6 +95,12 @@ describe('the pairs on every band', () => {
       expect(ratio, pair).toBeGreaterThanOrEqual(BODY_TEXT_CONTRAST);
     }
     expect(fieldBorder).toBeGreaterThanOrEqual(3);
+  });
+
+  it.each(bands)('%s: a chip is flat, opaque `pill`, with no gradient through it', (_, p) => {
+    expect(BRAND_SHARES.chip).toBe(1);
+    const { inkOnChip, pillOnInk } = bandPairs(p);
+    expect(inkOnChip).toBe(pillOnInk);
   });
 
   it('puts the page’s worst points under the glow on the two mid bands, where words sit on chips', () => {

@@ -478,10 +478,10 @@ extension XCTestCase {
     return last
   }
 
-  /// Taps `button`, a `WordsButton` (IsItUI), above its words: halfway between the top of its
-  /// element, the words' band, and the top of the 44-point line it is centred in, which a tap
-  /// takes. A button whose element is the whole line or more is tapped halfway up its top half.
-  /// Waits up to 10 seconds for it, as a tap on it would.
+  /// Taps `button`, a `WordsButton` or `PillButton` (IsItUI), above its words or pill: halfway
+  /// between the top of its element, the words' band or the pill, and the top of the 44-point
+  /// line it is centred in, which a tap takes. A button whose element is the whole line or more
+  /// is tapped halfway up its top half. Waits up to 10 seconds for it, as a tap on it would.
   @MainActor
   func tapOutsideItsWords(_ button: XCUIElement) {
     XCTAssertTrue(button.waitForExistence(timeout: 10), "No \(button) to tap")
@@ -596,6 +596,14 @@ extension XCTestCase {
 func aboveTheWords(_ height: CGFloat) -> CGFloat {
   let half = height / 2
   return half < 22 ? (half + 22) / 2 : half / 2
+}
+
+/// `points` on the simulator's pixel grid, thirds of a point, for holding a frame to a size: a
+/// frame is read back in floating point, so Settings' cm segment, laid out exactly 44 tall, came
+/// back 43.99999999999997 on PR #34's macOS run of step 6, where a frame a whole pixel short
+/// still comes out short.
+func onPixels(_ points: CGFloat) -> CGFloat {
+  (points * 3).rounded() / 3
 }
 
 /// The screen as the accessibility tree has it at one moment: every element with an identifier,

@@ -4055,7 +4055,9 @@ step 5 and Settings in step 6.
 - **The tokens are data, TypeScript first.** `packages/mobile/src/brandColours.ts` holds each
   token's share (`BRAND_SHARES`), generated into IsItModel's `BrandColours.swift`
   (`BrandShares`, and the content card's colour), which IsItUI and the Linux tests read: `chip`
-  (pill at 85% over the background, opaque under Reduce Transparency), `selected` (an ink fill
+  (pill, opaque: the website's 85% over the background until PR #34's macOS runs, where Apple's
+  contrast check failed it over the gradient on every fixture, on the tabs not selected and on
+  "Use my exact location", so the build plan's fallback, a flat fill), `selected` (an ink fill
   with words in pill), `soft` (ink at 85%, on flat fills only, never on a page's gradient),
   `wash` (ink at 12%), `field` and `fieldBorder` (ink at 8% and 55%), `border` (28%), `hairline`
   (22%), `affordance` (70%) and `card` (pill moved 25% away from the ink, opaque: `#401a4f` on
@@ -4067,26 +4069,30 @@ step 5 and Settings in step 6.
   view is drawn, and `BrandTokens` (read through `@SurfaceTokens`) gives each token as the
   environment's contrast and transparency settings change it.
 - **Every pair, every band, at its worst point.** The model is the app's own background model,
-  the same as `PageBackground`, `HomeAuditTests`' `PageColours` and the website: mixes in sRGB
-  rounded to 8 bits, the worst point anywhere on a 402 by 874 screen sampled every 6 points,
-  ratios rounded down. `brandColours.test.ts` pins each pair to the design's figure (rounded down
-  to one decimal), so a palette or share change can't pass quietly, and holds every text pair to
-  4.5:1 and the search box's edge to 3:1; `brandColours.ts` is under the suite's 100% coverage.
+  the same as `PageBackground` and `HomeAuditTests`' `PageColours`: the app's own approximation
+  of the website's 168°, from 40% across the top to 60% across the bottom (CSS's own line, corner
+  to corner, tilts about 12°); mixes in sRGB rounded to 8 bits, the worst point anywhere on a
+  402 by 874 screen sampled every 6 points, ratios rounded down. `brandColours.test.ts` pins
+  each pair to the design's figure (rounded down to one decimal; ink on a chip is pill on ink
+  since the chip became opaque), so a palette or share change can't pass quietly, and holds
+  every text pair to 4.5:1 and the search box's edge to 3:1; `brandColours.ts` is under the
+  suite's 100% coverage.
 
   | Band      | page: ink / page | ink / chip | pill on ink | sheet: ink | soft  | ink / wash | soft / pressed | placeholder | field edge |
   | --------- | ---------------- | ---------- | ----------- | ---------- | ----- | ---------- | -------------- | ----------- | ---------- |
-  | nosnow    | 10.09            | 13.01      | 13.62       | 13.01      | 8.51  | 10.33      | 7.18           | 7.60        | 3.45       |
-  | flakes    | 8.28             | 12.31      | 13.17       | 12.31      | 8.32  | 9.82       | 6.96           | 7.36        | 3.43       |
-  | maybesnow | 4.87 (glow)      | 8.18       | 8.97        | 8.97       | 7.02  | 6.46       | 5.19           | 5.71        | 3.98       |
-  | snow      | 4.88 (glow)      | 10.17      | 11.54       | 11.54      | 8.79  | 8.22       | 6.47           | 7.19        | 4.61       |
-  | heavysnow | 6.18             | 13.82      | 15.47       | 15.47      | 11.39 | 10.98      | 8.45           | 9.45        | 5.50       |
-  | deepsnow  | 6.17             | 17.05      | 19.07       | 19.07      | 13.82 | 13.96      | 10.51          | 11.73       | 6.23       |
+  | nosnow    | 10.09            | 13.62      | 13.62       | 13.01      | 8.51  | 10.33      | 7.18           | 7.60        | 3.45       |
+  | flakes    | 8.28             | 13.17      | 13.17       | 12.31      | 8.32  | 9.82       | 6.96           | 7.36        | 3.43       |
+  | maybesnow | 4.87 (glow)      | 8.97       | 8.97        | 8.97       | 7.02  | 6.46       | 5.19           | 5.71        | 3.98       |
+  | snow      | 4.88 (glow)      | 11.54      | 11.54       | 11.54      | 8.79  | 8.22       | 6.47           | 7.19        | 4.61       |
+  | heavysnow | 6.18             | 15.47      | 15.47       | 15.47      | 11.39 | 10.98      | 8.45           | 9.45        | 5.50       |
+  | deepsnow  | 6.17             | 19.07      | 19.07       | 19.07      | 13.82 | 13.96      | 10.51          | 11.73       | 6.23       |
 
   On content: ink on the page 4.88 at the glow's centre (7.32 without the glow), on a card 14.20,
   soft on a card 10.62, ink on a pressed row or the units track 10.00, soft on a pressed row
   7.76, pill on ink 11.54, and a hairline against its card 1.96 (decorative). The page's worst
   points, 4.87 and 4.88, are under the glow at the top bar's right end, where the words sit on
-  chips at 8.18 or more; every pair on a flat fill is 5.19:1 or more.
+  chips at 8.97 or more (a chip is opaque `pill`, so ink on it is pill on ink); every pair on a
+  flat fill is 5.19:1 or more.
 
 - **Two website values are left out**, and the tests pin them below 4.5:1: ink at 10% as a
   button's fill on the page (the website's `.button`, 4.01:1 on maybesnow), and ink at 85% or
@@ -4140,7 +4146,7 @@ This supersedes spec 10.1 and 10.2 on type, colours, the switcher, Now and the w
   user still hears why. A notice about the place (`AppCopy.slugGone`) is a chip of words above
   it. `homeTopBar` and `HomeTopBar` say so (`approximate` is now only the notice). At
   accessibility sizes the bar is leading, the gear trailing, so wrapped words read from the
-  left. Every word in it sits on a chip's flat fill, 8.18:1 or more on every band, where bare
+  left. Every word in it sits on a chip's flat fill, 8.97:1 or more on every band, where bare
   ink under maybesnow's glow at the bar's right end is 4.87.
 - **The switcher is the website's tabs, and the segmented `Picker` is gone.** At standard sizes
   a chip track at most 352 wide, centred, in equal thirds, the view on screen on an ink thumb
@@ -4184,9 +4190,11 @@ This supersedes spec 10.1 and 10.2 on type, colours, the switcher, Now and the w
   also under the error state's words); "Want the full picture?" 44 below with its links each on
   a 44-point line; "Nearby:" and its places as one run that wraps, each place underlined with a
   comma after all but the last (`AppCopy.listComma`, outside the underline and outside the
-  place's spoken label, so `app.buttons["Dundee"]` still finds it), two texts side by side
-  rather than `Text + Text`, which the iOS 26 SDK deprecates; a hairline 40 above the credits;
-  and the credits' links underlined rather than bold.
+  place's spoken label, so `app.buttons["Dundee"]` still finds it), one text from an
+  `AttributedString` (`nearbyName`, as the credits are), not two side by side, whose commas the
+  audit judged texts of their own on PR #34's macOS runs and failed for contrast, 2.3 points
+  wide with no identifier; a hairline 40 above the credits; and the credits' links underlined
+  rather than bold.
 - **Two website values are not copied**, as step 2 measured: the detail and the agreement
   heading are full ink, not 0.9 (4.31:1 under snow's glow, and `DrawnText` matches pixels
   against the exact ink), and Retry is filled with the chip colour, not 10% ink (4.01:1 on
@@ -4286,12 +4294,19 @@ supersedes spec 10.3 on the picker's look: no navigation bar, no grouped list, n
   default). A recent place's menu holds "Save {place}" when it can be saved and "Delete"
   (`AppCopy.deleteRecent`, destructive); a saved place's holds "Remove {place} from saved
   places". Each item is the same row's VoiceOver action (`accessibilityAction(named:)`), and the
-  star stays the main way to save and remove.
+  star stays the main way to save and remove. Each tells VoiceOver what it did, as the star does
+  (below), since the row moves or goes with the focus on it.
 - **The parts** (PickerChrome.swift). `SheetHeader`: "Search for a place" (`sheetTitle`, a
   heading) and the website's Close pill (`PillButton` on the sheet: the wash with the `border`
-  edge, at least 44 by 44, `picker-close`), the word in `button` type on the title's first
-  baseline, so both scale with the text where the toolbar's xmark couldn't. `SearchBox` around
-  `BoxTextField`, a `UITextField` in a representable: as tall as the box (`sizeThatFits`, at
+  edge, at least 44 by 44, `picker-close`), the word on the title's first baseline, so both
+  scale with the text where the toolbar's xmark couldn't. The word was in `button` type (Medium)
+  until PR #34's macOS runs, where every picker audit found it "partially unsupported" for
+  Dynamic Type though it grew, the one text so found and the only Medium one audited; it is in
+  `label` now, the place pill's role, which passes. That is the first of three changes to try,
+  one a run, then no border, then a 36-point pill; whichever clears it goes to Retry too, which
+  is built the same way and not audited. `label` is Regular at 16 points where `button` is
+  Medium at 14.4, so a pass shows the text was the cause, not which part of it. `SearchBox`
+  around `BoxTextField`, a `UITextField` in a representable: as tall as the box (`sizeThatFits`, at
   least 44) so its own element is, its text inset inside it so the whole box but the clear
   button is the field to tap, in the `field` role's face through `UIFontMetrics(.body)` (a face up
   under Bold Text), its prompt in `soft`, the caret ink, the keyboard dark on a dark band, the
@@ -4308,10 +4323,11 @@ supersedes spec 10.3 on the picker's look: no navigation bar, no grouped list, n
   Identifiers: `saved-heading`, `saved-<key>`, `saved-hint`, `saved-full`, and each star
   `star-<its row's identifier>` (`star-result-<i>`, `star-saved-<key>`, `star-recent-<key>`);
   every older one is kept.
-- **VoiceOver.** After a star, the presenter's announcement is posted ("Leeds saved.", "Leeds
-  removed from saved places."); focus isn't moved to a row that moved (the Later list). Rows
-  that move between Saved and Recent animate as the system animates a change, at once under
-  Reduce Motion.
+- **VoiceOver.** After a star, or the same from a row's menu or its VoiceOver action, the
+  presenter's announcement is posted ("Leeds saved.", "Leeds removed from saved places."), and
+  after Delete, "Leeds deleted from recent places." (`AppCopy.placeDeleted`,
+  `RecentRow.deleted`); focus isn't moved to a row that moved (the Later list). Rows that move
+  between Saved and Recent animate as the system animates a change, at once under Reduce Motion.
 - **Contrast.** Every text pair on the sheet is 5.19:1 or more on every band (step 2's table:
   ink on the sheet 8.97 at least, `soft` 7.02, ink on the wash 6.46, `soft` on a pressed row
   5.19, the placeholder on the field 5.71), and the field's edge at least 3.43, so nothing like

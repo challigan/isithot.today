@@ -95,12 +95,13 @@ struct CreditsView: View {
 }
 
 /// A notice in full, as its owners wrote it, under its project's name: the project's page as a
-/// page button showing its URL, underlined as the website underlines a link, with its arrow out;
-/// then the notice on a card, in the system's monospaced footnote type (the app's one text not
-/// in Bricolage), selectable. The button's accessibility label is in words (`urlLabel`,
-/// "Bricolage Grotesque's project page") and its value the URL, as the Debug recorder's lines
-/// are: a URL as a label was "not human-readable" to the audit on PR #33's second macOS run, and
-/// the recorder's line showing a URL under a shorter label passed on its third.
+/// page button showing its URL, underlined as the website underlines a link, with its arrow out
+/// in `affordance`, as every arrow and chevron is; then the notice on a card, in the system's
+/// monospaced footnote type (the app's one text not in Bricolage), selectable. The button's
+/// accessibility label is in words (`urlLabel`, "Bricolage Grotesque's project page") and its
+/// value the URL, as the Debug recorder's lines are: a URL as a label was "not human-readable" to
+/// the audit on PR #33's second macOS run, and the recorder's line showing a URL under a shorter
+/// label passed on its third.
 struct NoticeView: View {
   let title: String
   let url: URL?
@@ -108,6 +109,7 @@ struct NoticeView: View {
   let text: String?
 
   @Environment(\.openURL) private var openURL
+  @SurfaceTokens private var tokens
 
   var body: some View {
     SheetPage(title: title) {
@@ -123,6 +125,7 @@ struct NoticeView: View {
               Spacer(minLength: 0)
               Image(systemName: "arrow.up.forward")
                 .font(.footnote.weight(.semibold))
+                .foregroundStyle(tokens.affordance)
                 .accessibilityHidden(true)
             }
           }

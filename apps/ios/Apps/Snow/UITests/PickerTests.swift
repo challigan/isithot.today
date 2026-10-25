@@ -103,8 +103,11 @@ final class PickerTests: XCTestCase {
     let clear = app.buttons["clear-search"]
     XCTAssertTrue(clear.waitForExistence(timeout: 5), "No clear button with text typed")
     XCTAssertEqual(clear.label, "Clear search")
-    XCTAssertGreaterThanOrEqual(clear.frame.width, 44, "The clear button at \(clear.frame)")
-    XCTAssertGreaterThanOrEqual(clear.frame.height, 44, "The clear button at \(clear.frame)")
+    // To the pixel, as a frame laid out at exactly 44 can read back a hair under (`onPixels`).
+    XCTAssertGreaterThanOrEqual(
+      onPixels(clear.frame.width), 44, "The clear button at \(clear.frame)")
+    XCTAssertGreaterThanOrEqual(
+      onPixels(clear.frame.height), 44, "The clear button at \(clear.frame)")
     field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 2))
     XCTAssertTrue(leeds.waitForExistence(timeout: 10), "No recent places once cleared")
     waitUntilGone(clear, "The clear button with nothing typed")
@@ -218,9 +221,9 @@ final class PickerTests: XCTestCase {
   }
 
   /// With location access off, "Use my location" says so, with Open Settings, and the search
-  /// still works. Opened from the approximate line's "Use my location", the picker starts there:
-  /// tapped on its line above its words, outside its element (IsItUI's `WordsButton`), as the
-  /// whole 44-point line is the button.
+  /// still works. Opened from the top bar's "Use my exact location" chip, the picker starts there:
+  /// tapped on its line above the chip, outside its element (IsItUI's `PillButton`, drawn 34
+  /// tall), as the whole 44-point line is the button.
   @MainActor
   func testUseMyLocationDenied() throws {
     let app = launch(["-resetStore", "-network", "ip-first-launch", "-location", "denied"])

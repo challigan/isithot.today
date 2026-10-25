@@ -5,8 +5,8 @@
 /// (Settings and its pages, in `Palettes.content`). packages/mobile measures every pair they
 /// make on every band, at its worst point on the screen.
 public enum BrandShares {
-  /// `pill` over a page: its chips, tab track and Retry (opaque under Reduce Transparency).
-  public static let chip: Double = 0.85
+  /// `pill` over a page, opaque: its chips, tab track and Retry.
+  public static let chip: Double = 1
   /// Ink: secondary text on a flat fill (the sheet, a card), never on a page's gradient.
   public static let soft: Double = 0.85
   /// Ink over what is beneath: the sheet's Close, pressed rows and the units track.

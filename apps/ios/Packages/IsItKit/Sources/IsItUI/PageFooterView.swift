@@ -107,14 +107,10 @@ struct PageFooterView: View {
         WordsButton {
           actions.selectNearby(city)
         } label: {
-          // Two texts side by side, not `Text + Text`, which the iOS 26 SDK deprecates.
-          HStack(spacing: 0) {
-            Text(verbatim: city.name)
-              .underline()
-            if index < footer.nearby.count - 1 {
-              Text(verbatim: AppCopy.listComma)
-            }
-          }
+          // One text, not two side by side: the audit judges each text in a button as an
+          // element of its own, and on PR #34's macOS runs failed every comma for contrast, a
+          // text 2.3 points wide with no identifier, which no exception may match.
+          Text(Self.nearbyName(city.name, comma: index < footer.nearby.count - 1))
         }
         .accessibilityLabel(Text(verbatim: city.name))
         .accessibilityIdentifier("nearby-\(city.slug)")
@@ -122,6 +118,17 @@ struct PageFooterView: View {
     }
     // The website's 1.6 line height, for a name that wraps.
     .brandFont(.line, lineSpacing: 0.4)
+  }
+
+  /// A place nearby as one text: its name underlined, and the comma after it, outside the
+  /// underline, when another place follows.
+  static func nearbyName(_ name: String, comma: Bool) -> AttributedString {
+    var text = AttributedString(name)
+    text.underlineStyle = Text.LineStyle.single
+    if comma {
+      text.append(AttributedString(AppCopy.listComma))
+    }
+    return text
   }
 
   /// A credit as one text, its linked phrases underlined, which a tap opens: the website's

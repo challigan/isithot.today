@@ -53,9 +53,11 @@ struct PageBackground: View {
 
 /// The place picker's background, the website's `.sheet`: a linear gradient at 168° from `pill`
 /// to `pill` with `BrandShares.sheetEnd` (15%) of `g2` mixed in, with no glow, so every row sits
-/// on the pill's flat colour. Drawn as `g2` fading in over the pill, which is the same mix at
-/// every point. Full bleed and decorative, with no accessibility modifier, as `PageBackground`:
-/// one on a view without an element makes it one, and Smart Invert inverts it with its text.
+/// within a few levels of `pill` on a light band (6 to 8 of 255 at the foot) and on exactly
+/// `pill` on a dark one, whose `g2` is its `pill`. Drawn as `g2` fading in over the pill, which
+/// is the same mix at every point. Full bleed and decorative, with no accessibility modifier, as
+/// `PageBackground`: one on a view without an element makes it one, and Smart Invert inverts it
+/// with its text.
 struct SheetBackground: View {
   let theme: PageTheme
 

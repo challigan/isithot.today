@@ -7,7 +7,7 @@ import UIKit
 /// heading, leading and wrapping, and the website's "Close" pill trailing, its words on the title's
 /// first baseline. Text, so both scale with Dynamic Type, which a toolbar's Close never did (PR
 /// #33). Close is the sheet's secondary pill (`PillButton`: the wash with the `border` edge, at
-/// least 44 by 44), its own element.
+/// least 44 by 44), its own element, its word in `label`, Regular, as the place's pill is.
 struct SheetHeader: View {
   let title: String
   let close: String
@@ -21,8 +21,12 @@ struct SheetHeader: View {
         .accessibilityAddTraits(.isHeader)
       Spacer(minLength: 0)
       PillButton(.chip(minHeight: HitTarget.minimum), bordered: true, action: action) {
+        // In `label`, the place pill's role, which the audit passes, rather than `button`'s
+        // Medium: on every picker audit of PR #34's macOS runs Close, the only Medium text
+        // audited, was "partially unsupported" for Dynamic Type though it grew. The first of
+        // the changes to try, one a run (DECISIONS).
         Text(verbatim: close)
-          .brandFont(.button)
+          .brandFont(.label)
       }
       .accessibilityIdentifier("picker-close")
     }

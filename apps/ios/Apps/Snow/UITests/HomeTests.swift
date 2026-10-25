@@ -80,8 +80,8 @@ final class HomeTests: XCTestCase {
   }
 
   /// A place under "Nearby:" loads in place, with no navigation: it becomes the place on the
-  /// top bar, a chosen one now (no approximate line), and the page answers for it on the same
-  /// view. (The fixture's server answers every place with the same fixture.)
+  /// top bar, a chosen one now (no "Use my exact location" chip), and the page answers for it on
+  /// the same view. (The fixture's server answers every place with the same fixture.)
   @MainActor
   func testNearbyLoadsInPlace() throws {
     let aberdeen = try HomeScreen.named("aberdeen-snow")

@@ -12,9 +12,10 @@
  * - **content**: Settings and every page it opens, in `Palettes.content` (core
  *   `SNOW_PALETTES.snow`, the website's own content pages' palette), over `PageBackground`.
  *
- * The model is the app's own: the same as `PageBackground`, the UI tests' `PageColours` and the
- * website's CSS. Mixes are in sRGB, rounded to 8 bits as a screen draws them, and a pair's ratio
- * is its worst anywhere on a 402 by 874 point screen, sampled every 6 points, rounded down.
+ * The model is the app's own, the same as `PageBackground` and the UI tests' `PageColours`: its
+ * approximation of the website's 168° (`along`), not CSS's own line. Mixes are in sRGB, rounded
+ * to 8 bits as a screen draws them, and a pair's ratio is its worst anywhere on a 402 by 874
+ * point screen, sampled every 6 points, rounded down.
  * `brandColoursSwift` writes the shares and the content card's colour into IsItModel, where
  * IsItUI and the Linux tests read the same numbers.
  */
@@ -30,8 +31,13 @@ export type Rgb = readonly [number, number, number];
  * otherwise the least that does:
  */
 export const BRAND_SHARES = {
-  /** `pill` over the background: a page's chips, its tab track and its Retry. */
-  chip: 0.85,
+  /**
+   * `pill`, opaque: a page's chips, its tab track and its Retry. Not the website's 85% over the
+   * background: Apple's contrast check failed that chip over the gradient on every fixture of
+   * PR #34's macOS runs (the tabs not selected and "Use my exact location"), so the build plan's
+   * fallback, a flat fill, the case that has never failed.
+   */
+  chip: 1,
   /** Ink, for secondary text on a flat fill only (the sheet, a card): never on the gradient. */
   soft: 0.85,
   /**
@@ -100,8 +106,9 @@ export function contrast(a: Rgb, b: Rgb): number {
 }
 
 /**
- * How far along the 168° gradient a point is, 0 to 1: CSS's `linear-gradient(168deg, …)` from
- * 40% across the top to 60% across the bottom, as `PageBackground` draws it.
+ * How far along the 168° gradient a point is, 0 to 1: the app's own approximation of the
+ * website's 168°, from 40% across the top to 60% across the bottom, as `PageBackground` draws it
+ * (CSS's own line, corner to corner, tilts about 12°).
  */
 function along(x: number, y: number): number {
   const [dx, dy] = [0.2 * SCREEN.width, SCREEN.height];
@@ -260,7 +267,7 @@ export const BRAND_COLOURS_SOURCE = 'packages/mobile/src/brandColours.ts';
 
 /** What each share is for, in the Swift's doc comments. */
 const SHARE_DOCS: Record<keyof typeof BRAND_SHARES, string> = {
-  chip: '`pill` over a page: its chips, tab track and Retry (opaque under Reduce Transparency).',
+  chip: '`pill` over a page, opaque: its chips, tab track and Retry.',
   soft: "Ink: secondary text on a flat fill (the sheet, a card), never on a page's gradient.",
   wash: "Ink over what is beneath: the sheet's Close, pressed rows and the units track.",
   field: "Ink: the search box's fill.",

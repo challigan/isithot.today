@@ -656,10 +656,12 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   lightest pixels inside the element and the contrast between them, beside the page's ink and its
   background at the element's centre (`PixelRange`, `PageColours`) and what text it shows drawn
   there (`DrawnText`), except those in `HomeAuditTests.exceptions`, each with why it isn't a fault
-  to fix: the credits' inline links (`hitRegion`), and contrast on a detail, "Use my location" or
-  a place nearby that the screenful shows drawn in the page's ink over its background at 4.5:1 or
-  more at every corner, proven again on each issue (`contrast`). (The segmented control's own
-  type size, `dynamicType`, was a third until the website's tabs replaced it.) The issues allowed and any exception a test didn't need are attached
+  to fix: the credits' inline links (`hitRegion`), and contrast on a detail or a place nearby
+  that the screenful shows drawn in the page's ink over its background at 4.5:1 or more at every
+  corner, proven again on each issue (`contrast`). (The segmented control's own type size,
+  `dynamicType`, was a third until the website's tabs replaced it, and the old "Use my location"
+  line was matched with Nearby until the "Use my exact location" chip, whose top row is its own
+  fill, replaced it.) The issues allowed and any exception a test didn't need are attached
   (`home-<fixture>-<size>-allowed`) and listed in its failure. Each page's first screenful also
   attaches the app's element tree (`<page>-tree`). Each call goes through `runAudit`
   (ScreenAudit.swift), which times it and reads its issues once it is done, outside XCTest's
@@ -760,8 +762,8 @@ iPhone app's place picker").
   typed Saved and Recent. Each place is a `PlaceRow` (the name, the line beneath in `soft`, the
   wash when pressed) with its `StarButton` (`star-<row>`), and a press-and-hold menu whose items
   are VoiceOver actions too: "Save {place}" and Delete on a recent place, "Remove {place} from
-  saved places" on a saved one. After a star, VoiceOver is told what it did. The parts are in
-  PickerChrome.swift.
+  saved places" on a saved one. After a star or a menu item, VoiceOver is told what it did
+  ("Leeds deleted from recent places." after Delete). The parts are in PickerChrome.swift.
 - **The search box is the app's own** (`SearchBox`, PickerChrome.swift): the website's box (the
   `field` tint, the 1.5-point `fieldBorder` edge, corners of 12) around `BoxTextField`, UIKit's
   `UITextField` in a representable, as tall as the box (at least 44, `sizeThatFits`) so its own

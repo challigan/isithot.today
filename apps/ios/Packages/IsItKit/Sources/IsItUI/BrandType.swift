@@ -39,13 +39,13 @@ enum TextRole: CaseIterable {
   case field
   /// Section headings: the hours', the week's, Saved, Recent, Settings' sections.
   case heading
-  /// The place, the agreement heading, the picker's rows, the links' sentence.
+  /// The place, the agreement heading, the picker's rows and Close, the links' sentence.
   case label
   /// A week's day, "Use my location", the links, the units, page buttons.
   case labelStrong
   /// Nearby; the picker's status, location and saved lines.
   case line
-  /// Retry, the picker's Close.
+  /// Retry, a notice's project page.
   case button
   /// The limited line, a week's band.
   case small

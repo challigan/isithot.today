@@ -92,19 +92,18 @@ final class HomeAuditTests: XCTestCase {
     Exception(
       type: .contrast,
       matches: { element in
-        // A page's detail, "Use my location" or a place nearby, and only with the proof.
+        // A page's detail or a place nearby, and only with the proof. Not "Use my exact
+        // location", a chip now, whose top row is its own fill, never the page's background.
         let detail = element.type == .staticText && element.identifier == "detail"
-        let words =
-          element.type == .button
-          && (element.identifier == "use-my-location" || element.identifier.hasPrefix("nearby-"))
-        return (detail || words) && element.drawn?.proves(4.5) == true
+        let place = element.type == .button && element.identifier.hasPrefix("nearby-")
+        return (detail || place) && element.drawn?.proves(4.5) == true
       },
       why:
-        "text the screenful shows drawn in the page's ink over the page's background, which "
-        + "gives 4.5:1 or more at every corner of its frame: Apple's check failed such text "
-        + "whose frame is mostly the page's gradient (two-line details, and the text buttons' "
-        + "44-point lines) at 5.3:1 to 14.6:1 on PR #33's two macOS runs, and passed the same "
-        + "ink on one line"
+        "a page's detail or a place nearby, drawn in the page's ink over the page's background, "
+        + "which the screenful shows giving 4.5:1 or more at every corner of its frame: Apple's "
+        + "check failed such text whose frame is mostly the page's gradient (two-line details, "
+        + "and the text buttons' 44-point lines) at 5.3:1 to 14.6:1 on PR #33's two macOS runs, "
+        + "and passed the same ink on one line"
     ),
   ]
 

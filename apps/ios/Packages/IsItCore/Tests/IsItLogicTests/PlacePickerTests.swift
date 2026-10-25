@@ -49,6 +49,11 @@ struct PlacePickerTests {
     #expect(picker.recents.map(\.name) == ["Leeds", "Leeds"])
     #expect(picker.recents.map(\.id) == ["device:53.8,-1.55", "city:leeds-gb"])
     #expect(picker.recents.map(\.place) == [recentHere, recentLeeds])
+    // What VoiceOver is told once Delete forgets one, the phone's own point too, which has no
+    // star.
+    #expect(
+      picker.recents.map(\.deleted)
+        == Array(repeating: "Leeds deleted from recent places.", count: 2))
     // Typing hides them: the box's own line or results take their place.
     for search in [
       PlaceSearchState.tooShort, .searching(previous: []), .found([]), .failed("No."),
@@ -276,11 +281,11 @@ struct PlacePickerSavedTests {
       search: .found(found), location: .idle, lists: places([], saved: [savedLeeds]))
     let texts =
       [empty.savedHeading, empty.savedHint, whenFull.savedFull, empty.deleteRecent]
-      .compactMap { $0 }
+      .compactMap { $0 } + [empty.recents[0].deleted]
       + [empty.recents[0].star, whenFull.saved[0].star, searching.results[0].star]
       .compactMap { $0 }.flatMap { [$0.label, $0.announcement] }
       + searching.results.compactMap(\.value)
-    #expect(texts.count == 11)
+    #expect(texts.count == 12)
     for text in texts {
       #expect(otherTopic(in: text) == nil, "\(text)")
       #expect(text.first?.isUppercase == true, "\(text)")

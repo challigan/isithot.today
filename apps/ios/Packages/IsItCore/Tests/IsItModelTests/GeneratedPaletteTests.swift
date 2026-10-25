@@ -66,7 +66,7 @@ struct GeneratedBrandColourTests {
       BrandShares.fieldBorder, BrandShares.border, BrandShares.hairline,
       BrandShares.increasedLine, BrandShares.affordance, BrandShares.card, BrandShares.sheetEnd,
     ]
-    #expect(shares == [0.85, 0.85, 0.12, 0.08, 0.55, 0.28, 0.22, 0.4, 0.7, 0.25, 0.15])
+    #expect(shares == [1, 0.85, 0.12, 0.08, 0.55, 0.28, 0.22, 0.4, 0.7, 0.25, 0.15])
     #expect(BrandShares.increasedLine > BrandShares.hairline)
     #expect(BrandShares.increasedLine > BrandShares.border)
   }

@@ -100,6 +100,11 @@ public enum AppCopy {
   }
 
   public static let deleteRecent = "Delete"
+
+  public static func placeDeleted(place: String) -> String {
+    "\(place) deleted from recent places."
+  }
+
   public static let clearSearch = "Clear search"
   public static let searchOffline = "You're offline. Connect to the internet to search."
   public static let locationUnavailable = "Couldn't find your location. Search for a place instead."

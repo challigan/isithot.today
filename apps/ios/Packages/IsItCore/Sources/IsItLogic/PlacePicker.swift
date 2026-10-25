@@ -38,7 +38,8 @@ public struct PlacePicker: Sendable, Equatable {
   /// The recent places that aren't saved (`SavedPlaces.shownRecent`), newest first, with nothing
   /// typed.
   public let recents: [RecentRow]
-  /// "Delete": a recent place's press-and-hold item and VoiceOver action, which forgets it.
+  /// "Delete": a recent place's press-and-hold item and VoiceOver action, which forgets it
+  /// (`RecentRow.deleted` is what VoiceOver is told then).
   public let deleteRecent: String
 
   /// The "Use my location" row.
@@ -132,6 +133,8 @@ public struct PlacePicker: Sendable, Equatable {
     /// Its empty star, nil for the phone's own point (which is never saved) and while the saved
     /// places are full.
     public let star: Star?
+    /// What VoiceOver is told once Delete forgets it: "Leeds deleted from recent places.".
+    public let deleted: String
   }
 
   /// The picker with its search at `search`, its location fix at `location`, and its saved and
@@ -203,7 +206,8 @@ public struct PlacePicker: Sendable, Equatable {
         name: place.name,
         detail: Self.line(place.detail),
         place: place,
-        star: Self.star(for: place.target, name: place.name, saved: saved)
+        star: Self.star(for: place.target, name: place.name, saved: saved),
+        deleted: AppCopy.placeDeleted(place: place.name)
       )
     }
   }
