@@ -4943,9 +4943,11 @@ and ".today" (`.brand`, global.css: 1.05rem, weight 650, tracked -0.01em; the en
 `AppNameView` draws it as one text in two faces, "willitsnow" SemiBold for the website's 650 and
 ".today" Regular, 16.8 points at Large and growing with callout, as the place's words do
 (`TextRole.appName`, `appNameEnd`); under Bold Text ".today" goes a face up, to Medium, and
-"willitsnow" stays SemiBold, the boldest of the text faces. One text is one element, read
-"willitsnow.today", identified `app-name`. ".today" is the full ink, not 0.75 of it: the UI tests
-prove a text's contrast by its surface's own ink (`DrawnText`), and the website's 0.9 detail
+"willitsnow" stays SemiBold, the boldest of the text faces. One text is one element, identified
+`app-name`, which VoiceOver reads as its words, "Will it snow today" (`AppCopy.appNameLabel`,
+carried as `HomeTopBar.nameLabel`): read as written, "willitsnow.today" failed the audit (below),
+and VoiceOver would say "willitsnow" as one word. ".today" is the full ink, not 0.75 of it: the UI
+tests prove a text's contrast by its surface's own ink (`DrawnText`), and the website's 0.9 detail
 measured 4.31:1 under snow's glow. Like the website's, and like the question below it, the name
 sits on the page's gradient, not on a chip.
 
@@ -4968,13 +4970,13 @@ keeps its lines and no text in it wraps again ("The place pill on one line, afte
 one line is kept within a point of the width. The pill's `layoutPriority(1)` from #35 is gone with
 the stack and spacer it ordered.
 
-**The tests.** `HomeTests` checks the name reads "willitsnow.today" on every screen it checks the
-top bar on (`expect(_:in:)`), and `expectFits` that it lies within the window; it is one of the top
-bar's fixed elements (`homeBar`, `AuditLog.fixed`), so an audit that moved the page doesn't move
-it. By the model the proof reads (brandColours.ts `pageAt`), the ink on the page where the name
-sits is 5.51:1 at the least at Large and 5.01 over AX3's wider name, both under maybesnow's glow,
-where the whole page's least is 4.87. Apple's contrast check may still fail it, as it failed other
-Bricolage text on the gradient; `DrawnText` then judges it by its pixels, as it does the question.
+**The tests.** `HomeTests` checks the name reads its label on every screen it checks the top bar on
+(`expect(_:in:)`), and `expectFits` that it lies within the window; it is one of the top bar's
+fixed elements (`homeBar`, `AuditLog.fixed`), so an audit that moved the page doesn't move it. By
+the model the proof reads (brandColours.ts `pageAt`), the ink on the page where the name sits is
+5.51:1 at the least at Large and 5.01 over AX3's wider name, both under maybesnow's glow, where the
+whole page's least is 4.87. Apple's contrast check may still fail it, as it failed other Bricolage
+text on the gradient; `DrawnText` then judges it by its pixels, as it does the question.
 
 - **Checked on Linux:** the mobile package's tests (the constant, every `homeTopBar` case's name,
   the screens' top bars) and `pnpm mobile:check`; IsItCore's 352 tests, `page.json`'s `homeTopBar`
@@ -4986,11 +4988,19 @@ Bricolage text on the gradient; `DrawnText` then judges it by its pixels, as it 
   pixel narrower; and one 0.8 into the slack staying too, as placing chooses from the width sized,
   where it had moved under the name before the review (27 checks).
 
-**For the next macOS run to show.** That the name draws on one line beside the place and the gear
-at Large on every fixture, the pill still under 44 points tall (`expectPlaceOnOneLine`), and beside
-the gear at AX3 with the pill under it; that the audits pass it, by Apple's check or by
-`DrawnText`, the Dynamic Type check too, though it stops growing past AX3; and that the AX3 home
-screens, taller by the pill's line, still fit and scroll. Unproven until then.
+**PR #36's first macOS run (c3520ae).** 38 of the 44 UI tests passed. The six that failed were
+every home audit, at Large and AX3 on each fixture, on one issue, 73 times:
+`sufficientElementDescription`, "Label not human-readable", on `app-name`, its label
+"willitsnow.today". Nothing else failed: `HomeTests` read the name and found it within the window,
+every place pill was under 44 tall, and the name passed the contrast check, the Dynamic Type check
+(AX4 and AX5 included, where it shrinks) and the clipped-text check. The trees put the layout where
+`TopBarLayout` says: at Large the name at (20, 79.7), 129.3 by 20.7, Aberdeen's pill at (211, 72),
+119 by 36, and the gear at (338, 68); at AX3 the name 281.3 by 44.7 beside the 60-point gear at
+(322, 68), the pill on the next line at (20, 128), 224.3 by 51.9, and "Use my exact location" under
+it at (20, 180.4). The label is now the words, `AppCopy.appNameLabel`.
+
+**For the next macOS run to show.** That the audits pass the name with its label, the six home
+audits with it, and the rest as on the first run. Unproven until then.
 
 ## API contract
 

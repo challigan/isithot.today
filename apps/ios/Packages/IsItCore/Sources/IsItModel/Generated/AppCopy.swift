@@ -13,6 +13,7 @@ public enum AppCopy {
   }
 
   public static let settings = "Settings"
+  public static let appNameLabel = "Will it snow today"
   public static let slugGone =
     "That place is no longer available. Showing your approximate location."
 

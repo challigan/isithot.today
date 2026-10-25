@@ -733,14 +733,15 @@ shared parts; step 3 draws the home screen with them, as the website draws the s
   subheadline (14 at both), the `button` role gone, Close and Retry in `label` and a notice's
   project page in `labelStrong`, and `small` gone, the limited line and the week's bands in
   `line`, 15.2 (DECISIONS, "After #34's second full run").
-- **The top bar** (`TopBarView`, HomeShell.swift): the app's name leading, "willitsnow.today"
-  as the website's header shows it (`AppNameView`, `app-name`; `TextRole.appName` and
-  `appNameEnd`); the place in a pill with the website's pin (`PillButton`, `PinShape`) and the
-  gear in a round chip (`IconPillButton`), trailing; beneath them a notice chip (`approximate`)
-  and, on approximate IP location, the "Use my exact location" chip (`use-my-location`), whose
-  VoiceOver hint is "Using approximate location.". When the three don't fit one line, the name
-  and the gear share the first and the pill takes the next, leading, with the notes under it
-  (`TopBarLayout`; DECISIONS, "The app's name back at the top left").
+- **The top bar** (`TopBarView`, HomeShell.swift): the app's name leading, "willitsnow.today" as
+  the website's header shows it, which VoiceOver reads as its words, "Will it snow today"
+  (`AppNameView`, `app-name`; `TextRole.appName` and `appNameEnd`; `AppCopy.appNameLabel`); the
+  place in a pill with the website's pin (`PillButton`, `PinShape`) and the gear in a round chip
+  (`IconPillButton`), trailing; beneath them a notice chip (`approximate`) and, on approximate IP
+  location, the "Use my exact location" chip (`use-my-location`), whose VoiceOver hint is "Using
+  approximate location.". When the three don't fit one line, the name and the gear share the
+  first and the pill takes the next, leading, with the notes under it (`TopBarLayout`; DECISIONS,
+  "The app's name back at the top left").
 - **The switcher** (`ViewSwitcher`): the website's track and ink thumb (`PillSegments`) at
   standard sizes, chips that wrap at accessibility sizes, one tab bar (`views`) holding
   `view-now`, `view-today` and `view-week` at every size. The segmented `Picker` is gone, and

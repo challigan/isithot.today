@@ -816,6 +816,7 @@ describe('the cases cover what section 7.4 asks for', () => {
     expect(bar('Leeds', true, null)).toEqual({
       name: 'willitsnow',
       nameEnd: '.today',
+      nameLabel: APP_COPY.appNameLabel,
       place: 'Leeds',
       placeLabel: 'Place: Leeds. Change place.',
       approximate: null,
@@ -823,6 +824,7 @@ describe('the cases cover what section 7.4 asks for', () => {
       settings: APP_COPY.settings,
     });
     expect(COPY.useExactLocation).toBe('Use my exact location');
+    expect(APP_COPY.appNameLabel).toBe('Will it snow today');
     // The name as the website's header shows it (Header.astro), the same on every bar.
     for (const c of cases) {
       expect(`${(c.out as any).name}${(c.out as any).nameEnd}`).toBe(SITES.snow.name);

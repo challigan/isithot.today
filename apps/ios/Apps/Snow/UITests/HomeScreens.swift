@@ -7,9 +7,11 @@ import XCTest
 /// verdict and every row's label from here, and compares what VoiceOver would hear.
 struct HomeScreen: Decodable {
   struct TopBar: Decodable {
-    /// "willitsnow" and ".today", the app's name, which the bar shows as one text.
+    /// "willitsnow" and ".today", the app's name, which the bar shows as one text, and what
+    /// VoiceOver reads for it, its words.
     let name: String
     let nameEnd: String
+    let nameLabel: String
     let place: String
     let placeLabel: String
     let approximate: String?
@@ -602,7 +604,7 @@ extension XCTestCase {
     line: UInt = #line
   ) {
     guard let shown = ShownScreen(app, file: file, line: line) else { return }
-    shown.check("app-name", reads: topBar.name + topBar.nameEnd, "the app's name", file, line)
+    shown.check("app-name", reads: topBar.nameLabel, "the app's name", file, line)
     shown.check("place", reads: topBar.placeLabel, "the place button", file, line)
     shown.check("approximate", reads: topBar.approximate, "the notice", file, line)
     shown.check(

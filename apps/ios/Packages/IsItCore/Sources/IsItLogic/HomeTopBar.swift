@@ -13,6 +13,8 @@ public struct HomeTopBar: Sendable, Equatable {
   public let name: String
   /// ".today", the rest of the name from its first dot, which the website sets in a lighter face.
   public let nameEnd: String
+  /// The name for VoiceOver, its words, "Will it snow today" (`AppCopy.appNameLabel`).
+  public let nameLabel: String
   /// "Leeds", or "Finding you…" while the place isn't known yet, as on the website.
   public let place: String
   /// The place button for VoiceOver: "Place: Leeds. Change place.", or while the place isn't
@@ -36,6 +38,7 @@ public struct HomeTopBar: Sendable, Equatable {
     let dot = site.firstIndex(of: ".") ?? site.endIndex
     name = String(site[..<dot])
     nameEnd = String(site[dot...])
+    nameLabel = AppCopy.appNameLabel
     if let placeName, !placeName.isEmpty {
       place = placeName
       placeLabel = AppCopy.placeButtonLabel(place: placeName)

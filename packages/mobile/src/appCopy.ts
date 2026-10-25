@@ -16,6 +16,10 @@ export const APP_COPY = {
   // the website's place button reads it ("…, change location").
   placeButtonUnknown: '{status}, change place.',
   settings: 'Settings',
+  // The app's name at the top left as VoiceOver reads it, its words: read as written, the
+  // audit judged "willitsnow.today" not human-readable (DECISIONS, "The app's name back at the
+  // top left").
+  appNameLabel: 'Will it snow today',
   slugGone: 'That place is no longer available. Showing your approximate location.',
   offline: "You're offline. Showing the forecast from {time}.",
   staleApp: 'No recent forecast. Connect to the internet to refresh.',

@@ -81,7 +81,7 @@ struct TopBarView: View {
 
   var body: some View {
     TopBarLayout(gap: 16, pillGap: 8) {
-      AppNameView(name: topBar.name, end: topBar.nameEnd)
+      AppNameView(name: topBar.name, end: topBar.nameEnd, label: topBar.nameLabel)
       PillButton(.chip(minHeight: 36), action: actions.openPlacePicker) {
         HStack(spacing: 6.4) {
           // Stroked 2 units in 24, with round caps and joins, as the website strokes it.
@@ -134,14 +134,17 @@ struct TopBarView: View {
 
 /// The app's name at the top bar's leading edge, as the website's header shows it (Header.astro,
 /// `.brand`): "willitsnow" SemiBold, for the website's 650, and ".today" Regular, 16.8 points at
-/// Large and growing as the place's words do (`TextRole.appName`). One text, so one element, read
-/// "willitsnow.today". The website draws ".today" at 0.75 of the ink; here it is the ink, as the
-/// UI tests prove a text's contrast by the surface's own ink (`DrawnText`), and the website's 0.9
-/// detail measured 4.31:1 under snow's glow. Always one line: offered less than its width, as the
-/// largest text sizes offer it beside the gear, it shrinks rather than wrap or be cut short.
+/// Large and growing as the place's words do (`TextRole.appName`). One text, so one element, which
+/// VoiceOver reads as its words, "Will it snow today": read as written, the audit judged
+/// "willitsnow.today" not human-readable (PR #36's first macOS run). The website draws ".today" at
+/// 0.75 of the ink; here it is the ink, as the UI tests prove a text's contrast by the surface's
+/// own ink (`DrawnText`), and the website's 0.9 detail measured 4.31:1 under snow's glow. Always
+/// one line: offered less than its width, as the largest text sizes offer it beside the gear, it
+/// shrinks rather than wrap or be cut short.
 private struct AppNameView: View {
   let name: String
   let end: String
+  let label: String
 
   @Environment(\.legibilityWeight) private var legibilityWeight
 
@@ -150,6 +153,7 @@ private struct AppNameView: View {
       .brandFont(.appName)
       .lineLimit(1)
       .minimumScaleFactor(0.5)
+      .accessibilityLabel(Text(verbatim: label))
       .accessibilityIdentifier("app-name")
   }
 
