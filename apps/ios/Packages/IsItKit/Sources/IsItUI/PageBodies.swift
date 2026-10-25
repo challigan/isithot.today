@@ -78,7 +78,7 @@ struct HourRowView: View {
   /// The chance as a filled share of a track, decorative: the row's label says it, and its
   /// shapes have no accessibility element. No accessibility modifier: `.accessibilityHidden(true)`
   /// here made the bar an unlabelled element under its row on PR #33's first macOS run (its
-  /// trees), as it made the page's background one (PageTheme.swift).
+  /// trees), as it made the page's background one (Backgrounds.swift).
   private var bar: some View {
     GeometryReader { proxy in
       ZStack(alignment: .leading) {

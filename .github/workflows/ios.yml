@@ -25,8 +25,9 @@ on:
       - scripts/swift-small-strings.mjs
       - apps/web/src/lib/snowGlyphs.ts
       - apps/web/public/snow/favicon.svg
-      # The answer font's recipe: the script and the website's font.
+      # The fonts' recipes: the scripts and the website's font.
       - scripts/make-answer-font.py
+      - scripts/make-text-fonts.py
       - apps/web/src/fonts/bricolage-answer.woff2
       - .github/workflows/ios*.yml
   pull_request:
@@ -44,8 +45,9 @@ on:
       - scripts/swift-small-strings.mjs
       - apps/web/src/lib/snowGlyphs.ts
       - apps/web/public/snow/favicon.svg
-      # The answer font's recipe: the script and the website's font.
+      # The fonts' recipes: the scripts and the website's font.
       - scripts/make-answer-font.py
+      - scripts/make-text-fonts.py
       - apps/web/src/fonts/bricolage-answer.woff2
       - .github/workflows/ios*.yml
 

@@ -3,6 +3,7 @@
  * files on disk differ from it (`pnpm mobile:check`). The files are committed, so the Mac and CI
  * build the app without Node, and the check stops a hand edit or a stale copy.
  */
+import { BRAND_COLOURS_PATH, brandColoursSwift } from './brandColours';
 import { APP_COPY_PATH, appCopySwift } from './exportAppCopy';
 import { CONFIGS_GENERATED_DIR, CONFIG_COPY_PATH, configCopy } from './exportConfigCopy';
 import { CONSTANTS_PATH, constantsSwift } from './exportConstants';
@@ -44,7 +45,7 @@ export const VECTORS_DIR = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Res
 
 /**
  * IsItModel's generated Swift: the copy, the questions, the constants, the credits, the keys,
- * the fonts' names and the palettes.
+ * the fonts' names, the palettes and the shares the app mixes them by.
  */
 export const MODEL_GENERATED_DIR = 'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated';
 
@@ -81,10 +82,10 @@ export interface AssetSources {
 }
 
 /**
- * Every file but the fonts, in order: IsItModel's Swift (the palettes last), the
- * Info.plist's strings (`Copy.xcconfig`), each fixture, each search fixture, each vector file,
- * worked out from the fixtures exactly as their files have them, the UI tests' screens (from
- * page.json), then the glyphs and the app icon.
+ * Every file but the fonts, in order: IsItModel's Swift (the palettes and brand colours last),
+ * the Info.plist's strings (`Copy.xcconfig`), each fixture, each search fixture, each vector
+ * file, worked out from the fixtures exactly as their files have them, the UI tests' screens
+ * (from page.json), then the glyphs and the app icon.
  */
 export async function generatedFiles(sources: AssetSources): Promise<GeneratedFile[]> {
   const files: GeneratedFile[] = [
@@ -96,6 +97,7 @@ export async function generatedFiles(sources: AssetSources): Promise<GeneratedFi
     { path: KEYS_PATH, contents: keysSwift() },
     { path: BRAND_FONTS_PATH, contents: brandFontsSwift() },
     { path: PALETTES_PATH, contents: palettesSwift() },
+    { path: BRAND_COLOURS_PATH, contents: brandColoursSwift() },
     { path: CONFIG_COPY_PATH, contents: configCopy() },
   ];
   const fixtures = new Map<string, Fixture>();

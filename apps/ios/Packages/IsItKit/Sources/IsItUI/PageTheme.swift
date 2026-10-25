@@ -1,8 +1,12 @@
+import IsItLogic
+import IsItModel
 import SwiftUI
 
-/// A forecast page's colours (iOS build spec, section 10.1), from its band's palette: the
-/// gradient from `g1` to `g2`, the glow of `g3` at `glow` opacity, and the text in `ink`. The app
-/// makes it from IsItModel's `Palette` with SnowKit's `Color(rgb:)`.
+/// A surface's colours (iOS build spec, section 10.1; DECISIONS, "The iPhone app in the website's
+/// look"), from a core palette: the gradient from `g1` to `g2`, the glow of `g3` at `glow`
+/// opacity, the text in `ink`, and `pill`, the controls' colour (a page's chips, the sheet's
+/// background, the selected tab's words). A page takes its band's (`init(_:)`); the app's own
+/// pages take `content`, fixed.
 public struct PageTheme: Hashable {
   public var g1: Color
   public var g2: Color
@@ -10,22 +14,173 @@ public struct PageTheme: Hashable {
   /// The glow's opacity at its centre, 0 to 1.
   public var glow: Double
   public var ink: Color
+  public var pill: Color
+  /// A card's fill, opaque: only the content surface draws cards (`BrandColours.contentCard`),
+  /// and every other theme has its `pill` here.
+  public var card: Color
   /// The page is dark under light ink (IsItLogic's `Palette.inkIsLight`): the system's controls
-  /// on it (the switcher's segmented control, Retry) take the dark colour scheme, so their own
-  /// text keeps its contrast on the page whatever the phone's appearance (section 16).
+  /// on it (the status bar, the keyboard, glass buttons, the spinner) take the dark colour
+  /// scheme, so their own text keeps its contrast on the page whatever the phone's appearance
+  /// (section 16).
   public var dark: Bool
 
-  public init(g1: Color, g2: Color, g3: Color, glow: Double, ink: Color, dark: Bool = false) {
+  public init(
+    g1: Color, g2: Color, g3: Color, glow: Double, ink: Color, pill: Color, card: Color? = nil,
+    dark: Bool = false
+  ) {
     self.g1 = g1
     self.g2 = g2
     self.g3 = g3
     self.glow = glow
     self.ink = ink
+    self.pill = pill
+    self.card = card ?? pill
     self.dark = dark
   }
 
+  /// A band's palette as a surface's colours, dark for light ink, so that the system's controls
+  /// on it keep their contrast.
+  public init(_ palette: IsItModel.Palette) {
+    self.init(palette, card: nil)
+  }
+
+  private init(_ palette: IsItModel.Palette, card: UInt32?) {
+    self.init(
+      g1: Color(rgb: palette.g1),
+      g2: Color(rgb: palette.g2),
+      g3: Color(rgb: palette.g3),
+      glow: palette.glow,
+      ink: Color(rgb: palette.ink),
+      pill: Color(rgb: palette.pill),
+      card: card.map { Color(rgb: $0) },
+      dark: palette.inkIsLight
+    )
+  }
+
+  /// The app's own pages' colours (Settings and every page it opens): the website's content
+  /// pages' palette (`Palettes.content`), the same in both appearances, with its plum cards.
+  public static let content = PageTheme(Palettes.content, card: BrandColours.contentCard)
+
   /// The colour scheme the system's controls on the page take.
   var controls: ColorScheme { dark ? .dark : .light }
+}
+
+extension Color {
+  /// A colour from 0xRRGGBB in sRGB, as the generated palettes write them. IsItUI's own, as it
+  /// doesn't link SnowKit, whose `Color(rgb:)` the app and the widget use.
+  init(rgb: UInt32) {
+    self.init(
+      .sRGB,
+      red: Double((rgb >> 16) & 0xff) / 255,
+      green: Double((rgb >> 8) & 0xff) / 255,
+      blue: Double(rgb & 0xff) / 255
+    )
+  }
+}
+
+/// Which of the app's three surfaces a view is drawn on (DECISIONS, "The iPhone app in the
+/// website's look"), which decides the fills its parts take: a page of the home screen, in the
+/// band on screen; the sheet, the place picker, in the band it opened over; or content,
+/// Settings and its pages, in `PageTheme.content`. Nothing follows Dark Mode.
+public enum Surface: Hashable {
+  case page
+  case sheet
+  case content
+}
+
+private struct SurfaceKey: EnvironmentKey {
+  static let defaultValue = Surface.page
+}
+
+private struct PageThemeKey: EnvironmentKey {
+  static let defaultValue = PageTheme.content
+}
+
+extension EnvironmentValues {
+  /// The surface the view is on.
+  public var surface: Surface {
+    get { self[SurfaceKey.self] }
+    set { self[SurfaceKey.self] = newValue }
+  }
+
+  /// The colours of the surface the view is on: the app's own pages' unless one sets them.
+  public var pageTheme: PageTheme {
+    get { self[PageThemeKey.self] }
+    set { self[PageThemeKey.self] = newValue }
+  }
+}
+
+/// A surface's tokens (DECISIONS, "The iPhone app in the website's look"): each a share of its
+/// theme's ink or pill (IsItModel's `BrandShares`, which packages/mobile measures on every band),
+/// as the phone's accessibility settings change them. Under Increase Contrast, soft text,
+/// affordances and the search box's edge are full ink, and hairlines and borders heavier; under
+/// Reduce Transparency, a chip is opaque.
+struct BrandTokens {
+  let theme: PageTheme
+  let surface: Surface
+  let increasedContrast: Bool
+  let reduceTransparency: Bool
+
+  /// Every word, icon, star, caret, spinner and tick.
+  var ink: Color { theme.ink }
+  /// A page's chips: the place, the gear, notes and notices, the tab track, Retry.
+  var chip: Color {
+    reduceTransparency ? theme.pill : theme.pill.opacity(BrandShares.chip)
+  }
+  /// The selected tab, the units thumb and the primary button: an ink fill, words in `pill`.
+  var selected: Color { theme.ink }
+  var selectedWords: Color { theme.pill }
+  /// Secondary text on a flat fill (the sheet, a card), never on a page's gradient.
+  var soft: Color { increasedContrast ? theme.ink : theme.ink.opacity(BrandShares.soft) }
+  /// Over what is beneath: the sheet's Close, pressed rows, the units track.
+  var wash: Color { theme.ink.opacity(BrandShares.wash) }
+  /// The search box's fill and its edge.
+  var field: Color { theme.ink.opacity(BrandShares.field) }
+  var fieldBorder: Color {
+    increasedContrast ? theme.ink : theme.ink.opacity(BrandShares.fieldBorder)
+  }
+  /// The edge of a page's Retry and of the sheet's Close.
+  var border: Color {
+    theme.ink.opacity(increasedContrast ? BrandShares.increasedLine : BrandShares.border)
+  }
+  /// A rule: above a page's credits, between a card's rows.
+  var hairline: Color {
+    theme.ink.opacity(increasedContrast ? BrandShares.increasedLine : BrandShares.hairline)
+  }
+  /// A card, opaque: the content surface's plum.
+  var card: Color { theme.card }
+  /// Chevrons and arrows on a card, hidden from VoiceOver.
+  var affordance: Color {
+    increasedContrast ? theme.ink : theme.ink.opacity(BrandShares.affordance)
+  }
+  /// What a secondary button is filled with on this surface: a chip on a page, the wash on the
+  /// sheet, a card on content.
+  var secondaryFill: Color {
+    switch surface {
+    case .page: chip
+    case .sheet: wash
+    case .content: card
+    }
+  }
+}
+
+/// The tokens of the surface a view is on, from the environment: `@SurfaceTokens private var
+/// tokens`, then `tokens.chip`.
+@propertyWrapper
+struct SurfaceTokens: DynamicProperty {
+  @Environment(\.pageTheme) private var theme
+  @Environment(\.surface) private var surface
+  @Environment(\.colorSchemeContrast) private var contrast
+  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+  var wrappedValue: BrandTokens {
+    BrandTokens(
+      theme: theme,
+      surface: surface,
+      increasedContrast: contrast == .increased,
+      reduceTransparency: reduceTransparency
+    )
+  }
 }
 
 /// The smallest a control is tapped by, in points, as Apple's guidelines and the accessibility
@@ -91,46 +246,5 @@ struct WordsBand: Shape {
   func path(in rect: CGRect) -> Path {
     guard height > 0, height < rect.height else { return Path(rect) }
     return Path(rect.insetBy(dx: 0, dy: (rect.height - height) / 2))
-  }
-}
-
-/// The website's page background (`global.css`): a linear gradient from `g1` to `g2` at 168°
-/// (down, a little to the right), and over it a radial glow of `g3` centred at (88%, 6%), from
-/// the palette's `glow` opacity to clear at 52% of the distance to the farthest corner. Full
-/// bleed and decorative, with no accessibility modifier, and it must keep none: a gradient has
-/// no accessibility element, and an accessibility modifier on a view without one makes it one.
-/// On PR #33's two macOS runs `.accessibilityHidden(true)` here, before and then after
-/// `.accessibilityIgnoresInvertColors()`, was the window-sized `other` element with no label that
-/// the audit failed on every screenful of every page (`sufficientElementDescription`), as the
-/// same modifier made an element of each hour bar and row of agreement dots it hid (DECISIONS,
-/// "The iPhone app's UI tests, after PR #33's second macOS run"). Smart Invert inverts it with the
-/// text on it, as Safari inverts the website: exempt, it kept its colours under ink Smart Invert
-/// had inverted, pale on pale or dark on dark (about 1:1 to 3.7:1, modelled).
-struct PageBackground: View {
-  let theme: PageTheme
-
-  var body: some View {
-    GeometryReader { proxy in
-      let size = proxy.size
-      let centre = CGPoint(x: size.width * 0.88, y: size.height * 0.06)
-      // The farthest corner from the centre, as CSS's `circle` sizes a radial gradient.
-      let across = max(centre.x, size.width - centre.x)
-      let down = max(centre.y, size.height - centre.y)
-      let farthest = (across * across + down * down).squareRoot()
-      ZStack {
-        LinearGradient(
-          colors: [theme.g1, theme.g2],
-          startPoint: UnitPoint(x: 0.4, y: 0),
-          endPoint: UnitPoint(x: 0.6, y: 1)
-        )
-        RadialGradient(
-          colors: [theme.g3.opacity(theme.glow), theme.g3.opacity(0)],
-          center: UnitPoint(x: 0.88, y: 0.06),
-          startRadius: 0,
-          endRadius: max(farthest * 0.52, 1)
-        )
-      }
-    }
-    .ignoresSafeArea()
   }
 }

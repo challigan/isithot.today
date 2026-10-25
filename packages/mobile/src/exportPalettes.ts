@@ -1,10 +1,11 @@
 /**
  * `Palettes.swift` (iOS build spec, sections 7.1, 10.1 and 16): the snow bands' colours, the
  * website's own (core `SNOW_PALETTES`), with the contrast of each band's `ink` against both ends
- * of its gradient. It is plain data, keyed by the band, so it goes into IsItModel beside
- * `SnowBand`, where every target reaches it, the widget too, and it compiles and is tested on
- * Linux. SnowKit's `Color(rgb:)` turns a value into a colour. The spec put it in IsItUI, which
- * the widget doesn't link.
+ * of its gradient, and `Palettes.content`, the app's own pages' (`CONTENT_BAND`). It is plain
+ * data, keyed by the band, so it goes into IsItModel beside `SnowBand`, where every target reaches
+ * it, the widget too, and it compiles and is tested on Linux. SnowKit's `Color(rgb:)` and
+ * IsItUI's turn a value into a colour. The spec put it in IsItUI, which the widget doesn't link.
+ * The shares the app mixes them by are brandColours.ts's.
  */
 import { SNOW_PALETTES, type Palette, type SnowBand } from '@isithot/core';
 import { generatedHeader, swiftCall, swiftCase, swiftDouble, swiftIdentifier } from './swift';
@@ -16,6 +17,13 @@ export const PALETTES_SOURCE = 'packages/core/src/palettes.ts';
 
 /** What a band the app doesn't know draws as (Swift's `SnowBand.unknown`). */
 export const UNKNOWN_BAND_DRAWS_AS: SnowBand = 'nosnow';
+
+/**
+ * The band whose palette the app's own pages wear (`Palettes.content`: Settings and every page it
+ * opens), fixed in both appearances: the website's content pages' (apps/web `LOOKS.snow.content`,
+ * its About, Privacy, Support and Terms).
+ */
+export const CONTENT_BAND: SnowBand = 'snow';
 
 /** WCAG AA for body text, which every band's ink meets on both ends of its gradient. */
 export const BODY_TEXT_CONTRAST = 4.5;
@@ -111,6 +119,11 @@ export function palettesSwift(): string {
     ),
     '    }',
     '  }',
+    '',
+    "  /// The app's own pages' palette (Settings and every page it opens), fixed in both",
+    "  /// appearances: the website's content pages' (apps/web `LOOKS.snow.content`, its About,",
+    '  /// Privacy, Support and Terms).',
+    `  public static let content = Snow.${swiftIdentifier(CONTENT_BAND)}`,
     '',
     "  /// Each band by name, in core's order.",
     '  public enum Snow {',

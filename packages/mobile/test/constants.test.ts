@@ -24,6 +24,7 @@ import {
 } from '../src/exportConstants';
 import {
   BODY_TEXT_CONTRAST,
+  CONTENT_BAND,
   PALETTES_PATH,
   PALETTES_SOURCE,
   UNKNOWN_BAND_DRAWS_AS,
@@ -227,6 +228,14 @@ describe('palettesSwift', () => {
     expect(bands).toEqual(Object.keys(SNOW_PALETTES));
     expect(swiftHex('#FFFFFF')).toBe('0xffffff');
     expect(opacity('14%')).toBe(0.14);
+  });
+
+  it("gives the app's own pages the website's content palette, snow's", () => {
+    expect(CONTENT_BAND).toBe('snow');
+    expect(swift).toContain(
+      "  /// appearances: the website's content pages' (apps/web `LOOKS.snow.content`, its About,\n",
+    );
+    expect(swift).toContain('  public static let content = Snow.snow\n');
   });
 
   it('draws a band the app does not know as nosnow', () => {

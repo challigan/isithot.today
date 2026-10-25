@@ -12,7 +12,13 @@ export default defineConfig({
     environment: 'node',
     coverage: {
       provider: 'v8',
-      include: ['packages/core/src/**/*.ts', 'packages/client/src/**/*.ts'],
+      // brandColours.ts is the app's contrast model, which the iOS build plan holds to full
+      // coverage beside core's and the client's rules.
+      include: [
+        'packages/core/src/**/*.ts',
+        'packages/client/src/**/*.ts',
+        'packages/mobile/src/brandColours.ts',
+      ],
       exclude: [
         'packages/core/src/types.ts',
         'packages/core/src/index.ts',

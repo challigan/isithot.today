@@ -406,7 +406,7 @@ extension XCTestCase {
   /// neither an identifier nor a label, under no element with a label (a row's bar or dots are
   /// under their row's). On PR #33's two macOS runs one such, the window's size, failed the
   /// audit's `sufficientElementDescription` on every screenful of every page: the page's
-  /// background, made an element by its own accessibility modifiers (PageTheme.swift). Read from
+  /// background, made an element by its own accessibility modifiers (Backgrounds.swift). Read from
   /// one snapshot, outside the audit, and failing with each one's place from its window, every
   /// element on the way with its index among its parent's children, and the app's element tree
   /// attached (`<what>-bare-tree`, `what` as a slug), so a run says where any is at once.

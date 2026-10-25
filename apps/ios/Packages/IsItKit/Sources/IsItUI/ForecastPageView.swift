@@ -69,7 +69,7 @@ public struct ForecastPageView: View {
 
   /// The glyph, the heading, the verdict and the detail; while the first answer is on its way,
   /// shapes that hold their places, with no accessibility element and no accessibility modifier,
-  /// which would make one (PageTheme.swift).
+  /// which would make one (Backgrounds.swift).
   @ViewBuilder private var header: some View {
     let size = min(glyphSize, 160)
     if let glyph {

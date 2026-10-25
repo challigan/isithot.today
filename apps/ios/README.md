@@ -29,7 +29,9 @@ Configs/                 Base (every target), Team (Carl's team ID, not a secret
                          API origin, ad units), CI-Simulator (signed to run locally, for CI); generated:
                          Generated/Copy.xcconfig (the Info.plist's strings: the location purpose string)
 Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API models; generated CoreCopy,
-                         Questions, AppCopy, AppCredits, Constants, Keys and Palettes; the ports, the
+                         Questions, AppCopy, AppCredits, Constants, Keys, BrandFonts (every font's name),
+                         Palettes (with Palettes.content, the app's own pages') and BrandColours (the
+                         surfaces' shares and the content card); the ports, the
                          home screen's, the picker's and Settings' presenters, the glyph's drift, which
                          pages are light ink on dark and the sheets' colours (IsItLogic); AppModel, its
                          API client, the launch and refresh rules, what VoiceOver is told, the clocks
@@ -45,7 +47,12 @@ Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore, UR
                          with its bodies and GlyphView, drawing IsItLogic's HomePage and HomeTopBar, with
                          HomeActions; the picker: PlacePickerView, drawing PlacePicker, with
                          PlacePickerActions; Settings: SettingsView and its pages, with SettingsActions;
-                         SheetStyle, both sheets' colours at WCAG AA),
+                         SheetStyle, both sheets' colours at WCAG AA; the parts every screen is to share,
+                         in the website's look: BrandType (TextRole, the type scale, and brandFont),
+                         PageTheme (a surface's colours, Surface and the tokens, BrandTokens),
+                         Backgrounds (PageBackground, SheetBackground), Buttons (PillButton,
+                         IconPillButton, PressStyle, RowPressStyle, PinShape), PillSegments, and
+                         Layouts (FlowLayout, EqualColumns)),
                          IsItWidgetUI (the widget's entry, provider, view), SnowKit (Glyphs, Color(rgb:)
                          for the palettes, and the glyph catalogues, generated)
 Apps/Snow/App/           WillItSnowApp (the services and the scene's phases), HomeView (the home screen,

@@ -47,7 +47,7 @@ public struct HomeShell<Content: View>: View {
       .animation(reduceMotion ? nil : .easeInOut(duration: 0.9), value: theme)
       // Decoration with no accessibility element, and no accessibility modifier here or in
       // `PageBackground`: one on views without an element makes one, the window's size here
-      // (PR #33's second macOS run, PageTheme.swift).
+      // (PR #33's second macOS run, Backgrounds.swift).
     }
   }
 }

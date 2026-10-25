@@ -4019,6 +4019,78 @@ font for the Swift. No screen uses them yet: the home screen moves to them in st
   character of "Météo-France Łódź 0.9cm 100% ° ’ … ·" (`CTFontGetGlyphsForCharacters`), and the
   built Info.plist lists every file. A plist or resource slip fails these before any UI test.
 
+**Step 2: the brand colours and the shared parts.** One colour story and one set of parts for
+every screen, with no screen changed yet: the home screen moves to them in step 3, the picker in
+step 5 and Settings in step 6.
+
+- **Three surfaces.** Every screen is one of three, each from a core palette (g1, g2, g3, glow,
+  ink, pill). The **page** (the home screen and its three pages) wears the band of the page on
+  screen, over `PageBackground`. The **sheet** (the place picker) wears the band of the page it
+  opened over, over `SheetBackground`: pill to pill with 15% of g2 at 168°, no glow, the
+  website's `.sheet`. **Content** (Settings and every page it opens) wears `Palettes.content`,
+  core's `SNOW_PALETTES.snow`, which is the website's own content pages' palette
+  (`LOOKS.snow.content`: About, Privacy, Support and Terms), over `PageBackground`. In one
+  sentence: the forecast and the search over it wear the band on screen, the app's own pages the
+  website's content palette, and nothing follows Dark Mode, as the website makes the same split.
+  This supersedes spec 10.1's "sheets follow Dark Mode". The system's own parts on each surface
+  take its dark or light scheme (`PageTheme.controls`).
+- **The tokens are data, TypeScript first.** `packages/mobile/src/brandColours.ts` holds each
+  token's share (`BRAND_SHARES`), generated into IsItModel's `BrandColours.swift`
+  (`BrandShares`, and the content card's colour), which IsItUI and the Linux tests read: `chip`
+  (pill at 85% over the background, opaque under Reduce Transparency), `selected` (an ink fill
+  with words in pill), `soft` (ink at 85%, on flat fills only, never on a page's gradient),
+  `wash` (ink at 12%), `field` and `fieldBorder` (ink at 8% and 55%), `border` (28%), `hairline`
+  (22%), `affordance` (70%) and `card` (pill moved 25% away from the ink, opaque: `#401a4f` on
+  content). Under Increase Contrast soft text, affordances and the search box's edge are full
+  ink, hairlines and borders 40%, and `PageBackground` draws no glow; ink on the content page is
+  then 7.32:1 or more. In IsItUI, `PageTheme` gains `pill` and `card`, `init(_ palette:)` (moved
+  from the app, with IsItUI's own `Color(rgb:)`, since IsItUI doesn't link SnowKit) and
+  `PageTheme.content`; `Surface` and the `surface` and `pageTheme` environment values say where a
+  view is drawn, and `BrandTokens` (read through `@SurfaceTokens`) gives each token as the
+  environment's contrast and transparency settings change it.
+- **Every pair, every band, at its worst point.** The model is the app's own background model,
+  the same as `PageBackground`, `HomeAuditTests`' `PageColours` and the website: mixes in sRGB
+  rounded to 8 bits, the worst point anywhere on a 402 by 874 screen sampled every 6 points,
+  ratios rounded down. `brandColours.test.ts` pins each pair to the design's figure (rounded down
+  to one decimal), so a palette or share change can't pass quietly, and holds every text pair to
+  4.5:1 and the search box's edge to 3:1; `brandColours.ts` is under the suite's 100% coverage.
+
+  | Band      | page: ink / page | ink / chip | pill on ink | sheet: ink | soft  | ink / wash | soft / pressed | placeholder | field edge |
+  | --------- | ---------------- | ---------- | ----------- | ---------- | ----- | ---------- | -------------- | ----------- | ---------- |
+  | nosnow    | 10.09            | 13.01      | 13.62       | 13.01      | 8.51  | 10.33      | 7.18           | 7.60        | 3.45       |
+  | flakes    | 8.28             | 12.31      | 13.17       | 12.31      | 8.32  | 9.82       | 6.96           | 7.36        | 3.43       |
+  | maybesnow | 4.87 (glow)      | 8.18       | 8.97        | 8.97       | 7.02  | 6.46       | 5.19           | 5.71        | 3.98       |
+  | snow      | 4.88 (glow)      | 10.17      | 11.54       | 11.54      | 8.79  | 8.22       | 6.47           | 7.19        | 4.61       |
+  | heavysnow | 6.18             | 13.82      | 15.47       | 15.47      | 11.39 | 10.98      | 8.45           | 9.45        | 5.50       |
+  | deepsnow  | 6.17             | 17.05      | 19.07       | 19.07      | 13.82 | 13.96      | 10.51          | 11.73       | 6.23       |
+
+  On content: ink on the page 4.88 at the glow's centre (7.32 without the glow), on a card 14.20,
+  soft on a card 10.62, ink on a pressed row or the units track 10.00, soft on a pressed row
+  7.76, pill on ink 11.54, and a hairline against its card 1.96 (decorative). The page's worst
+  points, 4.87 and 4.88, are under the glow at the top bar's right end, where the words sit on
+  chips at 8.18 or more; every pair on a flat fill is 5.19:1 or more.
+
+- **Two website values are left out**, and the tests pin them below 4.5:1: ink at 10% as a
+  button's fill on the page (the website's `.button`, 4.01:1 on maybesnow), and ink at 85% or
+  90% as text on the gradient (4.03:1 on content; 4.31:1 for the website's detail under the snow
+  glow).
+- **The shared parts, one copy each.** `BrandType.swift`: `TextRole`, the type scale (each role
+  a face, the website's size at 402 wide, the text style it grows with, its tracking and line
+  spacing), and `.brandFont(_:)`, which scales the tracking and line spacing with the text and
+  steps the face up under Bold Text, which a custom font doesn't follow on its own.
+  `Backgrounds.swift`: `PageBackground`, moved from `PageTheme.swift`, and `SheetBackground`,
+  neither with an accessibility modifier. `Buttons.swift`: `PillButton` (a chip hugging its
+  words or a wide pill, secondary in the surface's fill or primary in ink, its element the pill
+  and its tap region the 44-point line, as `WordsButton`), `IconPillButton` (the gear: a chip
+  circle in a 44 by 44 element), `PressStyle` (scale 0.96, never dimmed, none under Reduce
+  Motion), `RowPressStyle` (the wash) and `PinShape` (the website's pin). `PillSegments.swift`:
+  the website's segmented pill, its ink thumb sliding by `matchedGeometryEffect` on the website's
+  300 ms curve, each segment a button with `.isSelected`. `Layouts.swift`: `FlowLayout`, moved
+  from `PageFooterView.swift` unchanged, and `EqualColumns`, the website's grid, never lazy.
+- **Checked where it can be.** Linux: `brandColours.test.ts`, the Swift's generation and
+  `GeneratedPaletteTests`' content palette and card. IsItUI compiles only on macOS: the existing
+  39 UI tests are to stay green and look unchanged, since nothing on screen uses the new parts.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,

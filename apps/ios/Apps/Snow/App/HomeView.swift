@@ -155,18 +155,3 @@ private struct HomeContent: View {
     )
   }
 }
-
-extension PageTheme {
-  /// A band's palette as a page's colours, dark for light ink, so that the system's controls on
-  /// the page keep their contrast.
-  init(_ palette: IsItModel.Palette) {
-    self.init(
-      g1: Color(rgb: palette.g1),
-      g2: Color(rgb: palette.g2),
-      g3: Color(rgb: palette.g3),
-      glow: palette.glow,
-      ink: Color(rgb: palette.ink),
-      dark: palette.inkIsLight
-    )
-  }
-}
