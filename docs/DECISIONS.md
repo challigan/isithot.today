@@ -2407,12 +2407,17 @@ once to VoiceOver, and every text size up to AX5 (sections 9.5, 10.1, 10.2 and 1
   segment would cut "This week" short, and section 16 wants full labels, so there it is a row of
   buttons that wraps, the one on screen underlined and marked selected.
 - **The pager** (`HomePager`, IsItUI) is a horizontal `ScrollView` of the three pages, each the
-  container's size, with `.scrollTargetBehavior(.paging)` and `.scrollPosition(id:)`, plus a
-  `ScrollViewReader` scroll on first appearance in case the initial position isn't applied.
-  Switcher and pager share one binding to `AppModel.view`, so a tap, a swipe, a route and the
-  return after 30 minutes away (5.1's rule, unchanged) always agree. A tap moves the pages
-  without animation: an animated programmatic scroll passes Today on its way from Now to the
-  week, and the position it reports on the way could set the view mid-scroll. (The container's
+  container's size, with `.scrollTargetBehavior(.paging)`, and a `ScrollViewReader` scroll on
+  first appearance that puts the pages on the view the app opens on. Switcher and pager share
+  `AppModel.view`, so a tap, a swipe, a route and the return after 30 minutes away (5.1's rule,
+  unchanged) always agree. A change to the view moves the pages at once, not animated: an
+  animated programmatic scroll passes Today on its way from Now to the week, and the position it
+  reports on the way could set the view mid-scroll. Until PR #34's second full macOS run the two
+  shared one binding through `.scrollPosition(id:)`, whose setter wrote whatever page the scroll
+  view reported into the view; on that run it most likely wrote Now back over a tap on Today. On
+  iOS 18 the view now moves the pages through the `ScrollViewReader`, and the pages set the view
+  only as a scroll comes to rest, to the page they rest on (`PagerRest`); iOS 17, with no scroll
+  phases, keeps `.scrollPosition(id:)` ("After #34's second full run", below). (The container's
   size, `containerRelativeFrame`, turned out to be the screen's safe area in height, which put
   the top bar under the status bar; each page has been the pager's own size since main's first
   macOS run: "The iPhone app's UI tests, after main's first macOS run", below.)
@@ -4133,7 +4138,8 @@ This supersedes spec 10.1 and 10.2 on type, colours, the switcher, Now and the w
   word from the generated copy.
 - **Type.** Every word is in a `TextRole` through `.brandFont`: the question in Regular, the
   verdict, the grid's values, the headings, the tabs and the week's days and amounts in
-  SemiBold, a model that disagrees in Regular, Retry in Medium, the answer word in
+  SemiBold, a model that disagrees in Regular, Retry in Medium (in `label`, Regular, since
+  "After #34's second full run", below), the answer word in
   `BricolageAnswer` at 0.3 of the page's width (120.6 points on a 402-point iPhone, 96 to 208,
   growing with the large title) on one line, shrinking rather than breaking, and "Checking…" and
   the error words in it at 28. SwiftUI can't set the answer's 0.86 line height, so 0.17 of its
@@ -4305,7 +4311,10 @@ supersedes spec 10.3 on the picker's look: no navigation bar, no grouped list, n
   `label` now, the place pill's role, which passes. That is the first of three changes to try,
   one a run, then no border, then a 36-point pill; whichever clears it goes to Retry too, which
   is built the same way and not audited. `label` is Regular at 16 points where `button` is
-  Medium at 14.4, so a pass shows the text was the cause, not which part of it. `SearchBox`
+  Medium at 14.4, so a pass shows the text was the cause, not which part of it. (`label`
+  cleared it on the next run, and the run after showed the part: the size, 14.4 with
+  subheadline drawn at 14 points at both Medium and Large. Retry is in `label` too, and the
+  `button` role is gone: "After #34's second full run", below.) `SearchBox`
   around `BoxTextField`, a `UITextField` in a representable: as tall as the box (`sizeThatFits`, at
   least 44) so its own element is, its text inset inside it so the whole box but the clear
   button is the field to tap, in the `field` role's face through `UIFontMetrics(.body)` (a face up
@@ -4585,6 +4594,123 @@ the home's nine details too, and the nine tests pass; that the tests' durations 
 the job's (the proof isn't timed on its own: it runs after each audit call, outside `AuditTimes`,
 and took 1.1 to 1.3 seconds for the largest frame in the Linux harness's unoptimised build); and
 that `SurfaceFile.bundled` finds the bundle's Surfaces.json and its samples agree.
+
+## After #34's second full run
+
+PR #34's second full macOS run, on cf4eb74 (run 40174838258, job 121113524162), passed 42 of the
+44 UI tests. Both failures are the app's, not the tests', as read from the run's attachments
+(session scratchpad: look-art-cf4eb74, and the screen recordings' frames in leeds-full,
+leeds-frames and lic-frames).
+
+**A tap on Today undone (`HomeTests.testLeedsDry`).** Going through the tabs, a tap on Now
+showed Now; a tap on Today then left Now's heading for the whole 20 seconds. The same test passed
+on 3405dd3 and on main, and no app code changed between 3405dd3 and cf4eb74 (only the tests,
+TypeScript and the docs).
+
+- **What the recording shows.** It draws a frame only when the screen changes; times are seconds
+  from its start. The Now tap, at (86.3, 210), moved the pages at 12.76 with no animation and the
+  thumb by 13.25. Then nothing moved for 2.13 seconds. The Today tap, at (201, 210), the centre of
+  `view-today` (143.7, 188, 114.7, 44), was drawn pressed (the word at 0.96 of its width from
+  15.38, held from 15.46 to 15.49) and let go (whole again by 15.61), and nothing else on the
+  screen changed, then or in the 20 seconds after: the thumb on Now, the pages at Now and the
+  heading Now's, as the waits' debug descriptions read the pages and the heading too.
+- **So the tap reached the button**, on a still screen: no thumb's or pager's animation could
+  have swallowed it, and the segment kept its frame and identity (the same word shrank and grew
+  back smoothly).
+- **Its release was drawn late.** In every switcher tap that worked with a recording (3405dd3's
+  durham-tomorrow at Large and leeds-dry at AX3, and this run's Now) the new page is drawn 0.03 to
+  0.07 seconds after the press, and 0.13 to 0.18 before XCUITest's record of the tap. Here the
+  press lasted 0.11 to 0.16 seconds and the release was drawn only 0.05 to 0.10 before the record:
+  more work on the main thread than a release's scale, most likely the action's update. Yet the
+  frame after it still had Now chosen.
+- **What could choose Now.** None of `AppModel`'s own moves would here: the launch, the return
+  after a long time away and the first answer each set the view for the time of day, Today, and
+  no route was opened. Only the Now tab and the pager's `scrollPosition(id:)` setter could.
+- **The cause, inferred, not proven.** The tab's action set the view to Today, and in the same
+  update the pager's two-way binding wrote back the page the scroll view still showed, Now, before
+  the move to Today was applied. The pager wrote whatever page it reported straight into the view,
+  the weakness phase 5.2 already named for an animated scroll's pages on the way. Whether a report
+  reaches the setter before or after the move depends on the order of SwiftUI's work within an
+  update, so it happens only now and then; neither the artifacts nor Linux can show that order. It
+  may first show on this PR because the tabs are now SwiftUI buttons (`PillSegments`) where they
+  were UIKit's segmented control; that is not verified.
+- **The fix** (`HomePager.pagerFollows`). On iOS 18 the pages set the view only as a scroll comes
+  to rest (`onScrollPhaseChange`, at `.idle`), to the page under the middle of what the scroll view
+  shows then, never from what it reports on the way. `PagerRest` (IsItLogic) finds it: the page
+  whose span holds the visible rect's middle, the end page past either end, and nothing to follow
+  with no width, no finite middle, no pages, or content narrower than the pages side by side (not
+  yet laid out, or a page's own vertical scroll view, whose middle is always over Now's, should
+  its phases ever reach the pager's handler). A change to the view moves the pages at once through
+  the `ScrollViewReader`, with nothing to write back; a tab's jump rests on the page chosen, so it
+  is never undone. Whatever moved the pages, XCUITest's swipe or a user's drag, the page they rest
+  on is followed. iOS 17 has no scroll phases, so it keeps `scrollPosition(id:)`, and the race may
+  remain there; the UI tests run on iOS 26.5. `PagerRestTests` holds the rule on Linux: each page
+  at rest, the halves, both ends, half a point of rounding, and every case with nothing to follow.
+- **What stays.** A tap on the tab of the page being swiped away from, while the pages still
+  coast, gives way to where they come to rest, as the website's look has it: the thumb moves when
+  the pager settles.
+- **The risk.** On iOS 18 the page the app opens on now rests on the `onAppear` scroll alone,
+  until now a backup to `scrollPosition(id:)`'s first position. Should the app open on Now instead
+  of Today, `testDefaultViewEitherSideOf6pm` and every home test that reads every page fail at
+  once; `onChange(of:initial: true)` is then the next to try.
+- **The test is unchanged**, with no wait or retry added: the tap came on a screen still for 2.1
+  seconds, as a user's would, so it was right to fail, and tapping again would hide exactly this.
+  `tap(_:in:)`'s failure now also says where the tab was, the tab the app has chosen and where the
+  pages are (`homeGeometry`, whose `page-<view>` is the chosen view's page). The old tab still
+  chosen is a tap that never took or was undone; the new one chosen with its page off the screen
+  is pages that didn't follow. Should the failure come back with Now chosen, the action never ran,
+  which points to the touch, not the pager.
+
+**A licence's URL "partially unsupported" for Dynamic Type
+(`SettingsTests.testRowsOpenWhatTheySay`).** On the typeface's licence (`NoticeView`), the
+project-page button's URL text, at (20, 200.3, 362, 52), in `button` type: BricolageText-Medium at
+14.4 points with subheadline.
+
+- **It really doesn't grow from Medium to Large.** The recording has the audit's text-size sweep:
+  13 frames, xSmall to AX5 and back to Large, each told by the title's widths, in the large
+  title's steps, and the notice's monospaced footnote's, 12, 12, 12 then 13 points. The URL's
+  underline spans the string, 18.957 em in BricolageText-Medium, so its widths give 12, 13, 14 and
+  14 points from xSmall to Large, then 16, 17, 19, 22, 26, 31, 36 and 42, each line within 0.05 of
+  a whole point. Medium's and Large's crops are identical to the pixel; unrounded, Large's 14.4
+  would be 819 pixels wide, not 796.
+- **SwiftUI draws every brand role at whole points** on the simulator. From the trees' frame
+  widths at Large: `small` 14.4 drawn at 14.00, `line` 15.2 at 15.01, `row` 17.6 at 18.03, `note`
+  13.6 at 14.00, `label` and `labelStrong` 16 at 16.0. Among the audited roles, 14.4 with
+  subheadline is the one whose Medium and Large come to the same point.
+- **The rule the audit appears to apply.** Apple doesn't publish it, but one rule fits every case
+  in PR #31's, #33's and #34's logs: a text is "partially unsupported" when another size draws it
+  at its Large size. Flagged: the caption2 recorder lines (11 points from xSmall to Large), the
+  toolbar's Close (never below the bar's size), and the picker's Close in `button` (14 at Medium
+  and Large; at Large 61 points wide, 14.03 points, and at AX3 106, 31.08, on f3dc54e's run).
+  Texts whose sizes repeat, but never at Large's, pass, as the system footnote on the same page
+  does.
+- **Not the cause.** The Medium face: Settings' and Credits' rows, Medium 17.6 with body (about 15,
+  16, 17 and 18 from xSmall to Large), pass. The underline: "Open Settings" and the "Use my exact
+  location" chip pass. The wide pill with its text, spacer and arrow held 52 tall: Your privacy's
+  full-policy button is built the same way, its text 362 by 52 in `labelStrong`, and passes, and
+  Settings' rows' frames stay 362 by 54 from xSmall to Large and pass, so the audit reads the
+  text's size, not its frame. A link or a button, the URL text, the label and the value: Close was
+  a plain button with none of these and failed the same way. Nor `fixedSize` or a line limit.
+- **`small`, also 14.4 with subheadline, is no counterexample.** A week's band is inside its row's
+  one element (`accessibilityElement(children: .ignore)`), so the audit judges the row; the
+  limited line, its own element, has never been audited (no tree has `limited`). Both 14.4-point
+  texts judged as their own elements, Close and the URL, failed.
+- **The fix.** The URL is in `labelStrong` (SemiBold 16 with callout), DESIGN's role for page
+  buttons and outbound links, still underlined, drawn at 16 points at Large and 15 at Medium. At
+  that size it is about 309 points wide, so at Large it wraps to two lines in the 300 or so beside
+  the arrow, as it already did from xLarge, the pill growing to fit. Retry, built as Close is and
+  in the same type, takes `label`, as the picker's plan said whichever change cleared Close would
+  (`label` did on 3405dd3's run); with no text left in it, the `button` role is gone. No test
+  changes and no exception: the licence's audit is what proves the fix on the next run.
+- **Left as it is.** `small` keeps the website's 14.4 for the week's bands, judged as their rows,
+  and the limited line, which will fail the same way when a limited fixture is audited and should
+  then move to `line` (15.2, which passes as the picker's `location-detail`).
+
+**For the next macOS run to show.** That the home tests that read every page,
+`testDefaultViewEitherSideOf6pm`, `testTheMiddleTabTurnsToTomorrowAt6pm`,
+`testNearbyLoadsInPlaceOnThisWeek`, `FixtureLaunchTests.testSwitcherAndSwipe`, the offline tests'
+swipes and the home audits' taps pass with the pages setting the view only at rest; that the app
+still opens on Today before 6pm; and that the licence's audit passes, and the picker's still do.
 
 ## API contract
 

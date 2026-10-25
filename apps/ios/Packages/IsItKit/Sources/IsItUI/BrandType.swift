@@ -12,7 +12,13 @@ extension Font {
 /// The app's one type scale (DECISIONS, "The iPhone app in the website's look"): each role the
 /// website's face and size (px at 402 wide = pt at Large), the text style it grows with, below
 /// Large as well as above, and its tracking and line spacing in ems. Never caption2, which
-/// doesn't shrink below Large and failed the audit's Dynamic Type check on PR #33.
+/// doesn't shrink below Large and failed the audit's Dynamic Type check on PR #33. A role's text
+/// is drawn at whole points, so its size and style must come to different sizes at Medium and
+/// Large: 14.4 with subheadline came to 14 at both, and the audit failed both texts in it that
+/// it judged as elements of their own, the picker's Close and a notice's project page, as
+/// "partially unsupported" (DECISIONS, "After #34's second full run"). `small` is still that
+/// size: the week's bands, inside each row's one element, and the limited line, not yet
+/// audited.
 enum TextRole: CaseIterable {
   /// The answer word: 0.30 of the page's width, 96 to 208 (`answerSize(pageWidth:)`), one line.
   case answer
@@ -39,14 +45,13 @@ enum TextRole: CaseIterable {
   case field
   /// Section headings: the hours', the week's, Saved, Recent, Settings' sections.
   case heading
-  /// The place, the agreement heading, the picker's rows and Close, the links' sentence.
+  /// The place, the agreement heading, the picker's rows and Close, Retry, the links' sentence.
   case label
-  /// A week's day, "Use my location", the links, the units, page buttons.
+  /// A week's day, "Use my location", the links, the units, page buttons, a notice's project
+  /// page.
   case labelStrong
   /// Nearby; the picker's status, location and saved lines.
   case line
-  /// Retry, a notice's project page.
-  case button
   /// The limited line, a week's band.
   case small
   /// Updated, notices, rows' details, the units footnote, the version.
@@ -61,7 +66,7 @@ enum TextRole: CaseIterable {
     case .answer, .answerState, .title: .answer
     case .verdict, .value, .pageHeading, .amount, .sheetTitle, .heading, .labelStrong, .tab:
       .textSemiBold
-    case .row, .button: .textMedium
+    case .row: .textMedium
     case .valueOut, .question, .detail, .field, .label, .line, .small, .note, .caption:
       .textRegular
     }
@@ -79,7 +84,7 @@ enum TextRole: CaseIterable {
     case .detail, .row, .sheetTitle, .field: 17.6
     case .heading, .label, .labelStrong: 16
     case .line: 15.2
-    case .button, .small: 14.4
+    case .small: 14.4
     case .note: 13.6
     case .tab, .caption: 12.8
     }
@@ -94,7 +99,7 @@ enum TextRole: CaseIterable {
     case .verdict, .value, .valueOut, .pageHeading: .title2
     case .question, .amount, .detail, .row, .sheetTitle, .field: .body
     case .heading, .label, .labelStrong: .callout
-    case .line, .button, .small: .subheadline
+    case .line, .small: .subheadline
     case .note, .tab, .caption: .footnote
     }
   }

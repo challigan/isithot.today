@@ -524,7 +524,13 @@ brought forward the minute's tick, pull to refresh, the footer and the loading a
   horizontal scroll view is `pager` to the UI tests, which read its edges, and an audit issue on
   it names it. Both are bound to `AppModel.view` (`$model.view` in `HomeView`), so a tap, a swipe, a widget's route
   (`.view`, which now sets the view) and the return after more than 30 minutes away (the view
-  for the time of day) move both. The app opens on
+  for the time of day) move both. Since PR #34's second full macOS run, on iOS 18 a change to the
+  view moves the pages at once through the `ScrollViewReader`, and the pages set the view only as
+  a scroll comes to rest, to the page they rest on (`PagerRest`, IsItLogic, held on Linux by
+  `PagerRestTests`), never from what the scroll view reports on the way: `.scrollPosition(id:)`'s
+  setter, which took that, most likely wrote Now back over a tap on Today there (DECISIONS,
+  "After #34's second full run"). iOS 17, with no scroll phases, keeps `.scrollPosition(id:)`.
+  The app opens on
   `MiddleDay.defaultView`, Today or Now from 6pm, once: from the saved answer it paints, or else
   from its first answer, unless the user or a route has chosen a view by then, as the website
   does; a place under "Nearby:", a place chosen in the picker (phase 6) and Retry answer on the
@@ -707,6 +713,10 @@ shared parts; step 3 draws the home screen with them, as the website draws the s
 
 - **Type**: every word through `.brandFont(TextRole)` (BrandType.swift), Bricolage throughout,
   the answer word 0.3 of the page's width (`HomePager` passes `pageWidth` to `ForecastPageView`).
+  A role's text is drawn at whole points, so each must come to different sizes at Medium and
+  Large, or the audit finds it "partially unsupported" for Dynamic Type: the `button` role (14.4
+  with subheadline, 14 at both) is gone, Close and Retry in `label` and a notice's project page in
+  `labelStrong` (DECISIONS, "After #34's second full run").
 - **The top bar** (`TopBarView`, HomeShell.swift): the place in a pill with the website's pin
   (`PillButton`, `PinShape`), the gear in a round chip (`IconPillButton`), trailing; beneath
   them a notice chip (`approximate`) and, on approximate IP location, the "Use my exact

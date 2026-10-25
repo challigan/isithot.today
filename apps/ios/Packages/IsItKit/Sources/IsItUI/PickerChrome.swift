@@ -21,10 +21,10 @@ struct SheetHeader: View {
         .accessibilityAddTraits(.isHeader)
       Spacer(minLength: 0)
       PillButton(.chip(minHeight: HitTarget.minimum), bordered: true, action: action) {
-        // In `label`, the place pill's role, which the audit passes, rather than `button`'s
-        // Medium: on every picker audit of PR #34's macOS runs Close, the only Medium text
-        // audited, was "partially unsupported" for Dynamic Type though it grew. The first of
-        // the changes to try, one a run (DECISIONS).
+        // In `label`, the place pill's role, which the audit passes, rather than the Medium
+        // 14.4 with subheadline it was in, drawn at whole points and so at 14 at both Medium and
+        // Large: in that, every picker audit of PR #34's macOS runs found Close "partially
+        // unsupported" for Dynamic Type (DECISIONS, "After #34's second full run").
         Text(verbatim: close)
           .brandFont(.label)
       }

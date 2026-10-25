@@ -118,11 +118,12 @@ private struct TabChip: View {
 }
 
 /// Now, Today (Tomorrow from 6pm) and This week side by side, a page each, paged horizontally
-/// (iOS build spec, section 10.2): swiping sets `selection`, and setting it (the switcher, a
-/// route, the return after a long time away) moves the pages, so the two always agree. Each page
-/// scrolls vertically and pulls to refresh (`refresh`). Only the page on screen is in the
-/// accessibility tree, so VoiceOver and the UI tests read that one; VoiceOver moves between pages
-/// with the switcher.
+/// (iOS build spec, section 10.2): a swipe sets `selection` as the pages come to rest, to the
+/// page they rest on, and setting it (the switcher, a route, the return after a long time away)
+/// moves the pages to it at once, so the two always agree (`pagerFollows`). Each page scrolls
+/// vertically and pulls to refresh (`refresh`). Only the page on screen is in the accessibility
+/// tree, so VoiceOver and the UI tests read that one; VoiceOver moves between pages with the
+/// switcher.
 ///
 /// Each page is exactly the pager's size: the space the home screen leaves it under the top bar
 /// and the switcher, read as the pager is laid out. Not
@@ -185,21 +186,62 @@ public struct HomePager: View {
           .scrollTargetLayout()
         }
         .scrollTargetBehavior(.paging)
-        .scrollPosition(id: position)
+        .pagerFollows($selection, views: pages.map(\.page.view), proxy: proxy)
         .scrollIndicators(.hidden)
         .accessibilityIdentifier("pager")
+        // The pages on the view the app opens on: on iOS 18 the only move that does it, as
+        // `pagerFollows` moves them only when `selection` changes; on iOS 17 in case
+        // `scrollPosition(id:)`'s first position isn't applied.
         .onAppear { proxy.scrollTo(selection, anchor: .leading) }
       }
     }
   }
+}
 
-  /// The page scrolled to, as the scroll view reads and sets it: the selection.
-  private var position: Binding<AppView?> {
-    Binding(
-      get: { selection },
-      set: { shown in
-        if let shown { selection = shown }
-      }
-    )
+extension View {
+  /// The pages and `selection` kept together. A tap, a route or the return after a long time
+  /// away sets `selection`, and the pages move to it at once, not animated: an animated scroll
+  /// passes the pages between. On iOS 18 the pages set it only as a scroll comes to rest, to the
+  /// page they rest on (`PagerRest`), read from where the scroll view is then, never from what
+  /// it reports on the way. Not `scrollPosition(id:)` there, whose setter took whatever page the
+  /// scroll view reported: on PR #34's macOS run on cf4eb74 a tap on Today was drawn pressed and
+  /// let go with nothing else moving, and Now was still chosen in the next frame, most likely
+  /// written back over it in the same update, as only the Now tab and that setter could choose
+  /// it (DECISIONS, "After #34's second full run"). iOS 17 has no scroll phases, so there the two
+  /// still share `scrollPosition(id:)`.
+  @ViewBuilder
+  fileprivate func pagerFollows(
+    _ selection: Binding<AppView>,
+    views: [AppView],
+    proxy: ScrollViewProxy
+  ) -> some View {
+    if #available(iOS 18, *) {
+      self
+        .onChange(of: selection.wrappedValue) { _, view in
+          proxy.scrollTo(view, anchor: .leading)
+        }
+        .onScrollPhaseChange { _, phase, context in
+          // Whatever moved the pages, the page they rest on is followed. A tab's move jumps
+          // to its page, so it rests on the page chosen and is never undone.
+          guard phase == .idle,
+            let rest = PagerRest.view(
+              midX: Double(context.geometry.visibleRect.midX),
+              width: Double(context.geometry.containerSize.width),
+              contentWidth: Double(context.geometry.contentSize.width),
+              views: views
+            ),
+            rest != selection.wrappedValue
+          else { return }
+          selection.wrappedValue = rest
+        }
+    } else {
+      scrollPosition(
+        id: Binding<AppView?>(
+          get: { selection.wrappedValue },
+          set: { shown in
+            if let shown { selection.wrappedValue = shown }
+          }
+        ))
+    }
   }
 }

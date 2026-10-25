@@ -259,7 +259,8 @@ extension XCTestCase {
 
   /// Taps `page`'s tab in the switcher (a tab, a button labelled as the tab reads, on the track or
   /// at accessibility sizes a chip of its own), waits for its heading, and checks the tab is the
-  /// one selected.
+  /// one selected. A heading that never comes fails with where the tab was, the tab the app has
+  /// chosen and where the pages are (`homeGeometry`: the page in the tree is the chosen view's).
   @MainActor
   func tap(_ page: HomeScreen.Page, in app: XCUIApplication) throws {
     let tab = app.buttons[page.label]
@@ -267,7 +268,18 @@ extension XCTestCase {
       throw HomeScreenError("No \(page.label) tab")
     }
     tab.tap()
-    try awaitHeading(page.heading, in: app)
+    do {
+      try awaitHeading(page.heading, in: app)
+    } catch {
+      // Which tab the app has chosen, and where the pages are, tell a tap that never took or was
+      // undone (the old tab still chosen, as on PR #34's run on cf4eb74) from pages that didn't
+      // follow it (the new tab chosen, its page off the screen).
+      let chosen = app.find("views").buttons.allElementsBoundByIndex
+        .filter { $0.isSelected }.map { $0.label }
+      throw HomeScreenError(
+        "\(error) after a tap on \(page.label) at \(tab.frame); the tab chosen: "
+          + (chosen.isEmpty ? "none" : chosen.joined(separator: ", ")) + "; \(app.homeGeometry)")
+    }
     XCTAssertTrue(tab.isSelected, "The \(page.label) tab isn't selected")
   }
 

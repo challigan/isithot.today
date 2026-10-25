@@ -95,9 +95,13 @@ struct CreditsView: View {
 }
 
 /// A notice in full, as its owners wrote it, under its project's name: the project's page as a
-/// page button showing its URL, underlined as the website underlines a link, with its arrow out
-/// in `affordance`, as every arrow and chevron is; then the notice on a card, in the system's
-/// monospaced footnote type (the app's one text not in Bricolage), selectable. The button's
+/// page button showing its URL in `labelStrong`, a page button's and an outbound link's role,
+/// underlined as the website underlines a link, with its arrow out in `affordance`, as every
+/// arrow and chevron is; then the notice on a card, in the system's monospaced footnote type (the
+/// app's one text not in Bricolage), selectable. The URL was in `button` type, 14.4 points with
+/// subheadline, drawn at whole points and so at 14 at both Medium and Large; the audit failed it
+/// as "partially unsupported" for Dynamic Type on PR #34's macOS run on cf4eb74, as it had the
+/// picker's Close in it (DECISIONS, "After #34's second full run"). The button's
 /// accessibility label is in words (`urlLabel`, "Bricolage Grotesque's project page") and its
 /// value the URL, as the Debug recorder's lines are: a URL as a label was "not human-readable" to
 /// the audit on PR #33's second macOS run, and the recorder's line showing a URL under a shorter
@@ -121,7 +125,7 @@ struct NoticeView: View {
             HStack(spacing: 12) {
               Text(verbatim: url.absoluteString)
                 .underline()
-                .brandFont(.button)
+                .brandFont(.labelStrong)
               Spacer(minLength: 0)
               Image(systemName: "arrow.up.forward")
                 .font(.footnote.weight(.semibold))

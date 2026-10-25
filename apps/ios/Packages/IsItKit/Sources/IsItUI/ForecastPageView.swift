@@ -298,7 +298,10 @@ struct ModelStripView: View {
 
 /// "Retry": in the error state under the words, or under the footer's line over an answer. The
 /// website's `.retry` chip, filled with the page's chip colour rather than its 10% ink, which
-/// gives 4.01:1 on maybesnow, with the `border` edge; drawn and tapped at least 44 tall.
+/// gives 4.01:1 on maybesnow, with the `border` edge; drawn and tapped at least 44 tall. Its word
+/// is in `label`, as the picker's Close, built the same way, is: the Medium 14.4 with
+/// subheadline both were in is drawn at 14 points at Medium and Large alike, which the audit
+/// failed in Close and in a notice's project page (DECISIONS, "After #34's second full run").
 struct RetryButton: View {
   let title: String
   let action: () -> Void
@@ -306,7 +309,7 @@ struct RetryButton: View {
   var body: some View {
     PillButton(.chip(minHeight: HitTarget.minimum), bordered: true, action: action) {
       Text(verbatim: title)
-        .brandFont(.button)
+        .brandFont(.label)
     }
     .accessibilityIdentifier("retry")
   }
