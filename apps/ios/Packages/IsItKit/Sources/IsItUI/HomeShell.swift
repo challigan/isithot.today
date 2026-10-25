@@ -97,6 +97,10 @@ struct TopBarView: View {
         }
         .accessibilityLabel(Text(verbatim: topBar.placeLabel))
         .accessibilityIdentifier("place")
+        // Offered its width before the spacer beside it: at the same priority the two shared
+        // what was left, and on PR #34's last macOS run "Aberdeen" broke inside the word,
+        // "Aberdee" over "n", with half the bar empty.
+        .layoutPriority(1)
         if accessibilitySize {
           Spacer(minLength: 8)
         }

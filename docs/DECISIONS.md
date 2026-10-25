@@ -4868,6 +4868,18 @@ and e1bc88e's (session scratchpad: hang-wk4).
   bottom edge) or in where the pages break (`step`), read first from the trees and `-moved` screens
   attached and a spindump of testmanagerd.
 
+## The place pill on one line, after #34 merged
+
+PR #34's last macOS run (1e7b5fd) passed every test, but its screenshots showed the home screen's
+place pill breaking "Aberdeen" inside the word, "Aberdee" over "n", 119 by 44, with half the top
+bar empty; Leeds and Durham fitted on one line, 36 tall. The pill shares its row with a spacer
+that pushes it to the trailing edge, and at the same layout priority the row divided what was
+left between the two, so a name a little wider than its share wrapped wherever the width ran
+out. The pill now has `layoutPriority(1)` (`TopBarView`), so it is offered its whole width before
+the spacer; at accessibility sizes, where it leads, it still wraps, between words. No audit kind
+catches a word broken across lines, so `HomeTests` now checks that the pill is under 44 points
+tall at the standard size on every fixture (`expectPlaceOnOneLine`), which Aberdeen's failed.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,

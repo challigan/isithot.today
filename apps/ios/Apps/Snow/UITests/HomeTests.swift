@@ -148,6 +148,7 @@ final class HomeTests: XCTestCase {
     let screen = try HomeScreen.named(name)
     let app = try launch(screen)
     expect(screen.topBar, in: app)
+    expectPlaceOnOneLine(app, name)
     expectFits(app, name)
     expectNoBareElements(app, name)
     try tabs(screen, in: app)
@@ -169,6 +170,18 @@ final class HomeTests: XCTestCase {
       try swipe(from: pages[index], to: pages[index + 1], in: app, left: true)
       expect(pages[index + 1], in: app)
     }
+  }
+
+  /// At the standard text size the place pill holds the name on one line, as the website's does:
+  /// 36 points tall on one line (Leeds, 90.7 by 36, on PR #34's last macOS run), and 44 once the
+  /// name wrapped (Aberdeen, 119 by 44, broken inside the word, "Aberdee" over "n").
+  @MainActor
+  private func expectPlaceOnOneLine(_ app: XCUIApplication, _ name: String) {
+    let place = app.buttons["place"]
+    XCTAssertTrue(place.waitForExistence(timeout: 10), "\(name): no place pill")
+    XCTAssertLessThan(
+      place.frame.height, 44,
+      "\(name): the place pill at \(place.frame) has wrapped onto a second line")
   }
 
   /// The switcher shows every page's tab, labelled as the page labels itself.
