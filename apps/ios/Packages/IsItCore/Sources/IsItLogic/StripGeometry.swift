@@ -138,8 +138,9 @@ public struct StripGeometry: Codable, Sendable, Equatable {
   )
 
   /// Where `value` sits between `lo` and `hi`, as a percentage clamped to the strip (core
-  /// `track`). A strip with no range divides by 1, as core's does.
-  private static func track(_ lo: Double, _ hi: Double) -> (Double) -> Double {
+  /// `track`). A strip with no range divides by 1, as core's does. The week's rows place their
+  /// dots by it too (`HomePage.WeekRow`), from none to the snowiest day.
+  static func track(_ lo: Double, _ hi: Double) -> (Double) -> Double {
     let range = hi - lo
     let span = range == 0 || range.isNaN ? 1 : range
     return { value in Swift.min(100, Swift.max(0, ((value - lo) / span) * 100)) }

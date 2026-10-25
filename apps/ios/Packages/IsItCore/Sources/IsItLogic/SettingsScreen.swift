@@ -43,6 +43,26 @@ public struct SettingsScreen: Sendable, Equatable {
     public let selected: Units?
     /// "Temperatures follow: cm with °C, inches with °F."
     public let footnote: String
+    /// The row's icon: `.units`.
+    public let icon: Icon
+  }
+
+  /// The icon at the start of a row (DECISIONS, "The iPhone app in the website's look"), one for
+  /// each row, so that none goes without. IsItUI draws each as an SF Symbol, in a switch that
+  /// names every case, and leaves it out at accessibility sizes, where the words need the card's
+  /// width. Your privacy's "Privacy policy" button carries `.policy` too, as a row, but shows none.
+  public enum Icon: String, Sendable, Equatable, CaseIterable {
+    /// "Snow units", the units control's row.
+    case units
+    case privacyChoices
+    case yourPrivacy
+    case policy
+    case reportAd
+    case howItWorks
+    case credits
+    case terms
+    case contactUs
+    case support
   }
 
   /// What a row does when tapped.
@@ -64,6 +84,7 @@ public struct SettingsScreen: Sendable, Equatable {
     public let id: String
     public let title: String
     public let action: Action
+    public let icon: Icon
   }
 
   public struct Section: Sendable, Equatable, Identifiable {
@@ -93,22 +114,30 @@ public struct SettingsScreen: Sendable, Equatable {
       label: CoreCopy.snowUnitsLabel,
       choices: [Units.c, .f].map { .init(units: $0, name: CoreCopy.snowUnitName($0)) },
       selected: units,
-      footnote: AppCopy.unitsFootnote
+      footnote: AppCopy.unitsFootnote,
+      icon: .units
     )
     var privacy: [Row] = []
     if privacyChoices {
       privacy.append(
-        Row(id: "privacy-choices", title: AppCopy.privacyChoices, action: .privacyChoices))
+        Row(
+          id: "privacy-choices", title: AppCopy.privacyChoices, action: .privacyChoices,
+          icon: .privacyChoices))
     }
-    privacy.append(Row(id: "your-privacy", title: AppCopy.yourPrivacy, action: .page(.yourPrivacy)))
-    privacy += Self.web("privacy-policy", AppCopy.privacyPolicy, Constants.Site.privacy)
+    privacy.append(
+      Row(
+        id: "your-privacy", title: AppCopy.yourPrivacy, action: .page(.yourPrivacy),
+        icon: .yourPrivacy))
+    privacy += Self.web("privacy-policy", AppCopy.privacyPolicy, Constants.Site.privacy, .policy)
     var sections = [Section(id: "privacy", heading: AppCopy.settingsPrivacy, rows: privacy)]
     if !unlocked {
       sections.append(
         Section(
           id: "report",
           heading: nil,
-          rows: [Row(id: "report-ad", title: AppCopy.reportAd, action: .reportAd)]
+          rows: [
+            Row(id: "report-ad", title: AppCopy.reportAd, action: .reportAd, icon: .reportAd)
+          ]
         ))
     }
     sections.append(
@@ -116,23 +145,30 @@ public struct SettingsScreen: Sendable, Equatable {
         id: "about",
         heading: AppCopy.settingsAbout,
         rows: [
-          Row(id: "how-it-works", title: CoreCopy.howItWorks, action: .page(.howItWorks)),
-          Row(id: "credits", title: AppCopy.credits, action: .page(.credits)),
-        ] + Self.web("terms", AppCopy.terms, Constants.Site.terms)
+          Row(
+            id: "how-it-works", title: CoreCopy.howItWorks, action: .page(.howItWorks),
+            icon: .howItWorks),
+          Row(id: "credits", title: AppCopy.credits, action: .page(.credits), icon: .credits),
+        ] + Self.web("terms", AppCopy.terms, Constants.Site.terms, .terms)
       ))
     sections.append(
       Section(
         id: "help",
         heading: AppCopy.settingsHelp,
-        rows: [Row(id: "contact-us", title: AppCopy.contactUs, action: .mail(.contactUs()))]
-          + Self.web("support", AppCopy.support, Constants.Site.support)
+        rows: [
+          Row(
+            id: "contact-us", title: AppCopy.contactUs, action: .mail(.contactUs()),
+            icon: .contactUs)
+        ] + Self.web("support", AppCopy.support, Constants.Site.support, .support)
       ))
     self.sections = sections
     self.version = version?.line
   }
 
-  /// A row that opens `address` in Safari; none if it isn't a URL.
-  private static func web(_ id: String, _ title: String, _ address: String) -> [Row] {
-    URL(string: address).map { [Row(id: id, title: title, action: .open($0))] } ?? []
+  /// A row that opens `address` in Safari, with `icon`; none if it isn't a URL.
+  private static func web(_ id: String, _ title: String, _ address: String, _ icon: Icon)
+    -> [Row]
+  {
+    URL(string: address).map { [Row(id: id, title: title, action: .open($0), icon: icon)] } ?? []
   }
 }

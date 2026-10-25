@@ -33,13 +33,16 @@ final class HomeTests: XCTestCase {
   }
 
   /// The view the app opens on (`defaultView`): Today at 5:59pm at the place, its tabs Now,
-  /// Today and This week; Now at 6pm, the middle tab Tomorrow.
+  /// Today and This week; Now at 6pm, the middle tab Tomorrow. And the pages are on it
+  /// (`expectFits`), which the page's words can't show: the tree holds the chosen view's page
+  /// wherever the pages are.
   @MainActor
   func testDefaultViewEitherSideOf6pm() throws {
     let before = try HomeScreen.named("durham-before-6pm")
     XCTAssertEqual(before.defaultView, "today")
     let early = try launch(before)
     try tabs(before, in: early)
+    expectFits(early, before.name)
     expect(try before.opening(), in: early)
     early.terminate()
 
@@ -47,6 +50,7 @@ final class HomeTests: XCTestCase {
     XCTAssertEqual(after.defaultView, "now")
     let late = try launch(after)
     try tabs(after, in: late)
+    expectFits(late, after.name)
     expect(try after.opening(), in: late)
     try tap(try after.page("today"), in: late)
     expect(try after.page("today"), in: late)
@@ -80,8 +84,8 @@ final class HomeTests: XCTestCase {
   }
 
   /// A place under "Nearby:" loads in place, with no navigation: it becomes the place on the
-  /// top bar, a chosen one now (no approximate line), and the page answers for it on the same
-  /// view. (The fixture's server answers every place with the same fixture.)
+  /// top bar, a chosen one now (no "Use my exact location" chip), and the page answers for it on
+  /// the same view. (The fixture's server answers every place with the same fixture.)
   @MainActor
   func testNearbyLoadsInPlace() throws {
     let aberdeen = try HomeScreen.named("aberdeen-snow")

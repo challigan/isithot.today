@@ -5,7 +5,9 @@ import Testing
 /// The band palettes pnpm mobile:generate writes into IsItModel (iOS build spec, sections 10.1
 /// and 16), checked on Linux as the app's `PaletteTests` checks them on iOS: every band's ink
 /// meets WCAG AA for body text on both ends of its gradient, and the ratios the generator wrote
-/// are what the colours give.
+/// are what the colours give. With them, the content palette and the shares the app's surfaces
+/// mix them by (`BrandColours.swift`), whose every pair packages/mobile's brandColours.test.ts
+/// measures on every band.
 @Suite("Palettes: the bands' colours")
 struct GeneratedPaletteTests {
   @Test(
@@ -35,6 +37,38 @@ struct GeneratedPaletteTests {
     #expect(Palettes.snow(.unknown) == Palettes.snow(.nosnow))
     #expect(Palettes.snow(.snow) == Palettes.Snow.snow)
     #expect(Palettes.snow(.nosnow).ink == 0x341a3c)
+  }
+}
+
+@Suite("Brand colours: the content palette and the surfaces' shares")
+struct GeneratedBrandColourTests {
+  @Test("the app's own pages wear snow's palette, the website's content pages'")
+  func content() {
+    #expect(Palettes.content == Palettes.Snow.snow)
+    #expect(Palettes.content.ink == 0xffffff)
+  }
+
+  @Test("the content card is the pill a quarter of the way to black, opaque, under ink at AA")
+  func card() {
+    let pill = Palettes.content.pill
+    let toBlack = [pill >> 16, pill >> 8, pill].map { channel -> UInt32 in
+      UInt32((Double(channel & 0xff) * (1 - BrandShares.card)).rounded())
+    }
+    #expect(BrandColours.contentCard == toBlack[0] << 16 | toBlack[1] << 8 | toBlack[2])
+    #expect(BrandColours.contentCard == 0x401a4f)
+    #expect(contrast(Palettes.content.ink, BrandColours.contentCard) >= 14.2)
+  }
+
+  @Test("the shares, with Increase Contrast's lines heavier than the hairline and the border")
+  func shares() {
+    let shares = [
+      BrandShares.chip, BrandShares.soft, BrandShares.wash, BrandShares.field,
+      BrandShares.fieldBorder, BrandShares.border, BrandShares.hairline,
+      BrandShares.increasedLine, BrandShares.affordance, BrandShares.card, BrandShares.sheetEnd,
+    ]
+    #expect(shares == [1, 0.85, 0.12, 0.08, 0.55, 0.28, 0.22, 0.4, 0.7, 0.25, 0.15])
+    #expect(BrandShares.increasedLine > BrandShares.hairline)
+    #expect(BrandShares.increasedLine > BrandShares.border)
   }
 }
 

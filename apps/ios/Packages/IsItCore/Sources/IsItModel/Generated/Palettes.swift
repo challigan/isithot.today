@@ -29,6 +29,11 @@ public enum Palettes {
     }
   }
 
+  /// The app's own pages' palette (Settings and every page it opens), fixed in both
+  /// appearances: the website's content pages' (apps/web `LOOKS.snow.content`, its About,
+  /// Privacy, Support and Terms).
+  public static let content = Snow.snow
+
   /// Each band by name, in core's order.
   public enum Snow {
     public static let nosnow = Palette(

@@ -3,20 +3,16 @@ import IsItModel
 import SwiftUI
 import UIKit
 
-/// The Settings sheet (iOS build spec, section 10.4): the snow units, the privacy rows, Report an
-/// ad in the free version, About and Help, and the version, as sections of rows on cards, drawn
-/// as an inset grouped list draws them, in system materials that follow Dark Mode. A page that
-/// scrolls (`SheetPage(.grouped)`), not a `Form`: on PR #33's macOS runs the audit's Dynamic Type
-/// check failed the `Form`'s "About" header (all three runs) and its "Report an ad" row (the
-/// third) as "partially unsupported", though the recording shows both growing at every size they
-/// were on screen, while "How it works", which left the screen at the same size as About, passed.
-/// A `Form`'s cells are made only while on screen; a scroll view's text, on screen or not, has
-/// passed on every run (DECISIONS). A departure from section 10.4's native form, its look kept.
-/// Pages open on the sheet's own stack (Your privacy, How it works, Credits and licences);
-/// willitsnow.today's pages open in Safari and the emails in the mail app, through `openURL`, and
-/// with no mail app the fallback sheet says where to write. Everything shown is the presenters'.
-/// The headers, the footer and the tint are `SheetStyle`'s, which meet WCAG AA where the system's
-/// light ones don't.
+/// The Settings sheet (iOS build spec, section 10.4) in the website's look (DECISIONS, "The
+/// iPhone app in the website's look", step 6): the website's content pages' palette, fixed and
+/// the same in both appearances, with the title on the page; the snow units on a card with the
+/// website's cm | in pill; the privacy rows, Report an ad in the free version, About and Help, as
+/// rows with icons on plum cards under their headings; and the version. A page that scrolls
+/// (`SheetPage`), not a `Form`, whose cells the audit failed on PR #33's runs though they grew;
+/// section 10.4's order and contents are kept, its native form and Dark Mode are not. Pages open
+/// on the sheet's own stack (Your privacy, How it works, Credits and licences); willitsnow.today's
+/// pages open in Safari and the emails in the mail app, through `openURL`, and with no mail app
+/// the fallback sheet says where to write. Everything shown is the presenters'.
 public struct SettingsView: View {
   let screen: SettingsScreen
   let privacy: YourPrivacy
@@ -35,44 +31,34 @@ public struct SettingsView: View {
 
   public var body: some View {
     NavigationStack {
-      SheetPage(.grouped, spacing: 24) {
-        SheetSection(footer: screen.units.footnote) {
-          UnitsRow(control: screen.units, setUnits: actions.setUnits)
-            .sheetRow()
-        }
+      SheetPage(title: screen.title) {
+        UnitsCard(control: screen.units, setUnits: actions.setUnits)
         ForEach(screen.sections) { section in
-          // A header only for a section with a heading: Report an ad's has none.
+          // A heading only for a section with one: Report an ad's has none, and follows closer.
           SheetSection(header: section.heading) {
             rows(section)
           }
+          .padding(.top, section.heading == nil ? 16 : SheetMetrics.sectionGap)
         }
         if let version = screen.version {
-          SheetSection {
-            Text(verbatim: version)
-              .accessibilityIdentifier("version")
-              .sheetRow()
-          }
+          // One line on the page, so on the gradient (10.51:1 where it sits).
+          Text(verbatim: version)
+            .brandFont(.note)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("version")
+            .padding(.top, SheetMetrics.sectionGap)
         }
       }
-      .navigationTitle(Text(verbatim: screen.title))
-      .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .confirmationAction) {
-          Button {
-            dismiss()
-          } label: {
-            CloseLabel(title: screen.close)
-          }
-          .accessibilityIdentifier("close-settings")
+        SheetCloseButton(title: screen.close, identifier: "close-settings") {
+          dismiss()
         }
       }
       .navigationDestination(for: SettingsPage.self) { page in
         destination(page)
       }
     }
-    // The rows that leave the app, Close, and the pages' links and buttons: the system's blue
-    // gives 4.01:1 on a row and 3.59:1 on the page's grouped background (`SheetStyle`).
-    .tint(SheetStyle.accent)
+    .sheetChrome()
     .sheet(item: $fallback) { fallback in
       MailFallbackView(fallback: fallback, copy: actions.copy)
     }
@@ -87,22 +73,20 @@ public struct SettingsView: View {
     }
     ForEach(Array(shown.enumerated()), id: \.element.id) { index, row in
       if index > 0 {
-        SheetDivider()
+        SheetDivider(afterIcon: true)
       }
       rowView(row)
     }
   }
 
   /// A row as its action has it, the whole row a button at least `SheetMetrics.rowHeight` tall
-  /// (`SheetRowStyle`): a page on the stack, a web page or an email (each marked as leaving the
-  /// app), or Google's form.
+  /// (`SheetRowStyle`), its icon leading and its end saying what it does: a page on the stack (a
+  /// chevron), a web page or an email (an arrow out), or Google's form (neither).
   @ViewBuilder private func rowView(_ row: SettingsScreen.Row) -> some View {
     switch row.action {
     case .page(let page):
       NavigationLink(value: page) {
-        PageRowLabel {
-          Text(verbatim: row.title)
-        }
+        RowLabel(title: row.title, icon: row.icon, end: .page)
       }
       .buttonStyle(SheetRowStyle())
       .accessibilityIdentifier(row.id)
@@ -110,7 +94,7 @@ public struct SettingsView: View {
       Button {
         openURL(url)
       } label: {
-        LeavingRow(title: row.title)
+        RowLabel(title: row.title, icon: row.icon, end: .leaves)
       }
       .buttonStyle(SheetRowStyle())
       .accessibilityIdentifier(row.id)
@@ -118,7 +102,7 @@ public struct SettingsView: View {
       Button {
         send(draft)
       } label: {
-        LeavingRow(title: row.title)
+        RowLabel(title: row.title, icon: row.icon, end: .leaves)
       }
       .buttonStyle(SheetRowStyle())
       .accessibilityIdentifier(row.id)
@@ -126,7 +110,7 @@ public struct SettingsView: View {
       Button {
         send(actions.reportAd())
       } label: {
-        LeavingRow(title: row.title)
+        RowLabel(title: row.title, icon: row.icon, end: .leaves)
       }
       .buttonStyle(SheetRowStyle())
       .accessibilityIdentifier(row.id)
@@ -135,8 +119,7 @@ public struct SettingsView: View {
         Button {
           privacyChoices()
         } label: {
-          Text(verbatim: row.title)
-            .foregroundStyle(.tint)
+          RowLabel(title: row.title, icon: row.icon, end: .none)
         }
         .buttonStyle(SheetRowStyle())
         .accessibilityIdentifier(row.id)
@@ -167,9 +150,36 @@ public struct SettingsView: View {
   }
 }
 
-/// "Snow units" with its cm | in control, side by side, or one over the other at accessibility
-/// sizes. VoiceOver reads the label, then each choice; nothing is chosen before the first answer
-/// chose the units.
+/// The units' card: "Snow units" with its control (`UnitsRow`), then the footnote, which can
+/// wrap, so it is on the card in `note` and `soft` (10.62:1), never on the page.
+struct UnitsCard: View {
+  let control: SettingsScreen.UnitsControl
+  let setUnits: (Units) -> Void
+
+  @SurfaceTokens private var tokens
+
+  /// Spelt out, as `RowLabel`'s is.
+  init(control: SettingsScreen.UnitsControl, setUnits: @escaping (Units) -> Void) {
+    self.control = control
+    self.setUnits = setUnits
+  }
+
+  var body: some View {
+    SheetCard {
+      UnitsRow(control: control, setUnits: setUnits)
+      Text(verbatim: control.footnote)
+        .brandFont(.note)
+        .foregroundStyle(tokens.soft)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, SheetMetrics.rowInset)
+        .padding(.bottom, 16)
+    }
+  }
+}
+
+/// "Snow units" with its cm | in control: the ruler, the label and the control on one line, or
+/// at accessibility sizes, with no icon, the label over the control. VoiceOver reads the label,
+/// then each choice; nothing is chosen before the first answer chose the units.
 struct UnitsRow: View {
   let control: SettingsScreen.UnitsControl
   let setUnits: (Units) -> Void
@@ -181,54 +191,46 @@ struct UnitsRow: View {
     let layout =
       stacked
       ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-      : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+      : AnyLayout(HStackLayout(alignment: .center, spacing: SheetMetrics.iconGap))
     layout {
+      if !stacked {
+        RowIcon(icon: control.icon)
+      }
       Text(verbatim: control.label)
+        .brandFont(.row)
+        .fixedSize(horizontal: false, vertical: true)
       if !stacked {
         Spacer(minLength: 0)
       }
       UnitsSegments(control: control, setUnits: setUnits)
     }
+    .sheetRow()
   }
 }
 
-/// The cm | in control (section 10.4): a segmented control drawn as two buttons, the one chosen
-/// raised and marked selected, as a segment is. Not UIKit's segmented control, which keeps its
-/// own type size where section 16 has every string grow to AX5, and which phase 5's home audit
-/// expects the accessibility audit to report; here the labels are the page's text and grow
-/// with it, so Settings' audit, which allows nothing, has nothing to allow. Each button is
-/// tapped on its own (`.plain`, a style of its own, not a row's) and is at least 44 points
-/// square.
+/// The cm | in control, the website's `.units` pill sized for touch (`PillSegments`): the wash's
+/// track on the card, the chosen unit on an ink thumb in the pill colour (11.54:1), the other in
+/// ink on the track (10.00:1), each segment at least 56 by 44 and hugging its word. Not UIKit's
+/// segmented control, which keeps its own type size as the text grows; these words grow with the
+/// page's, so Settings' audit, which allows nothing, has nothing to allow. The thumb slides when
+/// the model has saved the choice, not at the tap. It is still two buttons in a group, each
+/// `.isSelected` when chosen, which the UI tests find as `units`, by their words.
 struct UnitsSegments: View {
   let control: SettingsScreen.UnitsControl
   let setUnits: (Units) -> Void
 
   var body: some View {
-    HStack(spacing: 2) {
-      ForEach(control.choices) { choice in
-        let selected = choice.units == control.selected
-        Button {
-          setUnits(choice.units)
-        } label: {
-          Text(verbatim: choice.name)
-            .fontWeight(selected ? .semibold : .regular)
-            .padding(.horizontal, 14)
-            .frame(minWidth: HitTarget.minimum, minHeight: HitTarget.minimum)
-            .background {
-              if selected {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                  .fill(.background)
-                  .shadow(color: .black.opacity(0.15), radius: 1, y: 1)
-              }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
-      }
+    // Optional ids, so that before the first answer chose the units no segment is chosen.
+    PillSegments(
+      control.choices.map { PillSegment(id: Optional($0.units), title: $0.name) },
+      selected: control.selected,
+      widths: .hugging(minWidth: 56),
+      role: .labelStrong,
+      inset: 3
+    ) { units in
+      if let units { setUnits(units) }
     }
-    .padding(2)
-    .background(.quaternary, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+    // Never squeezed: at accessibility sizes it has its own line.
     .fixedSize()
     // The choices' group, which the UI tests find by it.
     .accessibilityElement(children: .contain)
@@ -236,29 +238,15 @@ struct UnitsSegments: View {
   }
 }
 
-/// A row's label for a page or an email outside the app, opened in Safari or the mail app: its
-/// title in the tint, and an arrow out that VoiceOver doesn't read.
-struct LeavingRow: View {
-  let title: String
-
-  var body: some View {
-    HStack(spacing: 8) {
-      Text(verbatim: title)
-      Spacer(minLength: 0)
-      Image(systemName: "arrow.up.forward")
-        .font(.footnote.weight(.semibold))
-        .foregroundStyle(.secondary)
-        .accessibilityHidden(true)
-    }
-    .foregroundStyle(.tint)
-    .contentShape(Rectangle())
-  }
-}
-
-/// What shows when no mail app can open an email (section 10.7): where to write, and "Copy
-/// address", which says "Address copied." once it has, on screen and to VoiceOver. The
-/// announcement is UIKit's: iOS 17's `AccessibilityNotification` is the Accessibility
-/// framework's, which SwiftUI isn't known to re-export.
+/// What shows when no mail app can open an email (section 10.7), in Settings' look: its title on
+/// the page, where to write on a reading card, "Copy address" as the website's selected pill
+/// (ink, its words in the pill colour, 11.54:1), and once it has copied, "Address copied." on the
+/// page and to VoiceOver. A sheet of its own at full height, as a sheet opens by default: at the
+/// medium detent iOS 26 draws a sheet as a card inset over Settings, scaled to 96%, with Settings
+/// showing through its glass, which the audit found on PR #33's macOS run as clipped text, text
+/// no element holds, and Close short of contrast. Close is trailing, as Settings' is. The
+/// announcement is UIKit's: iOS 17's `AccessibilityNotification` is the Accessibility framework's,
+/// which SwiftUI isn't known to re-export.
 struct MailFallbackView: View {
   let fallback: MailFallback
   let copy: @MainActor (String) -> Void
@@ -268,51 +256,52 @@ struct MailFallbackView: View {
 
   var body: some View {
     NavigationStack {
-      ScrollView {
-        VStack(alignment: .leading, spacing: 16) {
+      SheetPage(title: fallback.title) {
+        ReadingCard {
           Text(verbatim: fallback.body)
-            .fixedSize(horizontal: false, vertical: true)
+            .paragraph()
             .accessibilityIdentifier("fallback-body")
-          Button {
-            copy(fallback.address)
-            copied = true
-            UIAccessibility.post(notification: .announcement, argument: fallback.copied)
-          } label: {
+        }
+        PillButton(.wide, .primary) {
+          copy(fallback.address)
+          copied = true
+          UIAccessibility.post(notification: .announcement, argument: fallback.copied)
+        } label: {
+          HStack(spacing: 10) {
+            Image(systemName: "doc.on.doc")
+              .font(.callout)
+              .accessibilityHidden(true)
             Text(verbatim: fallback.copyAddress)
-          }
-          .buttonStyle(.borderedProminent)
-          // White on the fill, 7.56:1 in both appearances (`SheetStyle.filled`).
-          .tint(SheetStyle.filled)
-          .accessibilityIdentifier("copy-address")
-          if copied {
-            // "Address copied.", not section 10.9's "Copied.": the audit found that one word
-            // with its full stop "not human-readable" on PR #33's two macOS runs, with the
-            // identifier `copied` in the card the sheet was then drawn as, and with this one at
-            // full height; every label of more than one word passed (packages/mobile appCopy.ts).
-            Text(verbatim: fallback.copied)
-              .accessibilityIdentifier("copy-confirmation")
+              .brandFont(.labelStrong)
           }
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-      }
-      .navigationTitle(Text(verbatim: fallback.title))
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button {
-            dismiss()
-          } label: {
-            CloseLabel(title: fallback.close)
+        .accessibilityIdentifier("copy-address")
+        .padding(.top, 24)
+        if copied {
+          // "Address copied.", not section 10.9's "Copied.": the audit found that one word
+          // with its full stop "not human-readable" on PR #33's two macOS runs, with the
+          // identifier `copied` in the card the sheet was then drawn as, and with this one at
+          // full height; every label of more than one word passed (packages/mobile appCopy.ts).
+          // One line on the page, beside a tick VoiceOver doesn't read.
+          HStack(spacing: 10) {
+            Image(systemName: "checkmark")
+              .font(.callout)
+              .accessibilityHidden(true)
+            Text(verbatim: fallback.copied)
+              .brandFont(.label)
+              .fixedSize(horizontal: false, vertical: true)
+              .accessibilityIdentifier("copy-confirmation")
           }
-          .accessibilityIdentifier("close-fallback")
+          .padding(.top, 14)
+        }
+      }
+      .toolbar {
+        SheetCloseButton(title: fallback.close, identifier: "close-fallback") {
+          dismiss()
         }
       }
     }
-    // A sheet of its own, so Settings' tint is given again, for Close. Full height, as a sheet
-    // opens by default: at the medium detent iOS 26 draws a sheet as a card inset over Settings,
-    // scaled to 96%, with Settings showing through its glass, which the audit found on PR #33's
-    // macOS run as clipped text, text no element holds, and Close short of contrast.
-    .tint(SheetStyle.accent)
+    // A sheet of its own, so the content surface and its chrome are given again.
+    .sheetChrome()
   }
 }

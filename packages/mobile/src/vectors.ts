@@ -42,15 +42,19 @@ import {
 } from '@isithot/core';
 import {
   CLIENT,
+  PLACES as PLACE_LISTS,
   addRecent,
   alertAction,
   alertPlaceAllowed,
+  canSave,
+  choosePlace,
   dayUntil,
   deviceTarget,
   fingerprint,
   freshQuery,
   hold,
   hourUntil,
+  isSaved,
   middleDay,
   nextRefreshAt,
   notificationRoute,
@@ -60,21 +64,26 @@ import {
   registrationBody,
   removeRecent,
   resultDetail,
+  savePlace,
   searchInput,
   searchQuery,
   searchTarget,
+  shownRecent,
   targetFromQuery,
   targetKey,
   todayQuery,
+  unsavePlace,
   updatedLine,
   usableUntil,
   widgetEntries,
   type AlertPrefs,
   type Holds,
   type Permission,
+  type PlaceLists,
   type PlaceTarget,
   type PushEnv,
   type RecentPlace,
+  type SavedPlace,
   type Target,
   type WidgetEntry,
 } from '@isithot/client';
@@ -1120,7 +1129,7 @@ export const RUNNING_LEAD_MS = 2 * MINUTE;
  * side of 6pm and from two minutes before it as the clock runs, and the first place under
  * "Nearby:"; OfflineTests' saved answer an hour on with no connection, its last two minutes and
  * its end (`usableUntil`) offline, a failed request over it, and nothing saved with no
- * connection. The two clocks that run start `RUNNING_LEAD_MS` before their moment, so that a
+ * connection; and the two pages PickerTests open the picker over. The two clocks that run start `RUNNING_LEAD_MS` before their moment, so that a
  * slow launch on the CI's simulator can't pass it before the test has read the screen before it.
  */
 export function homeScreens(fixtures: FixtureSet): HomeScreenSpec[] {
@@ -1177,6 +1186,23 @@ export function homeScreens(fixtures: FixtureSet): HomeScreenSpec[] {
       now: own('aberdeen-snow'),
       phase: 'offline',
       approximate: true,
+    },
+    // The pages PickerTests open the picker over, whose band it wears and whose palette its
+    // audit's contrast proof reads: Leeds by IP on the first launch, and Leeds chosen from a
+    // search, a city page, both at the first launch's moment, where those tests' clock starts.
+    {
+      name: 'picker-first-launch',
+      fixture: 'ip-first-launch',
+      now: own('ip-first-launch'),
+      phase: 'ready',
+      approximate: true,
+    },
+    {
+      name: 'picker-leeds',
+      fixture: 'leeds-dry',
+      now: own('ip-first-launch'),
+      phase: 'ready',
+      approximate: false,
     },
   );
   return screens;
@@ -1734,11 +1760,23 @@ function recentVectors(): VectorFile {
   const more = ['aberdeen-gb', 'shrewsbury-gb', 'reykjavik-is', 'kolkata-in', 'london-gb'].map(
     (slug) => place({ kind: 'city', slug }, slug),
   );
-  const addTo = (list: RecentPlace[], target: Target, name: string, max?: number) =>
+  const addTo = (
+    list: RecentPlace[],
+    target: Target,
+    name: string,
+    max?: number,
+    detail?: string,
+  ) =>
     add(
       'addRecent',
-      { list, target, name, ...(max === undefined ? {} : { max }) },
-      addRecent(list, target, name, max),
+      {
+        list,
+        target,
+        name,
+        ...(max === undefined ? {} : { max }),
+        ...(detail === undefined ? {} : { detail }),
+      },
+      addRecent(list, target, name, max, detail),
     );
   addTo([], leeds.target, 'Leeds');
   addTo([leeds, durham], leeds.target, 'Leeds');
@@ -1760,6 +1798,17 @@ function recentVectors(): VectorFile {
   addTo([leeds], { kind: 'ip' }, 'Your location');
   addTo([...more, leeds, durham], { kind: 'ip' }, 'Leeds');
   addTo([], { kind: 'ip' }, 'Leeds');
+  // A place's line (saved places' detail): kept when given, the newer entry's when chosen again,
+  // and absent otherwise, as older stored entries are.
+  const line = 'England, United Kingdom';
+  const leedsLine = { ...leeds, detail: line };
+  addTo([], leeds.target, 'Leeds', undefined, line);
+  addTo([durham], leeds.target, 'Leeds', 3, line);
+  addTo([leedsLine, durham], leeds.target, 'Leeds');
+  addTo([leedsLine, durham], durham.target, 'Durham', undefined, line);
+  addTo([durham, leedsLine], leeds.target, 'Leeds', undefined, 'West Yorkshire, England');
+  addTo([leedsLine], { kind: 'ip' }, 'Leeds', undefined, line);
+  addTo([], denver.target, 'Denver', undefined, '');
   const removeFrom = (list: RecentPlace[], target: Target) =>
     add('removeRecent', { list, target }, removeRecent(list, target));
   removeFrom([leeds, durham, phone], durham.target);
@@ -1768,6 +1817,7 @@ function recentVectors(): VectorFile {
   removeFrom([leeds, durham, phone, searched], { ...searched.target, name: 'Elsewhere' });
   removeFrom([leeds, durham], { kind: 'ip' });
   removeFrom([], leeds.target);
+  removeFrom([leedsLine, durham], leeds.target);
   return vectorFile(
     [
       ['client', 'addRecent'],
@@ -1858,10 +1908,141 @@ function searchVectors(): VectorFile {
   );
 }
 
+// ---- saved.json --------------------------------------------------------------------------------
+
 /**
- * Every vector file, in the spec's order (section 7.4's, then phase 5's `page.json` and phase 6's
- * `search.json`), from `fixtures` (each as its file has it). Throws when a fixture a vector needs
- * is missing.
+ * The picker's saved places (the iPhone app in the website's look, step 4): client `isSaved`,
+ * `canSave`, `savePlace`, `unsavePlace`, `choosePlace` and `shownRecent`, on an empty and a full
+ * list, the tenth and eleventh save, a place saved twice, approximate IP location, the phone's
+ * point beside a searched one at the same coordinates, saving from the recent places and from a
+ * search, removing (back on top, the sixth recent place cut), and choosing.
+ */
+function savedVectors(): VectorFile {
+  const { cases, add } = collector();
+  const line = 'England, United Kingdom';
+  const leeds: SavedPlace = {
+    target: { kind: 'city', slug: 'leeds-gb', name: 'Leeds' },
+    name: 'Leeds',
+    detail: line,
+  };
+  const york: SavedPlace = { target: { kind: 'city', slug: 'york-gb' }, name: 'York' };
+  const kathmandu: SavedPlace = {
+    target: {
+      kind: 'coords',
+      source: 'search',
+      lat: 27.7,
+      lon: 85.3,
+      name: 'Kathmandu',
+      region: 'Bagmati Province',
+      country: 'NP',
+      geonameId: 1283240,
+      elevation: 1337,
+    },
+    name: 'Kathmandu',
+    detail: 'Bagmati Province, Nepal',
+  };
+  const searchedLeeds: SavedPlace = {
+    target: { kind: 'coords', source: 'search', lat: 53.8, lon: -1.55, name: 'Leeds' },
+    name: 'Leeds',
+  };
+  const phone: PlaceTarget = { kind: 'coords', source: 'device', lat: 53.8, lon: -1.55 };
+  const recent = (p: SavedPlace): RecentPlace =>
+    p.detail === undefined
+      ? { target: p.target, name: p.name }
+      : { target: p.target, name: p.name, detail: p.detail };
+  const durham: RecentPlace = { target: { kind: 'city', slug: 'durham-gb' }, name: 'Durham' };
+  const five = ['aberdeen-gb', 'shrewsbury-gb', 'reykjavik-is', 'kolkata-in', 'london-gb'].map(
+    (slug): RecentPlace => ({ target: { kind: 'city', slug }, name: slug }),
+  );
+  const ten = Array.from({ length: PLACE_LISTS.savedMax }, (_, i): SavedPlace => ({
+    target: { kind: 'city', slug: `place-${i}-gb` },
+    name: `Place ${i}`,
+  }));
+  const lists = (saved: SavedPlace[], recentPlaces: RecentPlace[] = []): PlaceLists => ({
+    saved,
+    recent: recentPlaces,
+  });
+
+  const targets: Target[] = [
+    leeds.target,
+    { kind: 'city', slug: 'leeds-gb', name: 'Leeds, West Yorkshire' },
+    york.target,
+    kathmandu.target,
+    searchedLeeds.target,
+    phone,
+    { ...phone, name: 'Leeds' },
+    { kind: 'ip' },
+  ];
+  for (const saved of [[], [leeds], [leeds, kathmandu], [searchedLeeds], ten.slice(1), ten]) {
+    for (const target of targets) {
+      add('isSaved', { saved, target }, isSaved(saved, target));
+      add('canSave', { saved, target }, canSave(saved, target));
+    }
+  }
+
+  const save = (l: PlaceLists, place: SavedPlace) =>
+    add('savePlace', { lists: l, place }, savePlace(l, place));
+  save(lists([]), leeds);
+  save(lists([york], [durham, recent(leeds)]), leeds);
+  save(lists([york], [durham]), kathmandu);
+  save(lists(ten.slice(1), [recent(leeds)]), leeds);
+  save(lists(ten, [recent(leeds)]), leeds);
+  save(lists([leeds]), { target: { kind: 'city', slug: 'leeds-gb' }, name: 'Leeds again' });
+  save(lists([], [durham]), { target: durham.target, name: '' });
+  save(lists([]), { target: phone, name: 'Leeds' });
+  save(lists([]), { target: { ...phone, name: 'Leeds' }, name: 'Leeds' });
+  // The same point found by a search is a place of its own, and the phone's stays recent.
+  save(lists([], [{ target: phone, name: 'Leeds' }]), searchedLeeds);
+  save(lists([kathmandu], [recent(searchedLeeds)]), searchedLeeds);
+
+  const unsave = (l: PlaceLists, target: Target) =>
+    add('unsavePlace', { lists: l, target }, unsavePlace(l, target));
+  unsave(lists([york, leeds], [durham]), { kind: 'city', slug: 'leeds-gb' });
+  unsave(lists([leeds], five), leeds.target);
+  unsave(lists([york, kathmandu]), york.target);
+  unsave(lists([york, kathmandu], [durham]), kathmandu.target);
+  unsave(lists([leeds], [durham]), york.target);
+  unsave(lists([leeds], [durham]), { kind: 'ip' });
+  unsave(lists([searchedLeeds]), phone);
+  unsave(lists([]), leeds.target);
+
+  const choose = (l: PlaceLists, target: Target, name: string, detail?: string) =>
+    add(
+      'choosePlace',
+      { lists: l, target, name, ...(detail === undefined ? {} : { detail }) },
+      choosePlace(l, target, name, detail),
+    );
+  choose(lists([leeds], [durham]), { kind: 'city', slug: 'leeds-gb' }, 'Leeds', line);
+  choose(lists([leeds], [durham]), york.target, 'York');
+  choose(lists([leeds], [durham]), kathmandu.target, 'Kathmandu', 'Bagmati Province, Nepal');
+  choose(lists([leeds], five), durham.target, 'Durham', line);
+  choose(lists([searchedLeeds], [durham]), phone, 'Leeds');
+  choose(lists([leeds], [durham]), { kind: 'ip' }, 'Leeds');
+  choose(lists([]), york.target, 'York', '');
+
+  const shown = (l: PlaceLists) => add('shownRecent', { lists: l }, shownRecent(l));
+  shown(lists([leeds], [durham, recent(leeds), { target: phone, name: 'Leeds' }]));
+  shown(lists([searchedLeeds, kathmandu], [{ target: phone, name: 'Leeds' }, durham]));
+  shown(lists([], five));
+  shown(lists([leeds]));
+  shown(lists(ten, five));
+  return vectorFile(
+    [
+      ['client', 'isSaved'],
+      ['client', 'canSave'],
+      ['client', 'savePlace'],
+      ['client', 'unsavePlace'],
+      ['client', 'choosePlace'],
+      ['client', 'shownRecent'],
+    ],
+    cases,
+  );
+}
+
+/**
+ * Every vector file, in the spec's order (section 7.4's, then phase 5's `page.json`, phase 6's
+ * `search.json` and the saved places' `saved.json`), from `fixtures` (each as its file has it).
+ * Throws when a fixture a vector needs is missing.
  */
 export function vectorFiles(fixtures: FixtureSet): NamedVectors[] {
   return [
@@ -1880,6 +2061,7 @@ export function vectorFiles(fixtures: FixtureSet): NamedVectors[] {
     { name: 'recent', vectors: recentVectors() },
     { name: 'page', vectors: pageVectors(fixtures) },
     { name: 'search', vectors: searchVectors() },
+    { name: 'saved', vectors: savedVectors() },
   ];
 }
 

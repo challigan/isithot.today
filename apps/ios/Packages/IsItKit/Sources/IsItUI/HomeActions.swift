@@ -7,11 +7,12 @@ import IsItModel
 public struct HomeActions {
   /// Ask for the answer again: Retry, in the error state or under the footer's line.
   public var retry: () -> Void
-  /// The place button: open the place picker.
+  /// The place pill: open the place picker.
   public var openPlacePicker: () -> Void
   /// The gear: open Settings.
   public var openSettings: () -> Void
-  /// "Use my location", beside the approximate-location line.
+  /// "Use my exact location", the chip on approximate location: open the picker finding the
+  /// phone's place.
   public var useMyLocation: () -> Void
   /// A link out (BBC Weather, the Met Office, AccuWeather) or a credit's: open it in Safari.
   public var openLink: (URL) -> Void

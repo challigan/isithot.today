@@ -3,36 +3,44 @@ import XCTest
 
 /// Section 16's accessibility audit of the screen on show, as the picker's and Settings' UI tests
 /// run it: XCUITest's `performAccessibilityAudit(for:)` (iOS 17), every kind of issue, in the three
-/// calls `AuditKinds.passes`, each through `runAudit`, which times it and runs it again once
-/// should it not finish in time. Each issue is noted with its kind, its element (type,
-/// identifier, label and frame on screen) and Apple's description, and a contrast issue with the
-/// screen's pixels inside its element (`PixelRange`); then the test fails once, listing them all,
-/// so one run shows every issue on the screen rather than stopping at the first (these tests stop
-/// at their first failure). Nothing is allowed: every issue is the app's to fix. (The toolbars'
-/// Close buttons, which failed Dynamic Type as text on PR #33's first macOS run, are icons now;
-/// Your privacy's back button, a bar button too, passed. Settings' "About" header and "Report an
-/// ad", which a `Form` left "partially unsupported", are a scrolling page's now.) Should a system
-/// control the app can't change fail, an exception would match it as one of
+/// calls `AuditKinds.passes`, each through `runAudit`, which times it and runs it again once, on
+/// the same screen, should it not finish in time (the home's audit moves its page a few points
+/// instead, which a sheet hasn't: `OnAuditTimeout`). Each issue is noted with its kind, its
+/// element (type, identifier, label and frame on screen) and Apple's description, and a contrast
+/// issue with the screen's pixels inside its element (`PixelRange`, `DrawnText`); then the test
+/// fails once, listing them all, so one run shows every issue on the screen rather than stopping
+/// at the first (these tests stop at their first failure).
+///
+/// One issue is allowed, as on the home screen: contrast on a text element whose pixels prove it
+/// is text drawn in `surface`'s own colours at 4.5:1 or more (`MeasuredContrast`; DECISIONS,
+/// "Contrast by measured pixels, after #34's first full run"), the picker's in the band of the
+/// page it opened over and Settings' in the content palette. Nothing else is: every other issue
+/// is the app's to fix. (The toolbars' Close buttons, which failed Dynamic Type as text on PR
+/// #33's first macOS run, are icons now; Your privacy's back button, a bar button too, passed.)
+/// Should a system control the app can't change fail, an exception would match it as one of
 /// `app.navigationBars`' or the search bar's by its place, with the run's evidence, not by an
 /// identifier it may not have.
 ///
 /// The screen as audited and the app's element tree are attached first, as
 /// `audit-<screen>` and `audit-<screen>-tree`: on PR #33's second macOS run each failing sheet's
 /// test stopped at its audit, before it attached its screen, so nothing showed what the audit
-/// had read. Each call's time is attached as `audit-<screen>-times`, however the audit ends.
+/// had read. Each call's time is attached as `audit-<screen>-times`, however the audit ends, and
+/// the issues allowed as `audit-<screen>-allowed`, which the failure lists too, so that a proof
+/// that allows too much shows in every run.
 extension XCTestCase {
   @MainActor
   func auditAccessibility(
     of app: XCUIApplication,
     on screen: String,
+    surface: ScreenSurface,
     file: StaticString = #filePath,
     line: UInt = #line
   ) throws {
-    let found = AuditIssues()
+    let found = AuditIssues(
+      surface: try SurfaceFile.bundled().colours(surface, window: app.frame))
     let times = AuditTimes()
     // The screen as the first call audits it, for a contrast issue's pixels.
     let shot = app.screenshot()
-    let window = app.frame
     let name = "audit-" + slug(screen)
     attachPNG(shot, as: name)
     attachText(app.debugDescription, as: "\(name)-tree")
@@ -40,20 +48,26 @@ extension XCTestCase {
     // Where the screen's elements are as audited, so a call is run again only on this screen.
     let audited = ScreenLayout(app)
     for kinds in AuditKinds.passes {
-      let issues = try runAudit(of: app, for: kinds, at: screen, timing: times) {
-        guard app.state == .runningForeground else {
-          return "the app isn't in the foreground (state \(app.state.rawValue))"
-        }
-        return ScreenLayout.change(from: audited, to: ScreenLayout(app))
-      }
+      let issues = try runAudit(
+        of: app, for: kinds, at: screen, timing: times,
+        onTimeout: .runAgain {
+          guard app.state == .runningForeground else {
+            return "the app isn't in the foreground (state \(app.state.rawValue))"
+          }
+          return ScreenLayout.change(from: audited, to: ScreenLayout(app))
+        })
       for issue in issues {
-        found.note(issue, shot: shot, window: window)
+        found.note(issue, shot: shot)
       }
     }
+    let allowed = found.allowed.map { "Allowed: \($0)" }
+    attachText(
+      allowed.isEmpty ? "Nothing allowed on \(surface)" : allowed.joined(separator: "\n"),
+      as: "\(name)-allowed")
     XCTAssertTrue(
-      found.lines.isEmpty,
-      "\(found.lines.count) accessibility issues on \(screen), in the window at \(app.frame):\n"
-        + found.lines.joined(separator: "\n"),
+      found.unexpected.isEmpty,
+      "\(found.unexpected.count) accessibility issues on \(screen), on \(surface), in the window "
+        + "at \(app.frame):\n" + (found.unexpected + allowed).joined(separator: "\n"),
       file: file, line: line)
   }
 
@@ -64,23 +78,30 @@ extension XCTestCase {
   /// and its issues' count, go into `times`.
   ///
   /// A call that didn't finish in time (XCTest's "Audit failed to complete in time", -56,
-  /// `isAuditTimeout`) runs once more, with the same kinds, 2 seconds later, only once `settled`
-  /// finds the screen the one the call was to audit (nil; or why it isn't): the first attempt's
-  /// issues are dropped, so none is counted twice. On PR #33's third macOS run the first call on
-  /// the Now page's sixth screenful at AX3, the costliest screenful of the suite, then of all five
-  /// kinds that read the screen as it is, ran some 17 seconds where about 7 were expected, with
-  /// the app still on screen, and timed out; two other calls of that test ran about 2.5 times as
-  /// long as expected and finished (those five kinds are two calls now, `AuditKinds`; DECISIONS,
-  /// "The iPhone app's UI tests, after PR #33's third macOS run"). Any other error, a second
+  /// `isAuditTimeout`: XCTest gives each call 15 seconds, as testmanagerd logs) does as
+  /// `onTimeout` says. The home pages' (`.handBack`) isn't run again on the same screen: the
+  /// error is thrown at once, and the caller audits the screenful again with the page moved a few
+  /// points (`HomeAuditTests`). On PR #34's run on c74aa22, and on fdb3182's, the contrast call on
+  /// a week page's screenful at AX3 stopped for the whole 15 seconds, and the same call run again
+  /// on the same, still screen stopped for 15 again, both times; every other call of the run
+  /// finished in 3.7 seconds or less (DECISIONS, "After #34's fourth full run"). The sheets'
+  /// (`.runAgain`) runs once more, with the same kinds, 2 seconds later, only once `settled` finds
+  /// the screen the one the call was to audit (nil; or why it isn't): the first attempt's issues
+  /// are dropped, so none is counted twice. That was PR #33's answer to its third macOS run's
+  /// timeout, then read as a slow host (DECISIONS, "The iPhone app's UI tests, after PR #33's
+  /// third macOS run"); no sheet's call has timed out on any run, and a second timeout on the same
+  /// screen at least tells a call that stops from one that is slow. Any other error, a second
   /// failure, or a screen that isn't the one to audit throws (`AuditFailure`), with each attempt's
-  /// error and time: every kind runs on every screen the test attaches, or the test fails.
+  /// error and time. Every kind runs on every screenful's content, or the test fails: a home
+  /// screenful whose call stopped is audited in full on its `-moved` twin, which shows whole the
+  /// same elements.
   @MainActor
   func runAudit(
     of app: XCUIApplication,
     for kinds: XCUIAccessibilityAuditType,
     at place: String,
     timing times: AuditTimes,
-    settled: () -> String?
+    onTimeout: OnAuditTimeout
   ) throws -> [XCUIAccessibilityAuditIssue] {
     let first = timedAudit(of: app, for: kinds)
     guard let error = first.error else {
@@ -93,6 +114,11 @@ extension XCTestCase {
       throw failure
     }
     let timedOut = "timed out (-56) after \(secondsText(first.seconds)) s"
+    guard case .runAgain(let settled) = onTimeout else {
+      let note = "\(timedOut); not run again on the same screen"
+      times.add(AuditTime(place, kinds, first.seconds, note: note))
+      throw failure
+    }
     RunLoop.current.run(until: Date().addingTimeInterval(2))
     if let why = settled() {
       failure.notRunAgain = why
@@ -177,9 +203,11 @@ func slug(_ name: String) -> String {
 /// after PR #33's macOS run"). Contrast is first, so the screen it measures is the one in the
 /// screenshot taken before the calls, whose pixels its issues are noted with. Two calls where the
 /// screen is read as it is, not one: on PR #33's third macOS run the one call of those five kinds
-/// took up to 10.8 seconds where it finished, against XCTest's deadline of about 17, and timed out
-/// once, on the home's costliest screenful (DECISIONS, "The iPhone app's UI tests, after PR #33's
-/// third macOS run"); each call has a deadline of its own.
+/// took up to 10.8 seconds where it finished, against XCTest's deadline of 15 seconds a call
+/// (testmanagerd logs `timeout: 15` for each; PR #33 reckoned about 17, the timed-out call's time
+/// from its screen recording), and timed out once, on the home's costliest screenful (DECISIONS,
+/// "The iPhone app's UI tests, after PR #33's third macOS run"); each call has a deadline of its
+/// own.
 enum AuditKinds {
   /// The checks that change the text size.
   static let resizing: XCUIAccessibilityAuditType = [.dynamicType, .textClipped]
@@ -198,26 +226,64 @@ enum AuditKinds {
   static let passes = [contrast, described, resizing]
 }
 
-/// The issues one screen's audits found, each described.
+/// The issues one screen's audits found, each described: those that fail the test, and those
+/// `MeasuredContrast` allows, contrast on text its screenshot's pixels prove at 4.5:1 or more on
+/// `surface`.
 @MainActor
 private final class AuditIssues {
-  /// Each issue's description, in the order found.
-  private(set) var lines: [String] = []
+  let surface: SurfaceColours
+  private(set) var unexpected: [String] = []
+  private(set) var allowed: [String] = []
 
-  func note(_ issue: XCUIAccessibilityAuditIssue, shot: XCUIScreenshot, window: CGRect) {
+  init(surface: SurfaceColours) {
+    self.surface = surface
+  }
+
+  func note(_ issue: XCUIAccessibilityAuditIssue, shot: XCUIScreenshot) {
     var text =
       "\(issue.auditType.names): \(issue.compactDescription) (\(describeElement(issue.element))): "
       + issue.detailedDescription
-    if issue.auditType == .contrast, let element = issue.element {
-      let pixels = PixelRange(shot, in: element.frame, window: window)
-      text += "; the screen's pixels there: " + (pixels.map(\.description) ?? "can't be read")
+    guard issue.auditType == .contrast, let element = issue.element else {
+      unexpected.append(text)
+      return
     }
-    lines.append(text)
+    let frame = element.frame
+    var audited = AuditedElement(
+      type: element.elementType, identifier: element.identifier, label: element.label,
+      frame: frame, credits: .null)
+    let pixels = ScreenPixels(shot, in: frame, window: surface.window)
+    let drawn = DrawnText(
+      ScreenPixels(shot, in: DrawnText.reading(frame), window: surface.window), in: frame,
+      on: surface, withMarks: MeasuredContrast.drawsMarks(audited.type))
+    audited.drawn = drawn
+    let range = pixels.flatMap { PixelRange(rgba: $0.rgba) }
+    text +=
+      "; the screen's pixels there: \(range.map(\.description) ?? "can't be read"); "
+      + surface.expected(in: frame) + "; " + drawn.description
+    if MeasuredContrast.allows(audited) {
+      allowed.append("\(text). Allowed: \(MeasuredContrast.why)")
+    } else {
+      unexpected.append(text)
+    }
   }
 }
 
+/// What an exception knows of an issue's element: its type, identifier, label and frame on
+/// screen, the screen's credits, where they are on screen (`.null` without, as on every sheet),
+/// and for a contrast issue, what the screenshot shows drawn in its frame (`DrawnText`).
+struct AuditedElement {
+  let type: XCUIElement.ElementType?
+  let identifier: String
+  let label: String
+  let frame: CGRect
+  let credits: CGRect
+  var drawn: DrawnText?
+}
+
 /// Whether `error` is XCTest's "Audit failed to complete in time": code -56 in its accessibility
-/// audit's domain, which Apple doesn't document, nor how long the deadline is.
+/// audit's domain, which Apple doesn't document, nor its deadline: 15 seconds a call, as
+/// testmanagerd logs each call's (`XCAXAuditRunForApplication … timeout: 15`, on PR #34's run on
+/// c74aa22).
 func isAuditTimeout(_ error: Error) -> Bool {
   let error = error as NSError
   return error.domain == "com.apple.xcode.xctest.accessibilityAudit" && error.code == -56
@@ -236,23 +302,40 @@ func seconds(since start: ContinuousClock.Instant) -> Double {
   return Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18
 }
 
-/// Seconds as the times and failures give them: "17.2".
+/// Seconds as the times and failures give them: "15.3".
 func secondsText(_ seconds: Double) -> String {
   String(format: "%.1f", seconds)
 }
 
+/// What `runAudit` does with a call that doesn't finish in time.
+enum OnAuditTimeout {
+  /// Throws at once, the call not run again on the same screen, for the caller to audit the same
+  /// content with the page moved a few points: the home pages' (`HomeAuditTests`).
+  case handBack
+  /// Runs it once more on the same screen, 2 seconds later, once `settled` finds the screen the
+  /// one the call was to audit (nil; or why it isn't): the sheets', which have no page to move.
+  case runAgain(settled: @MainActor () -> String?)
+}
+
 /// An audit call that failed (`runAudit`), as the test's failure says it: where, which kinds,
-/// each attempt's error and time, and, for one that didn't finish in time and wasn't run again,
-/// why not.
+/// each attempt's error and time, and, for one that didn't finish in time, what became of it: not
+/// run again, and why; run again on the same screen (a sheet's); or its screenful audited again
+/// with the page moved a few points, which failed too (a home page's, `elsewhere`).
 struct AuditFailure: Error, CustomStringConvertible, LocalizedError {
   let place: String
   let kinds: XCUIAccessibilityAuditType
   let first: Error
   let after: Double
-  /// Why a call that didn't finish in time wasn't run again: the screen wasn't the one to audit.
+  /// Where the screen was, for the failure to say: on a home page, where the credits were.
+  var at: String?
+  /// Why a call that didn't finish in time wasn't run again: the screen wasn't the one to audit,
+  /// or a home page couldn't be moved a few points.
   var notRunAgain: String?
-  /// The second attempt's error and time.
+  /// The second attempt's error and time, on the same screen.
   var second: (error: Error, after: Double)?
+  /// How the audit of a home screenful moved a few points failed (another `AuditFailure`, with
+  /// its own place, kinds, time and where the credits were).
+  var elsewhere: Error?
 
   init(place: String, kinds: XCUIAccessibilityAuditType, first: Error, after: Double) {
     self.place = place
@@ -263,13 +346,15 @@ struct AuditFailure: Error, CustomStringConvertible, LocalizedError {
 
   var description: String {
     let audit = "\(place): the audit of \(kinds.names)"
-    let firstTime = "after \(secondsText(after)) s"
+    let firstTime = "after \(secondsText(after)) s" + (at.map { " \($0)" } ?? "")
     guard isAuditTimeout(first) else { return "\(audit) didn't run (\(first)) \(firstTime)" }
-    if let notRunAgain {
-      return "\(audit) didn't finish in time (\(first)) \(firstTime), and wasn't run again: "
-        + notRunAgain
+    let timedOut = "\(audit) didn't finish in time (\(first)) \(firstTime)"
+    if let elsewhere {
+      return "\(timedOut); then its screenful, audited again with the page moved a few points, "
+        + "failed too: \(elsewhere)"
     }
-    guard let second else { return "\(audit) didn't finish in time (\(first)) \(firstTime)" }
+    if let notRunAgain { return "\(timedOut), and wasn't run again: \(notRunAgain)" }
+    guard let second else { return timedOut }
     let secondTime = "after \(secondsText(second.after)) s"
     if isAuditTimeout(second.error) {
       return "\(audit) didn't finish in time twice: \(first) \(firstTime), then, run again on "
@@ -284,7 +369,7 @@ struct AuditFailure: Error, CustomStringConvertible, LocalizedError {
 }
 
 /// One audit call as `runAudit` timed it: where, which kinds, its seconds (the last attempt's),
-/// how many issues it found, and what else befell it ("timed out (-56) after 17.2 s; ran again").
+/// how many issues it found, and what else befell it ("timed out (-56) after 15.3 s; ran again").
 struct AuditTime {
   let place: String
   let kinds: XCUIAccessibilityAuditType
@@ -433,7 +518,9 @@ func describeElement(
 
 /// An sRGB colour, a screenshot's pixel or a palette's `#rrggbb`, with WCAG 2's luminance and
 /// contrast, as scripts/palette-contrast.mjs and packages/mobile `exportPalettes.ts` work them out.
-struct RGB: Equatable, CustomStringConvertible {
+/// Hashable, so the contrast proof works a surface's colours out once for each background colour
+/// (`DrawnText`).
+struct RGB: Hashable, CustomStringConvertible {
   let red: UInt8
   let green: UInt8
   let blue: UInt8
@@ -486,14 +573,28 @@ struct RGB: Equatable, CustomStringConvertible {
   }
 
   /// This colour taken `amount` (0 to 1) of the way to `other`, channel by channel in sRGB, as
-  /// SwiftUI mixes a gradient's stops and lays a colour over another at an opacity.
+  /// SwiftUI mixes a gradient's stops and lays a colour over another at an opacity: worked out as
+  /// packages/mobile brandColours.ts `mix` does, `a + (b - a) × t` rounded, so the two round each
+  /// half level the same way (`SurfaceFile.mismatches`).
   func mixed(with other: RGB, by amount: Double) -> RGB {
     let t = min(max(amount, 0), 1)
     func mix(_ a: UInt8, _ b: UInt8) -> UInt8 {
-      UInt8((Double(a) * (1 - t) + Double(b) * t).rounded())
+      UInt8((Double(a) + (Double(b) - Double(a)) * t).rounded())
     }
     return RGB(
       red: mix(red, other.red), green: mix(green, other.green), blue: mix(blue, other.blue))
+  }
+
+  /// Whether this colour lies on the line from `a` to `b`, to within `levels` a channel of its
+  /// nearest point: a blend of the two, as anti-aliasing draws where they meet.
+  func between(_ a: RGB, _ b: RGB, within levels: Int) -> Bool {
+    let from = [Double(a.red), Double(a.green), Double(a.blue)]
+    let step = [Double(b.red) - from[0], Double(b.green) - from[1], Double(b.blue) - from[2]]
+    let mine = [Double(red), Double(green), Double(blue)]
+    let length = step.reduce(0) { $0 + $1 * $1 }
+    let along = (0..<3).reduce(0) { $0 + (mine[$1] - from[$1]) * step[$1] }
+    let t = length == 0 ? 0 : min(max(along / length, 0), 1)
+    return (0..<3).allSatisfy { abs(mine[$0] - (from[$0] + step[$0] * t)) <= Double(levels) }
   }
 }
 
@@ -600,13 +701,6 @@ struct PixelRange: CustomStringConvertible {
     guard let darkest, let lightest else { return nil }
     self.darkest = darkest.0
     self.lightest = lightest.0
-  }
-
-  /// Inside `frame`, in points on screen, of `shot`, a screenshot of the window at `window`; nil
-  /// when the frame is off the screenshot or it can't be read.
-  init?(_ shot: XCUIScreenshot, in frame: CGRect, window: CGRect) {
-    guard let pixels = ScreenPixels(shot, in: frame, window: window) else { return nil }
-    self.init(rgba: pixels.rgba)
   }
 }
 

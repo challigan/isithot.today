@@ -34,8 +34,10 @@ export const CORE_COPY_SOURCE = 'packages/core/src/copy.ts';
 
 /**
  * The `COPY` keys the app shows: section 10.9's list, and the picker's title, close button and
- * locating line, the switcher's label and the credits. `UNITS_LABELS.snow` is written as
- * `snowUnitsLabel`, so `COPY.snowUnitsLabel` (the same string) isn't listed.
+ * locating line, the switcher's label, the credits, and the website's top bar and week: the chip
+ * on approximate location ("Use my exact location") and the week's heading ("The week ahead").
+ * `UNITS_LABELS.snow` is written as `snowUnitsLabel`, so `COPY.snowUnitsLabel` (the same string)
+ * isn't listed.
  */
 export const CORE_COPY_KEYS = [
   'viewsLabel',
@@ -44,6 +46,7 @@ export const CORE_COPY_KEYS = [
   'unavailable',
   'retry',
   'approximate',
+  'useExactLocation',
   'useMyLocation',
   'locating',
   'locationDenied',
@@ -58,6 +61,7 @@ export const CORE_COPY_KEYS = [
   'metOfficeCredit',
   'climateCredit',
   'nextHoursSnow',
+  'nextDays',
   'stale',
   'updated',
   'yesterday',

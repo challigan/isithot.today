@@ -4,7 +4,7 @@ import IsItModel
 
 /// What `AppModel` works with (iOS build spec, section 9.4), each behind a protocol so that the
 /// tests, on Linux, give it fakes: the API, the clock, what is stored, the widgets, the phone's
-/// location, the recent places, the later phases' steps, and the random jitter.
+/// location, the recent and saved places, the later phases' steps, and the random jitter.
 public struct AppEnvironment: Sendable {
   public var client: APIClient
   /// The time the answers are shown at, and the refreshes', retries' and holds' work at a time.
@@ -21,6 +21,8 @@ public struct AppEnvironment: Sendable {
   public var location: any LocationService
   /// The picker's recent places, `recent.v1` (phase 6).
   public var recents: any RecentStore
+  /// The picker's saved places, `savedPlaces.v1` (the website's look, step 4).
+  public var saved: any SavedPlaceStore
   public var hooks: any AppHooks
   /// A random whole number in the range: the refreshes' jitter.
   public var random: @Sendable (ClosedRange<Int>) -> Int
@@ -33,6 +35,7 @@ public struct AppEnvironment: Sendable {
     widgets: any WidgetReloader,
     location: any LocationService = NoLocation(),
     recents: any RecentStore = MemoryRecents(),
+    saved: any SavedPlaceStore = MemorySavedPlaces(),
     hooks: any AppHooks = NoHooks(),
     random: @escaping @Sendable (ClosedRange<Int>) -> Int = { Int.random(in: $0) }
   ) {
@@ -43,6 +46,7 @@ public struct AppEnvironment: Sendable {
     self.widgets = widgets
     self.location = location
     self.recents = recents
+    self.saved = saved
     self.hooks = hooks
     self.random = random
   }
@@ -151,6 +155,30 @@ public final class MemoryRecents: RecentStore, @unchecked Sendable {
   public func loadRecents() -> [RecentPlace] { lock.withLock { list } }
 
   public func saveRecents(_ list: [RecentPlace]) { lock.withLock { self.list = list } }
+}
+
+/// The picker's saved places (`savedPlaces.v1`, in the app's own defaults beside `recent.v1`),
+/// at most ten, in the order saved. `SavedPlaceDefaults` (IsItServices) in the app. Not the App
+/// Group: no widget reads them, as the widget follows the place on screen.
+public protocol SavedPlaceStore: Sendable {
+  /// The list kept, in the order saved (`SavedPlaces.list(stored:)` reads it).
+  func loadSavedPlaces() -> [SavedPlace]
+  /// Keeps `list`, replacing the one before.
+  func saveSavedPlaces(_ list: [SavedPlace])
+}
+
+/// Saved places kept in memory only: the tests', and a build's without its own defaults.
+public final class MemorySavedPlaces: SavedPlaceStore, @unchecked Sendable {
+  private let lock = NSLock()
+  private var list: [SavedPlace]
+
+  public init(_ list: [SavedPlace] = []) {
+    self.list = list
+  }
+
+  public func loadSavedPlaces() -> [SavedPlace] { lock.withLock { list } }
+
+  public func saveSavedPlaces(_ list: [SavedPlace]) { lock.withLock { self.list = list } }
 }
 
 /// Tells the widgets that the saved answer changed: WidgetKit's `reloadAllTimelines` in the app.

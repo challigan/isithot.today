@@ -2,10 +2,11 @@ import Foundation
 import IsItModel
 
 /// The place picker as plain values (iOS build spec, section 10.3), from where its search and its
-/// location fix are and the recent places: the title, the search box's prompt and its clear
-/// button's label, "Use my location" first, then the search's line and its results, or with
-/// nothing typed, the recent places under "Recent". IsItUI draws it; the app's model says what
-/// each row does.
+/// location fix are and its two lists: the title, the search box's prompt and its clear button's
+/// label, "Use my location" first, then the search's line and its results, or with nothing
+/// typed, the saved places under "Saved" and the recent places under "Recent". Every place but
+/// the phone's own point has a star that saves or removes it (`Star`), with the words VoiceOver
+/// reads and is told. IsItUI draws it; the app's model says what each row does.
 public struct PlacePicker: Sendable, Equatable {
   /// "Search for a place".
   public let title: String
@@ -22,10 +23,24 @@ public struct PlacePicker: Sendable, Equatable {
   public let status: String?
   /// The search's results, best first; while a newer search is on its way, the last one's.
   public let results: [ResultRow]
+  /// "Saved", over the saved places, with nothing typed: shown then even with none saved, so a
+  /// first launch's picker says what the stars are for.
+  public let savedHeading: String?
+  /// The saved places, in the order saved, with nothing typed.
+  public let saved: [SavedRow]
+  /// "Tap the star beside a place to save it here.", with nothing typed and none saved.
+  public let savedHint: String?
+  /// "You can save up to 10 places. Remove one to save another.", with nothing typed and the
+  /// list full: the empty stars are gone then, and this says why.
+  public let savedFull: String?
   /// "Recent", over the recent places, shown only with nothing typed and some to show.
   public let recentHeading: String?
-  /// The recent places, newest first, with nothing typed; each can be swiped away.
+  /// The recent places that aren't saved (`SavedPlaces.shownRecent`), newest first, with nothing
+  /// typed.
   public let recents: [RecentRow]
+  /// "Delete": a recent place's press-and-hold item and VoiceOver action, which forgets it
+  /// (`RecentRow.deleted` is what VoiceOver is told then).
+  public let deleteRecent: String
 
   /// The "Use my location" row.
   public struct LocationRow: Sendable, Equatable {
@@ -47,6 +62,41 @@ public struct PlacePicker: Sendable, Equatable {
     }
   }
 
+  /// A place's star: filled for a saved place, which a tap removes, and empty for one a tap saves.
+  public struct Star: Sendable, Equatable {
+    /// Whether the place is saved.
+    public let saved: Bool
+    /// What it does, as VoiceOver reads it and a row's press-and-hold menu shows it: "Save
+    /// Leeds", or "Remove Leeds from saved places".
+    public let label: String
+    /// What VoiceOver is told once it is tapped: "Leeds saved.", or "Leeds removed from saved
+    /// places.".
+    public let announcement: String
+
+    public init(saved: Bool, label: String, announcement: String) {
+      self.saved = saved
+      self.label = label
+      self.announcement = announcement
+    }
+
+    /// The star of the place named `name`, saved or not.
+    init(name: String, saved: Bool) {
+      if saved {
+        self.init(
+          saved: true,
+          label: AppCopy.unsavePlace(place: name),
+          announcement: AppCopy.placeUnsaved(place: name)
+        )
+      } else {
+        self.init(
+          saved: false,
+          label: AppCopy.savePlace(place: name),
+          announcement: AppCopy.placeSaved(place: name)
+        )
+      }
+    }
+  }
+
   /// A search result: "Leeds", with "England, United Kingdom" beneath.
   public struct ResultRow: Sendable, Equatable, Identifiable {
     /// Its place in the results.
@@ -56,22 +106,45 @@ public struct PlacePicker: Sendable, Equatable {
     public let detail: String?
     /// What choosing it chooses.
     public let result: SearchResult
+    /// "Saved" when it is a saved place, as VoiceOver reads the row after its name; else nil.
+    public let value: String?
+    /// Its star, nil when the saved places are full and it isn't one of them.
+    public let star: Star?
   }
 
-  /// A recent place, by its name.
+  /// A saved place, by its name, with its line beneath when it has one.
+  public struct SavedRow: Sendable, Equatable, Identifiable {
+    /// The place's key (`Target.key`), one per place.
+    public let id: String
+    public let name: String
+    public let detail: String?
+    public let place: SavedPlace
+    /// Its filled star, which removes it.
+    public let star: Star
+  }
+
+  /// A recent place, by its name, with its line beneath when it has one.
   public struct RecentRow: Sendable, Equatable, Identifiable {
     /// The place's key (`Target.key`), one per place.
     public let id: String
     public let name: String
+    public let detail: String?
     public let place: RecentPlace
+    /// Its empty star, nil for the phone's own point (which is never saved) and while the saved
+    /// places are full.
+    public let star: Star?
+    /// What VoiceOver is told once Delete forgets it: "Leeds deleted from recent places.".
+    public let deleted: String
   }
 
-  /// The picker with its search at `search`, its location fix at `location`, and `recents`.
-  public init(search: PlaceSearchState, location: LocationState, recents: [RecentPlace]) {
+  /// The picker with its search at `search`, its location fix at `location`, and its saved and
+  /// recent places, `lists`.
+  public init(search: PlaceSearchState, location: LocationState, lists: PlaceLists) {
     title = CoreCopy.searchLabel
     close = CoreCopy.close
     prompt = CoreCopy.searchPlaceholder
     clear = AppCopy.clearSearch
+    deleteRecent = AppCopy.deleteRecent
     self.location = LocationRow(location)
     let shown: [SearchResult]
     switch search {
@@ -91,22 +164,65 @@ public struct PlacePicker: Sendable, Equatable {
       status = message
       shown = []
     }
+    let saved = lists.saved
     results = shown.enumerated().map { index, result in
-      let detail = PlaceSearch.detail(result)
+      let isSaved = SavedPlaces.isSaved(Target(search: result), in: saved)
       return ResultRow(
         id: index,
         name: result.name,
-        detail: detail.isEmpty ? nil : detail,
-        result: result
+        detail: PlaceSearch.line(result),
+        result: result,
+        value: isSaved ? AppCopy.saved : nil,
+        star: Self.star(for: Target(search: result), name: result.name, saved: saved)
       )
     }
-    if case .empty = search, !recents.isEmpty {
-      recentHeading = AppCopy.recent
-      self.recents = recents.map { RecentRow(id: $0.target.key, name: $0.name, place: $0) }
-    } else {
+    guard case .empty = search else {
+      savedHeading = nil
+      self.saved = []
+      savedHint = nil
+      savedFull = nil
       recentHeading = nil
-      self.recents = []
+      recents = []
+      return
     }
+    savedHeading = AppCopy.saved
+    self.saved = saved.map { place in
+      SavedRow(
+        id: place.target.key,
+        name: place.name,
+        detail: Self.line(place.detail),
+        place: place,
+        star: Star(name: place.name, saved: true)
+      )
+    }
+    savedHint = saved.isEmpty ? AppCopy.savedHint : nil
+    savedFull =
+      saved.count >= SavedPlaces.max ? AppCopy.savedFull(max: String(SavedPlaces.max)) : nil
+    let shownRecent = SavedPlaces.shownRecent(lists)
+    recentHeading = shownRecent.isEmpty ? nil : AppCopy.recent
+    recents = shownRecent.map { place in
+      RecentRow(
+        id: place.target.key,
+        name: place.name,
+        detail: Self.line(place.detail),
+        place: place,
+        star: Self.star(for: place.target, name: place.name, saved: saved),
+        deleted: AppCopy.placeDeleted(place: place.name)
+      )
+    }
+  }
+
+  /// The star of `target`'s place, named `name`: filled when it is saved, empty when it can be,
+  /// and none otherwise (the phone's own point, or a full list).
+  private static func star(for target: Target, name: String, saved: [SavedPlace]) -> Star? {
+    if SavedPlaces.isSaved(target, in: saved) { return Star(name: name, saved: true) }
+    return SavedPlaces.canSave(target, in: saved) ? Star(name: name, saved: false) : nil
+  }
+
+  /// A row's line, or nil for none or an empty one.
+  private static func line(_ detail: String?) -> String? {
+    guard let detail, !detail.isEmpty else { return nil }
+    return detail
   }
 }
 

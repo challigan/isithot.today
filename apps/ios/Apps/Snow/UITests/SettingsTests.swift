@@ -7,6 +7,8 @@ import XCTest
 /// fallback with no mail app (`-openURLs nomail`); Your privacy's lines; the version line; and
 /// no word naming another app, website or weather type. Each screen is audited for
 /// accessibility and attached for the contact sheet. Every launch starts from a clean store.
+/// Each page is known by its title on the page (`page-title`, `page(titled:in:)`), the website's
+/// h1, since the navigation bar draws none (IsItUI's `SheetPage`).
 final class SettingsTests: XCTestCase {
   override func setUpWithError() throws {
     continueAfterFailure = false
@@ -19,27 +21,33 @@ final class SettingsTests: XCTestCase {
   func testUnitsChangeAsksInTheNewUnits() throws {
     let app = launch(["-resetStore", "-network", "ip-first-launch", "-openURLs", "record"])
     openSettings(app)
-    // The control is two buttons in a group (`UnitsSegments`), each marked selected as a
-    // segment is, so its labels grow with the text size.
+    // The control is two buttons in a group (`UnitsSegments`, the website's cm | in pill),
+    // each marked selected as a segment is, so its labels grow with the text size.
     let units = app.find("units")
     XCTAssertTrue(units.waitForExistence(timeout: 5), "No snow units control")
     // The first launch asked by IP with no units, and kept the server's choice.
     XCTAssertTrue(units.buttons["cm"].isSelected, "cm isn't chosen")
     XCTAssertFalse(units.buttons["in"].isSelected, "in is chosen as well")
+    // Each a tap's size, though the pill hugs its words, to the pixel (`onPixels`).
+    for choice in ["cm", "in"] {
+      let frame = units.buttons[choice].frame
+      XCTAssertGreaterThanOrEqual(onPixels(frame.width), 44, "\(choice) at \(frame)")
+      XCTAssertGreaterThanOrEqual(onPixels(frame.height), 44, "\(choice) at \(frame)")
+    }
     // The recorder's lines say what they hold, and hold it as their values.
     XCTAssertEqual(recorded(app.staticTexts["debug-units"]), "none")
     XCTAssertEqual(app.staticTexts["debug-units"].label, "Units last asked for")
     XCTAssertEqual(opened(app).label, "Last link opened")
     XCTAssertTrue(
       app.staticTexts["Temperatures follow: cm with °C, inches with °F."].exists, "No footnote")
-    // Each row is a whole row's button, as tall as a list's (`SheetRowStyle`).
+    // Each row is a whole row's button, at least 54 tall (`SheetRowStyle`).
     let row = app.buttons["your-privacy"]
     XCTAssertGreaterThanOrEqual(row.frame.height, 44, "Your privacy's row at \(row.frame)")
     units.buttons["in"].tap()
     waitFor(app.staticTexts["debug-units"], value: "f")
     XCTAssertTrue(units.buttons["in"].isSelected, "in isn't chosen")
     XCTAssertFalse(units.buttons["cm"].isSelected, "cm is still chosen")
-    try auditAccessibility(of: app, on: "Settings")
+    try auditAccessibility(of: app, on: "Settings", surface: .content)
     attachScreen(of: app, named: "app-settings")
     app.terminate()
 
@@ -84,29 +92,29 @@ final class SettingsTests: XCTestCase {
 
     // How it works, with the judging's numbers and the rounded location.
     tap("how-it-works", in: app)
-    XCTAssertTrue(app.navigationBars["How it works"].waitForExistence(timeout: 5))
+    page(titled: "How it works", in: app)
     XCTAssertTrue(text("When 60% or more of them do, the answer is yes", in: app).exists)
     XCTAssertTrue(text("rounded to about 5 km before it leaves your phone", in: app).exists)
     XCTAssertFalse(text("one service", in: app).exists, "The four sites' paragraph is in the app")
     assertSnowOnly(app)
-    try auditAccessibility(of: app, on: "How it works")
+    try auditAccessibility(of: app, on: "How it works", surface: .content)
     attachScreen(of: app, named: "app-how-it-works")
     back(in: app)
 
     // Credits and licences, and a notice in full.
     tap("credits", in: app)
-    XCTAssertTrue(app.navigationBars["Credits and licences"].waitForExistence(timeout: 5))
+    page(titled: "Credits and licences", in: app)
     XCTAssertTrue(text("Place names: GeoNames, licensed under CC BY 4.0", in: app).exists)
     XCTAssertTrue(text("Contains Met Office data", in: app).exists)
     assertSnowOnly(app)
-    try auditAccessibility(of: app, on: "Credits and licences")
+    try auditAccessibility(of: app, on: "Credits and licences", surface: .content)
     attachScreen(of: app, named: "app-credits")
     tap("notice-BricolageGrotesque-OFL", in: app)
     let notice = app.staticTexts["notice-text"]
     XCTAssertTrue(notice.waitForExistence(timeout: 5), "No notice text")
     XCTAssertTrue(notice.label.contains("SIL OPEN FONT LICENSE Version 1.1"))
     // A licence in full is a screen of its own, audited too.
-    try auditAccessibility(of: app, on: "the typeface's licence")
+    try auditAccessibility(of: app, on: "the typeface's licence", surface: .content)
     attachScreen(of: app, named: "app-notice")
     back(in: app)
     tap("notice-Google-Mobile-Ads-LICENSE", in: app)
@@ -141,7 +149,7 @@ final class SettingsTests: XCTestCase {
     let app = launch(["-resetStore", "-fixture", "leeds-dry", "-openURLs", "nomail"])
     openSettings(app)
     tap("report-ad", in: app)
-    XCTAssertTrue(app.navigationBars["Report an ad"].waitForExistence(timeout: 5), "No fallback")
+    page(titled: "Report an ad", in: app)
     XCTAssertEqual(
       app.staticTexts["fallback-body"].label,
       "Email support@willitsnow.today with a screenshot of the ad and the time you saw it.")
@@ -150,18 +158,18 @@ final class SettingsTests: XCTestCase {
     let copied = app.staticTexts["copy-confirmation"]
     XCTAssertTrue(copied.waitForExistence(timeout: 5), "No confirmation")
     XCTAssertEqual(copied.label, "Address copied.")
-    try auditAccessibility(of: app, on: "Report an ad's fallback")
+    try auditAccessibility(of: app, on: "Report an ad's fallback", surface: .content)
     attachScreen(of: app, named: "app-report-ad-fallback")
     app.buttons["close-fallback"].tap()
 
     // Contact us falls back the same way.
     tap("contact-us", in: app)
-    XCTAssertTrue(app.navigationBars["Contact us"].waitForExistence(timeout: 5), "No fallback")
+    page(titled: "Contact us", in: app)
     XCTAssertEqual(
       app.staticTexts["fallback-body"].label,
       "Email support@willitsnow.today. Tell us what happened, and the version number at the end "
         + "of Settings.")
-    try auditAccessibility(of: app, on: "Contact us's fallback")
+    try auditAccessibility(of: app, on: "Contact us's fallback", surface: .content)
     attachScreen(of: app, named: "app-contact-us-fallback")
   }
 
@@ -172,13 +180,13 @@ final class SettingsTests: XCTestCase {
     let app = launch(["-resetStore", "-fixture", "leeds-dry", "-openURLs", "record"])
     openSettings(app)
     tap("your-privacy", in: app)
-    XCTAssertTrue(app.navigationBars["Your privacy"].waitForExistence(timeout: 5))
+    page(titled: "Your privacy", in: app)
     let lines = [
       "To get the forecast, the app sends the place (a town, or your location rounded to about "
         + "5 km) and your units to our server. Until you choose a place, our server estimates a "
         + "rough one from your internet connection. Place names you search for go to Open-Meteo, "
         + "our forecast provider, to find matching places. The app keeps your place, units, "
-        + "recent places and the last forecast on your iPhone.",
+        + "recent and saved places and the last forecast on your iPhone.",
       "Only while notifications are on, we keep your device's notification token, an ID made "
         + "from it, the place, its time zone, your units and which notifications you chose, "
         + "with a few details such as the app's version and when it last checked in. We delete "
@@ -203,7 +211,7 @@ final class SettingsTests: XCTestCase {
     XCTAssertFalse(text("What we keep for notifications", in: app).exists)
     XCTAssertFalse(app.buttons["delete-my-data"].exists)
     assertSnowOnly(app)
-    try auditAccessibility(of: app, on: "Your privacy")
+    try auditAccessibility(of: app, on: "Your privacy", surface: .content)
     attachScreen(of: app, named: "app-your-privacy")
     let policy = app.buttons["full-policy"]
     XCTAssertGreaterThanOrEqual(policy.frame.height, 44, "The full policy's row at \(policy.frame)")
@@ -223,15 +231,31 @@ final class SettingsTests: XCTestCase {
     return app
   }
 
-  /// Taps the gear, and waits for the sheet. With no sheet, the failure says where the top bar
-  /// was: on main's first macOS run the gear was under the status bar, where the tap never
-  /// reached it.
+  /// Taps the gear, and waits for the sheet, with its Close and its title. With no sheet, the
+  /// failure says where the top bar was: on main's first macOS run the gear was under the status
+  /// bar, where the tap never reached it.
   @MainActor
   private func openSettings(_ app: XCUIApplication) {
     app.buttons["settings"].tap()
     XCTAssertTrue(
       app.buttons["close-settings"].waitForExistence(timeout: 5),
       "No Settings after tapping the gear; \(app.homeGeometry)")
+    page(titled: "Settings", in: app)
+  }
+
+  /// Waits for the page titled `title`: Settings, a page on its stack or the mail fallback, each
+  /// known by its title on the page (`page-title`), not by the navigation bar's, which draws no
+  /// title. With none, the failure lists the titles on screen.
+  @MainActor
+  private func page(
+    titled title: String, in app: XCUIApplication, file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    let titled = NSPredicate(format: "identifier == 'page-title' AND label == %@", title)
+    if app.staticTexts.matching(titled).firstMatch.waitForExistence(timeout: 5) { return }
+    let shown = app.staticTexts.matching(identifier: "page-title").allElementsBoundByIndex
+      .map(\.label)
+    XCTFail("No page titled \"\(title)\"; the titles on screen: \(shown)", file: file, line: line)
   }
 
   /// The recorder's line whose value is the last URL the app would have opened.

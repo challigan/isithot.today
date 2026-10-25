@@ -42,9 +42,9 @@ public final class PlacePickerModel {
     self.clock = clock
   }
 
-  /// What the picker shows: the search, the location row and the recent places.
+  /// What the picker shows: the search, the location row, and the saved and recent places.
   public var content: PlacePicker {
-    PlacePicker(search: search, location: location, recents: app.recents)
+    PlacePicker(search: search, location: location, lists: app.lists)
   }
 
   /// The search box now holds `text`: cancels the search before, and with 2 letters or more,
@@ -78,21 +78,49 @@ public final class PlacePickerModel {
   }
 
   /// Chooses a search result (`Target(search:)`: its city page's slug, or its point on the
-  /// grid), named as the search named it. The sheet closes at once, then the place loads.
+  /// grid), named as the search named it, with its line. The sheet closes at once, then the
+  /// place loads.
   public func choose(_ result: SearchResult) async {
     finish()
-    await app.choose(Target(search: result), name: result.name)
+    await app.choose(Target(search: result), name: result.name, detail: PlaceSearch.line(result))
   }
 
   /// Chooses a recent place, which moves to the top of the list.
   public func choose(_ place: RecentPlace) async {
     finish()
-    await app.choose(place.target, name: place.name)
+    await app.choose(place.target, name: place.name, detail: place.detail)
+  }
+
+  /// Chooses a saved place, which stays where it is in Saved and doesn't join Recent. A saved
+  /// place is never the phone's own point, so nothing follows the phone from here.
+  public func choose(saved place: SavedPlace) async {
+    finish()
+    await app.choose(place.target, name: place.name, detail: place.detail)
   }
 
   /// Takes `place` off the recent places.
   public func remove(_ place: RecentPlace) {
     app.removeRecent(place)
+  }
+
+  /// A result's empty star: saves the place as the search named it, with its line. The sheet
+  /// stays open on the same results, and nothing is chosen or asked for.
+  public func save(_ result: SearchResult) {
+    app.save(
+      SavedPlace(
+        target: Target(search: result), name: result.name, detail: PlaceSearch.line(result))
+    )
+  }
+
+  /// A recent place's empty star: it moves to the end of the saved places, name, line and all.
+  public func save(_ place: RecentPlace) {
+    app.save(SavedPlace(target: place.target, name: place.name, detail: place.detail))
+  }
+
+  /// A filled star, on a saved place or a result that is one: the place goes back on top of the
+  /// recent places, where one more tap saves it again. Nothing is chosen or asked for.
+  public func unsave(_ target: Target) {
+    app.unsave(target)
   }
 
   /// "Use my location": permission, asked only now and only if never asked, then one fix

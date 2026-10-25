@@ -55,6 +55,8 @@ struct HomeScreen: Decodable {
   }
 
   struct Week: Decodable {
+    /// "The week ahead".
+    let heading: String
     let rows: [Row]
   }
 
@@ -101,19 +103,14 @@ struct HomeScreen: Decodable {
     return screen
   }
 
-  /// The colours `page` is drawn in: its band's palette, or no snow's for a page with no band, as
-  /// the app draws it (packages/mobile `UNKNOWN_BAND_DRAWS_AS`).
-  static func palette(of page: Page) throws -> HomePalette {
-    let band = page.band ?? "nosnow"
-    guard let palette = try file().palettes[band] else {
-      throw HomeScreenError("HomeScreens.json has no palette for \(band)")
-    }
-    return palette
+  /// The surface the place picker wears opened over this screen's opening page: the sheet, in
+  /// that page's band (PickerTests; `Surfaces.json` has every band's palette).
+  func picker() throws -> ScreenSurface {
+    .sheet(band: try opening().band)
   }
 
-  /// The file: every band's palette, and every screen.
+  /// The file: every screen. Each page's band names its palette, which `Surfaces.json` gives.
   private struct File: Decodable {
-    let palettes: [String: HomePalette]
     let screens: [HomeScreen]
   }
 
@@ -127,18 +124,6 @@ struct HomeScreen: Decodable {
     else { throw HomeScreenError("The UI tests have no HomeScreens.json") }
     return try JSONDecoder().decode(File.self, from: Data(contentsOf: url))
   }
-}
-
-/// A band's colours as a page draws them (IsItUI's `PageBackground`, core `SNOW_PALETTES`): the
-/// gradient from `g1` to `g2`, the glow of `g3` at `glow` opacity (0 to 1) at its centre, and the
-/// text in `ink`, each `#rrggbb`. What the home audit's contrast failures set the screen's pixels
-/// beside (`PageColours`).
-struct HomePalette: Decodable {
-  let g1: String
-  let g2: String
-  let g3: String
-  let glow: Double
-  let ink: String
 }
 
 /// A screen that never appeared, or a file that isn't there: the test stops, with why.
@@ -201,6 +186,29 @@ extension XCUIApplication {
       pending.append(contentsOf: element.children)
     }
     return frames
+  }
+
+  /// Nil when `page-<view>`, the chosen view's page, starts at the window's left edge, as it does
+  /// once the pages have followed the view chosen; otherwise where it is, with `homeGeometry`.
+  /// The tree holds the chosen view's page wherever the pages are, as HomePager hides the others
+  /// by the view chosen, not by where the pages are: only this frame shows the page is the one on
+  /// screen, which no heading, label or selected tab can.
+  func pageOffScreen(_ view: String) -> String? {
+    guard let root = try? snapshot() else { return "the screen can't be read" }
+    guard let page = Self.homeFrames(in: root)["page-\(view)"] else {
+      return "no page-\(view) on screen; \(homeGeometry)"
+    }
+    return Self.offScreen("page-\(view)", at: page, window: root.frame).map {
+      "\($0); \(homeGeometry)"
+    }
+  }
+
+  /// Nil when a page's `frame` starts at the `window`'s left edge, within half a point, as a
+  /// frame read on a 3x screen may round; otherwise what is wrong.
+  static func offScreen(_ id: String, at frame: CGRect, window: CGRect) -> String? {
+    guard abs(frame.minX - window.minX) > 0.5 else { return nil }
+    return "\(id) at \(frame) doesn't start at the window's left edge at \(window.minX), so "
+      + "the pages aren't on the view chosen"
   }
 
   /// The part of the screen a page shows through: the window below the switcher. A page's
@@ -272,8 +280,11 @@ extension XCTestCase {
     }
   }
 
-  /// Taps `page`'s tab in the switcher (a segment, or at accessibility sizes a button, either
-  /// labelled as the tab reads), waits for its heading, and checks the tab is the one selected.
+  /// Taps `page`'s tab in the switcher (a tab, a button labelled as the tab reads, on the track or
+  /// at accessibility sizes a chip of its own), waits for its heading, and checks its page is the
+  /// one on screen (`pageOffScreen`) and the tab is the one selected. A heading that never comes
+  /// fails with where the tab was, the tab the app has chosen and where the pages are
+  /// (`homeGeometry`: the page in the tree is the chosen view's).
   @MainActor
   func tap(_ page: HomeScreen.Page, in app: XCUIApplication) throws {
     let tab = app.buttons[page.label]
@@ -281,7 +292,23 @@ extension XCTestCase {
       throw HomeScreenError("No \(page.label) tab")
     }
     tab.tap()
-    try awaitHeading(page.heading, in: app)
+    do {
+      try awaitHeading(page.heading, in: app)
+    } catch {
+      // Which tab the app has chosen, and where the pages are, tell a tap that never took or was
+      // undone (the old tab still chosen, as on PR #34's run on cf4eb74) from pages that didn't
+      // follow it (the new tab chosen, its page off the screen).
+      let chosen = app.find("views").buttons.allElementsBoundByIndex
+        .filter { $0.isSelected }.map { $0.label }
+      throw HomeScreenError(
+        "\(error) after a tap on \(page.label) at \(tab.frame); the tab chosen: "
+          + (chosen.isEmpty ? "none" : chosen.joined(separator: ", ")) + "; \(app.homeGeometry)")
+    }
+    // The heading is read from the chosen view's page wherever the pages are: only the page's
+    // frame shows they followed the tap.
+    if let off = app.pageOffScreen(page.view) {
+      throw HomeScreenError("After a tap on \(page.label), \(off)")
+    }
     XCTAssertTrue(tab.isSelected, "The \(page.label) tab isn't selected")
   }
 
@@ -308,11 +335,14 @@ extension XCTestCase {
   /// Scrolls `page`, the page on screen, down by `distance` points: a drag up the page by that
   /// much, from no lower than 90% of the way down the part of it on screen and 80 points above
   /// the screen's bottom edge (the home indicator's), held still before it lifts so the page
-  /// doesn't fling on. The drag is in the page's left margin, 10 points in (the pages have 20 of
-  /// padding), where no button, link or row is, so the page's scroll view always takes it.
-  /// (Phase 5.4's drag, from 90% of the page's frame down its middle, never moved a page past
-  /// its first scroll on PR #31's macOS run, and at AX3 the audit after it found no app to
-  /// audit.) Gives the drag, for a failure to say.
+  /// doesn't fling on. A negative `distance` scrolls it up: a drag down the page from a tenth of
+  /// the way down the part on screen (`HomeAuditTests.moveAFewPoints`, a few dozen points at
+  /// most). The drag is in the page's left margin, 10 points in (the pages have 20 of padding),
+  /// where no button, link or row is, so the page's scroll view always takes it. (Phase 5.4's
+  /// drag, from 90% of the page's frame down its middle, never moved a page past its first scroll
+  /// on PR #31's macOS run, and at AX3 the audit after it found no app to audit.) The page moves
+  /// by less than the drag: the scroll view spends its first 13 to 20 points before the page
+  /// moves (PR #33's macOS run). Gives the drag, for a failure to say.
   @MainActor
   @discardableResult
   func scrollDown(
@@ -323,7 +353,7 @@ extension XCTestCase {
     let shown = onScreen(page, in: app)
     let screen = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
     let x = shown.minX + 10
-    let start = min(shown.minY + shown.height * 0.1 + distance, app.frame.maxY - 80)
+    let start = min(shown.minY + shown.height * 0.1 + max(distance, 0), app.frame.maxY - 80)
     let from = screen.withOffset(CGVector(dx: x, dy: start))
     let to = screen.withOffset(CGVector(dx: x, dy: start - distance))
     from.press(forDuration: 0.01, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.3)
@@ -333,17 +363,19 @@ extension XCTestCase {
   /// Checks the home screen fits the screen, as it is at launch, before any page has scrolled:
   /// the top bar's place button and gear, and the switcher, each lie within the window; the
   /// pager (HomePager's horizontal scroll view, which never scrolls vertically) runs from under
-  /// the switcher to no lower than the window's bottom edge; and the page on screen starts under
-  /// the switcher, within the window. On main's first macOS run the home screen didn't fit: each
-  /// of the pager's pages was the height of the screen's safe area, so the home screen was taller
-  /// than the screen by the top bar and the switcher, and the window centred it. The place button
-  /// and the gear were under the status bar, where taps never reached them, and the pager, every
-  /// page with it, ran past the screen's bottom edge, the page's end never on screen.
+  /// the switcher to no lower than the window's bottom edge; and the page in the tree, the chosen
+  /// view's, starts under the switcher, within the window, and at its left edge, so it is the
+  /// page on screen (`offScreen`): pages that didn't follow the view the app opens on fail here.
+  /// On main's first macOS run the home screen didn't fit: each of the pager's pages was the
+  /// height of the screen's safe area, so the home screen was taller than the screen by the top
+  /// bar and the switcher, and the window centred it. The place button and the gear were under
+  /// the status bar, where taps never reached them, and the pager, every page with it, ran past
+  /// the screen's bottom edge, the page's end never on screen.
   ///
-  /// Only the page's top is checked against its frame, which may be its content's (the page's
-  /// scroll view's, `shown(_:in:)`): from its top, a frame that is the content's runs below the
-  /// screen however well the page fits. A page's end is HomeAuditTests' to check, its credits
-  /// coming into view.
+  /// Only the page's top and left edge are checked against its frame, which may be its
+  /// content's (the page's scroll view's, `shown(_:in:)`): from its top, a frame that is the
+  /// content's runs below the screen however well the page fits. A page's end is
+  /// HomeAuditTests' to check, its credits coming into view.
   ///
   /// It doesn't prove the place button and the gear are below the status bar, whose frame
   /// XCUITest doesn't give. On the iPhone 17, a home screen about 50 to 70 points too tall would
@@ -399,14 +431,17 @@ extension XCTestCase {
         "\(what): \(id) at \(page) doesn't start between the switcher's bottom edge at "
           + "\(views.maxY) and the window's at \(window.maxY), \(doesntFit)",
         file: file, line: line)
+      if let off = XCUIApplication.offScreen(id, at: page, window: window) {
+        XCTFail("\(what): \(off); \(app.homeGeometry)", file: file, line: line)
+      }
     }
   }
 
   /// Checks the app has no bare element: a leaf of the accessibility tree of type `other` with
-  /// neither an identifier nor a label, under no element with a label (a row's bar or dots are
-  /// under their row's). On PR #33's two macOS runs one such, the window's size, failed the
+  /// neither an identifier nor a label, under no element with a label (a week row's track is
+  /// under its row's). On PR #33's two macOS runs one such, the window's size, failed the
   /// audit's `sufficientElementDescription` on every screenful of every page: the page's
-  /// background, made an element by its own accessibility modifiers (PageTheme.swift). Read from
+  /// background, made an element by its own accessibility modifiers (Backgrounds.swift). Read from
   /// one snapshot, outside the audit, and failing with each one's place from its window, every
   /// element on the way with its index among its parent's children, and the app's element tree
   /// attached (`<what>-bare-tree`, `what` as a slug), so a run says where any is at once.
@@ -475,10 +510,10 @@ extension XCTestCase {
     return last
   }
 
-  /// Taps `button`, a `WordsButton` (IsItUI), above its words: halfway between the top of its
-  /// element, the words' band, and the top of the 44-point line it is centred in, which a tap
-  /// takes. A button whose element is the whole line or more is tapped halfway up its top half.
-  /// Waits up to 10 seconds for it, as a tap on it would.
+  /// Taps `button`, a `WordsButton` or `PillButton` (IsItUI), above its words or pill: halfway
+  /// between the top of its element, the words' band or the pill, and the top of the 44-point
+  /// line it is centred in, which a tap takes. A button whose element is the whole line or more
+  /// is tapped halfway up its top half. Waits up to 10 seconds for it, as a tap on it would.
   @MainActor
   func tapOutsideItsWords(_ button: XCUIElement) {
     XCTAssertTrue(button.waitForExistence(timeout: 10), "No \(button) to tap")
@@ -505,9 +540,9 @@ extension XCTestCase {
 
   /// Checks that the page on screen says what `page` says: the heading (the question and the
   /// answer, with the place), the verdict and the detail; the middle page's agreement, strip,
-  /// model list and limited line; Now's next hours and the week's days, each row as VoiceOver
-  /// reads it; the footer's Updated and offline, unavailable or stale line; and Retry. What
-  /// `page` hasn't is checked not to be there. Read from one snapshot of the screen
+  /// grid of models and limited line; Now's grid of hours, and the week's heading and days, each
+  /// cell or row as VoiceOver reads it; the footer's Updated and offline, unavailable or stale
+  /// line; and Retry. What `page` hasn't is checked not to be there. Read from one snapshot of the screen
   /// (`ShownScreen`), so the many checks don't each ask the app.
   @MainActor
   func expect(
@@ -527,6 +562,7 @@ extension XCTestCase {
       ("verdict", page.verdict), ("detail", page.detail),
       ("agreement", page.day?.heading), ("strip", page.day?.summary),
       ("limited", page.day?.limited), ("hours-heading", page.hours?.heading),
+      ("week-heading", page.week?.heading),
       ("updated", page.footer?.updated), ("notice", page.footer?.notice),
       ("retry", page.retry),
     ]
@@ -553,8 +589,8 @@ extension XCTestCase {
     }
   }
 
-  /// Checks the top bar: the place button's label, the approximate line or the notice in its
-  /// place, "Use my location", and the Settings button's label.
+  /// Checks the top bar: the place pill's label, the notice about the place, "Use my exact
+  /// location" on approximate location, and the Settings button's label.
   @MainActor
   func expect(
     _ topBar: HomeScreen.TopBar,
@@ -564,14 +600,15 @@ extension XCTestCase {
   ) {
     guard let shown = ShownScreen(app, file: file, line: line) else { return }
     shown.check("place", reads: topBar.placeLabel, "the place button", file, line)
-    shown.check("approximate", reads: topBar.approximate, "the approximate line", file, line)
-    shown.check("use-my-location", reads: topBar.useMyLocation, "Use my location", file, line)
+    shown.check("approximate", reads: topBar.approximate, "the notice", file, line)
+    shown.check(
+      "use-my-location", reads: topBar.useMyLocation, "Use my exact location", file, line)
     shown.check("settings", reads: topBar.settings, "the Settings button", file, line)
   }
 
   /// Attaches the screen to the result bundle as a PNG, kept, named for the contact sheet, which
   /// tiles attachments in their names' order; and gives the screenshot, whose pixels a contrast
-  /// failure reads (`PixelRange`).
+  /// failure reads (`PixelRange`, `DrawnText`).
   @MainActor
   @discardableResult
   func attach(_ app: XCUIApplication, as name: String) -> XCUIScreenshot {
@@ -591,6 +628,14 @@ extension XCTestCase {
 func aboveTheWords(_ height: CGFloat) -> CGFloat {
   let half = height / 2
   return half < 22 ? (half + 22) / 2 : half / 2
+}
+
+/// `points` on the simulator's pixel grid, thirds of a point, for holding a frame to a size: a
+/// frame is read back in floating point, so Settings' cm segment, laid out exactly 44 tall, came
+/// back 43.99999999999997 on PR #34's macOS run of step 6, where a frame a whole pixel short
+/// still comes out short.
+func onPixels(_ points: CGFloat) -> CGFloat {
+  (points * 3).rounded() / 3
 }
 
 /// The screen as the accessibility tree has it at one moment: every element with an identifier,

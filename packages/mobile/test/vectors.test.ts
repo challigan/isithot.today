@@ -16,15 +16,19 @@ import {
   type TodayResponse,
 } from '@isithot/core';
 import {
+  PLACES,
   addRecent,
   alertAction,
   alertPlaceAllowed,
+  canSave,
+  choosePlace,
   dayUntil,
   deviceTarget,
   fingerprint,
   freshQuery,
   hold,
   hourUntil,
+  isSaved,
   middleDay,
   nextRefreshAt,
   notificationRoute,
@@ -34,12 +38,15 @@ import {
   registrationBody,
   removeRecent,
   resultDetail,
+  savePlace,
   searchInput,
   searchQuery,
   searchTarget,
+  shownRecent,
   targetFromQuery,
   targetKey,
   todayQuery,
+  unsavePlace,
   updatedLine,
   usableUntil,
   widgetEntries,
@@ -113,7 +120,13 @@ const replay: Record<string, (i: In) => unknown> = {
   alertAction: (i) => alertAction(i),
   parseDeepLink: (i) => parseDeepLink(i.url),
   notificationRoute: (i) => notificationRoute(i.payload, () => i.placeToday),
-  addRecent: (i) => addRecent(i.list, i.target, i.name, i.max),
+  addRecent: (i) => addRecent(i.list, i.target, i.name, i.max, i.detail),
+  isSaved: (i) => isSaved(i.saved, i.target),
+  canSave: (i) => canSave(i.saved, i.target),
+  savePlace: (i) => savePlace(i.lists, i.place),
+  unsavePlace: (i) => unsavePlace(i.lists, i.target),
+  choosePlace: (i) => choosePlace(i.lists, i.target, i.name, i.detail),
+  shownRecent: (i) => shownRecent(i.lists),
   removeRecent: (i) => removeRecent(i.list, i.target),
   searchInput: (i) => searchInput(i.text),
   resultDetail: (i) => resultDetail(i.result),
@@ -166,8 +179,8 @@ const SPEC_FILES = [
 /** Phase 5's, after section 7.4's: the app's page. */
 const PAGE_FILES = ['page'];
 
-/** Phase 6's: the picker's search box. */
-const PICKER_FILES = ['search'];
+/** Phase 6's: the picker's search box; then its saved places (the website's look, step 4). */
+const PICKER_FILES = ['search', 'saved'];
 
 /** The functions whose reference is core's; the rest are the client's. */
 const CORE = [
@@ -192,7 +205,7 @@ const local = (zone: string, now: number) => {
 };
 
 describe('vectorFiles', () => {
-  it('writes every file section 7.4 names, in its order, then the page and the search box', () => {
+  it('writes every file section 7.4 names, in its order, then the page and the picker’s', () => {
     expect(files.map((f) => f.name)).toEqual([...SPEC_FILES, ...PAGE_FILES, ...PICKER_FILES]);
   });
 
@@ -708,11 +721,14 @@ describe('the cases cover what section 7.4 asks for', () => {
           );
         }
       }
-      // Up to seven days (fewer where the forecast ends), each with its agreement and never a
-      // percentage.
+      // "The week ahead", then up to seven days (fewer where the forecast ends), each with its
+      // dot on the week's track and its agreement, never a percentage.
       if (o.week) {
+        expect(o.week.heading).toBe(COPY.nextDays);
         expect(o.week.rows.length).toBeLessThanOrEqual(7);
         for (const row of o.week.rows) {
+          expect(row.left).toBeGreaterThanOrEqual(0);
+          expect(row.left).toBeLessThanOrEqual(100);
           expect(row.snowy).toBeLessThanOrEqual(row.total);
           expect(row.spoken).toMatch(/^[A-Z][a-z]+day, /);
           expect(row.spoken).not.toContain('%');
@@ -739,6 +755,23 @@ describe('the cases cover what section 7.4 asks for', () => {
       snowy: 6,
       total: 6,
     });
+    // Each dot from none to the snowiest day: the snowiest at the track's end, a day without
+    // snow at its start, the rest in proportion, as the website draws them (core `track`).
+    const amounts = durhamWeek.week.rows.map((r: any) => Number.parseFloat(r.amount));
+    const most = Math.max(...amounts);
+    expect(durhamWeek.week.rows.map((r: any) => r.left)).toEqual(
+      amounts.map((a: number) => (a / most) * 100),
+    );
+    expect(durhamWeek.week.rows[0].left).toBe(0);
+    expect(Math.max(...durhamWeek.week.rows.map((r: any) => r.left))).toBe(100);
+    // A week without snow keeps every dot at the start (core's track divides by 1).
+    const dry = cases.filter((c) =>
+      (c.out as any).week?.rows.every((r: any) => r.amount === '0cm'),
+    );
+    expect(dry.length).toBeGreaterThan(0);
+    for (const c of dry) {
+      expect((c.out as any).week.rows.every((r: any) => r.left === 0)).toBe(true);
+    }
     expect(
       cases.some((c) =>
         (c.out as any).hours?.rows.some(
@@ -768,7 +801,7 @@ describe('the cases cover what section 7.4 asks for', () => {
     }
   });
 
-  it('homeTopBar: the place or "Finding you…", the approximate line or the notice', () => {
+  it('homeTopBar: the place or "Finding you…", the exact-location chip and the notice', () => {
     const cases = casesFor('page', 'homeTopBar');
     const bar = (placeName: string | null, approximate: boolean, notice: string | null) =>
       cases.find(
@@ -777,13 +810,16 @@ describe('the cases cover what section 7.4 asks for', () => {
           (c.in as In).approximate === approximate &&
           (c.in as In).notice === notice,
       )?.out as any;
+    // On approximate location, the website's chip and no line: VoiceOver hears "Using
+    // approximate location." as the chip's hint.
     expect(bar('Leeds', true, null)).toEqual({
       place: 'Leeds',
       placeLabel: 'Place: Leeds. Change place.',
-      approximate: COPY.approximate,
-      useMyLocation: COPY.useMyLocation,
+      approximate: null,
+      useMyLocation: COPY.useExactLocation,
       settings: APP_COPY.settings,
     });
+    expect(COPY.useExactLocation).toBe('Use my exact location');
     expect(bar('Leeds', false, null)).toMatchObject({ approximate: null, useMyLocation: null });
     for (const unknown of [null, '']) {
       expect(bar(unknown, true, null)).toMatchObject({
@@ -791,10 +827,10 @@ describe('the cases cover what section 7.4 asks for', () => {
         placeLabel: fill(APP_COPY.placeButtonUnknown, { status: COPY.locating }),
       });
     }
-    // The notice takes the approximate line's place, and shows on a chosen place too.
+    // The notice shows above the chip on approximate location, and on a chosen place alone.
     expect(bar(null, true, APP_COPY.slugGone)).toMatchObject({
       approximate: APP_COPY.slugGone,
-      useMyLocation: COPY.useMyLocation,
+      useMyLocation: COPY.useExactLocation,
     });
     expect(bar('Leeds', false, APP_COPY.slugGone)).toMatchObject({
       approximate: APP_COPY.slugGone,
@@ -831,5 +867,55 @@ describe('the cases cover what section 7.4 asks for', () => {
       added.some((c) => (c.out as unknown[]).length === 5 && (c.in as In).list.length === 5),
     ).toBe(true);
     expect(added.some((c) => (c.in as In).max === 0)).toBe(true);
+  });
+
+  it('recent: a line kept, replaced by the newer entry’s, and absent when not given', () => {
+    const added = casesFor('recent', 'addRecent');
+    const withLine = added.filter((c) => (c.in as In).detail !== undefined);
+    expect(withLine.length).toBeGreaterThanOrEqual(5);
+    expect(withLine.some((c) => (c.in as In).max === undefined)).toBe(true);
+    for (const c of withLine) {
+      const first = (c.out as In[])[0];
+      if ((c.in as In).target.kind !== 'ip') expect(first.detail).toBe((c.in as In).detail);
+    }
+    // Chosen again without a line, a place that had one loses it: the newer entry wins.
+    const again = added.find(
+      (c) => (c.in as In).detail === undefined && (c.in as In).list[0]?.detail !== undefined,
+    )!;
+    expect(Object.keys((again.out as In[])[0])).toEqual(['target', 'name']);
+  });
+
+  it('saved: the limit, no IP or phone point, back on top of Recent, and choosing', () => {
+    const saves = casesFor('saved', 'savePlace');
+    // The tenth saved, the eleventh refused.
+    expect(
+      saves.some(
+        (c) =>
+          (c.in as In).lists.saved.length === PLACES.savedMax - 1 &&
+          (c.out as In).saved.length === PLACES.savedMax,
+      ),
+    ).toBe(true);
+    const full = saves.find((c) => (c.in as In).lists.saved.length === PLACES.savedMax)!;
+    expect(full.out).toEqual(full.in.lists);
+    // The phone's point is never saved, named or not; nor is approximate IP location.
+    const phone = casesFor('saved', 'canSave').filter(
+      (c) => (c.in as In).target.source === 'device' || (c.in as In).target.kind === 'ip',
+    );
+    expect(phone.length).toBeGreaterThan(0);
+    expect(phone.every((c) => c.out === false)).toBe(true);
+    // Removing puts the place back on top of Recent, with its line; the sixth is cut.
+    const unsaved = casesFor('saved', 'unsavePlace').filter(
+      (c) => (c.out as In).saved.length < (c.in as In).lists.saved.length,
+    );
+    expect(unsaved.length).toBeGreaterThanOrEqual(3);
+    expect(unsaved.some((c) => (c.out as In).recent.length === PLACES.recentMax)).toBe(true);
+    expect(unsaved.some((c) => (c.out as In).recent[0].detail !== undefined)).toBe(true);
+    // Choosing a saved place changes nothing.
+    expect(
+      casesFor('saved', 'choosePlace').some(
+        (c) => JSON.stringify(c.out) === JSON.stringify(c.in.lists),
+      ),
+    ).toBe(true);
+    expect(casesFor('saved', 'shownRecent').length).toBeGreaterThanOrEqual(4);
   });
 });

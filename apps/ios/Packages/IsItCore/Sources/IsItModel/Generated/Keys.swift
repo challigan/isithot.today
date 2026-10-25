@@ -15,6 +15,7 @@ public enum Keys {
   /// The app's own defaults.
   public enum App {
     public static let recent = "recent.v1"
+    public static let savedPlaces = "savedPlaces.v1"
     public static let alerts = "alerts.v1"
     public static let alertSync = "alertSync.v1"
     public static let lastView = "ui.lastView"

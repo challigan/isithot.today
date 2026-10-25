@@ -15,9 +15,9 @@ import UIKit
 /// hour picked, Tomorrow from 6pm and the stale state follow the time while the app is open. Its
 /// minutes are the model's (`MinuteTick`): the system's own in the app, and a Debug build's clock
 /// started at `-now` turns the page on its own minute too. The top bar, over every page, opens
-/// the two sheets (`HomeSheet`), one at a time: the place button, and the approximate line's
-/// "Use my location", the place picker, full screen (section 10.3, `PickerSheet`); the gear,
-/// Settings (section 10.4, `SettingsSheet`).
+/// the two sheets (`HomeSheet`), one at a time: the place pill, and on approximate location the
+/// "Use my exact location" chip, the place picker, full screen (section 10.3, `PickerSheet`);
+/// the gear, Settings (section 10.4, `SettingsSheet`).
 struct HomeView: View {
   let model: AppModel
   /// The sheet open over the home screen, if any.
@@ -32,10 +32,14 @@ struct HomeView: View {
         // pages' own audits are HomeAuditTests'. Nor are their changes announced (`covered`).
         .accessibilityHidden(sheet != nil)
     }
-    // Both sheets are drawn outside the page's colours, so they follow the system's, and Dark
-    // Mode; and both under the Debug recorder (`debugRecorder()`, DebugHooks.swift), so under
-    // `-openURLs` every URL either would open is recorded instead, the picker's Open Settings
-    // as well as Settings' rows. A Release build draws them as they are.
+    // The picker wears the band of the page on screen, which `PickerSheet` reads from the model
+    // in its own body, so it follows a refresh while open and never follows Dark Mode, as the
+    // pages don't (the sheet surface, IsItUI's PlacePickerView). Settings wears the website's
+    // content pages' palette whatever the band, and doesn't follow Dark Mode either (the content
+    // surface, IsItUI's SettingsView). Both are under the Debug recorder (`debugRecorder()`,
+    // DebugHooks.swift), so under `-openURLs` every URL either would open is recorded instead,
+    // the picker's Open Settings as well as Settings' rows. A Release build draws them as they
+    // are.
     .fullScreenCover(item: $sheet.picker) { request in
       PickerSheet(model: model, request: request)
         .debugRecorder()
@@ -108,9 +112,11 @@ private struct HomeContent: View {
     let now = model.now
     let pages = AppView.allCases.map { model.page($0, at: now) }
     let shown = pages.first { $0.view == model.view } ?? pages[1]
-    HomeShell(topBar: model.topBar, theme: PageTheme(shown.palette), actions: actions) {
+    // The page on screen's colours, which the top bar and the switcher wear over every page.
+    let theme = PageTheme(shown.palette)
+    HomeShell(topBar: model.topBar, theme: theme, actions: actions) {
       VStack(spacing: 0) {
-        ViewSwitcher(pages: pages, selection: $model.view)
+        ViewSwitcher(pages: pages, selection: $model.view, theme: theme)
         HomePager(
           pages: pages.map { page in
             PageContent(
@@ -136,8 +142,8 @@ private struct HomeContent: View {
     }
   }
 
-  /// What the screen's taps do: Retry asks again; the place button opens the picker, and "Use
-  /// my location" opens it finding the phone's place; the gear opens Settings; a place under
+  /// What the screen's taps do: Retry asks again; the place pill opens the picker, and "Use my
+  /// exact location" opens it finding the phone's place; the gear opens Settings; a place under
   /// "Nearby:" loads in place; links open in Safari.
   private var actions: HomeActions {
     let model = model
@@ -152,21 +158,6 @@ private struct HomeContent: View {
       selectNearby: { city in
         Task { await model.select(.city(slug: city.slug, name: city.name)) }
       }
-    )
-  }
-}
-
-extension PageTheme {
-  /// A band's palette as a page's colours, dark for light ink, so that the system's controls on
-  /// the page keep their contrast.
-  init(_ palette: IsItModel.Palette) {
-    self.init(
-      g1: Color(rgb: palette.g1),
-      g2: Color(rgb: palette.g2),
-      g3: Color(rgb: palette.g3),
-      glow: palette.glow,
-      ink: Color(rgb: palette.ink),
-      dark: palette.inkIsLight
     )
   }
 }

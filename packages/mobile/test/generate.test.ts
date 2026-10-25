@@ -9,12 +9,20 @@ import {
   makeSearchFixture,
   type Fixture,
 } from '../src/fixtures';
+import { SURFACES_PATH, brandColoursSwift, surfacesJson } from '../src/brandColours';
 import { appCopySwift } from '../src/exportAppCopy';
 import { CONFIGS_GENERATED_DIR, configCopy } from '../src/exportConfigCopy';
 import { constantsSwift } from '../src/exportConstants';
 import { coreCopySwift } from '../src/exportCoreCopy';
 import { creditsSwift } from '../src/exportCredits';
-import { FONTS_DIR, FONT_PATH } from '../src/exportFont';
+import {
+  BRAND_FONTS,
+  BRAND_FONTS_PATH,
+  BRAND_FONTS_SOURCE,
+  FONTS_DIR,
+  brandFontsSwift,
+  fontPath,
+} from '../src/exportFont';
 import {
   GLYPHS_DIR,
   GLYPHS_FALLBACK_DIR,
@@ -41,6 +49,7 @@ import {
   sameContents,
   type GeneratedFile,
 } from '../src/generate';
+import { generatedHeader } from '../src/swift';
 import { vectorFiles, vectorJson } from '../src/vectors';
 
 const sources = {
@@ -72,6 +81,7 @@ describe('generatedFiles', () => {
     const vectors = [
       ...['grid', 'target', 'query', 'placeTime', 'tomorrow', 'freshness', 'hours'],
       ...['questions', 'strip', 'widget', 'alerts', 'links', 'recent', 'page', 'search'],
+      'saved',
     ];
     const resourcePaths = [
       ...FIXTURES.map((s) => `${resources}/Fixtures/${s.name}.json`),
@@ -85,27 +95,32 @@ describe('generatedFiles', () => {
       `${model}/Constants.swift`,
       `${model}/AppCredits.swift`,
       `${model}/Keys.swift`,
+      `${model}/BrandFonts.swift`,
       `${model}/Palettes.swift`,
+      `${model}/BrandColours.swift`,
       'apps/ios/Configs/Generated/Copy.xcconfig',
       ...resourcePaths,
       HOME_SCREENS_PATH,
+      SURFACES_PATH,
       ...assets.map((f) => f.path),
     ]);
-    expect(files.slice(0, 8).map((f) => f.contents)).toEqual([
+    expect(files.slice(0, 10).map((f) => f.contents)).toEqual([
       coreCopySwift(),
       questionsSwift(),
       appCopySwift(),
       constantsSwift(),
       creditsSwift(),
       keysSwift(),
+      brandFontsSwift(),
       palettesSwift(),
+      brandColoursSwift(),
       configCopy(),
     ]);
-    expect(files[9]!.contents).toBe(fixtureJson(await makeFixture(FIXTURES[1]!)));
+    expect(files[11]!.contents).toBe(fixtureJson(await makeFixture(FIXTURES[1]!)));
     const search = files.find((f) => f.path.endsWith('/Fixtures/Search/search-leeds.json'))!;
     expect(search.contents).toBe(fixtureJson(await makeSearchFixture(SEARCH_FIXTURES[0]!)));
     expect(SEARCH_FIXTURES_DIR).toBe(`${FIXTURES_DIR}/Search`);
-    const first = 8 + resourcePaths.length + 1;
+    const first = 10 + resourcePaths.length + 2;
     for (const [i, f] of assets.entries()) {
       expect(sameContents(files[first + i]!.contents, f.contents)).toBe(true);
     }
@@ -141,6 +156,8 @@ describe('generatedFiles', () => {
     expect(files.find((f) => f.path === HOME_SCREENS_PATH)!.contents).toBe(
       homeScreensJson(fixtures, page),
     );
+    // And the surfaces their contrast proof reads, beside them.
+    expect(files.find((f) => f.path === SURFACES_PATH)!.contents).toBe(surfacesJson());
   });
 
   it('starts every Swift file with the header that names its source', () => {
@@ -154,10 +171,38 @@ describe('generatedFiles', () => {
   });
 
   it('puts every file it writes in a folder it owns, so a stale one is found', () => {
-    const paths = [...files.map((f) => f.path), FONT_PATH];
+    const paths = [...files.map((f) => f.path), ...BRAND_FONTS.map((f) => fontPath(f.name))];
     for (const path of paths) {
       expect(OWNED_DIRS.some((dir) => path.startsWith(`${dir}/`))).toBe(true);
     }
+  });
+});
+
+describe('brandFontsSwift', () => {
+  const swift = brandFontsSwift();
+
+  it('goes into IsItModel, where the widget reaches it too, with the header first', () => {
+    expect(BRAND_FONTS_PATH).toBe(
+      'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated/BrandFonts.swift',
+    );
+    expect(swift.split('\n')[0]).toBe(generatedHeader(BRAND_FONTS_SOURCE));
+    expect(swift.split('\n').filter((l) => l.startsWith('import '))).toEqual([]);
+  });
+
+  it('names every font by its PostScript name, the text faces first, and its file', () => {
+    expect(swift).toContain('public enum BrandFont: String, CaseIterable, Sendable {\n');
+    expect([...swift.matchAll(/^ {2}case (\w+) = "([^"]+)"$/gm)].map((m) => [m[1], m[2]])).toEqual([
+      ['textRegular', 'BricolageText-Regular'],
+      ['textMedium', 'BricolageText-Medium'],
+      ['textSemiBold', 'BricolageText-SemiBold'],
+      ['answer', 'BricolageAnswer'],
+    ]);
+    expect(swift).toContain('  public var file: String { rawValue + ".ttf" }\n');
+  });
+
+  it('is the same every time, within 100 columns', () => {
+    expect(brandFontsSwift()).toBe(swift);
+    for (const line of swift.split('\n')) expect(line.length).toBeLessThanOrEqual(100);
   });
 });
 

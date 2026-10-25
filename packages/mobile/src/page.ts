@@ -89,16 +89,19 @@ export interface HourRow {
 }
 
 /**
- * A day of the week (10.2): its label ("Today", "Tue"), amount ("2cm") and band label (core
- * `viewDisplay`'s), the models expecting snow of those with data (S1), drawn as `total` dots with
- * `snowy` filled, and what VoiceOver reads for the row: "Tuesday, 2cm, snow, 4 of 6 forecasts
- * expect snow", never a percentage. (The Swift also reads an answer saved before S1, whose days
- * have no agreement: no dots, and `APP_COPY.weekRowLabelShort`.)
+ * A day of the week (10.2): its label ("Today", "Tue"), amount ("2cm") and band label, and where
+ * its dot sits on the week's track, in % from none to the snowiest day (core `viewDisplay`'s, as
+ * the website draws the row); the models expecting snow of those with data (S1); and what
+ * VoiceOver reads for the row: "Tuesday, 2cm, snow, 4 of 6 forecasts expect snow", never a
+ * percentage. The agreement is spoken only: the website's track has no dots for it. (The Swift
+ * also reads an answer saved before S1, whose days have no agreement:
+ * `APP_COPY.weekRowLabelShort`.)
  */
 export interface WeekRow {
   label: string;
   amount: string;
   bandLabel: string;
+  left: number;
   snowy: number;
   total: number;
   spoken: string;
@@ -126,8 +129,8 @@ export interface HomePage {
   day: { heading: string; summary: string; limited: string | null; lines: ModelLine[] } | null;
   /** Now's body: "Chance of snow, next 12 hours", then the six 2-hour rows. */
   hours: { heading: string; rows: HourRow[] } | null;
-  /** The week's body, under its verdict and detail: a row for each day. */
-  week: { rows: WeekRow[] } | null;
+  /** The week's body, under its verdict and detail: "The week ahead", then a row for each day. */
+  week: { heading: string; rows: WeekRow[] } | null;
   /**
    * "Retry", after a failed request: in the error state, and under the footer's line while an
    * answer shows; never offline over an answer, or rate limited, which ask again by themselves.
@@ -172,6 +175,13 @@ export function fill(template: string, values: Readonly<Record<string, string>>)
 function spokenHour(item: NowItem): string {
   if (item.sr === null) throw new Error(`A snow hour without its spoken line: ${item.label}`);
   return item.sr;
+}
+
+/** Where a day's dot sits on the week's track (`WeekItem.left`): null only on a placeholder. */
+function weekLeft(item: WeekItem): number {
+  if (item.left === null)
+    throw new Error(`A snow day without its place on the track: ${item.label}`);
+  return item.left;
 }
 
 /**
@@ -309,12 +319,14 @@ export function homePage(res: TodayResponse | null, o: PageInput): HomePage {
       })),
     },
     week: week && {
+      heading: week.heading,
       rows: week.items.map((item, i) => {
         const day = weekShown!.days[i]!;
         return {
           label: item.label,
           amount: item.value,
           bandLabel: item.bandLabel,
+          left: weekLeft(item),
           snowy: day.snowy,
           total: day.total,
           spoken: spokenDay(weekShown!, day, item),
@@ -330,8 +342,10 @@ export function homePage(res: TodayResponse | null, o: PageInput): HomePage {
  * The home screen's top bar (10.2), the reference for IsItLogic's `HomeTopBar`: the place as a
  * button that opens the picker, labelled for VoiceOver "Place: Leeds. Change place.", or while no
  * place is known core's "Finding you…" and "Finding you…, change place."; on approximate IP
- * location the line beneath it ("Using approximate location.") with "Use my location", the
- * notice in that line's place while there is one (`APP_COPY.slugGone`); and the gear's label.
+ * location the website's chip beneath it, "Use my exact location" (VoiceOver hears core's
+ * "Using approximate location." as its hint, so the line itself isn't shown); a notice to tell
+ * the user about the place, while there is one (`APP_COPY.slugGone`), above the chip or on its
+ * own; and the gear's label.
  */
 export interface HomeTopBar {
   place: string;
@@ -357,8 +371,8 @@ export function homeTopBar(
     placeLabel: known
       ? fill(APP_COPY.placeButtonLabel, { place: known })
       : fill(APP_COPY.placeButtonUnknown, { status: COPY.locating }),
-    approximate: notice ?? (approximate ? COPY.approximate : null),
-    useMyLocation: approximate ? COPY.useMyLocation : null,
+    approximate: notice,
+    useMyLocation: approximate ? COPY.useExactLocation : null,
     settings: APP_COPY.settings,
   };
 }

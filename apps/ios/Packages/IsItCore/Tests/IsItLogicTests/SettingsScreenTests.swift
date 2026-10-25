@@ -82,6 +82,35 @@ struct SettingsScreenTests {
     #expect(!hidden.sections.flatMap(\.rows).contains { $0.action == .privacyChoices })
   }
 
+  @Test("each row has its own icon, the one for what it opens, and the units row has the ruler's")
+  func icons() throws {
+    let screen = SettingsScreen(units: .c, unlocked: false, privacyChoices: true, version: version)
+    let rows = screen.sections.flatMap(\.rows)
+    #expect(
+      rows.map { "\($0.id) \($0.icon)" } == [
+        "privacy-choices privacyChoices", "your-privacy yourPrivacy", "privacy-policy policy",
+        "report-ad reportAd", "how-it-works howItWorks", "credits credits", "terms terms",
+        "contact-us contactUs", "support support",
+      ])
+    #expect(screen.units.icon == .units)
+    // Every icon is some row's, and no two rows share one, so each row reads apart at a glance.
+    let shown = [screen.units.icon] + rows.map(\.icon)
+    #expect(Set(shown).count == shown.count)
+    #expect(Set(shown) == Set(SettingsScreen.Icon.allCases))
+    // The other versions drop rows, never change an icon.
+    for unlocked in [false, true] {
+      for choices in [false, true] {
+        let other = SettingsScreen(
+          units: nil, unlocked: unlocked, privacyChoices: choices, version: nil)
+        for row in other.sections.flatMap(\.rows) {
+          #expect(rows.first { $0.id == row.id }?.icon == row.icon, "\(row.id)")
+        }
+      }
+    }
+    // Your privacy's button to the policy is the same kind of row as Settings'.
+    #expect(try #require(YourPrivacy(adsOn: true, privacyChoices: false).policy).icon == .policy)
+  }
+
   @Test("before the first answer chose the units, neither choice is chosen")
   func noUnits() {
     let screen = SettingsScreen(units: nil, unlocked: false, privacyChoices: false, version: nil)

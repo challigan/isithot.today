@@ -2,7 +2,7 @@
  * The app's "Credits and licences" screen (iOS build spec, section 10.6), beyond what core
  * already words for the website (`COPY.forecastCredit`, `metOfficeCredit` and `climateCredit`,
  * linked by `CREDIT_LINKS`): the forecast models' agencies, as the About page lists them; the
- * climate records' and the place names' credits; and the answer's typeface and Google's two SDKs,
+ * climate records' and the place names' credits; and the app's typeface and Google's two SDKs,
  * each with the notice the app bundles as a file in `LICENCES_DIR`. `pnpm mobile:generate` writes
  * them into `AppCredits.swift` (`exportCredits.ts`).
  *
@@ -78,13 +78,15 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 /**
  * The typeface and the software, each with its notice in full. Google's two notices are their
  * Swift packages' own LICENSE files, at the revisions `apps/ios/Package.resolved` pins; the
- * typeface's is the licence of the package the answer font is made from (`exportFont.ts`).
+ * typeface's is the licence of the package all four of the app's fonts are made from
+ * (`exportFont.ts`). Its summary says "the app's", as the app sets its words in it, not only
+ * the answer.
  */
 export const NOTICES: readonly Notice[] = [
   {
     name: 'Bricolage Grotesque',
     summary:
-      "The answer's typeface. Copyright 2022 The Bricolage Grotesque Project Authors, licensed " +
+      "The app's typeface. Copyright 2022 The Bricolage Grotesque Project Authors, licensed " +
       'under the SIL Open Font License, Version 1.1.',
     url: 'https://github.com/ateliertriay/bricolage',
     file: 'BricolageGrotesque-OFL',

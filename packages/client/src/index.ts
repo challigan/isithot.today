@@ -7,5 +7,6 @@ export * from './widget';
 export * from './alerts';
 export * from './links';
 export * from './recent';
+export * from './saved';
 export * from './search';
 export * from './keys';

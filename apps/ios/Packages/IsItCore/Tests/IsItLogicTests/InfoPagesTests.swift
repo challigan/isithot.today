@@ -107,6 +107,11 @@ struct InfoPagesTests {
       page.notices.map(\.file) == [
         "BricolageGrotesque-OFL", "Google-Mobile-Ads-LICENSE", "Google-UMP-LICENSE",
       ])
+    // The whole app's typeface, not only the answer's: every page sets its words in it.
+    #expect(
+      page.notices[0].summary
+        == "The app's typeface. Copyright 2022 The Bricolage Grotesque Project Authors, "
+        + "licensed under the SIL Open Font License, Version 1.1.")
     #expect(page.notices[0].summary.contains("SIL Open Font License, Version 1.1"))
     #expect(page.notices[1].summary.contains("Apache License, Version 2.0"))
     #expect(page.notices.allSatisfy { $0.url?.scheme == "https" })
@@ -134,7 +139,7 @@ struct InfoPagesTests {
           + "5 km) and your units to our server. Until you choose a place, our server estimates a "
           + "rough one from your internet connection. Place names you search for go to Open-Meteo, "
           + "our forecast provider, to find matching places. The app keeps your place, units, "
-          + "recent places and the last forecast on your iPhone.",
+          + "recent and saved places and the last forecast on your iPhone.",
         "Only while notifications are on, we keep your device's notification token, an ID made "
           + "from it, the place, its time zone, your units and which notifications you chose, "
           + "with a few details such as the app's version and when it last checked in. We delete "

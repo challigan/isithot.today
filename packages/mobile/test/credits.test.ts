@@ -52,6 +52,11 @@ describe('the credits beyond core', () => {
       'Google Mobile Ads SDK',
       'Google User Messaging Platform SDK',
     ]);
+    // The typeface is the whole app's, not only the answer's, since the app sets its words in it.
+    expect(NOTICES[0]!.summary).toBe(
+      "The app's typeface. Copyright 2022 The Bricolage Grotesque Project Authors, licensed " +
+        'under the SIL Open Font License, Version 1.1.',
+    );
     for (const text of [
       modelAgencies(),
       ...DATA_CREDITS.map((c) => c.text),
@@ -177,8 +182,8 @@ describe("Your privacy and the website's privacy notice", () => {
       ['a rough one from your internet connection', 'a rough location from your IP address'],
       ['Place names you search for go to Open-Meteo', 'place searches go to Open-Meteo'],
       [
-        'The app keeps your place, units, recent places and the last forecast on your iPhone.',
-        'it keeps your place, units, recent places and last answer on your iPhone',
+        'The app keeps your place, units, recent and saved places and the last forecast on your iPhone.',
+        'it keeps your place, units, recent and saved places and last answer on your iPhone',
       ],
       ["your device's notification token, an ID made from it", 'an ID made from the token'],
       [

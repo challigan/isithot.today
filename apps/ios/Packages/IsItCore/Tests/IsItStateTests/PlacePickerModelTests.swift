@@ -284,12 +284,17 @@ struct PlacePickerChoiceTests {
     #expect(h.store.loadPlace() == leedsCity)
     #expect(h.store.today?.key == "city:leeds-gb")
     #expect(h.widgets.reloads == 1)
-    #expect(h.model.recents == [RecentPlace(target: leedsCity, name: "Leeds")])
+    // With the search's line beneath its name, so two places of one name can be told apart.
+    #expect(
+      h.model.recents == [
+        RecentPlace(target: leedsCity, name: "Leeds", detail: "England, United Kingdom")
+      ])
     #expect(h.recents.loadRecents() == h.model.recents)
     // Phase 8's sync, which decides whether the notification place follows.
     #expect(h.hooks.calls == ["syncAlerts city:leeds-gb c"])
     #expect(h.model.topBar.placeLabel == "Place: Leeds. Change place.")
     #expect(h.model.topBar.approximate == nil)
+    #expect(h.model.topBar.useMyLocation == nil)
     #expect(h.model.page(.today, at: h.model.now).headingLabel == "Leeds. Will it snow today? No.")
   }
 
@@ -313,7 +318,10 @@ struct PlacePickerChoiceTests {
     let place = Target(search: try found("search-kathmandu")[0])
     #expect(h.model.target == place)
     #expect(h.model.target.key == "search:27.7,85.3")
-    #expect(h.model.recents == [RecentPlace(target: place, name: "Kathmandu")])
+    #expect(
+      h.model.recents == [
+        RecentPlace(target: place, name: "Kathmandu", detail: "Bagmati Province, Nepal")
+      ])
     #expect(h.model.placeName == "Kathmandu")
   }
 
@@ -568,7 +576,10 @@ struct PlacePickerLocationTests {
       h.transport.urls == [
         "https://willitsnow.today/api/v1/today?place=leeds-gb&units=c&ahead=snow"
       ])
-    #expect(h.model.recents == [RecentPlace(target: leedsCity, name: "Leeds")])
+    #expect(
+      h.model.recents == [
+        RecentPlace(target: leedsCity, name: "Leeds", detail: "England, United Kingdom")
+      ])
     #expect(h.hooks.calls == ["location access", "location fix", "syncAlerts city:leeds-gb c"])
   }
 
@@ -606,5 +617,202 @@ struct PlacePickerLocationTests {
       #expect(h.transport.requests.count == 1, "\(access)")
       #expect(h.model.target == leeds, "\(access)")
     }
+  }
+}
+
+/// Saved places in the picker (the website's look, step 4): a star saves or removes without
+/// choosing or asking anything, a saved place chosen leaves both lists alone, and both lists are
+/// kept, saved places first.
+@MainActor
+@Suite("Saved places in the picker")
+struct PlacePickerSavedTests {
+  let england = "England, United Kingdom"
+
+  @Test("a result's star saves it in place: the sheet stays open, nothing chosen or asked for")
+  func saveAResult() async throws {
+    let h = Harness(now: try fixtureNow("leeds-dry"), replies: [try searchReply("search-leeds")])
+    let picker = h.model.makePicker()
+    picker.type("Leeds")
+    await h.clock.runNext()
+    let row = try #require(picker.content.results.first)
+    #expect(row.star?.label == "Save Leeds")
+    #expect(row.value == nil)
+    picker.save(row.result)
+    #expect(!picker.finished)
+    #expect(h.model.target == .ip)
+    #expect(h.transport.urls == ["https://willitsnow.today/api/v1/search?q=Leeds"])
+    #expect(h.hooks.calls.isEmpty)
+    let saved = SavedPlace(target: leedsCity, name: "Leeds", detail: england)
+    #expect(h.model.saved == [saved])
+    #expect(h.saved.loadSavedPlaces() == [saved])
+    #expect(h.model.recents.isEmpty)
+    // The results stay, the star now filled and the row saved.
+    #expect(picker.content.results.first?.star?.label == "Remove Leeds from saved places")
+    #expect(picker.content.results.first?.value == "Saved")
+    // Its filled star removes it, back on top of the recent places, still choosing nothing.
+    picker.unsave(Target(search: row.result))
+    #expect(h.model.saved.isEmpty)
+    #expect(h.model.recents == [RecentPlace(target: leedsCity, name: "Leeds", detail: england)])
+    #expect(h.recents.loadRecents() == h.model.recents)
+    #expect(!picker.finished)
+    #expect(h.transport.requests.count == 1)
+    // Cleared, the box shows Saved with its hint, and Leeds under Recent.
+    picker.type("")
+    #expect(picker.content.savedHint == "Tap the star beside a place to save it here.")
+    #expect(picker.content.recents.map(\.id) == ["city:leeds-gb"])
+  }
+
+  @Test("a recent place's star moves it to the end of Saved, and its filled star brings it back")
+  func saveARecent() async throws {
+    let york = SavedPlace(target: .city(slug: "york-gb", name: "York"), name: "York")
+    let leeds = RecentPlace(target: leedsCity, name: "Leeds", detail: england)
+    let durham = RecentPlace(target: .city(slug: "durham-gb", name: "Durham"), name: "Durham")
+    let h = Harness(
+      now: try fixtureNow("leeds-dry"), replies: [], recents: [leeds, durham], saved: [york])
+    let picker = h.model.makePicker()
+    #expect(picker.content.saved.map(\.name) == ["York"])
+    #expect(picker.content.recents.map(\.name) == ["Leeds", "Durham"])
+    picker.save(try #require(picker.content.recents.first).place)
+    #expect(picker.content.saved.map(\.name) == ["York", "Leeds"])
+    #expect(picker.content.saved.last?.detail == england)
+    #expect(picker.content.recents.map(\.name) == ["Durham"])
+    #expect(h.saved.loadSavedPlaces().map(\.name) == ["York", "Leeds"])
+    #expect(h.recents.loadRecents() == [durham])
+    // Removed: back on top of Recent, as it was.
+    picker.unsave(leedsCity)
+    #expect(picker.content.saved.map(\.name) == ["York"])
+    #expect(picker.content.recents.map(\.place) == [leeds, durham])
+    #expect(h.transport.requests.isEmpty)
+    #expect(!picker.finished)
+  }
+
+  @Test("removing a saved place cuts Recent to five, dropping the oldest")
+  func unsaveCutsRecent() throws {
+    let five = ["york", "hull", "bath", "ripon", "selby"].map {
+      RecentPlace(target: .city(slug: "\($0)-gb"), name: $0)
+    }
+    let h = Harness(
+      now: try fixtureNow("leeds-dry"), replies: [], recents: five,
+      saved: [SavedPlace(target: leedsCity, name: "Leeds")])
+    h.model.makePicker().unsave(leedsCity)
+    #expect(h.model.recents.map(\.name) == ["Leeds", "york", "hull", "bath", "ripon"])
+    #expect(h.model.saved.isEmpty)
+  }
+
+  @Test("a saved place chosen: the sheet closes, it loads, and neither list changes")
+  func chooseSaved() async throws {
+    let saved = SavedPlace(target: leedsCity, name: "Leeds", detail: england)
+    let durham = RecentPlace(target: .city(slug: "durham-gb", name: "Durham"), name: "Durham")
+    let h = Harness(
+      now: try fixtureNow("leeds-dry"),
+      store: .init(units: .c),
+      replies: [try FakeTransport.fixture("leeds-dry")],
+      recents: [durham],
+      saved: [saved]
+    )
+    let picker = h.model.makePicker()
+    await picker.choose(saved: try #require(picker.content.saved.first).place)
+    #expect(picker.finished)
+    #expect(h.model.target == leedsCity)
+    #expect(h.store.loadPlace() == leedsCity)
+    #expect(
+      h.transport.urls == [
+        "https://willitsnow.today/api/v1/today?place=leeds-gb&units=c&ahead=snow"
+      ]
+    )
+    #expect(h.hooks.calls == ["syncAlerts city:leeds-gb c"])
+    #expect(h.model.saved == [saved])
+    #expect(h.model.recents == [durham])
+    // A result that is a saved place, chosen, leaves Recent alone too.
+    let again = h.model.makePicker()
+    #expect(again.content.saved.map(\.name) == ["Leeds"])
+    #expect(again.content.recents.map(\.name) == ["Durham"])
+  }
+
+  @Test("a place chosen from a result or Recent keeps its line among the recent places")
+  func chosenWithItsLine() async throws {
+    let h = Harness(
+      now: try fixtureNow("leeds-dry"),
+      store: .init(units: .c),
+      replies: [try searchReply("search-leeds"), try FakeTransport.fixture("leeds-dry")]
+    )
+    let picker = h.model.makePicker()
+    picker.type("Leeds")
+    await h.clock.runNext()
+    await picker.choose(try #require(picker.content.results.first).result)
+    let leeds = RecentPlace(target: leedsCity, name: "Leeds", detail: england)
+    #expect(h.model.recents == [leeds])
+    let again = h.model.makePicker()
+    #expect(again.content.recents.first?.detail == england)
+    #expect(again.content.recents.first?.star?.label == "Save Leeds")
+  }
+
+  @Test("the phone's own point is never saved, and its recent row has no star")
+  func phoneNeverSaved() async throws {
+    let here = RecentPlace(target: .device(lat: 53.8, lon: -1.55), name: "Leeds")
+    let h = Harness(now: try fixtureNow("leeds-dry"), replies: [], recents: [here])
+    let picker = h.model.makePicker()
+    #expect(picker.content.recents.first?.star == nil)
+    picker.save(here)
+    #expect(h.model.saved.isEmpty)
+    #expect(h.model.recents == [here])
+    #expect(h.saved.loadSavedPlaces().isEmpty)
+  }
+
+  @Test("a full list refuses an eleventh, and has room again once one goes")
+  func full() async throws {
+    let ten = (1...10).map { SavedPlace(target: .city(slug: "place-\($0)"), name: "Place \($0)") }
+    let york = RecentPlace(target: .city(slug: "york-gb"), name: "York")
+    let h = Harness(
+      now: try fixtureNow("leeds-dry"), replies: [try searchReply("search-leeds")],
+      recents: [york], saved: ten)
+    let picker = h.model.makePicker()
+    #expect(picker.content.savedFull == "You can save up to 10 places. Remove one to save another.")
+    #expect(picker.content.recents.first?.star == nil)
+    picker.save(york)
+    #expect(h.model.saved == ten)
+    #expect(h.model.recents == [york])
+    picker.type("Leeds")
+    await h.clock.runNext()
+    let result = try #require(picker.content.results.first)
+    #expect(result.star == nil)
+    picker.save(result.result)
+    #expect(h.model.saved == ten)
+    // One removed: the stars come back.
+    picker.unsave(ten[0].target)
+    picker.save(result.result)
+    #expect(h.model.saved.map(\.name).last == "Leeds")
+    #expect(h.model.saved.count == 10)
+  }
+
+  @Test("both lists are kept, and a new model reads them back")
+  func kept() async throws {
+    let h = Harness(
+      now: try fixtureNow("leeds-dry"),
+      replies: [try searchReply("search-leeds"), try searchReply("search-kathmandu")],
+      recents: [RecentPlace(target: .city(slug: "york-gb"), name: "York")]
+    )
+    let picker = h.model.makePicker()
+    picker.type("Leeds")
+    await h.clock.runNext()
+    picker.save(try #require(picker.content.results.first).result)
+    picker.type("Kathmandu")
+    await h.clock.runNext()
+    picker.save(try #require(picker.content.results.first).result)
+    picker.save(try #require(h.model.recents.first))
+    let next = AppModel(
+      environment: AppEnvironment(
+        client: APIClient(transport: FakeTransport([])),
+        clock: h.clock,
+        store: h.store,
+        widgets: FakeWidgets(),
+        recents: h.recents,
+        saved: h.saved
+      ))
+    #expect(next.saved.map(\.name) == ["Leeds", "Kathmandu", "York"])
+    #expect(next.saved == h.model.saved)
+    #expect(next.recents.isEmpty)
+    #expect(
+      next.makePicker().content.saved.map(\.detail) == [england, "Bagmati Province, Nepal", nil])
   }
 }

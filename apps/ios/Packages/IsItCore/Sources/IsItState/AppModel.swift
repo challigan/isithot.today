@@ -48,8 +48,13 @@ public final class AppModel {
   public private(set) var route: DeepLink.Route?
   /// When the next quiet refresh is due, or nil when none is (in the background, say).
   public private(set) var nextRefreshAt: Date?
-  /// The picker's recent places (`recent.v1`), newest first: the last five chosen there.
+  /// The picker's recent places (`recent.v1`), newest first: the last five chosen there. A place
+  /// may also be saved if a write was cut short; the picker shows it once, under "Saved"
+  /// (`SavedPlaces.shownRecent`).
   public private(set) var recents: [RecentPlace]
+  /// The picker's saved places (`savedPlaces.v1`), in the order saved: at most ten, kept until
+  /// removed, never the phone's own point.
+  public private(set) var saved: [SavedPlace]
 
   @ObservationIgnored private let environment: AppEnvironment
   /// The launch's fetch (step 3), decided with the paint in `init`.
@@ -92,6 +97,7 @@ public final class AppModel {
     shownView = MiddleDay.defaultView(plan.paint?.response, at: now)
     opened = plan.paint != nil
     recents = environment.recents.loadRecents()
+    saved = environment.saved.loadSavedPlaces()
   }
 
   // MARK: - What the views call
@@ -221,15 +227,16 @@ public final class AppModel {
 
   /// Chooses `target` as the place, as the picker does (section 10.3): it is kept in
   /// `place.v1`, loaded in place (`select(_:)`, which saves it for the widgets and reloads them),
-  /// and joins the recent places, under `name`, at once; a place without one (the device's)
-  /// joins them under its answer's name when the answer arrives. Then the notifications are
-  /// synced (phase 8's `syncAlerts`), as a notification place that follows the device's
-  /// location may have moved. The view on screen stays, as for a place under "Nearby:": a place
-  /// chosen from This week opens on its week. The place on screen again only asks again.
-  public func choose(_ target: Target, name: String?) async {
+  /// and unless it is a saved place, which stays where it is, joins the recent places under
+  /// `name`, with its line (`detail`), at once (`SavedPlaces.choosing`); a place without a name
+  /// (the device's) joins them under its answer's name when the answer arrives. Then the
+  /// notifications are synced (phase 8's `syncAlerts`), as a notification place that follows the
+  /// device's location may have moved. The view on screen stays, as for a place under "Nearby:":
+  /// a place chosen from This week opens on its week. The place on screen again only asks again.
+  public func choose(_ target: Target, name: String?, detail: String? = nil) async {
     if let name, !name.isEmpty {
       unnamedChoice = nil
-      saveRecents(RecentPlaces.adding(target, name: name, to: recents))
+      keepLists(SavedPlaces.choosing(target, name: name, detail: detail, in: lists))
     } else {
       unnamedChoice = target
     }
@@ -237,9 +244,29 @@ public final class AppModel {
     await environment.hooks.syncAlerts(target: self.target, units: units)
   }
 
-  /// Takes `place` off the recent places (a swipe in the picker).
+  /// Takes `place` off the recent places (Delete in the picker).
   public func removeRecent(_ place: RecentPlace) {
     saveRecents(RecentPlaces.removing(place.target, from: recents))
+  }
+
+  /// The picker's saved and recent places, together, as `SavedPlaces` changes them.
+  public var lists: PlaceLists {
+    PlaceLists(saved: saved, recent: recents)
+  }
+
+  /// Saves `place` (a star in the picker): at the end of the saved places, and out of the recent
+  /// places (`SavedPlaces.saving`). Nothing is chosen or asked for: the picker stays as it is. A
+  /// place that can't be saved (the list full, the phone's own point, or saved already) changes
+  /// nothing.
+  public func save(_ place: SavedPlace) {
+    keepLists(SavedPlaces.saving(place, in: lists))
+  }
+
+  /// Removes `target`'s place from the saved places (its filled star), putting it back on top of
+  /// the recent places, so its empty star there saves it again (`SavedPlaces.unsaving`). Nothing
+  /// is chosen or asked for.
+  public func unsave(_ target: Target) {
+    keepLists(SavedPlaces.unsaving(target, in: lists))
   }
 
   /// "Use my location" (section 10.3): asks for When In Use permission only now, at the tap,
@@ -275,6 +302,17 @@ public final class AppModel {
   private func saveRecents(_ list: [RecentPlace]) {
     recents = list
     environment.recents.saveRecents(list)
+  }
+
+  /// Keeps `lists`, writing each that changed whole: the saved places first, then the recent
+  /// places. A write cut short between the two leaves a place in both, which the picker shows once,
+  /// under "Saved" (`SavedPlaces.shownRecent`), until the next change to Recent drops it.
+  private func keepLists(_ lists: PlaceLists) {
+    if lists.saved != saved {
+      saved = lists.saved
+      environment.saved.saveSavedPlaces(lists.saved)
+    }
+    if lists.recent != recents { saveRecents(lists.recent) }
   }
 
   // MARK: - Loading a place
@@ -393,7 +431,7 @@ public final class AppModel {
       unnamedChoice = nil
       let name = answer.location.name
       if unnamed.key.utf8.elementsEqual(target.key.utf8), !name.isEmpty {
-        saveRecents(RecentPlaces.adding(target, name: name, to: recents))
+        keepLists(SavedPlaces.choosing(target, name: name, in: lists))
       }
     }
     if units == nil {

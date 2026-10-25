@@ -2,8 +2,9 @@
  * Where the native apps keep things. Shared with the widgets through the App Group: the place
  * (`Target` JSON; absent for approximate IP location), the units ("c" or "f"), the purchase
  * (written only by the app's StoreKit code) and the last good answer, a file. The app's own: recent
- * places, the notification switches and place, the last registration sent, the last view and the
- * dismissed notifications card.
+ * places, saved places, the notification switches and place, the last registration sent, the last
+ * view and the dismissed notifications card. Saved places are the app's alone, as recent places
+ * are: no widget reads them.
  *
  * Swift: the generated `Keys.swift`.
  */
@@ -16,6 +17,7 @@ export const APP_GROUP_KEYS = {
 
 export const APP_KEYS = {
   recent: 'recent.v1',
+  savedPlaces: 'savedPlaces.v1',
   alerts: 'alerts.v1',
   alertSync: 'alertSync.v1',
   lastView: 'ui.lastView',

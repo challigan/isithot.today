@@ -15,7 +15,7 @@ import {
   TOMORROW_FROM_HOUR,
   WIDGET,
 } from '@isithot/core';
-import { CLIENT } from '@isithot/client';
+import { CLIENT, PLACES } from '@isithot/client';
 import {
   CONSTANTS_PATH,
   CONSTANTS_SOURCE,
@@ -24,6 +24,7 @@ import {
 } from '../src/exportConstants';
 import {
   BODY_TEXT_CONTRAST,
+  CONTENT_BAND,
   PALETTES_PATH,
   PALETTES_SOURCE,
   UNKNOWN_BAND_DRAWS_AS,
@@ -154,6 +155,16 @@ describe('constantsSwift', () => {
     expect(swift).toContain('    public static let refreshAfterMs = 1_800_000\n');
   });
 
+  it("writes the picker's limits on recent and saved places", () => {
+    expect(members(swift, 'Places')).toEqual(
+      Object.entries(PLACES).map(([k, v]) => `public static let ${k} = ${v}`),
+    );
+    expect(members(swift, 'Places')).toEqual([
+      'public static let recentMax = 5',
+      'public static let savedMax = 10',
+    ]);
+  });
+
   it('is the same every time, within 100 columns but for the header', () => {
     expect(constantsSwift()).toBe(swift);
     for (const line of swift.split('\n').slice(1)) expect(line.length).toBeLessThanOrEqual(100);
@@ -227,6 +238,14 @@ describe('palettesSwift', () => {
     expect(bands).toEqual(Object.keys(SNOW_PALETTES));
     expect(swiftHex('#FFFFFF')).toBe('0xffffff');
     expect(opacity('14%')).toBe(0.14);
+  });
+
+  it("gives the app's own pages the website's content palette, snow's", () => {
+    expect(CONTENT_BAND).toBe('snow');
+    expect(swift).toContain(
+      "  /// appearances: the website's content pages' (apps/web `LOOKS.snow.content`, its About,\n",
+    );
+    expect(swift).toContain('  public static let content = Snow.snow\n');
   });
 
   it('draws a band the app does not know as nosnow', () => {

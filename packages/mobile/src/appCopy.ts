@@ -29,6 +29,9 @@ export const APP_COPY = {
   // 16), and a row of the model list under the strip (10.2).
   headingLabel: '{place}. {question} {answer}',
   modelLine: '{name} · {value}',
+  // After each place under "Nearby:" but the last, outside its underline, as the website joins
+  // them (Views.astro, ", "): the space after it is the layout's.
+  listComma: ',',
   // What VoiceOver is told when the page says something new (16): the heading, then the verdict,
   // as the website's live region holds and reads the two.
   announcement: '{heading} {verdict}',
@@ -49,6 +52,21 @@ export const APP_COPY = {
   // access off, and Close. The two here are for a search the phone couldn't send and a location
   // fix that found nothing with permission given: neither blames the forecasts.
   recent: 'Recent',
+  // Saved places, above Recent with nothing typed: the heading (also a saved result's value, as
+  // VoiceOver reads the row), the line with none saved yet, and the line once the list is full,
+  // `max` being client `PLACES.savedMax`. A star saves or removes the place beside it: its
+  // VoiceOver label, the same words in a row's press-and-hold menu, and what VoiceOver is told
+  // after a tap. Recent's own menu forgets a place (`deleteRecent`), and VoiceOver is told so
+  // (`placeDeleted`), as after a star: the row leaves the list with the focus on it.
+  saved: 'Saved',
+  savedHint: 'Tap the star beside a place to save it here.',
+  savedFull: 'You can save up to {max} places. Remove one to save another.',
+  savePlace: 'Save {place}',
+  unsavePlace: 'Remove {place} from saved places',
+  placeSaved: '{place} saved.',
+  placeUnsaved: '{place} removed from saved places.',
+  deleteRecent: 'Delete',
+  placeDeleted: '{place} deleted from recent places.',
   // The search box is the app's own, not the system's search (`.searchable`), whose clear
   // button, about 20 points square, the accessibility audit failed as too small to tap on PR
   // #33's second macOS run, and which SwiftUI doesn't let the app change: this is its own clear
@@ -117,8 +135,8 @@ export const APP_COPY = {
   // sent/ (a notification sent), test/ (a test sent) and judged/ (a registration a run judged
   // with nothing to send, in a zone it left unfinished, so the next run skips it: "some forecast
   // checks that found nothing to send"). Searches go to Open-Meteo, and the phone keeps the place,
-  // units, recent places and last answer (phase 8 adds the notification choices to both this
-  // line and the notice's). "See Privacy choices." follows the ads line only while that row is
+  // units, recent and saved places and last answer, none of which leaves it but the place chosen
+  // (phase 8 adds the notification choices to both this line and the notice's). "See Privacy choices." follows the ads line only while that row is
   // in Settings.
   privacyChoices: 'Privacy choices',
   yourPrivacy: 'Your privacy',
@@ -127,8 +145,8 @@ export const APP_COPY = {
     'To get the forecast, the app sends the place (a town, or your location rounded to about ' +
     '5 km) and your units to our server. Until you choose a place, our server estimates a rough ' +
     'one from your internet connection. Place names you search for go to Open-Meteo, our ' +
-    'forecast provider, to find matching places. The app keeps your place, units, recent ' +
-    'places and the last forecast on your iPhone.',
+    'forecast provider, to find matching places. The app keeps your place, units, recent and ' +
+    'saved places and the last forecast on your iPhone.',
   privacyNotifications:
     "Only while notifications are on, we keep your device's notification token, an ID made from " +
     'it, the place, its time zone, your units and which notifications you chose, with a few ' +

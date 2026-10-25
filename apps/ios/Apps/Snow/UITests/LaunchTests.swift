@@ -20,7 +20,7 @@ final class LaunchTests: XCTestCase {
     XCTAssertEqual(app.buttons["place"].label, "Place: Leeds. Change place.")
     XCTAssertEqual(heading(in: app).label, "Leeds. Will it snow today? No.")
     XCTAssertEqual(app.staticTexts["verdict"].label, "Rain, not snow.")
-    XCTAssertTrue(app.buttons["use-my-location"].exists, "No approximate-location line")
+    XCTAssertTrue(app.buttons["use-my-location"].exists, "No \"Use my exact location\" chip")
     XCTAssertEqual(app.staticTexts["updated"].label, "Updated 12:05pm GMT")
     XCTAssertFalse(app.staticTexts["notice"].exists, "An offline or stale line while online")
     attachScreen(of: app, named: "app-first-launch")

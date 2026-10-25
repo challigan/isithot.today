@@ -116,20 +116,35 @@ struct HomePageTests {
   @Test("durham-tomorrow: the week's days, each read with its agreement, never a percentage")
   func weekDays() throws {
     let week = try #require(try page("durham-tomorrow", .week).week)
+    #expect(week.heading == "The week ahead")
     #expect(week.rows.count == 7)
     #expect(week.rows.map(\.label) == ["Today", "Thu", "Fri", "Sat", "Sun", "Mon", "Tue"])
     #expect(
       week.rows[1]
         == HomePage.WeekRow(
-          label: "Thu", amount: "4cm", bandLabel: "Snow", snowy: 6, total: 6,
+          label: "Thu", amount: "4cm", bandLabel: "Snow", left: 50, snowy: 6, total: 6,
           spoken: "Thursday, 4cm, snow, 6 of 6 forecasts expect snow"))
     #expect(week.rows[0].spoken == "Today, 0cm, too warm, 0 of 6 forecasts expect snow")
     #expect(week.rows[2].spoken == "Friday, 8cm, heavy snow, 6 of 6 forecasts expect snow")
-    // A day with a model short of data has fewer dots.
+    // A day with a model short of data has fewer forecasts in its agreement.
     #expect(week.rows[4].total == 5)
     #expect(week.rows[4].spoken == "Sunday, 0cm, dry, 0 of 5 forecasts expect snow")
     #expect(week.rows.allSatisfy { !$0.spoken.contains("%") })
     #expect(try page("durham-tomorrow", .week).day == nil)
+  }
+
+  @Test("the week's dots: from none to the snowiest day, as the website places them")
+  func weekTrack() throws {
+    // Durham's 8cm on Friday is the track's end, Thursday's 4cm halfway, no snow its start.
+    let durham = try #require(try page("durham-tomorrow", .week).week)
+    #expect(durham.rows.map(\.left) == [0, 50, 100, 0, 0, 0, 0])
+    // Leeds' one snowy day, 0.2cm, is its end however little falls.
+    let leeds = try #require(try page("leeds-dry", .week).week)
+    #expect(leeds.rows.map(\.left) == [0, 0, 0, 0, 100, 0, 0])
+    // A week without snow divides by 1, as core's track does: every dot at the start.
+    let dry = try #require(try page("kathmandu-0545", .week).week)
+    #expect(dry.rows.allSatisfy { $0.amount == "0cm" })
+    #expect(dry.rows.allSatisfy { $0.left == 0 })
   }
 
   @Test("leeds-dry and denver-f: one forecast in core's words for one, and inches")
@@ -144,7 +159,7 @@ struct HomePageTests {
       denver.rows[1].spoken == "Friday, 0.2in, snow possible, 3 of 6 forecasts expect snow")
   }
 
-  @Test("an answer saved before the week's days had their agreement: no dots, read without it")
+  @Test("an answer saved before the week's days had their agreement: read without it")
   func weekWithoutAgreement() throws {
     var json = try #require(
       JSONSerialization.jsonObject(with: Fixtures.data("durham-tomorrow")) as? [String: Any])
@@ -342,20 +357,22 @@ struct HomeTopBarTests {
     #expect(bar.settings == "Settings")
   }
 
-  @Test("on the approximate place, the line beneath and its button")
+  @Test("on the approximate place, the website's chip alone, its line only VoiceOver's hint")
   func approximate() {
     let bar = HomeTopBar(placeName: "Leeds", approximate: true)
-    #expect(bar.approximate == "Using approximate location.")
-    #expect(bar.useMyLocation == "Use my location")
+    #expect(bar.approximate == nil)
+    #expect(bar.useMyLocation == "Use my exact location")
+    // The picker's row keeps its own words.
+    #expect(bar.useMyLocation != CoreCopy.useMyLocation)
   }
 
-  @Test("a notice says why, in the approximate line's place, or on its own")
+  @Test("a notice says why, above the chip on the approximate place, or on its own")
   func notice() {
     let gone = HomeTopBar(placeName: "Leeds", approximate: true, notice: AppCopy.slugGone)
     #expect(
       gone.approximate
         == "That place is no longer available. Showing your approximate location.")
-    #expect(gone.useMyLocation == "Use my location")
+    #expect(gone.useMyLocation == "Use my exact location")
     let chosen = HomeTopBar(placeName: "Leeds", approximate: false, notice: AppCopy.slugGone)
     #expect(chosen.approximate == AppCopy.slugGone)
     #expect(chosen.useMyLocation == nil)

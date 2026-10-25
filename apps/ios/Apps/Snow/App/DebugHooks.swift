@@ -18,8 +18,8 @@ enum DebugHooks {
 
     /// The launch arguments that change how the app starts, before the model reads `store`:
     /// `-uitest` turns animations off; `-resetStore` forgets the place, the units, the saved
-    /// answer and the recent places, for a first launch (not the purchase, which only StoreKit's
-    /// code writes).
+    /// answer and the recent and saved places, for a first launch (not the purchase, which only
+    /// StoreKit's code writes).
     static func prepare(
       store: SharedStore?,
       arguments: [String] = ProcessInfo.processInfo.arguments
@@ -29,6 +29,7 @@ enum DebugHooks {
       }
       if arguments.contains("-resetStore") {
         RecentDefaults().removeAll()
+        SavedPlaceDefaults().removeAll()
       }
       if arguments.contains("-resetStore"), let store {
         store.savePlace(.ip)

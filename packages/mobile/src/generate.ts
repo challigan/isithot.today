@@ -3,12 +3,13 @@
  * files on disk differ from it (`pnpm mobile:check`). The files are committed, so the Mac and CI
  * build the app without Node, and the check stops a hand edit or a stale copy.
  */
+import { BRAND_COLOURS_PATH, SURFACES_PATH, brandColoursSwift, surfacesJson } from './brandColours';
 import { APP_COPY_PATH, appCopySwift } from './exportAppCopy';
 import { CONFIGS_GENERATED_DIR, CONFIG_COPY_PATH, configCopy } from './exportConfigCopy';
 import { CONSTANTS_PATH, constantsSwift } from './exportConstants';
 import { CORE_COPY_PATH, coreCopySwift } from './exportCoreCopy';
 import { CREDITS_PATH, creditsSwift } from './exportCredits';
-import { FONTS_DIR } from './exportFont';
+import { BRAND_FONTS_PATH, FONTS_DIR, brandFontsSwift } from './exportFont';
 import {
   GLYPHS_DIR,
   GLYPHS_FALLBACK_DIR,
@@ -43,15 +44,15 @@ export const SEARCH_FIXTURES_DIR = `${FIXTURES_DIR}/Search`;
 export const VECTORS_DIR = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources/Vectors';
 
 /**
- * IsItModel's generated Swift: the copy, the questions, the constants, the credits, the keys
- * and the palettes.
+ * IsItModel's generated Swift: the copy, the questions, the constants, the credits, the keys,
+ * the fonts' names, the palettes and the shares the app mixes them by.
  */
 export const MODEL_GENERATED_DIR = 'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated';
 
 /**
  * Folders the generator owns, with everything in them: every file there is generated, so one it
- * no longer writes is stale. Hidden files (a Mac's `.DS_Store`) don't count. The answer font's
- * folder is the script's to fill (`exportFont.ts`).
+ * no longer writes is stale. Hidden files (a Mac's `.DS_Store`) don't count. The fonts' folder is
+ * the font scripts' to fill (`exportFont.ts`).
  */
 export const OWNED_DIRS: readonly string[] = [
   FIXTURES_DIR,
@@ -68,7 +69,7 @@ export const OWNED_DIRS: readonly string[] = [
 
 export interface GeneratedFile {
   path: string;
-  /** Text, written as UTF-8, or bytes (the PNGs and the font). */
+  /** Text, written as UTF-8, or bytes (the PNGs and the fonts). */
   contents: string | Uint8Array;
 }
 
@@ -81,10 +82,10 @@ export interface AssetSources {
 }
 
 /**
- * Every file but the answer font, in order: IsItModel's Swift (the palettes last), the
- * Info.plist's strings (`Copy.xcconfig`), each fixture, each search fixture, each vector file,
- * worked out from the fixtures exactly as their files have them, the UI tests' screens (from
- * page.json), then the glyphs and the app icon.
+ * Every file but the fonts, in order: IsItModel's Swift (the palettes and brand colours last),
+ * the Info.plist's strings (`Copy.xcconfig`), each fixture, each search fixture, each vector
+ * file, worked out from the fixtures exactly as their files have them, the UI tests' screens
+ * (from page.json) and surfaces (from brandColours.ts), then the glyphs and the app icon.
  */
 export async function generatedFiles(sources: AssetSources): Promise<GeneratedFile[]> {
   const files: GeneratedFile[] = [
@@ -94,7 +95,9 @@ export async function generatedFiles(sources: AssetSources): Promise<GeneratedFi
     { path: CONSTANTS_PATH, contents: constantsSwift() },
     { path: CREDITS_PATH, contents: creditsSwift() },
     { path: KEYS_PATH, contents: keysSwift() },
+    { path: BRAND_FONTS_PATH, contents: brandFontsSwift() },
     { path: PALETTES_PATH, contents: palettesSwift() },
+    { path: BRAND_COLOURS_PATH, contents: brandColoursSwift() },
     { path: CONFIG_COPY_PATH, contents: configCopy() },
   ];
   const fixtures = new Map<string, Fixture>();
@@ -114,6 +117,7 @@ export async function generatedFiles(sources: AssetSources): Promise<GeneratedFi
   const page = vectors.find((v) => v.name === 'page');
   if (!page) throw new Error('No page.json');
   files.push({ path: HOME_SCREENS_PATH, contents: homeScreensJson(fixtures, page.vectors) });
+  files.push({ path: SURFACES_PATH, contents: surfacesJson() });
   files.push(...glyphFiles(sources.glyphs), ...iconFiles(sources.favicon));
   return files;
 }

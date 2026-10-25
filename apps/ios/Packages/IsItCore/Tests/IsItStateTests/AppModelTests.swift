@@ -822,3 +822,126 @@ struct AppModelViewTests {
     #expect(h.model.view == .now)
   }
 }
+
+/// Writes to the two lists' stores, in order, as "saved: …" and "recent: …".
+final class ListWrites: SavedPlaceStore, RecentStore, @unchecked Sendable {
+  private let log = Locked<[String]>([])
+  private let saved = MemorySavedPlaces()
+  private let recent = MemoryRecents()
+
+  var writes: [String] { log.read { $0 } }
+
+  func loadSavedPlaces() -> [SavedPlace] { saved.loadSavedPlaces() }
+
+  func saveSavedPlaces(_ list: [SavedPlace]) {
+    log.change { $0.append("saved: " + list.map(\.name).joined(separator: ",")) }
+    saved.saveSavedPlaces(list)
+  }
+
+  func loadRecents() -> [RecentPlace] { recent.loadRecents() }
+
+  func saveRecents(_ list: [RecentPlace]) {
+    log.change { $0.append("recent: " + list.map(\.name).joined(separator: ",")) }
+    recent.saveRecents(list)
+  }
+}
+
+/// `AppModel`'s saved places (the website's look, step 4): `save`, `unsave` and choosing, as
+/// client `saved.ts` changes the two lists, each written whole, the saved places first.
+@MainActor
+@Suite("The app's saved places")
+struct AppModelSavedTests {
+  let leeds = SavedPlace(
+    target: .city(slug: "leeds-gb", name: "Leeds"), name: "Leeds", detail: "England, United Kingdom"
+  )
+
+  /// A model over `writes`, launched on nothing: no request is answered.
+  func model(_ writes: ListWrites, transport: FakeTransport = FakeTransport([])) throws -> AppModel
+  {
+    AppModel(
+      environment: AppEnvironment(
+        client: APIClient(transport: transport),
+        clock: TestClock(try fixtureNow("leeds-dry")),
+        store: FakeState(),
+        widgets: FakeWidgets(),
+        recents: writes,
+        saved: writes
+      ))
+  }
+
+  @Test("saving writes the saved places, then the recent places it left")
+  func saveOrder() throws {
+    let writes = ListWrites()
+    writes.saveRecents([RecentPlace(target: leeds.target, name: "Leeds")])
+    let model = try model(writes)
+    model.save(leeds)
+    #expect(writes.writes == ["recent: Leeds", "saved: Leeds", "recent: "])
+    #expect(model.saved == [leeds])
+    #expect(model.recents.isEmpty)
+    // Saved again, nothing changes and nothing is written.
+    model.save(leeds)
+    #expect(writes.writes.count == 3)
+  }
+
+  @Test("removing writes the saved places, then the recent places it joined")
+  func unsaveOrder() throws {
+    let writes = ListWrites()
+    writes.saveSavedPlaces([leeds])
+    let model = try model(writes)
+    #expect(model.saved == [leeds])
+    model.unsave(.city(slug: "leeds-gb"))
+    #expect(writes.writes == ["saved: Leeds", "saved: ", "recent: Leeds"])
+    #expect(
+      model.recents == [RecentPlace(target: leeds.target, name: "Leeds", detail: leeds.detail)])
+    // A place that isn't saved changes nothing.
+    model.unsave(.city(slug: "york-gb"))
+    #expect(writes.writes.count == 3)
+  }
+
+  @Test("a star chooses nothing and asks for nothing")
+  func starsAskNothing() throws {
+    let transport = FakeTransport([])
+    let writes = ListWrites()
+    let model = try model(writes, transport: transport)
+    model.save(leeds)
+    model.unsave(leeds.target)
+    model.save(leeds)
+    #expect(transport.requests.isEmpty)
+    #expect(model.target == .ip)
+    #expect(model.phase == .loading)
+  }
+
+  @Test("a saved place chosen leaves both lists unwritten; another joins Recent with its line")
+  func choosing() async throws {
+    let writes = ListWrites()
+    writes.saveSavedPlaces([leeds])
+    let transport = FakeTransport([
+      try FakeTransport.fixture("leeds-dry"), try FakeTransport.fixture("leeds-dry"),
+    ])
+    let model = try model(writes, transport: transport)
+    await model.choose(leeds.target, name: "Leeds", detail: leeds.detail)
+    #expect(model.target == leeds.target)
+    #expect(writes.writes == ["saved: Leeds"])
+    let york = Target.city(slug: "york-gb", name: "York")
+    await model.choose(york, name: "York", detail: "England, United Kingdom")
+    #expect(writes.writes == ["saved: Leeds", "recent: York"])
+    #expect(
+      model.recents == [RecentPlace(target: york, name: "York", detail: "England, United Kingdom")])
+    #expect(model.saved == [leeds])
+  }
+
+  @Test("the phone's own point can't be saved; chosen, it joins Recent under its answer's name")
+  func phone() async throws {
+    let writes = ListWrites()
+    let here = Target.device(lat: 53.8, lon: -1.55)
+    let model = try model(
+      writes, transport: FakeTransport([try FakeTransport.fixture("leeds-dry")]))
+    model.save(SavedPlace(target: here, name: "Leeds"))
+    #expect(model.saved.isEmpty)
+    #expect(writes.writes.isEmpty)
+    await model.choose(here, name: nil)
+    #expect(model.recents.map(\.target) == [here])
+    #expect(model.recents.first?.detail == nil)
+    #expect(model.lists == PlaceLists(saved: [], recent: model.recents))
+  }
+}

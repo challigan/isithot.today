@@ -292,8 +292,8 @@ is Today again. This settles the spec's open question about the evening.
   emulated phones, including a keyboard-sized resize; not yet on a real iPhone or Android
   phone.
 - **Room for saved places.** The picker's body is in sections ("Use my location", then the
-  results), so a saved list can go between them later. Nothing is built for it yet (see "Saved
-  places").
+  results), so a saved list can go between them later. Nothing is built for it on the web; the
+  iPhone app has one (see "Saved places (the iPhone app)").
 
 ## Fixes after the round 2 review
 
@@ -842,21 +842,39 @@ from, in words and with an arrow. Hot, Wet and Snow, and the week, are unchanged
   model list (every topic) still runs past the gutters at 320px with 200% text, and wind's at
   1280px with three-figure km/h gusts; the same column steps would fix it.
 
-## Saved places (planned for the apps)
+## Saved places (the iPhone app)
 
-Carl wants to save places in the native apps. Nothing is built for it on the web.
+Carl wanted to save places in the native apps, beside the picker's recent ones. The iPhone app
+has them now (built in "The iPhone app in the website's look", step 4); the website has none.
 
-- The full-screen picker is where the saved list goes: a "Saved places" section between the
-  search box and the results (in `SearchSheet.astro`, between "Use my location" and the
-  results list).
-- The API needs nothing new: a saved place is a city slug or rounded coordinates, which
-  `/api/v1/today` already takes.
-- On the web each domain has its own storage, so places saved on isithot.today would not show
-  on isitwet.today or willitsnow.today. A web version would need the same address-carrying
-  approach as F8 above (clumsier for a list than for one place) or the sites on one shared
-  domain.
-- The iPhone app's recent places (the last five, newest first, one per place) are a rule in
-  `packages/client` (`addRecent`), below.
+- **Where they show**: in the full-screen picker, with nothing typed, a "Saved" section between
+  "Use my location" and "Recent", where `SearchSheet.astro` would put one on the web. A star
+  beside a place saves or removes it.
+- **The rules** are one pure function per action in `packages/client/src/saved.ts`, ported to
+  Swift and checked by golden vectors (`saved.json`), as the recent places are: at most ten
+  (`PLACES.savedMax`), in the order saved with the newest last, one per place (`targetKey`).
+  The two lists change together (`PlaceLists`): saving takes a place out of Recent; removing it
+  puts it back on top of Recent, so one more tap undoes it; choosing a saved place leaves both
+  alone, so the list doesn't shuffle under the thumb; and Recent never shows a saved place
+  (`shownRecent`). A saved place keeps the name and line it was saved with.
+- **The phone's own point is never saved**, nor is approximate IP location. A device fix
+  follows the phone: a saved "my location" that moved would mislead, and one that stood still
+  would mislead under that name. So the Recent row a location fix made has no star; to keep the
+  town you are in, search for it and save that. This is Carl's open question 1 in the build
+  plan, built on its default; saving the point as a fixed place is on the Later list.
+- **Kept in the app's own defaults** (`savedPlaces.v1`, beside `recent.v1`), not the App Group:
+  no widget reads them, as the v1 widget follows the place on screen, and the spec keeps widgets
+  that choose a place for the all-in-one app. Read leniently, as `recent.v1` is, and written
+  whole after each change, the saved places first, so a write cut short leaves a place in both
+  lists, which `shownRecent` shows once.
+- **Free**, like Recent: the upgrade stays "no ads, plus widgets" (open question 2's default).
+- **The API needs nothing new**: a saved place is a city slug or rounded coordinates, which
+  `/api/v1/today` already takes. They never leave the phone; only the place chosen is asked
+  about. Your privacy and the website's privacy notice now say the app keeps "recent and saved
+  places".
+- **On the web** each domain has its own storage, so a web version would need the same
+  address-carrying approach as F8 above (clumsier for a list than for one place) or the sites on
+  one shared domain. Nothing is built there.
 
 ## The client package (packages/client)
 
@@ -2389,18 +2407,28 @@ once to VoiceOver, and every text size up to AX5 (sections 9.5, 10.1, 10.2 and 1
   segment would cut "This week" short, and section 16 wants full labels, so there it is a row of
   buttons that wraps, the one on screen underlined and marked selected.
 - **The pager** (`HomePager`, IsItUI) is a horizontal `ScrollView` of the three pages, each the
-  container's size, with `.scrollTargetBehavior(.paging)` and `.scrollPosition(id:)`, plus a
-  `ScrollViewReader` scroll on first appearance in case the initial position isn't applied.
-  Switcher and pager share one binding to `AppModel.view`, so a tap, a swipe, a route and the
-  return after 30 minutes away (5.1's rule, unchanged) always agree. A tap moves the pages
-  without animation: an animated programmatic scroll passes Today on its way from Now to the
-  week, and the position it reports on the way could set the view mid-scroll. (The container's
-  size, `containerRelativeFrame`, turned out to be the screen's safe area in height, which put
-  the top bar under the status bar; each page has been the pager's own size since main's first
-  macOS run: "The iPhone app's UI tests, after main's first macOS run", below.)
-- **Only the page on screen is in the accessibility tree.** The other two are hidden from
-  VoiceOver (which changes page with the switcher, as with a system page view) and so from the UI
-  tests, whose identifiers (`heading`, `verdict`, …) stay unique. Pull to refresh is on each
+  container's size, with `.scrollTargetBehavior(.paging)`, and a `ScrollViewReader` scroll on
+  first appearance that puts the pages on the view the app opens on. Switcher and pager share
+  `AppModel.view`, so a tap, a swipe, a route and the return after 30 minutes away (5.1's rule,
+  unchanged) always agree. A change to the view moves the pages at once, not animated: an
+  animated programmatic scroll passes Today on its way from Now to the week, and the position it
+  reports on the way could set the view mid-scroll. Until PR #34's second full macOS run the two
+  shared one binding through `.scrollPosition(id:)`, whose setter wrote whatever page the scroll
+  view reported into the view; on that run it most likely wrote Now back over a tap on Today. The
+  view now moves the pages through the `ScrollViewReader`, and the scroll view reports through
+  `.scrollPosition(id:)` into a position of its own, which places the pages at launch and which
+  the app never writes (`PagerSync`). On iOS 18 only a swipe, as it comes to rest, sets the view,
+  to the page it rests on (`PagerRest`); on iOS 17, with no scroll phases, the page the scroll
+  view reports does ("After #34's second full run" and its correction after the third, below). (The
+  container's size, `containerRelativeFrame`, turned out to be the screen's safe area in height,
+  which put the top bar under the status bar; each page has been the pager's own size since
+  main's first macOS run: "The iPhone app's UI tests, after main's first macOS run", below.)
+- **Only the chosen view's page is in the accessibility tree**: the page on screen, except while
+  a swipe is still moving, as the view follows a swipe only when the pages settle (on iOS 17,
+  when the scroll view reports the next page). The other two are hidden from VoiceOver (which
+  changes page with the switcher, as with a system page view) and so from the UI tests, whose
+  identifiers (`heading`, `verdict`, …) stay unique; since "After #34's second full run" the
+  tests check that page's frame starts at the window's left edge. Pull to refresh is on each
   page's own scroll view, not the pager's.
 - **The view it opens on** is `MiddleDay.defaultView`, as 5.1 set it; 5.1 drew only the middle
   page, so the app now opens on Now from 6pm. A route to a view (a widget's `.view`) now sets the
@@ -3869,7 +3897,10 @@ screen recordings, screenshots and element trees, and run 2's, were read for eac
   screenful). The rule was to split them once a first call came to more than about 60% of the
   deadline, and this run is past it: This week's ninth first call finished in 10.8 seconds against
   a deadline of about 17 (the timed-out call's), some 63%, and run 2's 12.4 on the same Now
-  screenful was about 72%. Nor would the retry alone have saved this run: Today's first screenful,
+  screenful was about 72%. (Corrected after #34's fourth full run: the deadline is 15 seconds a
+  call, XCTest's own, which testmanagerd logs as `timeout: 15` for each; the 17 was the recording's
+  time from the screenshot to the next tap, around the call. The split stands: 10.8 and 12.4 are
+  72% and 83% of it.) Nor would the retry alone have saved this run: Today's first screenful,
   audited about 4.6 seconds after the timeout, took 9.5 seconds, about 2.5 times its expected
   time, so the host was still slow, and the same five kinds run again 2 seconds after the -56, at
   that rate, would have taken about 17.5 and timed out again. So the split is made now, not after
@@ -3954,6 +3985,888 @@ screen recordings, screenshots and element trees, and run 2's, were read for eac
   (vitest). IsItUI and the app
   compile only on macOS: `SheetPage`, the Settings and Credits pages and the recorder's lines are
   for the next run's screens and trees to show.
+
+## The iPhone app in the website's look (apps/ios, packages/mobile, scripts)
+
+Carl asked for the iPhone app to look as close to the website as possible, with the cm/in toggle
+kept in Settings and no name at the top; for a more modern Settings ("very retro iOS and boring
+at the moment"); and for saved places beside the picker's recent ones. The design was measured
+against the website's own CSS and is built in seven steps, each pushed so the macOS job compiles
+it. This section grows with each step.
+
+**Step 1: the brand fonts.** The website sets every word in Bricolage Grotesque; the app had only
+the answer word's subset (`BricolageAnswer.ttf`). The step adds the text faces and names every
+font for the Swift. No screen uses them yet: the home screen moves to them in step 3.
+
+- **Static instances, not the variable font.** What ships is what is drawn, whether or not Core
+  Text applies the optical size of a custom variable font, and however SwiftUI would map a
+  weight onto one. The website sets text between 12.5 and 24 px, where "Will it snow today?" at
+  wght 400 is 8.733 em wide at opsz 14, 8.710 at 16 and 8.689 at 18: one optical size, 16, draws
+  every size within 1% of the website's continuous one.
+- **Three faces, not the design's six.** `BricolageText-Regular` (400), `-Medium` (500) and
+  `-SemiBold` (600), all at opsz 16, beside `BricolageAnswer` (780, opsz 96). A Book (450) face
+  for the question and Display (opsz 22) cuts for the verdict and the grid's values change widths
+  by under 1% and the weight by a step nobody sees at those sizes: the question takes Regular and
+  the verdict and values SemiBold. If the contact sheet beside the website shows a difference,
+  they come back.
+- **Latin and latin-ext merged.** The website loads the two subsets as it needs them; each app
+  face is both, merged with fontTools' merger (374 code points, 476 glyphs, about 71 KB a face),
+  so Łódź, Reykjavík and Météo-France never fall back to SF Pro mid-word. Scripts beyond latin-ext
+  fall back to the system font, as on the website. The faces keep every feature the subsets have:
+  `kern`, `mark`, `mkmk`, `ccmp`, `locl`, `tnum`, `pnum`, `frac`, `numr` and `dnom` (tabular
+  figures for the grids and week amounts through `.monospacedDigit()`).
+- **The name table is rewritten.** Every instance comes out of the instancer named "Bricolage
+  Grotesque 96pt ExtraBold", so the three would collide when registered. Each face is named
+  family "Bricolage Text" with its style, and its PostScript name (`Font.custom`'s and
+  `UIFont(name:)`'s, and the file's name) is its own. The copyright and the licence's URL stay,
+  and the licence's description is added, as for the answer font; the axes' names go, since
+  nothing in a static font points to them. `OS/2`'s regular bit is set only on the 400 face and
+  `head.macStyle` is 0. The font has no reserved name, so the OFL allows the renamed, modified
+  versions (below, "Credits and licences").
+- **Byte for byte the same each build.** The merger stamps `head.modified` with the time of the
+  build (two prototype builds differed only there), so the script sets `created` and `modified`
+  to the source's, as the answer font keeps its. The script was run twice and the outputs
+  compared with `cmp`: identical, and identical to the committed files.
+- **Checked without Python.** As with the answer font, each face's version string (name ID 5)
+  ends with its recipe, a SHA-256 of `scripts/make-text-fonts.py` and the two subset files, and
+  `pnpm mobile:check` checks each file's recipe and every table's checksum in Node
+  (`exportFont.ts`, `TEXT_FONTS`, which names the faces as the script's `FACES` does; a vitest
+  holds the two together). `pnpm mobile:generate` runs the script only when a face is missing or
+  stale. It builds all three at once, into a folder of its own, and writes only those that
+  differ. The fonts folder is the generator's, so a face no longer listed is stale.
+- **`BrandFont`, generated.** `IsItModel/Generated/BrandFonts.swift` names every face by its
+  PostScript name, with its `file`, so no face's name is typed in the app's Swift (the literal
+  guard) and the widget, which links IsItModel, can name the same faces when it moves to them.
+- **Registered by the app and the widget.** Both Info.plists list all four files in
+  `UIAppFonts`, since an extension can't load the app's fonts; `project.yml` needed no change,
+  as the Fonts folder was already a resource of both. `check-archive.sh` still checks only the
+  answer font in a Release bundle (on the Later list).
+- **Tested where it can be.** On Linux: `exportFont.test.ts` (each face current, stale and
+  missing; its names, weight and regular bit; a glyph for every letter of "Météo-France Łódź
+  Reykjavík Kraków Malmö 0.9cm 100% ° ’ … · –" in its cmap), `appFonts.test.ts` (both plists'
+  `UIAppFonts` are `BrandFont`'s files, in order), `generate.test.ts` (the Swift) and IsItModel's
+  `GeneratedFontTests`. On macOS, `AnswerFontTests` became `BrandFontTests`: every face is
+  registered under its PostScript name in its own family, each text face has a glyph for every
+  character of "Météo-France Łódź 0.9cm 100% ° ’ … ·" (`CTFontGetGlyphsForCharacters`), and the
+  built Info.plist lists every file. A plist or resource slip fails these before any UI test.
+
+**Step 2: the brand colours and the shared parts.** One colour story and one set of parts for
+every screen, with no screen changed yet: the home screen moves to them in step 3, the picker in
+step 5 and Settings in step 6.
+
+- **Three surfaces.** Every screen is one of three, each from a core palette (g1, g2, g3, glow,
+  ink, pill). The **page** (the home screen and its three pages) wears the band of the page on
+  screen, over `PageBackground`. The **sheet** (the place picker) wears the band of the page it
+  opened over, over `SheetBackground`: pill to pill with 15% of g2 at 168°, no glow, the
+  website's `.sheet`. **Content** (Settings and every page it opens) wears `Palettes.content`,
+  core's `SNOW_PALETTES.snow`, which is the website's own content pages' palette
+  (`LOOKS.snow.content`: About, Privacy, Support and Terms), over `PageBackground`. In one
+  sentence: the forecast and the search over it wear the band on screen, the app's own pages the
+  website's content palette, and nothing follows Dark Mode, as the website makes the same split.
+  This supersedes spec 10.1's "sheets follow Dark Mode". The system's own parts on each surface
+  take its dark or light scheme (`PageTheme.controls`).
+- **The tokens are data, TypeScript first.** `packages/mobile/src/brandColours.ts` holds each
+  token's share (`BRAND_SHARES`), generated into IsItModel's `BrandColours.swift`
+  (`BrandShares`, and the content card's colour), which IsItUI and the Linux tests read: `chip`
+  (pill, opaque: the website's 85% over the background until PR #34's macOS runs, where Apple's
+  contrast check failed it over the gradient on every fixture, on the tabs not selected and on
+  "Use my exact location", so the build plan's fallback, a flat fill), `selected` (an ink fill
+  with words in pill), `soft` (ink at 85%, on flat fills only, never on a page's gradient),
+  `wash` (ink at 12%), `field` and `fieldBorder` (ink at 8% and 55%), `border` (28%), `hairline`
+  (22%), `affordance` (70%) and `card` (pill moved 25% away from the ink, opaque: `#401a4f` on
+  content). Under Increase Contrast soft text, affordances and the search box's edge are full
+  ink, hairlines and borders 40%, and `PageBackground` draws no glow; ink on the content page is
+  then 7.32:1 or more. In IsItUI, `PageTheme` gains `pill` and `card`, `init(_ palette:)` (moved
+  from the app, with IsItUI's own `Color(rgb:)`, since IsItUI doesn't link SnowKit) and
+  `PageTheme.content`; `Surface` and the `surface` and `pageTheme` environment values say where a
+  view is drawn, and `BrandTokens` (read through `@SurfaceTokens`) gives each token as the
+  environment's contrast and transparency settings change it.
+- **Every pair, every band, at its worst point.** The model is the app's own background model,
+  the same as `PageBackground` and `HomeAuditTests`' `PageColours`: the app's own approximation
+  of the website's 168°, from 40% across the top to 60% across the bottom (CSS's own line, corner
+  to corner, tilts about 12°); mixes in sRGB rounded to 8 bits, the worst point anywhere on a
+  402 by 874 screen sampled every 6 points, ratios rounded down. `brandColours.test.ts` pins
+  each pair to the design's figure (rounded down to one decimal; ink on a chip is pill on ink
+  since the chip became opaque), so a palette or share change can't pass quietly, and holds
+  every text pair to 4.5:1 and the search box's edge to 3:1; `brandColours.ts` is under the
+  suite's 100% coverage.
+
+  | Band      | page: ink / page | ink / chip | pill on ink | sheet: ink | soft  | ink / wash | soft / pressed | placeholder | field edge |
+  | --------- | ---------------- | ---------- | ----------- | ---------- | ----- | ---------- | -------------- | ----------- | ---------- |
+  | nosnow    | 10.09            | 13.62      | 13.62       | 13.01      | 8.51  | 10.33      | 7.18           | 7.60        | 3.45       |
+  | flakes    | 8.28             | 13.17      | 13.17       | 12.31      | 8.32  | 9.82       | 6.96           | 7.36        | 3.43       |
+  | maybesnow | 4.87 (glow)      | 8.97       | 8.97        | 8.97       | 7.02  | 6.46       | 5.19           | 5.71        | 3.98       |
+  | snow      | 4.88 (glow)      | 11.54      | 11.54       | 11.54      | 8.79  | 8.22       | 6.47           | 7.19        | 4.61       |
+  | heavysnow | 6.18             | 15.47      | 15.47       | 15.47      | 11.39 | 10.98      | 8.45           | 9.45        | 5.50       |
+  | deepsnow  | 6.17             | 19.07      | 19.07       | 19.07      | 13.82 | 13.96      | 10.51          | 11.73       | 6.23       |
+
+  On content: ink on the page 4.88 at the glow's centre (7.32 without the glow), on a card 14.20,
+  soft on a card 10.62, ink on a pressed row or the units track 10.00, soft on a pressed row
+  7.76, pill on ink 11.54, and a hairline against its card 1.96 (decorative). The page's worst
+  points, 4.87 and 4.88, are under the glow at the top bar's right end, where the words sit on
+  chips at 8.97 or more (a chip is opaque `pill`, so ink on it is pill on ink); every pair on a
+  flat fill is 5.19:1 or more.
+
+- **Two website values are left out**, and the tests pin them below 4.5:1: ink at 10% as a
+  button's fill on the page (the website's `.button`, 4.01:1 on maybesnow), and ink at 85% or
+  90% as text on the gradient (4.03:1 on content; 4.31:1 for the website's detail under the snow
+  glow).
+- **The shared parts, one copy each.** `BrandType.swift`: `TextRole`, the type scale (each role
+  a face, the website's size at 402 wide, the text style it grows with, its tracking and line
+  spacing), and `.brandFont(_:)`, which scales the tracking and line spacing with the text and
+  steps the face up under Bold Text, which a custom font doesn't follow on its own.
+  `Backgrounds.swift`: `PageBackground`, moved from `PageTheme.swift`, and `SheetBackground`,
+  neither with an accessibility modifier. `Buttons.swift`: `PillButton` (a chip hugging its
+  words or a wide pill, secondary in the surface's fill or primary in ink, its element the pill
+  and its tap region the 44-point line, as `WordsButton`), `IconPillButton` (the gear: a chip
+  circle in a 44 by 44 element), `PressStyle` (scale 0.96, never dimmed, none under Reduce
+  Motion), `RowPressStyle` (the wash) and `PinShape` (the website's pin). `PillSegments.swift`:
+  the website's segmented pill, its ink thumb sliding by `matchedGeometryEffect` on the website's
+  300 ms curve, each segment a button with `.isSelected`. `Layouts.swift`: `FlowLayout`, moved
+  from `PageFooterView.swift` unchanged, and `EqualColumns`, the website's grid, never lazy.
+- **Checked where it can be.** Linux: `brandColours.test.ts`, the Swift's generation and
+  `GeneratedPaletteTests`' content palette and card. IsItUI compiles only on macOS: the existing
+  39 UI tests are to stay green and look unchanged, since nothing on screen uses the new parts.
+
+**Step 3: the home screen in the website's look.** The top bar, the switcher and the three
+pages, drawn as the website draws them for the same answer (Header.astro, ViewTabs.astro,
+Views.astro, Now.astro, Week.astro, `view.ts`), measured at 402 points wide, where a CSS pixel is
+a point. The design's mock, drawn by the website itself with the app's changes, is the target.
+This supersedes spec 10.1 and 10.2 on type, colours, the switcher, Now and the week.
+
+- **Rules every screen follows**, the audit's lessons so far, binding on steps 5 and 6 as well:
+  no lazy container (a page is a `ScrollView` and a `VStack`); each element laid out once, with
+  accessibility sizes a branch on `isAccessibilitySize`, never `ViewThatFits`; no accessibility
+  modifier on a view with no element (shapes, gradients, tracks, thumbs, cards); every visible
+  word inside some element's frame, so a grid cell is one element over both its lines; an
+  element on a page's gradient hugs its words, any `.frame(maxWidth: .infinity)` outside it, and
+  text that can run to two lines at Large sits on a flat fill (the detail and Nearby, proven by
+  the `DrawnText` exception, are the only exceptions); tap regions 44 points each way and
+  elements at least 34 on their short side; pressed states wash or scale, never dim; and every
+  word from the generated copy.
+- **Type.** Every word is in a `TextRole` through `.brandFont`: the question in Regular, the
+  verdict, the grid's values, the headings, the tabs and the week's days and amounts in
+  SemiBold, a model that disagrees in Regular, Retry in Medium (in `label`, Regular, since
+  "After #34's second full run", below), the answer word in
+  `BricolageAnswer` at 0.3 of the page's width (120.6 points on a 402-point iPhone, 96 to 208,
+  growing with the large title) on one line, shrinking rather than breaking, and "Checking…" and
+  the error words in it at 28. SwiftUI can't set the answer's 0.86 line height, so 0.17 of its
+  size comes off the space above and below it instead, every text keeping its whole frame.
+- **The top bar** is the website's pills, trailing: the place in a chip with the website's pin
+  (no chevron, wrapping in its pill, never cut short) and the gear in a round chip beside it, in
+  the place of the website's cm | in pill, which stays in Settings. On approximate IP location
+  the website's "Use my exact location" chip sits beneath them (`CoreCopy.useExactLocation`),
+  and "Using approximate location." is no longer shown: it is the chip's VoiceOver hint, so the
+  user still hears why. A notice about the place (`AppCopy.slugGone`) is a chip of words above
+  it. `homeTopBar` and `HomeTopBar` say so (`approximate` is now only the notice). At
+  accessibility sizes the bar is leading, the gear trailing, so wrapped words read from the
+  left. Every word in it sits on a chip's flat fill, 8.97:1 or more on every band, where bare
+  ink under maybesnow's glow at the bar's right end is 4.87.
+- **The switcher is the website's tabs, and the segmented `Picker` is gone.** At standard sizes
+  a chip track at most 352 wide, centred, in equal thirds, the view on screen on an ink thumb
+  with its words in `pill`, sliding on the website's 300 ms curve (`PillSegments`); at
+  accessibility sizes, where a third would cut a label short, separate chips that wrap (This week
+  on a second line at AX3), not the website's smaller words broken mid-word. One container, the
+  tab bar (`.isTabBar`), labelled "Forecast period" (`views`), holds the three buttons,
+  `view-now`, `view-today` and `view-week` at every size, each `.isSelected` when shown. UIKit's
+  segmented control kept its own type size as the text grew, which `HomeAuditTests` allowed as
+  its one Dynamic Type exception; the tabs' words scale, so that exception is deleted and the
+  audit allows the home screen one fewer. The open decision about it ("The iPhone app's phases 5
+  and 6, reviewed") is closed by Carl's "as close to the website as possible".
+- **The hero.** The glyph sits at the top right, 35 below the page's top and 8 into the gutter,
+  in full ink (not the website's 0.95, so it matches the text it is tinted with), at 112 points
+  growing with the text to 176 and at most 0.4 of the width; the question sits 35 below it,
+  wrapping short of the glyph. At accessibility sizes the glyph has a line of its own above the
+  question. The question is offered the width beside the glyph and keeps its own
+  (`LimitedWidth`, IsItUI), so the heading's element hugs its words rather than reaching over the
+  glyph or across the gradient; the design's `.frame(maxWidth:)` would have grown it to the
+  whole width beside the glyph. The loading skeleton and its placeholder circle are gone, as the
+  website shows none, and the loading word doesn't pulse.
+- **Today's models and Now's hours are the website's grid**: three equal columns (two at
+  accessibility sizes, where "Météo-France" wraps after its hyphen), each cell its value over its
+  name, never lazy (`EqualColumns`, `ValueCell`). Each cell is one element over both lines, its
+  frame hugging them: a model read as its name with its amount as the value (`model-<i>`), an
+  hour as "20% chance at 10am" (`hour-<i>`). Now's chance bars are gone, as the website has
+  none; `HourRow.chance` stays in the presenter and the vectors.
+- **The week is the website's rows, and spec 10.2's agreement dots go.** Under "The week ahead"
+  (`CoreCopy.nextDays`, `week-heading`), each day is its name, a track with a dot from none to
+  the week's snowiest day (core `weekParts`' `track(0, max)`, ported as `WeekRow.left` through
+  `StripGeometry.track`, now internal and shared), its amount and its band; at accessibility
+  sizes the track goes, as the website drops it under 19 em, and the row stacks. How many
+  forecasts expect snow, which spec 10.2 made each day's signature, is now spoken only: each row
+  is one element, still read "Tuesday, 2cm, snow, 4 of 6 forecasts expect snow". The columns are
+  the website's least widths raised to the widest snow labels, so they line up row to row, which
+  the website's per-row grids don't quite do. `HomePage.week` is `{ heading, rows }` in the
+  TypeScript and the Swift, and `left` is a number, never null: core's is null only on a
+  placeholder row, which `homePage` never shows, so `page.ts` throws rather than pass one on.
+- **The footer** has the website's type and spacing: Updated and the notice 12 apart; Retry the
+  website's chip (`PillButton`, the page's chip colour with the `border` edge, at least 44 tall,
+  also under the error state's words); "Want the full picture?" 44 below with its links each on
+  a 44-point line; "Nearby:" and its places as one run that wraps, each place underlined with a
+  comma after all but the last (`AppCopy.listComma`, outside the underline and outside the
+  place's spoken label, so `app.buttons["Dundee"]` still finds it), one text from an
+  `AttributedString` (`nearbyName`, as the credits are), not two side by side, whose commas the
+  audit judged texts of their own on PR #34's macOS runs and failed for contrast, 2.3 points
+  wide with no identifier; a hairline 40 above the credits; and the credits' links underlined
+  rather than bold.
+- **Two website values are not copied**, as step 2 measured: the detail and the agreement
+  heading are full ink, not 0.9 (4.31:1 under snow's glow, and `DrawnText` matches pixels
+  against the exact ink), and Retry is filled with the chip colour, not 10% ink (4.01:1 on
+  maybesnow).
+- **What can't match the website.** No wordmark, Hot | Wet | Snow | Wind bar, city links, "All
+  places" or site links (Carl's rule); the gear has no website counterpart; the top bar and the
+  switcher stay pinned, as iOS's convention and the UI tests' (`pageWindow`) expect, where the
+  website's scroll away; the thumb moves when the pager settles, not with the finger; every
+  control is 44 points to tap (pills drawn 36, the chip 34, Retry 44, where the website's are 32,
+  about 20 and 32), and the links and places sit on 44-point lines, so the footer is airier; no
+  ellipsis on a long place; underlines at the font's own position and thickness; the optical size
+  fixed per face; the answer's 0.86 line height emulated; at large text sizes the app stacks where
+  the website shrinks its tabs and overlaps; the week's columns line up; the vh-based spacing is
+  fixed at the iPhone 17's values; and the website's intro, ad slot and places hub aren't pages of
+  the app. The 0.3 s colour fade on a view change and the loading word's pulse are on the Later
+  list.
+- **Tests.** TypeScript: `vectors.test.ts` (the chip without the line, the notice above it, the
+  week's heading and every dot between 0 and 100, Durham's at 0, 50 and 100, every snowless week
+  at 0), `homeScreens.test.ts` and the copy tests. Linux: `PageVectorTests` (the week's heading
+  and each dot against `page.json`), `HomePageTests` (the dots of Durham, Leeds and a snowless
+  week; the top bar's chip and notice) and the state tests, which now check `useMyLocation` to
+  know a chosen place isn't approximate, since `approximate` is nil either way. On macOS:
+  `HomeAuditTests` loses `exceptions[0]`, the segment term in `AuditLog.note` and the tabs it
+  matched by; it knows the size reached the app by whether This week's tab starts at or below
+  Now's bottom (`switcherWraps`), now that the tabs are buttons at both sizes. `HomeScreens.swift`
+  reads the week's heading and checks it (`week-heading`), and `HomeScreens.json` is regenerated
+  (the chip's words, no approximate line, the week's heading and dots). The other home tests need
+  no change: their labels, identifiers and the `WordsButton` geometry hold. The first macOS run
+  is to show whether the grids' cells, the pills and the tab bar's trait pass as the design
+  expects (its section 5's risks and fallbacks).
+
+**Step 4: saved places' rules and storage.** The rules, the copy and the store, with no change
+to the picker's look yet (step 5 draws it); the picker as it is ignores the presenter's new
+fields. "Saved places (the iPhone app)" above says what they are.
+
+- **TypeScript first.** `packages/client`: `PLACES = { recentMax: 5, savedMax: 10 }`
+  (`config.ts`), `saved.ts` (`isSaved`, `canSave`, `savePlace`, `unsavePlace`, `choosePlace`,
+  `shownRecent`), `RecentPlace.detail` and `addRecent`'s last argument, and
+  `APP_KEYS.savedPlaces = 'savedPlaces.v1'`, all at 100% coverage. `packages/mobile`: `saved.json`
+  (an empty and a full list, the tenth and eleventh save, a place saved twice under two names,
+  approximate IP location, the phone's point named and not, a searched point at the phone's
+  coordinates, saving from Recent and from a search, removing with the sixth recent place cut,
+  choosing saved and unsaved places, and overlapping lists), `recent.json`'s cases with a line
+  (every older case kept), `Constants.Places`, and the copy (`saved`, `savedHint`, `savedFull`,
+  `savePlace`, `unsavePlace`, `placeSaved`, `placeUnsaved`, `deleteRecent`).
+- **A recent place keeps its line** ("England, United Kingdom"), so Recent tells two Newcastles
+  apart as the results do. The field is optional, as the stored shape only ever gains optional
+  fields: `recent.v1`'s older entries read as they are, and a place without a line is written
+  without one.
+- **`savePlace` also refuses a place with no name**, which `canSave` (a target alone) can't see,
+  so the lenient reader, which skips empty names, always reads back a list `savePlace` could
+  have made.
+- **Swift.** `SavedPlaces` (IsItLogic) is the port, with `savedPlaces.v1`'s codec; `RecentPlaces`
+  keeps the line and reads its limit from `Constants.Places`; `PlaceSearch.line(_:)` gives a
+  result's line or none. `PlacePicker` gains the Saved section (its heading always with nothing
+  typed, the hint with none saved, the line when full), every row's `Star` (filled or empty, its
+  label, which a row's press-and-hold menu reuses, and what VoiceOver is told after a tap), a
+  saved result's value "Saved", the recent places through `shownRecent`, and "Delete". IsItState
+  gains `SavedPlaceStore` and `MemorySavedPlaces` (`AppEnvironment.saved`); `AppModel.saved`,
+  `.lists`, `.save(_:)`, `.unsave(_:)` and `choose(_:name:detail:)`, which follows
+  `choosePlace`; and `PlacePickerModel.save(_:)` (a result or a recent place), `.unsave(_:)` and
+  `.choose(saved:)`. `AppModel` writes only the lists that changed, the saved places first.
+  IsItServices gains `SavedPlaceDefaults`; the app wires it in, and `-resetStore` forgets it.
+- **Privacy.** "recent places" becomes "recent and saved places" in Your privacy
+  (`privacyForecast`), the website's privacy notice (`PrivacyBody.astro`, its date moved on),
+  `e2e/credits.spec.ts`, `credits.test.ts`'s pair, Linux's `InfoPagesTests` and the first line
+  `SettingsTests.testYourPrivacy` reads. Nothing new leaves the phone.
+- **Tests.** Linux: `SavedVectorTests` (listed in `PortedVectors`), `RecentVectorTests` with the
+  line, the saved places' codec (a round trip, nothing or not a list, the entries skipped, at
+  most ten), `PlacePickerTests` (Saved over Recent, a place in both shown once, the stars and
+  their words, the hint, a full list with no empty stars, a result's value, typing, every new
+  word in sentence case and about snow alone), `PlacePickerModelTests` (a star saving a result in
+  place with nothing chosen or asked, a recent place moved to Saved and back, Recent cut to five,
+  a saved place chosen, the line kept, the phone's point refused, a full list, both lists read
+  back by a new model) and `AppModelTests` (the writes, saved places first, and nothing written
+  for a change that changes nothing). Three state tests now expect a chosen result's line among
+  the recent places.
+
+**Step 5: the picker in the website's look, with saved places.** The full-screen picker drawn
+as the website's (`SearchSheet.astro`, `.sheet`), with step 4's saved places in it. This
+supersedes spec 10.3 on the picker's look: no navigation bar, no grouped list, no system blue.
+
+- **Its surface is the sheet**, in the band of the page on screen when it opens (Now, Today or
+  This week, whichever is showing), followed if a refresh changes it while open, fading in 0.9 s
+  as the pages do (at once under Reduce Motion), as the website's picker takes `:root`'s palette.
+  `PickerSheet` reads the theme from the model in its own body, so the cover follows the model.
+  The background is `SheetBackground` (the band's `pill` to 15% `g2`, no glow), every word is in
+  its ink, and the system's parts on it (the status bar, the keyboard, the spinner, the menus)
+  take the band's colour scheme. It never follows Dark Mode, as the pages don't; spec 10.1's
+  "sheets follow Dark Mode" no longer holds for it. Settings follows in step 6.
+- **Not a `List`.** A `ScrollView` and a `VStack` below the title row and the box, every row made
+  at once, as the build plan's rule 1 asks of every page: a lazy container's text was "partially
+  unsupported" by the audit's Dynamic Type check though it grew (PR #33's runs), and saved places
+  make the list longer than any the audit passed. The keyboard still goes with a drag
+  (`scrollDismissesKeyboard(.immediately)`) and the rows still bounce.
+- **Press and hold instead of swipes**, which only a `List` has (Carl's open question 3, on its
+  default). A recent place's menu holds "Save {place}" when it can be saved and "Delete"
+  (`AppCopy.deleteRecent`, destructive); a saved place's holds "Remove {place} from saved
+  places". Each item is the same row's VoiceOver action (`accessibilityAction(named:)`), and the
+  star stays the main way to save and remove. Each tells VoiceOver what it did, as the star does
+  (below), since the row moves or goes with the focus on it.
+- **The parts** (PickerChrome.swift). `SheetHeader`: "Search for a place" (`sheetTitle`, a
+  heading) and the website's Close pill (`PillButton` on the sheet: the wash with the `border`
+  edge, at least 44 by 44, `picker-close`), the word on the title's first baseline, so both
+  scale with the text where the toolbar's xmark couldn't. The word was in `button` type (Medium)
+  until PR #34's macOS runs, where every picker audit found it "partially unsupported" for
+  Dynamic Type though it grew, the one text so found and the only Medium one audited; it is in
+  `label` now, the place pill's role, which passes. That is the first of three changes to try,
+  one a run, then no border, then a 36-point pill; whichever clears it goes to Retry too, which
+  is built the same way and not audited. `label` is Regular at 16 points where `button` is
+  Medium at 14.4, so a pass shows the text was the cause, not which part of it. (`label`
+  cleared it on the next run, and the run after showed the part: the size, 14.4 with
+  subheadline drawn at 14 points at both Medium and Large. Retry is in `label` too, and the
+  `button` role is gone: "After #34's second full run", below.) `SearchBox`
+  around `BoxTextField`, a `UITextField` in a representable: as tall as the box (`sizeThatFits`, at
+  least 44) so its own element is, its text inset inside it so the whole box but the clear
+  button is the field to tap, in the `field` role's face through `UIFontMetrics(.body)` (a face up
+  under Bold Text), its prompt in `soft`, the caret ink, the keyboard dark on a dark band, the
+  search-field trait, and the model's text written back only when it differs, so the caret never
+  jumps. The clear button is an ink xmark, 44 by 44, that asks for the keyboard again. `PlaceRow`:
+  the place as one button (`label` name, `note` line in `soft`, washed when pressed, at least 44
+  tall), read "Leeds, England, United Kingdom", with "Saved" as a saved result's value;
+  `StarButton` beside it (`star` or `star.fill` in ink, at least 44 by 44, growing with
+  `.body`), its own button with its own style, so a tap on the star never chooses the place.
+- **Rows.** "Use my location" in `labelStrong` with no icon (the website has none) and an ink
+  spinner while the fix is out; its line and the search's in `line`; "Open Settings" a
+  `WordsButton` in `labelStrong`, underlined, as the pages draw a link; "Saved" and "Recent" in
+  `heading`, as written, with the header trait; the hint and the full line in `line`.
+  Identifiers: `saved-heading`, `saved-<key>`, `saved-hint`, `saved-full`, and each star
+  `star-<its row's identifier>` (`star-result-<i>`, `star-saved-<key>`, `star-recent-<key>`);
+  every older one is kept.
+- **VoiceOver.** After a star, or the same from a row's menu or its VoiceOver action, the
+  presenter's announcement is posted ("Leeds saved.", "Leeds removed from saved places."), and
+  after Delete, "Leeds deleted from recent places." (`AppCopy.placeDeleted`,
+  `RecentRow.deleted`); focus isn't moved to a row that moved (the Later list). Rows that move
+  between Saved and Recent animate as the system animates a change, at once under Reduce Motion.
+- **Contrast.** Every text pair on the sheet is 5.19:1 or more on every band (step 2's table:
+  ink on the sheet 8.97 at least, `soft` 7.02, ink on the wash 6.46, `soft` on a pressed row
+  5.19, the placeholder on the field 5.71), and the field's edge at least 3.43, so nothing like
+  `SheetStyle.secondary` is needed, and the picker no longer uses `SheetStyle`.
+- **Tests.** `PickerTests`: `testRecentPlaces` reads Leeds with its line and deletes it from its
+  menu (`press(forDuration: 1.2)`, then Delete); new are `testSavingAResult` (a result's star in
+  place, nothing chosen, the row's value "Saved", kept across a relaunch, chosen from Saved and
+  staying there), `testSavingARecentAndRemovingIt` (to Saved by the star and back, the hint, and
+  the menu's Remove), `testSavedPlacesAccessibilityAudit` and `…AtAX3` (Kathmandu saved, Leeds a
+  recent place, location access off, the keyboard down: `picker-saved`, `picker-saved-ax3`), and
+  `testPickerOnADarkBand` (`-fixture aberdeen-snow`, Leeds saved: `picker-dark`). The UI plan
+  goes from 39 tests to 44. A menu item is found by its words among buttons that aren't a star,
+  since "Remove Leeds from saved places" is the star's label too. The Linux harness's XCUITest
+  stub gains `press(forDuration:)`, as the SDK has it.
+- **For the first macOS run to show.** `BoxTextField`'s element at 44 or more (else the fallback
+  is a container view the field fills); the menus' items as buttons to XCUITest (else the
+  accessibility actions, tested on Linux through the presenter); the long Saved and Recent lists
+  at AX3; the Close pill's and the stars' contrast on the wash; and the status bar on a dark band,
+  on the contact sheet.
+
+**Step 6: Settings and its pages in the website's look.** Settings, How it works, Your privacy,
+Credits and licences, a notice in full and the no-mail fallback, drawn as the website draws its
+own content pages (About, Privacy, Support and Terms: `.prose`, `.models h2`, `.units`,
+`.tabs`). Carl found Settings "very retro iOS and boring"; the website has no settings page, but
+the pages Settings opens share one look there, and that look is the answer. This supersedes spec
+10.1's "sheets follow Dark Mode" and 10.4's "native Form" for Settings; 10.4's order and
+contents, and every row's action, are unchanged.
+
+- **The content palette, fixed.** Every page wears `PageTheme.content` (core's `snow`, the
+  website's `LOOKS.snow.content`) over `PageBackground`, its gradient and glow fixed to the
+  screen, the same in Light and Dark Mode, as the website's content pages never follow the
+  forecast's band. It is already a dark page, so at night it is no brighter than a dark sheet;
+  following the band would change legal and help text with the weather. `sheetChrome()` puts a
+  sheet on the content surface and gives its system parts the dark scheme and ink, since
+  Settings is presented from outside `HomeShell`; each page gives the navigation bar the same
+  scheme (`toolbarColorScheme`).
+- **Only single lines on the gradient, every paragraph on a card.** At Large the page carries
+  only titles, headings, the version and "Address copied." (4.88:1 at the glow's centre, 7.32
+  under Increase Contrast, which drops the glow). Everything that can wrap sits on an opaque,
+  flat card in the `card` colour (`#401a4f`, ink on it 14.20:1): the units' footnote, How it
+  works', Your privacy's and the fallback's paragraphs (`ReadingCard`), each credit's words, the
+  notices' summaries and a notice's text. On PR #33's last green run (run 4) Apple's contrast
+  check still failed each fixture's two-line detail drawn on the forecast pages' gradient at
+  9.65:1 ("3 to 4cm still to come…" on snow), 13.68:1 (heavy snow) and 11.43:1 (no snow), and
+  passed one-line texts in the same ink and every text at AX3; multi-line text on flat colours
+  has never failed, which includes the old How it works and Your privacy and the credits on
+  white cards. Settings' audits allow nothing, so the website's bare prose is the one thing the
+  app doesn't copy: How it works reads as reading cards. If a card's paragraph still fails, the
+  next step is the darker card `#2a1230` (17.1:1), then no glow on content; never an exception.
+- **Titles in the answer's face.** Each page's title is its own heading on the page
+  (`PageTitle`: `BricolageAnswer` at 35 points, growing with the large title, -0.01 em, a
+  heading to VoiceOver, `page-title`), the website's 750 h1, and it scrolls away as the
+  website's does. The answer's 780 face is the nearest built one, so no new font file ships.
+  It is a subset of letters, digits, `.,'’!?…-` and the space, and every title Settings shows
+  ("Settings", "How it works", "Your privacy", "Credits and licences", the three notices' names,
+  "Report an ad" and "Contact us") is inside it: `titleFont.test.ts` reads the subset from
+  `make-answer-font.py` and the glyphs from the bundled font's cmap, so a title with a letter
+  outside it fails on Linux. Page headings are `pageHeading` (21.6 SemiBold), section headings
+  `heading` (16 SemiBold, the website's `.models h2`, flush with the cards, not the system's grey
+  insets).
+- **The toolbar keeps its buttons and draws no title.** The `NavigationStack` stays for the back
+  gesture, VoiceOver's escape and the back button's history menu, and `navigationTitle` still
+  names each page there; the principal item is a clear point with no element, so the only
+  title drawn is the page's own. Close is the system's xmark (`CloseLabel`, its label the word)
+  in the confirming action's place, top right, on Settings and now on the fallback too (it was
+  leading there), tinted with the card colour: on iOS 26 a prominent plum glass circle (white on
+  it 14.20:1) where plain glass would leave white at about 4.88:1 under the glow; before iOS 26 a
+  white xmark. `#available(iOS 26, *)` is used for that tint alone, so the bar's background is
+  the system's (iOS 26's scroll-edge effect, before it the bar's material once content scrolls
+  under), not the design's card-coloured bar on iOS 17 and 18. The picker, with no toolbar,
+  keeps the website's Close pill. Should iOS 26 still draw a title, or the audit flag the clear
+  principal item, the fallback is `.navigationTitle(Text(verbatim: ""))`; the tests already wait
+  for `page-title`, not the bar.
+- **Rows with icons on plum cards.** Each row is one button the card's width, at least 54
+  points tall (`SheetRowStyle`, washed edge to edge while pressed, never dimmed): an SF Symbol in
+  ink (`SettingsScreen.Icon`, one a row and one for the units, an IsItLogic enum the Linux tests
+  hold to one each; IsItUI draws them in one switch that names every case), its title in `row`
+  (17.6 Medium), a detail in `note` and `soft` (10.62:1), and a chevron for a page on the stack
+  or an arrow out for Safari or mail, in `affordance` and hidden from VoiceOver. The icons go at
+  accessibility sizes, where the words need the card's width; the chevrons stay. A 22% hairline
+  runs from the words to the card's edge between rows (`SheetDivider`). The icons answer Carl's
+  "more modern", as the build plan settled.
+- **Units is the website's cm | in pill**, the shared `PillSegments` on the card: the wash's
+  track (10.00:1 for the unchosen word), the chosen unit on the ink thumb in the pill colour
+  (11.54:1), sliding on the website's curve (at once under Reduce Motion) when the model has
+  saved the choice. Each segment hugs its word and is at least 56 by 44; the group keeps `units`
+  and its two `.isSelected` buttons, and at accessibility sizes "Snow units" sits over it with
+  no icon.
+- **Buttons on a page are the shared pills.** The privacy policy and a notice's project page are
+  `PillButton(.wide)` in the card colour (words in ink, at least 52 tall, the arrow out kept);
+  "Copy address" is the primary pill, the website's selected tab (ink, its words in the pill
+  colour, 11.54:1). The design's own `PillButtonStyle` isn't built. `PillButton` gains an
+  optional role, for phase 8's destructive "Turn off notifications and delete my data".
+- **The copy and the colours' code.** Bricolage's credit becomes "The app's typeface.", since
+  every page now sets its words in it (`credits.ts`, regenerated `AppCredits.swift`).
+  `SheetStyle.swift` is rewritten as Settings' parts (`sheetChrome`, `SheetCloseButton`,
+  `SheetPage`, `PageTitle`, `PageHeading`, `SheetSection`, `SheetCard`, `SheetDivider`,
+  `RowLabel`, `RowIcon`, `SheetRowStyle`, `ReadingCard`, `LeavingLabel`; `CloseLabel` kept),
+  every colour from the content surface's tokens. The `SheetStyle` enum and IsItLogic's
+  `SheetColours` with its tests go: they corrected the system's light-appearance colours, and
+  nothing draws in the system's colours now. The pairs Settings uses are step 2's, already held
+  by `brandColours.test.ts`; the design's separate `BrandSheet` Swift tests and its vitest tying
+  `Palettes.content` to the website's `LOOKS` are not built (the latter is on the Later list).
+- **Tests.** Linux: `SettingsScreenTests` (each row's icon, the units' ruler, no two alike,
+  every case used, the other versions only dropping rows, and Your privacy's policy button
+  with the policy row's), `InfoPagesTests` (the new summary); `titleFont.test.ts` and
+  `credits.test.ts`
+  (`fontTables.ts` now holds the cmap reader both font tests use). On macOS, `SettingsTests`
+  waits for each page by its title on the page (`page(titled:in:)`, which lists the titles on
+  screen when it fails) instead of the five `app.navigationBars[…]` waits, `openSettings` waits
+  for "Settings" as well as Close, and `testUnitsChangeAsksInTheNewUnits` holds both units to
+  44 by 44. Every identifier is kept, `page-title` is new, and the audits still allow nothing;
+  their screens (`app-settings` and the rest) become the contact sheet's new look.
+- **For the first macOS run to show.** Whether the cards' paragraphs and the single lines on the
+  gradient pass contrast as the evidence says; whether iOS 26 draws the clear principal item
+  without a glass capsule or a title; the plum glass Close against the glow; the titles' fit
+  and the icons' alignment on the contact sheet; and that the thumb doesn't animate on first
+  appearance.
+
+## Contrast by measured pixels, after #34's first full run
+
+PR #34's first full macOS run on 3405dd3 (run 40167289069, job 121091106449) built the app and
+the widget, passed the unit plan (22 of 22) and 35 of the 44 UI tests. Every one of the nine
+failures was Apple's contrast check (`performAccessibilityAudit`, `.contrast`) failing text whose
+drawn pixels measure far above 4.5:1. The tests' own readouts, and the run's attachments read
+back with the screenshots each test attached (look-proof/crops.py in the session's scratchpad):
+
+- **The picker, on a light band (nosnow, a near-flat sheet).** Close (`picker-close`), "Use my
+  location" (`picker-use-my-location`), a recent row's "Leeds", "England, United Kingdom",
+  "Bagmati Province, Nepal" (soft, the ink at 85%), "Search for a place" and `location-detail` at
+  AX3, on all four picker audits: the darkest pixel the ink `#341a3c` or soft `#503958`, the
+  lightest about `#f6eef9`, 8.77 to 13.62:1 between them.
+- **The home screen.** "Want the full picture? See the forecast on", three lines at AX3, on the
+  Now and week pages of three fixtures (8.79 to 14.77:1 from the page's ink to the background at
+  its centre), and a two-line verdict on durham-tomorrow's week at Large (13.03:1). The nine
+  details the run allowed (PR #33's `DrawnText` exception) were the same kind of text.
+- **Settings.** How it works' title (`page-title`, `BricolageAnswer` at 35 points, white on the
+  content palette's gradient): darkest `#763e8e`, lightest `#ffffff`, 7.37:1.
+
+The same kinds of text in the system font passed on main, and every failure is Bricolage, on a
+plain fill or the gentlest of gradients: Apple's check evidently misreads Bricolage's glyphs on
+these backgrounds. It had already failed two-line details and the old 44-point text buttons at
+5.3 to 14.6:1 on PR #33's runs, which `DrawnText` allowed for the details and the places nearby.
+
+**The decision (Carl's, told to him).** Wherever Apple's contrast check fails a text element, the
+test judges it by WCAG on the screenshot's own pixels instead, on every audited screen: the home
+screen, the picker, Settings and its pages, and the mail fallback, and for every text element,
+not only listed identifiers: a static text, or a button or link with a label, icons included (the
+gear, the stars, clear-search), each held to 4.5:1. It stays a proof: the issue is allowed only
+when the pixels prove the element is text drawn in its surface's own colours over its surface's
+own fills at 4.5:1 or more, throughout (no 3:1 for large text). Every allowed issue is listed in
+the failure message and attached. Hit regions, Dynamic Type, clipped text, descriptions, traits
+and element detection are never allowed, and no other check changes.
+
+- **One proof, one place** (`UITests/DrawnText.swift`). `DrawnText` classes each pixel of the
+  frame against its surface's model at that point: one of the surface's fills (within 6 levels a
+  channel: the background, a chip, a card, the wash, the field), one of its text colours (within
+  3: the ink, or soft on a flat fill), for a button or link one of the lines it draws round its
+  words (within 3: Close's and Retry's edge, a card's hairline, a row's chevron), an edge (a blend
+  of two of those, within 6 of the line between them, with a pixel of each within 2 pixels, as
+  anti-aliasing is), or none of them. The screenshot is read a point round the frame, for those
+  neighbours only: Close's pill fills its 44-point frame, so its edge's outer blend meets the sheet
+  just outside it (read without the margin, 0.42% of Close's pixels were none of the sheet's
+  colours; with it, none). It proves when the frame is whole on the screen and at least 10 by 10
+  points (the smallest text is 12.8 points at Large); the text colours are on 1% of the frame or
+  more ("Use my location", a row 370 points wide, has its words and icon on 2.5%); pixels of none
+  are no more than 0.5% of the frame nor 2% of its text pixels; and each text colour drawn on 9
+  pixels or more gives 4.5:1 or more against each fill shown clear of what is drawn on it (no
+  pixel but a fill's within 2) on 1% of the frame or more, measured on the pixels themselves: the
+  text pixel nearest the fill in luminance against the fill pixel nearest the text. The bound on
+  the text is a review's: the frame's share alone let a sparse frame through, as "Use my
+  location"'s 0.5% is a sixth of its words, so a few letters dimmed to 50% in place proved; the
+  run's 28 issues have pixels of none at 0.18% of their text pixels at the most, and one letter's
+  width of "Use my location" dimmed in place makes 5 to 6%.
+  So it refuses an element whose text is dimmed, greyed, in another colour or over a fill the
+  surface hasn't (pixels of none over 0.5% of the frame or 2% of its text), one with no text
+  drawn, a tiny or off-screen frame, and a palette short of contrast. Only the tokens' text
+  colours, ink and soft, are measured; and as pixels are classed by colour alone, text drawn in
+  exactly one of the surface's own fill or line colours (the wash, the field, a chip, the card,
+  the track, an edge or a hairline) is taken for that fill or line, and isn't measured. An icon
+  button with a label is text to it (the gear, the stars, clear-search), held to 4.5:1, stricter
+  than WCAG's 3:1 for graphics. `MeasuredContrast` is the exception every audit shares: a text
+  element with the proof.
+  `HomeAuditTests.exceptions` keeps the credits' hit regions and takes it in place of PR #33's
+  details-and-places clause; the picker's and Settings' audits (`auditAccessibility(of:on:surface:)`)
+  allow it and nothing else, and now list and attach what they allowed (`audit-<screen>-allowed`)
+  as the home audit does.
+- **Each test says its surface.** The home audit's pages are the page in their band
+  (`HomeScreens.json`); the picker is the sheet in the band of the page it opened over, read from
+  two new screens, `picker-first-launch` (Leeds by IP at the first launch) and `picker-leeds`
+  (Leeds chosen from a search then), and from `aberdeen-snow` for the dark band
+  (`HomeScreen.picker()`); Settings, its pages and the fallback are content. A wrong surface fails
+  safe: its fills don't match the pixels, so nothing is allowed.
+- **The surfaces from one source, TypeScript first.** brandColours.ts already modelled the page,
+  the sheet and content for the tokens' contrast table. It now names the models' numbers
+  (`BACKGROUND_MODEL`) and the surfaces as data (`SURFACES`: each surface's background model, its
+  fixed band for content, its fills, its text colours and its marks, every share from
+  `BRAND_SHARES`), lays them at a point (`surfaceAt`) and works out every text pair the proof can
+  allow at its worst point on the screen (`surfaceTextPairs`). `brandColours.test.ts` holds every
+  such pair to 4.5:1 on every band it is drawn in and equal to the design's figures (`bandPairs`,
+  `contentPairs`), so the proof's model and the tokens are one. `surfacesJson` writes
+  `UITests/Generated/Surfaces.json`: the models' numbers, the least contrast, the band a page with
+  none draws as, every band's palette (now with `pill`), the three surfaces, and each surface's
+  colours at six points in each palette it is drawn in (78 samples). The Swift reproduces every
+  sample before it judges a pixel (`SurfaceFile.bundled`, failing the test with any that differs),
+  so it works the same model out, not a copy; to make that exact, brandColours.ts takes square roots
+  as the Swift does (`Math.hypot` may differ in the last bit) and the Swift mixes as TypeScript's
+  `mix` does (`a + (b − a) × t`). `HomeScreens.json` no longer carries the palettes; `PageColours`
+  and the old `DrawnText` in HomeAuditTests.swift are gone.
+- **What the surfaces hold, and don't.** The page: the band's gradient and glow, its opaque chips
+  (`pill`), ink; Retry's edge. The sheet: the band's pill fading towards g2, the wash (Close) and
+  the field (the search box), ink and soft on each; Close's edge over its wash. Content: the
+  content palette's gradient and glow, the plum card and the units track, ink everywhere and soft
+  on the card and the track; a card's hairlines and chevrons. Soft is never a page's or content's
+  gradient colour, as the tokens never put it there. The selected tab's and the units thumb's
+  `pill` on an ink fill are not modelled, nor Increase Contrast's heavier lines and absent glow
+  (the UI tests run at standard settings): Apple's check has not failed them, and should it, they
+  fail.
+
+**The evidence, in the Linux harness** (session scratchpad, look-uicheck: the UI test files
+type-checked against XCUITest stubs, and checks against fakes and the run's pixels).
+
+- **Run 3405dd3's 28 contrast issues all prove.** Each is cropped from the screenshot its test
+  attached, at the frame its failure gives and a point round it (pixels at 3x, frames in points):
+  the 19 that failed (12 on the picker, 6 on the home screen, How it works' title) and the 9
+  details PR #33's exception allowed. The text colours are on 2.5% ("Use my location") to 25.6%
+  (How it works' title) of a frame, pixels of none 0.03% of a frame and 0.18% of its text pixels
+  at the most, and the least contrast is 5.55:1 (the title's white on the content gradient,
+  nearest the glow); on the sheet, 6.61:1 (soft on Close's wash). `MeasuredContrast` allows
+  each, and the home's log notes the verdict as allowed with its proof. PR #33's second run's 50
+  home issues prove as well (5.21:1 at the least).
+- **The same pixels made wrong are all refused.** Dimmed to 50, 60 and 70% over their fill, as
+  `.opacity` draws: no pixel is a text colour any more. In a lighter grey (`#767676` on the light
+  bands, 4.54:1 on white, `#c8c8c8` on the dark): the same. In the ink over a fill the surface
+  hasn't (a pale or dark green the ink gives 7:1 or more on): 97.51% of "Use my location"'s
+  pixels are none of the sheet's colours. With the text taken away: no text. Judged as another
+  band's or surface's: the fills don't match (a snow page's detail does prove on content, which
+  is the snow palette's own gradient and glow, as it should). A dimmed copy of "Use my
+  location"'s words beside them: 3.17% of its pixels none of the sheet's colours, over 0.5%. A
+  few of its letters dimmed to 50% in place (3.04:1), over 5, 10 or 15% of its words' span from
+  30, 60 or 85% of the way along, or a 50% copy of the first 5 or 10% of its words beside them:
+  0.12 to 0.52% of the row none of the sheet's colours, under the frame's 0.5% in nine of the
+  eleven, but 4.9 to 25.6% of its text pixels, so all eleven are refused.
+- **Synthetic frames are all refused.** No frame, an empty one, 9 by 40 and 200 by 6 points; one
+  partly off the screen; the website's ink-at-10% Retry fill on maybesnow by the glow (89% of the
+  frame none of the page's colours, and, declared a fill of the page, refused for its 4.03:1); a
+  palette whose ink gives 3.45:1 on snow's page; soft at 40% on the nosnow sheet (2.34:1).
+- **The model is TypeScript's.** The Swift works out all 78 samples as brandColours.ts did, and
+  a sample changed by one level is caught; a sheet's contrast issue whose pixels can't be read is
+  noted as unexpected, with why. The largest frame, an AX3 detail of 330 by 160 points, takes
+  1.1 to 1.3 seconds in the harness's unoptimised build.
+
+**For the next macOS run to show.** That the 19 issues are allowed with their proofs listed,
+the home's nine details too, and the nine tests pass; that the tests' durations stay well inside
+the job's (the proof isn't timed on its own: it runs after each audit call, outside `AuditTimes`,
+and took 1.1 to 1.3 seconds for the largest frame in the Linux harness's unoptimised build); and
+that `SurfaceFile.bundled` finds the bundle's Surfaces.json and its samples agree.
+
+## After #34's second full run
+
+PR #34's second full macOS run, on cf4eb74 (run 40174838258, job 121113524162), passed 42 of the
+44 UI tests. Both failures are the app's, not the tests', as read from the run's attachments
+(session scratchpad: look-art-cf4eb74, and the screen recordings' frames in leeds-full,
+leeds-frames and lic-frames).
+
+**A tap on Today undone (`HomeTests.testLeedsDry`).** Going through the tabs, a tap on Now
+showed Now; a tap on Today then left Now's heading for the whole 20 seconds. The same test passed
+on 3405dd3 and on main, and no app code changed between 3405dd3 and cf4eb74 (only the tests,
+TypeScript and the docs).
+
+- **What the recording shows.** It draws a frame only when the screen changes; times are seconds
+  from its start. The Now tap, at (86.3, 210), moved the pages at 12.76 with no animation and the
+  thumb by 13.25. Then nothing moved for 2.13 seconds. The Today tap, at (201, 210), the centre of
+  `view-today` (143.7, 188, 114.7, 44), was drawn pressed (the word at 0.96 of its width from
+  15.38, held from 15.46 to 15.49) and let go (whole again by 15.61), and nothing else on the
+  screen changed, then or in the 20 seconds after: the thumb on Now, the pages at Now and the
+  heading Now's, as the waits' debug descriptions read the pages and the heading too.
+- **So the tap reached the button**, on a still screen: no thumb's or pager's animation could
+  have swallowed it, and the segment kept its frame and identity (the same word shrank and grew
+  back smoothly).
+- **Its release was drawn late.** In every switcher tap that worked with a recording (3405dd3's
+  durham-tomorrow at Large and leeds-dry at AX3, and this run's Now) the new page is drawn 0.03 to
+  0.07 seconds after the press, and 0.13 to 0.18 before XCUITest's record of the tap. Here the
+  press lasted 0.11 to 0.16 seconds and the release was drawn only 0.05 to 0.10 before the record:
+  more work on the main thread than a release's scale, most likely the action's update. Yet the
+  frame after it still had Now chosen.
+- **What could choose Now.** None of `AppModel`'s own moves would here: the launch, the return
+  after a long time away and the first answer each set the view for the time of day, Today, and
+  no route was opened. Only the Now tab and the pager's `scrollPosition(id:)` setter could.
+- **The cause, inferred, not proven.** The tab's action set the view to Today, and in the same
+  update the pager's two-way binding wrote back the page the scroll view still showed, Now, before
+  the move to Today was applied. The pager wrote whatever page it reported straight into the view,
+  the weakness phase 5.2 already named for an animated scroll's pages on the way. Whether a report
+  reaches the setter before or after the move depends on the order of SwiftUI's work within an
+  update, so it happens only now and then; neither the artifacts nor Linux can show that order. It
+  may first show on this PR because the tabs are now SwiftUI buttons (`PillSegments`) where they
+  were UIKit's segmented control; that is not verified.
+- **The fix** (`HomePager.pagerFollows`, since replaced by `PagerSync`; see the correction below). On iOS 18 the pages set the view only as a scroll comes
+  to rest (`onScrollPhaseChange`, at `.idle`), to the page under the middle of what the scroll view
+  shows then, never from what it reports on the way. `PagerRest` (IsItLogic) finds it: the page
+  whose span holds the visible rect's middle, the end page past either end, and nothing to follow
+  with no width, no finite middle, no pages, or content narrower than the pages side by side (not
+  yet laid out, or a page's own vertical scroll view, whose middle is always over Now's, should
+  its phases ever reach the pager's handler). A change to the view moves the pages at once through
+  the `ScrollViewReader`, with nothing to write back; a tab's jump rests on the page chosen, so it
+  is never undone. Whatever moved the pages, XCUITest's swipe or a user's drag, the page they rest
+  on is followed. `PagerRestTests` holds the rule on Linux: each page at rest, the halves, both
+  ends, half a point of rounding, and every case with nothing to follow.
+- **On iOS 17**, the deployment target, there are no scroll phases, and the same race could undo
+  a user's tap. There the scroll view still reports the page it is on through
+  `scrollPosition(id:)`, but into a position of its own (`PagerPosition`, since folded into
+  `PagerSync`), set at first to the view the app opens on and never written by the app; only a change there sets the view, and a
+  change to the view moves the pages through the `ScrollViewReader`, as on iOS 18, unless a
+  swipe's report has put them there already. A report of the page the pages are still on is the
+  position already held, so it changes nothing, where through the shared binding it could write
+  that page back over a tap's. It relies on the scroll view reporting the reader's moves as it
+  does a swipe's, which nothing here checks: the UI tests run on iOS 26.5 only. A swipe still
+  sets the view when the scroll view reports the next page, before the pages rest, as it did.
+- **What stays.** A tap on the tab of the page being swiped away from, while the pages still
+  coast, gives way to where they come to rest, as the website's look has it: the thumb moves when
+  the pager settles.
+- **The risk.** On iOS 18 the page the app opens on now rests on the `onAppear` scroll alone,
+  until now a backup to `scrollPosition(id:)`'s first position. Should the pages open on Now with
+  Today chosen, no heading, label or selected tab would show it: HomePager hides the pages by the
+  view chosen (`accessibilityHidden`), not by where they are, so the tree holds Today's page
+  wherever the pages are, and the first tap on a tab puts the two back in step. So `expectFits`
+  and `tap(_:in:)` also check that the chosen view's `page-<view>` starts at the window's left
+  edge, within half a point (`offScreen`; every page frame in cf4eb74's and 3405dd3's trees
+  starts at 0), and `testDefaultViewEitherSideOf6pm` calls `expectFits` after each launch. Pages
+  that didn't follow the launch then fail that test, the three `everyPage` tests and the home
+  audits at once, with the page's frame; pages that didn't follow a tap fail the tap.
+  `onChange(of:initial: true)` is then the next to try.
+- **No wait or retry is added**: the tap came on a screen still for 2.1 seconds, as a user's
+  would, so it was right to fail, and tapping again would hide exactly this. `tap(_:in:)`'s
+  failure now also says where the tab was, the tab the app has chosen and where the pages are
+  (`homeGeometry`, whose `page-<view>` is the chosen view's page). The old tab still chosen is a
+  tap that never took or was undone; the new one chosen with its page off the screen is pages
+  that didn't follow, which `offScreen` now fails as soon as the heading comes. Should the
+  failure come back with Now chosen, the action never ran, which points to the touch, not the
+  pager.
+- **Corrected after #34's third full run (8bcc82b).** Every launch opened on Now: 30 UI tests
+  failed with the heading on Now where Today was due, and `offScreen` agreed. Following every rest
+  followed the scroll view's first rest too, at launch, on Now, before the `onAppear` scroll moved
+  it to the view the app opens on, and wrote Now over the view. Now one modifier, `PagerSync`,
+  serves both versions. The scroll view reports into a position of its own through
+  `.scrollPosition(id:)`, set at first to the view the app opens on, so it opens there as it did
+  before this PR, and the app never writes it, so no report can be written back over a tap. On
+  iOS 18 the view follows only a swipe: `onScrollPhaseChange` notes `.interacting`, a finger
+  moving the pages, and at the `.idle` after it sets the view to the page they rest on
+  (`PagerRest`); a rest no finger led to, at launch or after a tab's jump, changes nothing. On
+  iOS 17 the page the scroll view reports sets the view, as described above. "The risk" above no
+  longer holds: the first position is the scroll view's own again, with the `onAppear` scroll as
+  its backup, and `offScreen` still checks it.
+
+**A licence's URL "partially unsupported" for Dynamic Type
+(`SettingsTests.testRowsOpenWhatTheySay`).** On the typeface's licence (`NoticeView`), the
+project-page button's URL text, at (20, 200.3, 362, 52), in `button` type: BricolageText-Medium at
+14.4 points with subheadline.
+
+- **It really doesn't grow from Medium to Large.** The recording has the audit's text-size sweep:
+  13 frames, xSmall to AX5 and back to Large, each told by the title's widths, in the large
+  title's steps, and the notice's monospaced footnote's, 12, 12, 12 then 13 points. The URL's
+  underline spans the string, 18.957 em in BricolageText-Medium, so its widths give 12, 13, 14 and
+  14 points from xSmall to Large, then 16, 17, 19, 22, 26, 31, 36 and 42, each line within 0.05 of
+  a whole point. Medium's and Large's crops are identical to the pixel; unrounded, Large's 14.4
+  would be 819 pixels wide, not 796.
+- **SwiftUI draws every brand role at whole points** on the simulator. From the trees' frame
+  widths at Large: `small` 14.4 drawn at 14.00, `line` 15.2 at 15.01, `row` 17.6 at 18.03, `note`
+  13.6 at 14.00, `label` and `labelStrong` 16 at 16.0. Among the audited roles, 14.4 with
+  subheadline is the one whose Medium and Large come to the same point.
+- **The rule the audit appears to apply.** Apple doesn't publish it, but one rule fits every case
+  in PR #31's, #33's and #34's logs: a text is "partially unsupported" when another size draws it
+  at its Large size. Flagged: the caption2 recorder lines (11 points from xSmall to Large), the
+  toolbar's Close (never below the bar's size), and the picker's Close in `button` (14 at Medium
+  and Large; at Large 61 points wide, 14.03 points, and at AX3 106, 31.08, on f3dc54e's run).
+  Texts whose sizes repeat, but never at Large's, pass, as the system footnote on the same page
+  does.
+- **Not the cause.** The Medium face: Settings' and Credits' rows, Medium 17.6 with body (about 15,
+  16, 17 and 18 from xSmall to Large), pass. The underline: "Open Settings" and the "Use my exact
+  location" chip pass. The wide pill with its text, spacer and arrow held 52 tall: Your privacy's
+  full-policy button is built the same way, its text 362 by 52 in `labelStrong`, and passes, and
+  Settings' rows' frames stay 362 by 54 from xSmall to Large and pass, so the audit reads the
+  text's size, not its frame. A link or a button, the URL text, the label and the value: Close was
+  a plain button with none of these and failed the same way. Nor `fixedSize` or a line limit.
+- **`small`, also 14.4 with subheadline, is no counterexample.** A week's band is inside its row's
+  one element (`accessibilityElement(children: .ignore)`), so the audit judges the row; the
+  limited line, its own element, has never been audited (no tree has `limited`). Both 14.4-point
+  texts judged as their own elements, Close and the URL, failed.
+- **The fix.** The URL is in `labelStrong` (SemiBold 16 with callout), DESIGN's role for page
+  buttons and outbound links, still underlined, drawn at 16 points at Large and 15 at Medium. At
+  that size it is about 309 points wide, so at Large it wraps to two lines in the 300 or so beside
+  the arrow, as it already did from xLarge, the pill growing to fit. Retry, built as Close is and
+  in the same type, takes `label`, as the picker's plan said whichever change cleared Close would
+  (`label` did on 3405dd3's run); with no text left in it, the `button` role is gone. No test
+  changes and no exception: the licence's audit is what proves the fix on the next run.
+- **The limited line and the week's bands too.** They were the `small` role's, also 14.4 with
+  subheadline. The bands are judged as their rows, but the limited line is its own element and
+  would fail the same way once a limited fixture is audited, so both are in `line` now, 15.2 with
+  subheadline, drawn at 15 points at Large and passing as the picker's `location-detail`, and
+  `small` is gone. It departs from the website's 14.4, as Retry's `label` does: a little larger,
+  still Regular, and still smaller than the 16-point texts around them.
+
+**For the next macOS run to show.** That the home tests that read every page,
+`testDefaultViewEitherSideOf6pm`, `testTheMiddleTabTurnsToTomorrowAt6pm`,
+`testNearbyLoadsInPlaceOnThisWeek`, `FixtureLaunchTests.testSwitcherAndSwipe`, the offline tests'
+swipes and the home audits' taps pass with the pages setting the view only at rest; that the app
+still opens on Today before 6pm, its pages on it after every launch and tap (`offScreen`); and
+that the licence's audit passes, and the picker's still do.
+
+## After #34's fourth full run
+
+PR #34's fourth full macOS run, on c74aa22 (run 40189947895, job 121158965836), passed 43 of the 44
+UI tests. The one failure, `HomeAuditTests.testLeedsDryAtAX3`: on the week page's fourth screenful
+the contrast call threw -56, "Audit failed to complete in time", after 15.3 seconds, and again after
+15.0 when `runAudit` ran it again on the same, settled screen. Every other call of the run finished
+in 3.7 seconds or less. Read from the run's xcresult (the runner's session log, the app's output and
+the simulator's `system.logarchive`), its attachments and screen recording, and fdb3182's, cf4eb74's
+and e1bc88e's (session scratchpad: hang-wk4).
+
+- **XCTest's deadline is 15 seconds a call.** For each call testmanagerd logs
+  `XCAXAuditRunForApplication`, its kinds (`auditTypeContrast`) and `timeout: 15`, and both -56s
+  came 15.07 and 15.03 seconds after the runner asked. PR #33's "about 17" (above, corrected there)
+  was measured around the call; ScreenAudit's comments say 15 now.
+- **Where the call stopped.** A contrast call runs in two parts. In the app, about 0.4 seconds in,
+  the accessibility runtime logs one "AX Audit: SwiftUI view @ has an unknown contrast issue type"
+  line a candidate: 33 on both attempts, as on every call. Then testmanagerd judges the candidates
+  from the screen's pixels with its vision service (AXMService, with the AXElementVision and
+  AXIconVision models). On every call that finished, testmanagerd freed its AXMService about 0.2
+  seconds after the app's lines and asked for the screenshot at once. On the two that stopped it
+  logged the models' lookups and two orientation lookups, then nothing, and the app nothing, until
+  the deadline; AXMService was never freed.
+- **Not a slow host, nor a screen still moving.** Of about 300 contrast calls on four runs, every
+  one but the four that stopped took 1.4 seconds or less, and each stop came within a tenth of a
+  second of the deadline, twice on one screen. The recording has no frame from the end of the step's
+  drag until the status bar's minute; XCTest's wait for the app to idle took no time; the app
+  answered every query between the attempts in 0.12 to 0.23 seconds, and its minute tick drew during
+  the second attempt without freeing it.
+- **What it depends on: not shown.** fdb3182's run stopped the same way, twice, on the same page's
+  fifth screenful (50 candidates). Screens near the two that stopped passed, but each on another
+  build, whose content or element tree differs, so no run has audited the same content a few points
+  away (hang-wk4: the `tree-week-*` trees, compared with their addresses stripped). cf4eb74's and
+  e1bc88e's week pages, the same as each other, are from before 8bcc82b set the week's bands in
+  `line`: there each row is 87.3 points tall at AX3 and its band 37.3, where c74aa22's are 89.7 and
+  39.7, so their sources sit about 16 points higher on the page ("Want the full picture?" at 2027.7
+  against 2044.1, "BBC Weather" at 2126.0 against 2142.3). Their fourth screenfuls, the page 1304.33
+  and 1296.0 points down against c74aa22's 1299.67, passed in 0.71 and 0.58 seconds showing "BBC
+  Weather" whole, at about 822 to 866 and 830 to 874, where c74aa22's cuts it at 842.6 to 886.6;
+  cf4eb74's cuts "Met Office" instead, at 865.7 to 909.7 (hang-wk4: `hung-vs-pass.png`,
+  `cf4eb74-cuts.txt`). Their fifth screenfuls passed in under 0.8 seconds, and cf4eb74's is 1.33
+  points from fdb3182's, but fdb3182's tree is another: each nearby place's button holds its name
+  and a 5-point comma as texts of their own, so that screen has 50 contrast candidates where
+  cf4eb74's has 36 (`leeds-counts.tsv`). In every pair the content or the candidates differ. Both
+  stopped screens are the week page at AX3 with the sources' sentence and its 44-point link rows,
+  and a link or linked text cut by the screen's bottom edge; each of those, alone or together, is on
+  screens that passed (AccuWeather cut at 867 to 911, durham-tomorrow's credits' links, slivers of 2
+  to 3 points at the page's top, about 50 screens with an element across the window's top). Nor do
+  the candidates' counts tell: 33 stopped where 34 to 36 passed, 50 where 41 to 43 did. So the
+  artefacts show neither which element sets the stall off nor that it needs that exact screen: that
+  the stall is in Apple's judging of that one screenshot, and that the same content a few points
+  away would pass, is a hypothesis, which the test change below puts to the test. A spindump of
+  testmanagerd during a stall, or the same screen in Xcode, could say more.
+- **So no app change yet.** Nothing in the app was busy, and what the two screens share passes
+  elsewhere: a change aimed at the cut "BBC Weather" link (whole on cf4eb74's and e1bc88e's passing
+  screens, but links cut by the bottom edge pass on other pages) or the 0.83-point sliver of "Fri"
+  at the page's top would be a guess. Page breaks that never cut an element (`step`) might avoid it,
+  but screens with cuts pass far more often than not.
+- **The test change: the same content, a few points away** (`HomeAuditTests.auditAgain` and
+  `moveAFewPoints`; `runAudit`'s `OnAuditTimeout`). A retry with a nudge, to test the hypothesis
+  above, not a fix for a cause shown. A home call that doesn't finish in time isn't run again on the
+  same screen, which stopped again both times it was tried. The screenful's other calls aren't made.
+  The app's element tree is attached (`<name>-<k>-tree`), the page put back should the call have
+  moved it (`restore`), and the app checked in the foreground at the test's text size. From one
+  snapshot of the page, `PageRoom` finds how far it may move each way and still show whole exactly
+  the elements the screenful showed whole (`Screenful.showsWhole`'s rule): short of the first
+  element shown whole that a move would cut, of the first not shown whole that it would show whole,
+  and of the page's ends (a drag down at its top would pull at the refresh). On c74aa22's screen
+  that is 9.5 points up, to "Rain" 8.5 under the page's top edge, and 32.3 down, to the sources'
+  sentence 31.3 above the window's bottom edge; on fdb3182's, 17.0 up and 2.6 down. The page is
+  dragged to move 3 to 12 points (9 to 36 pixels), a point short of the room, the way with the wider
+  band first. A drag spends 13 to 20 points before the page moves, so each drag is the move still
+  wanted and 16.5 points more, then the last drag's measured dead travel more, at most three a way,
+  the page's place read from the credits once it has settled. There, a second snapshot must show
+  whole the same elements, by type, identifier, label and place on the page (`PageElements.change`).
+  The screen is then attached as `<name>-<k>-moved` (after `-<k>` on the contact sheet), added as a
+  screenful of its own, and audited in all three calls, so every kind runs on the same whole content
+  and the contrast proof reads the pixels audited. Before those calls, what the stopped screenful's
+  calls done had found is dropped (`AuditLog.mark` and `drop`), as the moved screenful's calls find
+  it again on the same whole elements: so none is counted twice, as `runAudit` drops a sheet's first
+  attempt's. (Should the page not move, it stays noted, for the test's failure to list.) The page's
+  audit goes on from there: the next scroll is worked out from the moved screenful (`step`), and
+  elements cut at its edges are judged on a screenful that shows them whole (`AuditLog.settle`), as
+  before. Nothing is skipped and nothing new is allowed.
+- **When it fails.** A call on the moved screenful that fails too fails the test with both attempts,
+  each with its kinds, time and where the credits were (`AuditFailure.elsewhere`); a page that can't
+  be moved so fails it with what each way came to (`notRunAgain`). The times attachment says what
+  happened: "timed out (-56) after 15.3 s; not run again on the same screen" on the stopped call,
+  then the moved screenful's three calls at "…, screenful 4, scrolled 7.5 points up" (or down).
+- **The sheets keep their retry.** A sheet has no page to move a few points. None of their calls has
+  timed out on any run, and a second timeout on the same screen at least tells a call that stops
+  from one that is slow (`OnAuditTimeout.runAgain`).
+- **Checked on Linux:** the nine UI test files type-check against the stubs of XCUITest, and copies
+  ran there: `PageRoom` on c74aa22's and fdb3182's stopped screens, rebuilt from their element trees
+  (9.53 up and 32.27 down, so down first; 16.97 and 2.63, so up alone), at the page's top and end,
+  and with frames that never fit; `PageElements.change` (a third of a point's rounding and the order
+  no change; an element cut, one come whole, one renamed); `runAudit` handing a timeout back at once
+  with its note; the failure's words; and the week page's whole audit against a fake app scrolled by
+  its drags, each spending 13 to 20 points, on c74aa22's tree: the fourth screenful's contrast call
+  stopping, its other calls not made, the page moved 5 points with the same elements whole and
+  audited in all three calls, and the audit going on to the page's end; the fourth screenful's
+  second call stopping instead, the issue its contrast call had found counted once, not twice; the
+  moved screen stopping too, failing once with both attempts and where the credits were for each;
+  and a page that won't move, failing with what each way came to, and, when its second call had
+  stopped, keeping the issue its first had found.
+- **What the next run will tell.** The moved screenful shows whole the same elements as the one that
+  stopped, a few points away ("BBC Weather" still cut by the bottom edge, whichever way the page
+  moves): it tests whether the stall needs that exact screen. Should it pass, the hypothesis stands,
+  still unproven, and the page's audit goes on to its end. Should its contrast call stop too, the
+  hypothesis is wrong: the stall follows what the screen shows, not where to the point, so the move
+  is no fix and is to come out, and the next change is to that content, in the app (what the two
+  stopped screens share: the sources' sentence and its link rows at AX3, a link cut by the screen's
+  bottom edge) or in where the pages break (`step`), read first from the trees and `-moved` screens
+  attached and a spindump of testmanagerd.
 
 ## API contract
 
@@ -4180,11 +5093,13 @@ checks it answers `text/plain` on all four hosts).
   the API's `attribution` lines as they are, with the same phrases linked: the phrases and their
   links are core's (`CREDIT_LINKS`, split by `creditParts`), which the website's `Credit.astro`
   reads too.
-- **The answer font in the apps.** Bricolage Grotesque is under the SIL Open Font License 1.1,
-  with no reserved font name. The iPhone app bundles the answer's subset as `BricolageAnswer.ttf`,
-  renamed and so a modified version, which the OFL allows; its name table keeps the copyright
-  and carries the licence's description and URL. The app's credits screen (spec section 10.6)
-  gives the licence's full text.
+- **The fonts in the apps.** Bricolage Grotesque is under the SIL Open Font License 1.1, with
+  no reserved font name. The iPhone app bundles the answer's subset as `BricolageAnswer.ttf` and
+  three static text faces as `BricolageText-{Regular,Medium,SemiBold}.ttf`, each renamed and so a
+  modified version, which the OFL allows; each name table keeps the copyright and carries the
+  licence's description and URL. The app's credits screen (spec section 10.6) gives the licence's
+  full text, which covers every face, under "The app's typeface.", since every page sets its
+  words in it.
 - **Fair use, not non-commercial.** ShareAlike attaches only to adapted material, and a verdict
   or a median of 8 models very likely is not (a reading, not legal advice). The per-model
   figures the pages and `models[]` show are the closest thing to passing on Met Office data,
@@ -4360,10 +5275,6 @@ index the crawler's own US town; see "Search engines").
 - The iPhone app: whether a recent place that came from "Use my location", chosen again from the
   list, follows the phone at the next launch (as now) or stays put ("The iPhone app's phase 6,
   reviewed").
-- The iPhone app: whether the home switcher, section 10.2's segmented `Picker`, is drawn as
-  Settings' units are (buttons in a segmented track whose labels grow with the text), which
-  would let `HomeAuditTests` drop its one Dynamic Type exception ("The iPhone app's phases 5 and
-  6, reviewed").
 - The iPhone app: whether to restore spec section 16's Smart Invert exemption for the glyph and
   the gradients, which the app now inverts with the text. Restored, it is for the page as a
   whole, its text too, and only once the window-sized element the audit fails is settled ("The
