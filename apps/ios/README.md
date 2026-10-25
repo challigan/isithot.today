@@ -676,17 +676,21 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   (`home-<fixture>-<size>-allowed`) and listed in its failure. Each page's first screenful also
   attaches the app's element tree (`<page>-tree`). Each call goes through `runAudit`
   (ScreenAudit.swift), which times it and reads its issues once it is done, outside XCTest's
-  deadline for the call; one that doesn't finish in time ("Audit failed to complete in time",
-  -56) runs once more, 2 seconds later, with the same kinds, only while the app is in the
-  foreground, the switcher is the test's size's and the page is within a point of the screenful
-  attached (the resizing call's page put back first), the first attempt's issues dropped. The
-  times are attached (`home-<fixture>-<size>-audit-times`, a line a call), and the slowest call
-  and any that timed out are named in `-allowed`. A page that stops scrolling short of its end,
-  an app that has left the foreground, or an audit that can't run, or doesn't finish in time
-  twice or on a screen that isn't the screenful's, fails with where the page and its credits were
+  deadline for the call, 15 seconds. One that doesn't finish in time ("Audit failed to complete
+  in time", -56) isn't run again on the same screen, where on PR #34's runs on fdb3182 and c74aa22
+  it stopped again: the screenful's other calls aren't made, the app's element tree is attached
+  (`…-<k>-tree`), and once the app is in the foreground at the test's size, the page is moved 3 to
+  12 points, the way with more room first, so that it shows whole exactly the elements the screenful
+  showed whole (`PageRoom`, checked again on a second snapshot), attached as `…-<k>-moved` and
+  audited in all three calls as a screenful of its own; the next scroll starts from there
+  (DECISIONS, "After #34's fourth full run"). The times are attached
+  (`home-<fixture>-<size>-audit-times`, a line a call), and the slowest call and any that timed
+  out are named in `-allowed`. A page that stops scrolling short of its end, an app that has left
+  the foreground, an audit that can't run, or one that doesn't finish in time on the moved
+  screenful too or whose page can't be moved so, fails with where the page and its credits were
   on each screenful, and the page's frame on each (the scroll view's viewport, PR #33's run
-  showed); a timeout with each attempt's error and time. A page that stops short, or never
-  reaches its end, also says the page's whole frame and the window's,
+  showed); a timeout with each attempt's error and time and where the credits were. A page that
+  stops short, or never reaches its end, also says the page's whole frame and the window's,
   each drag (those that put the page back marked so), the page's four lowest elements and where
   a swipe by XCUITest's own gesture then moved the credits (a page at the end of its scroll range,
   or a drag it didn't take), and attaches the app's element tree as `<name>-tree-stopped`. For a
@@ -699,7 +703,8 @@ screens to a row). `HomeAuditTests` attaches every screenful it audits as
 …, `…-1-large-2-today-01`, …, `…-1-large-3-this-week-01`, …, `…-2-ax3-1-now-01` and so on, then
 durham-tomorrow (whose middle tab is `2-tomorrow`) and leeds-dry: eighteen pages top to bottom,
 fixture by fixture, Large before AX3, each in the switcher's order, after the `app-…` and
-`glyph-…` attachments and before the widgets'. Phase 5's exit asks for these.
+`glyph-…` attachments and before the widgets'. A screenful audited again a few points away after
+a call didn't finish in time follows its own, as `…-<k>-moved`. Phase 5's exit asks for these.
 
 **On Linux** (`swift test` in IsItCore): `ClockTests.swift` (`FixedClock`: one moment, work for a
 later time never runs, the model on it asks once; `MinuteTick.anchor`: each tick a twentieth of
@@ -960,8 +965,9 @@ with the screen's darkest and lightest pixels inside the element and what the pr
 it, then one failure that lists them all with the window's frame. The tests stop at their first
 failure, so without it a run would show one issue a screen. Each audit first attaches the screen
 as audited and the element tree (`audit-<screen>`, `audit-<screen>-tree`), and each call goes
-through `runAudit`, as the home audit's do: timed (`audit-<screen>-times`), and run again once
-after a timeout only while the screen's elements are where they were as audited. Each test says
+through `runAudit`, as the home audit's do: timed (`audit-<screen>-times`), and, with no page to
+move a few points as the home's audit does, run again once after a timeout, on the same screen,
+only while the screen's elements are where they were as audited. Each test says
 which surface its screen is (`auditAccessibility(of:on:surface:)`): the picker the sheet in the
 band of the page it opened over (`HomeScreen.picker()`, from the screens `picker-leeds`,
 `picker-first-launch` and `aberdeen-snow`), Settings, its pages and the mail fallback content.

@@ -335,11 +335,14 @@ extension XCTestCase {
   /// Scrolls `page`, the page on screen, down by `distance` points: a drag up the page by that
   /// much, from no lower than 90% of the way down the part of it on screen and 80 points above
   /// the screen's bottom edge (the home indicator's), held still before it lifts so the page
-  /// doesn't fling on. The drag is in the page's left margin, 10 points in (the pages have 20 of
-  /// padding), where no button, link or row is, so the page's scroll view always takes it.
-  /// (Phase 5.4's drag, from 90% of the page's frame down its middle, never moved a page past
-  /// its first scroll on PR #31's macOS run, and at AX3 the audit after it found no app to
-  /// audit.) Gives the drag, for a failure to say.
+  /// doesn't fling on. A negative `distance` scrolls it up: a drag down the page from a tenth of
+  /// the way down the part on screen (`HomeAuditTests.moveAFewPoints`, a few dozen points at
+  /// most). The drag is in the page's left margin, 10 points in (the pages have 20 of padding),
+  /// where no button, link or row is, so the page's scroll view always takes it. (Phase 5.4's
+  /// drag, from 90% of the page's frame down its middle, never moved a page past its first scroll
+  /// on PR #31's macOS run, and at AX3 the audit after it found no app to audit.) The page moves
+  /// by less than the drag: the scroll view spends its first 13 to 20 points before the page
+  /// moves (PR #33's macOS run). Gives the drag, for a failure to say.
   @MainActor
   @discardableResult
   func scrollDown(
@@ -350,7 +353,7 @@ extension XCTestCase {
     let shown = onScreen(page, in: app)
     let screen = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
     let x = shown.minX + 10
-    let start = min(shown.minY + shown.height * 0.1 + distance, app.frame.maxY - 80)
+    let start = min(shown.minY + shown.height * 0.1 + max(distance, 0), app.frame.maxY - 80)
     let from = screen.withOffset(CGVector(dx: x, dy: start))
     let to = screen.withOffset(CGVector(dx: x, dy: start - distance))
     from.press(forDuration: 0.01, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.3)

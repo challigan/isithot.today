@@ -3897,7 +3897,10 @@ screen recordings, screenshots and element trees, and run 2's, were read for eac
   screenful). The rule was to split them once a first call came to more than about 60% of the
   deadline, and this run is past it: This week's ninth first call finished in 10.8 seconds against
   a deadline of about 17 (the timed-out call's), some 63%, and run 2's 12.4 on the same Now
-  screenful was about 72%. Nor would the retry alone have saved this run: Today's first screenful,
+  screenful was about 72%. (Corrected after #34's fourth full run: the deadline is 15 seconds a
+  call, XCTest's own, which testmanagerd logs as `timeout: 15` for each; the 17 was the recording's
+  time from the screenshot to the next tap, around the call. The split stands: 10.8 and 12.4 are
+  72% and 83% of it.) Nor would the retry alone have saved this run: Today's first screenful,
   audited about 4.6 seconds after the timeout, took 9.5 seconds, about 2.5 times its expected
   time, so the host was still slow, and the same five kinds run again 2 seconds after the -56, at
   that rate, would have taken about 17.5 and timed out again. So the split is made now, not after
@@ -4750,6 +4753,94 @@ project-page button's URL text, at (20, 200.3, 362, 52), in `button` type: Brico
 swipes and the home audits' taps pass with the pages setting the view only at rest; that the app
 still opens on Today before 6pm, its pages on it after every launch and tap (`offScreen`); and
 that the licence's audit passes, and the picker's still do.
+
+## After #34's fourth full run
+
+PR #34's fourth full macOS run, on c74aa22 (run 40189947895, job 121158965836), passed 43 of the 44
+UI tests. The one failure, `HomeAuditTests.testLeedsDryAtAX3`: on the week page's fourth screenful
+the contrast call threw -56, "Audit failed to complete in time", after 15.3 seconds, and again after
+15.0 when `runAudit` ran it again on the same, settled screen. Every other call of the run finished
+in 3.7 seconds or less. Read from the run's xcresult (the runner's session log, the app's output and
+the simulator's `system.logarchive`), its attachments and screen recording, and fdb3182's, cf4eb74's
+and e1bc88e's (session scratchpad: hang-wk4).
+
+- **XCTest's deadline is 15 seconds a call.** For each call testmanagerd logs
+  `XCAXAuditRunForApplication`, its kinds (`auditTypeContrast`) and `timeout: 15`, and both -56s
+  came 15.07 and 15.03 seconds after the runner asked. PR #33's "about 17" (above, corrected there)
+  was measured around the call; ScreenAudit's comments say 15 now.
+- **Where the call stopped.** A contrast call runs in two parts. In the app, about 0.4 seconds in,
+  the accessibility runtime logs one "AX Audit: SwiftUI view @ has an unknown contrast issue type"
+  line a candidate: 33 on both attempts, as on every call. Then testmanagerd judges the candidates
+  from the screen's pixels with its vision service (AXMService, with the AXElementVision and
+  AXIconVision models). On every call that finished, testmanagerd freed its AXMService about 0.2
+  seconds after the app's lines and asked for the screenshot at once. On the two that stopped it
+  logged the models' lookups and two orientation lookups, then nothing, and the app nothing, until
+  the deadline; AXMService was never freed.
+- **Not a slow host, nor a screen still moving.** Of about 300 contrast calls on four runs, every
+  one but the four that stopped took 1.4 seconds or less, and each stop came within a tenth of a
+  second of the deadline, twice on one screen. The recording has no frame from the end of the step's
+  drag until the status bar's minute; XCTest's wait for the app to idle took no time; the app
+  answered every query between the attempts in 0.12 to 0.23 seconds, and its minute tick drew during
+  the second attempt without freeing it.
+- **What it depends on: that screen, to the point.** fdb3182's run stopped the same way, twice, on
+  the same page's fifth screenful (50 candidates). The screens a few points from c74aa22's (the page
+  1299.67 points down) passed on cf4eb74 and e1bc88e, 1304.33 and 1296.0 down, in 0.71 and 0.58
+  seconds, and those runs' fifth screenfuls, near fdb3182's, in under 0.8. Both stopped screens are
+  the week page at AX3 with the sources' sentence and its 44-point link rows, and a link or linked
+  text cut by the screen's bottom edge; each of those, alone or together, is on screens that passed
+  (AccuWeather cut at 867 to 911, durham-tomorrow's credits' links, slivers of 2 to 3 points at the
+  page's top, about 50 screens with an element across the window's top). Nor do the candidates'
+  counts tell: 33 stopped where 34 to 36 passed, 50 where 41 to 43 did. So the stall is in Apple's
+  judging of that exact screenshot; which element sets it off the artefacts can't say. A spindump of
+  testmanagerd during a stall, or the same screen in Xcode, could.
+- **So no app change.** Nothing in the app was busy, and what the two screens share passes
+  elsewhere: a change aimed at the cut "BBC Weather" link or the 0.83-point sliver of "Fri" at the
+  page's top would be a guess. Page breaks that never cut an element (`step`) might avoid it, but
+  screens with cuts pass far more often than not.
+- **The fix: the same content, a few points away** (`HomeAuditTests.auditAgain` and
+  `moveAFewPoints`; `runAudit`'s `OnAuditTimeout`). A home call that doesn't finish in time isn't
+  run again on the same screen, which stopped again both times it was tried. The screenful's other
+  calls aren't made, and the issues of those done stay noted against it. The app's element tree is
+  attached (`<name>-<k>-tree`), the page put back should the call have moved it (`restore`), and the
+  app checked in the foreground at the test's text size. From one snapshot of the page, `PageRoom`
+  finds how far it may move each way and still show whole exactly the elements the screenful showed
+  whole (`Screenful.showsWhole`'s rule): short of the first element shown whole that a move would
+  cut, of the first not shown whole that it would show whole, and of the page's ends (a drag down at
+  its top would pull at the refresh). On c74aa22's screen that is 9.5 points up, to "Rain" 8.5 under
+  the page's top edge, and 32.3 down, to the sources' sentence 31.3 above the window's bottom edge;
+  on fdb3182's, 17.0 up and 2.6 down. The page is dragged to move 3 to 12 points (9 to 36 pixels), a
+  point short of the room, the way with the wider band first. A drag spends 13 to 20 points before
+  the page moves, so each drag is the move still wanted and 16.5 points more, then the last drag's
+  measured dead travel more, at most three a way, the page's place read from the credits once it has
+  settled. There, a second snapshot must show whole the same elements, by type, identifier, label
+  and place on the page (`PageElements.change`). The screen is then attached as `<name>-<k>-moved`
+  (after `-<k>` on the contact sheet), added as a screenful of its own, and audited in all three
+  calls, so every kind runs on the same whole content and the contrast proof reads the pixels
+  audited. The page's audit goes on from there: the next scroll is worked out from the moved
+  screenful (`step`), and elements cut at its edges are judged on a screenful that shows them whole
+  (`AuditLog.settle`), as before. Nothing is skipped and nothing new is allowed.
+- **When it fails.** A call on the moved screenful that fails too fails the test with both attempts,
+  each with its kinds, time and where the credits were (`AuditFailure.elsewhere`); a page that can't
+  be moved so fails it with what each way came to (`notRunAgain`). The times attachment says what
+  happened: "timed out (-56) after 15.3 s; not run again on the same screen" on the stopped call,
+  then the moved screenful's three calls at "…, screenful 4, scrolled 7.5 points up" (or down).
+- **The sheets keep their retry.** A sheet has no page to move a few points. None of their calls has
+  timed out on any run, and a second timeout on the same screen at least tells a call that stops
+  from one that is slow (`OnAuditTimeout.runAgain`).
+- **Checked on Linux:** the nine UI test files type-check against the stubs of XCUITest, and copies
+  ran there: `PageRoom` on c74aa22's and fdb3182's stopped screens, rebuilt from their element trees
+  (9.53 up and 32.27 down, so down first; 16.97 and 2.63, so up alone), at the page's top and end,
+  and with frames that never fit; `PageElements.change` (a third of a point's rounding and the order
+  no change; an element cut, one come whole, one renamed); `runAudit` handing a timeout back at once
+  with its note; the failure's words; and the week page's whole audit against a fake app scrolled by
+  its drags, each spending 13 to 20 points, on c74aa22's tree: the fourth screenful's contrast call
+  stopping, its other calls not made, the page moved 5 points with the same elements whole and
+  audited in all three calls, and the audit going on to the page's end; the moved screen stopping
+  too, failing once with both attempts and where the credits were for each; and a page that won't
+  move, failing with what each way came to.
+- **For the next run to show:** that the moved screenful passes. Should it stop too, the stall is
+  less exact than one screen, and the trees and `-moved` screens attached, with a spindump of
+  testmanagerd, are the next to read.
 
 ## API contract
 

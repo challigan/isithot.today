@@ -23,8 +23,9 @@ import XCTest
 /// Every issue an audit finds fails the test, but for the exceptions in `exceptions`, each with
 /// why it isn't a fault to fix in the app. An element of the page is judged on a screenful that
 /// shows it whole (`AuditLog`). Each call goes through `runAudit` (ScreenAudit.swift): timed, the
-/// times attached at the test's end as `home-<fixture>-<order>-audit-times`, and run again once,
-/// on the screenful as attached, should it not finish in time.
+/// times attached at the test's end as `home-<fixture>-<order>-audit-times`. One that doesn't
+/// finish in time isn't run again on the same screen: the page is moved a few points, showing
+/// whole the same elements, and audited again in all three calls (`auditAgain`).
 final class HomeAuditTests: XCTestCase {
   override func setUpWithError() throws {
     continueAfterFailure = true
@@ -170,11 +171,14 @@ final class HomeAuditTests: XCTestCase {
   /// the page moved it with the credits. An element of the page that a screenful cuts at the
   /// page's edge, or shows not at all, is judged on a screenful that shows it whole
   /// (`AuditLog.settle`). Before the next scroll the page is put back where the screenful had it,
-  /// should an audit have moved it (`restore`). A call that doesn't finish in time runs again
-  /// once, only on the screenful as attached (`runAudit`, `unsettled`). Fails, with where the page
-  /// and its credits were, when the credits aren't there, the app has left the foreground, an
-  /// audit can't run or doesn't finish in time twice, a call but the resizing one moves the page,
-  /// the page stops scrolling before its end, or its end never comes into view; for the last two,
+  /// should an audit have moved it (`restore`). A call that doesn't finish in time isn't run again
+  /// on the same screen: the screenful's other calls aren't made, and the page is moved a few
+  /// points, showing whole what the screenful showed whole, and audited again in all three calls
+  /// as a screenful of its own, `<name>-<k>-moved` (`auditAgain`); the next scroll starts from
+  /// there. Fails, with where the page and its credits were, when the credits aren't there, the
+  /// app has left the foreground, an audit can't run, a call doesn't finish in time on the moved
+  /// screenful too or the page can't be moved so, a call but the resizing one moves the page, the
+  /// page stops scrolling before its end, or its end never comes into view; for the last two,
   /// with what `stopped` finds too.
   @MainActor
   private func audit(
@@ -191,6 +195,9 @@ final class HomeAuditTests: XCTestCase {
       XCTFail("\(page.view) page: no credits at its end")
       return
     }
+    let run = PageRun(
+      page: page, app: app, size: size, colours: colours, credits: credits, found: found,
+      times: times)
     var seen: [Screenful] = []
     var drags: [Drag] = []
     defer { found.settle(on: seen) }
@@ -201,57 +208,27 @@ final class HomeAuditTests: XCTestCase {
         XCTFail("\(place): the app isn't in the foreground (state \(app.state.rawValue))")
         return
       }
-      let shot = attach(app, as: "\(name)-\(String(format: "%02d", number))")
-      if number == 1 {
-        // The tree on every page, not only one that stops: on PR #33's second macOS run none
-        // stopped, and nothing showed what held the window-sized element with no label.
-        attachText(app.debugDescription, as: "\(name)-tree")
-      }
-      let whole = app.find("page-\(page.view)").frame
-      let screenful = Screenful(page: shown(whole, in: app), frame: whole, credits: credits.frame)
-      guard !screenful.page.isEmpty else {
-        XCTFail("\(place): no page-\(page.view) on screen")
+      let label = "\(name)-\(String(format: "%02d", number))"
+      // The tree on every page, not only one that stops: on PR #33's second macOS run none
+      // stopped, and nothing showed what held the window-sized element with no label.
+      guard
+        case (let attached, let shot)? = attachScreenful(
+          as: label, at: place, with: run, tree: number == 1 ? "\(name)-tree" : nil)
+      else { return }
+      seen.append(attached)
+      var screenful = attached
+      do {
+        try auditCalls(on: attached, shot: shot, at: place, with: run)
+      } catch let failure as AuditFailure where isAuditTimeout(failure.first) {
+        guard
+          let moved = auditAgain(
+            after: failure, on: attached, as: label, at: place, with: run, seen: &seen,
+            drags: &drags)
+        else { return }
+        screenful = moved
+      } catch {
+        XCTFail("\(error); the app's state is \(app.state.rawValue), " + Screenful.describe(seen))
         return
-      }
-      seen.append(screenful)
-      // A contrast issue's pixels, from the screenful as attached.
-      let pixels = { (frame: CGRect) in ScreenPixels(shot, in: frame, window: colours.window) }
-      for kinds in AuditKinds.passes {
-        let issues: [XCUIAccessibilityAuditIssue]
-        do {
-          issues = try runAudit(of: app, for: kinds, at: place, timing: times) {
-            // Run again only on the screenful as attached: the resizing call's page put back
-            // first, as before a scroll.
-            if kinds == AuditKinds.resizing {
-              drags += restore(page, to: screenful, in: app, credits: credits)
-            }
-            return unsettled(app, at: size, credits: credits, as: screenful)
-          }
-        } catch {
-          XCTFail(
-            "\(error); the app's state is \(app.state.rawValue), " + Screenful.describe(seen))
-          return
-        }
-        // Where the credits are once the call is done: how far it moved the page, by which each
-        // issue's element is noted where it was on the screenful.
-        let end = settledFrame(of: credits)
-        let moved = end.minY - screenful.credits.minY
-        for issue in issues {
-          found.note(
-            issue, on: place, in: screenful, moved: abs(moved) < 1 ? 0 : moved, pixels: pixels,
-            colours: colours)
-        }
-        guard abs(moved) >= 1 else { continue }
-        let says =
-          "\(place): the audit of \(kinds.names) moved the page \(moved) points, the credits from "
-          + "\(screenful.credits) to \(end)"
-        if kinds == AuditKinds.resizing {
-          // Expected of a page scrolled past its end at a smaller text size; put back below.
-          print("\(says); it is put back before the next scroll")
-        } else {
-          // Nothing but the text size should move a page: its issues were read where it was.
-          XCTFail("\(says), which only the Dynamic Type and clipped-text checks were known to do")
-        }
       }
       // The credits' end is on screen: the whole page has been audited.
       if screenful.credits.maxY <= screenful.page.maxY { return }
@@ -275,6 +252,206 @@ final class HomeAuditTests: XCTestCase {
         + Screenful.describe(seen) + "; "
         + stopped(page, as: name, in: app, credits: credits, drags: drags))
   }
+
+  /// Attaches the screen as `label`, and, given `tree`, the app's element tree so named; gives
+  /// the screenful, where the page and its credits are, and the screenshot, whose pixels a
+  /// contrast issue's proof reads. Nil, having failed the test, with no page on screen.
+  @MainActor
+  private func attachScreenful(
+    as label: String,
+    at place: String,
+    with run: PageRun,
+    tree: String?
+  ) -> (Screenful, XCUIScreenshot)? {
+    let shot = attach(run.app, as: label)
+    if let tree { attachText(run.app.debugDescription, as: tree) }
+    let whole = run.app.find("page-\(run.page.view)").frame
+    let screenful = Screenful(
+      page: shown(whole, in: run.app), frame: whole, credits: run.credits.frame)
+    guard !screenful.page.isEmpty else {
+      XCTFail("\(place): no page-\(run.page.view) on screen")
+      return nil
+    }
+    return (screenful, shot)
+  }
+
+  /// Audits `screenful`, attached as `shot`, in the three calls (`AuditKinds.passes`), each
+  /// through `runAudit`, and notes each issue where its element was on the screenful
+  /// (`AuditLog.note`), a contrast issue with the screenshot's pixels. Fails when a call but the
+  /// resizing one moves the page. Throws a call's failure (`AuditFailure`) as it comes: one that
+  /// didn't finish in time isn't run again on this screen (`OnAuditTimeout.handBack`), the
+  /// screenful's later calls aren't made, and the issues of those done stay noted.
+  @MainActor
+  private func auditCalls(
+    on screenful: Screenful,
+    shot: XCUIScreenshot,
+    at place: String,
+    with run: PageRun
+  ) throws {
+    // A contrast issue's pixels, from the screenful as attached.
+    let pixels = { (frame: CGRect) in ScreenPixels(shot, in: frame, window: run.colours.window) }
+    for kinds in AuditKinds.passes {
+      let issues = try runAudit(
+        of: run.app, for: kinds, at: place, timing: run.times, onTimeout: .handBack)
+      // Where the credits are once the call is done: how far it moved the page, by which each
+      // issue's element is noted where it was on the screenful.
+      let end = settledFrame(of: run.credits)
+      let moved = end.minY - screenful.credits.minY
+      for issue in issues {
+        run.found.note(
+          issue, on: place, in: screenful, moved: abs(moved) < 1 ? 0 : moved, pixels: pixels,
+          colours: run.colours)
+      }
+      guard abs(moved) >= 1 else { continue }
+      let says =
+        "\(place): the audit of \(kinds.names) moved the page \(moved) points, the credits from "
+        + "\(screenful.credits) to \(end)"
+      if kinds == AuditKinds.resizing {
+        // Expected of a page scrolled past its end at a smaller text size; put back below.
+        print("\(says); it is put back before the next scroll")
+      } else {
+        // Nothing but the text size should move a page: its issues were read where it was.
+        XCTFail("\(says), which only the Dynamic Type and clipped-text checks were known to do")
+      }
+    }
+  }
+
+  /// After a call on `screenful` (attached as `label`) didn't finish in time (`failure`): the
+  /// screenful's other calls not made, and the issues of those done noted against it, attaches
+  /// the app's element tree as `<label>-tree`, what was on screen as the call stopped; puts the
+  /// page back should the call have moved it (`restore`); checks the app is as the test had it
+  /// (`unsettled`); moves the page a few points so that it shows whole exactly the elements the
+  /// screenful showed whole (`moveAFewPoints`); and attaches the screen as `<label>-moved` and
+  /// audits it in all three calls, a screenful of its own in `seen`, so every kind runs on the
+  /// same content and the proof reads the pixels audited. Gives it, for the next scroll to start
+  /// from; nil, having failed the test with each attempt's time and where the credits were, when
+  /// the page can't be moved so or a call on the moved screenful fails too.
+  ///
+  /// Not the same call again on the same screen: on PR #34's run on c74aa22 the contrast call on
+  /// leeds-dry's week page at AX3, fourth screenful, stopped for XCTest's 15 seconds twice, run
+  /// again on the same still screen, as it had on fdb3182's fifth; the screens a few points from
+  /// it in other runs passed in under a second (DECISIONS, "After #34's fourth full run").
+  @MainActor
+  private func auditAgain(
+    after failure: AuditFailure,
+    on screenful: Screenful,
+    as label: String,
+    at place: String,
+    with run: PageRun,
+    seen: inout [Screenful],
+    drags: inout [Drag]
+  ) -> Screenful? {
+    var failure = failure
+    failure.at = "with the credits at \(screenful.credits)"
+    attachText(run.app.debugDescription, as: "\(label)-tree")
+    drags += restore(run.page, to: screenful, in: run.app, credits: run.credits)
+    let distance: CGFloat
+    do {
+      if let why = unsettled(run.app, at: run.size) { throw HomeScreenError(why) }
+      distance = try moveAFewPoints(
+        run.page, from: screenful, in: run.app, credits: run.credits, drags: &drags)
+    } catch {
+      failure.notRunAgain = "its screenful wasn't audited again a few points away: \(error)"
+      XCTFail("\(failure); " + Screenful.describe(seen))
+      return nil
+    }
+    let again =
+      "\(place), scrolled \(pointsText(abs(distance))) points \(distance > 0 ? "down" : "up")"
+    guard
+      case (let moved, let shot)? = attachScreenful(
+        as: "\(label)-moved", at: again, with: run, tree: nil)
+    else { return nil }
+    seen.append(moved)
+    do {
+      try auditCalls(on: moved, shot: shot, at: again, with: run)
+    } catch {
+      if var second = error as? AuditFailure {
+        second.at = "with the credits at \(moved.credits)"
+        failure.elsewhere = second
+      } else {
+        failure.elsewhere = error
+      }
+      XCTFail(
+        "\(failure); the app's state is \(run.app.state.rawValue), " + Screenful.describe(seen))
+      return nil
+    }
+    return moved
+  }
+
+  /// Moves the page a few points from where `screenful` had it, so that it shows whole exactly
+  /// the elements the screenful showed whole (`Screenful.showsWhole`), and gives how far its
+  /// content moved up the screen (down, should it be negative). From one snapshot of the page,
+  /// how far it may move each way (`PageRoom`) gives the moves to aim for (`PageRoom.windows`,
+  /// `nudge`), the way with more room first. Each drag aims for the middle of the moves allowed,
+  /// longer by what a drag spends before the page moves: reckoned at first as `deadTravel`, then
+  /// as the last drag's, measured from where the credits went; at most `nudgingDrags` drags a
+  /// way. The page's place is read from the credits once it has settled (`settledFrame`), and
+  /// once it is among the moves allowed, a second snapshot must show whole the same elements, by
+  /// type, identifier, label and place on the page (`PageElements.change`). Throws, with what
+  /// each way came to, when no way gets there.
+  @MainActor
+  func moveAFewPoints(
+    _ page: HomeScreen.Page,
+    from screenful: Screenful,
+    in app: XCUIApplication,
+    credits: XCUIElement,
+    drags: inout [Drag]
+  ) throws -> CGFloat {
+    let element = app.find("page-\(page.view)")
+    guard let first = try? element.snapshot(), let before = PageElements(first) else {
+      throw HomeScreenError("the page's elements can't be read")
+    }
+    let room = PageRoom(before.frames(on: screenful), page: screenful.page)
+    let windows = room.windows(least: Self.nudge.least, most: Self.nudge.most, margin: 1)
+    guard !windows.isEmpty else {
+      throw HomeScreenError("no room to move it \(pointsText(Self.nudge.least)) points: \(room)")
+    }
+    var dead = Self.deadTravel
+    var tried: [String] = []
+    for window in windows {
+      var at = screenful.credits.minY - settledFrame(of: credits).minY
+      var count = 0
+      while !window.contains(at), count < Self.nudgingDrags {
+        count += 1
+        let want = (window.lowerBound + window.upperBound) / 2 - at
+        let length = dead + abs(want)
+        drags.append(scrollDown(page, by: want < 0 ? -length : length, in: app))
+        let now = screenful.credits.minY - settledFrame(of: credits).minY
+        let went = want < 0 ? at - now : now - at
+        dead = went >= 0.5 ? max(length - went, 0) : length
+        at = now
+      }
+      let way = "\(PageRoom.describe(window)) (room \(room))"
+      guard window.contains(at) else {
+        tried.append("\(way): \(count) drags left it at \(pointsText(at))")
+        continue
+      }
+      guard let second = try? element.snapshot(), let after = PageElements(second) else {
+        throw HomeScreenError("the page's elements can't be read once moved")
+      }
+      let moved = Screenful(page: screenful.page, frame: screenful.frame, credits: after.credits)
+      if let change = PageElements.change(from: before, on: screenful, to: after, on: moved) {
+        tried.append("\(way): moved \(pointsText(at)), \(change)")
+        continue
+      }
+      return at
+    }
+    throw HomeScreenError(
+      "it couldn't be moved a few points showing whole what it did: "
+        + tried.joined(separator: "; "))
+  }
+
+  /// The moves `moveAFewPoints` aims for, each way: at least 3 points (9 pixels), so the screen
+  /// differs by more than a frame's rounding, and at most 12, a few points still, the band 9
+  /// points wide, wider than the 7 by which a drag's dead travel varies (`deadTravel`).
+  static let nudge: (least: CGFloat, most: CGFloat) = (3, 12)
+
+  /// What a drag is reckoned to spend before the page moves until one is measured: the middle of
+  /// the 13 to 20 points of PR #33's macOS run (`restoringSlack`).
+  static let deadTravel: CGFloat = 16.5
+
+  /// The most drags `moveAFewPoints` makes each way.
+  static let nudgingDrags = 3
 
   /// Puts the page back where `screenful` had it, after an audit moved it back up: scrolls down,
   /// at most four fifths of the page on screen a drag, until the credits are within
@@ -309,26 +486,17 @@ final class HomeAuditTests: XCTestCase {
     return drags
   }
 
-  /// Why the screen isn't `screenful` as attached, for an audit call that didn't finish in time
-  /// to run again on it (`runAudit`), or nil when it is: the app in the foreground; the switcher
-  /// the one for `size`, so the text size is the test's (a Dynamic Type check cut short could
-  /// leave another); and the credits within a point of where the screenful had them.
+  /// Why the app isn't as the test had it, for a screenful to be audited again after a call
+  /// didn't finish in time (`auditAgain`), or nil when it is: the app in the foreground, and the
+  /// switcher the one for `size`, so the text size is the test's (a Dynamic Type check cut short
+  /// could leave another).
   @MainActor
-  private func unsettled(
-    _ app: XCUIApplication,
-    at size: TextSize,
-    credits: XCUIElement,
-    as screenful: Screenful
-  ) -> String? {
+  private func unsettled(_ app: XCUIApplication, at size: TextSize) -> String? {
     guard app.state == .runningForeground else {
       return "the app isn't in the foreground (state \(app.state.rawValue))"
     }
     guard switcherWraps(app) == (size == .ax3) else {
       return "the switcher isn't the one for the test's text size"
-    }
-    let now = settledFrame(of: credits)
-    guard abs(now.minY - screenful.credits.minY) < 1 else {
-      return "the page isn't where the screenful had it, the credits at \(now)"
     }
     return nil
   }
@@ -450,6 +618,188 @@ struct Screenful {
     let credits = seen.map { "\($0.credits)" }.joined(separator: ", ")
     return "the page on screen at \(page), the page's frame on each screenful at \(frames), the "
       + "credits on each screenful at \(credits)"
+  }
+}
+
+/// What auditing one page has at hand: the page, the app at its text size, the page's colours,
+/// its credits, and where the test notes issues and times.
+@MainActor
+private struct PageRun {
+  let page: HomeScreen.Page
+  let app: XCUIApplication
+  let size: TextSize
+  let colours: SurfaceColours
+  let credits: XCUIElement
+  let found: AuditLog
+  let times: AuditTimes
+}
+
+/// Points as the failures and places give them: "7.5".
+func pointsText(_ points: CGFloat) -> String {
+  String(format: "%.1f", Double(points))
+}
+
+/// A page's elements as one snapshot has them, every one under the page's own in the tree's
+/// order (rows, their texts, the credits and the content's own container among them), and where
+/// its credits were: by which `HomeAuditTests.moveAFewPoints` finds how far the page may move
+/// (`PageRoom`) and checks a moved screenful shows whole the same elements.
+struct PageElements {
+  let elements: [ScreenLayout.Element]
+  let credits: CGRect
+
+  init(elements: [ScreenLayout.Element], credits: CGRect) {
+    self.elements = elements
+    self.credits = credits
+  }
+
+  /// Under `root`, the page's snapshot; nil without the credits.
+  @MainActor
+  init?(_ root: any XCUIElementSnapshot) {
+    var found: [ScreenLayout.Element] = []
+    var pending = Array(root.children.reversed())
+    while let node = pending.popLast() {
+      found.append(
+        ScreenLayout.Element(
+          type: node.elementType, identifier: node.identifier, label: node.label,
+          frame: node.frame))
+      pending.append(contentsOf: node.children.reversed())
+    }
+    guard let credits = found.first(where: { $0.identifier == "credits" })?.frame else {
+      return nil
+    }
+    self.init(elements: found, credits: credits)
+  }
+
+  /// The screenful as the snapshot had the page: `screenful`'s part of the page on screen, the
+  /// credits where the snapshot had them.
+  private func taken(on screenful: Screenful) -> Screenful {
+    Screenful(page: screenful.page, frame: screenful.frame, credits: credits)
+  }
+
+  /// Each element's frame where `screenful` had the page: moved as the credits moved.
+  func frames(on screenful: Screenful) -> [CGRect] {
+    let moved = screenful.credits.minY - credits.minY
+    return elements.map { $0.frame.isNull ? $0.frame : $0.frame.offsetBy(dx: 0, dy: moved) }
+  }
+
+  /// The elements `screenful` shows whole (`Screenful.showsWhole`), the page moved as the credits
+  /// moved, in the tree's order, each with its place on the page: its top less the credits'.
+  func whole(on screenful: Screenful) -> [(element: ScreenLayout.Element, place: CGFloat)] {
+    let snapshot = taken(on: screenful)
+    return elements.filter { screenful.showsWhole($0.frame, from: snapshot) }.map {
+      ($0, $0.frame.minY - credits.minY)
+    }
+  }
+
+  /// How the elements `after` shows whole on `moved` differ from those `before` showed whole on
+  /// `screenful`, or nil when they are the same: each of the same type, identifier and label as
+  /// one of the others, within a point of its place on the page. Says the first one the screenful
+  /// showed whole that `moved` doesn't, or else the first `moved` shows whole that the screenful
+  /// didn't.
+  static func change(
+    from before: PageElements,
+    on screenful: Screenful,
+    to after: PageElements,
+    on moved: Screenful
+  ) -> String? {
+    typealias Whole = (element: ScreenLayout.Element, place: CGFloat)
+    func same(_ a: Whole, _ b: Whole) -> Bool {
+      a.element.type == b.element.type && a.element.identifier == b.element.identifier
+        && a.element.label == b.element.label && abs(a.place - b.place) < 1
+    }
+    func named(_ item: Whole) -> String {
+      let e = item.element
+      return describeElement(e.type, e.identifier, e.label, e.frame)
+    }
+    var now = after.whole(on: moved)
+    var lost: Whole?
+    for item in before.whole(on: screenful) {
+      if let index = now.firstIndex(where: { same(item, $0) }) {
+        now.remove(at: index)
+      } else if lost == nil {
+        lost = item
+      }
+    }
+    if let lost { return "it doesn't show whole the \(named(lost)), which the screenful did" }
+    if let more = now.first {
+      return "it shows whole the \(named(more)) too, which the screenful didn't"
+    }
+    return nil
+  }
+}
+
+/// How far a page may move from a screenful and still show whole exactly the elements of the
+/// page the screenful showed whole (`Screenful.showsWhole`'s rule, to within a point): `up`, the
+/// most its content may move up the screen (the page scrolled down), and `down`, the most it may
+/// move down. Each stops short of the first move that would cut an element the screenful showed
+/// whole or show whole one it didn't, and of the page's ends, past which it can't scroll (and a
+/// drag down at its top would pull at its refresh). On PR #34's run on c74aa22 the week page's
+/// fourth screenful at AX3 had 9.5 points of room up, to its first whole element ("Rain", 8.5
+/// under the page's top edge), and 32.3 down, to its last ("Want the full picture? See the
+/// forecast on", 31.3 above the window's bottom edge).
+struct PageRoom: Equatable, CustomStringConvertible {
+  let up: CGFloat
+  let down: CGFloat
+
+  init(up: CGFloat, down: CGFloat) {
+    self.up = up
+    self.down = down
+  }
+
+  /// Of `frames`, every element of the page's where the screenful had it, on the part of the page
+  /// on screen `page` (`Screenful.page`).
+  init(_ frames: [CGRect], page: CGRect) {
+    let window = page.insetBy(dx: -1, dy: -1)
+    var up = CGFloat.infinity
+    var down = CGFloat.infinity
+    var content = CGRect.null
+    for frame in frames where !frame.isNull && !frame.isEmpty {
+      content = content.union(frame)
+      // Whole once the content has moved up by m, from `least` to `most`, where it fits across.
+      guard frame.minX >= window.minX, frame.maxX <= window.maxX else { continue }
+      let least = frame.maxY - window.maxY
+      let most = frame.minY - window.minY
+      guard least <= most else { continue }
+      if least > 0 {
+        up = min(up, least)
+      } else if most < 0 {
+        down = min(down, -most)
+      } else {
+        up = min(up, most)
+        down = min(down, -least)
+      }
+    }
+    if !content.isNull {
+      up = min(up, max(content.maxY - page.maxY, 0))
+      down = min(down, max(page.minY - content.minY, 0))
+    }
+    self.init(up: up, down: down)
+  }
+
+  /// The moves to aim for, signed (the content up the screen positive): from `least` to `most`
+  /// points each way, and `margin` short of its room; the way with the wider band first, up on a
+  /// tie; none a way with less room than `least` and `margin`.
+  func windows(least: CGFloat, most: CGFloat, margin: CGFloat) -> [ClosedRange<CGFloat>] {
+    let upMost = min(most, up - margin)
+    let downMost = min(most, down - margin)
+    var found: [ClosedRange<CGFloat>] = []
+    if upMost >= least { found.append(least...upMost) }
+    if downMost >= least {
+      let window = (-downMost)...(-least)
+      if downMost > upMost { found.insert(window, at: 0) } else { found.append(window) }
+    }
+    return found
+  }
+
+  /// A band of moves as a failure says it: "the content 3.0 to 12.0 points down".
+  static func describe(_ window: ClosedRange<CGFloat>) -> String {
+    let way = window.lowerBound < 0 ? "down" : "up"
+    let ends = [abs(window.lowerBound), abs(window.upperBound)].sorted()
+    return "the content \(pointsText(ends[0])) to \(pointsText(ends[1])) points \(way)"
+  }
+
+  var description: String {
+    "\(pointsText(up)) points up, \(pointsText(down)) down"
   }
 }
 
