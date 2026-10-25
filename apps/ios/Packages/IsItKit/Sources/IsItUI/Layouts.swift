@@ -148,3 +148,45 @@ struct LimitedWidth: Layout {
     return ProposedViewSize(width: min(proposal.width ?? most, most), height: proposal.height)
   }
 }
+
+/// Lays its one view out on one line when its words fit the width offered, to within `slack`,
+/// and wraps them at that width only when they don't. On one line the view is offered no width,
+/// so it takes its own and can't wrap. Offered a width, a text can be given a fraction less than
+/// its words once its container is drawn on the screen's pixels: the place's pill was drawn
+/// 119.0 wide for "Aberdeen", whose words are 72.656 points and its padding, pin and gap 46.4,
+/// and on PR #34's last macOS run its "n" wrapped (DECISIONS, "The place pill on one line, after
+/// #34 merged"). A line kept whole within the slack runs into the pill's 12-point padding by no
+/// more. Wrapped, the words are measured at the width offered and placed with the slack added,
+/// so a line measured a fraction wider than the pixels it is drawn on breaks where it did.
+struct OneLineWhenItFits: Layout {
+  /// How far past the width offered a line may run and still be kept whole: a point, more than
+  /// a pixel at any of the iPhone's scales.
+  var slack: CGFloat = 1
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    guard let view = subviews.first else { return .zero }
+    guard let width = proposal.width, !fitsOnOneLine(view, in: width) else {
+      return view.sizeThatFits(.unspecified)
+    }
+    return view.sizeThatFits(ProposedViewSize(width: width, height: nil))
+  }
+
+  func placeSubviews(
+    in bounds: CGRect,
+    proposal: ProposedViewSize,
+    subviews: Subviews,
+    cache: inout ()
+  ) {
+    guard let view = subviews.first else { return }
+    let offer =
+      fitsOnOneLine(view, in: bounds.width)
+      ? ProposedViewSize.unspecified
+      : ProposedViewSize(width: bounds.width + slack, height: nil)
+    view.place(at: bounds.origin, proposal: offer)
+  }
+
+  /// Whether the view's own width is no more than `width` and the slack.
+  private func fitsOnOneLine(_ view: LayoutSubview, in width: CGFloat) -> Bool {
+    view.sizeThatFits(.unspecified).width <= width + slack
+  }
+}

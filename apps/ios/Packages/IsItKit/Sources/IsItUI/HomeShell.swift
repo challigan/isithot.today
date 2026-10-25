@@ -91,12 +91,19 @@ struct TopBarView: View {
             PinShape()
               .stroke(style: StrokeStyle(lineWidth: pin / 12, lineCap: .round, lineJoin: .round))
               .frame(width: pin, height: pin)
-            Text(verbatim: topBar.place)
-              .brandFont(.label)
+            // On one line whenever it fits: given a fraction of a point less than its words,
+            // "Aberdeen" broke inside the word, "Aberdee" over "n" (`OneLineWhenItFits`).
+            OneLineWhenItFits {
+              Text(verbatim: topBar.place)
+                .brandFont(.label)
+            }
           }
         }
         .accessibilityLabel(Text(verbatim: topBar.placeLabel))
         .accessibilityIdentifier("place")
+        // Offered its width before the spacer beside it, which at the same priority would take
+        // half of what the gear leaves, so a name wider than that half would wrap beside it.
+        .layoutPriority(1)
         if accessibilitySize {
           Spacer(minLength: 8)
         }
