@@ -47,7 +47,7 @@ final class SettingsTests: XCTestCase {
     waitFor(app.staticTexts["debug-units"], value: "f")
     XCTAssertTrue(units.buttons["in"].isSelected, "in isn't chosen")
     XCTAssertFalse(units.buttons["cm"].isSelected, "cm is still chosen")
-    try auditAccessibility(of: app, on: "Settings")
+    try auditAccessibility(of: app, on: "Settings", surface: .content)
     attachScreen(of: app, named: "app-settings")
     app.terminate()
 
@@ -97,7 +97,7 @@ final class SettingsTests: XCTestCase {
     XCTAssertTrue(text("rounded to about 5 km before it leaves your phone", in: app).exists)
     XCTAssertFalse(text("one service", in: app).exists, "The four sites' paragraph is in the app")
     assertSnowOnly(app)
-    try auditAccessibility(of: app, on: "How it works")
+    try auditAccessibility(of: app, on: "How it works", surface: .content)
     attachScreen(of: app, named: "app-how-it-works")
     back(in: app)
 
@@ -107,14 +107,14 @@ final class SettingsTests: XCTestCase {
     XCTAssertTrue(text("Place names: GeoNames, licensed under CC BY 4.0", in: app).exists)
     XCTAssertTrue(text("Contains Met Office data", in: app).exists)
     assertSnowOnly(app)
-    try auditAccessibility(of: app, on: "Credits and licences")
+    try auditAccessibility(of: app, on: "Credits and licences", surface: .content)
     attachScreen(of: app, named: "app-credits")
     tap("notice-BricolageGrotesque-OFL", in: app)
     let notice = app.staticTexts["notice-text"]
     XCTAssertTrue(notice.waitForExistence(timeout: 5), "No notice text")
     XCTAssertTrue(notice.label.contains("SIL OPEN FONT LICENSE Version 1.1"))
     // A licence in full is a screen of its own, audited too.
-    try auditAccessibility(of: app, on: "the typeface's licence")
+    try auditAccessibility(of: app, on: "the typeface's licence", surface: .content)
     attachScreen(of: app, named: "app-notice")
     back(in: app)
     tap("notice-Google-Mobile-Ads-LICENSE", in: app)
@@ -158,7 +158,7 @@ final class SettingsTests: XCTestCase {
     let copied = app.staticTexts["copy-confirmation"]
     XCTAssertTrue(copied.waitForExistence(timeout: 5), "No confirmation")
     XCTAssertEqual(copied.label, "Address copied.")
-    try auditAccessibility(of: app, on: "Report an ad's fallback")
+    try auditAccessibility(of: app, on: "Report an ad's fallback", surface: .content)
     attachScreen(of: app, named: "app-report-ad-fallback")
     app.buttons["close-fallback"].tap()
 
@@ -169,7 +169,7 @@ final class SettingsTests: XCTestCase {
       app.staticTexts["fallback-body"].label,
       "Email support@willitsnow.today. Tell us what happened, and the version number at the end "
         + "of Settings.")
-    try auditAccessibility(of: app, on: "Contact us's fallback")
+    try auditAccessibility(of: app, on: "Contact us's fallback", surface: .content)
     attachScreen(of: app, named: "app-contact-us-fallback")
   }
 
@@ -211,7 +211,7 @@ final class SettingsTests: XCTestCase {
     XCTAssertFalse(text("What we keep for notifications", in: app).exists)
     XCTAssertFalse(app.buttons["delete-my-data"].exists)
     assertSnowOnly(app)
-    try auditAccessibility(of: app, on: "Your privacy")
+    try auditAccessibility(of: app, on: "Your privacy", surface: .content)
     attachScreen(of: app, named: "app-your-privacy")
     let policy = app.buttons["full-policy"]
     XCTAssertGreaterThanOrEqual(policy.frame.height, 44, "The full policy's row at \(policy.frame)")

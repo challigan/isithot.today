@@ -9,7 +9,7 @@ import {
   makeSearchFixture,
   type Fixture,
 } from '../src/fixtures';
-import { brandColoursSwift } from '../src/brandColours';
+import { SURFACES_PATH, brandColoursSwift, surfacesJson } from '../src/brandColours';
 import { appCopySwift } from '../src/exportAppCopy';
 import { CONFIGS_GENERATED_DIR, configCopy } from '../src/exportConfigCopy';
 import { constantsSwift } from '../src/exportConstants';
@@ -101,6 +101,7 @@ describe('generatedFiles', () => {
       'apps/ios/Configs/Generated/Copy.xcconfig',
       ...resourcePaths,
       HOME_SCREENS_PATH,
+      SURFACES_PATH,
       ...assets.map((f) => f.path),
     ]);
     expect(files.slice(0, 10).map((f) => f.contents)).toEqual([
@@ -119,7 +120,7 @@ describe('generatedFiles', () => {
     const search = files.find((f) => f.path.endsWith('/Fixtures/Search/search-leeds.json'))!;
     expect(search.contents).toBe(fixtureJson(await makeSearchFixture(SEARCH_FIXTURES[0]!)));
     expect(SEARCH_FIXTURES_DIR).toBe(`${FIXTURES_DIR}/Search`);
-    const first = 10 + resourcePaths.length + 1;
+    const first = 10 + resourcePaths.length + 2;
     for (const [i, f] of assets.entries()) {
       expect(sameContents(files[first + i]!.contents, f.contents)).toBe(true);
     }
@@ -155,6 +156,8 @@ describe('generatedFiles', () => {
     expect(files.find((f) => f.path === HOME_SCREENS_PATH)!.contents).toBe(
       homeScreensJson(fixtures, page),
     );
+    // And the surfaces their contrast proof reads, beside them.
+    expect(files.find((f) => f.path === SURFACES_PATH)!.contents).toBe(surfacesJson());
   });
 
   it('starts every Swift file with the header that names its source', () => {

@@ -12,15 +12,24 @@
  * - **content**: Settings and every page it opens, in `Palettes.content` (core
  *   `SNOW_PALETTES.snow`, the website's own content pages' palette), over `PageBackground`.
  *
- * The model is the app's own, the same as `PageBackground` and the UI tests' `PageColours`: its
+ * The model is the app's own, the same as `PageBackground` and `SheetBackground`: its
  * approximation of the website's 168° (`along`), not CSS's own line. Mixes are in sRGB, rounded
  * to 8 bits as a screen draws them, and a pair's ratio is its worst anywhere on a 402 by 874
  * point screen, sampled every 6 points, rounded down.
  * `brandColoursSwift` writes the shares and the content card's colour into IsItModel, where
- * IsItUI and the Linux tests read the same numbers.
+ * IsItUI and the Linux tests read the same numbers; `surfacesJson` writes the surfaces, their
+ * models and every band's palette for the UI tests, whose contrast proof judges a screenshot's
+ * pixels by them (DECISIONS, "Contrast by measured pixels, after #34's first full run").
  */
-import { SNOW_PALETTES, type Palette } from '@isithot/core';
-import { CONTENT_BAND, opacity, ratioDown, rgb } from './exportPalettes';
+import { SNOW_PALETTES, type Palette, type SnowBand } from '@isithot/core';
+import {
+  BODY_TEXT_CONTRAST,
+  CONTENT_BAND,
+  UNKNOWN_BAND_DRAWS_AS,
+  opacity,
+  ratioDown,
+  rgb,
+} from './exportPalettes';
 import { generatedHeader, swiftDouble, swiftIdentifier } from './swift';
 
 /** An sRGB colour: red, green and blue, 0 to 255. */
@@ -106,13 +115,33 @@ export function contrast(a: Rgb, b: Rgb): number {
 }
 
 /**
- * How far along the 168° gradient a point is, 0 to 1: the app's own approximation of the
- * website's 168°, from 40% across the top to 60% across the bottom, as `PageBackground` draws it
- * (CSS's own line, corner to corner, tilts about 12°).
+ * The page's and the sheet's backgrounds as `PageBackground` and `SheetBackground` draw them, in
+ * fractions of the screen: the gradient's line, from 40% across the top to 60% across the bottom
+ * (the app's own approximation of the website's 168°; CSS's own line, corner to corner, tilts
+ * about 12°), and the page's glow, centred at (88%, 6%), gone at 52% of the way to the farthest
+ * corner. Named here, not only used, so the UI tests' contrast proof reads the same numbers
+ * (`surfacesJson`) and works the same model out from them.
  */
+export const BACKGROUND_MODEL = {
+  from: [0.4, 0],
+  to: [0.6, 1],
+  glowCentre: [0.88, 0.06],
+  glowReach: 0.52,
+} as const;
+
+/**
+ * The length of (x, y) as the UI tests' Swift works it out, the square root of the sum of the
+ * squares: `Math.hypot` may differ from it in the last bit, and a mix that lands on half a level
+ * would then round the other way there.
+ */
+const length = (x: number, y: number): number => Math.sqrt(x * x + y * y);
+
+/** How far along the gradient's line (`BACKGROUND_MODEL`) a point is, 0 to 1. */
 function along(x: number, y: number): number {
-  const [dx, dy] = [0.2 * SCREEN.width, SCREEN.height];
-  const t = ((x - 0.4 * SCREEN.width) * dx + y * dy) / (dx * dx + dy * dy);
+  const { from, to } = BACKGROUND_MODEL;
+  const [x0, y0] = [from[0] * SCREEN.width, from[1] * SCREEN.height];
+  const [dx, dy] = [(to[0] - from[0]) * SCREEN.width, (to[1] - from[1]) * SCREEN.height];
+  const t = ((x - x0) * dx + (y - y0) * dy) / (dx * dx + dy * dy);
   return Math.min(Math.max(t, 0), 1);
 }
 
@@ -124,10 +153,11 @@ function along(x: number, y: number): number {
 export function pageAt(p: Palette, x: number, y: number, glow = true): Rgb {
   const base = mix(colour(p.g1), colour(p.g2), along(x, y));
   if (!glow) return base;
-  const [cx, cy] = [0.88 * SCREEN.width, 0.06 * SCREEN.height];
+  const { glowCentre, glowReach } = BACKGROUND_MODEL;
+  const [cx, cy] = [glowCentre[0] * SCREEN.width, glowCentre[1] * SCREEN.height];
   const radius =
-    Math.hypot(Math.max(cx, SCREEN.width - cx), Math.max(cy, SCREEN.height - cy)) * 0.52;
-  const fade = Math.max(0, 1 - Math.hypot(x - cx, y - cy) / radius);
+    length(Math.max(cx, SCREEN.width - cx), Math.max(cy, SCREEN.height - cy)) * glowReach;
+  const fade = Math.max(0, 1 - length(x - cx, y - cy) / radius);
   return mix(base, colour(p.g3), opacity(p.glow) * fade);
 }
 
@@ -264,6 +294,231 @@ export const BRAND_COLOURS_PATH =
   'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated/BrandColours.swift';
 
 export const BRAND_COLOURS_SOURCE = 'packages/mobile/src/brandColours.ts';
+
+/** One of the app's three surfaces (this module's comment). */
+export type SurfaceName = 'page' | 'sheet' | 'content';
+
+/** The name every surface gives its background among its fills. */
+export const BACKGROUND = 'background';
+
+/**
+ * A flat fill a surface lays text on beside its background: `colour` (the palette's ink or pill,
+ * or a fixed colour) at `share` over `over`, the background or a fill listed before it.
+ */
+export interface SurfaceFill {
+  name: string;
+  colour: 'ink' | 'pill' | `#${string}`;
+  share: number;
+  over: string;
+}
+
+/** The palette's ink at `share` over each fill named in `on`. */
+export interface SurfaceInk {
+  name: string;
+  share: number;
+  on: readonly string[];
+}
+
+/**
+ * A surface as the app draws it: its background's model, its palette's band where it is fixed
+ * (null where the band on screen decides), the flat fills its text sits on, the colours its text
+ * is drawn in (`texts`), and the lines a button of it draws round or beside its words (`marks`:
+ * an edge, a hairline, a chevron), each the ink at a share over a fill.
+ */
+export interface Surface {
+  background: 'page' | 'sheet';
+  band: SnowBand | null;
+  fills: readonly SurfaceFill[];
+  texts: readonly SurfaceInk[];
+  marks: readonly SurfaceInk[];
+}
+
+/**
+ * The three surfaces, from `BRAND_SHARES`: what the UI tests' contrast proof (`DrawnText`, from
+ * `Surfaces.json`) holds the screenshot's pixels to, so it allows text in these colours on these
+ * fills and nothing else, and `surfaceTextPairs` shows every such pair at 4.5:1 or more on every
+ * band. Not every token is here: the selected tab's and the units thumb's `pill` on an ink fill,
+ * the search box's edge and the page's hairline above the credits, which no text element's
+ * frame holds whole or which Apple's check has never failed, are left to fail the audit.
+ *
+ * - page: ink on the gradient and on its opaque chips; Retry's edge round its chip.
+ * - sheet: ink and soft on the sheet, on Close's wash and on the search box's field; Close's
+ *   edge, over its wash.
+ * - content: ink on the gradient, on a card and on the units track (the wash on a card), soft on
+ *   a card and the track; a card's hairlines and its rows' chevrons and arrows.
+ */
+export const SURFACES: Readonly<Record<SurfaceName, Surface>> = {
+  page: {
+    background: 'page',
+    band: null,
+    fills: [{ name: 'chip', colour: 'pill', share: BRAND_SHARES.chip, over: BACKGROUND }],
+    texts: [{ name: 'ink', share: 1, on: [BACKGROUND, 'chip'] }],
+    marks: [{ name: 'border', share: BRAND_SHARES.border, on: ['chip'] }],
+  },
+  sheet: {
+    background: 'sheet',
+    band: null,
+    fills: [
+      { name: 'wash', colour: 'ink', share: BRAND_SHARES.wash, over: BACKGROUND },
+      { name: 'field', colour: 'ink', share: BRAND_SHARES.field, over: BACKGROUND },
+    ],
+    texts: [
+      { name: 'ink', share: 1, on: [BACKGROUND, 'wash', 'field'] },
+      { name: 'soft', share: BRAND_SHARES.soft, on: [BACKGROUND, 'wash', 'field'] },
+    ],
+    marks: [{ name: 'border', share: BRAND_SHARES.border, on: ['wash'] }],
+  },
+  content: {
+    background: 'page',
+    band: CONTENT_BAND,
+    fills: [
+      {
+        name: 'card',
+        colour: hex(card(CONTENT_PALETTE)) as `#${string}`,
+        share: 1,
+        over: BACKGROUND,
+      },
+      { name: 'track', colour: 'ink', share: BRAND_SHARES.wash, over: 'card' },
+    ],
+    texts: [
+      { name: 'ink', share: 1, on: [BACKGROUND, 'card', 'track'] },
+      { name: 'soft', share: BRAND_SHARES.soft, on: ['card', 'track'] },
+    ],
+    marks: [
+      { name: 'hairline', share: BRAND_SHARES.hairline, on: ['card'] },
+      { name: 'affordance', share: BRAND_SHARES.affordance, on: ['card'] },
+    ],
+  },
+};
+
+/**
+ * What a surface lays at one point: each fill, the background first, and each text colour and
+ * mark on each fill it may sit on, keyed `<ink's name>/<fill's name>` ("soft/wash").
+ */
+export interface SurfaceColours {
+  fills: Record<string, Rgb>;
+  texts: Record<string, Rgb>;
+  marks: Record<string, Rgb>;
+}
+
+/** Every colour `s` lays at (x, y) in `p`. A fill over one not yet laid, or ink on one, throws. */
+export function surfaceAt(s: Surface, p: Palette, x: number, y: number): SurfaceColours {
+  const fills: Record<string, Rgb> = {
+    [BACKGROUND]: s.background === 'page' ? pageAt(p, x, y) : sheetAt(p, x, y),
+  };
+  const fill = (name: string): Rgb => {
+    const found = fills[name];
+    if (!found) throw new Error(`No fill ${name} before it`);
+    return found;
+  };
+  const named = (c: SurfaceFill['colour']): Rgb =>
+    c === 'ink' ? colour(p.ink) : c === 'pill' ? colour(p.pill) : colour(c);
+  for (const f of s.fills) fills[f.name] = over(named(f.colour), f.share, fill(f.over));
+  const inks = (list: readonly SurfaceInk[]): Record<string, Rgb> =>
+    Object.fromEntries(
+      list.flatMap((t) =>
+        t.on.map((f) => [`${t.name}/${f}`, over(colour(p.ink), t.share, fill(f))]),
+      ),
+    );
+  return { fills, texts: inks(s.texts), marks: inks(s.marks) };
+}
+
+/** The palettes a surface is drawn in: its fixed band's, or every band's. */
+export function surfacePalettes(s: Surface): [SnowBand, Palette][] {
+  const bands = Object.entries(SNOW_PALETTES) as [SnowBand, Palette][];
+  return s.band === null ? bands : bands.filter(([band]) => band === s.band);
+}
+
+/**
+ * Each text colour of `s` on each fill it may sit on, `<text>/<fill>`, at its worst point on the
+ * screen in `p`, rounded down to two decimals: the pairs the contrast proof can allow.
+ */
+export function surfaceTextPairs(s: Surface, p: Palette): Record<string, number> {
+  const least: Record<string, number> = {};
+  for (let x = 0; x <= SCREEN.width; x += SCREEN.step) {
+    for (let y = 0; y <= SCREEN.height; y += SCREEN.step) {
+      const { fills, texts } = surfaceAt(s, p, x, y);
+      for (const [key, text] of Object.entries(texts)) {
+        const ratio = contrast(text, fills[key.split('/')[1]!]!);
+        least[key] = Math.min(least[key] ?? Infinity, ratio);
+      }
+    }
+  }
+  return Object.fromEntries(Object.entries(least).map(([key, ratio]) => [key, ratioDown(ratio)]));
+}
+
+/**
+ * The points each surface is sampled at for `Surfaces.json`, so the UI tests' Swift can show it
+ * works the model out exactly as this does: the screen's corners, the glow's centre, the middle,
+ * and two points where the home audit has measured text.
+ */
+export const SURFACE_SAMPLES: readonly (readonly [number, number])[] = [
+  [0, 0],
+  [SCREEN.width, SCREEN.height],
+  [BACKGROUND_MODEL.glowCentre[0] * SCREEN.width, BACKGROUND_MODEL.glowCentre[1] * SCREEN.height],
+  [SCREEN.width / 2, SCREEN.height / 2],
+  [139.33, 712.67],
+  [245, 134],
+];
+
+export const SURFACES_PATH = 'apps/ios/Apps/Snow/UITests/Generated/Surfaces.json';
+
+/** `#rrggbb` for each colour of a record. */
+const hexes = (colours: Record<string, Rgb>): Record<string, string> =>
+  Object.fromEntries(Object.entries(colours).map(([name, c]) => [name, hex(c)]));
+
+/**
+ * `Surfaces.json`, for the UI tests' contrast proof (`DrawnText`): the background models, the
+ * least contrast allowed, the band a page with none draws as, every band's palette, the three
+ * surfaces, and each surface's colours at `SURFACE_SAMPLES` in each palette it is drawn in, which
+ * the Swift reproduces before it judges a pixel. A line a palette, surface or sample, so a
+ * changed one is a changed line.
+ */
+export function surfacesJson(): string {
+  const palettes = (Object.entries(SNOW_PALETTES) as [SnowBand, Palette][]).map(([band, p]) => {
+    const { g1, g2, g3, ink, pill } = p;
+    return `    ${JSON.stringify(band)}: ${JSON.stringify({ g1, g2, g3, glow: opacity(p.glow), ink, pill })}`;
+  });
+  const surfaces = Object.entries(SURFACES).map(
+    ([name, s]) => `    ${JSON.stringify(name)}: ${JSON.stringify(s)}`,
+  );
+  const samples = (Object.entries(SURFACES) as [SurfaceName, Surface][]).flatMap(([name, s]) =>
+    surfacePalettes(s).flatMap(([band, p]) =>
+      SURFACE_SAMPLES.map(([x, y]) => {
+        const at = surfaceAt(s, p, x, y);
+        const sample = {
+          surface: name,
+          band,
+          x,
+          y,
+          fills: hexes(at.fills),
+          texts: hexes(at.texts),
+          marks: hexes(at.marks),
+        };
+        return `    ${JSON.stringify(sample)}`;
+      }),
+    ),
+  );
+  return [
+    '{',
+    `  "source": ${JSON.stringify(`${BRAND_COLOURS_SOURCE} (SURFACES), by surfacesJson`)},`,
+    `  "screen": ${JSON.stringify({ width: SCREEN.width, height: SCREEN.height })},`,
+    `  "background": ${JSON.stringify({ ...BACKGROUND_MODEL, sheetEnd: BRAND_SHARES.sheetEnd })},`,
+    `  "minimum": ${BODY_TEXT_CONTRAST},`,
+    `  "unknownBand": ${JSON.stringify(UNKNOWN_BAND_DRAWS_AS)},`,
+    '  "palettes": {',
+    palettes.join(',\n'),
+    '  },',
+    '  "surfaces": {',
+    surfaces.join(',\n'),
+    '  },',
+    '  "samples": [',
+    samples.join(',\n'),
+    '  ]',
+    '}',
+    '',
+  ].join('\n');
+}
 
 /** What each share is for, in the Swift's doc comments. */
 const SHARE_DOCS: Record<keyof typeof BRAND_SHARES, string> = {

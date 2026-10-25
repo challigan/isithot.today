@@ -103,19 +103,14 @@ struct HomeScreen: Decodable {
     return screen
   }
 
-  /// The colours `page` is drawn in: its band's palette, or no snow's for a page with no band, as
-  /// the app draws it (packages/mobile `UNKNOWN_BAND_DRAWS_AS`).
-  static func palette(of page: Page) throws -> HomePalette {
-    let band = page.band ?? "nosnow"
-    guard let palette = try file().palettes[band] else {
-      throw HomeScreenError("HomeScreens.json has no palette for \(band)")
-    }
-    return palette
+  /// The surface the place picker wears opened over this screen's opening page: the sheet, in
+  /// that page's band (PickerTests; `Surfaces.json` has every band's palette).
+  func picker() throws -> ScreenSurface {
+    .sheet(band: try opening().band)
   }
 
-  /// The file: every band's palette, and every screen.
+  /// The file: every screen. Each page's band names its palette, which `Surfaces.json` gives.
   private struct File: Decodable {
-    let palettes: [String: HomePalette]
     let screens: [HomeScreen]
   }
 
@@ -129,18 +124,6 @@ struct HomeScreen: Decodable {
     else { throw HomeScreenError("The UI tests have no HomeScreens.json") }
     return try JSONDecoder().decode(File.self, from: Data(contentsOf: url))
   }
-}
-
-/// A band's colours as a page draws them (IsItUI's `PageBackground`, core `SNOW_PALETTES`): the
-/// gradient from `g1` to `g2`, the glow of `g3` at `glow` opacity (0 to 1) at its centre, and the
-/// text in `ink`, each `#rrggbb`. What the home audit's contrast failures set the screen's pixels
-/// beside (`PageColours`).
-struct HomePalette: Decodable {
-  let g1: String
-  let g2: String
-  let g3: String
-  let glow: Double
-  let ink: String
 }
 
 /// A screen that never appeared, or a file that isn't there: the test stops, with why.
@@ -576,7 +559,7 @@ extension XCTestCase {
 
   /// Attaches the screen to the result bundle as a PNG, kept, named for the contact sheet, which
   /// tiles attachments in their names' order; and gives the screenshot, whose pixels a contrast
-  /// failure reads (`PixelRange`).
+  /// failure reads (`PixelRange`, `DrawnText`).
   @MainActor
   @discardableResult
   func attach(_ app: XCUIApplication, as name: String) -> XCUIScreenshot {

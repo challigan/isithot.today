@@ -1129,7 +1129,7 @@ export const RUNNING_LEAD_MS = 2 * MINUTE;
  * side of 6pm and from two minutes before it as the clock runs, and the first place under
  * "Nearby:"; OfflineTests' saved answer an hour on with no connection, its last two minutes and
  * its end (`usableUntil`) offline, a failed request over it, and nothing saved with no
- * connection. The two clocks that run start `RUNNING_LEAD_MS` before their moment, so that a
+ * connection; and the two pages PickerTests open the picker over. The two clocks that run start `RUNNING_LEAD_MS` before their moment, so that a
  * slow launch on the CI's simulator can't pass it before the test has read the screen before it.
  */
 export function homeScreens(fixtures: FixtureSet): HomeScreenSpec[] {
@@ -1186,6 +1186,23 @@ export function homeScreens(fixtures: FixtureSet): HomeScreenSpec[] {
       now: own('aberdeen-snow'),
       phase: 'offline',
       approximate: true,
+    },
+    // The pages PickerTests open the picker over, whose band it wears and whose palette its
+    // audit's contrast proof reads: Leeds by IP on the first launch, and Leeds chosen from a
+    // search, a city page, both at the first launch's moment, where those tests' clock starts.
+    {
+      name: 'picker-first-launch',
+      fixture: 'ip-first-launch',
+      now: own('ip-first-launch'),
+      phase: 'ready',
+      approximate: true,
+    },
+    {
+      name: 'picker-leeds',
+      fixture: 'leeds-dry',
+      now: own('ip-first-launch'),
+      phase: 'ready',
+      approximate: false,
     },
   );
   return screens;

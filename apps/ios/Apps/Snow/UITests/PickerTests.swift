@@ -297,7 +297,9 @@ final class PickerTests: XCTestCase {
     app.buttons["picker-use-my-location"].tap()
     XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10), "No Open Settings")
     attachScreen(of: app, named: "picker-audit")
-    try auditAccessibility(of: app, on: "the picker, with a recent place and location access off")
+    try auditAccessibility(
+      of: app, on: "the picker, with a recent place and location access off",
+      surface: try HomeScreen.named("picker-leeds").picker())
   }
 
   /// The search's results pass the audit too, with the keyboard down: a drag on the list puts it
@@ -315,7 +317,9 @@ final class PickerTests: XCTestCase {
     waitUntilGone(app.keyboards.firstMatch, "The keyboard is still up")
     XCTAssertTrue(result.exists, "The results went with the keyboard")
     attachScreen(of: app, named: "picker-results-audit")
-    try auditAccessibility(of: app, on: "the picker's results")
+    try auditAccessibility(
+      of: app, on: "the picker's results",
+      surface: try HomeScreen.named("picker-first-launch").picker())
   }
 
   /// The picker passes the audit with saved and recent places, at Large and at AX3: Kathmandu
@@ -346,7 +350,9 @@ final class PickerTests: XCTestCase {
       app.buttons["saved-city:leeds-gb"].waitForExistence(timeout: 10), "Leeds isn't under Saved")
     putTheKeyboardAway(app)
     attachScreen(of: app, named: "picker-dark")
-    try auditAccessibility(of: app, on: "the picker on a dark band, with a saved place")
+    try auditAccessibility(
+      of: app, on: "the picker on a dark band, with a saved place",
+      surface: try HomeScreen.named("aberdeen-snow").picker())
   }
 
   // MARK: - Helpers
@@ -380,7 +386,9 @@ final class PickerTests: XCTestCase {
     putTheKeyboardAway(app)
     attachScreen(of: app, named: name)
     let at = size == .ax3 ? "AX3" : "Large"
-    try auditAccessibility(of: app, on: "the picker, with saved and recent places, at \(at)")
+    try auditAccessibility(
+      of: app, on: "the picker, with saved and recent places, at \(at)",
+      surface: try HomeScreen.named("picker-leeds").picker())
   }
 
   /// Puts the keyboard away with a drag on the rows, as they ask

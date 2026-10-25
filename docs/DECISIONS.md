@@ -4447,6 +4447,126 @@ contents, and every row's action, are unchanged.
   and the icons' alignment on the contact sheet; and that the thumb doesn't animate on first
   appearance.
 
+## Contrast by measured pixels, after #34's first full run
+
+PR #34's first full macOS run on 3405dd3 (run 40167289069, job 121091106449) built the app and
+the widget, passed the unit plan (22 of 22) and 35 of the 44 UI tests. Every one of the nine
+failures was Apple's contrast check (`performAccessibilityAudit`, `.contrast`) failing text whose
+drawn pixels measure far above 4.5:1. The tests' own readouts, and the run's attachments read
+back with the screenshots each test attached (look-proof/crops.py in the session's scratchpad):
+
+- **The picker, on a light band (nosnow, a near-flat sheet).** Close (`picker-close`), "Use my
+  location" (`picker-use-my-location`), a recent row's "Leeds", "England, United Kingdom",
+  "Bagmati Province, Nepal" (soft, the ink at 85%), "Search for a place" and `location-detail` at
+  AX3, on all four picker audits: the darkest pixel the ink `#341a3c` or soft `#503958`, the
+  lightest about `#f6eef9`, 8.77 to 13.62:1 between them.
+- **The home screen.** "Want the full picture? See the forecast on", three lines at AX3, on the
+  Now and week pages of three fixtures (8.79 to 14.77:1 from the page's ink to the background at
+  its centre), and a two-line verdict on durham-tomorrow's week at Large (13.03:1). The nine
+  details the run allowed (PR #33's `DrawnText` exception) were the same kind of text.
+- **Settings.** How it works' title (`page-title`, `BricolageAnswer` at 35 points, white on the
+  content palette's gradient): darkest `#763e8e`, lightest `#ffffff`, 7.37:1.
+
+The same kinds of text in the system font passed on main, and every failure is Bricolage, on a
+plain fill or the gentlest of gradients: Apple's check evidently misreads Bricolage's glyphs on
+these backgrounds. It had already failed two-line details and the old 44-point text buttons at
+5.3 to 14.6:1 on PR #33's runs, which `DrawnText` allowed for the details and the places nearby.
+
+**The decision (Carl's, told to him).** Wherever Apple's contrast check fails a text element, the
+test judges it by WCAG on the screenshot's own pixels instead, on every audited screen: the home
+screen, the picker, Settings and its pages, and the mail fallback, and for every text element (a
+static text, or a button or link whose label is words), not only listed identifiers. It stays a
+proof: the issue is allowed only when the pixels prove the element is text drawn in its surface's
+own colours over its surface's own fills at 4.5:1 or more, throughout (no 3:1 for large text).
+Every allowed issue is listed in the failure message and attached. Hit regions, Dynamic Type,
+clipped text, descriptions, traits and element detection are never allowed, and no other check
+changes.
+
+- **One proof, one place** (`UITests/DrawnText.swift`). `DrawnText` classes each pixel of the
+  frame against its surface's model at that point: one of the surface's fills (within 6 levels a
+  channel: the background, a chip, a card, the wash, the field), one of its text colours (within
+  3: the ink, or soft on a flat fill), for a button or link one of the lines it draws round its
+  words (within 3: Close's and Retry's edge, a card's hairline, a row's chevron), an edge (a blend
+  of two of those, within 6 of the line between them, with a pixel of each within 2 pixels, as
+  anti-aliasing is), or none of them. The screenshot is read a point round the frame, for those
+  neighbours only: Close's pill fills its 44-point frame, so its edge's outer blend meets the sheet
+  just outside it (read without the margin, 0.42% of Close's pixels were none of the sheet's
+  colours; with it, none). It proves when the frame is whole on the screen and at least 10 by 10
+  points (the smallest text is 12.8 points at Large); the text colours are on 1% of the frame or
+  more ("Use my location", a row 370 points wide, has its words and icon on 2.5%); pixels of none
+  are 0.5% at the most; and each text colour drawn gives 4.5:1 or more against each fill shown
+  clear of what is drawn on it (no pixel but a fill's within 2), measured on the pixels themselves:
+  the text pixel nearest the fill in luminance against the fill pixel nearest the text.
+  `MeasuredContrast` is the exception every audit shares: a text element with the proof.
+  `HomeAuditTests.exceptions` keeps the credits' hit regions and takes it in place of PR #33's
+  details-and-places clause; the picker's and Settings' audits (`auditAccessibility(of:on:surface:)`)
+  allow it and nothing else, and now list and attach what they allowed (`audit-<screen>-allowed`)
+  as the home audit does.
+- **Each test says its surface.** The home audit's pages are the page in their band
+  (`HomeScreens.json`); the picker is the sheet in the band of the page it opened over, read from
+  two new screens, `picker-first-launch` (Leeds by IP at the first launch) and `picker-leeds`
+  (Leeds chosen from a search then), and from `aberdeen-snow` for the dark band
+  (`HomeScreen.picker()`); Settings, its pages and the fallback are content. A wrong surface fails
+  safe: its fills don't match the pixels, so nothing is allowed.
+- **The surfaces from one source, TypeScript first.** brandColours.ts already modelled the page,
+  the sheet and content for the tokens' contrast table. It now names the models' numbers
+  (`BACKGROUND_MODEL`) and the surfaces as data (`SURFACES`: each surface's background model, its
+  fixed band for content, its fills, its text colours and its marks, every share from
+  `BRAND_SHARES`), lays them at a point (`surfaceAt`) and works out every text pair the proof can
+  allow at its worst point on the screen (`surfaceTextPairs`). `brandColours.test.ts` holds every
+  such pair to 4.5:1 on every band it is drawn in and equal to the design's figures (`bandPairs`,
+  `contentPairs`), so the proof's model and the tokens are one. `surfacesJson` writes
+  `UITests/Generated/Surfaces.json`: the models' numbers, the least contrast, the band a page with
+  none draws as, every band's palette (now with `pill`), the three surfaces, and each surface's
+  colours at six points in each palette it is drawn in (78 samples). The Swift reproduces every
+  sample before it judges a pixel (`SurfaceFile.bundled`, failing the test with any that differs),
+  so it works the same model out, not a copy; to make that exact, brandColours.ts takes square roots
+  as the Swift does (`Math.hypot` may differ in the last bit) and the Swift mixes as TypeScript's
+  `mix` does (`a + (b − a) × t`). `HomeScreens.json` no longer carries the palettes; `PageColours`
+  and the old `DrawnText` in HomeAuditTests.swift are gone.
+- **What the surfaces hold, and don't.** The page: the band's gradient and glow, its opaque chips
+  (`pill`), ink; Retry's edge. The sheet: the band's pill fading towards g2, the wash (Close) and
+  the field (the search box), ink and soft on each; Close's edge over its wash. Content: the
+  content palette's gradient and glow, the plum card and the units track, ink everywhere and soft
+  on the card and the track; a card's hairlines and chevrons. Soft is never a page's or content's
+  gradient colour, as the tokens never put it there. The selected tab's and the units thumb's
+  `pill` on an ink fill are not modelled, nor Increase Contrast's heavier lines and absent glow
+  (the UI tests run at standard settings): Apple's check has not failed them, and should it, they
+  fail.
+
+**The evidence, in the Linux harness** (session scratchpad, look-uicheck: the UI test files
+type-checked against XCUITest stubs, and checks against fakes and the run's pixels).
+
+- **Run 3405dd3's 28 contrast issues all prove.** Each is cropped from the screenshot its test
+  attached, at the frame its failure gives and a point round it (pixels at 3x, frames in points):
+  the 19 that failed (12 on the picker, 6 on the home screen, How it works' title) and the 9
+  details PR #33's exception allowed. The text colours are on 2.5% ("Use my location") to 25.6%
+  (How it works' title) of a frame, pixels of none 0.03% at the most, and the least contrast is
+  5.55:1 (the title's white on the content gradient, nearest the glow); on the sheet, 6.61:1
+  (soft on Close's wash). `MeasuredContrast` allows each, and the home's log notes the verdict as
+  allowed with its proof. PR #33's second run's 50 home issues prove as well (5.21:1 at the least).
+- **The same pixels made wrong are all refused.** Dimmed to 50, 60 and 70% over their fill, as
+  `.opacity` draws: no pixel is a text colour any more. In a lighter grey (`#767676` on the light
+  bands, 4.54:1 on white, `#c8c8c8` on the dark): the same. In the ink over a fill the surface
+  hasn't (a pale or dark green the ink gives 7:1 or more on): 97.51% of "Use my location"'s
+  pixels are none of the sheet's colours. With the text taken away: no text. Judged as another
+  band's or surface's: the fills don't match (a snow page's detail does prove on content, which
+  is the snow palette's own gradient and glow, as it should). A dimmed copy of "Use my
+  location"'s words beside them: 3.17% of its pixels none of the sheet's colours, over 0.5%.
+- **Synthetic frames are all refused.** No frame, an empty one, 9 by 40 and 200 by 6 points; one
+  partly off the screen; the website's ink-at-10% Retry fill on maybesnow by the glow (89% of the
+  frame none of the page's colours, and, declared a fill of the page, refused for its 4.03:1); a
+  palette whose ink gives 3.45:1 on snow's page; soft at 40% on the nosnow sheet (2.34:1).
+- **The model is TypeScript's.** The Swift works out all 78 samples as brandColours.ts did, and
+  a sample changed by one level is caught; a sheet's contrast issue whose pixels can't be read is
+  noted as unexpected, with why. The largest frame, an AX3 detail of 330 by 160 points, takes
+  1.1 seconds in the harness's unoptimised build.
+
+**For the next macOS run to show.** That the 19 issues are allowed with their proofs listed,
+the home's nine details too, and the nine tests pass; how long the proof takes in the UI tests'
+unoptimised build, about 1.1 seconds for the largest frame on the Linux harness; and that
+`SurfaceFile.bundled` finds the bundle's Surfaces.json and its samples agree.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,

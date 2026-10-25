@@ -71,13 +71,15 @@ final class HomeAuditTests: XCTestCase {
 
   /// The issues allowed, each matched as narrowly as its element allows, with its reason: the
   /// credits' links, which phase 5.4 foresaw (DECISIONS, "The iPhone app's home accessibility and
-  /// its UI tests"), and contrast on text the screenful shows drawn in the page's ink at 4.5:1 or
-  /// more, proven again on each issue (`DrawnText`; DECISIONS, "The iPhone app's UI tests, after
-  /// PR #33's second macOS run"). The switcher's Dynamic Type exception, phase 5.4's other, went
-  /// with the segmented picker it allowed: the website's tabs that replace it scale (DECISIONS,
-  /// "The iPhone app in the website's look"). The issues allowed and the exceptions no audit of a
-  /// test needed are attached at its end (`home-<fixture>-<size>-allowed`) and listed in its
-  /// failure, so that one the app no longer needs can go.
+  /// its UI tests"), and contrast on any text element whose screenful's pixels prove it is text
+  /// in the page's own colours at 4.5:1 or more, proven again on each issue, as on every audited
+  /// screen (`MeasuredContrast`, `DrawnText`; DECISIONS, "Contrast by measured pixels, after
+  /// #34's first full run"), which took over PR #33's exception for the details and the places
+  /// nearby alone. The switcher's Dynamic Type exception, phase 5.4's other, went with the
+  /// segmented picker it allowed: the website's tabs that replace it scale (DECISIONS, "The
+  /// iPhone app in the website's look"). The issues allowed and the exceptions no audit of a test
+  /// needed are attached at its end (`home-<fixture>-<size>-allowed`) and listed in its failure,
+  /// so that one the app no longer needs can go.
   static let exceptions: [Exception] = [
     Exception(
       type: .hitRegion,
@@ -89,22 +91,7 @@ final class HomeAuditTests: XCTestCase {
         + "(section 10.2), is as tall as its line, as WCAG 2.2's target size (2.5.8) allows a "
         + "target inside a sentence"
     ),
-    Exception(
-      type: .contrast,
-      matches: { element in
-        // A page's detail or a place nearby, and only with the proof. Not "Use my exact
-        // location", a chip now, whose top row is its own fill, never the page's background.
-        let detail = element.type == .staticText && element.identifier == "detail"
-        let place = element.type == .button && element.identifier.hasPrefix("nearby-")
-        return (detail || place) && element.drawn?.proves(4.5) == true
-      },
-      why:
-        "a page's detail or a place nearby, drawn in the page's ink over the page's background, "
-        + "which the screenful shows giving 4.5:1 or more at every corner of its frame: Apple's "
-        + "check failed such text whose frame is mostly the page's gradient (two-line details, "
-        + "and the text buttons' 44-point lines) at 5.3:1 to 14.6:1 on PR #33's two macOS runs, "
-        + "and passed the same ink on one line"
-    ),
+    Exception(type: .contrast, matches: MeasuredContrast.allows, why: MeasuredContrast.why),
   ]
 
   /// The most screenfuls a page is audited in, top to bottom: a bound on a page that never ends,
@@ -147,6 +134,8 @@ final class HomeAuditTests: XCTestCase {
     expectFits(app, "\(name) at \(order)")
     // The window-sized element with no label, on every screenful of PR #33's two macOS runs.
     expectNoBareElements(app, "\(name) at \(order)")
+    // Every page's colours, from brandColours.ts, once checked against TypeScript's samples.
+    let surfaces = try SurfaceFile.bundled()
     let found = AuditLog()
     let times = AuditTimes()
     // Every call's time, however the test ends (ci/xcresult-summary.mjs `timings` lists them).
@@ -155,7 +144,7 @@ final class HomeAuditTests: XCTestCase {
       try tap(page, in: app)
       XCTAssertEqual(app.heading.label, page.heading, "\(page.view) page at \(order)")
       let tab = page.label.lowercased().replacingOccurrences(of: " ", with: "-")
-      let colours = PageColours(palette: try HomeScreen.palette(of: page), window: app.frame)
+      let colours = try surfaces.colours(.page(band: page.band), window: app.frame)
       try audit(
         page, as: "home-\(name)-\(order)-\(index + 1)-\(tab)", in: app, at: size,
         colours: colours, noting: found, timing: times)
@@ -193,7 +182,7 @@ final class HomeAuditTests: XCTestCase {
     as name: String,
     in app: XCUIApplication,
     at size: TextSize,
-    colours: PageColours,
+    colours: SurfaceColours,
     noting found: AuditLog,
     timing times: AuditTimes
   ) throws {
@@ -464,18 +453,6 @@ struct Screenful {
   }
 }
 
-/// What an exception knows of an issue's element: its type, identifier, label and frame on
-/// screen, the screen's credits, where they are on screen (`.null` without), and for a contrast
-/// issue, what the screenful shows drawn in its frame.
-struct AuditedElement {
-  let type: XCUIElement.ElementType?
-  let identifier: String
-  let label: String
-  let frame: CGRect
-  let credits: CGRect
-  var drawn: DrawnText?
-}
-
 /// What the audits found: the issues that fail the test, and those allowed, each described with
 /// its kind, its element and the page it was on; and which exceptions allowed any.
 ///
@@ -529,7 +506,7 @@ private final class AuditLog {
     in screenful: Screenful,
     moved: CGFloat,
     pixels: (CGRect) -> ScreenPixels?,
-    colours: PageColours
+    colours: SurfaceColours
   ) {
     let identifier = issue.element?.identifier ?? ""
     let label = issue.element?.label ?? ""
@@ -551,12 +528,14 @@ private final class AuditLog {
       + issue.detailedDescription
     if issue.auditType == .contrast, !frame.isNull {
       let read = pixels(frame)
-      element.drawn = read.flatMap { DrawnText($0, in: frame, colours: colours) }
+      let drawn = DrawnText(
+        pixels(DrawnText.reading(frame)), in: frame, on: colours,
+        withMarks: MeasuredContrast.drawsMarks(type))
+      element.drawn = drawn
       let range = read.flatMap { PixelRange(rgba: $0.rgba) }
       text +=
         "; the screenful's pixels there: \(range.map(\.description) ?? "can't be read"); "
-        + colours.expected(in: frame) + "; "
-        + (element.drawn.map(\.description) ?? "the text drawn can't be read")
+        + colours.expected(in: frame) + "; " + drawn.description
     }
     if fixed || element.frame.isNull || screenful.showsWhole(element.frame, from: screenful) {
       judge(element, issue.auditType, text)
@@ -592,107 +571,5 @@ private final class AuditLog {
     } else {
       unexpected.append(text)
     }
-  }
-}
-
-/// A page's colours where an element is, for a contrast failure to set beside the screenful's
-/// pixels there: the ink, and the background at the element's centre as IsItUI's
-/// `PageBackground` draws it over the window (a gradient from `g1` to `g2` from 40% across the
-/// top to 60% across the bottom, and over it the glow of `g3`, centred at 88% across and 6% down,
-/// from `glow` opacity to none at 52% of the way to the farthest corner), mixed in sRGB as
-/// SwiftUI mixes them, to within a few levels a channel.
-struct PageColours {
-  let palette: HomePalette
-  let window: CGRect
-
-  /// The background at `point`, on screen; nil for a palette that isn't three `#rrggbb`s.
-  func background(at point: CGPoint) -> RGB? {
-    guard let g1 = RGB(hex: palette.g1), let g2 = RGB(hex: palette.g2),
-      let g3 = RGB(hex: palette.g3), window.width > 0, window.height > 0
-    else { return nil }
-    let (width, height) = (Double(window.width), Double(window.height))
-    let x = Double(point.x - window.minX)
-    let y = Double(point.y - window.minY)
-    // Along the gradient's line, from (0.4w, 0) to (0.6w, h).
-    let (dx, dy) = (0.2 * width, height)
-    let along = ((x - 0.4 * width) * dx + y * dy) / (dx * dx + dy * dy)
-    let base = g1.mixed(with: g2, by: along)
-    let (cx, cy) = (0.88 * width, 0.06 * height)
-    let (across, down) = (max(cx, width - cx), max(cy, height - cy))
-    let radius = max((across * across + down * down).squareRoot() * 0.52, 1)
-    let distance = ((x - cx) * (x - cx) + (y - cy) * (y - cy)).squareRoot()
-    return base.mixed(with: g3, by: palette.glow * max(0, 1 - distance / radius))
-  }
-
-  /// "the page's ink #ffffff on about #6c3384 at its centre, 6.88:1", for an element at `frame`.
-  func expected(in frame: CGRect) -> String {
-    guard let ink = RGB(hex: palette.ink),
-      let background = background(at: CGPoint(x: frame.midX, y: frame.midY))
-    else { return "the page's colours can't be read" }
-    return "the page's ink \(ink) on about \(background) at its centre, "
-      + ratio(ink.contrast(with: background))
-  }
-}
-
-/// What a screenful shows of text in the page's ink inside an element's frame, for a contrast
-/// issue: the share of the frame's pixels that are the ink (within 3 levels a channel); whether
-/// the frame's top row, half a point in, above a line's tallest letters, is the page's background
-/// there (`PageColours`, within 6 levels a channel); and the least WCAG contrast of the ink with
-/// the page's background at the frame's four corners. Text drawn whole in the ink over the
-/// page's background has all three, so one that `proves(4.5)` is text a reader sees at 4.5:1 or
-/// more wherever it is in its frame: dimmed, drawn in another colour, over anything but the
-/// page's background, or on a page short of contrast, it fails one of them. On PR #33's second
-/// macOS run all 50 home contrast issues proved so (the ink 7 to 11% of their pixels, the top row
-/// within 2 levels, 5.41:1 at the least), from the screenfuls attached.
-struct DrawnText: CustomStringConvertible {
-  let inkShare: Double
-  let edgeIsBackground: Bool
-  let worst: Double
-
-  /// Of `pixels`, the screenful inside `frame`, on the page drawn in `colours`; nil for a
-  /// palette that can't be read or no pixels.
-  init?(_ pixels: ScreenPixels, in frame: CGRect, colours: PageColours) {
-    guard let ink = RGB(hex: colours.palette.ink), pixels.width > 0, pixels.height > 0 else {
-      return nil
-    }
-    var inked = 0
-    for y in 0..<pixels.height {
-      for x in 0..<pixels.width where pixels.pixel(x, y).within(3, of: ink) {
-        inked += 1
-      }
-    }
-    let row = Int(((frame.minY + 0.5 - pixels.origin.y) * pixels.scale).rounded(.down))
-    var edge = (0..<pixels.height).contains(row)
-    if edge {
-      for x in 0..<pixels.width {
-        guard let background = colours.background(at: pixels.point(x, row)) else { return nil }
-        if !pixels.pixel(x, row).within(6, of: background) {
-          edge = false
-          break
-        }
-      }
-    }
-    let corners = [
-      CGPoint(x: frame.minX, y: frame.minY), CGPoint(x: frame.maxX, y: frame.minY),
-      CGPoint(x: frame.minX, y: frame.maxY), CGPoint(x: frame.maxX, y: frame.maxY),
-    ]
-    let ratios = corners.compactMap { colours.background(at: $0).map(ink.contrast(with:)) }
-    guard let worst = ratios.min() else { return nil }
-    inkShare = Double(inked) / Double(pixels.width * pixels.height)
-    edgeIsBackground = edge
-    self.worst = worst
-  }
-
-  /// Whether it is text drawn whole in the ink over the page's background, which gives
-  /// `minimum` or more at every corner of the frame.
-  func proves(_ minimum: Double) -> Bool {
-    inkShare >= 0.02 && edgeIsBackground && worst >= minimum
-  }
-
-  var description: String {
-    let percent = (inkShare * 1000).rounded() / 10
-    return "the ink on \(percent)% of its pixels, its top row "
-      + (edgeIsBackground ? "the page's background" : "not the page's background")
-      + ", the ink on the background at its corners \(ratio(worst)) at the least"
   }
 }

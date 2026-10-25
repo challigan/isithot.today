@@ -8,11 +8,16 @@
 import { SNOW_PALETTES, type Palette, type SnowBand } from '@isithot/core';
 import { describe, expect, it } from 'vitest';
 import {
+  BACKGROUND,
+  BACKGROUND_MODEL,
   BRAND_COLOURS_PATH,
   BRAND_COLOURS_SOURCE,
   BRAND_SHARES,
   CONTENT_PALETTE,
   SCREEN,
+  SURFACES,
+  SURFACES_PATH,
+  SURFACE_SAMPLES,
   UNUSED_SHARES,
   bandPairs,
   brandColoursSwift,
@@ -26,12 +31,24 @@ import {
   over,
   pageAt,
   sheetAt,
+  surfaceAt,
+  surfacePalettes,
+  surfaceTextPairs,
+  surfacesJson,
   unusedPairs,
   worst,
   type BandPairs,
   type ContentPairs,
+  type Rgb,
+  type Surface,
 } from '../src/brandColours';
-import { BODY_TEXT_CONTRAST, CONTENT_BAND } from '../src/exportPalettes';
+import { UI_TESTS_GENERATED_DIR } from '../src/exportHomeScreens';
+import {
+  BODY_TEXT_CONTRAST,
+  CONTENT_BAND,
+  UNKNOWN_BAND_DRAWS_AS,
+  opacity,
+} from '../src/exportPalettes';
 import { generatedHeader } from '../src/swift';
 
 /** A ratio rounded down to one decimal, as the design's floors are. */
@@ -195,6 +212,186 @@ describe('the background models', () => {
     expect(luminance(card(SNOW_PALETTES.nosnow))).toBeGreaterThan(
       luminance(colour(SNOW_PALETTES.nosnow.pill)),
     );
+  });
+});
+
+describe('the surfaces the UI tests’ contrast proof reads', () => {
+  const sheetP = SNOW_PALETTES.maybesnow;
+
+  it('name the background models’ numbers, which the page draws by', () => {
+    expect(BACKGROUND_MODEL).toEqual({
+      from: [0.4, 0],
+      to: [0.6, 1],
+      glowCentre: [0.88, 0.06],
+      glowReach: 0.52,
+    });
+    // The points the Linux harness checks the UI tests' Swift at: a place nearby on no snow, and
+    // "Use my location" under the glow on snow.
+    expect(hex(pageAt(SNOW_PALETTES.nosnow, 139.33, 712.67))).toBe('#e5d0eb');
+    expect(hex(pageAt(SNOW_PALETTES.snow, 245, 134))).toBe('#85529a');
+  });
+
+  it('lay each fill, text colour and mark as the tokens do, over the background models', () => {
+    for (const [, p] of bands) {
+      const [ink, pill] = [colour(p.ink), colour(p.pill)];
+      const page = surfaceAt(SURFACES.page, p, 120, 300);
+      expect(page.fills).toEqual({
+        [BACKGROUND]: pageAt(p, 120, 300),
+        chip: over(pill, BRAND_SHARES.chip, pageAt(p, 120, 300)),
+      });
+      expect(page.texts).toEqual({ 'ink/background': ink, 'ink/chip': ink });
+      expect(page.marks).toEqual({ 'border/chip': over(ink, BRAND_SHARES.border, pill) });
+      const sheet = surfaceAt(SURFACES.sheet, p, 120, 300);
+      const under = sheetAt(p, 120, 300);
+      const wash = over(ink, BRAND_SHARES.wash, under);
+      const field = over(ink, BRAND_SHARES.field, under);
+      expect(sheet.fills).toEqual({ [BACKGROUND]: under, wash, field });
+      expect(sheet.texts).toEqual({
+        'ink/background': ink,
+        'ink/wash': ink,
+        'ink/field': ink,
+        'soft/background': over(ink, BRAND_SHARES.soft, under),
+        'soft/wash': over(ink, BRAND_SHARES.soft, wash),
+        'soft/field': over(ink, BRAND_SHARES.soft, field),
+      });
+      expect(sheet.marks).toEqual({ 'border/wash': over(ink, BRAND_SHARES.border, wash) });
+    }
+    const p = CONTENT_PALETTE;
+    const content = surfaceAt(SURFACES.content, p, 30, 600);
+    const [ink, plum] = [colour(p.ink), card(p)];
+    const track = over(ink, BRAND_SHARES.wash, plum);
+    expect(content.fills).toEqual({ [BACKGROUND]: pageAt(p, 30, 600), card: plum, track });
+    expect(content.texts).toEqual({
+      'ink/background': ink,
+      'ink/card': ink,
+      'ink/track': ink,
+      'soft/card': over(ink, BRAND_SHARES.soft, plum),
+      'soft/track': over(ink, BRAND_SHARES.soft, track),
+    });
+    expect(content.marks).toEqual({
+      'hairline/card': over(ink, BRAND_SHARES.hairline, plum),
+      'affordance/card': over(ink, BRAND_SHARES.affordance, plum),
+    });
+  });
+
+  it('allow soft text only on flat fills, never on a page’s gradient', () => {
+    for (const s of [SURFACES.page, SURFACES.content]) {
+      const soft = s.texts.find((t) => t.name === 'soft');
+      expect(soft?.on ?? []).not.toContain(BACKGROUND);
+    }
+    expect(SURFACES.content.band).toBe(CONTENT_BAND);
+    expect(SURFACES.page.band).toBeNull();
+    expect(SURFACES.sheet.band).toBeNull();
+  });
+
+  it('throw for a fill over, or ink on, a fill not yet laid', () => {
+    const before: Surface = {
+      ...SURFACES.sheet,
+      fills: [{ name: 'late', colour: '#123456', share: 1, over: 'early' }],
+    };
+    expect(() => surfaceAt(before, sheetP, 0, 0)).toThrow(/No fill early before it/);
+    const nowhere: Surface = { ...SURFACES.page, texts: [{ name: 'ink', share: 1, on: ['card'] }] };
+    expect(() => surfaceAt(nowhere, sheetP, 0, 0)).toThrow(/No fill card before it/);
+  });
+
+  it('give every text pair 4.5:1 or more at its worst point, on every band each is drawn in', () => {
+    expect(surfacePalettes(SURFACES.page).map(([band]) => band)).toEqual(
+      Object.keys(SNOW_PALETTES),
+    );
+    expect(surfacePalettes(SURFACES.content)).toEqual([[CONTENT_BAND, CONTENT_PALETTE]]);
+    for (const s of Object.values(SURFACES)) {
+      for (const [band, p] of surfacePalettes(s)) {
+        for (const [pair, ratio] of Object.entries(surfaceTextPairs(s, p))) {
+          expect(ratio, `${band} ${pair}`).toBeGreaterThanOrEqual(BODY_TEXT_CONTRAST);
+        }
+      }
+    }
+  });
+
+  it('make the pairs the design measured, so the proof and the tokens are one model', () => {
+    for (const [band, p] of bands) {
+      const pairs = bandPairs(p);
+      expect(surfaceTextPairs(SURFACES.page, p), band).toEqual({
+        'ink/background': pairs.inkOnPage,
+        'ink/chip': pairs.inkOnChip,
+      });
+      const sheet = surfaceTextPairs(SURFACES.sheet, p);
+      expect(sheet['ink/background'], band).toBe(pairs.inkOnSheet);
+      expect(sheet['soft/background'], band).toBe(pairs.softOnSheet);
+      expect(sheet['ink/wash'], band).toBe(pairs.inkOnWash);
+      expect(sheet['soft/wash'], band).toBe(pairs.softOnPressedRow);
+      expect(sheet['soft/field'], band).toBe(pairs.placeholderOnField);
+    }
+    const content = contentPairs();
+    expect(surfaceTextPairs(SURFACES.content, CONTENT_PALETTE)).toEqual({
+      'ink/background': content.inkOnPage,
+      'ink/card': content.inkOnCard,
+      'ink/track': content.inkOnWash,
+      'soft/card': content.softOnCard,
+      'soft/track': content.softOnPressedRow,
+    });
+  });
+});
+
+describe('surfacesJson', () => {
+  const text = surfacesJson();
+  const file = JSON.parse(text);
+
+  it('sits beside HomeScreens.json, in the UI tests’ generated folder', () => {
+    expect(SURFACES_PATH).toBe(`${UI_TESTS_GENERATED_DIR}/Surfaces.json`);
+  });
+
+  it('gives the models, the least contrast, the band a page with none draws as, and every palette', () => {
+    expect(file.source).toBe(`${BRAND_COLOURS_SOURCE} (SURFACES), by surfacesJson`);
+    expect(file.screen).toEqual({ width: SCREEN.width, height: SCREEN.height });
+    expect(file.background).toEqual({ ...BACKGROUND_MODEL, sheetEnd: BRAND_SHARES.sheetEnd });
+    expect(file.minimum).toBe(BODY_TEXT_CONTRAST);
+    expect(file.unknownBand).toBe(UNKNOWN_BAND_DRAWS_AS);
+    expect(Object.keys(file.palettes)).toEqual(Object.keys(SNOW_PALETTES));
+    for (const [band, p] of bands) {
+      const { g1, g2, g3, ink, pill } = p;
+      expect(file.palettes[band], band).toEqual({ g1, g2, g3, glow: opacity(p.glow), ink, pill });
+    }
+    expect(file.surfaces).toEqual(JSON.parse(JSON.stringify(SURFACES)));
+  });
+
+  it('samples each surface in each palette it is drawn in, as surfaceAt lays it', () => {
+    const drawn = Object.values(SURFACES).reduce((n, s) => n + surfacePalettes(s).length, 0);
+    expect(file.samples).toHaveLength(drawn * SURFACE_SAMPLES.length);
+    expect(SURFACE_SAMPLES).toContainEqual([0, 0]);
+    expect(SURFACE_SAMPLES).toContainEqual([SCREEN.width, SCREEN.height]);
+    for (const sample of file.samples) {
+      const s = SURFACES[sample.surface as keyof typeof SURFACES];
+      const at = surfaceAt(s, SNOW_PALETTES[sample.band as SnowBand], sample.x, sample.y);
+      const hexes = (c: Record<string, Rgb>) =>
+        Object.fromEntries(Object.entries(c).map(([k, v]) => [k, hex(v)]));
+      expect(sample.fills).toEqual(hexes(at.fills));
+      expect(sample.texts).toEqual(hexes(at.texts));
+      expect(sample.marks).toEqual(hexes(at.marks));
+    }
+    expect(file.samples[0]).toEqual({
+      surface: 'page',
+      band: 'nosnow',
+      x: 0,
+      y: 0,
+      fills: { background: '#f8ecf2', chip: '#f6eef9' },
+      texts: { 'ink/background': '#341a3c', 'ink/chip': '#341a3c' },
+      marks: { 'border/chip': '#c0b3c4' },
+    });
+  });
+
+  it('writes a line a palette, surface or sample, the same every time', () => {
+    const lines = text.split('\n');
+    const palettes = lines.indexOf('  "palettes": {');
+    expect(lines.slice(palettes + 1, palettes + 7).map((l) => l.trim().split('"')[1])).toEqual(
+      Object.keys(SNOW_PALETTES),
+    );
+    // `{` and five fields; each block's opening and closing lines round its own; then `}` and
+    // the empty string after the last newline.
+    const blocks = Object.keys(SNOW_PALETTES).length + 3 + file.samples.length;
+    expect(lines.length).toBe(6 + 3 * 2 + blocks + 2);
+    expect(text.endsWith('\n  ]\n}\n')).toBe(true);
+    expect(surfacesJson()).toBe(text);
   });
 });
 

@@ -3,7 +3,7 @@
  * files on disk differ from it (`pnpm mobile:check`). The files are committed, so the Mac and CI
  * build the app without Node, and the check stops a hand edit or a stale copy.
  */
-import { BRAND_COLOURS_PATH, brandColoursSwift } from './brandColours';
+import { BRAND_COLOURS_PATH, SURFACES_PATH, brandColoursSwift, surfacesJson } from './brandColours';
 import { APP_COPY_PATH, appCopySwift } from './exportAppCopy';
 import { CONFIGS_GENERATED_DIR, CONFIG_COPY_PATH, configCopy } from './exportConfigCopy';
 import { CONSTANTS_PATH, constantsSwift } from './exportConstants';
@@ -85,7 +85,7 @@ export interface AssetSources {
  * Every file but the fonts, in order: IsItModel's Swift (the palettes and brand colours last),
  * the Info.plist's strings (`Copy.xcconfig`), each fixture, each search fixture, each vector
  * file, worked out from the fixtures exactly as their files have them, the UI tests' screens
- * (from page.json), then the glyphs and the app icon.
+ * (from page.json) and surfaces (from brandColours.ts), then the glyphs and the app icon.
  */
 export async function generatedFiles(sources: AssetSources): Promise<GeneratedFile[]> {
   const files: GeneratedFile[] = [
@@ -117,6 +117,7 @@ export async function generatedFiles(sources: AssetSources): Promise<GeneratedFi
   const page = vectors.find((v) => v.name === 'page');
   if (!page) throw new Error('No page.json');
   files.push({ path: HOME_SCREENS_PATH, contents: homeScreensJson(fixtures, page.vectors) });
+  files.push({ path: SURFACES_PATH, contents: surfacesJson() });
   files.push(...glyphFiles(sources.glyphs), ...iconFiles(sources.favicon));
   return files;
 }

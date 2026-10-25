@@ -6,33 +6,40 @@ import XCTest
 /// calls `AuditKinds.passes`, each through `runAudit`, which times it and runs it again once
 /// should it not finish in time. Each issue is noted with its kind, its element (type,
 /// identifier, label and frame on screen) and Apple's description, and a contrast issue with the
-/// screen's pixels inside its element (`PixelRange`); then the test fails once, listing them all,
-/// so one run shows every issue on the screen rather than stopping at the first (these tests stop
-/// at their first failure). Nothing is allowed: every issue is the app's to fix. (The toolbars'
-/// Close buttons, which failed Dynamic Type as text on PR #33's first macOS run, are icons now;
-/// Your privacy's back button, a bar button too, passed. Settings' "About" header and "Report an
-/// ad", which a `Form` left "partially unsupported", are a scrolling page's now.) Should a system
-/// control the app can't change fail, an exception would match it as one of
+/// screen's pixels inside its element (`PixelRange`, `DrawnText`); then the test fails once,
+/// listing them all, so one run shows every issue on the screen rather than stopping at the first
+/// (these tests stop at their first failure).
+///
+/// One issue is allowed, as on the home screen: contrast on a text element whose pixels prove it
+/// is text drawn in `surface`'s own colours at 4.5:1 or more (`MeasuredContrast`; DECISIONS,
+/// "Contrast by measured pixels, after #34's first full run"), the picker's in the band of the
+/// page it opened over and Settings' in the content palette. Nothing else is: every other issue
+/// is the app's to fix. (The toolbars' Close buttons, which failed Dynamic Type as text on PR
+/// #33's first macOS run, are icons now; Your privacy's back button, a bar button too, passed.)
+/// Should a system control the app can't change fail, an exception would match it as one of
 /// `app.navigationBars`' or the search bar's by its place, with the run's evidence, not by an
 /// identifier it may not have.
 ///
 /// The screen as audited and the app's element tree are attached first, as
 /// `audit-<screen>` and `audit-<screen>-tree`: on PR #33's second macOS run each failing sheet's
 /// test stopped at its audit, before it attached its screen, so nothing showed what the audit
-/// had read. Each call's time is attached as `audit-<screen>-times`, however the audit ends.
+/// had read. Each call's time is attached as `audit-<screen>-times`, however the audit ends, and
+/// the issues allowed as `audit-<screen>-allowed`, which the failure lists too, so that a proof
+/// that allows too much shows in every run.
 extension XCTestCase {
   @MainActor
   func auditAccessibility(
     of app: XCUIApplication,
     on screen: String,
+    surface: ScreenSurface,
     file: StaticString = #filePath,
     line: UInt = #line
   ) throws {
-    let found = AuditIssues()
+    let found = AuditIssues(
+      surface: try SurfaceFile.bundled().colours(surface, window: app.frame))
     let times = AuditTimes()
     // The screen as the first call audits it, for a contrast issue's pixels.
     let shot = app.screenshot()
-    let window = app.frame
     let name = "audit-" + slug(screen)
     attachPNG(shot, as: name)
     attachText(app.debugDescription, as: "\(name)-tree")
@@ -47,13 +54,17 @@ extension XCTestCase {
         return ScreenLayout.change(from: audited, to: ScreenLayout(app))
       }
       for issue in issues {
-        found.note(issue, shot: shot, window: window)
+        found.note(issue, shot: shot)
       }
     }
+    let allowed = found.allowed.map { "Allowed: \($0)" }
+    attachText(
+      allowed.isEmpty ? "Nothing allowed on \(surface)" : allowed.joined(separator: "\n"),
+      as: "\(name)-allowed")
     XCTAssertTrue(
-      found.lines.isEmpty,
-      "\(found.lines.count) accessibility issues on \(screen), in the window at \(app.frame):\n"
-        + found.lines.joined(separator: "\n"),
+      found.unexpected.isEmpty,
+      "\(found.unexpected.count) accessibility issues on \(screen), on \(surface), in the window "
+        + "at \(app.frame):\n" + (found.unexpected + allowed).joined(separator: "\n"),
       file: file, line: line)
   }
 
@@ -198,22 +209,58 @@ enum AuditKinds {
   static let passes = [contrast, described, resizing]
 }
 
-/// The issues one screen's audits found, each described.
+/// The issues one screen's audits found, each described: those that fail the test, and those
+/// `MeasuredContrast` allows, contrast on text its screenshot's pixels prove at 4.5:1 or more on
+/// `surface`.
 @MainActor
 private final class AuditIssues {
-  /// Each issue's description, in the order found.
-  private(set) var lines: [String] = []
+  let surface: SurfaceColours
+  private(set) var unexpected: [String] = []
+  private(set) var allowed: [String] = []
 
-  func note(_ issue: XCUIAccessibilityAuditIssue, shot: XCUIScreenshot, window: CGRect) {
+  init(surface: SurfaceColours) {
+    self.surface = surface
+  }
+
+  func note(_ issue: XCUIAccessibilityAuditIssue, shot: XCUIScreenshot) {
     var text =
       "\(issue.auditType.names): \(issue.compactDescription) (\(describeElement(issue.element))): "
       + issue.detailedDescription
-    if issue.auditType == .contrast, let element = issue.element {
-      let pixels = PixelRange(shot, in: element.frame, window: window)
-      text += "; the screen's pixels there: " + (pixels.map(\.description) ?? "can't be read")
+    guard issue.auditType == .contrast, let element = issue.element else {
+      unexpected.append(text)
+      return
     }
-    lines.append(text)
+    let frame = element.frame
+    var audited = AuditedElement(
+      type: element.elementType, identifier: element.identifier, label: element.label,
+      frame: frame, credits: .null)
+    let pixels = ScreenPixels(shot, in: frame, window: surface.window)
+    let drawn = DrawnText(
+      ScreenPixels(shot, in: DrawnText.reading(frame), window: surface.window), in: frame,
+      on: surface, withMarks: MeasuredContrast.drawsMarks(audited.type))
+    audited.drawn = drawn
+    let range = pixels.flatMap { PixelRange(rgba: $0.rgba) }
+    text +=
+      "; the screen's pixels there: \(range.map(\.description) ?? "can't be read"); "
+      + surface.expected(in: frame) + "; " + drawn.description
+    if MeasuredContrast.allows(audited) {
+      allowed.append("\(text). Allowed: \(MeasuredContrast.why)")
+    } else {
+      unexpected.append(text)
+    }
   }
+}
+
+/// What an exception knows of an issue's element: its type, identifier, label and frame on
+/// screen, the screen's credits, where they are on screen (`.null` without, as on every sheet),
+/// and for a contrast issue, what the screenshot shows drawn in its frame (`DrawnText`).
+struct AuditedElement {
+  let type: XCUIElement.ElementType?
+  let identifier: String
+  let label: String
+  let frame: CGRect
+  let credits: CGRect
+  var drawn: DrawnText?
 }
 
 /// Whether `error` is XCTest's "Audit failed to complete in time": code -56 in its accessibility
@@ -433,7 +480,9 @@ func describeElement(
 
 /// An sRGB colour, a screenshot's pixel or a palette's `#rrggbb`, with WCAG 2's luminance and
 /// contrast, as scripts/palette-contrast.mjs and packages/mobile `exportPalettes.ts` work them out.
-struct RGB: Equatable, CustomStringConvertible {
+/// Hashable, so the contrast proof works a surface's colours out once for each background colour
+/// (`DrawnText`).
+struct RGB: Hashable, CustomStringConvertible {
   let red: UInt8
   let green: UInt8
   let blue: UInt8
@@ -486,14 +535,28 @@ struct RGB: Equatable, CustomStringConvertible {
   }
 
   /// This colour taken `amount` (0 to 1) of the way to `other`, channel by channel in sRGB, as
-  /// SwiftUI mixes a gradient's stops and lays a colour over another at an opacity.
+  /// SwiftUI mixes a gradient's stops and lays a colour over another at an opacity: worked out as
+  /// packages/mobile brandColours.ts `mix` does, `a + (b - a) × t` rounded, so the two round each
+  /// half level the same way (`SurfaceFile.mismatches`).
   func mixed(with other: RGB, by amount: Double) -> RGB {
     let t = min(max(amount, 0), 1)
     func mix(_ a: UInt8, _ b: UInt8) -> UInt8 {
-      UInt8((Double(a) * (1 - t) + Double(b) * t).rounded())
+      UInt8((Double(a) + (Double(b) - Double(a)) * t).rounded())
     }
     return RGB(
       red: mix(red, other.red), green: mix(green, other.green), blue: mix(blue, other.blue))
+  }
+
+  /// Whether this colour lies on the line from `a` to `b`, to within `levels` a channel of its
+  /// nearest point: a blend of the two, as anti-aliasing draws where they meet.
+  func between(_ a: RGB, _ b: RGB, within levels: Int) -> Bool {
+    let from = [Double(a.red), Double(a.green), Double(a.blue)]
+    let step = [Double(b.red) - from[0], Double(b.green) - from[1], Double(b.blue) - from[2]]
+    let mine = [Double(red), Double(green), Double(blue)]
+    let length = step.reduce(0) { $0 + $1 * $1 }
+    let along = (0..<3).reduce(0) { $0 + (mine[$1] - from[$1]) * step[$1] }
+    let t = length == 0 ? 0 : min(max(along / length, 0), 1)
+    return (0..<3).allSatisfy { abs(mine[$0] - (from[$0] + step[$0] * t)) <= Double(levels) }
   }
 }
 
@@ -600,13 +663,6 @@ struct PixelRange: CustomStringConvertible {
     guard let darkest, let lightest else { return nil }
     self.darkest = darkest.0
     self.lightest = lightest.0
-  }
-
-  /// Inside `frame`, in points on screen, of `shot`, a screenshot of the window at `window`; nil
-  /// when the frame is off the screenshot or it can't be read.
-  init?(_ shot: XCUIScreenshot, in frame: CGRect, window: CGRect) {
-    guard let pixels = ScreenPixels(shot, in: frame, window: window) else { return nil }
-    self.init(rgba: pixels.rgba)
   }
 }
 

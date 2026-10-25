@@ -80,7 +80,9 @@ Apps/Snow/UITests/       FixtureLaunchTests (fixtures at their own moments, and 
                          Generated/HomeScreens.json (generated from page.json) through HomeScreens.swift;
                          PickerTests (the place picker over a stubbed network and location) and
                          SettingsTests (every row, the units, Report an ad's fallback, Your privacy),
-                         with ScreenAudit.swift's audit; each attaches its screens
+                         with ScreenAudit.swift's audit; each attaches its screens. DrawnText.swift
+                         is every audit's contrast proof, on Generated/Surfaces.json (from
+                         packages/mobile brandColours.ts)
 TestPlans/               Unit and UI
 ci/                      xcodegen.sh, simulator.sh, test.sh, release-check.sh, xcresult-summary.mjs, contact-sheet.mjs;
                          for releases archive.sh, upload.sh and ExportOptions.plist
@@ -578,8 +580,8 @@ What section 16 asks of the home screen, proven where it can only be proven, on 
 page.json: for each screen a UI test opens, its fixture, the moment as `-now` takes it, how its
 request went, the view it opens on (core `defaultView`), the top bar (`homeTopBar`, a reference new
 in 5.4 for IsItLogic's `HomeTopBar`) and its three pages (`homePage`), exactly as page.json has
-them, and beside the screens each band's palette (`homePalettes`), which the home audit's
-contrast failures read the screen's pixels against. The screens are listed in `homeScreens` (packages/mobile `vectors.ts`), which adds each to
+them; each page's band names the palette it is drawn in, which `Generated/Surfaces.json` gives
+(below, "The contrast proof"). The screens are listed in `homeScreens` (packages/mobile `vectors.ts`), which adds each to
 page.json, so the Swift on Linux is held to the same cases (`PageVectorTests`). The UI test bundle
 carries the file (project.yml), and `HomeScreens.swift` reads it (`HomeScreen.named`) and compares
 the screen with it, from one snapshot of the accessibility tree for each check (`ShownScreen`), in
@@ -654,14 +656,13 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   the screenful (with where it was once the audit had moved the page, and the part of the page on
   screen, for one no screenful showed whole), a contrast issue with the screenful's darkest and
   lightest pixels inside the element and the contrast between them, beside the page's ink and its
-  background at the element's centre (`PixelRange`, `PageColours`) and what text it shows drawn
-  there (`DrawnText`), except those in `HomeAuditTests.exceptions`, each with why it isn't a fault
-  to fix: the credits' inline links (`hitRegion`), and contrast on a detail or a place nearby
-  that the screenful shows drawn in the page's ink over its background at 4.5:1 or more at every
-  corner, proven again on each issue (`contrast`). (The segmented control's own type size,
-  `dynamicType`, was a third until the website's tabs replaced it, and the old "Use my location"
-  line was matched with Nearby until the "Use my exact location" chip, whose top row is its own
-  fill, replaced it.) The issues allowed and any exception a test didn't need are attached
+  background at the element's centre (`PixelRange`, `SurfaceColours.expected`) and what the proof
+  reads of it (`DrawnText`), except those in `HomeAuditTests.exceptions`, each with why it isn't a
+  fault to fix: the credits' inline links (`hitRegion`), and contrast on any text element the
+  contrast proof allows, as on every audited screen (`MeasuredContrast`, below). (The segmented
+  control's own type size, `dynamicType`, was a third until the website's tabs replaced it; PR
+  #33's contrast exception for the details and the places nearby alone became the proof for
+  every text element after PR #34's first full run.) The issues allowed and any exception a test didn't need are attached
   (`home-<fixture>-<size>-allowed`) and listed in its failure. Each page's first screenful also
   attaches the app's element tree (`<page>-tree`). Each call goes through `runAudit`
   (ScreenAudit.swift), which times it and reads its issues once it is done, outside XCTest's
@@ -934,22 +935,49 @@ emails after its pages' audits: the recorder's lines show the whole URL below th
 and Report an ad's, 201 characters, would take most of the screen at the audit's largest sizes.
 
 **The audits** (`PickerTests` and `SettingsTests`; `HomeAuditTests` has its own, with its
-exceptions, above) go through `auditAccessibility(of:on:)` (`UITests/ScreenAudit.swift`):
+exceptions, above) go through `auditAccessibility(of:on:surface:)` (`UITests/ScreenAudit.swift`):
 `performAccessibilityAudit(for:)` for every kind of issue, in the home audit's three calls
 (`AuditKinds`: contrast; then element detection, hit regions, descriptions and traits; then
 Dynamic Type and clipped text, the seven kinds the iOS SDK defines, each named rather than `.all`
 less two), each issue noted once its call is done with its kind (named as `HomeAuditTests` names
 it), its element's type, identifier, label and frame, and Apple's description, a contrast issue
-with the screen's darkest and lightest pixels inside the element, then one failure that lists
-them all with the window's frame. The tests stop at their first failure, so without it a
-run would show one issue a screen. Each audit first attaches the screen as audited and the
-element tree (`audit-<screen>`, `audit-<screen>-tree`), and each call goes through `runAudit`, as
-the home audit's do: timed (`audit-<screen>-times`), and run again once after a timeout only
-while the screen's elements are where they were as audited. Every issue is the app's to fix: the
-sheets' audits allow none. Settings' Close buttons (`close-settings`, `close-fallback`) are the
+with the screen's darkest and lightest pixels inside the element and what the proof reads of
+it, then one failure that lists them all with the window's frame. The tests stop at their first
+failure, so without it a run would show one issue a screen. Each audit first attaches the screen
+as audited and the element tree (`audit-<screen>`, `audit-<screen>-tree`), and each call goes
+through `runAudit`, as the home audit's do: timed (`audit-<screen>-times`), and run again once
+after a timeout only while the screen's elements are where they were as audited. Each test says
+which surface its screen is (`auditAccessibility(of:on:surface:)`): the picker the sheet in the
+band of the page it opened over (`HomeScreen.picker()`, from the screens `picker-leeds`,
+`picker-first-launch` and `aberdeen-snow`), Settings, its pages and the mail fallback content.
+Every issue is the app's to fix but one: contrast on a text element the proof allows, as on the
+home screen, listed in the failure with why and attached as `audit-<screen>-allowed`. Settings' Close buttons (`close-settings`, `close-fallback`) are the
 xmark with "Close" as their label (`CloseLabel`, IsItUI), not the word on screen, which a toolbar
 draws at the bar's own type size and the audit failed for Dynamic Type; the picker, with no
 toolbar, has the website's Close pill (`picker-close`), whose word scales with the text.
+
+**The contrast proof** (`UITests/DrawnText.swift`; DECISIONS, "Contrast by measured pixels, after
+#34's first full run"). Apple's contrast check fails Bricolage text whose pixels measure far above
+4.5:1, so wherever it fails a text element (a static text, or a button or link with a label), on
+every audited screen, the test judges the element by WCAG on the screenshot's own pixels instead,
+and allows the issue only when they prove it (`MeasuredContrast.allows`). Each pixel of the frame
+is classed against its surface's model at that point: one of the surface's fills (within 6 levels
+a channel), one of its text colours (within 3: the ink, or soft on a flat fill), for a button or
+link one of the lines it draws (its edge, a hairline, a chevron), a blend of two of those with a
+pixel of each within 2 pixels (anti-aliasing; the screenshot is read a point round the frame for
+these neighbours only), or none of them. It proves when the frame is whole on screen and at least
+10 by 10 points, the text colours are on 1% of it or more, pixels of none are 0.5% at the most,
+and every text colour drawn gives 4.5:1 or more with every fill shown clear of it, measured on the
+pixels. So dimmed or secondary text below 4.5:1, text over a fill the surface hasn't, a wrong
+colour, an empty or tiny frame, an element with no text drawn and a palette short of contrast all
+fail; hit regions, Dynamic Type, clipped text, descriptions, traits and element detection are
+never allowed. The surfaces come from one source: packages/mobile `brandColours.ts` `SURFACES`
+(the page: the band's gradient and glow and its opaque chips; the sheet: the band's pill fading
+towards g2, the wash and the field; content: the content palette's gradient and glow, the plum
+cards and the units track), written with every band's palette and the background models' numbers
+into `Generated/Surfaces.json` (`surfacesJson`), whose sample colours the Swift reproduces before
+judging a pixel (`SurfaceFile.bundled`), so the proof and the tokens can't part; `brandColours.test.ts`
+holds every text pair the proof can allow to 4.5:1 on every band.
 
 ### How they meet
 
