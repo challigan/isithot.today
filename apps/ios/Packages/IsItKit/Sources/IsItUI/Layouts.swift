@@ -190,3 +190,102 @@ struct OneLineWhenItFits: Layout {
     view.sizeThatFits(.unspecified).width <= width + slack
   }
 }
+
+/// The top bar's lines, as the website's header wraps (global.css `header`, `flex-wrap` and
+/// `space-between`; DECISIONS, "The app's name back at the top left"). Its views are the app's
+/// name, the place's pill, the gear, and then any notes about the place. When the name, the pill
+/// and the gear fit one line, to within `slack`, the name leads and the pill and the gear trail,
+/// `pillGap` apart. Otherwise the name and the gear share the first line and the pill takes the
+/// next on its own, leading, offered the whole width, as the website moves its pills under its
+/// name. The notes follow beneath: at the bar's trailing edge on one line, as before, and at its
+/// leading edge, under the pill, on two. On two lines the name is offered what the gear leaves it,
+/// so at the largest text sizes it shrinks (`AppNameView`). Placing chooses from the width the bar
+/// was sized at, and each view is measured and placed with the same offer, so a bar placed a pixel
+/// narrower than it was sized keeps its lines, and no text in it wraps again; views on a line are
+/// centred on it.
+struct TopBarLayout: Layout {
+  /// Between the name and what follows it on its line: the website's 1rem.
+  var gap: CGFloat
+  /// Between the pill and the gear.
+  var pillGap: CGFloat
+  /// How far past the width the one line may run and still be kept, into the gap: a point, more
+  /// than a pixel at any of the iPhone's scales.
+  var slack: CGFloat = 1
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    arrangement(of: subviews, width: proposal.width).size
+  }
+
+  func placeSubviews(
+    in bounds: CGRect,
+    proposal: ProposedViewSize,
+    subviews: Subviews,
+    cache: inout ()
+  ) {
+    // The width it was sized at, which `bounds` may be a pixel narrower than once rounded: the
+    // same choice of one line or two, and the same lines.
+    let placed = arrangement(of: subviews, width: proposal.width ?? bounds.width)
+    for (view, place) in zip(subviews, placed.places) {
+      view.place(
+        at: CGPoint(x: bounds.minX + place.origin.x, y: bounds.minY + place.origin.y),
+        proposal: place.offer
+      )
+    }
+  }
+
+  /// Where a view goes, and what it is offered, measured and placed alike.
+  private struct Place {
+    let origin: CGPoint
+    let offer: ProposedViewSize
+  }
+
+  /// Each view's place, in the views' order, and the size of the whole, `width` wide (the one
+  /// line's width when none is offered). Fewer than three views are not placed.
+  private func arrangement(
+    of subviews: Subviews,
+    width offered: CGFloat?
+  ) -> (places: [Place], size: CGSize) {
+    guard subviews.count >= 3 else { return ([], .zero) }
+    let (nameView, pillView, gearView) = (subviews[0], subviews[1], subviews[2])
+    let name = nameView.sizeThatFits(.unspecified)
+    let pill = pillView.sizeThatFits(.unspecified)
+    let gear = gearView.sizeThatFits(.unspecified)
+    let oneLine = name.width + gap + pill.width + pillGap + gear.width
+    let width = offered ?? oneLine
+    let onOneLine = oneLine <= width + slack
+    var places: [Place] = []
+    let line: CGFloat
+    var y: CGFloat
+    if onOneLine {
+      line = max(name.height, pill.height, gear.height)
+      let pillX = width - gear.width - pillGap - pill.width
+      places.append(Place(origin: CGPoint(x: 0, y: (line - name.height) / 2), offer: .unspecified))
+      places.append(
+        Place(origin: CGPoint(x: pillX, y: (line - pill.height) / 2), offer: .unspecified))
+      y = line
+    } else {
+      let room = max(width - gap - gear.width, 0)
+      let nameOffer =
+        name.width <= room + slack
+        ? ProposedViewSize.unspecified : ProposedViewSize(width: room, height: nil)
+      let shown = nameView.sizeThatFits(nameOffer)
+      line = max(shown.height, gear.height)
+      let pillOffer = ProposedViewSize(width: width, height: nil)
+      places.append(Place(origin: CGPoint(x: 0, y: (line - shown.height) / 2), offer: nameOffer))
+      places.append(Place(origin: CGPoint(x: 0, y: line), offer: pillOffer))
+      y = line + pillView.sizeThatFits(pillOffer).height
+    }
+    // The gear at the first line's trailing edge, on one line or two.
+    places.append(
+      Place(
+        origin: CGPoint(x: width - gear.width, y: (line - gear.height) / 2), offer: .unspecified))
+    let noteOffer = ProposedViewSize(width: width, height: nil)
+    for note in subviews.dropFirst(3) {
+      let size = note.sizeThatFits(noteOffer)
+      places.append(
+        Place(origin: CGPoint(x: onOneLine ? width - size.width : 0, y: y), offer: noteOffer))
+      y += size.height
+    }
+    return (places, CGSize(width: width, height: y))
+  }
+}

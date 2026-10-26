@@ -850,7 +850,7 @@ private final class AuditLog {
 
   /// The identifiers of the top bar's and the switcher's elements, which don't scroll.
   private static let fixed: Set<String> = [
-    "place", "settings", "approximate", "use-my-location", "views",
+    "app-name", "place", "settings", "approximate", "use-my-location", "views",
   ]
 
   private(set) var unexpected: [String] = []

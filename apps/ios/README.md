@@ -61,7 +61,7 @@ Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore, UR
                          the tokens, BrandTokens), Backgrounds (PageBackground, SheetBackground),
                          Buttons (PillButton, IconPillButton, PressStyle, RowPressStyle, PinShape),
                          PillSegments, and Layouts (FlowLayout, EqualColumns, LimitedWidth,
-                         OneLineWhenItFits)),
+                         OneLineWhenItFits, TopBarLayout)),
                          IsItWidgetUI (the widget's entry, provider, view), SnowKit (Glyphs, Color(rgb:)
                          for the palettes, and the glyph catalogues, generated)
 Apps/Snow/App/           WillItSnowApp (the services and the scene's phases), HomeView (the home screen,
@@ -600,25 +600,26 @@ which each identifier checked must be there once: `expect(page, in:)` checks the
 question and the answer, with the place), the verdict and the detail, the agreement, the strip's
 summary, each model's name and amount (`model-0`…), Now's rows (`hour-0`…) and the week's (`day-0`…)
 as VoiceOver reads them, the week's heading, the Updated line, the offline, unavailable or stale
-line and Retry, and that nothing else of them is there; `expect(topBar, in:)` the place pill's
-label, the notice (`approximate`), "Use my exact location" and Settings. Nothing in a test types a page's words. A
-difference is reported and the test goes on to the next; a screen that never comes stops it.
+line and Retry, and that nothing else of them is there; `expect(topBar, in:)` the app's name
+(`app-name`), the place pill's label, the notice (`approximate`), "Use my exact location" and
+Settings. Nothing in a test types a page's words. A difference is reported and the test goes on
+to the next; a screen that never comes stops it.
 
 **The tests** (the UI test plan; `### UI:` in the `ios` job's log names each failure with its
 file and line):
 
 - `HomeTests`: `testAberdeenSnow`, `testDurhamTomorrow` and `testLeedsDry` open each fixture at
-  its own moment with `-clock fixed`, check the top bar, that the place pill holds its name on
-  one line at the standard size, under 44 points tall (`expectPlaceOnOneLine`; DECISIONS, "The
-  place pill on one line, after #34 merged"), that the home screen fits the screen
-  (`expectFits`: the place button, the gear and the switcher within the window, the pager
-  between the switcher and the window's bottom edge, and the page on screen starting under the
-  switcher; not the page's bottom, as XCUITest may give its scroll view its content's frame,
-  nor the status bar, whose frame XCUITest doesn't give, which the picker's and Settings' taps
-  guard), that no element with neither an identifier nor a label sits under no labelled one
-  (`expectNoBareElements`, which names its path: PR #33's runs had one, the page's background),
-  the tabs and the page it opens on (Today, or Now from 6pm), then each page by its tab, then back
-  from This week to Now by swiping and on again, each tab selected as it shows.
+  its own moment with `-clock fixed`, check the top bar, that the place pill holds its name on one
+  line at the standard size, under 44 points tall (`expectPlaceOnOneLine`; DECISIONS, "The place
+  pill on one line, after #34 merged"), that the home screen fits the screen (`expectFits`: the
+  app's name, the place button, the gear and the switcher within the window, the pager between the
+  switcher and the window's bottom edge, and the page on screen starting under the switcher; not
+  the page's bottom, as XCUITest may give its scroll view its content's frame, nor the status bar,
+  whose frame XCUITest doesn't give, which the picker's and Settings' taps guard), that no element
+  with neither an identifier nor a label sits under no labelled one (`expectNoBareElements`, which
+  names its path: PR #33's runs had one, the page's background), the tabs and the page it opens on
+  (Today, or Now from 6pm), then each page by its tab, then back from This week to Now by swiping
+  and on again, each tab selected as it shows.
   `testDefaultViewEitherSideOf6pm` opens Durham at 5:59pm (Today; Now, Today, This week) and at
   6pm (Now; the middle tab Tomorrow).
   `testTheMiddleTabTurnsToTomorrowAt6pm` opens at 5:58pm with `-clock run` and waits up to three
@@ -732,10 +733,15 @@ shared parts; step 3 draws the home screen with them, as the website draws the s
   subheadline (14 at both), the `button` role gone, Close and Retry in `label` and a notice's
   project page in `labelStrong`, and `small` gone, the limited line and the week's bands in
   `line`, 15.2 (DECISIONS, "After #34's second full run").
-- **The top bar** (`TopBarView`, HomeShell.swift): the place in a pill with the website's pin
-  (`PillButton`, `PinShape`), the gear in a round chip (`IconPillButton`), trailing; beneath
-  them a notice chip (`approximate`) and, on approximate IP location, the "Use my exact
-  location" chip (`use-my-location`), whose VoiceOver hint is "Using approximate location.".
+- **The top bar** (`TopBarView`, HomeShell.swift): the app's name leading, "willitsnow.today" as
+  the website's header shows it, which VoiceOver reads as its words, "Will it snow today"
+  (`AppNameView`, `app-name`; `TextRole.appName` and `appNameEnd`; `AppCopy.appNameLabel`); the
+  place in a pill with the website's pin (`PillButton`, `PinShape`) and the gear in a round chip
+  (`IconPillButton`), trailing; beneath them a notice chip (`approximate`) and, on approximate IP
+  location, the "Use my exact location" chip (`use-my-location`), whose VoiceOver hint is "Using
+  approximate location.". When the three don't fit one line, the name and the gear share the
+  first and the pill takes the next, leading, with the notes under it (`TopBarLayout`; DECISIONS,
+  "The app's name back at the top left").
 - **The switcher** (`ViewSwitcher`): the website's track and ink thumb (`PillSegments`) at
   standard sizes, chips that wrap at accessibility sizes, one tab bar (`views`) holding
   `view-now`, `view-today` and `view-week` at every size. The segmented `Picker` is gone, and

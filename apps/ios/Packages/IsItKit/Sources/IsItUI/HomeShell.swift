@@ -58,60 +58,50 @@ public struct HomeShell<Content: View>: View {
 }
 
 /// The top bar, in the website's arrangement (Header.astro; DECISIONS, "The iPhone app in the
-/// website's look"): a 44-point line holding the place as a pill with the website's pin, which
-/// opens the picker ("Place: Leeds. Change place."), and beside it the gear for Settings in a
-/// round chip; beneath them, a notice about the place while there is one, and on the approximate
-/// IP place the website's "Use my exact location" chip, whose VoiceOver hint says the place is
-/// approximate. Trailing, where the website puts its pills; at accessibility text sizes leading,
-/// with the gear trailing, so wrapped words read from the left. A long place name wraps in its
-/// pill, never cut short. Every word sits on a chip's flat fill, never on the page's gradient,
-/// and each pill is its own accessibility element (`PillButton`). Its colours follow the page on
-/// screen's, fading as the background does.
+/// website's look" and "The app's name back at the top left"): the app's name leading,
+/// "willitsnow.today" (`AppNameView`), and trailing on its 44-point line the place as a pill with
+/// the website's pin, which opens the picker ("Place: Leeds. Change place."), and the gear for
+/// Settings in a round chip; beneath them, a notice about the place while there is one, and on the
+/// approximate IP place the website's "Use my exact location" chip, whose VoiceOver hint says the
+/// place is approximate. When the three don't fit one line, at accessibility text sizes or beside
+/// a long place, the pill takes a line of its own under the name, leading, as the website's pills
+/// move under its name, and the notes follow it (`TopBarLayout`). A long place name wraps in its
+/// pill, never cut short. The name sits on the page's gradient in the page's ink, as the website's
+/// does; every other word sits on a chip's flat fill, and each pill is its own accessibility
+/// element (`PillButton`). Its colours follow the page on screen's, fading as the background does.
 struct TopBarView: View {
   let topBar: HomeTopBar
   let theme: PageTheme
   let actions: HomeActions
 
-  @Environment(\.dynamicTypeSize) private var typeSize
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @SurfaceTokens private var tokens
   /// The pin, the website's 16 points beside the place's words, growing with them.
   @ScaledMetric(relativeTo: .callout) private var pin: CGFloat = 16
 
   var body: some View {
-    let accessibilitySize = typeSize.isAccessibilitySize
-    VStack(alignment: accessibilitySize ? .leading : .trailing, spacing: 0) {
-      HStack(alignment: .center, spacing: 8) {
-        if !accessibilitySize {
-          Spacer(minLength: 0)
-        }
-        PillButton(.chip(minHeight: 36), action: actions.openPlacePicker) {
-          HStack(spacing: 6.4) {
-            // Stroked 2 units in 24, with round caps and joins, as the website strokes it.
-            PinShape()
-              .stroke(style: StrokeStyle(lineWidth: pin / 12, lineCap: .round, lineJoin: .round))
-              .frame(width: pin, height: pin)
-            // On one line whenever it fits: given a fraction of a point less than its words,
-            // "Aberdeen" broke inside the word, "Aberdee" over "n" (`OneLineWhenItFits`).
-            OneLineWhenItFits {
-              Text(verbatim: topBar.place)
-                .brandFont(.label)
-            }
+    TopBarLayout(gap: 16, pillGap: 8) {
+      AppNameView(name: topBar.name, end: topBar.nameEnd, label: topBar.nameLabel)
+      PillButton(.chip(minHeight: 36), action: actions.openPlacePicker) {
+        HStack(spacing: 6.4) {
+          // Stroked 2 units in 24, with round caps and joins, as the website strokes it.
+          PinShape()
+            .stroke(style: StrokeStyle(lineWidth: pin / 12, lineCap: .round, lineJoin: .round))
+            .frame(width: pin, height: pin)
+          // On one line whenever it fits: given a fraction of a point less than its words,
+          // "Aberdeen" broke inside the word, "Aberdee" over "n" (`OneLineWhenItFits`).
+          OneLineWhenItFits {
+            Text(verbatim: topBar.place)
+              .brandFont(.label)
           }
         }
-        .accessibilityLabel(Text(verbatim: topBar.placeLabel))
-        .accessibilityIdentifier("place")
-        // Offered its width before the spacer beside it, which at the same priority would take
-        // half of what the gear leaves, so a name wider than that half would wrap beside it.
-        .layoutPriority(1)
-        if accessibilitySize {
-          Spacer(minLength: 8)
-        }
-        IconPillButton(
-          systemName: "gearshape", label: topBar.settings, action: actions.openSettings
-        )
-        .accessibilityIdentifier("settings")
       }
+      .accessibilityLabel(Text(verbatim: topBar.placeLabel))
+      .accessibilityIdentifier("place")
+      IconPillButton(
+        systemName: "gearshape", label: topBar.settings, action: actions.openSettings
+      )
+      .accessibilityIdentifier("settings")
       if let notice = topBar.approximate {
         // Words, not a control: the chip is their flat fill, and the text alone their element.
         Text(verbatim: notice)
@@ -139,5 +129,42 @@ struct TopBarView: View {
     .padding(.horizontal, 20)
     .padding(.top, 6)
     .animation(reduceMotion ? nil : .easeInOut(duration: 0.9), value: theme)
+  }
+}
+
+/// The app's name at the top bar's leading edge, as the website's header shows it (Header.astro,
+/// `.brand`): "willitsnow" SemiBold, for the website's 650, and ".today" Regular, 16.8 points at
+/// Large and growing as the place's words do (`TextRole.appName`). One text, so one element, which
+/// VoiceOver reads as its words, "Will it snow today": read as written, the audit judged
+/// "willitsnow.today" not human-readable (PR #36's first macOS run). The website draws ".today" at
+/// 0.75 of the ink; here it is the ink, as the UI tests prove a text's contrast by the surface's
+/// own ink (`DrawnText`), and the website's 0.9 detail measured 4.31:1 under snow's glow. Always
+/// one line: offered less than its width, as the largest text sizes offer it beside the gear, it
+/// shrinks rather than wrap or be cut short.
+private struct AppNameView: View {
+  let name: String
+  let end: String
+  let label: String
+
+  @Environment(\.legibilityWeight) private var legibilityWeight
+
+  var body: some View {
+    Text(Self.attributed(name: name, end: end, boldText: legibilityWeight == .bold))
+      .brandFont(.appName)
+      .lineLimit(1)
+      .minimumScaleFactor(0.5)
+      .accessibilityLabel(Text(verbatim: label))
+      .accessibilityIdentifier("app-name")
+  }
+
+  /// The name as one text in two faces, as `brandFont(_:)` sets them under Bold Text: ".today" a
+  /// face up, to Medium, and "willitsnow" SemiBold still, the boldest of the text faces.
+  static func attributed(name: String, end: String, boldText: Bool) -> AttributedString {
+    var text = AttributedString(name)
+    text.font = TextRole.appName.font(boldText: boldText)
+    var rest = AttributedString(end)
+    rest.font = TextRole.appNameEnd.font(boldText: boldText)
+    text.append(rest)
+    return text
   }
 }

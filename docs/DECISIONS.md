@@ -4155,13 +4155,15 @@ This supersedes spec 10.1 and 10.2 on type, colours, the switcher, Now and the w
 - **The top bar** is the website's pills, trailing: the place in a chip with the website's pin
   (no chevron, wrapping in its pill, never cut short) and the gear in a round chip beside it, in
   the place of the website's cm | in pill, which stays in Settings. On approximate IP location
-  the website's "Use my exact location" chip sits beneath them (`CoreCopy.useExactLocation`),
-  and "Using approximate location." is no longer shown: it is the chip's VoiceOver hint, so the
-  user still hears why. A notice about the place (`AppCopy.slugGone`) is a chip of words above
-  it. `homeTopBar` and `HomeTopBar` say so (`approximate` is now only the notice). At
-  accessibility sizes the bar is leading, the gear trailing, so wrapped words read from the
-  left. Every word in it sits on a chip's flat fill, 8.97:1 or more on every band, where bare
-  ink under maybesnow's glow at the bar's right end is 4.87.
+  the website's "Use my exact location" chip sits beneath them (`CoreCopy.useExactLocation`), and
+  "Using approximate location." is no longer shown: it is the chip's VoiceOver hint, so the user
+  still hears why. A notice about the place (`AppCopy.slugGone`) is a chip of words above it.
+  `homeTopBar` and `HomeTopBar` say so (`approximate` is now only the notice). At accessibility
+  sizes the bar is leading, the gear trailing, so wrapped words read from the left. Every word in
+  it sits on a chip's flat fill, 8.97:1 or more on every band, where bare ink under maybesnow's
+  glow at the bar's right end is 4.87. (The app's name has since come back, leading, on the
+  gradient, with the pill under it when the three don't fit one line: "The app's name back at the
+  top left".)
 - **The switcher is the website's tabs, and the segmented `Picker` is gone.** At standard sizes
   a chip track at most 352 wide, centred, in equal thirds, the view on screen on an ink thumb
   with its words in `pill`, sliding on the website's 300 ms curve (`PillSegments`); at
@@ -4213,18 +4215,18 @@ This supersedes spec 10.1 and 10.2 on type, colours, the switcher, Now and the w
   heading are full ink, not 0.9 (4.31:1 under snow's glow, and `DrawnText` matches pixels
   against the exact ink), and Retry is filled with the chip colour, not 10% ink (4.01:1 on
   maybesnow).
-- **What can't match the website.** No wordmark, Hot | Wet | Snow | Wind bar, city links, "All
-  places" or site links (Carl's rule); the gear has no website counterpart; the top bar and the
-  switcher stay pinned, as iOS's convention and the UI tests' (`pageWindow`) expect, where the
-  website's scroll away; the thumb moves when the pager settles, not with the finger; every
-  control is 44 points to tap (pills drawn 36, the chip 34, Retry 44, where the website's are 32,
-  about 20 and 32), and the links and places sit on 44-point lines, so the footer is airier; no
-  ellipsis on a long place; underlines at the font's own position and thickness; the optical size
-  fixed per face; the answer's 0.86 line height emulated; at large text sizes the app stacks where
-  the website shrinks its tabs and overlaps; the week's columns line up; the vh-based spacing is
-  fixed at the iPhone 17's values; and the website's intro, ad slot and places hub aren't pages of
-  the app. The 0.3 s colour fade on a view change and the loading word's pulse are on the Later
-  list.
+- **What can't match the website.** No Hot | Wet | Snow | Wind bar, city links, "All places" or
+  site links (Carl's rule), and at first no wordmark, which came back after #35 ("The app's name
+  back at the top left"); the gear has no website counterpart; the top bar and the switcher stay
+  pinned, as iOS's convention and the UI tests' (`pageWindow`) expect, where the website's scroll
+  away; the thumb moves when the pager settles, not with the finger; every control is 44 points
+  to tap (pills drawn 36, the chip 34, Retry 44, where the website's are 32, about 20 and 32),
+  and the links and places sit on 44-point lines, so the footer is airier; no ellipsis on a long
+  place; underlines at the font's own position and thickness; the optical size fixed per face;
+  the answer's 0.86 line height emulated; at large text sizes the app stacks where the website
+  shrinks its tabs and overlaps; the week's columns line up; the vh-based spacing is fixed at the
+  iPhone 17's values; and the website's intro, ad slot and places hub aren't pages of the app.
+  The 0.3 s colour fade on a view change and the loading word's pulse are on the Later list.
 - **Tests.** TypeScript: `vectors.test.ts` (the chip without the line, the notice above it, the
   week's heading and every dot between 0 and 100, Durham's at 0, 50 and 100, every snowless week
   at 0), `homeScreens.test.ts` and the copy tests. Linux: `PageVectorTests` (the week's heading
@@ -4925,6 +4927,80 @@ ask; none has wrapped on a run, and they are left as they are.
 width inside the pill's narrower bounds, so that `expectPlaceOnOneLine` passes on Aberdeen as well
 as Leeds and Durham, the pills 36 tall at Large; and that the AX3 screenshots show Aberdeen whole.
 Unproven until then.
+
+## The app's name back at the top left
+
+Carl, after #35 merged: "I actually think we should put willitsnow.today back in the top left. It
+looks a bit empty up there without it." It reverses the "no name at the top" of his request for the
+website's look ("The iPhone app in the website's look"). The name is the app's own, the store's
+name for it, so it names no other app, site or weather.
+
+**As the website draws it.** Header.astro shows `SITES.snow.name` split at its dot, "willitsnow"
+and ".today" (`.brand`, global.css: 1.05rem, weight 650, tracked -0.01em; the end at weight 400 and
+0.75 opacity). The app takes the name from the same place: `Constants.Site.name`, written from core
+`SITES.snow` by `pnpm mobile:generate`; `homeTopBar` (page.ts) splits it as Header.astro does into
+`name` and `nameEnd`, `HomeTopBar` ports the split, and page.json holds the two together.
+`AppNameView` draws it as one text in two faces, "willitsnow" SemiBold for the website's 650 and
+".today" Regular, 16.8 points at Large and growing with callout, as the place's words do
+(`TextRole.appName`, `appNameEnd`); under Bold Text ".today" goes a face up, to Medium, and
+"willitsnow" stays SemiBold, the boldest of the text faces. One text is one element, identified
+`app-name`, which VoiceOver reads as its words, "Will it snow today" (`AppCopy.appNameLabel`,
+carried as `HomeTopBar.nameLabel`): read as written, "willitsnow.today" failed the audit (below),
+and VoiceOver would say "willitsnow" as one word. ".today" is the full ink, not 0.75 of it: the UI
+tests prove a text's contrast by its surface's own ink (`DrawnText`), and the website's 0.9 detail
+measured 4.31:1 under snow's glow. Like the website's, and like the question below it, the name
+sits on the page's gradient, not on a chip.
+
+**Where it fits.** Shaped with HarfBuzz in the app's faces, the name is 127.6 points at Large
+(82.20 of "willitsnow" and 48.10 of ".today", less the tracking), 279.2 at AX3 (36.75 points), and
+by estimate 375 or more at the largest size (the label near 47 points there by the measured step
+from AX3 to AX5; not measured), wider than the 362-point bar. At Large the name, the place's pill
+and the gear fit one line, 16 and 8 points apart, while the place's words are under about 120
+points: Aberdeen (72.7), Leeds and Durham do. A longer place, or a larger text size, takes the
+website's wrap (`header`'s `flex-wrap`), as `TopBarLayout` arranges it: the name and the gear share
+the first line and the pill takes the next on its own, leading, offered the whole width, with the
+notice and "Use my exact location" under it, leading too (trailing on one line, as before). At AX3
+the name and the 60-point gear take 355 of the 362. Past that, the name is offered what the gear
+leaves it, 286 points, and shrinks to it rather than wrap or be cut short (`minimumScaleFactor`
+0.5). The tests' own sizes, Large and AX3, never shrink it, but the audits' Dynamic Type and
+clipped-text call lays the screen out at every size to AX5, and sees it shrunk to 286 points at AX4
+and AX5, no longer growing past AX3. Placing chooses from the width the bar was sized at, and each
+view is measured and placed with the same offer, so a bar placed a pixel narrower than it was sized
+keeps its lines and no text in it wraps again ("The place pill on one line, after #34 merged"); the
+one line is kept within a point of the width. The pill's `layoutPriority(1)` from #35 is gone with
+the stack and spacer it ordered.
+
+**The tests.** `HomeTests` checks the name reads its label on every screen it checks the top bar on
+(`expect(_:in:)`), and `expectFits` that it lies within the window; it is one of the top bar's
+fixed elements (`homeBar`, `AuditLog.fixed`), so an audit that moved the page doesn't move it. By
+the model the proof reads (brandColours.ts `pageAt`), the ink on the page where the name sits is
+5.51:1 at the least at Large and 5.01 over AX3's wider name, both under maybesnow's glow, where the
+whole page's least is 4.87. Apple's contrast check may still fail it, as it failed other Bricolage
+text on the gradient; `DrawnText` then judges it by its pixels, as it does the question.
+
+- **Checked on Linux:** the mobile package's tests (the constant, every `homeTopBar` case's name,
+  the screens' top bars) and `pnpm mobile:check`; IsItCore's 352 tests, `page.json`'s `homeTopBar`
+  cases among them; and a copy of `TopBarLayout` compiled against a stub of SwiftUI's `Layout`
+  (session scratchpad: topbar-check), with views measured as above: one line for Aberdeen at Large,
+  the pill 8 from the gear and the chip trailing under them; two lines for a 230-point pill, the
+  chip leading; name and gear first at AX3; the name offered 286 at the largest size; a line a
+  point over kept and 1.01 over moved; a pill that just fits staying on the line when placed a
+  pixel narrower; and one 0.8 into the slack staying too, as placing chooses from the width sized,
+  where it had moved under the name before the review (27 checks).
+
+**PR #36's first macOS run (c3520ae).** 38 of the 44 UI tests passed. The six that failed were
+every home audit, at Large and AX3 on each fixture, on one issue, 73 times:
+`sufficientElementDescription`, "Label not human-readable", on `app-name`, its label
+"willitsnow.today". Nothing else failed: `HomeTests` read the name and found it within the window,
+every place pill was under 44 tall, and the name passed the contrast check, the Dynamic Type check
+(AX4 and AX5 included, where it shrinks) and the clipped-text check. The trees put the layout where
+`TopBarLayout` says: at Large the name at (20, 79.7), 129.3 by 20.7, Aberdeen's pill at (211, 72),
+119 by 36, and the gear at (338, 68); at AX3 the name 281.3 by 44.7 beside the 60-point gear at
+(322, 68), the pill on the next line at (20, 128), 224.3 by 51.9, and "Use my exact location" under
+it at (20, 180.4). The label is now the words, `AppCopy.appNameLabel`.
+
+**For the next macOS run to show.** That the audits pass the name with its label, the six home
+audits with it, and the rest as on the first run. Unproven until then.
 
 ## API contract
 
