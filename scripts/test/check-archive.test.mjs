@@ -54,6 +54,7 @@ const HOOKS = [
   '-umpGeography',
   '-openURLs',
   'URLProtocolStub',
+  'FakePurchases',
   '127.0.0.1',
 ];
 
@@ -157,6 +158,11 @@ const NETWORK_CODE = [0xd28dc5b3, 0xf2ae8cb3, 0xf2cdeef3, 0xf2ed6e53];
 const LOCATION_CODE = [0xd28d85b3, 0xf2ac6df3, 0xf2ce8c33, 0xf2eded33];
 // "-route" (6 bytes), as LLVM builds it in x6 (scripts/test/swift-small-strings.test.mjs).
 const ROUTE_CODE = [0xd28e45a6, 0xf2aeade6, 0xf2ccae86];
+// "-purchase" (9 bytes): "-purchas" built in x0, then its second word in x1, "e" under 0xE9
+// (0xE0 plus the length): mov x1, #0x65; movk x1, #0xe900, lsl #48.
+const PURCHASE_CODE = [0xd28e05a0, 0xf2ae4ea0, 0xf2cd0c60, 0xf2ee6c20, 0xd2800ca1, 0xf2fd2001];
+// "-restore" (8 bytes) built in x0, then its second word, 0xE8 and nothing else, in x1.
+const RESTORE_CODE = [0xd28e45a0, 0xf2ae6ca0, 0xf2cdee80, 0xf2ecae40, 0xd2fd0001];
 
 const PRIVACY = plist({ NSPrivacyTracking: false, NSPrivacyCollectedDataTypes: [] });
 
@@ -305,7 +311,7 @@ describe('an archive that passes', () => {
         '',
         '- WillItSnow 1.0 (101)',
         `- ads test: Google's demo units (${DEMO_APP})`,
-        "- checked: privacy manifests, the icon, the answer font, 15 debug hooks in both binaries, the ad units and SKAdNetworkItems, the widget's links, versions, encryption and fixtures",
+        "- checked: privacy manifests, the icon, the answer font, 18 debug hooks in both binaries, the ad units and SKAdNetworkItems, the widget's links, versions, encryption, fixtures, StoreKit configurations and StoreKitTest",
         '',
       ].join('\n'),
     );
@@ -338,7 +344,20 @@ describe('an archive that passes', () => {
           'unlocked-resetStore',
           'ad-network',
           'use-location',
+          'in-app-purchase',
+          'tap-to-restore',
         ]),
+      },
+    });
+    expect(check(dir).errors).toEqual([]);
+  });
+
+  it('passes with the purchase code in the app, and StoreKit itself in both', () => {
+    const storeKit = '/System/Library/Frameworks/StoreKit.framework/StoreKit';
+    const dir = archive({
+      files: {
+        WillItSnow: binary([storeKit, 'StoreKitPurchases', 'StoreKitFacts']),
+        [`${WIDGET}/WillItSnowWidgets`]: binary([storeKit, 'StoreKitFacts']),
       },
     });
     expect(check(dir).errors).toEqual([]);
@@ -432,6 +451,13 @@ describe('an archive that fails', () => {
     },
   );
 
+  it("fails when the widget links the app's purchase code", () => {
+    const dir = archive({
+      files: { [`${WIDGET}/WillItSnowWidgets`]: binary(['StoreKitFacts', 'StoreKitPurchases']) },
+    });
+    expect(check(dir).errors).toEqual(["the widget links the app's purchase code"]);
+  });
+
   it("passes with the location code in the app's binary", () => {
     const dir = archive({ files: { WillItSnow: binary(['CLLocationManager']) } });
     expect(check(dir).errors).toEqual([]);
@@ -505,6 +531,16 @@ describe('an archive that fails', () => {
     const location = archive({ files: { WillItSnow: binary([], LOCATION_CODE) } });
     expect(check(location).errors).toEqual([
       'the app binary builds the debug hook -location as a short Swift literal',
+    ]);
+  });
+
+  it.each([
+    ['-purchase', PURCHASE_CODE],
+    ['-restore', RESTORE_CODE],
+  ])("fails on StoreKit's stand-in's launch argument %s as a short Swift literal", (hook, code) => {
+    const dir = archive({ files: { WillItSnow: binary(['will it snow?'], code) } });
+    expect(check(dir).errors).toEqual([
+      `the app binary builds the debug hook ${hook} as a short Swift literal`,
     ]);
   });
 
@@ -680,6 +716,23 @@ describe('an archive that fails', () => {
     expect(check(folder).errors).toEqual(['the app bundles the fixtures']);
     const loose = archive({ files: { 'leeds-dry.json': '{\n  "_fixture": {}\n}' } });
     expect(check(loose).errors).toEqual(['the app bundles the fixtures']);
+  });
+
+  it('fails when the app bundles a StoreKit configuration, loose or in a folder', () => {
+    const storeKit = '{\n  "identifier" : "5A1C3E07",\n  "products" : [\n\n  ]\n}\n';
+    const loose = archive({ files: { 'Snow.storekit': storeKit } });
+    expect(check(loose).errors).toEqual(['the app bundles a StoreKit configuration']);
+    const folder = archive({ files: { 'StoreKit/Snow.storekit': storeKit } });
+    expect(check(folder).errors).toEqual(['the app bundles a StoreKit configuration']);
+  });
+
+  it('fails when the app links StoreKitTest', () => {
+    const dir = archive({
+      files: {
+        WillItSnow: binary(['will it snow?', '@rpath/StoreKitTest.framework/StoreKitTest']),
+      },
+    });
+    expect(check(dir).errors).toEqual(['the app links StoreKitTest']);
   });
 
   it('fails when there is no widget, app, Info.plist or executable', () => {

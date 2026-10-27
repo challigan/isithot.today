@@ -26,6 +26,12 @@ final class FakeAdsPlatform: AdsPlatform {
   /// The calls a test can hold.
   enum Held: Hashable {
     case update
+    /// The consent form, on screen until the test releases it.
+    case form
+    /// Mobile Ads' start.
+    case startAds
+    /// The privacy options form, on screen until the test releases it.
+    case privacyOptions
     case loadInterstitial
     case presentInterstitial
   }
@@ -77,18 +83,21 @@ final class FakeAdsPlatform: AdsPlatform {
 
   func presentConsentFormIfRequired() async -> AdsConsent {
     calls.append("presentConsentForm")
+    await gates[.form]?.wait()
     if let afterForm { consent = afterForm }
     return consent
   }
 
   func presentPrivacyOptions() async -> AdsConsent {
     calls.append("presentPrivacyOptions")
+    await gates[.privacyOptions]?.wait()
     if let afterPrivacyOptions { consent = afterPrivacyOptions }
     return consent
   }
 
   func startAds() async {
     calls.append("startAds")
+    await gates[.startAds]?.wait()
   }
 
   func homeBannerHeight(width: Double) -> Double {
@@ -113,6 +122,10 @@ final class FakeAdsPlatform: AdsPlatform {
     calls.append("presentInterstitial")
     await gates[.presentInterstitial]?.wait()
     return interstitialPresents
+  }
+
+  func stop() {
+    calls.append("stop")
   }
 
   /// A width as the calls note it: whole points without a fraction.

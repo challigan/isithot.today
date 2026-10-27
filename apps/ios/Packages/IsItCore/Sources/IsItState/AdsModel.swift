@@ -55,6 +55,9 @@ public protocol AdsPlatform: AnyObject {
   /// Shows the loaded full-screen ad over whatever is on top, and returns once it closes (true),
   /// or at once when it can't be shown (false).
   func presentInterstitial() async -> Bool
+  /// The purchase is owned: drops every banner view and the full-screen ad on hand, so nothing
+  /// more is asked of Google. The SDK itself can't be stopped (spec 14.2.5).
+  func stop()
 }
 
 /// When the last full-screen ad showed (`Keys.App.lastInterstitial`, the app's own defaults):
@@ -85,7 +88,8 @@ public final class MemoryAdsStore: AdsStore, @unchecked Sendable {
 /// Mobile Ads, then the home banner, a banner at the end of each page shown, and a full-screen ad
 /// when the user chooses a place in the picker. Google's SDKs are behind `AdsPlatform`, so the
 /// tests run it on Linux with a fake. The views read the phase and the home band's height, and draw
-/// nothing while the purchase is owned; an unlocked session never starts it.
+/// nothing while the purchase is owned; an unlocked session never starts it, and a purchase made
+/// while it runs stops it for good (`stop()`).
 ///
 /// A slot's space doesn't depend on its banner's news: the home band and the page ends are there
 /// whenever the ads are `on`, as Google asks for a fixed space, so that a banner that loads late
@@ -105,6 +109,8 @@ public final class AdsModel {
     case withheld
     /// Mobile Ads started: the slots show and the ads load.
     case on
+    /// Stopped for good this launch: the purchase became owned (`stop()`).
+    case off
   }
 
   /// How far the ads have come this launch.
@@ -145,6 +151,8 @@ public final class AdsModel {
   private var interstitialLoadedAt: Date?
   /// Whether a full-screen ad is loading.
   @ObservationIgnored private var loadingInterstitial = false
+  /// Whether the purchase stopped the ads (`stop()`): nothing more from Google this launch.
+  @ObservationIgnored private var stopped = false
 
   public init(platform: any AdsPlatform, store: any AdsStore, clock: any AppClock) {
     self.platform = platform
@@ -156,7 +164,8 @@ public final class AdsModel {
   // MARK: - Consent and the start
 
   /// Launch step 5's work (spec 14.2), started and left running: returns at once, so alert sync
-  /// and a pending route never wait on the consent form. Only the first call does anything.
+  /// and a pending route never wait on the consent form. Only the first call does anything, and
+  /// none after `stop()`.
   ///  1. If UMP's kept answer already lets ads be requested, Mobile Ads starts now, alongside the
   ///     update (Google's own order).
   ///  2. updateConsent, then presentConsentFormIfRequired.
@@ -166,18 +175,38 @@ public final class AdsModel {
   /// loads the page-end banner of every page already shown whose width is known, and, unless
   /// `firstRun`, loads a full-screen ad.
   public func start(firstRun: Bool) {
-    guard asking == nil else { return }
+    guard asking == nil, !stopped else { return }
     self.firstRun = firstRun
     phase = .asking
     asking = Task { await ask() }
   }
 
+  /// The purchase became owned mid-session (spec 14.2.5): nothing more from Google this launch.
+  /// No banner loads or loads again (each waiting retry is called off), no full-screen ad shows or
+  /// loads (a place chosen calls `done` at once), Mobile Ads never starts if it hasn't, and a
+  /// consent form not yet asked for never is; one already on screen stays until answered, as UMP
+  /// can't take it away, and then nothing starts. The home band's height and Privacy choices go,
+  /// and `platform.stop()` drops the banners. A later `start(firstRun:)` does nothing. Once only.
+  public func stop() {
+    guard !stopped else { return }
+    stopped = true
+    phase = .off
+    privacyChoices = false
+    homeBannerHeight = nil
+    for work in retries.values { work.cancel() }
+    retries = [:]
+    interstitialLoadedAt = nil
+    platform.stop()
+  }
+
   /// Settings' "Privacy choices": UMP's privacy options form, then its answer; if ads may now be
   /// requested and Mobile Ads hasn't started, it starts. Nothing while Settings doesn't show the
-  /// row (`privacyChoices`), as in a session whose ads never started.
+  /// row (`privacyChoices`), as in a session whose ads never started; stopped while the form is
+  /// on screen, its answer brings nothing back.
   public func openPrivacyChoices() async {
     guard privacyChoices else { return }
     let answer = await platform.presentPrivacyOptions()
+    guard !stopped else { return }
     privacyChoices = answer.privacyOptionsRequired
     if answer.canRequestAds { await startMobileAds() }
   }
@@ -188,7 +217,10 @@ public final class AdsModel {
       // Consent kept from an earlier launch: Mobile Ads starts while the update is out.
       if kept.canRequestAds { Task { await self.startMobileAds() } }
     }
+    // Stopped meanwhile: no form is asked for, and one on screen starts nothing once answered.
+    guard !stopped else { return }
     let answer = await platform.presentConsentFormIfRequired()
+    guard !stopped else { return }
     privacyChoices = answer.privacyOptionsRequired
     if answer.canRequestAds {
       await startMobileAds()
@@ -197,11 +229,13 @@ public final class AdsModel {
     }
   }
 
-  /// Starts Mobile Ads, once; then the ads are on, and what may load now loads.
+  /// Starts Mobile Ads, once; then the ads are on, and what may load now loads. Stopped before
+  /// or while it starts, the ads stay off and nothing loads.
   private func startMobileAds() async {
-    guard !started else { return }
+    guard !started, !stopped else { return }
     started = true
     await platform.startAds()
+    guard !stopped else { return }
     phase = .on
     show(.home)
     for view in AppView.allCases where shownViews.contains(view) { show(.pageEnd(view)) }
@@ -255,7 +289,7 @@ public final class AdsModel {
     case .failed:
       let count = (failures[slot] ?? 0) + 1
       failures[slot] = count
-      guard retries[slot] == nil else { return }
+      guard retries[slot] == nil, !stopped else { return }
       let at = clock.now.addingTimeInterval(AdRules.retryDelay(failures: count))
       retries[slot] = clock.schedule(at: at) { [weak self] in self?.loadAgain(slot) }
     }
@@ -263,7 +297,7 @@ public final class AdsModel {
 
   private func loadAgain(_ slot: AdSlot) {
     retries[slot] = nil
-    guard let width = loadedWidths[slot] else { return }
+    guard !stopped, let width = loadedWidths[slot] else { return }
     platform.loadBanner(slot, width: width)
   }
 
@@ -274,7 +308,12 @@ public final class AdsModel {
   /// calls `done` at once. Keeps when it showed (saved as it is asked to show, put back if it
   /// couldn't), then loads the next. A stale one is dropped and another loaded, and nothing shows;
   /// so is one that failed to load, for a later choice. A choice never waits for an ad to load.
+  /// Once the ads are stopped (`stop()`), `done` at once, and nothing is loaded.
   public func placeChosen(then done: @escaping @MainActor () -> Void) {
+    guard !stopped else {
+      done()
+      return
+    }
     let now = clock.now
     if let loadedAt = interstitialLoadedAt,
       !AdRules.interstitialFresh(loadedAt: loadedAt, now: now)
@@ -314,7 +353,8 @@ public final class AdsModel {
     Task {
       let loaded = await platform.loadInterstitial()
       loadingInterstitial = false
-      if loaded { interstitialLoadedAt = clock.now }
+      // One that loads after the stop is dropped.
+      if loaded, !stopped { interstitialLoadedAt = clock.now }
     }
   }
 }

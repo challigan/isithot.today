@@ -3,7 +3,8 @@
  * the website, from core's `config.ts` (and the models' agencies from `copy.ts`) and the client's
  * `config.ts`, under the same names, and willitsnow.today's name, which the top bar shows, and its
  * pages and support address (core `SITES.snow` and `CONTACT_EMAIL`), which the app's Settings
- * open, so no URL or name is typed in Swift.
+ * open, so no URL or name is typed in Swift, and the one-off purchase's product ID and price
+ * (`purchase.ts`), so no price is typed in Swift either.
  * A group written whole (`SEARCH`, `AHEAD`, `WIDGET`, `CLIENT`, `PLACES`, `ADS`) gains a member
  * when core or the client adds a key, and stops the generator if the new value isn't a whole
  * number, so a Swift type is chosen for it rather than guessed. `ALERTS` is not written whole: it
@@ -25,6 +26,7 @@ import {
   WIDGET,
 } from '@isithot/core';
 import { ADS, CLIENT, PLACES } from '@isithot/client';
+import { PURCHASE, PURCHASE_DISPLAY_PRICE } from './purchase';
 import {
   generatedHeader,
   swiftCall,
@@ -39,7 +41,8 @@ export const CONSTANTS_PATH =
   'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated/Constants.swift';
 
 export const CONSTANTS_SOURCE =
-  'packages/core/src/config.ts, packages/core/src/copy.ts and packages/client/src/config.ts';
+  'packages/core/src/config.ts, packages/core/src/copy.ts, packages/client/src/config.ts and ' +
+  'packages/mobile/src/purchase.ts';
 
 type Numbers = Readonly<Record<string, number>>;
 
@@ -95,8 +98,8 @@ export function constantsSwift(): string {
     generatedHeader(CONSTANTS_SOURCE),
     '',
     '/// The numbers the app shares with the server and the website, under their TypeScript names,',
-    '/// so the app judges nothing differently, and the site it links to. Durations say their',
-    '/// unit, as the TypeScript does.',
+    '/// so the app judges nothing differently, the site it links to and the purchase it sells.',
+    '/// Durations say their unit, as the TypeScript does.',
     'public enum Constants {',
     '  /// From this local hour at the place until midnight, the middle view answers for tomorrow',
     '  /// and the app opens on Now (core `TOMORROW_FROM_HOUR`).',
@@ -244,6 +247,19 @@ export function constantsSwift(): string {
           'public static let contactEmail',
           swiftString(contactEmail(CONTACT_EMAIL)),
         ),
+      ],
+    ),
+    ...group(
+      [
+        'The one-off purchase (packages/mobile `PURCHASE`, spec section 13): its product ID, which',
+        'Snow.storekit and App Store Connect name too, and the price Snow.storekit sells it at as',
+        "StoreKit shows it there, which only a Debug build's stand-in shows: a Release build shows",
+        "the App Store's own `displayPrice`.",
+      ],
+      'Purchase',
+      [
+        ...swiftLet('    ', 'public static let productID', swiftString(PURCHASE.productID)),
+        ...swiftLet('    ', 'public static let displayPrice', swiftString(PURCHASE_DISPLAY_PRICE)),
       ],
     ),
     '}',

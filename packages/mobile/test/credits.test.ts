@@ -217,6 +217,11 @@ describe("Your privacy and the website's privacy notice", () => {
       ],
       [APP_COPY.privacyChoices, `Settings → ${APP_COPY.privacyChoices} lets you change it`],
       [APP_COPY.privacyPurchases, APP_COPY.privacyPurchases],
+      // What the phone keeps of the purchase (`Keys.AppGroup.unlock`).
+      [
+        "a note on your iPhone of whether you've made the one-off purchase",
+        "a note on your iPhone of whether you've made the one-off purchase",
+      ],
       [APP_COPY.privacyAccounts, 'It has no accounts.'],
     ];
     const app = [

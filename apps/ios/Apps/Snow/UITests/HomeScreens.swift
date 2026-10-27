@@ -184,6 +184,25 @@ extension XCUIApplication {
     return true
   }
 
+  /// Whether Settings or the upgrade sheet is closed, as the screen shows it: the top bar's gear
+  /// is there and takes a tap, where under a sheet the home screen is out of the accessibility
+  /// tree (HomeView). Not the sheet's elements gone, which XCUITest may go on finding once it has
+  /// closed, as it did the picker's search box (`pickerClosed`).
+  var sheetClosed: Bool {
+    let gear = buttons["settings"]
+    return gear.exists && gear.isHittable
+  }
+
+  /// Whether Settings or the upgrade sheet is closed (`sheetClosed`) within `timeout` seconds.
+  func sheetCloses(within timeout: TimeInterval) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !sheetClosed {
+      guard Date() < deadline else { return false }
+      RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+    }
+    return true
+  }
+
   /// The top bar's name and controls and the switcher, which don't scroll, by identifier.
   static let homeBar = ["app-name", "place", "settings", "approximate", "use-my-location", "views"]
 
@@ -279,19 +298,22 @@ extension XCTestCase {
   }
 
   /// Launches the app on `screen`'s fixture at its moment, from a clean store (`-resetStore`),
-  /// the clock fixed there unless `clock` is "run", at `size`; and waits for the page it opens
-  /// on.
+  /// the clock fixed there unless `clock` is "run", at `size`, with `extra` launch arguments
+  /// after those (`-purchase bought`, say, for the home row StoreKit's stand-in brings); and
+  /// waits for the page it opens on.
   @MainActor
   func launch(
     _ screen: HomeScreen,
     clock: String = "fixed",
-    size: TextSize = .large
+    size: TextSize = .large,
+    extra: [String] = []
   ) throws -> XCUIApplication {
     guard let fixture = screen.fixture else {
       throw HomeScreenError("\(screen.name) has no fixture to launch on")
     }
     let app = try launchApp(
-      ["-resetStore", "-fixture", fixture, "-now", screen.now, "-clock", clock] + size.arguments)
+      ["-resetStore", "-fixture", fixture, "-now", screen.now, "-clock", clock] + size.arguments
+        + extra)
     try awaitHeading(try screen.opening().heading, in: app)
     return app
   }
@@ -391,6 +413,34 @@ extension XCTestCase {
     let to = screen.withOffset(CGVector(dx: x, dy: start - distance))
     from.press(forDuration: 0.01, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.3)
     return Drag(from: CGPoint(x: x, y: start), to: CGPoint(x: x, y: start - distance))
+  }
+
+  /// Scrolls `page`, the page on screen, until the element `id` lies whole on screen: drags of
+  /// four fifths of the page on screen (`scrollDown`, whose drag then starts on the page, above
+  /// an ad band), up to 12, more than the longest page's end at Large takes; throws when it never
+  /// does. AdsTests' box at a page's end, and UpgradeTests' home row above its footer.
+  @MainActor
+  func scroll(
+    _ page: HomeScreen.Page,
+    toShow id: String,
+    in app: XCUIApplication
+  ) throws {
+    let element = app.find(id)
+    guard element.exists else {
+      throw HomeScreenError("No \(id) on the \(page.view) page; \(app.homeGeometry)")
+    }
+    var drags: [Drag] = []
+    while true {
+      let frame = settledFrame(of: element)
+      let shown = onScreen(page, in: app)
+      if lies(frame, within: shown) { return }
+      guard drags.count < 12 else {
+        throw HomeScreenError(
+          "\(id) at \(frame) never came whole on screen, within \(shown), after the drags "
+            + "\(drags); \(app.homeGeometry)")
+      }
+      drags.append(scrollDown(page, by: shown.height * 0.8, in: app))
+    }
   }
 
   /// Checks the home screen fits the screen, as it is at launch, before any page has scrolled:
@@ -654,6 +704,35 @@ extension XCTestCase {
     add(attachment)
     return shot
   }
+
+  /// No text or button a sheet shows names another weather type, website or app (section
+  /// 10.8): Settings and the pages on its stack (SettingsTests), and the upgrade sheet
+  /// (UpgradeTests). Only what can be tapped counts: the home screen under the sheet, whose
+  /// answer may well say "Rain, not snow.", is the server's, and is covered.
+  @MainActor
+  func assertSnowOnly(
+    _ app: XCUIApplication,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    let other =
+      #"(?i)\b(websites?|isithot|isitwet|isitwindy|hot|wet|wind|windy|rain|rainy|rainfall|android)\b"#
+    let shown = (app.staticTexts.allElementsBoundByIndex + app.buttons.allElementsBoundByIndex)
+      .filter { $0.isHittable }
+    XCTAssertFalse(shown.isEmpty, "Nothing on screen", file: file, line: line)
+    for element in shown {
+      XCTAssertNil(
+        element.label.range(of: other, options: .regularExpression), element.label, file: file,
+        line: line)
+    }
+  }
+}
+
+/// Whether `inner` lies within `outer`, edge by edge, to half a point either way, as a frame read
+/// on a 3x screen may round.
+func lies(_ inner: CGRect, within outer: CGRect) -> Bool {
+  inner.minX >= outer.minX - 0.5 && inner.maxX <= outer.maxX + 0.5
+    && inner.minY >= outer.minY - 0.5 && inner.maxY <= outer.maxY + 0.5
 }
 
 /// How far above its centre `tapOutsideItsWords` taps a button whose element is `height` tall:

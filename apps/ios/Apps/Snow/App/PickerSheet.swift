@@ -22,8 +22,9 @@ struct PickerRequest: Identifiable, Equatable {
 /// version a choice in the picker the place pill opened may first show the full-screen ad over
 /// the picker (`AdsModel.placeChosen`), and the picker closes as the ad does: the pill's tap and
 /// the choice are the two actions Google asks for before such an ad. The "Use my exact location"
-/// chip's picker never shows one, as its fix chooses the place after that one tap. A star saves
-/// or removes a place and chooses nothing.
+/// chip's picker never shows one, as its fix chooses the place after that one tap, and a paid
+/// session never asks for one, even when the purchase came after the ads had started (where
+/// `AdsModel.stop()` makes it a no-op too). A star saves or removes a place and chooses nothing.
 struct PickerSheet: View {
   let model: AppModel
   /// The free version's ads.
@@ -72,7 +73,7 @@ struct PickerSheet: View {
     )
     .onChange(of: picker.finished) { _, finished in
       guard finished else { return }
-      if request.locating {
+      if request.locating || model.unlocked {
         dismiss()
       } else {
         ads.placeChosen { dismiss() }

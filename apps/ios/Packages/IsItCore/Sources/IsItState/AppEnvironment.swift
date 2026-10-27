@@ -115,9 +115,9 @@ public struct SystemClock: AppClock {
 }
 
 /// What the app keeps between launches (iOS build spec, section 9.6): in the App Group, the
-/// place (`place.v1`), the units (`units.v1`), the purchase (`unlock.v1`, read only: StoreKit's
-/// code writes it, phase 7) and the last good answer (`today.v1.json`). `SharedStore`
-/// (IsItServices) in the app; `MemoryState` without an App Group, and in the tests.
+/// place (`place.v1`), the units (`units.v1`), the purchase (`unlock.v1`, read only here:
+/// `PurchaseModel` writes it, through `UnlockStore`) and the last good answer (`today.v1.json`).
+/// `SharedStore` (IsItServices) in the app; `MemoryState` without an App Group, and in the tests.
 public protocol StoredState: Sendable {
   /// The chosen place, or approximate IP location when there is none.
   func loadPlace() -> Target
@@ -126,7 +126,7 @@ public protocol StoredState: Sendable {
   /// The units, or nil before the first answer chose them.
   func loadUnits() -> Units?
   func saveUnits(_ units: Units)
-  /// Whether the purchase is owned, as StoreKit's code last wrote it.
+  /// Whether the purchase is owned, as `PurchaseModel` last wrote it.
   func loadUnlocked() -> Bool
   /// The last good answer, or nil (none, unreadable, or another store version's).
   func loadToday() -> SavedToday?
@@ -191,13 +191,15 @@ public protocol WidgetReloader: Sendable {
 /// `LocationService`.
 public protocol AppHooks: Sendable {
   /// Step 2 (phase 7, StoreKit): starts `Transaction.updates` and the entitlement check, and
-  /// returns at once.
+  /// returns at once (`PurchaseModel.start()`).
   func startEntitlementCheck()
-  /// Step 5 (phase 7): once the check has finished, whether the purchase is owned; nil keeps
-  /// what `unlock.v1` says.
+  /// Step 5 (phase 7): once the check has finished, whether the purchase is owned
+  /// (`PurchaseModel.launchEntitlement()`); nil keeps what `unlock.v1` says.
   func entitlement() async -> Bool?
   /// Step 5 (phase 8): consent, then Mobile Ads, then the banner. Called only when not unlocked.
   func startAds() async
+  /// Phase 7: the purchase became owned while the app runs: the ads stop for good this launch.
+  func stopAds() async
   /// Step 6 (phase 8): when a notification switch is on, registration and `AlertSync`. Also
   /// called when the picker chooses a place (section 10.3), so a notification place that
   /// follows the device's location follows it; a chosen notification place never follows
@@ -219,6 +221,9 @@ public struct NoHooks: AppHooks {
 
   /// Phase 8 starts consent and the ads.
   public func startAds() async {}
+
+  /// Phase 7 stops the ads here.
+  public func stopAds() async {}
 
   /// Phase 8 syncs the notifications.
   public func syncAlerts(target: Target, units: Units?) async {}

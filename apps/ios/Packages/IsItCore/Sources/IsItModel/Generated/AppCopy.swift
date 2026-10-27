@@ -125,6 +125,14 @@ public enum AppCopy {
   public static let restore = "Restore purchase"
   public static let restored = "Purchase restored."
   public static let nothingToRestore = "No purchase found for this Apple Account."
+
+  public static func buy(price: String) -> String {
+    "Buy for \(price)"
+  }
+
+  public static let upgradeDescription = "No ads, plus home and lock screen widgets"
+  public static let upgradeUnavailable = "The purchase isn't available right now. Try again later."
+  public static let purchasesOff = "In-app purchases are turned off on this iPhone."
   public static let unitsFootnote = "Temperatures follow: cm with °C, inches with °F."
   public static let notifications = "Notifications"
   public static let evening = "Evening before (about 6pm)"
@@ -164,7 +172,8 @@ public enum AppCopy {
   public static let privacyAds =
     "In the free version, Google shows the ads and may collect device and usage data. The app keeps when it last showed a full-screen ad, so it shows one at most every 5 minutes."
   public static let seePrivacyChoices = "See Privacy choices."
-  public static let privacyPurchases = "Apple handles purchases. We never see your payment details."
+  public static let privacyPurchases =
+    "Apple handles purchases. We never see your payment details. The app keeps a note on your iPhone of whether you've made the one-off purchase."
   public static let privacyAccounts = "There are no accounts."
   public static let keptForNotifications = "What we keep for notifications"
   public static let deleteMyData = "Turn off notifications and delete my data"
