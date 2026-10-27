@@ -163,25 +163,45 @@ extension XCUIApplication {
   /// The question and the answer: one heading element.
   var heading: XCUIElement { find("heading") }
 
-  /// Whether the place picker is closed, as the screen shows it: the top bar's place button takes
-  /// a tap, which it can't under the picker's full-screen cover, and the picker's search box
-  /// (`place-search`) is gone or out of reach. Not its absence alone: on PR #38's macOS run
-  /// (40541947888) XCUITest went on finding the search box of a picker that its screen recording
-  /// shows closed, the home screen loading the place chosen.
-  var pickerClosed: Bool {
-    let place = buttons["place"]
-    let field = find("place-search")
-    return place.exists && place.isHittable && !(field.exists && field.isHittable)
+  /// The place picker as the app holds it, from its Debug readout (`debug-picker`,
+  /// `DebugHooks.pickerReadout`): open, while the home screen has it open; closing, once the home
+  /// screen has closed it but its content is still on screen; closed. Nil with no readout.
+  var pickerState: String? {
+    (try? find("debug-picker").snapshot())?.value as? String
   }
 
-  /// Whether the place picker is closed (`pickerClosed`) within `timeout` seconds.
-  func pickerCloses(within timeout: TimeInterval) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !pickerClosed {
-      guard Date() < deadline else { return false }
-      RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+  /// Whether the place picker is closed, as the app says (`pickerState`): the home screen has
+  /// closed it, and SwiftUI has taken its content off the screen. Not as XCUITest's tree has it:
+  /// on PR #38's macOS run (40541947888) the tree held the search box (`place-search`) of a
+  /// picker the screen recording shows closed, the home screen loading the place chosen, for
+  /// the whole 10 seconds of the wait; on PR #39's (40562013812), the check that followed (the
+  /// place button taking a tap, the search box out of reach), read from the same tree, failed for
+  /// 15 (DECISIONS, "Ads in the iPhone app: three placements"). That the home screen then shows
+  /// the place chosen is the caller's to read from the screen, as XCUITest read the home screen's
+  /// own elements as they were.
+  var pickerClosed: Bool { pickerState == "closed" }
+
+  /// How many times a picker's content has come on screen this launch, from the readout
+  /// (`debug-pickers`): what tells a picker that opened and closed from the readout at rest,
+  /// which reads closed before any picker opens. Nil with no readout.
+  var pickersShown: Int? {
+    ((try? find("debug-pickers").snapshot())?.value as? String).flatMap { Int($0) }
+  }
+
+  /// The picker as the app and XCUITest have it, for a failure or `picker-closed-lag` to say: the
+  /// readout's state; then the search box and the place button, each with its frame and whether a
+  /// tap would reach it, or not found. A search box off the screen's foot (874 points down on the
+  /// iPhone 17) is the picker's views still in the window; one where the picker had it, a tree
+  /// that fell behind them.
+  var pickerReport: String {
+    func found(_ element: XCUIElement, _ name: String) -> String {
+      guard let snapshot = try? element.snapshot() else { return "no \(name)" }
+      let reach = element.exists && element.isHittable ? "a tap reaches it" : "a tap doesn't"
+      return "\(name) at \(snapshot.frame), \(reach)"
     }
-    return true
+    return "debug-picker reads \(pickerState ?? "nothing"), debug-pickers "
+      + "\(pickersShown.map(String.init) ?? "nothing"); "
+      + found(find("place-search"), "place-search") + "; " + found(buttons["place"], "place")
   }
 
   /// Whether Settings or the upgrade sheet is closed, as the screen shows it: the top bar's gear
@@ -333,6 +353,52 @@ extension XCTestCase {
       let shown = heading.exists ? heading.label : "no heading"
       throw HomeScreenError("The heading never read \"\(label)\"; it reads \"\(shown)\"")
     }
+  }
+
+  /// Whether the picker a tap opened is on screen within `timeout` seconds, as the app's readout
+  /// says: `debug-picker` reads open and `debug-pickers` more than `shown`, the count before the
+  /// tap. Nil when the readout couldn't be read at all, should XCUITest not find it under the
+  /// full-screen cover; the caller then waits for the picker's own elements, and
+  /// `pickerCloses(in:after:within:)` still proves a picker came and went. Read four times a
+  /// second from a snapshot, which a readout not found fails nothing.
+  @MainActor
+  func pickerOpens(in app: XCUIApplication, after shown: Int, within timeout: TimeInterval)
+    -> Bool?
+  {
+    let deadline = Date().addingTimeInterval(timeout)
+    var read = false
+    repeat {
+      if let state = app.pickerState {
+        read = true
+        if state == "open", (app.pickersShown ?? 0) > shown { return true }
+      }
+      RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+    } while Date() < deadline
+    return read ? false : nil
+  }
+
+  /// Whether the picker opened after the readout counted `shown` pickers has closed within
+  /// `timeout` seconds: `debug-picker` reads closed (`pickerClosed`) and `debug-pickers` more than
+  /// `shown`, so the readout at rest, which reads closed before any picker opens, never passes.
+  /// Read four times a second from a snapshot, which a readout not found fails nothing: not a
+  /// predicate on its value, which would read an element XCUITest may not find under the cover.
+  /// Once it is, should XCUITest still find the picker's search box, attaches what it found
+  /// (`pickerReport`) as `picker-closed-lag`, failing nothing: where the search box was, and
+  /// which of it and the place button a tap would reach, tell the picker's views still in the
+  /// window from a tree that fell behind them, which PR #39's run couldn't.
+  @MainActor
+  func pickerCloses(in app: XCUIApplication, after shown: Int, within timeout: TimeInterval)
+    -> Bool
+  {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !(app.pickerClosed && (app.pickersShown ?? 0) > shown) {
+      guard Date() < deadline else { return false }
+      RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+    }
+    if (try? app.find("place-search").snapshot()) != nil {
+      attachText(app.pickerReport, as: "picker-closed-lag")
+    }
+    return true
   }
 
   /// Taps `page`'s tab in the switcher (a tab, a button labelled as the tab reads, on the track or

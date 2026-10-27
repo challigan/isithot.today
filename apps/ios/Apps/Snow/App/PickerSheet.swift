@@ -25,6 +25,8 @@ struct PickerRequest: Identifiable, Equatable {
 /// chip's picker never shows one, as its fix chooses the place after that one tap, and a paid
 /// session never asks for one, even when the purchase came after the ads had started (where
 /// `AdsModel.stop()` makes it a no-op too). A star saves or removes a place and chooses nothing.
+/// A Debug build notes the picker's content coming on screen and leaving it, for the UI tests'
+/// readout of the picker (`DebugHooks.pickerReadout`).
 struct PickerSheet: View {
   let model: AppModel
   /// The free version's ads.
@@ -80,12 +82,16 @@ struct PickerSheet: View {
       }
     }
     .onAppear {
+      DebugHooks.pickerAppeared()
       // Not in `.task`, which is cancelled as the sheet closes, and would cancel the fetch of
       // the place the fix chose with it.
       guard request.locating, !started else { return }
       started = true
       Task { await picker.useMyLocation() }
     }
-    .onDisappear { picker.close() }
+    .onDisappear {
+      DebugHooks.pickerDisappeared()
+      picker.close()
+    }
   }
 }

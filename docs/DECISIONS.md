@@ -4766,6 +4766,36 @@ swipes and the home audits' taps pass with the pages setting the view only at re
 still opens on Today before 6pm, its pages on it after every launch and tap (`offScreen`); and
 that the licence's audit passes, and the picker's still do.
 
+**What PR #36's and #39's runs showed** (PR #36: run 40242003907, job 121316022296; PR #39: run
+40562013812, job 122394234668). `HomeTests.testTheMiddleTabTurnsToTomorrowAt6pm` failed the same
+way on both, after `PagerSync` had replaced the write-back above. Once the 6pm flip had drawn
+(the palette's 0.9-second fade), the screen was still for 3.4 and 1.9 seconds. Then a tap on Now
+at (86.33, 210), the centre of `view-now`, drew the word pressed and let go: 0.992 of its width
+on PR #39's recording, 0.972 on PR #36's, whole again within 0.1 seconds. Nothing else moved,
+and for 20 seconds the tree read tomorrow's heading with Tomorrow chosen. So the touch reached
+the button and its action changed nothing on screen.
+
+- `PagerSync` can't have undone it. On iOS 18 it writes the view only at rest after a finger
+  moved the pages, and this test never touches them. So the write-back blamed for cf4eb74's tap,
+  pressed and let go with nothing chosen, is in doubt as that tap's cause too.
+- Nor any other writer of the model's view: the launch, the first answer and the return to the
+  foreground didn't run.
+- The other 15 or so switcher taps a run, in 27 logs, never failed so. What is new here is that
+  the minute's tick, not a tap, turned the middle tab, and with it the theme, the colour scheme
+  and an announcement.
+- The test's comment said no request went. One does: the fixture's hours start at 17:00Z, so a
+  quiet refresh is due at 18:00Z plus 0 to 90 seconds. It would have had to land inside the
+  touch's 50 ms.
+- What the artefacts can't show is whether the action ran, whether the model moved and the views
+  didn't, and whether UIKit ended the touch or cancelled it. It stays unexplained, and the test
+  unchanged: it fails, as it should, about one run in eight.
+- A Debug readout of the writes to the model's view and of the window's touches was built and
+  left out of PR #39: its watch-only recognizer on the window and the switcher's and pager's
+  wrapped bindings would change every UI test's touch handling to diagnose one. Should the test
+  fail again, the next step is the writes alone, in a PR of its own, then the fix where they
+  point: the switcher's button, the views' observation, or `PagerSync`. A tap that reached the
+  app is never tapped again.
+
 ## After #34's fourth full run
 
 PR #34's fourth full macOS run, on c74aa22 (run 40189947895, job 121158965836), passed 43 of the 44
@@ -4879,6 +4909,33 @@ and e1bc88e's (session scratchpad: hang-wk4).
   stopped screens share: the sources' sentence and its link rows at AX3, a link cut by the screen's
   bottom edge) or in where the pages break (`step`), read first from the trees and `-moved` screens
   attached and a spindump of testmanagerd.
+
+**What PR #37's, #38's and #39's runs showed** (PR #37's last run; PR #38's runs 40541947888
+and 40562032792; PR #39's 40562013812). The stall follows the exact screen, to about a point.
+
+- Of 342 contrast calls on the four runs with attachments, 337 took 2.0 seconds or less and four
+  stopped at 15.0 to 15.2. None took anything between, and runner speed doesn't predict either.
+- Every stop was on leeds-dry's week page at AX3, sixth screenful. The credits were at 649.7,
+  650.07, 650.7 and 656.4 points down the screen where calls stopped, and at 638.7, 643.4 and
+  653.4 where they finished. The content is the same in every run; only the scroll offset
+  differs.
+- PR #38's second run moved the page 6.3 points, from 656.4 to 650.07. That landed within half a
+  point of two other runs' stops, and the call stopped again.
+- The app logged its 36 candidates and then nothing; the screenful before, with the same 36,
+  finished. The stall is testmanagerd's. XCTest's 15 seconds can't be set: they travel in its private audit
+  configuration.
+- So `auditAgain` now moves the page up to three times (`reaudits`). Each try aims at the point
+  of the band farthest from every place a call stopped, about 11 points on the first try. It
+  lands at least 3 points (`clearOfStalls`) from each of them (`PageRoom.aims`) and shows whole
+  the same elements as before.
+- Should every try stop, the failure lists each with its move, kinds, time and where the credits
+  were. Each line of the times carries where the credits were ("week page, screenful 6 (credits
+  656.40)"), so runs build up the map of positions.
+- Checked on Linux: the re-audit runs against a fake app on c74aa22's tree. Three stops in a row
+  (moves of 8.5 points, then -11.5, then -7.2, each at least 3 from the others) fail listing all
+  three. A second try away from both stops goes on to the page's end. Issues aren't counted
+  twice, and a page that won't move fails with each band's aim. `PageRoom.aims` was checked on
+  bands cut by one, two and three stops.
 
 ## The place pill on one line, after #34 merged
 
@@ -5378,6 +5435,55 @@ count stayed at 1. The consent form, now loaded before it is shown, came over th
 EEA; one of the three touches on Consent was taken (the log doesn't say which), the ads came on,
 Settings showed Privacy choices and Your privacy's line pointed to it. The page-end box showed its
 banner under the credits on Leeds's answer.
+
+**What PR #38's and #39's runs showed** (PR #38: runs 40541947888 and 40562032792; PR #39: run
+40562013812). "The picker is still open" failed `PickerTests.testSavingAResult` on PR #38's first
+run. On PR #39's, it failed the full-screen test twice, under 5029e0a's check: the place button
+taking a tap and the search box out of reach. Each screen recording shows the picker closing at
+once.
+
+- On PR #38's, the saved Leeds was tapped at 130.59 seconds, and Leeds' answer was on the home
+  screen by 130.98. No frame followed in the wait's 10 seconds.
+- On PR #39's, the ad closed at 60.96 seconds, and the picker was gone 70 ms later, onto
+  Kathmandu's answer.
+- XCUITest keeps no cache of its own. Each query is answered from a snapshot that the app's
+  accessibility runtime builds, and the hit test behind `isHittable` comes from the same runtime.
+  So the runtime went on serving the closed cover's subtree, for 10 and 15 seconds.
+- In the same seconds it served the home screen's own elements live: the place button's label
+  wait passed, and a tap on it landed. The lag comes and goes: AdsTests' check passed on PR #37's
+  runs and on both of PR #38's.
+- The same run's audit trees list the home screen's top bar under every sheet, though `HomeView`
+  hides it there (`.accessibilityHidden(sheet != nil)`); the pages under it are gone, as they
+  should be. So neither what XCUITest finds nor what it calls hittable says what is on screen.
+- The artefacts can't say which clause of 5029e0a's check failed: no screenshot or tree was
+  attached at the failure. Nor whether VoiceOver meets the closed picker too (its views still in
+  the window) or only automation does (a stale subtree).
+- So a Debug build draws the picker as the app holds it, under `-uitest`, ads or not
+  (`DebugHooks.pickerReadout`), in two clear points at the home screen's top right, outside what
+  a sheet hides. `debug-picker` reads `open` while the home screen has the picker open, `closing`
+  once it has closed it but SwiftUI hasn't called the picker's `onDisappear`, then `closed`, as it
+  does before any picker opens. It follows the home screen's sheet, so the ad taking the picker
+  off screen and back still reads open. `debug-pickers` counts the pickers that came on screen.
+- A test notes the count before it taps the place button (`pickersBefore`). Opening waits for
+  `open` with a higher count (`pickerOpens`), or, should the readout not be found under the
+  cover, for the search box as before. PickerTests' two closing checks and AdsTests' three pass
+  only on `closed` with a count higher than before (`pickerCloses(in:after:within:)`), so the
+  readout at rest, which reads closed too, never passes, and a reopening that never came fails
+  at its close. The place's label and the heading, read from the home screen, still say the
+  picker closed onto the place chosen.
+- Should XCUITest still find the search box once the readout reads closed, the test attaches
+  `picker-closed-lag`, failing nothing. It gives the box's frame (off the screen's foot means the
+  picker's views were still in the window; where the picker had it means a stale tree) and which
+  of the box and the place button a tap would reach. A failure gives the same, with the readout's
+  last word: `open` means the app never closed the picker; `closing` throughout means UIKit's
+  dismissal never finished.
+- Every audit now meets the readouts' one-point elements. An issue on one is set apart
+  (`DebugReadout`) and listed in the times and `-allowed`, so each run shows whether the audit
+  flags such an element at all. A Release build has none.
+- Checked on Linux: the 11 UI test files compile against the XCUITest stubs. `DebugHooks`,
+  `HomeView` and `PickerSheet` type-check in Debug and Release against the ads harness's stubs. `swift format lint --strict` passes on
+  every changed file, and so do the Swift literal guard and `check-archive.test.mjs`. No hook
+  list changes: the readouts are values, as `debug-ads` is, not launch arguments.
 
 **Still unproven on a Mac.** That the page-end box waits for an answer, so none shows under
 "Checking…": no test opens a page without one while the ads are on. It rests on one gate in

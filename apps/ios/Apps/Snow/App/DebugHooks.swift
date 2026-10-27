@@ -173,6 +173,33 @@ enum DebugHooks {
       }
     }
 
+    /// The place picker as the app holds it (`PickerReadout`), over the home screen, for every UI
+    /// test (`-uitest`), with the ads or without: whether the home screen has the picker `open`,
+    /// and once it hasn't, whether the picker's content has left the screen, so PickerTests and
+    /// AdsTests read the picker closed from the app, not from XCUITest's tree, which on PR #38's
+    /// and #39's macOS runs went on finding a closed picker's search box for 10 and 15 seconds
+    /// (DECISIONS, "Ads in the iPhone app: three placements"). Nothing without `-uitest`.
+    @ViewBuilder
+    static func pickerReadout(
+      open: Bool,
+      arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> some View {
+      if arguments.contains("-uitest") {
+        PickerReadout(open: open)
+      }
+    }
+
+    /// The picker's content came on screen (`PickerSheet`'s `onAppear`), for `pickerReadout`.
+    static func pickerAppeared() {
+      DebugPresence.shared.pickerOnScreen = true
+      DebugPresence.shared.pickersShown += 1
+    }
+
+    /// The picker's content left the screen (`PickerSheet`'s `onDisappear`), for `pickerReadout`.
+    static func pickerDisappeared() {
+      DebugPresence.shared.pickerOnScreen = false
+    }
+
     /// `-unlocked 0|1`: whether the purchase is owned, whatever `unlock.v1` says, so a UI test
     /// launches the free version or the paid one; nil without it. It stands in for StoreKit's
     /// answers too (`purchases(arguments:)`), so the launch's check gives the same answer rather
@@ -427,6 +454,12 @@ enum DebugHooks {
     static func noAds() -> Bool { false }
 
     static func adsReadout(_ ads: AdsModel) -> some View { EmptyView() }
+
+    static func pickerReadout(open: Bool) -> some View { EmptyView() }
+
+    static func pickerAppeared() {}
+
+    static func pickerDisappeared() {}
 
     static func store(_ store: any StoredState) -> any StoredState { store }
 
@@ -865,9 +898,9 @@ enum DebugHooks {
 
     var body: some View {
       HStack(spacing: 0) {
-        reading("debug-ads", phase)
-        reading("debug-interstitial", ads.interstitialReady ? "ready" : "none")
-        reading("debug-shown", String(ads.interstitialsShown))
+        Reading(id: "debug-ads", value: phase)
+        Reading(id: "debug-interstitial", value: ads.interstitialReady ? "ready" : "none")
+        Reading(id: "debug-shown", value: String(ads.interstitialsShown))
       }
       .allowsHitTesting(false)
     }
@@ -882,15 +915,64 @@ enum DebugHooks {
       case .off: "off"
       }
     }
+  }
 
-    /// A clear point identified `id`, whose accessibility value is `value`.
-    private func reading(_ id: String, _ value: String) -> some View {
+  /// A clear point identified `id`, whose accessibility value is `value`: one element of a Debug
+  /// readout, which shows nothing.
+  private struct Reading: View {
+    let id: String
+    let value: String
+
+    var body: some View {
       Color.clear
         .frame(width: 1, height: 1)
         .accessibilityElement()
         .accessibilityValue(Text(verbatim: value))
         .accessibilityIdentifier(id)
     }
+  }
+
+  /// `DebugHooks.pickerReadout`: two clear elements of a point each, which show nothing and take no
+  /// tap, whose accessibility values PickerTests and AdsTests read. `debug-picker`: open, while the
+  /// home screen has the picker open; closing, once it has closed it but the picker's content is
+  /// still on screen (SwiftUI hasn't called its `onDisappear`); closed otherwise, as before any
+  /// picker opened. `debug-pickers`: how many times a picker's content has come on screen, so a
+  /// test knows the picker it reads is the one its tap opened, and that closed is that one
+  /// closing, not the readout at rest. Over the home
+  /// screen rather than the picker, so it is read where XCUITest kept up on PR #39's run, and the
+  /// home screen's sheet state rather than the picker's, so Google's full-screen ad over the
+  /// picker, should it take the picker off screen and back, still reads open. A view of its own,
+  /// reading `DebugPresence` in its own body, as `AdsReadout` does. Each value is one lowercase
+  /// word, shown to no one, so none of it is copy.
+  @MainActor
+  private struct PickerReadout: View {
+    let open: Bool
+
+    var body: some View {
+      HStack(spacing: 0) {
+        Reading(id: "debug-picker", value: state)
+        Reading(id: "debug-pickers", value: String(DebugPresence.shared.pickersShown))
+      }
+      .allowsHitTesting(false)
+    }
+
+    /// The picker as one word.
+    private var state: String {
+      if open { return "open" }
+      return DebugPresence.shared.pickerOnScreen ? "closing" : "closed"
+    }
+  }
+
+  /// What `PickerReadout` reads beyond the home screen's sheet: whether the picker's content is
+  /// on screen, from its `onAppear` to its `onDisappear` (`DebugHooks.pickerAppeared` and
+  /// `pickerDisappeared`), and how many times it has come on screen.
+  @MainActor
+  @Observable
+  private final class DebugPresence {
+    static let shared = DebugPresence()
+
+    var pickerOnScreen = false
+    var pickersShown = 0
   }
 #endif
 
