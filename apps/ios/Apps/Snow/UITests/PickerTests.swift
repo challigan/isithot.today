@@ -45,7 +45,7 @@ final class PickerTests: XCTestCase {
     XCTAssertFalse(app.buttons["result-1"].exists, "More than search-leeds's one result")
     attachScreen(of: app, named: "picker-results")
     result.tap()
-    waitUntilGone(searchField(in: app), "The picker is still open")
+    XCTAssertTrue(app.pickerCloses(within: 10), "The picker is still open")
     wait(for: heading(in: app), label: "Leeds. Will it snow today? No.")
     XCTAssertEqual(app.buttons["place"].label, "Place: Leeds. Change place.")
     XCTAssertFalse(app.buttons["use-my-location"].exists, "Still on approximate location")
@@ -166,7 +166,7 @@ final class PickerTests: XCTestCase {
     let kept = app.buttons["saved-city:leeds-gb"]
     XCTAssertTrue(kept.waitForExistence(timeout: 10), "Leeds isn't saved after a relaunch")
     kept.tap()
-    waitUntilGone(searchField(in: app), "The picker is still open")
+    XCTAssertTrue(app.pickerCloses(within: 10), "The picker is still open")
     wait(for: heading(in: app), label: "Leeds. Will it snow today? No.")
     XCTAssertEqual(app.buttons["place"].label, "Place: Leeds. Change place.")
     // Still under Saved, and not under Recent.

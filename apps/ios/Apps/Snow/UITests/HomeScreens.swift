@@ -163,6 +163,27 @@ extension XCUIApplication {
   /// The question and the answer: one heading element.
   var heading: XCUIElement { find("heading") }
 
+  /// Whether the place picker is closed, as the screen shows it: the top bar's place button takes
+  /// a tap, which it can't under the picker's full-screen cover, and the picker's search box
+  /// (`place-search`) is gone or out of reach. Not its absence alone: on PR #38's macOS run
+  /// (40541947888) XCUITest went on finding the search box of a picker that its screen recording
+  /// shows closed, the home screen loading the place chosen.
+  var pickerClosed: Bool {
+    let place = buttons["place"]
+    let field = find("place-search")
+    return place.exists && place.isHittable && !(field.exists && field.isHittable)
+  }
+
+  /// Whether the place picker is closed (`pickerClosed`) within `timeout` seconds.
+  func pickerCloses(within timeout: TimeInterval) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !pickerClosed {
+      guard Date() < deadline else { return false }
+      RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+    }
+    return true
+  }
+
   /// The top bar's name and controls and the switcher, which don't scroll, by identifier.
   static let homeBar = ["app-name", "place", "settings", "approximate", "use-my-location", "views"]
 
