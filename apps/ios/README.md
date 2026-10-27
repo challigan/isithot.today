@@ -1159,6 +1159,10 @@ Swift):
 | `IsItPageBannerUnitID`     | each page's end    | `ca-app-pub-3940256099942544/2435281174` | `ADMOB_PAGE_BANNER_ID`      |
 | `IsItInterstitialUnitID`   | the full-screen ad | `ca-app-pub-3940256099942544/4411468910` | `ADMOB_INTERSTITIAL_ID`     |
 
+With `test`, `check-archive.sh` requires each key's own demo unit, as above, not just any of
+Google's: a banner unit under `IsItInterstitialUnitID` would load no full-screen ad while both
+banners showed, which is what a phone shows when the ad isn't ready yet.
+
 The Info.plist also lists `SKAdNetworkItems`: Google's 50 identifiers from
 developers.google.com/admob/ios/3p-skadnetworks, copied by hand until `ios-nightly.yml` exists.
 `check-archive.sh` checks all of it (above, "Releasing to TestFlight").
