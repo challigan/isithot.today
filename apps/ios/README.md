@@ -698,7 +698,10 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   control's own type size, `dynamicType`, was a third until the website's tabs replaced it; PR
   #33's contrast exception for the details and the places nearby alone became the proof for
   every text element after PR #34's first full run.) The issues allowed and any exception a test didn't need are attached
-  (`home-<fixture>-<size>-allowed`) and listed in its failure. Each page's first screenful also
+  (`home-<fixture>-<size>-allowed`) and listed in its failure. An issue on one of a Debug build's
+  readouts (`debug-picker` and `debug-pickers`: a point square at most, which a Release build
+  hasn't, `DebugReadout`) is set apart, failing nothing, and listed in
+  the times and `-allowed`, every audit's, the sheets' too. Each page's first screenful also
   attaches the app's element tree (`<page>-tree`). Each call goes through `runAudit`
   (ScreenAudit.swift), which times it and reads its issues once it is done, outside XCTest's
   deadline for the call, 15 seconds. One that doesn't finish in time ("Audit failed to complete
@@ -708,13 +711,17 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   12 points, the way with the wider band of moves first (up on a tie), so that it shows whole
   exactly the elements the screenful showed whole (`PageRoom`, checked again on a second snapshot),
   attached as `…-<k>-moved` and audited in all three calls as a screenful of its own, what the
-  stopped screenful's calls done found dropped so that none is counted twice; the next scroll
-  starts from there. That tests whether the stall needs that exact screen, which no run has shown
-  (DECISIONS, "After #34's fourth full run"). The times are attached
-  (`home-<fixture>-<size>-audit-times`, a line a call), and the slowest call and any that timed
-  out are named in `-allowed`. A page that stops scrolling short of its end, an app that has left
-  the foreground, an audit that can't run, or one that doesn't finish in time on the moved
-  screenful too or whose page can't be moved so, fails with where the page and its credits were
+  stopped screenful's calls done found dropped so that none is counted twice; should a call stop
+  there too, the page is moved again, each time at least 3 points from every place a call
+  stopped and aimed as far from them as the band allows (about 11 points on the first try), up to
+  three tries (`…-<k>-moved-2`, `…-<k>-moved-3`); the next scroll starts from the one whose calls
+  all finished. The stall follows the exact screen, to about a point: PR #38's second run's one
+  move landed within half a point of two other runs' stops (DECISIONS, "After #34's fourth full
+  run"). The times are attached (`home-<fixture>-<size>-audit-times`, a line a call, each place
+  with where the credits were), and the slowest call and any that timed out are named in
+  `-allowed`. A page that stops scrolling short of its end, an app that has left the foreground,
+  an audit that can't run, or one that doesn't finish in time on every moved screenful or whose
+  page can't be moved so, fails with where the page and its credits were
   on each screenful, and the page's frame on each (the scroll view's viewport, PR #33's run
   showed); a timeout with each attempt's error and time and where the credits were. A page that
   stops short, or never reaches its end, also says the page's whole frame and the window's,
@@ -731,7 +738,8 @@ screens to a row). `HomeAuditTests` attaches every screenful it audits as
 durham-tomorrow (whose middle tab is `2-tomorrow`) and leeds-dry: eighteen pages top to bottom,
 fixture by fixture, Large before AX3, each in the switcher's order, after the `app-…` and
 `glyph-…` attachments and before the widgets'. A screenful audited again a few points away after
-a call didn't finish in time follows its own, as `…-<k>-moved`. Phase 5's exit asks for these.
+a call didn't finish in time follows its own, as `…-<k>-moved` (then `-moved-2`, `-moved-3`).
+Phase 5's exit asks for these.
 
 **On Linux** (`swift test` in IsItCore): `ClockTests.swift` (`FixedClock`: one moment, work for a
 later time never runs, the model on it asks once; `MinuteTick.anchor`: each tick a twentieth of
@@ -1383,6 +1391,17 @@ launch argument. So far there are these:
   the home screen's corner, `debug-ads` (the ads model's phase: `idle`, `asking`, `withheld` or
   `on`), `debug-interstitial` (`ready` or `none`) and `debug-shown` (how many full-screen ads have
   shown and closed), so a test can tell Google not answering from the app failing;
+- the picker's readout, which `PickerTests` and `AdsTests` read: under `-uitest`, ads or not, two
+  clear one-point elements at the home screen's top right, outside what a sheet hides:
+  `debug-picker`, `open` while the home screen has the picker open, `closing` once it has closed
+  it but SwiftUI hasn't yet taken the picker's content off the screen (its `onDisappear`), then
+  `closed`, as before any picker opened; and `debug-pickers`, how many times a picker's content
+  has come on screen. A test notes the count before it taps the place button, waits for `open`
+  with a higher count where the readout can be read under the picker, and judges the picker
+  closed only by `closed` with a higher count than before, so the readout at rest never passes;
+  not by XCUITest's tree, which on PR #38's and #39's runs went on finding a closed picker's search
+  box for 10 and 15 seconds (DECISIONS, "Ads in the iPhone app: three placements"). It attaches
+  `picker-closed-lag` when the tree still has the search box once the readout reads `closed`;
 - the unit tests' host: when the app only hosts the unit tests (XCTest's
   `XCTestConfigurationFilePath` in its environment), it doesn't launch (`AppModel.launch()`), so
   the hosted tests have the App Group to themselves; a launch with `-fixture` or `-network`
