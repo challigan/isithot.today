@@ -20,6 +20,7 @@ public enum Keys {
     public static let alertSync = "alertSync.v1"
     public static let lastView = "ui.lastView"
     public static let card = "ui.alertCard"
+    public static let lastInterstitial = "ads.lastInterstitial"
   }
 
   /// The version of what is stored under these keys.

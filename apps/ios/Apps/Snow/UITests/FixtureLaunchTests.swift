@@ -105,12 +105,13 @@ final class FixtureLaunchTests: XCTestCase {
   }
 
   /// Launches the app on `fixture`, from a clean store (`-resetStore` forgets the place, the
-  /// units and the saved answer before `-fixture` is read), and waits for its heading and for
-  /// `element`, a text only an answer shows (the verdict, by default).
+  /// units and the saved answer before `-fixture` is read), with no consent form or ad
+  /// (`-noads 1`, as `launchApp`), and waits for its heading and for `element`, a text only an
+  /// answer shows (the verdict, by default).
   @MainActor
   private func launch(fixture: String, waitingFor element: String = "verdict") -> XCUIApplication {
     let app = XCUIApplication()
-    app.launchArguments = ["-uitest", "-resetStore", "-fixture", fixture]
+    app.launchArguments = ["-uitest", "-noads", "1", "-resetStore", "-fixture", fixture]
     app.launch()
     XCTAssertTrue(heading(in: app).waitForExistence(timeout: 15), "No heading on screen")
     XCTAssertTrue(app.staticTexts[element].waitForExistence(timeout: 15), "No answer on screen")

@@ -1368,9 +1368,10 @@ read CI; this records where the build fills or differs from the spec.
   from the client's `keys.ts` (phase 2.2's first emitter, with the escaping and identifier rules
   and their tests). The generator owns that folder too, so a stale file there fails the check.
 - **IsItKit has four modules so far:** `IsItServices` (`SharedStore`), `IsItAds` (Google Mobile
-  Ads 13.11.0 and UMP 3.1.0, exact; nothing runs yet), `IsItUI` (the skeleton's answer view) and
-  `IsItWidgetUI` (the widget's entry, provider and view, there so an app-hosted test can draw
-  it). `SnowKit` comes with the first snow-only code; SwiftPM refuses an empty target.
+  Ads 13.11.0 and UMP 3.1.0, exact; nothing runs yet, until phase 8.3's ads, "Ads in the iPhone
+  app: three placements"), `IsItUI` (the skeleton's answer view) and `IsItWidgetUI` (the widget's
+  entry, provider and view, there so an app-hosted test can draw it). `SnowKit` comes with the
+  first snow-only code; SwiftPM refuses an empty target.
 - **The saved answer.** `SharedStore` writes `{ v, savedAt, key, response }` to
   `Library/Caches/today.v1.json` in the group's container, and ignores a file from another store
   version. Without the App Group, Debug builds of the app fall back to their own defaults and
@@ -1395,7 +1396,8 @@ read CI; this records where the build fills or differs from the spec.
   (the palettes; `UILaunchScreen` is empty), the app icon, the StoreKit configuration and the
   `FEATURE_*` switches. The privacy manifests declare UserDefaults (CA92.1 and 1C8F.1 for the
   app, 1C8F.1 for the widget) and no collected data, until location and notifications arrive.
-  Phase 2.3 added the font and the icon.
+  Phase 2.3 added the font and the icon, and phase 8.3 `SKAdNetworkItems`, Google's list copied
+  by hand until `ios-nightly.yml` exists ("Ads in the iPhone app: three placements").
 - **XcodeGen's presets.** XcodeGen adds Xcode's template settings to each target unless a
   project xcconfig names the setting, so `Base.xcconfig` is what decides the device family
   (iPhone only), the Swift version and the icon (none; since phase 2.3 project.yml names the
@@ -1464,7 +1466,9 @@ uploads it to TestFlight, and `scripts/check-archive.sh`, which checks a build f
   `ADMOB_APP_ID` set, his publisher ID's digits must appear nowhere. With ads real the units must
   be well-formed and equal the variables. If Google's SDK, linked into the app, names its own
   demo publisher, a real build would fail; a test build says so in a notice, so it shows long
-  before the release candidate.
+  before the release candidate. Since phase 8.3 it checks three units, Google's SKAdNetwork
+  identifier, and `-route` only where no letter follows it ("Ads in the iPhone app: three
+  placements").
 - **Testable on Linux.** The reads that need macOS go through `plutil -convert xml1` and
   `codesign -d --entitlements - --xml` (the `:-` form the spec names is deprecated), named by
   `PLUTIL` and `CODESIGN`, and a small awk reader takes values from plutil's XML, so the tests
@@ -2877,10 +2881,12 @@ and licences, the static lines of Your privacy, and Report an ad (sections 10.4,
   phase 7 on); "Privacy choices" shows only while the ads are on and Google's form is required,
   which only phase 8's consent code can say, so the app passes false. `SettingsScreen` takes
   that flag already, `YourPrivacy` the lines kept for notifications (nil until a registration),
-  and `SettingsActions` the form and the delete button, both nil.
+  and `SettingsActions` the form and the delete button, both nil. (Since phase 8.3 the app passes
+  Google's answer and the form: "Ads in the iPhone app: three placements".)
 - **"Ads on" is the free version** (`!unlocked`), as section 14.2 starts the ads only when not
   unlocked: Report an ad shows in the free version (10.7) and Your privacy's ads line with it,
-  though phase 6 builds no banner yet. Bought, neither shows.
+  though phase 6 builds no banner yet (phase 8.3's ads follow the same `!unlocked`). Bought,
+  neither shows.
 - **Your privacy says what the privacy notice says.** Section 10.6's lines were shorter than PR
   #28's notice and PR #30's server (`devices.ts`): the place is "a town, or your location
   rounded to about 5 km" (a town isn't rounded); until a place is chosen the server estimates
@@ -5001,6 +5007,329 @@ it at (20, 180.4). The label is now the words, `AppCopy.appNameLabel`.
 
 **For the next macOS run to show.** That the audits pass the name with its label, the six home
 audits with it, and the rest as on the first run. Unproven until then.
+
+## Ads in the iPhone app: three placements
+
+Carl asked for phase 8.3 ("build the consent form and banner with test ads"), then for more: "I'd
+like more ads. One ad isn't enough to convince someone to pay money to remove it". He chose an ad at
+the end of each page and a full-screen ad when the place changes. So the free version has three
+placements: the home banner, an anchored adaptive banner in a band under the pages (spec 14.1); a
+banner at the end of each page (Now, Today or Tomorrow, This week), an inline adaptive one in the
+website's ad box after the footer's links; and a full-screen ad (an interstitial) as the user
+chooses a place. Before any of them comes Google's consent (UMP, spec 14.2), and Settings shows
+"Privacy choices" while UMP says its form is required. Nothing starts in an unlocked session, and
+every build but the release candidate's uses Google's demo units (`ADS_UNITS = test`).
+`apps/ios/README.md` ("Phase 8.3: the ads") lists the types; this records why they are as they are,
+and where the build differs from the design it was built from.
+
+**Google's rules, as read on 26 October 2026.** AdMob Help's pages, each at
+support.google.com/admob/answer/ and its number below (copies in the session scratchpad: policy):
+
+- **Full-screen ads** ("Disallowed interstitial implementations", 6201362; "Interstitial ad
+  guidance", 6066980; "Recommended interstitial implementations", 6201350): never "on app load and
+  when exiting apps", only "in between pages of app content"; "no more than one interstitial ad
+  after every two user actions"; never one "immediately after another interstitial ad was shown to
+  and closed by the user"; and none that "appears shortly after a new page of content has loaded",
+  for which Google recommends loading the ad in advance.
+- **Banners** ("Banner ad guidance", 6128877; "Discouraged banner implementations", 6275345;
+  "Recommended banner implementations", 6275335): not next to buttons or other content that takes
+  taps; "a non-clickable border or some other separation between the ad and the app's interactive
+  portion"; and "allocate a fixed space for the banner ad so that no app content will appear in that
+  space", since a banner that loads late appears where the content was and takes the taps meant for
+  it.
+- **Two banners on one screen.** At a page's end both show, the box and the band. No page read rules
+  that out; that is how the pages read, not something Google has confirmed.
+- **An hour's life.** By Google's iOS guide to interstitials, as the design read it (it isn't among
+  the saved pages), a full-screen ad expires an hour after it loads. The app drops one 55 minutes
+  old (`Constants.Ads.interstitialMaxAgeMinutes`) and loads another.
+
+**A fixed space, not spec 14.1's collapse.** Spec 14.1 had the banner collapse to no height until
+`bannerViewDidReceiveAd`, and again on failure: the pages would end lower, then an ad would land
+where their content was, which is what Google's fixed space is there to stop. So the band's space is
+kept from the moment the ads are on, before any ad has loaded, at the banner's own height, which
+Google gives for a width before any ad comes (`largePortraitAnchoredAdaptiveBanner(width:)`: 50 to
+150 points, never more than a fifth of the phone's portrait height), and it stays for the session,
+failed loads included. The box at a page's end is there whenever the ads are on, too. Nothing about
+a slot's space depends on its banner's news (`AdsModel`): the pages get shorter once, as Mobile Ads
+starts, and never move as an ad comes or fails.
+
+**The band and the box.** Both are in the website's ad tint, the page's ink at 8% (`.ad-slot`,
+global.css), and each is one accessibility container, read as "Advertisement"
+(`AppCopy.advertisement`, the website's `aria-label`), holding the ad's own elements.
+
+- **The band** (`AdBand`, IsItUI; `ad-home`): the home banner, the screen's width and as tall as
+  Google says, under 8 points of the tint, the separation that takes no tap between the pages and
+  the ad. The tint reaches down under the home indicator; the band itself ends above it.
+- **The box** (`AdBox`, IsItUI; `ad-page-<view>`): the website's `.ad-slot`, 40 points under the
+  footer's links, at least 250 points tall, with 12-point corners (continuous, as every rounded
+  rectangle in IsItUI is; the website's are circular), its banner an inline adaptive one at most 250
+  tall, centred and clipped. The banner is an overlay on a clear frame of that height: a UIKit view
+  put straight in the page's vertical scroll view is offered no height and would collapse, and a tap
+  outside its bounds would miss the ad. So in the scroll view the box is exactly 250 tall, which an
+  inline banner of at most 250 never needs to pass.
+- **The banners themselves** are `ad-banner-home` and `ad-banner-page-<view>`, set on Google's UIKit
+  view, which `BannerSlot` centres and leaves at its own size, the ad's.
+- **The widths come from the layout** (`onGeometryChange`): the home screen's stack for the band,
+  the box's own (the page less its 20-point margins) for a page's end. A width that isn't above zero
+  and finite is ignored: a view can report 0 before it is laid out, and a load at that width would
+  fail and be asked for again for ever. Any other change loads again at the new width, at a page's
+  end as in the band (the design loaded a page's banner once), so a banner sized at a passing width
+  doesn't stay that size. A width a fraction of a point different loads again too, so each view
+  reports its laid-out width, not one that changes from pass to pass.
+
+**In the stack, not a safe-area inset.** Spec 10.2 put the banner in `safeAreaInset(edge: .bottom)`.
+That makes the content's safe area larger, so each page's scroll view, which already runs to the
+window's bottom edge under the home indicator ("The iPhone app's UI tests, after PR #33's macOS
+run": the page's frame (0, 425.33, 402, 448.67) at AX3), would run on under the banner. Its content
+would scroll behind the ad and show through wherever the creative doesn't fill the slot; the UI
+tests' page window would take the banner in; and their drags, which start 80 points above the bottom
+edge (y = 794 on the 874-point iPhone 17), would land on it, since a banner of 50 to 150 points sits
+above the 34-point home indicator. The band is the pager's sibling in `HomeView`'s stack instead, so
+the pager's GeometryReader takes what is left: the pages end at the band's top, and nothing scrolls
+under the ad. Without the ads (the paid version, `-noads`, or before they are on) the band isn't in
+the tree, and the home screen is laid out exactly as before.
+
+**When the full-screen ad shows, and why then.** Only as the user chooses a place in the picker
+the place pill opened: a result, a recent place, a saved one, or the picker's own "Use my location"
+(when `PlacePickerModel` says `finished`). The ad comes over the picker as the choice is made, and
+the picker closes when the ad does, onto the new place, which has been loading behind it
+(`PickerSheet`: `ads.placeChosen { dismiss() }`), so it falls between two pages of content, before
+the next one shows. Only an ad already loaded and fresh shows: a choice never waits for one to
+load, so none appears after the new page has shown (Google's "after page load"), and one still
+loading simply isn't shown. At most one every 5 minutes (`Constants.Ads.interstitialGapMinutes`,
+client `ADS`), so none follows another. Never in the app's first run, so the first session someone
+has with the app has none; never as the app opens or comes back, since only a choice shows one; and
+never in the paid version, which starts no ads.
+
+The design also named a place under "Nearby:", and the build first showed one there. It doesn't
+now, nor in the picker the "Use my exact location" chip opens, which finds the phone's place and
+chooses it when the fix comes: each is a single action, and Google allows "no more than one
+interstitial ad after every two user actions". The place pill's tap and the choice in its picker are
+two. A place under "Nearby:" loads as it always has, and the chip's picker closes as it always did.
+
+- **Kept when it showed.** The time is saved as the ad is asked to show, and put back if it couldn't
+  show, so the next waits 5 minutes from it, across a relaunch too (below). A last one after now
+  (the phone's clock moved back) counts as just shown. One loaded after now can't be aged, so it
+  isn't fresh: it is dropped and another loaded (the design said only "younger than 55 minutes").
+- **Loading.** The first loads once the ads are on; the next once one has shown, failed to show or
+  been dropped as stale, and whenever a choice finds none on hand or loading. One that fails to load
+  isn't asked for again on a timer, as a banner is: the next choice asks.
+- **The first run** is `Launch.firstRun` (IsItState): no answer kept from an earlier launch. The app
+  reads it once the Debug hooks have prepared the store, so a `-resetStore` or `-fixture` launch is
+  a first run. It holds for the whole run, in which no full-screen ad even loads.
+
+**The 5 minutes kept on the phone, and the privacy line.** When the last full-screen ad showed is
+kept in the app's own defaults, `ads.lastInterstitial` (`Keys.App.lastInterstitial`, client
+`APP_KEYS`; `AdDefaults`, IsItServices), beside `recent.v1` and not in the App Group, since only the
+app reads it; `-resetStore` forgets it. It is something more the phone keeps, so Your privacy's ads
+line says so: "In the free version, Google shows the ads and may collect device and usage data. The
+app keeps when it last showed a full-screen ad, so it shows one at most every 5 minutes." The
+website's notice, under "Ads in the app", gains "The app keeps on your iPhone when it last showed a
+full-screen ad, so it shows one at most every 5 minutes.", and its date moves to 26 October 2026.
+The 5 is written in both, not filled into a slot: a slot would turn `AppCopy.privacyAds` into a
+function, and `YourPrivacy` and its tests with it. `credits.test.ts` pairs the two sentences and
+holds the only minutes either names to `ADS.interstitialGapMinutes`, as it holds the 90 days to
+`ALERTS.staleAfterDays`, so a new gap fails it until both texts are edited to match.
+
+**The start, which never holds the launch up** (spec 14.2). `AppModel` is unchanged: launch step 5
+calls `hooks.startAds()` only when the purchase isn't owned. The app's hooks are now `LiveHooks`
+(its other steps do nothing yet, as `NoHooks`' did), whose `startAds()` calls
+`AdsModel.start(firstRun:)`, which returns at once and keeps the flow in a task, so alert sync and a
+pending route never wait on Google's form. The flow: UMP's update (`requestConsentInfoUpdate`); its
+consent form if one is required, over whatever is on top (`loadAndPresentIfRequired`); then, if ads
+may be requested, Mobile Ads' start, every ad rated G at most and neither request tag, for children
+or for the under-aged, set; if not, `withheld`, and no ads this launch. Once on, the home banner
+loads as soon as the screen's width is known, so does the page-end banner of each page already
+shown, and a full-screen ad unless this is the first run.
+
+- **A page's banner waits for its page.** It loads once its page has been on screen (`shown`, from
+  the pager's view) and its box's width is known, so a page never shown asks for no ad, and showing
+  a page again asks for nothing more.
+- **A failed banner is asked for again**, at the same width, after 60 seconds, doubling with each
+  failure in a row to at most 600 (60, 120, 240, 480, 600, 600…; `AdRules.retryDelay`,
+  `Constants.Ads.retryFirstSeconds` and `retryMaxSeconds`), one waiting retry a slot, and from 60
+  again once one loads. A failure after an ad has shown is a failed refresh: the SDK goes on showing
+  the last ad, and the retry is harmless. The ads count time on the system's clock always, so a
+  Debug build's `-clock fixed` stops neither the retries nor the 5 minutes.
+- **Started is started.** Mobile Ads can't be stopped, so once it has started (or begun to), a later
+  "no" from the form doesn't make the phase `withheld`.
+
+**The kept answer, read as the update is asked for.** The design's first step, in Google's own
+order: when the answer UMP kept from an earlier launch already lets ads be requested, Mobile Ads
+starts at once, beside the update. UMPConsentInformation.h says `canRequestAds` "Returns NO until
+requestConsentInfoUpdateWithParameters:completionHandler: is called", and the build first read it
+before asking, so with the real SDK that step could never have fired. Now
+`AdsPlatform.updateConsent(requested:)` hands the model the answer the moment the update is asked
+for: `GoogleAds` calls UMP's completion-handler form, reads `canRequestAds` straight after, as
+Google's sample does, and returns UMP's answer once the update finishes. A returning user who has
+answered already gets the ads without waiting on the network.
+
+**Privacy choices, now real.** Settings shows the row in the free version while UMP's last answer
+says its privacy options form is required (`AdsModel.privacyChoices`), and Your privacy shows "See
+Privacy choices." with it: `SettingsSheet` passes `!model.unlocked && ads.privacyChoices` to both,
+with the row's action. The answer is the consent form's, then the privacy options form's, never the
+one kept from an earlier launch, so with consent kept from an earlier launch the row comes once this
+launch's form step has answered. The row opens UMP's privacy options form over Settings itself
+(`TopViewController`: the foreground scene's key window's root, then down what each presents, past
+one on its way out; over a SwiftUI sheet the root is already presenting, so a form shown from it
+would fail). If the answer then lets ads be requested and they haven't started, they start. The
+action does nothing while the row isn't shown, so it can never start the ads in a session that
+didn't (the design didn't say).
+
+**The SDK side** (`GoogleAds`, IsItAds, which now depends on IsItModel and IsItState; IsItUI still
+never imports Google's SDKs):
+
+- **One banner a slot, kept.** Each slot's `BannerView` is made the first time it is asked for and
+  kept, and `BannerSlot` (the `UIViewRepresentable`) does nothing when it is updated, so the
+  minute's redraw never makes or loads another. A banner is made at Google's standard size and sized
+  for its slot at its first load: the band's `largePortraitAnchoredAdaptiveBanner(width:)` (never
+  the deprecated anchored sizes), a page end's `inlineAdaptiveBanner(width:maxHeight: 250)`. It is
+  sized again only at a new width, judged by the width it was last sized for, not by comparing
+  sizes: an inline banner's size changes once its ad loads, and setting the size after an ad shows
+  sends a request of its own.
+- **No size delegate** (the design named `AdSizeDelegate`). GADAdSize.h says an inline banner's real
+  size is passed through the size delegate and shown by the banner's intrinsic content size;
+  `BannerSlot` only centres the banner and lets it keep that size, so a delegate method would have
+  nothing to do.
+- **Units from the Info.plist only** (`IsItBannerUnitID`, `IsItPageBannerUnitID`,
+  `IsItInterstitialUnitID`): `AdUnits` has no public initialiser, so no unit can be typed in Swift,
+  where a release candidate's archive check would find Google's demo publisher. A missing key gives
+  an empty unit, which no load answers; the archive check fails such a build first.
+- **The full-screen ad** loads with `InterstitialAd.load(with:request:)`. To show it,
+  `canPresent(from:)` first (false at once if Google says no), then it is presented from the
+  controller on top, and the call returns once Google says it closed or failed to show; then it is
+  dropped.
+- **Nothing in `init`** touches either SDK, so the unit tests' host, which builds the app and never
+  launches it, never starts them.
+
+**Three units, two new variables.** The page ends and the full-screen ad have units of their own.
+Snow.xcconfig's `GAD_PAGE_BANNER_test` is Google's demo adaptive banner (`…/2435281174`, the home
+banner's, which serves the inline size too) and `GAD_INTERSTITIAL_test` its demo interstitial
+(`…/4411468910`); the `_real` ones are `$(ADMOB_PAGE_BANNER_ID)` and `$(ADMOB_INTERSTITIAL_ID)`,
+chosen by `ADS_UNITS` as the banner's are. In the release candidate the page-end banner is a unit
+apart from the home one, so AdMob reports them apart. `ci/archive.sh` with ads real requires both
+variables as it does `ADMOB_BANNER_ID`, with one message naming all four; `ios-release.yml` passes
+them to both its jobs; and `check-archive.sh` checks all three units exactly as it checked the
+banner (`AD_UNITS`). docs/SETUP.md says what Carl makes in AdMob.
+
+**SKAdNetworkItems.** The skeleton left it out until the ads ("The iPhone app's skeleton"). The
+Info.plist now lists Google's 50 identifiers in Google's order, `cstr6suwn9` first, each a
+dictionary holding `SKAdNetworkIdentifier`, under a comment naming
+developers.google.com/admob/ios/3p-skadnetworks and its footer's date, 2026-02-10 (the list itself
+says 30 January 2026). Spec 14.4 has `ios-nightly.yml` keep it current, and that workflow still
+doesn't exist, so until it does the list is copied by hand. `check-archive.sh` fails a build, test
+or real, whose list lacks Google's own `cstr6suwn9.skadnetwork` (`plist_get_each`, which reads
+plutil's XML as `plist_get` does).
+
+**The `-route` hook, matched as a word.** `check-archive.sh` looked for `-route` anywhere in the app
+binary's strings. Google Mobile Ads 13.11.0's static library holds OpenSSL's name
+`sbgp-routerIdentifier` (in `libPsm_merged.o`, which a call to `GADMobileAds` alone pulls in:
+session scratchpad, ads83-tools). Main's archive passed, most likely because nothing in the app
+called Google's code. `-route` is now a word hook (`WORD_HOOKS`), found in the strings only where no
+letter follows it (`-route([^[:alpha:]]|$)`), and as a whole short literal, as before. `-route`,
+`-route https://x` and `launch -route=willitsnow://x` fail, with only their lines quoted;
+`sbgp-routerIdentifier` and `-routeX` pass. Over the real SDKs (GMA's ios-arm64 binary, the 515
+objects extracted from it, and UMP's), the old check fails both of GMA's on "contains the debug hook
+-route: sbgp-routerIdentifier", and the new one passes all three. No other hook's name matches
+anything in either SDK, so no other hook changed. Still 15 hooks.
+
+**The Debug hooks** that section 9.8 named and `check-archive.sh` already looked for are in
+`DebugHooks.swift`, each with a Release stub that names no argument: `-noads 1` (the ads never
+start, `LiveHooks`); `-unlocked 0|1` (the purchase as it says, from the model's first look at the
+store, through a store that answers `loadUnlocked()` with it and never writes `unlock.v1`, which
+only StoreKit's code writes); and `-umpGeography eea|other` (UMP's debug geography, with the answer
+it kept forgotten at each such launch, so its form comes again). Any other value stops the app,
+`-noads` included (the design didn't say). `-resetStore` forgets the last full-screen ad too.
+
+**The UI tests: `-noads 1`, but for AdsTests.** Every older UI test's launch passes `-noads 1`
+(HomeScreens.swift's `launchApp`, FixtureLaunchTests, LaunchTests, PickerTests and SettingsTests),
+so their screens, frames, audits and the contact sheet are what they were, whatever Google answers:
+the stubbed network covers only the app's own session, so Google's traffic would reach Google. They
+stay the free version, since Report an ad and the ads line follow the version, not the ads, and
+`SettingsTests` expects the new ads line. `AdsTests` launches with the ads, Google's demo units over
+the real network. Each of its tests skips, saying which answer of Google's didn't come in time,
+rather than fails; what is the app's fails. Nothing in it is audited, since the ads' elements are
+Google's.
+
+1. **The band under the pager** (`-resetStore -fixture leeds-dry -umpGeography other -unlocked 0`):
+   once `ad-home` comes (30 seconds at most), the band spans the window, the pager and the page end
+   at its top, it ends within the window, it is 58 to 158 tall (the banner's 50 to 150 and the
+   8-point border), its banner lies inside it under the border, and it reads "Advertisement";
+   `expectFits` and `expectNoBareElements` pass with the ads on; and its frame hasn't moved after up
+   to 15 seconds for the demo ad. Then the page scrolled to its end: the box below the credits, at
+   least 250 tall, within the page's width, its banner inside it and at least 40 below the credits.
+2. **The paid version** (`-unlocked 1`): 10 seconds on, no band, box, banner or web view; no Report
+   an ad and no Privacy choices; and Your privacy's four lines, none naming Google.
+3. **The EEA** (`-umpGeography eea`): Google's consent form (a web view, 30 seconds at most) and its
+   Consent or Accept button tapped, then Privacy choices in Settings and "See Privacy choices." as
+   Your privacy's fourth line.
+4. **The full-screen ad.** A first launch saves an answer, so the second isn't a first run
+   (`-network ip-first-launch,leeds-dry,kathmandu-0545`; the second at Kathmandu's moment). Once the
+   band shows, and 15 seconds more, Kathmandu chosen in the picker brings an ad over everything (the
+   place button gone, and the search field gone or out of reach, for a second), and closing it
+   leaves the home screen on Kathmandu; Leeds chosen 15 seconds later brings none, within the 5
+   minutes. With no ad the first time, Kathmandu must still have loaded, and then it skips.
+
+No UI test covers Privacy choices opening Google's form, which only trying it will show, nor the first run's rule (`AdsModelTests` has that); and no job builds
+with the real units (`ads real`) until Carl's variables exist. `AdsTests` waits on Google a good
+deal, which may add 2 to 4 minutes to the UI plan.
+
+- **Checked on Linux:** IsItCore in Docker (`isithot-swift:6.3.3`, Swift 6.3.3 with swift-format and
+  tzdata): `AdRulesTests` (7: every boundary), `AdsModelTests` (22 in three suites, the start, the
+  banners and the full-screen ad, against a fake SDK in `AdsFakes.swift` whose update, loads and
+  presentation a test can hold) and `Launch.firstRun`'s test. They were written first and run
+  against stubs that compile: 27 of the 30 failed, and the other three pass any stub that answers
+  false; two of those failed against a simpler `AdRules`. Run 15 times, one test raced its own check
+  (fixed: it now waits for the next load's task), then 40 runs in 40 passed. The whole suite, 383
+  tests in 71 suites, passes, with the two `InfoPagesTests` that pinned Your privacy's old ads line
+  given the new one. The TypeScript: packages/mobile, packages/client
+  and apps/web, 413 tests, the literal guard among them, with `pnpm mobile:check`, `pnpm lint` and
+  `pnpm format:check`; and `swift format lint --strict` over every Swift file.
+- **Checked on Linux, against stubs:** IsItKit's and the app's new code, type-checked in Debug and
+  Release against stub UIKit, SwiftUI, GoogleMobileAds, UserMessagingPlatform, WidgetKit and
+  CoreLocation modules, with Google's names from the 13.11.0 and 3.1.0 headers and Apple's from
+  developer.apple.com's documentation, isolation included, and the real IsItCore (session
+  scratchpad: ads-typecheck): IsItAds' four files, `AdDefaults`, IsItUI's `AdSpaces`, and the app's
+  `DebugHooks`, `LiveHooks`, `WillItSnowApp`, `HomeView`, `PickerSheet` and `SettingsSheet`, copied
+  as they are (`DebugHooks.swift` with the `import FoundationNetworking` Linux needs). Nine planted
+  mistakes each failed it (a misspelt delegate method, `.eea` for `.EEA`, a missing `await`, a
+  Release stub taken out, among them). The Release binary names none of `-noads`, `-unlocked`,
+  `-umpGeography` and `-resetStore`; the Debug one all four. Not type-checked: `ForecastPageView`'s
+  and `HomePager`'s bodies, too much SwiftUI to stub (HomePager's new initialisers are, as a
+  facade). The 11 UI test files compile against the XCUITest stubs (session scratchpad: ads-uicheck,
+  name-uicheck's with `webViews` and `count` added).
+- **Checked on Linux, the build's checks:** `check-archive.test.mjs`, 61 tests where there were 47
+  (main's script fails exactly the 14 new ones); `check_ads` over the real Info.plist filled from
+  Snow.xcconfig, test and real, with a variable that differs failing; `check_hooks` over the SDKs'
+  strings, as above; `archive.sh unsigned` with a stand-in `xcodebuild` (a missing or malformed
+  variable stops it, naming all four; with all four, the archive gets them); actionlint on
+  `ios-release.yml`; and the Info.plist read with Python's plistlib (50 identifiers, in the list's
+  order). Session scratchpad: ads-build/plist-e2e, gma-hooks, archive-try and old-script-run.
+  shellcheck didn't run (not installed here).
+
+**For the next macOS run to show.** Each of these is unproven until then:
+
+- that IsItAds, the app and IsItUI's new views build with Xcode 26.6 against the real SDKs
+  (`ForecastPageView`'s and `HomePager`'s bodies were never compiled here), and that UMP's async
+  forms (`requestConsentInfoUpdate(with:)`, `loadAndPresentIfRequired(from:)`,
+  `presentPrivacyOptionsForm(from:)`), `MobileAds.shared.start()` and
+  `InterstitialAd.load(with:request:)` are the names Swift derives, called on the main thread from
+  the main actor;
+- that the Unit plan and every older UI test pass as before under `-noads 1`, with the same screens
+  and audits;
+- that Google's demo app ID starts Mobile Ads on the simulator and UMP's debug geography works there
+  (V11): `ad-home` under `-umpGeography other`, the consent form under `eea`, with a Consent or
+  Accept button, and Privacy choices in Settings once it is answered;
+- that the band sits under the pager at 58 to 158 points and doesn't move as the demo ad loads; that
+  XCUITest finds `ad-banner-home` and `ad-banner-page-<view>`, set on the UIKit view; that the box's
+  overlay gives its banner the box's space; and that the banner's intrinsic size keeps it centred;
+- that the paid version (`-unlocked 1`) shows no ad and starts no web view;
+- that the full-screen ad comes over the picker, the picker closes when it does, and none comes
+  within 5 minutes; and that Google always says the ad closed or failed to show, without which the
+  picker would never close;
+- that the archive check passes with ads test now that the app calls Google's code (the `-route`
+  hook not matching `sbgp-routerIdentifier`, the SKAdNetwork identifier found, three demo units),
+  and that Xcode's Info.plist processing takes the XML comment.
 
 ## API contract
 

@@ -140,8 +140,13 @@ export const APP_COPY = {
   // with nothing to send, in a zone it left unfinished, so the next run skips it: "some forecast
   // checks that found nothing to send"). Searches go to Open-Meteo, and the phone keeps the place,
   // units, recent and saved places and last answer, none of which leaves it but the place chosen
-  // (phase 8 adds the notification choices to both this line and the notice's). "See Privacy choices." follows the ads line only while that row is
-  // in Settings.
+  // (phase 8.1, notifications in the app, adds the notification choices to both this line and the
+  // notice's). The ads line, in the free version only, says what Google may collect, and that the
+  // phone keeps when the app last showed a full-screen ad (`Keys.App.lastInterstitial`), so it
+  // shows one at most every 5 minutes (client `ADS.interstitialGapMinutes`), as the notice says:
+  // credits.test.ts holds both numbers to the constant. "See Privacy choices." follows it only
+  // while that row is in Settings: once the ads have started, while Google's consent tool says
+  // its privacy options must be offered.
   privacyChoices: 'Privacy choices',
   yourPrivacy: 'Your privacy',
   privacyPolicy: 'Privacy policy',
@@ -160,12 +165,18 @@ export const APP_COPY = {
     'instead, we delete them the next time you open the app. For a few days after each ' +
     'notification and each test, and after some forecast checks that found nothing to send, we ' +
     'also keep a note of it, even once the rest is deleted. It holds no token or place.',
-  privacyAds: 'In the free version, Google shows the ads and may collect device and usage data.',
+  privacyAds:
+    'In the free version, Google shows the ads and may collect device and usage data. The app ' +
+    'keeps when it last showed a full-screen ad, so it shows one at most every 5 minutes.',
   seePrivacyChoices: 'See Privacy choices.',
   privacyPurchases: 'Apple handles purchases. We never see your payment details.',
   privacyAccounts: 'There are no accounts.',
   keptForNotifications: 'What we keep for notifications',
   deleteMyData: 'Turn off notifications and delete my data',
+
+  // The ads (14.1): what VoiceOver reads for the band under the home screen's pages and the box at
+  // the end of each page, as the website labels its ad box (AdSlot.astro's `aria-label`).
+  advertisement: 'Advertisement',
 
   // Report an ad (10.7)
   reportAd: 'Report an ad',

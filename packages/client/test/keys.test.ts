@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CLIENT, PLACES } from '../src/config';
+import { ADS, CLIENT, PLACES } from '../src/config';
 import { APP_GROUP_KEYS, APP_KEYS, STORE_VERSION } from '../src/keys';
 
 describe('keys', () => {
@@ -17,6 +17,7 @@ describe('keys', () => {
       alertSync: 'alertSync.v1',
       lastView: 'ui.lastView',
       card: 'ui.alertCard',
+      lastInterstitial: 'ads.lastInterstitial',
     });
     expect(STORE_VERSION).toBe(1);
     const all = [...Object.values(APP_GROUP_KEYS), ...Object.values(APP_KEYS)];
@@ -39,5 +40,17 @@ describe('CLIENT', () => {
 describe('PLACES', () => {
   it('keeps five recent places and ten saved ones', () => {
     expect(PLACES).toEqual({ recentMax: 5, savedMax: 10 });
+  });
+});
+
+describe('ADS', () => {
+  it('keeps full-screen ads 5 minutes apart and under an hour old, and the retries’ waits', () => {
+    expect(ADS).toEqual({
+      interstitialGapMinutes: 5,
+      interstitialMaxAgeMinutes: 55,
+      retryFirstSeconds: 60,
+      retryMaxSeconds: 600,
+    });
+    expect(ADS.interstitialMaxAgeMinutes).toBeLessThan(60);
   });
 });

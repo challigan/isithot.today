@@ -410,11 +410,12 @@ final class PickerTests: XCTestCase {
     return app.buttons.matching(NSPredicate(format: format, label, "star-")).firstMatch
   }
 
-  /// Launches the app with `-uitest` and `arguments`, and waits for the heading.
+  /// Launches the app with `-uitest`, `-noads 1` (no consent form or ad, as `launchApp`) and
+  /// `arguments`, and waits for the heading.
   @MainActor
   private func launch(_ arguments: [String]) -> XCUIApplication {
     let app = XCUIApplication()
-    app.launchArguments = ["-uitest"] + arguments
+    app.launchArguments = ["-uitest", "-noads", "1"] + arguments
     app.launch()
     XCTAssertTrue(heading(in: app).waitForExistence(timeout: 15), "No heading on screen")
     return app

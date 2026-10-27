@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   COPY,
@@ -253,6 +254,15 @@ describe('APP_COPY', () => {
 
   it('separates the places nearby as the website does, the space left to the layout', () => {
     expect(APP_COPY.listComma).toBe(',');
+  });
+
+  it('labels the ads as the website labels its ad box', () => {
+    const slot = readFileSync(
+      new URL('../../../apps/web/src/components/AdSlot.astro', import.meta.url),
+      'utf8',
+    );
+    expect(APP_COPY.advertisement).toBe('Advertisement');
+    expect(slot).toContain(`aria-label="${APP_COPY.advertisement}"`);
   });
 
   it('names its slots, and only these strings have them', () => {

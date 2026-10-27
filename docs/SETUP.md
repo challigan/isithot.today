@@ -174,10 +174,32 @@ Works on any host, not only Cloudflare.
 Ads load after the page is interactive. They wait for the CMP's consent signal where GDPR
 applies, and the slot's height is reserved so the page does not jump.
 
-The apps' ads: once AdMob gives the publisher ID (`pub-…`), set `PUBLIC_ADMOB_PUBLISHER_ID` in
-Netlify and redeploy. `/app-ads.txt` on every domain then carries its line (until then, a
-comment). AdMob reads it from the developer website each app's store listing names, so each app
-lists its own site.
+The apps' ads (C15, once the AdMob account is approved). The iPhone app's free version has three
+ad units, and only the release candidate's build needs their IDs: every other build uses
+Google's demo units, so nothing here holds up a TestFlight build with **ads** `test`.
+
+1. In AdMob (https://admob.google.com), add the iOS app (not yet published) and create three ad
+   units: a **Banner** for the band under the home screen's pages, a second **Banner** for the
+   end of each page, and an **Interstitial** for the full-screen ad when a place is chosen. If
+   you have already made the one banner C15 first asked for, it is the home screen's: add the
+   other two. The page-end banner is a unit of its own, so AdMob reports the two apart.
+2. On both banners, set the refresh rate to 60 seconds. On the interstitial, set a frequency cap
+   of 1 impression per 5 minutes per user: the app already shows one at most every 5 minutes,
+   and this is Google's own guard beside it. Set the app's maximum ad content rating to G (the
+   app asks for G as well).
+3. **Privacy & messaging**: create the European regulations message (UK and EEA) and publish it;
+   it is the consent form the app shows. Add your iPhone as a test device.
+4. In GitHub, **Settings → Secrets and variables → Actions → Variables** (the repository's
+   variables, not the `testflight` environment's; none is a secret), add `ADMOB_APP_ID`
+   (`ca-app-pub-…~…`), `ADMOB_BANNER_ID` (the home screen's banner), `ADMOB_PAGE_BANNER_ID` (the
+   page-end banner) and `ADMOB_INTERSTITIAL_ID` (`ca-app-pub-…/…` each). An **iOS release** run
+   with **ads** `real`, the release candidate, needs all four, and stops at once, naming them, if
+   one is missing or malformed. With `test`, the archive check only makes sure your publisher
+   ID appears nowhere in the app.
+5. Once AdMob gives the publisher ID (`pub-…`), set `PUBLIC_ADMOB_PUBLISHER_ID` in Netlify and
+   redeploy. `/app-ads.txt` on every domain then carries its line (until then, a comment). AdMob
+   reads it from the developer website each app's store listing names, so each app lists its
+   own site.
 
 The apps' notifications: Apple push keys, done on 23 October. Two team-scoped APNs keys (one
 Sandbox, one Production) from Certificates, IDs & Profiles → Keys. In Netlify (scope

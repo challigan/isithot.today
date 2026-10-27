@@ -12,23 +12,29 @@ import UIKit
 /// `AppModel.setUnits(_:)`, the pasteboard, the bundled notices and the bundle's version.
 /// HomeView presents it, under the Debug recorder as it does the picker.
 ///
-/// Phase 6 has no ads and no notifications yet, so "Privacy choices" and the data kept for
-/// notifications (with its delete button) don't show: phase 8 passes whether Google's form is
-/// required and the last registration's lines. "Ads on" is the free version, as section 14.2
-/// starts the ads only when not unlocked; phase 7's purchase sets `unlocked`.
+/// "Privacy choices" shows in the free version while Google's consent says its privacy options
+/// form is required (`AdsModel.privacyChoices`), opens that form, and Your privacy points to it
+/// meanwhile. "Ads on" is the free version, as section 14.2 starts the ads only when not
+/// unlocked; phase 7's purchase sets `unlocked`, which hides both at once. The notifications are
+/// phase 8.1's, so the data kept for them (with its delete button) doesn't show yet: that phase
+/// passes the last registration's lines.
 struct SettingsSheet: View {
   let model: AppModel
+  /// The free version's ads.
+  let ads: AdsModel
 
   var body: some View {
     let model = model
+    let ads = ads
+    let choices = !model.unlocked && ads.privacyChoices
     SettingsView(
       screen: SettingsScreen(
         units: model.units,
         unlocked: model.unlocked,
-        privacyChoices: false,
+        privacyChoices: choices,
         version: AppBundle.version
       ),
-      privacy: YourPrivacy(adsOn: !model.unlocked, privacyChoices: false),
+      privacy: YourPrivacy(adsOn: !model.unlocked, privacyChoices: choices),
       actions: SettingsActions(
         setUnits: { units in Task { await model.setUnits(units) } },
         reportAd: {
@@ -40,7 +46,8 @@ struct SettingsSheet: View {
           )
         },
         copy: { UIPasteboard.general.string = $0 },
-        notice: AppBundle.notice
+        notice: AppBundle.notice,
+        privacyChoices: choices ? { Task { await ads.openPrivacyChoices() } } : nil
       )
     )
   }

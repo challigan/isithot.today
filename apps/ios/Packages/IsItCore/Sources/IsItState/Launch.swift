@@ -70,4 +70,11 @@ public enum Launch {
     guard age >= 0, age < Constants.Client.reuseMs else { return false }
     return Freshness.outOfDate(saved.response, at: now, holds: .init()) == nil
   }
+
+  /// Whether this is the app's first run, which shows no full-screen ad (phase 8.3): no answer
+  /// kept from an earlier launch (`loadToday()` is nil). The app asks once its store is ready,
+  /// so a Debug build's `-resetStore` and `-fixture` launches are first runs.
+  public static func firstRun(_ store: any StoredState) -> Bool {
+    store.loadToday() == nil
+  }
 }

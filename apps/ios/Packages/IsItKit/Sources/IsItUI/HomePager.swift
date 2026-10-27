@@ -125,7 +125,8 @@ private struct TabChip: View {
 /// accessibility tree, so VoiceOver and the UI tests read that one: the page on screen, except
 /// while a swipe is still moving, as `selection` follows a swipe only when the pages settle (on
 /// iOS 17, when the scroll view reports the next page). VoiceOver moves between pages with the
-/// switcher.
+/// switcher. Each page ends with what `pageEnd` gives for its view, after its footer: in the free
+/// version, the ad box.
 ///
 /// Each page is exactly the pager's size: the space the home screen leaves it under the top bar
 /// and the switcher, read as the pager is laid out. Not
@@ -142,26 +143,30 @@ private struct TabChip: View {
 /// screenful, never whole on screen, as this scroll view, then taller than the screen, was; with
 /// the identifier, the next run's log says whether it is (DECISIONS, "The iPhone app's UI tests,
 /// reviewed").
-public struct HomePager: View {
+public struct HomePager<PageEnd: View>: View {
   let pages: [PageContent]
   @Binding var selection: AppView
   /// Never drift the glyphs: a test's still screens.
   let still: Bool
   let actions: HomeActions
   let refresh: @Sendable () async -> Void
+  /// What each view's page ends with (`ForecastPageView`'s `end`).
+  let pageEnd: (AppView) -> PageEnd
 
   public init(
     pages: [PageContent],
     selection: Binding<AppView>,
     still: Bool,
     actions: HomeActions,
-    refresh: @escaping @Sendable () async -> Void
+    refresh: @escaping @Sendable () async -> Void,
+    @ViewBuilder pageEnd: @escaping (AppView) -> PageEnd
   ) {
     self.pages = pages
     _selection = selection
     self.still = still
     self.actions = actions
     self.refresh = refresh
+    self.pageEnd = pageEnd
   }
 
   public var body: some View {
@@ -177,7 +182,8 @@ public struct HomePager: View {
                 glyph: content.glyph,
                 still: still,
                 pageWidth: space.size.width,
-                actions: actions
+                actions: actions,
+                end: pageEnd(content.page.view)
               )
               .refreshable { [refresh] in await refresh() }
               .frame(width: space.size.width, height: space.size.height)

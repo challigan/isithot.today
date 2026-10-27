@@ -28,3 +28,28 @@ export const PLACES = {
   /** Saved places: ten, in the order saved, so the list never scrolls far. */
   savedMax: 10,
 } as const;
+
+/**
+ * The iPhone app's ads, in the free version, which reach Swift with core's constants
+ * (`Constants.Ads`).
+ */
+export const ADS = {
+  /**
+   * A full-screen ad shows when a place is chosen, at most once in this long. The app keeps when
+   * it last showed one, so the wait holds across launches; Your privacy and the website's privacy
+   * notice say so, with this number.
+   */
+  interstitialGapMinutes: 5,
+  /**
+   * Google's full-screen ads expire an hour after they load: one loaded this long ago or longer
+   * isn't shown, and another is loaded.
+   */
+  interstitialMaxAgeMinutes: 55,
+  /**
+   * An ad that fails to load is asked for again after this. The wait doubles with each failure in
+   * a row, and starts again from this once an ad loads.
+   */
+  retryFirstSeconds: 60,
+  /** The longest wait before asking again, however many loads have failed. */
+  retryMaxSeconds: 600,
+} as const;

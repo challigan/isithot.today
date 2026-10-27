@@ -149,7 +149,9 @@ struct InfoPagesTests {
           + "For a few days after each notification and each test, and after some forecast checks "
           + "that found nothing to send, we also keep a note of it, even once the rest is deleted. "
           + "It holds no token or place.",
-        "In the free version, Google shows the ads and may collect device and usage data.",
+        "In the free version, Google shows the ads and may collect device and usage data. The "
+          + "app keeps when it last showed a full-screen ad, so it shows one at most every 5 "
+          + "minutes.",
         "Apple handles purchases. We never see your payment details.",
         "There are no accounts.",
       ])
@@ -165,7 +167,9 @@ struct InfoPagesTests {
     let choices = YourPrivacy(adsOn: true, privacyChoices: true).lines
     #expect(
       choices[2...3] == [
-        "In the free version, Google shows the ads and may collect device and usage data.",
+        "In the free version, Google shows the ads and may collect device and usage data. The "
+          + "app keeps when it last showed a full-screen ad, so it shows one at most every 5 "
+          + "minutes.",
         "See Privacy choices.",
       ])
     let bought = YourPrivacy(adsOn: false, privacyChoices: true).lines

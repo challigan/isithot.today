@@ -18,10 +18,16 @@ struct PickerRequest: Identifiable, Equatable {
 /// (`AppModel.makePicker()`, IsItState) drawn by IsItUI's `PlacePickerView`, in the colours of the
 /// page on screen (`theme`), read from the app's model in the body, so the picker follows a
 /// refresh that changes the band while it is open. It closes when a place is chosen (`finished`),
-/// and its search stops with it; the chosen place goes on loading on the home screen. A star
-/// saves or removes a place and chooses nothing.
+/// and its search stops with it; the chosen place goes on loading on the home screen. In the free
+/// version a choice in the picker the place pill opened may first show the full-screen ad over
+/// the picker (`AdsModel.placeChosen`), and the picker closes as the ad does: the pill's tap and
+/// the choice are the two actions Google asks for before such an ad. The "Use my exact location"
+/// chip's picker never shows one, as its fix chooses the place after that one tap. A star saves
+/// or removes a place and chooses nothing.
 struct PickerSheet: View {
   let model: AppModel
+  /// The free version's ads.
+  let ads: AdsModel
   let request: PickerRequest
   @State private var picker: PlacePickerModel
   /// Whether the request's location fix has started, so it starts once.
@@ -30,8 +36,9 @@ struct PickerSheet: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.openURL) private var openURL
 
-  init(model: AppModel, request: PickerRequest) {
+  init(model: AppModel, ads: AdsModel, request: PickerRequest) {
     self.model = model
+    self.ads = ads
     self.request = request
     _picker = State(initialValue: model.makePicker())
   }
@@ -64,7 +71,12 @@ struct PickerSheet: View {
       )
     )
     .onChange(of: picker.finished) { _, finished in
-      if finished { dismiss() }
+      guard finished else { return }
+      if request.locating {
+        dismiss()
+      } else {
+        ads.placeChosen { dismiss() }
+      }
     }
     .onAppear {
       // Not in `.task`, which is cancelled as the sheet closes, and would cancel the fetch of

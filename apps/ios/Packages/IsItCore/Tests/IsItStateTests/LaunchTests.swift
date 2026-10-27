@@ -126,3 +126,16 @@ struct LaunchPlanTests {
     #expect(plan == .init(paint: nil, fetch: .plain))
   }
 }
+
+/// The app's first run (phase 8.3), which shows no full-screen ad: no answer kept from an earlier
+/// launch.
+@Suite("Whether this is the app's first run")
+struct FirstRunTests {
+  @Test("nothing kept, or only a place and units: a first run; an answer kept: not")
+  func firstRun() throws {
+    #expect(Launch.firstRun(FakeState()))
+    #expect(Launch.firstRun(FakeState(.init(place: aberdeen, units: .c))))
+    let saved = try savedAberdeen()
+    #expect(!Launch.firstRun(FakeState(.init(place: aberdeen, units: .c, today: saved))))
+  }
+}
