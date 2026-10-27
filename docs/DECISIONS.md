@@ -5359,16 +5359,19 @@ again. Google's full-screen ad came over the picker the moment Kathmandu was cho
 loaded beforehand, as the policy asks; the test misread it, as above. The consent form stayed open
 after three plain taps.
 
-**For the next macOS run to show.** Each of these is unproven until then:
+**What 221f20b's run showed** (run 40437897311). All 48 UI tests passed with none skipped, the four
+`AdsTests` among them, and every other check with them. The full-screen test found Google's close
+button over the picker and closed the ad, and the app counted it shown, which it does only once
+Google says the ad closed; the picker then closed onto Kathmandu. Once the next ad had loaded, Leeds
+chosen within 5 minutes brought none: no close button came, the picker closed onto Leeds and the
+count stayed at 1. The consent form, now loaded before it is shown, came over the home screen in the
+EEA; one of the three touches on Consent was taken (the log doesn't say which), the ads came on,
+Settings showed Privacy choices and Your privacy's line pointed to it. The page-end box showed its
+banner under the credits on Leeds's answer.
 
-- that the full-screen test closes the ad with "Close Advertisement" and the app counts it, the
-  picker closes when it does, and none comes within 5 minutes; and that Google always says the ad
-  closed or failed to show, without which the picker would never close;
-- that a tap at its centre or a press on Consent is one the form takes, after which Privacy
-  choices shows in Settings;
-- that the consent form, now loaded before it is shown, still comes (`ConsentForm.load` and a form's
-  `present(from:)`, the names the headers give);
-- that the page-end box waits for an answer, so none shows under "Checking…".
+**Still unproven on a Mac.** That the page-end box waits for an answer, so none shows under
+"Checking…": no test opens a page without one while the ads are on. It rests on one gate in
+`HomeView` (the page's `footer`), read but not run.
 
 ## API contract
 
