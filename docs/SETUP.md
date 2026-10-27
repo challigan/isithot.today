@@ -200,6 +200,10 @@ Google's demo units, so nothing here holds up a TestFlight build with **ads** `t
    redeploy. `/app-ads.txt` on every domain then carries its line (until then, a comment). AdMob
    reads it from the developer website each app's store listing names, so each app lists its
    own site.
+6. Once the app is live on the App Store, in AdMob open **Apps → App settings** and link the app
+   to its App Store listing. Until then AdMob can't find the listing's developer website, so it
+   can't check `app-ads.txt`, and the app's ads aren't fully served. Then check under
+   **app-ads.txt** that willitsnow.today's file shows as verified.
 
 The apps' notifications: Apple push keys, done on 23 October. Two team-scoped APNs keys (one
 Sandbox, one Production) from Certificates, IDs & Profiles → Keys. In Netlify (scope

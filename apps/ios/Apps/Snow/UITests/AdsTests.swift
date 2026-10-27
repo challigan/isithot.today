@@ -10,11 +10,17 @@ import XCTest
 /// closes once the ad does, with no second one within 5 minutes.
 ///
 /// Google's consent tool, its form and its demo ads aren't the app's to guarantee: a test whose
-/// answer from Google doesn't come in time skips, saying which, rather than fails. What is the
-/// app's fails: a band or a box out of place, a space that moves as its ad loads, an ad in the
-/// paid version, a picker that never closes, a second full-screen ad. Nothing here is audited,
-/// since the ads' own elements are Google's (HomeAuditTests audit the home screen without them).
-/// The screens are attached for the contact sheet (`ads-…`).
+/// answer from Google doesn't come in time skips, saying which, rather than fails. Which it is,
+/// a Debug build's readout of the ads model says (`DebugHooks.adsReadout`, over the home
+/// screen): `debug-ads`, the ads' phase, and `debug-interstitial`, whether a full-screen ad is
+/// loaded. A test skips only while the ads are still asking or are withheld (UMP or Mobile Ads
+/// didn't answer, or the network didn't carry it; `notOn`), or while no full-screen ad has
+/// loaded. What is the app's fails: ads that never start in the free version, no band once they
+/// are on, a consent form skipped, a band or a box out of place, a space that moves as its ad
+/// loads, ads started or shown in the paid version, a loaded full-screen ad that doesn't show, a
+/// picker that never closes, a second full-screen ad. Nothing here is audited, since the ads' own
+/// elements are Google's (HomeAuditTests audit the home screen without them). The screens are
+/// attached for the contact sheet (`ads-…`).
 final class AdsTests: XCTestCase {
   override func setUpWithError() throws {
     // Every frame out of place is reported, not only the first; a screen that never comes
@@ -23,10 +29,11 @@ final class AdsTests: XCTestCase {
   }
 
   /// The free version (`-unlocked 0`) outside the EEA (`-umpGeography other`, so no form): once
-  /// the ads start, the band (`expectBand`) is under the pager, which ends at its top, so no page
-  /// runs under the ad, and the home screen still fits; its frame stays as Google's demo ad loads
-  /// or fails, its space fixed, as Google's policy asks. At the page's end, the box
-  /// (`expectBox`), below the footer's links.
+  /// the ads are on (`awaitTheAds`, which fails when they never start or no band comes), the band
+  /// (`expectBand`) is under the pager, which ends at its top, so no page runs under the ad, and
+  /// the home screen still fits; its frame stays as Google's demo ad loads or fails, its space
+  /// fixed, as Google's policy asks. At the page's end, the box (`expectBox`), below the footer's
+  /// links.
   @MainActor
   func testTheBandSitsUnderThePager() throws {
     let page = try HomeScreen.named("leeds-dry").opening()
@@ -34,12 +41,8 @@ final class AdsTests: XCTestCase {
       "-resetStore", "-fixture", "leeds-dry", "-umpGeography", "other", "-unlocked", "0",
     ])
     try awaitHeading(page.heading, in: app)
+    try awaitTheAds(in: app, after: "the launch")
     let band = app.find("ad-home")
-    guard band.waitForExistence(timeout: 30) else {
-      throw XCTSkip(
-        "No ad band 30 seconds after the launch: Google's consent tool or Mobile Ads didn't "
-          + "answer in time, so the ads never started")
-    }
     let space = settledFrame(of: band)
     expectBand(in: app, below: page)
     expectFits(app, "leeds-dry with the ads")
@@ -59,7 +62,8 @@ final class AdsTests: XCTestCase {
   }
 
   /// The paid version (`-unlocked 1`): neither Google's consent tool nor Mobile Ads starts (spec
-  /// 14.2), so 10 seconds on there is no band, no box, no banner and no web page of Google's;
+  /// 14.2), so for the 10 seconds after the launch the ads read idle (`debug-ads`) at every
+  /// reading and there is no band, and then no box, no banner and no web page of Google's;
   /// Settings has no Report an ad and no Privacy choices; and Your privacy has no ads line.
   @MainActor
   func testThePaidVersionShowsNoAds() throws {
@@ -68,9 +72,19 @@ final class AdsTests: XCTestCase {
       "-resetStore", "-fixture", "leeds-dry", "-umpGeography", "other", "-unlocked", "1",
     ])
     try awaitHeading(page.heading, in: app)
-    XCTAssertFalse(
-      app.find("ad-home").waitForExistence(timeout: 10),
-      "An ad band in the paid version; \(app.homeGeometry)")
+    // Twice a second for 10 seconds, each phase read as it changes, until a band comes.
+    let band = app.find("ad-home")
+    let deadline = Date().addingTimeInterval(10)
+    var phases: [String] = []
+    repeat {
+      let phase = adsPhase(in: app) ?? "no readout"
+      if phases.last != phase { phases.append(phase) }
+      if band.exists { break }
+      RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+    } while Date() < deadline
+    XCTAssertEqual(
+      phases, ["idle"], "debug-ads in the paid version read \(phases), not idle throughout")
+    XCTAssertFalse(band.exists, "An ad band in the paid version; \(app.homeGeometry)")
     for id in ["ad-banner-home", "ad-page-\(page.view)", "ad-banner-page-\(page.view)"] {
       XCTAssertFalse(app.find(id).exists, "\(id) in the paid version; \(app.homeGeometry)")
     }
@@ -88,27 +102,37 @@ final class AdsTests: XCTestCase {
   }
 
   /// In the EEA (`-umpGeography eea`, Google's debug geography, which a Debug build asks again at
-  /// each such launch), Google's consent form comes over the home screen at launch. Once agreed
-  /// to, Google's privacy options must be offered, so Settings shows Privacy choices, and Your
-  /// privacy's line after the ads line points to it ("See Privacy choices.").
+  /// each such launch, UMP forgetting its kept answer), Google's consent form comes over the home
+  /// screen at launch, the ads asking until it is answered: the ads on before any form is a form
+  /// the app skipped, and fails. Once agreed to, Google's privacy options must be offered, so
+  /// Settings shows Privacy choices, and Your privacy's line after the ads line points to it
+  /// ("See Privacy choices.").
   @MainActor
   func testTheConsentFormThenPrivacyChoices() throws {
     let page = try HomeScreen.named("leeds-dry").opening()
     let app = try launch(["-resetStore", "-fixture", "leeds-dry", "-umpGeography", "eea"])
     try awaitHeading(page.heading, in: app)
+    // Up to 30 seconds for the form's web view, or for the ads to stop asking without one.
     let form = app.webViews.firstMatch
-    guard form.waitForExistence(timeout: 30) else {
-      throw XCTSkip(
-        "No consent form 30 seconds after the launch in the EEA: Google's consent tool didn't "
-          + "answer in time")
+    let phase = waitForAdsPhase(["on", "withheld"], in: app, timeout: 30) { form.exists }
+    // Nothing turns the ads on before the form is answered: a web view then is the band's banner.
+    if phase == "on" {
+      throw HomeScreenError(
+        "The ads came on in the EEA with no consent form first, though UMP forgets its answer at "
+          + "each such launch: the app skipped the form; \(app.homeGeometry)")
+    }
+    guard form.exists else {
+      throw notOn(phase, "30 seconds after the launch in the EEA, with no consent form", in: app)
     }
     let agree = try agreeButton(in: form)
     attach(app, as: "ads-consent-form")
     let words = agree.label
-    agree.tap()
     // Its button, not the web view: the band's banner, which the answer starts, is one too.
-    guard gone(agree, within: 10) else {
-      throw XCTSkip("Google's consent form was still open 10 seconds after \(words)")
+    guard tapUntilGone(agree, tries: 3) else {
+      throw XCTSkip(
+        "Google's consent form was still open after 3 tries at \(words), each a tap once one "
+          + "would reach it and 5 seconds for the form to close; a tap "
+          + (agree.exists && agree.isHittable ? "would reach it now" : "still wouldn't reach it"))
     }
     try openSettings(app)
     XCTAssertTrue(
@@ -123,13 +147,15 @@ final class AdsTests: XCTestCase {
   }
 
   /// The full-screen ad as a place is chosen. Never in the app's first run: a first launch saves
-  /// an answer, so the next isn't one; once the ads have started there, the ad has 15 seconds to
-  /// load, which nothing on screen shows. A place chosen in the picker then brings the ad over
-  /// everything, the picker under it; closed, the picker closes too, onto the place chosen.
-  /// Another place chosen as long after, within 5 minutes of the ad, brings none, though the next
-  /// has had as long to load: the picker closes straight onto it. The stub (`-network`) answers
-  /// the launch's request by IP with Leeds and each place chosen with its fixture; Google's
-  /// traffic goes to Google.
+  /// an answer, so the next isn't one; once the ads are on there, the ad loads, which only the
+  /// Debug readout shows (`debug-interstitial` reads ready), within 30 seconds or the test skips,
+  /// Google having none to give. A place chosen in the picker then brings the ad over everything,
+  /// the picker under it, or the test fails, as the app had an ad and didn't show it; closed, the
+  /// picker closes too, onto the place chosen. Once the next ad has loaded (30 seconds again, or
+  /// the rest skips, as a choice with no ad loaded would show nothing), another place chosen,
+  /// within 5 minutes of the first ad, brings none: the picker closes straight onto it. The stub
+  /// (`-network`) answers the launch's request by IP with Leeds and each place chosen with its
+  /// fixture; Google's traffic goes to Google.
   @MainActor
   func testAFullScreenAdWhenAPlaceIsChosen() throws {
     let network = [
@@ -142,21 +168,21 @@ final class AdsTests: XCTestCase {
     // Kathmandu's answer's own moment, as PickerTests choose it: the launch's, for Leeds, is a
     // day old by then.
     let app = try launch(network + ["-now", "2026-12-02T11:50:00.000Z"])
-    guard app.find("ad-home").waitForExistence(timeout: 30) else {
+    try awaitTheAds(in: app, after: "the second launch")
+    guard waitForAFullScreenAd(in: app, timeout: 30) else {
       throw XCTSkip(
-        "No ad band 30 seconds after the second launch: Google's consent tool or Mobile Ads "
-          + "didn't answer in time, so the ads never started")
+        "No full-screen ad loaded 30 seconds after the ads came on (debug-interstitial reads "
+          + "none): Google had no demo ad to give")
     }
-    RunLoop.current.run(until: Date().addingTimeInterval(15))
     try choose("Kathmandu", in: app)
     switch afterChoosing(in: app) {
     case .picker:
       throw HomeScreenError("The picker is still open 10 seconds after a place was chosen")
     case .home:
       expectPlace("Kathmandu", in: app)
-      throw XCTSkip(
-        "No full-screen ad as the place was chosen: Google's demo ad hadn't loaded 15 seconds "
-          + "after the ads started")
+      throw HomeScreenError(
+        "No full-screen ad as the place was chosen, though one was loaded (debug-interstitial "
+          + "read ready): the app didn't show it")
     case .ad:
       attach(app, as: "ads-full-screen")
       try closeTheAd(in: app)
@@ -169,8 +195,14 @@ final class AdsTests: XCTestCase {
     }
     expectPlace("Kathmandu", in: app)
 
-    // As long again, for the next ad to load: well within 5 minutes of the first.
-    RunLoop.current.run(until: Date().addingTimeInterval(15))
+    // The next ad, loaded once the first closed, up to 30 seconds on, well within 5 minutes of
+    // the first: with none loaded, a choice would bring no ad whatever the minutes since.
+    guard waitForAFullScreenAd(in: app, timeout: 30) else {
+      throw XCTSkip(
+        "The first full-screen ad showed and closed onto the place chosen, but no next one loaded "
+          + "in the 30 seconds after (debug-interstitial reads none): Google had no demo ad to "
+          + "give, so that a second choice within 5 minutes brings none can't be shown")
+    }
     try choose("Leeds", in: app)
     switch afterChoosing(in: app) {
     case .picker:
@@ -198,6 +230,86 @@ final class AdsTests: XCTestCase {
     return app
   }
 
+  /// The ads' phase as the Debug readout says it (`debug-ads`, `DebugHooks.adsReadout`): idle,
+  /// asking, withheld or on; nil when the home screen has no readout, as under a sheet.
+  @MainActor
+  private func adsPhase(in app: XCUIApplication) -> String? {
+    let readout = app.find("debug-ads")
+    return readout.exists ? readout.value as? String : nil
+  }
+
+  /// Reads the ads' phase twice a second until it is one of `phases` or `done` holds, for up to
+  /// `timeout` seconds, and gives the last reading.
+  @MainActor
+  private func waitForAdsPhase(
+    _ phases: Set<String>,
+    in app: XCUIApplication,
+    timeout: TimeInterval,
+    orUntil done: () -> Bool = { false }
+  ) -> String? {
+    let deadline = Date().addingTimeInterval(timeout)
+    var phase = adsPhase(in: app)
+    while !(phase.map(phases.contains) ?? false) && !done() && Date() < deadline {
+      RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+      phase = adsPhase(in: app)
+    }
+    return phase
+  }
+
+  /// Waits up to 30 seconds after `what`, a free launch's, for the ads to be on, then up to 5 for
+  /// the band (`ad-home`), which is there once they are on and the home screen's width is known.
+  /// Ads that aren't on by then skip or fail as `notOn` says; on with no band fails.
+  @MainActor
+  private func awaitTheAds(in app: XCUIApplication, after what: String) throws {
+    let phase = waitForAdsPhase(["on", "withheld"], in: app, timeout: 30)
+    guard phase == "on" else {
+      throw notOn(phase, "30 seconds after \(what)", in: app)
+    }
+    guard app.find("ad-home").waitForExistence(timeout: 5) else {
+      throw HomeScreenError(
+        "The ads are on (debug-ads reads on) but there is no ad band 5 seconds later; "
+          + app.homeGeometry)
+    }
+  }
+
+  /// What the ads not being on at `phase`, `when`, says, as the error to throw. Still asking, or
+  /// withheld (UMP says no ads may be requested, as when its update or Google's form never came),
+  /// is Google's or the network's, and skips; idle in a free launch, the ads never started, and no
+  /// readout at all are the app's, and fail.
+  @MainActor
+  private func notOn(_ phase: String?, _ when: String, in app: XCUIApplication) -> any Error {
+    switch phase {
+    case "asking"?:
+      return XCTSkip(
+        "debug-ads still reads asking \(when): UMP's update, Google's consent form or Mobile "
+          + "Ads' start didn't answer in time")
+    case "withheld"?:
+      return XCTSkip(
+        "debug-ads reads withheld \(when): UMP says no ads may be requested, its update or "
+          + "Google's consent form not having come (offline, or Google didn't answer)")
+    case "idle"?:
+      return HomeScreenError(
+        "debug-ads still reads idle \(when), in a free launch without -noads: the ads never "
+          + "started")
+    case nil:
+      return HomeScreenError(
+        "No debug-ads readout on the home screen \(when) (DebugHooks.adsReadout); "
+          + app.homeGeometry)
+    case .some(let other):
+      return HomeScreenError("debug-ads reads \(other) \(when), which is no phase of the ads")
+    }
+  }
+
+  /// Whether a full-screen ad is loaded, waiting for a place to be chosen, within `timeout`
+  /// seconds: the Debug readout `debug-interstitial` reads ready, where it reads none until then.
+  @MainActor
+  private func waitForAFullScreenAd(in app: XCUIApplication, timeout: TimeInterval) -> Bool {
+    let ready = NSPredicate(format: "value == %@", "ready")
+    let readout = app.find("debug-interstitial")
+    let waited = XCTNSPredicateExpectation(predicate: ready, object: readout)
+    return XCTWaiter().wait(for: [waited], timeout: timeout) == .completed
+  }
+
   /// The window and the home screen's frames, the ads' included (`homeFrames`), from one
   /// snapshot; nil, with a failure, when the app can't be read.
   @MainActor
@@ -212,11 +324,15 @@ final class AdsTests: XCTestCase {
   }
 
   /// Checks the band, from one snapshot: it spans the window; the pager and `page`, the page on
-  /// screen, end at or above its top; it ends within the window; it is 58 to 158 points tall, the
-  /// anchored adaptive banner's 50 to 150 (GADAdSize.h) and the 8 points of tint above it, the
-  /// border between the page and the ad; its banner (`ad-banner-home`) lies under the tint; and
-  /// VoiceOver reads it as an advertisement. Fails once, listing what is wrong, with where
-  /// everything is (`homeGeometry`).
+  /// screen, end at or above its top; it ends within the window; its banner (`ad-banner-home`)
+  /// is the anchored adaptive banner's 50 to 150 points tall (GADAdSize.h), starts 8 points below
+  /// the band's top, under the tint that borders the page and the ad, lies within the band, and
+  /// ends above the home indicator; and VoiceOver reads the band as an advertisement. The band's
+  /// own frame takes in its tint, which reaches down under the home indicator to the window's
+  /// bottom edge, so its height says nothing of the banner's: on 3f91596's macOS run (the iPhone
+  /// 17, a window 402 by 874) the band was 168 tall, the tint's 8, the banner's 126 and the home
+  /// indicator's 34. Fails once, listing what is wrong, with where everything is
+  /// (`homeGeometry`).
   @MainActor
   private func expectBand(in app: XCUIApplication, below page: HomeScreen.Page) {
     guard let screen = homeScreen(of: app) else { return }
@@ -241,15 +357,27 @@ final class AdsTests: XCTestCase {
     if band.maxY > window.maxY + 0.5 {
       wrong.append("it runs on below the window's bottom edge at \(window.maxY)")
     }
-    let height = onPixels(band.height)
-    if height < 58 || height > 158 {
-      wrong.append("it is \(height) tall, not a banner's 50 to 150 and the tint's 8")
-    }
     let under = CGRect(
       x: band.minX, y: band.minY + 8, width: band.width, height: max(band.height - 8, 0))
     if let banner = screen.frames["ad-banner-home"] {
+      let height = onPixels(banner.height)
+      if height < 50 || height > 150 {
+        wrong.append("its banner at \(banner) is \(height) tall, not a banner's 50 to 150")
+      }
+      if abs(banner.minY - under.minY) > 0.5 {
+        wrong.append("its banner at \(banner) doesn't start under the tint's 8, at \(under.minY)")
+      }
       if !lies(banner, within: under) {
         wrong.append("its banner at \(banner) isn't within it under the tint, at \(under)")
+      }
+      // XCUITest gives no safe area, so the banner is held clear of the home indicator by the
+      // band's bottom edge, the window's, its tint reaching down under the indicator: on the
+      // iPhone 17 the indicator takes the bottom 34 points, so a banner ending 20 or more above
+      // that edge is clear of it, where one running on under the indicator is not.
+      if banner.maxY > band.maxY - 20 {
+        wrong.append(
+          "its banner at \(banner) runs on to within 20 of its bottom edge at \(band.maxY), "
+            + "under the home indicator")
       }
     } else {
       wrong.append("it holds no banner (ad-banner-home)")
@@ -451,6 +579,24 @@ final class AdsTests: XCTestCase {
     let labels = form.buttons.allElementsBoundByIndex.map(\.label)
     throw XCTSkip(
       "Google's consent form has no button labelled Consent or Accept; its buttons: \(labels)")
+  }
+
+  /// Taps `button`, one of Google's consent form's, until it is gone: up to `tries` taps, each
+  /// once a tap would reach it (within 10 seconds), then 5 seconds for it to go; whether it went.
+  /// A tap as the form's page loads may not take: on 3f91596's macOS run the form was still open
+  /// 10 seconds after a single tap on Consent, made as soon as the button was in the tree.
+  @MainActor
+  private func tapUntilGone(_ button: XCUIElement, tries: Int) -> Bool {
+    for _ in 0..<tries {
+      let deadline = Date().addingTimeInterval(10)
+      while button.exists && !button.isHittable && Date() < deadline {
+        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+      }
+      guard button.exists else { return true }
+      if button.isHittable { button.tap() }
+      if gone(button, within: 5) { return true }
+    }
+    return false
   }
 
   /// Whether `element` is gone within `timeout` seconds.

@@ -109,8 +109,8 @@ extension Optional where Wrapped == HomeSheet {
 /// The ads take their spaces only in the free version and once they are on: the home banner's
 /// band, as tall as Google says the banner is at the screen's width, under the pager in the
 /// stack rather than in a safe-area inset over the pages, so the pages end at its top and nothing
-/// scrolls under the ad; and the box at each page's end. The ads hear the widths these are laid
-/// out at and the page on screen, and load each banner once they know both.
+/// scrolls under the ad; and the box at the end of each page with an answer. The ads hear the
+/// widths these are laid out at and the page on screen, and load each banner once they know both.
 private struct HomeContent: View {
   @Bindable var model: AppModel
   let ads: AdsModel
@@ -151,7 +151,9 @@ private struct HomeContent: View {
           // Pull to refresh (section 10.2), on every page, keeping what is on screen.
           refresh: { [model] in await model.refresh() },
           pageEnd: { view in
-            if adsShown {
+            // Only on a page with an answer (its footer shows): never under "Checking…" or an
+            // error, as Google allows no ads on a screen without content.
+            if adsShown, pages.first(where: { $0.view == view })?.footer != nil {
               AdBox(id: "ad-page-\(view.rawValue)") {
                 BannerSlot(ads: google, slot: .pageEnd(view))
               }
@@ -174,6 +176,12 @@ private struct HomeContent: View {
       } action: { width in
         ads.homeWidth(width)
       }
+    }
+    // A Debug build's readout of the ads for AdsTests (`DebugHooks.adsReadout`): in the corner
+    // over the home screen, out of the pages, so nothing moves; none under `-noads 1` or in a
+    // Release build.
+    .overlay(alignment: .topLeading) {
+      DebugHooks.adsReadout(ads)
     }
     .onChange(of: model.view, initial: true) { _, view in
       ads.shown(view)

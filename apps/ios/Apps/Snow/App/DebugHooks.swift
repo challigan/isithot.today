@@ -156,6 +156,20 @@ enum DebugHooks {
       return true
     }
 
+    /// The ads model as AdsTests read it (`AdsReadout`), over the home screen: how far the ads
+    /// have come and whether a full-screen ad is loaded, so a test that sees no ad can tell
+    /// Google's silence from the app's own failure. Nothing at all under `-noads 1`, so every
+    /// other UI test's tree, and so its audits, is as it was.
+    @ViewBuilder
+    static func adsReadout(
+      _ ads: AdsModel,
+      arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> some View {
+      if !noAds(arguments: arguments) {
+        AdsReadout(ads: ads)
+      }
+    }
+
     /// `-unlocked 0|1`: whether the purchase is owned, whatever `unlock.v1` says, so a UI test
     /// launches the free version or the paid one; nil without it. Any other value stops the app.
     static func unlocked(arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool? {
@@ -313,6 +327,8 @@ enum DebugHooks {
     static func apiOrigin() -> URL? { nil }
 
     static func noAds() -> Bool { false }
+
+    static func adsReadout(_ ads: AdsModel) -> some View { EmptyView() }
 
     static func store(_ store: any StoredState) -> any StoredState { store }
 
@@ -640,6 +656,44 @@ enum DebugHooks {
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityLabel(Text(verbatim: label))
         .accessibilityValue(Text(verbatim: value))
+    }
+  }
+
+  /// `DebugHooks.adsReadout`: two clear elements of a point each, which show nothing and take no
+  /// tap, whose accessibility values AdsTests read: `debug-ads`, the ads' phase (idle, asking,
+  /// withheld or on), and `debug-interstitial`, whether a full-screen ad is loaded, waiting for a
+  /// place to be chosen (ready or none). A view of its own, reading the model in its own body, so
+  /// only it is drawn again as they change, not the home screen. Each value is one lowercase
+  /// word, shown to no one, so none of it is copy.
+  @MainActor
+  private struct AdsReadout: View {
+    let ads: AdsModel
+
+    var body: some View {
+      HStack(spacing: 0) {
+        reading("debug-ads", phase)
+        reading("debug-interstitial", ads.interstitialReady ? "ready" : "none")
+      }
+      .allowsHitTesting(false)
+    }
+
+    /// The ads' phase as one word.
+    private var phase: String {
+      switch ads.phase {
+      case .idle: "idle"
+      case .asking: "asking"
+      case .withheld: "withheld"
+      case .on: "on"
+      }
+    }
+
+    /// A clear point identified `id`, whose accessibility value is `value`.
+    private func reading(_ id: String, _ value: String) -> some View {
+      Color.clear
+        .frame(width: 1, height: 1)
+        .accessibilityElement()
+        .accessibilityValue(Text(verbatim: value))
+        .accessibilityIdentifier(id)
     }
   }
 #endif

@@ -40,10 +40,10 @@ public enum ConsentGeography: Sendable {
 /// as both SDKs ask. Nothing touches either SDK until the model asks, so the unit tests' host,
 /// which builds the app and never launches it, never starts them.
 ///
-/// UMP's calls are its async forms, each form shown over whatever is on top
-/// (`TopViewController`). A failed call shows nothing, and the answer after it is the one UMP
-/// kept. A banner's news comes through its delegate to `banners`. A full-screen ad shows once and
-/// is dropped.
+/// UMP's update is its completion-handler form, so `canRequestAds` can be read the moment it is
+/// asked for; its forms are shown over whatever is on top (`TopViewController`) as they are ready.
+/// A failed call shows nothing, and the answer after it is the one UMP kept. A banner's news comes
+/// through its delegate to `banners`. A full-screen ad shows once and is dropped.
 @MainActor
 public final class GoogleAds: NSObject, AdsPlatform, BannerViewDelegate,
   FullScreenContentDelegate
@@ -106,11 +106,24 @@ public final class GoogleAds: NSObject, AdsPlatform, BannerViewDelegate,
     return consent
   }
 
-  /// UMP's consent form, when its answer says one is required, over whatever is on top; the
-  /// answer once the form closes, or at once when none is needed.
+  /// UMP's consent form, when its answer says one is required, over whatever is on top once the
+  /// form has loaded; the answer once the form closes, or at once when none is needed. The form is
+  /// downloaded first and the screen to show it over found after (where
+  /// `loadAndPresentIfRequired` takes it before the download): a sheet opened or closed meanwhile
+  /// would leave UMP a controller it can't show from, and the launch no consent and no ads.
   public func presentConsentFormIfRequired() async -> AdsConsent {
-    try? await ConsentForm.loadAndPresentIfRequired(from: TopViewController.find())
+    guard ConsentInformation.shared.consentStatus == .required, let form = await loadForm() else {
+      return consent
+    }
+    try? await form.present(from: TopViewController.find())
     return consent
+  }
+
+  /// UMP's consent form, downloaded; nil when it can't be (offline, or none set up in AdMob).
+  private func loadForm() async -> ConsentForm? {
+    await withCheckedContinuation { loaded in
+      ConsentForm.load { form, _ in loaded.resume(returning: form) }
+    }
   }
 
   /// UMP's privacy options form, Settings' "Privacy choices", over whatever is on top (Settings'

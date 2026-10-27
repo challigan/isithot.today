@@ -5066,7 +5066,11 @@ global.css), and each is one accessibility container, read as "Advertisement"
   tall, centred and clipped. The banner is an overlay on a clear frame of that height: a UIKit view
   put straight in the page's vertical scroll view is offered no height and would collapse, and a tap
   outside its bounds would miss the ad. So in the scroll view the box is exactly 250 tall, which an
-  inline banner of at most 250 never needs to pass.
+  inline banner of at most 250 never needs to pass. The box is only on a page with an answer (its
+  footer shows): never under "Checking…", as after every place chosen, nor under an error, since
+  Google allows no ads on a screen without content (found in review). It is the page's last thing,
+  so nothing above it moves when it comes. The band stays through those states: its space is the
+  fixed one, and taking it away at each choice would move the pages.
 - **The banners themselves** are `ad-banner-home` and `ad-banner-page-<view>`, set on Google's UIKit
   view, which `BannerSlot` centres and leaves at its own size, the ad's.
 - **The widths come from the layout** (`onGeometryChange`): the home screen's stack for the band,
@@ -5136,7 +5140,10 @@ calls `hooks.startAds()` only when the purchase isn't owned. The app's hooks are
 (its other steps do nothing yet, as `NoHooks`' did), whose `startAds()` calls
 `AdsModel.start(firstRun:)`, which returns at once and keeps the flow in a task, so alert sync and a
 pending route never wait on Google's form. The flow: UMP's update (`requestConsentInfoUpdate`); its
-consent form if one is required, over whatever is on top (`loadAndPresentIfRequired`); then, if ads
+consent form if one is required (`ConsentForm.load`, then `present(from:)` over whatever is on top
+once it has loaded, not `loadAndPresentIfRequired`, which takes the screen before the download, so
+a sheet opened or closed meanwhile would leave UMP nothing to show it from, and the launch no
+consent and no ads: found in review); then, if ads
 may be requested, Mobile Ads' start, every ad rated G at most and neither request tag, for children
 or for the under-aged, set; if not, `withheld`, and no ads this launch. Once on, the home banner
 loads as soon as the screen's width is known, so does the page-end banner of each page already
@@ -5247,31 +5254,47 @@ so their screens, frames, audits and the contact sheet are what they were, whate
 the stubbed network covers only the app's own session, so Google's traffic would reach Google. They
 stay the free version, since Report an ad and the ads line follow the version, not the ads, and
 `SettingsTests` expects the new ads line. `AdsTests` launches with the ads, Google's demo units over
-the real network. Each of its tests skips, saying which answer of Google's didn't come in time,
-rather than fails; what is the app's fails. Nothing in it is audited, since the ads' elements are
-Google's.
+the real network. Nothing in it is audited, since the ads' elements are Google's.
+
+**When AdsTests skips, and when it fails.** A test may skip only when Google didn't answer, never
+when the app is at fault, and the screen alone can't tell the two apart: no band is what a broken
+start looks like too, and so is no full-screen ad. So a Debug build draws a readout of the ads
+model for them (`DebugHooks.adsReadout`, over the home screen's corner, out of the pages; nothing
+under `-noads 1` or in a Release build): `debug-ads`, the phase (`idle`, `asking`, `withheld` or
+`on`), and `debug-interstitial`, `ready` or `none`. `asking` (UMP's update, its form or Mobile Ads'
+start still out) and `withheld` (UMP says no ads may be requested) skip; `idle` in a free launch,
+or no readout, fails, as does `on` with no band within 5 seconds. The full-screen test waits for
+`ready` before it chooses a place, skips if no ad ever loads, and fails if one was ready and none
+showed. Found in review, after the first macOS run's skips had blamed Google for whatever kept the
+ads away.
 
 1. **The band under the pager** (`-resetStore -fixture leeds-dry -umpGeography other -unlocked 0`):
-   once `ad-home` comes (30 seconds at most), the band spans the window, the pager and the page end
-   at its top, it ends within the window, it is 58 to 158 tall (the banner's 50 to 150 and the
-   8-point border), its banner lies inside it under the border, and it reads "Advertisement";
+   once the ads are on (30 seconds at most), the band spans the window, the pager and the page end
+   at its top, it ends at the window's bottom (its tint reaches under the home indicator, so its
+   frame does too: 168 points on 3f91596's run, 8 + 126 + 34), its banner is 50 to 150 tall, 8
+   below its top, and ends at least 20 above its bottom (the iPhone 17's home indicator is 34), and
+   it reads "Advertisement";
    `expectFits` and `expectNoBareElements` pass with the ads on; and its frame hasn't moved after up
    to 15 seconds for the demo ad. Then the page scrolled to its end: the box below the credits, at
    least 250 tall, within the page's width, its banner inside it and at least 40 below the credits.
 2. **The paid version** (`-unlocked 1`): 10 seconds on, no band, box, banner or web view; no Report
    an ad and no Privacy choices; and Your privacy's four lines, none naming Google.
-3. **The EEA** (`-umpGeography eea`): Google's consent form (a web view, 30 seconds at most) and its
-   Consent or Accept button tapped, then Privacy choices in Settings and "See Privacy choices." as
-   Your privacy's fourth line.
+3. **The EEA** (`-umpGeography eea`): Google's consent form (a web view, 30 seconds at most; the
+   ads on with no form fails, since the debug geography makes UMP ask again each launch) and its
+   Consent button tapped, up to three times while it stays (on 3f91596's run one tap left the form
+   open: the button was in the tree before the form took taps), then Privacy choices in Settings
+   and "See Privacy choices." as Your privacy's fourth line.
 4. **The full-screen ad.** A first launch saves an answer, so the second isn't a first run
-   (`-network ip-first-launch,leeds-dry,kathmandu-0545`; the second at Kathmandu's moment). Once the
-   band shows, and 15 seconds more, Kathmandu chosen in the picker brings an ad over everything (the
-   place button gone, and the search field gone or out of reach, for a second), and closing it
-   leaves the home screen on Kathmandu; Leeds chosen 15 seconds later brings none, within the 5
-   minutes. With no ad the first time, Kathmandu must still have loaded, and then it skips.
+   (`-network ip-first-launch,leeds-dry,kathmandu-0545`; the second at Kathmandu's moment). Once
+   `debug-interstitial` reads `ready` (30 seconds at most, else it skips), Kathmandu chosen in the
+   picker must bring an ad over everything (the place button gone, and the search field gone or out
+   of reach, for a second), and closing it leaves the home screen on Kathmandu. Once the next ad is
+   `ready` (else that part can't be shown, and it skips), Leeds chosen brings none, within the 5
+   minutes.
 
-No UI test covers Privacy choices opening Google's form, which only trying it will show, nor the first run's rule (`AdsModelTests` has that); and no job builds
-with the real units (`ads real`) until Carl's variables exist. `AdsTests` waits on Google a good
+No UI test covers Privacy choices opening Google's form, which only trying it will show, nor the
+first run's rule (`AdsModelTests` has that); and no job builds with the real units (`ads real`)
+until Carl's variables exist. `AdsTests` waits on Google a good
 deal, which may add 2 to 4 minutes to the UI plan.
 
 - **Checked on Linux:** IsItCore in Docker (`isithot-swift:6.3.3`, Swift 6.3.3 with swift-format and
@@ -5307,29 +5330,32 @@ deal, which may add 2 to 4 minutes to the UI plan.
   order). Session scratchpad: ads-build/plist-e2e, gma-hooks, archive-try and old-script-run.
   shellcheck didn't run (not installed here).
 
+**What 3f91596's macOS run showed** (run 40424015603). The app, IsItAds and IsItUI's new views
+built against the real SDKs with no new warning (the one listed, IsItLogic's dependency scan, is on
+main too). The Unit plan passed, 22 of 22, and every older UI test under `-noads 1`, 44 of them,
+audits and contact sheet included. The Release build had no debug hooks and no ads code in the
+widget, and the archive check passed with ads test now that the app calls Google's code: the
+`-route` match, Google's SKAdNetwork identifier and the three demo units. Google's demo app ID
+started Mobile Ads on the simulator, and UMP's debug geography worked there (V11): under `other`
+the band came with Google's demo banner in it, 402 by 126 at (0, 714), the pager ending at its top
+(y = 706), the banner above the home indicator (y = 840); the page-end box's banner was 362 by 250;
+under `eea` Google's consent form came over the home screen, with Consent, Do not consent and
+Manage options. The paid version showed no ad and started no web view. `AdsTests`' band test failed
+on its own expectation (the band's frame takes in its tint under the home indicator, 168 tall),
+the consent test skipped with the form still open after one tap, and the full-screen test skipped
+before its ad had loaded: each is now as above.
+
 **For the next macOS run to show.** Each of these is unproven until then:
 
-- that IsItAds, the app and IsItUI's new views build with Xcode 26.6 against the real SDKs
-  (`ForecastPageView`'s and `HomePager`'s bodies were never compiled here), and that UMP's async
-  forms (`requestConsentInfoUpdate(with:)`, `loadAndPresentIfRequired(from:)`,
-  `presentPrivacyOptionsForm(from:)`), `MobileAds.shared.start()` and
-  `InterstitialAd.load(with:request:)` are the names Swift derives, called on the main thread from
-  the main actor;
-- that the Unit plan and every older UI test pass as before under `-noads 1`, with the same screens
-  and audits;
-- that Google's demo app ID starts Mobile Ads on the simulator and UMP's debug geography works there
-  (V11): `ad-home` under `-umpGeography other`, the consent form under `eea`, with a Consent or
-  Accept button, and Privacy choices in Settings once it is answered;
-- that the band sits under the pager at 58 to 158 points and doesn't move as the demo ad loads; that
-  XCUITest finds `ad-banner-home` and `ad-banner-page-<view>`, set on the UIKit view; that the box's
-  overlay gives its banner the box's space; and that the banner's intrinsic size keeps it centred;
-- that the paid version (`-unlocked 1`) shows no ad and starts no web view;
-- that the full-screen ad comes over the picker, the picker closes when it does, and none comes
-  within 5 minutes; and that Google always says the ad closed or failed to show, without which the
-  picker would never close;
-- that the archive check passes with ads test now that the app calls Google's code (the `-route`
-  hook not matching `sbgp-routerIdentifier`, the SKAdNetwork identifier found, three demo units),
-  and that Xcode's Info.plist processing takes the XML comment.
+- that `debug-ads` and `debug-interstitial` are elements XCUITest reads, with their values;
+- that the band test passes with its frames as measured, and that the consent form closes within
+  three taps of Consent, after which Privacy choices shows in Settings;
+- that the full-screen ad comes over the picker once `ready`, the picker closes when it does, and
+  none comes within 5 minutes; and that Google always says the ad closed or failed to show, without
+  which the picker would never close;
+- that the consent form, now loaded before it is shown, still comes (`ConsentForm.load` and a form's
+  `present(from:)`, the names the headers give);
+- that the page-end box waits for an answer, so none shows under "Checking…".
 
 ## API contract
 

@@ -81,11 +81,11 @@ public final class MemoryAdsStore: AdsStore, @unchecked Sendable {
   public func saveLastInterstitial(_ date: Date?) { lock.withLock { last = date } }
 }
 
-/// The free version's ads (phase 8.3; iOS build spec, sections 14.1 and 14.2): UMP's consent,
-/// then Mobile Ads, then the home banner, a banner at the end of each page shown, and a
-/// full-screen ad when the user chooses a place in the picker. Google's SDKs are behind `AdsPlatform`, so the
-/// tests run it on Linux with a fake. The views read the phase and the home band's height, and
-/// draw nothing while the purchase is owned; an unlocked session never starts it.
+/// The free version's ads (phase 8.3; iOS build spec, sections 14.1 and 14.2): UMP's consent, then
+/// Mobile Ads, then the home banner, a banner at the end of each page shown, and a full-screen ad
+/// when the user chooses a place in the picker. Google's SDKs are behind `AdsPlatform`, so the
+/// tests run it on Linux with a fake. The views read the phase and the home band's height, and draw
+/// nothing while the purchase is owned; an unlocked session never starts it.
 ///
 /// A slot's space doesn't depend on its banner's news: the home band and the page ends are there
 /// whenever the ads are `on`, as Google asks for a fixed space, so that a banner that loads late
@@ -115,6 +115,9 @@ public final class AdsModel {
   /// The home banner's height, once the ads are on and the home screen's width is known; nil,
   /// no band.
   public private(set) var homeBannerHeight: Double?
+  /// Whether a full-screen ad is loaded, fresh or not, and waiting for a choice: what a Debug
+  /// build's UI tests read to tell Google's lack of an ad from the app's failing to show one.
+  public var interstitialReady: Bool { interstitialLoadedAt != nil }
 
   @ObservationIgnored private let platform: any AdsPlatform
   @ObservationIgnored private let store: any AdsStore
@@ -136,7 +139,7 @@ public final class AdsModel {
   /// Each slot's load again after a failure, while it waits.
   @ObservationIgnored private var retries: [AdSlot: ScheduledWork] = [:]
   /// When the full-screen ad on hand loaded; nil, none on hand.
-  @ObservationIgnored private var interstitialLoadedAt: Date?
+  private var interstitialLoadedAt: Date?
   /// Whether a full-screen ad is loading.
   @ObservationIgnored private var loadingInterstitial = false
 
@@ -263,8 +266,8 @@ public final class AdsModel {
 
   // MARK: - The full-screen ad
 
-  /// The user chose a place in the picker the place pill opened: shows the full-screen ad if one is due
-  /// (`AdRules.interstitialDue`), loaded and fresh, then calls `done` once it closes; otherwise
+  /// The user chose a place in the picker the place pill opened: shows the full-screen ad if one is
+  /// due (`AdRules.interstitialDue`), loaded and fresh, then calls `done` once it closes; otherwise
   /// calls `done` at once. Keeps when it showed (saved as it is asked to show, put back if it
   /// couldn't), then loads the next. A stale one is dropped and another loaded, and nothing shows;
   /// so is one that failed to load, for a later choice. A choice never waits for an ad to load.
