@@ -194,7 +194,7 @@ final class AdsTests: XCTestCase {
     }
     // The picker closes once the ad does, onto the place chosen.
     XCTAssertTrue(
-      gone(app.find("place-search"), within: 15),
+      app.pickerCloses(within: 15),
       "The picker is still open 15 seconds after the full-screen ad closed")
     expectPlace("Kathmandu", in: app)
 
@@ -220,7 +220,7 @@ final class AdsTests: XCTestCase {
       if close.isHittable { close.tap() }
     }
     XCTAssertTrue(
-      gone(app.find("place-search"), within: 15),
+      app.pickerCloses(within: 15),
       "The picker is still open 25 seconds after a place was chosen")
     expectPlace("Leeds", in: app)
     XCTAssertEqual(
@@ -553,7 +553,7 @@ final class AdsTests: XCTestCase {
     let shown = XCTWaiter().wait(for: [waited], timeout: 15) == .completed
     XCTAssertTrue(
       shown, "The place button reads \"\(place.exists ? place.label : "nothing")\", not \(name)")
-    XCTAssertFalse(app.find("place-search").exists, "The picker is still open")
+    XCTAssertTrue(app.pickerClosed, "The picker is still open")
     XCTAssertFalse(app.buttons["use-my-location"].exists, "Still on approximate location")
   }
 
@@ -598,14 +598,6 @@ final class AdsTests: XCTestCase {
       if waitForAdsPhase(["on"], in: app, timeout: 10) == "on" { return true }
     }
     return false
-  }
-
-  /// Whether `element` is gone within `timeout` seconds.
-  @MainActor
-  private func gone(_ element: XCUIElement, within timeout: TimeInterval) -> Bool {
-    let gone = NSPredicate(format: "exists == false")
-    let waited = XCTNSPredicateExpectation(predicate: gone, object: element)
-    return XCTWaiter().wait(for: [waited], timeout: timeout) == .completed
   }
 
   /// Taps the gear, and waits for Settings (its Close).
