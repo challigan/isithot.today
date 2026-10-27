@@ -16,7 +16,8 @@ public struct SettingsActions {
   public var copy: @MainActor (String) -> Void
   /// A bundled notice's full text, by its resource name; nil when it isn't bundled.
   public var notice: (String) -> String?
-  /// "Privacy choices": Google's privacy options form. Nil until phase 8 brings the ads.
+  /// "Privacy choices": Google's privacy options form. Nil while Settings doesn't show the row:
+  /// in the paid version, and while Google says the form isn't required.
   public var privacyChoices: (() -> Void)?
   /// "Turn off notifications and delete my data". Nil until phase 8 brings notifications.
   public var deleteMyData: (() -> Void)?

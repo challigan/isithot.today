@@ -173,8 +173,9 @@ final class SettingsTests: XCTestCase {
     attachScreen(of: app, named: "app-contact-us-fallback")
   }
 
-  /// Your privacy: the plain lines, in the free version with the ads line, no notifications
-  /// data while none is kept, and the full policy in Safari.
+  /// Your privacy: the plain lines, in the free version with the ads line, no "See Privacy
+  /// choices." with the ads off (`-noads 1`), no notifications data while none is kept, and the
+  /// full policy in Safari.
   @MainActor
   func testYourPrivacy() throws {
     let app = launch(["-resetStore", "-fixture", "leeds-dry", "-openURLs", "record"])
@@ -196,7 +197,8 @@ final class SettingsTests: XCTestCase {
         + "For a few days after each notification and each test, and after some forecast checks "
         + "that found nothing to send, we also keep a note of it, even once the rest is deleted. "
         + "It holds no token or place.",
-      "In the free version, Google shows the ads and may collect device and usage data.",
+      "In the free version, Google shows the ads and may collect device and usage data. The app "
+        + "keeps when it last showed a full-screen ad, so it shows one at most every 5 minutes.",
       "Apple handles purchases. We never see your payment details.",
       "There are no accounts.",
     ]
@@ -206,7 +208,7 @@ final class SettingsTests: XCTestCase {
       XCTAssertEqual(element.label, line)
     }
     XCTAssertFalse(app.staticTexts["privacy-line-\(lines.count)"].exists, "A line too many")
-    // No ads form to point to yet, and nothing kept for notifications.
+    // No Privacy choices to point to with the ads off, and nothing kept for notifications.
     XCTAssertFalse(text("See Privacy choices.", in: app).exists)
     XCTAssertFalse(text("What we keep for notifications", in: app).exists)
     XCTAssertFalse(app.buttons["delete-my-data"].exists)
@@ -221,11 +223,14 @@ final class SettingsTests: XCTestCase {
 
   // MARK: - Helpers
 
-  /// Launches the app with `-uitest` and `arguments`, and waits for the answer's verdict.
+  /// Launches the app with `-uitest`, `-noads 1` (no consent form or ad, as `launchApp`) and
+  /// `arguments`, and waits for the answer's verdict. Still the free version (no `-unlocked`):
+  /// Report an ad and the ads line show, as they follow the version, not the ads; Privacy
+  /// choices, which only Google's answer brings, never does (AdsTests show it).
   @MainActor
   private func launch(_ arguments: [String]) -> XCUIApplication {
     let app = XCUIApplication()
-    app.launchArguments = ["-uitest"] + arguments
+    app.launchArguments = ["-uitest", "-noads", "1"] + arguments
     app.launch()
     XCTAssertTrue(app.staticTexts["verdict"].waitForExistence(timeout: 15), "No answer on screen")
     return app

@@ -14,10 +14,13 @@ announced once to VoiceOver, and every text size up to AX5 (below, "Phases 5.2 a
 5.4, the home screen's accessibility proven by UI tests: every page of three fixtures read as
 VoiceOver hears it against the TypeScript's words, the offline and failure states, the
 accessibility audits at Large and AX3, and every page on the contact sheet (below, "Phase 5.4");
-and phase 6, the sheets behind the top bar, over every page: the place picker (6.1: search, "Use
+phase 6, the sheets behind the top bar, over every page: the place picker (6.1: search, "Use
 my location", the recent places and the saved places) and Settings (6.2 and 6.3: the snow units, the privacy rows,
 Report an ad, About and Help, the version, How it works, Credits and licences and Your privacy's
-lines) (below, "Phase 6"). The home screen is drawn in the website's look: its type, pills, tabs,
+lines) (below, "Phase 6"); and phase 8.3, the free version's ads: Google's consent form, a banner
+under the pages and one at the end of each, and a full-screen ad when a place is chosen, with
+Google's demo units until the release candidate (below, "Phase 8.3: the ads"). The home screen is
+drawn in the website's look: its type, pills, tabs,
 grids and week rows (below, "The home screen in the website's look"); so is the picker, in
 the band of the page on screen (below, "6.1: the place picker"), and so are Settings and its
 pages, in the website's content pages' palette (below, "6.2 and 6.3: Settings"). A Debug build can be
@@ -38,17 +41,20 @@ Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API
                          surfaces' shares and the content card); the ports, the
                          home screen's, the picker's and Settings' presenters, the saved places'
                          rules (SavedPlaces), the glyph's drift, which
-                         pages are light ink on dark (IsItLogic); AppModel, its
+                         pages are light ink on dark, when an ad may show (AdRules)
+                         (IsItLogic); AppModel, its
                          API client, the launch and refresh rules, what VoiceOver is told, the clocks
-                         and the minute tick, the picker's search and the location rules (IsItState); in
+                         and the minute tick, the picker's search and the location rules, the ads
+                         (AdsModel, with Google's SDKs behind AdsPlatform) (IsItState); in
                          Tests/IsItTestSupport the fixtures (the search answers in Fixtures/Search) and
                          golden vectors with their loaders; in Tests/IsItLogicTests the ports' golden
                          tests and the guard that every vector file is ported (below); in
                          Tests/IsItStateTests AppModel with fakes, and the home screen drawn from it
 Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore, URLSessionTransport,
                          WidgetCenterReloader, RecentDefaults, SavedPlaceDefaults: AppModel's
-                         services), IsItLocation
-                         (CoreLocationService, the app's only), IsItAds (Google's SDKs),
+                         services; AdDefaults, AdsModel's), IsItLocation
+                         (CoreLocationService, the app's only), IsItAds (Google's SDKs: GoogleAds,
+                         BannerSlot, TopViewController; the app's only),
                          IsItUI (the home screen: HomeShell, ViewSwitcher, HomePager and ForecastPageView
                          with its bodies and GlyphView, drawing IsItLogic's HomePage and HomeTopBar, with
                          HomeActions; the picker: PlacePickerView, drawing PlacePicker, with
@@ -61,13 +67,15 @@ Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore, UR
                          the tokens, BrandTokens), Backgrounds (PageBackground, SheetBackground),
                          Buttons (PillButton, IconPillButton, PressStyle, RowPressStyle, PinShape),
                          PillSegments, and Layouts (FlowLayout, EqualColumns, LimitedWidth,
-                         OneLineWhenItFits, TopBarLayout)),
+                         OneLineWhenItFits, TopBarLayout); the ads' spaces, AdSpaces (AdBand,
+                         AdBox)),
                          IsItWidgetUI (the widget's entry, provider, view), SnowKit (Glyphs, Color(rgb:)
                          for the palettes, and the glyph catalogues, generated)
-Apps/Snow/App/           WillItSnowApp (the services and the scene's phases), HomeView (the home screen,
-                         from the model, and its two sheets), PickerSheet (the place picker, from its
-                         model), SettingsSheet (Settings, from the model), DebugHooks (every test and
-                         debug hook)
+Apps/Snow/App/           WillItSnowApp (the services, the ads and the scene's phases), LiveHooks
+                         (the launch's later steps: the ads), HomeView (the home screen, from the
+                         model, with the ads' band and boxes, and its two sheets), PickerSheet (the
+                         place picker, from its model), SettingsSheet (Settings, from the model),
+                         DebugHooks (every test and debug hook)
 Apps/Snow/Resources/     the app's Info.plist, entitlements and privacy manifest; Licences/ (the notices
                          Credits and licences shows in full, copied whole); generated: Assets.xcassets
                          (the app icon) and Fonts/ (the app's and the widget's: BricolageAnswer.ttf and
@@ -81,7 +89,9 @@ Apps/Snow/UITests/       FixtureLaunchTests (fixtures at their own moments, and 
                          Generated/HomeScreens.json (generated from page.json) through HomeScreens.swift;
                          PickerTests (the place picker over a stubbed network and location) and
                          SettingsTests (every row, the units, Report an ad's fallback, Your privacy),
-                         with ScreenAudit.swift's audit; each attaches its screens. DrawnText.swift
+                         with ScreenAudit.swift's audit; AdsTests (the ads, with Google's demo
+                         units: the only tests launched without -noads 1); each attaches its
+                         screens. DrawnText.swift
                          is every audit's contrast proof, on Generated/Surfaces.json (from
                          packages/mobile brandColours.ts)
 TestPlans/               Unit and UI
@@ -120,7 +130,9 @@ CI builds and tests everything, so this is only for trying the app by hand.
    Tap Now, Today or This week, or swipe between them; pull a page down to ask again; a place
    under "Nearby:" loads in place. On any page, the place button opens the picker: search for a
    town, use your location (the simulator's, from Features, Location), or choose a recent
-   place. The gear opens Settings.
+   place. The gear opens Settings. A Debug build is the free version, with Google's demo ads,
+   after Google's consent form where one is required (the UK and the EEA); tick `-noads 1` to
+   try it without them, or `-unlocked 1` for the paid version (below, "Phase 8.3: the ads").
 4. Product, Test runs the Unit test plan; pick UI from the test plan menu for the UI tests.
 5. On your iPhone (Debug builds only): Xcode, Settings, Accounts needs your Apple Account, and
    the App IDs `today.willitsnow.app` and `today.willitsnow.app.widgets` need the App Group and,
@@ -139,8 +151,9 @@ TestFlight. It runs only when you start it, and only from `main`.
    checks an unsigned Release archive, with no key and no approval: a way to try a build before
    anything is signed.
 4. **ads**: `test`, Google's demo units, for every build before the release candidate. `real`
-   only for a release candidate, once the repository variables `ADMOB_APP_ID` and
-   `ADMOB_BANNER_ID` are set (C15).
+   only for a release candidate, once the repository variables `ADMOB_APP_ID`, `ADMOB_BANNER_ID`,
+   `ADMOB_PAGE_BANNER_ID` and `ADMOB_INTERSTITIAL_ID` are set (C15; docs/SETUP.md, section 5,
+   "The apps' ads"). Without all four, well-formed, a `real` run stops at once and names them.
 5. **notes** (optional): what testers should try. It becomes the build's What to Test in
    TestFlight.
 6. **Run workflow**. Within a minute the run waits for you: open it, press **Review
@@ -162,8 +175,9 @@ reach the key.
   file and line;
 - **Archive checks**: both bundles have privacy manifests and the answer font; the app has its
   icon; the widget links no Google Mobile Ads and no location code;
-  neither binary names any of the 15 debug hooks; the ad units are Google's demo ones (test) or
-  yours (real); the app and widget have the same version and build; `ITSAppUsesNonExemptEncryption`
+  neither binary names any of the 15 debug hooks; the three ad units are Google's demo ones
+  (test) or yours (real); the app's `SKAdNetworkItems` hold Google's; the app and widget have the
+  same version and build; `ITSAppUsesNonExemptEncryption`
   is false; no fixture is bundled. Each failure is named;
 - **Export**: the `.ipa` and its size;
 - **Signed app checks**: the app gets notifications in production, both have the App Group, the
@@ -242,7 +256,14 @@ does, with the glyph catalogue copied in as a resource and a test that every ban
 set that exists. `swift package dump-package` in IsItKit checks its manifest. Phase 6.1 did the
 same for IsItServices, IsItLocation and `DebugHooks.swift` (Debug and Release), with a stub
 `CoreLocation` module declaring the API `CoreLocationService` uses with Apple's signatures, and
-ran the `-network` stub's `reply(to:)` over the requests the picker's UI tests make.
+ran the `-network` stub's `reply(to:)` over the requests the picker's UI tests make. Phase 8.3
+type-checked IsItAds, `AdDefaults`, IsItUI's `AdSpaces` and the app's files that use them, Debug
+and Release, against the real IsItCore and stub `GoogleMobileAds` and `UserMessagingPlatform`
+modules declaring what `GoogleAds` uses with the names Google's 13.11.0 and 3.1.0 headers give,
+beside stub `UIKit` and `SwiftUI` modules with Apple's signatures; deliberate mistakes (a
+misspelt delegate method, a missing `await`, a Release stub taken out) fail it. The UI tests
+type-check against stubs of XCUITest. DECISIONS ("Ads in the iPhone app: three placements") says
+what was checked and what only macOS can show.
 
 ## Porting against the golden vectors (phase 3)
 
@@ -889,17 +910,23 @@ and its look in "The iPhone app in the website's look", step 6).
 - **The rows, in order:** Snow units (cm | in, the footnote beneath: `UnitsSegments`, the
   website's cm | in pill, `PillSegments` on the card, two buttons at least 56 by 44 whose words
   grow with the text, the one chosen on the ink thumb and marked selected; not UIKit's segmented
-  control, whose type size is fixed); Privacy ("Your privacy",
+  control, whose type size is fixed); Privacy ("Privacy choices", in the free version while
+  Google's consent says its privacy options form is required, then "Your privacy",
   "Privacy policy"); "Report an ad", in the free version only; About ("How it works", "Credits
   and licences", "Terms"); Help ("Contact us", "Support"); and "Version 1.0 (112)" from the
   bundle. willitsnow.today's pages open in Safari and the emails in the mail app, through
   `openURL`; every address is `Constants.Site` (core `SITES.snow` and `CONTACT_EMAIL`).
 - **Not yet, by design:** the Notifications section (phase 8 puts it after the units), the
-  upgrade row and "Restore purchase" (phase 7, after it), "Privacy choices" (phase 8, while the
-  ads are on and Google's form is required) and, in Your privacy, what is kept for notifications
-  with "Turn off notifications and delete my data" (phase 8). None shows as a row that does
-  nothing; `SettingsScreen` and `YourPrivacy` already take the flags and lines they need, and
-  `SettingsActions` the two actions, nil until then.
+  upgrade row and "Restore purchase" (phase 7, after it) and, in Your privacy, what is kept for
+  notifications with "Turn off notifications and delete my data" (phase 8). None shows as a row
+  that does nothing; `YourPrivacy` already takes the lines it needs, and `SettingsActions` the
+  delete action, nil until then.
+- **Privacy choices** (phase 8.3) is real: `SettingsSheet` passes
+  `!model.unlocked && ads.privacyChoices` (`AdsModel`, from UMP's last answer) to
+  `SettingsScreen` and to `YourPrivacy`, whose "See Privacy choices." follows the ads line while
+  the row is there, and the row opens UMP's privacy options form over Settings
+  (`AdsModel.openPrivacyChoices()`). Outside the UK and the EEA the form isn't required, so
+  neither shows (below, "Phase 8.3: the ads").
 - **IsItLogic:** `SettingsScreen(units:unlocked:privacyChoices:version:)` (the sections and
   rows, each with its action: a page, a web page, an email, Report an ad, Google's form),
   each row's icon (`SettingsScreen.Icon`, one a row, the units' too), `AppVersion`, `MailDraft`
@@ -1088,6 +1115,69 @@ decoding error's message, or one of the names above; and no literal is given to
 `Text(verbatim:)`. Phase 5's pages, merged in after, passed it unchanged: their one new literal
 of the kind is a bad `-clock`'s crash message.
 
+## Phase 8.3: the ads
+
+The free version's ads (spec section 14), as Carl widened phase 8.3: three placements, after
+Google's consent. DECISIONS has the why ("Ads in the iPhone app: three placements").
+
+- **What shows**, in the free version only, once Google's consent lets ads be requested: a band
+  under the pages holding the home banner (an anchored adaptive banner, `ad-home`); a box after each
+  page's footer holding that page's banner (an inline adaptive banner at most 250 tall,
+  `ad-page-<view>`, asked for once the page has been on screen); and a full-screen ad as a place is
+  chosen in the picker the place pill opened, only one already loaded, at most once every 5
+  minutes, and never in the app's first run. The band and the box keep their space whether or not an ad comes, and
+  VoiceOver reads each as "Advertisement".
+- **The start** is launch step 5, which AppModel takes only when the purchase isn't owned:
+  `LiveHooks.startAds()` calls `AdsModel.start(firstRun:)`, which returns at once and runs UMP's
+  update, its consent form where one is required, then Mobile Ads, every ad rated G at most.
+  Settings shows "Privacy choices" while UMP says its privacy options form is required (above, "6.2
+  and 6.3: Settings").
+- **IsItCore, tested on Linux:** `AdRules` (IsItLogic: when a full-screen ad is due and still fresh,
+  and the wait before a failed banner is asked for again) and `AdsModel` (IsItState: the start, the
+  phase the views read, the home band's height, each banner's loads and retries, and the full-screen
+  ad), with Google's SDKs behind `AdsPlatform` and the last full-screen ad's time behind `AdsStore`;
+  and `Launch.firstRun`. Every number is `Constants.Ads` (client `ADS`).
+- **IsItKit:** `GoogleAds` (IsItAds: the two SDKs as `AdsPlatform`; the units from the Info.plist,
+  `AdUnits.fromInfoPlist`; UMP's debug geography, `ConsentGeography`), `BannerSlot` (IsItAds: a
+  slot's banner on screen) and `TopViewController` (IsItAds: what the forms and the full-screen ad
+  show over); `AdDefaults` (IsItServices: `ads.lastInterstitial` in the app's own defaults);
+  `AdBand` and `AdBox` (IsItUI's AdSpaces.swift, which never imports Google). `HomePager` and
+  `ForecastPageView` take what each page ends with (`pageEnd`, `end`).
+- **The app:** `WillItSnowApp.init()` builds `GoogleAds`, `AdsModel` (on the system's clock always)
+  and `LiveHooks`; `HomeView` draws the band under the pager and a box at each page's end while
+  `!model.unlocked` and the ads are on, and tells the model the widths and the page on screen;
+  `PickerSheet` closes through `ads.placeChosen { dismiss() }` when the place pill opened it;
+  `SettingsSheet` passes Privacy choices.
+
+**The units** are Info.plist keys, filled by Snow.xcconfig from `ADS_UNITS` (no unit is typed in
+Swift):
+
+| Info.plist key             | For                | `test`: Google's demo unit               | `real`: repository variable |
+| -------------------------- | ------------------ | ---------------------------------------- | --------------------------- |
+| `GADApplicationIdentifier` | the app            | `ca-app-pub-3940256099942544~1458002511` | `ADMOB_APP_ID`              |
+| `IsItBannerUnitID`         | the home band      | `ca-app-pub-3940256099942544/2435281174` | `ADMOB_BANNER_ID`           |
+| `IsItPageBannerUnitID`     | each page's end    | `ca-app-pub-3940256099942544/2435281174` | `ADMOB_PAGE_BANNER_ID`      |
+| `IsItInterstitialUnitID`   | the full-screen ad | `ca-app-pub-3940256099942544/4411468910` | `ADMOB_INTERSTITIAL_ID`     |
+
+The Info.plist also lists `SKAdNetworkItems`: Google's 50 identifiers from
+developers.google.com/admob/ios/3p-skadnetworks, copied by hand until `ios-nightly.yml` exists.
+`check-archive.sh` checks all of it (above, "Releasing to TestFlight").
+
+**Its tests.** On Linux: `AdRulesTests`, `AdsModelTests` (the start, the banners and the full-screen
+ad, against `AdsFakes.swift`) and `FirstRunTests`. On the macOS CI every older UI test launches with
+`-noads 1`, so its screens are the app's own, and `AdsTests` (UI plan) launches with Google's demo
+units over the real network: the band under the pager and the box at a page's end (`ads-home-band`,
+`ads-page-end`), the paid version with none, the consent form in the EEA and then Privacy choices
+(`ads-consent-form`, `ads-privacy-choices`), and the full-screen ad as a place is chosen, then none
+within 5 minutes (`ads-full-screen`). Each skips, saying why, only when Google didn't answer in
+time, which a Debug build's readout of the ads model tells it (`debug-ads`, `debug-interstitial`,
+`debug-shown`); what is the app's fails.
+
+**Trying it.** A Debug build run from Xcode is the free version, with Google's demo ads. `-noads 1`
+runs it without them, `-unlocked 1` as the paid version, and on the simulator `-umpGeography eea`
+or `other` puts UMP in the EEA or out of it (below, "Debug hooks"). The first run shows no
+full-screen ad: choose places on a later launch.
+
 ## CI (`.github/workflows/ios.yml`)
 
 | Job             | Runs on                     | What it proves                                                                                                                                                                                                                                                                         |
@@ -1225,9 +1315,9 @@ launch argument. So far there are these:
 
 - `-uitest` turns animations off, and keeps the glyphs' flakes still (`stillMotion()`), as
   `-now` does too;
-- `-resetStore` forgets the place, the units, the saved answer and the recent and saved places
-  before the model reads them, for a first launch (not `unlock.v1`, which only StoreKit's code writes);
-  every UI test's first launch passes it;
+- `-resetStore` forgets the place, the units, the saved answer, the recent and saved places and
+  when the last full-screen ad showed before the model reads them, for a first launch (not
+  `unlock.v1`, which only StoreKit's code writes); every UI test's first launch passes it;
 - `-fixture <name>` answers every request for an answer with that fixture (a transport of its
   own), after forgetting the saved answer, so the launch fetches it rather than painting an
   earlier one; it is then saved in the App Group for the widget, as any answer is. The picker's
@@ -1272,6 +1362,23 @@ launch argument. So far there are these:
   content's, and no test audits a sheet over an email's lines; `-openURLs nomail` also refuses
   every `mailto:` URL, as a phone with no mail app does, so the fallback sheet shows. Any other
   value stops the app;
+- `-noads 1` keeps the free version's ads from starting (`LiveHooks`): no consent form, band, box
+  or full-screen ad, and nothing sent to Google, whose traffic the `-network` stub never covers.
+  Every UI test's launch passes it but `AdsTests`'. Any other value stops the app;
+- `-unlocked 0|1` says whether the purchase is owned, whatever `unlock.v1` says, from the model's
+  first look at the store, without writing it (a store that answers `loadUnlocked()` with it):
+  `1` is the paid version, with no ads, no Report an ad and no ads line. Any other value stops
+  the app;
+- `-umpGeography eea|other` is UMP's debug geography: the EEA, where its consent form is
+  required, or a region where none is. It takes effect on the simulator only: UMP keeps debug
+  features to the simulator and to devices whose hashed IDs the app names, and the app names
+  none, so on an iPhone UMP still goes by where the phone is. Either way UMP forgets the answer it
+  kept at each such launch, so the form comes again. `-resetStore` leaves UMP's own answer alone.
+  Any other value stops the app;
+- the ads readout, which `AdsTests` reads: unless `-noads 1`, three clear one-point elements in
+  the home screen's corner, `debug-ads` (the ads model's phase: `idle`, `asking`, `withheld` or
+  `on`), `debug-interstitial` (`ready` or `none`) and `debug-shown` (how many full-screen ads have
+  shown and closed), so a test can tell Google not answering from the app failing;
 - the unit tests' host: when the app only hosts the unit tests (XCTest's
   `XCTestConfigurationFilePath` in its environment), it doesn't launch (`AppModel.launch()`), so
   the hosted tests have the App Group to themselves; a launch with `-fixture` or `-network`
@@ -1294,7 +1401,9 @@ every run and fails if a binary names a hook, a fixture is bundled, or the widge
 Mobile Ads or the app's location code. `scripts/check-archive.sh` checks the unsigned Release
 archive on every run (`archive-check`) and the signed one before each upload, for the hooks of
 section 9.8 (`-network` and `-location` among them, as short literals), location code in the
-widget, and the rest of section 18.3's list.
+widget, and the rest of section 18.3's list. It looks for `-route` only where no letter follows
+it, since Google's SDK, linked into the app, holds OpenSSL's name `sbgp-routerIdentifier`
+(DECISIONS, "Ads in the iPhone app: three placements").
 
 **Short literals.** strings(1) can't find a hook's name in an optimised build: Swift keeps a
 string of 15 bytes or fewer inside the value, and the compiler builds such a literal in registers
@@ -1310,13 +1419,13 @@ found by strings.
 
 The early questions of spec section 26 that phases 0 and 2 settle.
 
-| #   | Question                                                                                                                                           | Status                                                       | What settles it                                                                                                                                                                                                                                                                                                                                                                              | Evidence so far                                                                                                                                                                                                                                                                                                                                                                                     |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| V1  | Do App Group defaults and the group container work in CI's simulator builds, signed to run locally?                                                | Pending CI                                                   | `AppGroupTests` in the Unit plan (`ios` job): the group's container opens, its defaults round-trip, and the widget's provider reads the answer the app saved. If not, the Debug fallback is already there, and the test then also runs on Carl's device build.                                                                                                                               | None yet: needs the first `ios` run.                                                                                                                                                                                                                                                                                                                                                                |
-| V4  | Do Foundation's time zones on Linux match core's `localDateTime` for every zone in the vectors?                                                    | Pending CI                                                   | `placeTime.json` in `swift-linux` (phase 3.3). PR 0.1's Linux run decodes fixtures only, so it doesn't cover time zones.                                                                                                                                                                                                                                                                     | PR 3.3 in Docker (`swift:6.3.3` with `tzdata`), 23 October 2026: `PlaceTime.local(_:in:)`, a Gregorian calendar read at `secondsFromGMT(for:)`, falling back to UTC, passes all 75 `placeTime.json` cases: London across both clock changes, Kolkata (+5:30), Kathmandu (+5:45), Adelaide, Kiritimati (+14), Denver, `Etc/GMT+1`, `Etc/GMT+7`, UTC and two unknown zones. The earlier probe agreed. |
-| V7  | Do the generated SVG template glyphs render correctly?                                                                                             | Pending CI                                                   | The contact sheet: `GlyphSnapshotTests` (Unit plan) draws each glyph from SnowKit's catalogue, whole and as its still and drift layers, in its band's ink on its gradient, without forcing template rendering. If they don't render as the website draws them, or show black, SnowKit switches to `Fallback/Glyphs.xcassets`, the same sets as PNGs: two lines in IsItKit's `Package.swift`. | resvg renders all 16 SVGs as the website draws them (the PNG fallback is its output). Core SVG is unproven until the first `ios` run.                                                                                                                                                                                                                                                               |
-| V11 | Do Google Mobile Ads 13.11.0 and UMP 3.1.0 resolve and cache through SPM on the runner? Is the demo app ID right? Does UMP's debug geography work? | Resolve and cache: pending CI. App ID and geography: phase 8 | The `ios` job's `Resolve packages` step (only the committed versions) and the `.spm` cache, whose hit or miss the run summary shows; the build then compiles IsItAds against both SDKs. Settled by the first green `ios` run and the cache hit on the run after it.                                                                                                                          | Only the pins so far: `swift package resolve` on Linux resolved both at their tags' revisions, which match `git ls-remote`, but stopped before the binary zips (dl.google.com is blocked here). The runner is the first to download, check and cache them.                                                                                                                                          |
-| V13 | Will `xcodebuild` run the iPhone-only app on an iPad simulator, in compatibility mode?                                                             | Pending CI                                                   | `ipad-compat` in `ios-nightly.yml` (spec section 18.2), which is still to be written. If not: `simctl install`, then `simctl io` screenshots for an agent to review.                                                                                                                                                                                                                         | None yet.                                                                                                                                                                                                                                                                                                                                                                                           |
+| #   | Question                                                                                                                                           | Status                                                                                                                                                                        | What settles it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Evidence so far                                                                                                                                                                                                                                                                                                                                                                                        |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| V1  | Do App Group defaults and the group container work in CI's simulator builds, signed to run locally?                                                | Pending CI                                                                                                                                                                    | `AppGroupTests` in the Unit plan (`ios` job): the group's container opens, its defaults round-trip, and the widget's provider reads the answer the app saved. If not, the Debug fallback is already there, and the test then also runs on Carl's device build.                                                                                                                                                                                                                                                                                                        | None yet: needs the first `ios` run.                                                                                                                                                                                                                                                                                                                                                                   |
+| V4  | Do Foundation's time zones on Linux match core's `localDateTime` for every zone in the vectors?                                                    | Pending CI                                                                                                                                                                    | `placeTime.json` in `swift-linux` (phase 3.3). PR 0.1's Linux run decodes fixtures only, so it doesn't cover time zones.                                                                                                                                                                                                                                                                                                                                                                                                                                              | PR 3.3 in Docker (`swift:6.3.3` with `tzdata`), 23 October 2026: `PlaceTime.local(_:in:)`, a Gregorian calendar read at `secondsFromGMT(for:)`, falling back to UTC, passes all 75 `placeTime.json` cases: London across both clock changes, Kolkata (+5:30), Kathmandu (+5:45), Adelaide, Kiritimati (+14), Denver, `Etc/GMT+1`, `Etc/GMT+7`, UTC and two unknown zones. The earlier probe agreed.    |
+| V7  | Do the generated SVG template glyphs render correctly?                                                                                             | Pending CI                                                                                                                                                                    | The contact sheet: `GlyphSnapshotTests` (Unit plan) draws each glyph from SnowKit's catalogue, whole and as its still and drift layers, in its band's ink on its gradient, without forcing template rendering. If they don't render as the website draws them, or show black, SnowKit switches to `Fallback/Glyphs.xcassets`, the same sets as PNGs: two lines in IsItKit's `Package.swift`.                                                                                                                                                                          | resvg renders all 16 SVGs as the website draws them (the PNG fallback is its output). Core SVG is unproven until the first `ios` run.                                                                                                                                                                                                                                                                  |
+| V11 | Do Google Mobile Ads 13.11.0 and UMP 3.1.0 resolve and cache through SPM on the runner? Is the demo app ID right? Does UMP's debug geography work? | Resolve and cache: pending CI. App ID and geography: settled on the simulator by 3f91596's run (the demo banner in the band under `other`, Google's consent form under `eea`) | The `ios` job's `Resolve packages` step (only the committed versions) and the `.spm` cache, whose hit or miss the run summary shows; the build then compiles IsItAds against both SDKs. Settled by the first green `ios` run and the cache hit on the run after it. The demo app ID and the debug geography: `AdsTests` (UI plan), whose band under `-umpGeography other` shows Mobile Ads started with the demo app ID, and whose consent form under `eea` shows the geography works on the simulator; each skips when Google doesn't answer, which settles nothing. | Only the pins so far: `swift package resolve` on Linux resolved both at their tags' revisions, which match `git ls-remote`, but stopped before the binary zips (dl.google.com is blocked here). The runner is the first to download, check and cache them. App ID and geography: none yet, as no run has started the ads; the Info.plist's app ID is Google's demo one (`check-archive.sh` checks it). |
+| V13 | Will `xcodebuild` run the iPhone-only app on an iPad simulator, in compatibility mode?                                                             | Pending CI                                                                                                                                                                    | `ipad-compat` in `ios-nightly.yml` (spec section 18.2), which is still to be written. If not: `simctl install`, then `simctl io` screenshots for an agent to review.                                                                                                                                                                                                                                                                                                                                                                                                  | None yet.                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ## Not here yet
 
@@ -1333,11 +1442,12 @@ Each comes with the phase that needs it, so nothing in the skeleton is dormant:
   a scroll view, so they wait for the page's content to be drawn apart from its scroll view;
   until then the UI tests' screens at Large and AX3 are the contact sheet's (phase 5.4);
 - in Settings, the notifications section (phase 8), the upgrade and "Restore purchase" (phase
-  7), "Privacy choices" and the data kept for notifications with its delete button (phase 8);
+  7), and the data kept for notifications with its delete button (phase 8);
 - the rest of `SnowKit`, StoreKit (`Snow.storekit`), notifications (the picker and the units
-  call phase 8's `syncAlerts` hook), `AdsService` and the banner, `SKAdNetworkItems`, the push
-  token in the app's privacy manifest, and coarse location in the widget's (phase 7, when the
-  widget fetches);
-- `FEATURE_UNLOCK` and `FEATURE_ADS` (spec section 9.8), with the purchase and the ads;
-- the Screenshots test plan and `ios-nightly.yml`;
+  call phase 8's `syncAlerts` hook), the push token in the app's privacy manifest, and coarse
+  location in the widget's (phase 7, when the widget fetches);
+- `FEATURE_UNLOCK` and `FEATURE_ADS` (spec section 9.8), with the purchase: the ads are in
+  (phase 8.3), and no build leaves them out yet;
+- the Screenshots test plan and `ios-nightly.yml`, which is to keep `SKAdNetworkItems` current
+  (copied by hand until then, phase 8.3);
 - the release job's `rc-archive` artefact (spec section 21.2), with the release candidate.

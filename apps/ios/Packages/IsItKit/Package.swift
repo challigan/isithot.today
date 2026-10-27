@@ -54,9 +54,13 @@ let package = Package(
       dependencies: [.product(name: "IsItState", package: "IsItCore")],
       swiftSettings: swift5
     ),
+    // The free version's ads behind AdsModel's `AdsPlatform` (IsItState): Google's consent and
+    // Mobile Ads SDKs, and the view that hosts their banners. Only the app links it.
     .target(
       name: "IsItAds",
       dependencies: [
+        .product(name: "IsItModel", package: "IsItCore"),
+        .product(name: "IsItState", package: "IsItCore"),
         .product(name: "GoogleMobileAds", package: "swift-package-manager-google-mobile-ads"),
         .product(
           name: "GoogleUserMessagingPlatform",

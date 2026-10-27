@@ -1,4 +1,5 @@
 import Foundation
+import IsItAds
 import IsItLogic
 import IsItModel
 import IsItState
@@ -17,20 +18,28 @@ import UIKit
 /// started at `-now` turns the page on its own minute too. The top bar, over every page, opens
 /// the two sheets (`HomeSheet`), one at a time: the place pill, and on approximate location the
 /// "Use my exact location" chip, the place picker, full screen (section 10.3, `PickerSheet`);
-/// the gear, Settings (section 10.4, `SettingsSheet`).
+/// the gear, Settings (section 10.4, `SettingsSheet`). In the free version, once the ads are on,
+/// the home banner's band sits under the pager and each page ends with its ad box, and a place
+/// chosen in the picker the place pill opened may show the full-screen ad (`AdsModel`).
 struct HomeView: View {
   let model: AppModel
+  /// The free version's ads.
+  let ads: AdsModel
+  /// Google's SDKs, whose banners the band and the page ends show.
+  let google: GoogleAds
   /// The sheet open over the home screen, if any.
   @State private var sheet: HomeSheet?
 
   var body: some View {
     let ticks = MinuteTick.anchor(model: model.now, system: Date())
     TimelineView(.periodic(from: ticks, by: 60)) { context in
-      HomeContent(model: model, tick: context.date, covered: sheet != nil) { sheet = $0 }
-        // Under a sheet, the pages are out of the accessibility tree, as VoiceOver already
-        // treats what is under a modal sheet: the sheets' audits read the sheet alone, and the
-        // pages' own audits are HomeAuditTests'. Nor are their changes announced (`covered`).
-        .accessibilityHidden(sheet != nil)
+      HomeContent(
+        model: model, ads: ads, google: google, tick: context.date, covered: sheet != nil
+      ) { sheet = $0 }
+      // Under a sheet, the pages are out of the accessibility tree, as VoiceOver already
+      // treats what is under a modal sheet: the sheets' audits read the sheet alone, and the
+      // pages' own audits are HomeAuditTests'. Nor are their changes announced (`covered`).
+      .accessibilityHidden(sheet != nil)
     }
     // The picker wears the band of the page on screen, which `PickerSheet` reads from the model
     // in its own body, so it follows a refresh while open and never follows Dark Mode, as the
@@ -41,11 +50,11 @@ struct HomeView: View {
     // the picker's Open Settings as well as Settings' rows. A Release build draws them as they
     // are.
     .fullScreenCover(item: $sheet.picker) { request in
-      PickerSheet(model: model, request: request)
+      PickerSheet(model: model, ads: ads, request: request)
         .debugRecorder()
     }
     .sheet(isPresented: $sheet.settings) {
-      SettingsSheet(model: model)
+      SettingsSheet(model: model, ads: ads)
         .debugRecorder()
     }
   }
@@ -96,8 +105,16 @@ extension Optional where Wrapped == HomeSheet {
 /// (`Announcements`, IsItState), VoiceOver hears its heading once (section 16), unless a sheet
 /// covers the pages: then nothing is said, then or once it closes, as the pages are out of the
 /// accessibility tree under it (the 6pm flip, or a quiet refresh's new answer, behind Settings).
+///
+/// The ads take their spaces only in the free version and once they are on: the home banner's
+/// band, as tall as Google says the banner is at the screen's width, under the pager in the
+/// stack rather than in a safe-area inset over the pages, so the pages end at its top and nothing
+/// scrolls under the ad; and the box at the end of each page with an answer. The ads hear the
+/// widths these are laid out at and the page on screen, and load each banner once they know both.
 private struct HomeContent: View {
   @Bindable var model: AppModel
+  let ads: AdsModel
+  let google: GoogleAds
   /// The minute tick's date: a new one each minute, which draws the screen again.
   let tick: Date
   /// Whether a sheet is open over the pages.
@@ -114,6 +131,7 @@ private struct HomeContent: View {
     let shown = pages.first { $0.view == model.view } ?? pages[1]
     // The page on screen's colours, which the top bar and the switcher wear over every page.
     let theme = PageTheme(shown.palette)
+    let adsShown = !model.unlocked && ads.phase == .on
     HomeShell(topBar: model.topBar, theme: theme, actions: actions) {
       VStack(spacing: 0) {
         ViewSwitcher(pages: pages, selection: $model.view, theme: theme)
@@ -131,9 +149,42 @@ private struct HomeContent: View {
           still: DebugHooks.stillMotion(),
           actions: actions,
           // Pull to refresh (section 10.2), on every page, keeping what is on screen.
-          refresh: { [model] in await model.refresh() }
+          refresh: { [model] in await model.refresh() },
+          pageEnd: { view in
+            // Only on a page with an answer (its footer shows): never under "Checking…" or an
+            // error, as Google allows no ads on a screen without content.
+            if adsShown, pages.first(where: { $0.view == view })?.footer != nil {
+              AdBox(id: "ad-page-\(view.rawValue)") {
+                BannerSlot(ads: google, slot: .pageEnd(view))
+              }
+              .onGeometryChange(for: Double.self) { proxy in
+                Double(proxy.size.width)
+              } action: { width in
+                ads.pageEndWidth(view, width)
+              }
+            }
+          }
         )
+        if adsShown, let height = ads.homeBannerHeight {
+          AdBand(height: height, id: "ad-home") {
+            BannerSlot(ads: google, slot: .home)
+          }
+        }
       }
+      .onGeometryChange(for: Double.self) { proxy in
+        Double(proxy.size.width)
+      } action: { width in
+        ads.homeWidth(width)
+      }
+    }
+    // A Debug build's readout of the ads for AdsTests (`DebugHooks.adsReadout`): in the corner
+    // over the home screen, out of the pages, so nothing moves; none under `-noads 1` or in a
+    // Release build.
+    .overlay(alignment: .topLeading) {
+      DebugHooks.adsReadout(ads)
+    }
+    .onChange(of: model.view, initial: true) { _, view in
+      ads.shown(view)
     }
     .onChange(of: shown, initial: true) { _, page in
       if let heading = announcements.drawn(page, covered: covered) {
@@ -144,7 +195,9 @@ private struct HomeContent: View {
 
   /// What the screen's taps do: Retry asks again; the place pill opens the picker, and "Use my
   /// exact location" opens it finding the phone's place; the gear opens Settings; a place under
-  /// "Nearby:" loads in place; links open in Safari.
+  /// "Nearby:" loads in place; links open in Safari. A place under "Nearby:" never brings the
+  /// full-screen ad: its tap is a single action, and Google allows at most one such ad for every
+  /// two (DECISIONS, "Ads in the iPhone app: three placements").
   private var actions: HomeActions {
     let model = model
     let openURL = openURL

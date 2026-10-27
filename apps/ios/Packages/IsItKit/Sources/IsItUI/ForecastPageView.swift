@@ -8,12 +8,13 @@ import SwiftUI
 /// at the website's size, 0.3 of the page's width; the question and the answer one heading for
 /// VoiceOver with the place; the verdict and the detail; the body (the middle page's agreement,
 /// strip and grid of models, Now's grid of hours, or the week's days); Retry in the error state;
-/// and the footer, with Retry under its line after a failed request while an answer shows.
-/// Everything shown is `page`'s, so the page reads as the website does for the same answer. Up
-/// to the largest accessibility text size nothing is cut short: text wraps, the glyph moves above
-/// the question, the grids take two columns, the answer word shrinks to fit its line rather than
-/// break, and the page scrolls.
-public struct ForecastPageView: View {
+/// the footer, with Retry under its line after a failed request while an answer shows; and the
+/// page's `end`, which the app gives: in the free version, the ad box. Everything else shown is
+/// `page`'s, so the page reads as the website does for the same answer. Up to the largest
+/// accessibility text size nothing is cut short: text wraps, the glyph moves above the question,
+/// the grids take two columns, the answer word shrinks to fit its line rather than break, and the
+/// page scrolls.
+public struct ForecastPageView<End: View>: View {
   let page: HomePage
   let theme: PageTheme
   /// The band's glyph, template images the page tints in `theme.ink`; nil without an answer.
@@ -24,6 +25,9 @@ public struct ForecastPageView: View {
   /// does.
   let pageWidth: CGFloat
   let actions: HomeActions
+  /// What the page ends with, after the footer and inside its margins, with no space of its own
+  /// above it: the free version's ad box (`AdBox`), or nothing.
+  let end: End
 
   @Environment(\.dynamicTypeSize) private var typeSize
   /// The glyph's size, the website's 112 points, growing with the text.
@@ -39,7 +43,8 @@ public struct ForecastPageView: View {
     glyph: PageGlyph?,
     still: Bool = false,
     pageWidth: CGFloat,
-    actions: HomeActions
+    actions: HomeActions,
+    end: End
   ) {
     self.page = page
     self.theme = theme
@@ -47,6 +52,7 @@ public struct ForecastPageView: View {
     self.still = still
     self.pageWidth = pageWidth
     self.actions = actions
+    self.end = end
   }
 
   public var body: some View {
@@ -91,6 +97,7 @@ public struct ForecastPageView: View {
         if let footer = page.footer {
           PageFooterView(footer: footer, retry: page.retry, actions: actions)
         }
+        end
       }
       .padding(.horizontal, 20)
       // The glyph's top, the website's 4vh; at accessibility sizes, the glyph's own line.

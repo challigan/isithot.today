@@ -124,6 +124,17 @@ public enum Constants {
     public static let savedMax = 10
   }
 
+  /// The ads in the free version (client `ADS`): a full-screen ad at most once every
+  /// `interstitialGapMinutes`, and never one loaded `interstitialMaxAgeMinutes` or more ago; a
+  /// failed load is asked for again after `retryFirstSeconds`, the wait doubling with each
+  /// failure in a row, at most `retryMaxSeconds`.
+  public enum Ads {
+    public static let interstitialGapMinutes = 5
+    public static let interstitialMaxAgeMinutes = 55
+    public static let retryFirstSeconds = 60
+    public static let retryMaxSeconds = 600
+  }
+
   /// willitsnow.today (core `SITES.snow`): its name, which the top bar shows as the website's
   /// header does, the pages Settings opens in Safari, and the address people write to (core
   /// `CONTACT_EMAIL`), for Contact us and Report an ad.

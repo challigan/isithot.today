@@ -15,7 +15,7 @@ import {
   TOMORROW_FROM_HOUR,
   WIDGET,
 } from '@isithot/core';
-import { CLIENT, PLACES } from '@isithot/client';
+import { ADS, CLIENT, PLACES } from '@isithot/client';
 import {
   CONSTANTS_PATH,
   CONSTANTS_SOURCE,
@@ -164,6 +164,18 @@ describe('constantsSwift', () => {
     expect(members(swift, 'Places')).toEqual([
       'public static let recentMax = 5',
       'public static let savedMax = 10',
+    ]);
+  });
+
+  it("writes the ads' timings, in minutes and seconds as named", () => {
+    expect(members(swift, 'Ads')).toEqual(
+      Object.entries(ADS).map(([k, v]) => `public static let ${k} = ${swiftInt(v)}`),
+    );
+    expect(members(swift, 'Ads')).toEqual([
+      'public static let interstitialGapMinutes = 5',
+      'public static let interstitialMaxAgeMinutes = 55',
+      'public static let retryFirstSeconds = 60',
+      'public static let retryMaxSeconds = 600',
     ]);
   });
 

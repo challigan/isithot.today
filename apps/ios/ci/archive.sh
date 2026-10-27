@@ -14,8 +14,9 @@
 #                                     with the build number left as it is
 #
 # Environment:
-#   ADS_UNITS       test (Google's demo units; the default) or real, which needs ADMOB_APP_ID and
-#                   ADMOB_BANNER_ID (repository variables)
+#   ADS_UNITS       test (Google's demo units; the default) or real, which needs ADMOB_APP_ID,
+#                   ADMOB_BANNER_ID, ADMOB_PAGE_BANNER_ID and ADMOB_INTERSTITIAL_ID (repository
+#                   variables)
 #   BUILD_NUMBER    CFBundleVersion for the app and the widget; Base.xcconfig's 1 when unset
 #   ASC_KEY_ID, ASC_ISSUER_ID
 #                   for signed and export: the team key, which scripts/asc-key.mjs wrote to
@@ -109,10 +110,13 @@ case "$ads" in
   test) ;;
   real)
     if ! [[ ${ADMOB_APP_ID:-} =~ ^ca-app-pub-[0-9]{16}~[0-9]{10}$ ]] ||
-      ! [[ ${ADMOB_BANNER_ID:-} =~ ^ca-app-pub-[0-9]{16}/[0-9]{10}$ ]]; then
-      missing "ads real needs the repository variables ADMOB_APP_ID (ca-app-pub-…~…) and ADMOB_BANNER_ID (ca-app-pub-…/…): Settings, Secrets and variables, Actions, Variables"
+      ! [[ ${ADMOB_BANNER_ID:-} =~ ^ca-app-pub-[0-9]{16}/[0-9]{10}$ ]] ||
+      ! [[ ${ADMOB_PAGE_BANNER_ID:-} =~ ^ca-app-pub-[0-9]{16}/[0-9]{10}$ ]] ||
+      ! [[ ${ADMOB_INTERSTITIAL_ID:-} =~ ^ca-app-pub-[0-9]{16}/[0-9]{10}$ ]]; then
+      missing "ads real needs the repository variables ADMOB_APP_ID (ca-app-pub-…~…), ADMOB_BANNER_ID, ADMOB_PAGE_BANNER_ID and ADMOB_INTERSTITIAL_ID (ca-app-pub-…/… each): Settings, Secrets and variables, Actions, Variables"
     fi
-    settings+=(ADMOB_APP_ID="$ADMOB_APP_ID" ADMOB_BANNER_ID="$ADMOB_BANNER_ID")
+    settings+=(ADMOB_APP_ID="$ADMOB_APP_ID" ADMOB_BANNER_ID="$ADMOB_BANNER_ID"
+      ADMOB_PAGE_BANNER_ID="$ADMOB_PAGE_BANNER_ID" ADMOB_INTERSTITIAL_ID="$ADMOB_INTERSTITIAL_ID")
     ;;
   *) missing "ADS_UNITS is $ads, not test or real" ;;
 esac

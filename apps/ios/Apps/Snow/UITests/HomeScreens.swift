@@ -169,23 +169,27 @@ extension XCUIApplication {
   /// Where the home screen's parts are, from one snapshot of the app: the window, then the top
   /// bar's controls, the switcher, the pager (HomePager's horizontal scroll view) and the page on
   /// screen (`page-<view>`), each with its frame or "no <identifier>", for a failure to say where
-  /// things were when a tap opened nothing or a page didn't fit.
+  /// things were when a tap opened nothing or a page didn't fit; and while the ads are on, the
+  /// band, the page's box and their banners (`ad-…`, AdsTests), which no other test launches.
   var homeGeometry: String {
     guard let root = try? snapshot() else { return "the screen can't be read" }
     let frames = Self.homeFrames(in: root)
-    let parts = Self.homeBar + ["pager"] + frames.keys.filter { $0.hasPrefix("page-") }.sorted()
+    let shown = frames.keys.filter { $0.hasPrefix("page-") || $0.hasPrefix("ad-") }.sorted()
+    let parts = Self.homeBar + ["pager"] + shown
     let found = parts.map { id in frames[id].map { "\(id) at \($0)" } ?? "no \(id)" }
     return "the window at \(root.frame); " + found.joined(separator: ", ")
   }
 
   /// The frame of the first element with each of the top bar's and switcher's identifiers, the
-  /// pager's, and each page's in the tree, under `root`.
+  /// pager's, each page's and each of the ads' (`ad-home`, `ad-page-<view>` and their banners'
+  /// `ad-banner-…`) in the tree, under `root`.
   static func homeFrames(in root: any XCUIElementSnapshot) -> [String: CGRect] {
     var frames: [String: CGRect] = [:]
     var pending = [root]
     while let element = pending.popLast() {
       let id = element.identifier
-      if frames[id] == nil, homeBar.contains(id) || id == "pager" || id.hasPrefix("page-") {
+      let home = homeBar.contains(id) || id == "pager" || id.hasPrefix("page-")
+      if frames[id] == nil, home || id.hasPrefix("ad-") {
         frames[id] = element.frame
       }
       pending.append(contentsOf: element.children)
@@ -238,11 +242,14 @@ struct Drag: CustomStringConvertible {
 }
 
 extension XCTestCase {
-  /// Launches the app with `-uitest` and `arguments`, and waits for the heading.
+  /// Launches the app with `-uitest`, `-noads 1` and `arguments`, and waits for the heading.
+  /// `-noads 1` keeps Google's consent form and ads from starting (DebugHooks), so every screen,
+  /// frame and audit is the app's own, as it was before the ads, whatever Google answers: every
+  /// UI test's launch passes it but AdsTests', which test the ads.
   @MainActor
   func launchApp(_ arguments: [String]) throws -> XCUIApplication {
     let app = XCUIApplication()
-    app.launchArguments = ["-uitest"] + arguments
+    app.launchArguments = ["-uitest", "-noads", "1"] + arguments
     app.launch()
     guard app.heading.waitForExistence(timeout: 20) else {
       throw HomeScreenError("No heading on screen after launching with \(arguments)")

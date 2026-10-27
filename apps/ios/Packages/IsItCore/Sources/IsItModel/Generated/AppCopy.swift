@@ -162,12 +162,13 @@ public enum AppCopy {
   public static let privacyNotifications =
     "Only while notifications are on, we keep your device's notification token, an ID made from it, the place, its time zone, your units and which notifications you chose, with a few details such as the app's version and when it last checked in. We delete them when you turn notifications off in the app, when Apple tells us the app is no longer installed, or about 90 days after you last open it. If you turn notifications off in your iPhone's Settings instead, we delete them the next time you open the app. For a few days after each notification and each test, and after some forecast checks that found nothing to send, we also keep a note of it, even once the rest is deleted. It holds no token or place."
   public static let privacyAds =
-    "In the free version, Google shows the ads and may collect device and usage data."
+    "In the free version, Google shows the ads and may collect device and usage data. The app keeps when it last showed a full-screen ad, so it shows one at most every 5 minutes."
   public static let seePrivacyChoices = "See Privacy choices."
   public static let privacyPurchases = "Apple handles purchases. We never see your payment details."
   public static let privacyAccounts = "There are no accounts."
   public static let keptForNotifications = "What we keep for notifications"
   public static let deleteMyData = "Turn off notifications and delete my data"
+  public static let advertisement = "Advertisement"
   public static let reportAd = "Report an ad"
 
   public static func reportAdSubject(version: String) -> String {

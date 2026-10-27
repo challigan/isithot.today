@@ -54,6 +54,14 @@ struct ConstantsTests {
     #expect(Constants.Client.requestTimeoutMs == 12 * 1000)
     #expect(Constants.Client.retryAfterMs == 60 * 1000)
   }
+
+  @Test("the ads' timings, minutes and seconds")
+  func ads() {
+    #expect(Constants.Ads.interstitialGapMinutes == 5)
+    #expect(Constants.Ads.interstitialMaxAgeMinutes == 55)
+    #expect(Constants.Ads.retryFirstSeconds == 60)
+    #expect(Constants.Ads.retryMaxSeconds == 10 * 60)
+  }
 }
 
 @Suite("Keys: where the apps keep things")
@@ -64,6 +72,7 @@ struct KeysTests {
     #expect(Keys.AppGroup.today == "today.v1.json")
     #expect(Keys.App.lastView == "ui.lastView")
     #expect(Keys.App.card == "ui.alertCard")
+    #expect(Keys.App.lastInterstitial == "ads.lastInterstitial")
     #expect(Keys.storeVersion == 1)
   }
 }

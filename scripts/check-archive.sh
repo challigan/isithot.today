@@ -5,17 +5,18 @@
 #   scripts/check-archive.sh <WillItSnow.xcarchive> <test|real>
 #       The archive, signed or not. It fails if either bundle lacks its privacy manifest or the
 #       answer font, the app has no icon, the widget links Google Mobile Ads, either binary names
-#       a debug hook, the ad units aren't Google's demo ones (test) or Carl's (real), the app and
-#       widget differ in version or build, ITSAppUsesNonExemptEncryption isn't false, or the
-#       fixtures are bundled.
+#       a debug hook, the ad units aren't Google's demo ones (test) or Carl's (real), the app's
+#       SKAdNetworkItems lack Google's, the app and widget differ in version or build,
+#       ITSAppUsesNonExemptEncryption isn't false, or the fixtures are bundled.
 #   scripts/check-archive.sh --ipa <WillItSnow.ipa, or a folder holding its Payload>
 #       The exported app's signed entitlements. It fails unless the app has aps-environment
 #       production, both have the App Group, the widget has no aps-environment, and neither is
 #       debuggable (get-task-allow).
 #
-# Optional environment: BUILD_NUMBER (the app's CFBundleVersion must be it), and ADMOB_APP_ID and
-# ADMOB_BANNER_ID, Carl's AdMob IDs (repository variables, not secrets): with real the app must
-# use them, and with test his publisher ID must appear nowhere.
+# Optional environment: BUILD_NUMBER (the app's CFBundleVersion must be it), and ADMOB_APP_ID,
+# ADMOB_BANNER_ID, ADMOB_PAGE_BANNER_ID and ADMOB_INTERSTITIAL_ID, Carl's AdMob IDs (repository
+# variables, not secrets): with real the app must use them, and with test his publisher ID must
+# appear nowhere.
 #
 # The reads that need macOS go through plutil and codesign, named by PLUTIL and CODESIGN so that
 # scripts/test/check-archive.test.mjs can stand in for them on Linux. strings(1) and
@@ -29,9 +30,21 @@ WIDGET=WillItSnowWidgets
 APP_GROUP=group.today.willitsnow.app
 # Google's demo publisher (section 14.3): every ad unit of a test build is one of its.
 DEMO_PUBLISHER=3940256099942544
+# Each ad unit's key in the app's Info.plist, and the repository variable that holds Carl's: the
+# home banner, the page-end banner and the full-screen ad.
+AD_UNITS=(IsItBannerUnitID=ADMOB_BANNER_ID IsItPageBannerUnitID=ADMOB_PAGE_BANNER_ID
+  IsItInterstitialUnitID=ADMOB_INTERSTITIAL_ID)
+# Google's own SKAdNetwork identifier, the first of the list SKAdNetworkItems copies (section
+# 14.4).
+GOOGLE_SKADNETWORK=cstr6suwn9.skadnetwork
 # The debug hooks' names (section 18.3), looked for anywhere in strings' output and as whole
 # short literals.
-HOOKS=(-uitest -fixture -apiOrigin -route -umpGeography -openURLs URLProtocolStub 127.0.0.1)
+HOOKS=(-uitest -fixture -apiOrigin -umpGeography -openURLs URLProtocolStub 127.0.0.1)
+# Debug hooks that begin ordinary words, so looked for in strings' output only where no letter
+# follows them, and as whole short literals: Google's SDK, linked into the app, holds OpenSSL's
+# name sbgp-routerIdentifier. Matched with grep -E, so none may hold a pattern's special
+# characters.
+WORD_HOOKS=(-route)
 # DebugHooks.swift's other launch arguments (section 9.8), too short or too ordinary to look
 # for inside longer strings, so matched only as whole short literals.
 LITERAL_HOOKS=(-now -clock -unlocked -noads -resetStore -network -location)
@@ -87,6 +100,30 @@ plist_get() {
         sub(/<\/string>$/, "", item)
         print item
       }
+    }
+    END { exit (state == 0) }
+  '
+}
+
+# The string under the key $2 in each dictionary of the top-level array $1, in the plist XML on
+# stdin, a line each: SKAdNetworkItems' SKAdNetworkIdentifier. Fails when there is no such key.
+plist_get_each() {
+  awk -v array="$1" -v key="$2" '
+    state == 0 && $0 == ("\t<key>" array "</key>") { state = 1; next }
+    state == 1 {
+      if ($0 != "\t<array>") exit
+      state = 2
+      next
+    }
+    state == 2 {
+      if ($0 == "\t</array>") exit
+      if (previous == ("\t\t\t<key>" key "</key>") && $0 ~ /^\t\t\t<string>.*<\/string>$/) {
+        item = $0
+        sub(/^\t\t\t<string>/, "", item)
+        sub(/<\/string>$/, "", item)
+        print item
+      }
+      previous = $0
     }
     END { exit (state == 0) }
   '
@@ -205,6 +242,14 @@ check_hooks() {
       fail "$2 builds the debug hook $hook as a short Swift literal"
     fi
   done
+  # The lines that name a word hook go to $1.words, for the message.
+  for hook in "${WORD_HOOKS[@]}"; do
+    if grep -E -e "$hook([^[:alpha:]]|\$)" "$1.strings" >"$1.words"; then
+      fail "$2 contains the debug hook $hook: $(excerpt "$hook" "$1.words")"
+    elif is_literal "$hook" "$1.literals"; then
+      fail "$2 builds the debug hook $hook as a short Swift literal"
+    fi
+  done
   for hook in "${LITERAL_HOOKS[@]}"; do
     if is_literal "$hook" "$1.literals"; then
       fail "$2 builds the debug hook $hook as a short Swift literal"
@@ -233,15 +278,15 @@ check_versions() {
   facts=("$APP ${version:-?} (${build:-?})" ${facts[@]+"${facts[@]}"})
 }
 
-# The ad units for $1 (test or real), from the app's Info.plist XML $2 and its binary's strings $3.
+# The ad units for $1 (test or real), from the app's Info.plist XML $2 and its binary's strings $3,
+# and Google's SKAdNetwork identifier.
 check_ads() {
-  local ads="$1" info="$2" text="$3" app_id banner ours="" publishers publisher
+  local ads="$1" info="$2" text="$3" app_id ours="" publishers publisher pair key variable unit
   local demo_app="^ca-app-pub-${DEMO_PUBLISHER}~[0-9]{10}$"
-  local demo_banner="^ca-app-pub-${DEMO_PUBLISHER}/[0-9]{10}$"
+  local demo_unit="^ca-app-pub-${DEMO_PUBLISHER}/[0-9]{10}$"
   local any_app='^ca-app-pub-[0-9]{16}~[0-9]{10}$'
-  local any_banner='^ca-app-pub-[0-9]{16}/[0-9]{10}$'
+  local any_unit='^ca-app-pub-[0-9]{16}/[0-9]{10}$'
   app_id="$(plist_get GADApplicationIdentifier <"$info")" || app_id=""
-  banner="$(plist_get IsItBannerUnitID <"$info")" || banner=""
   if [[ ${ADMOB_APP_ID:-} =~ $any_app ]]; then ours="${ADMOB_APP_ID:11:16}"; fi
   # Every AdMob publisher the Info.plist or the app binary names (ca-app-pub-… or pub-…).
   publishers="$(cat "$info" "$text" | grep -E -o 'pub-[0-9]{16}' | sed 's/^pub-//' | sort -u)" ||
@@ -251,9 +296,13 @@ check_ads() {
     if ! [[ $app_id =~ $demo_app ]]; then
       fail "with ads test, GADApplicationIdentifier is ${app_id:-missing}, not a Google demo app ID"
     fi
-    if ! [[ $banner =~ $demo_banner ]]; then
-      fail "with ads test, IsItBannerUnitID is ${banner:-missing}, not a Google demo unit"
-    fi
+    for pair in "${AD_UNITS[@]}"; do
+      key="${pair%%=*}"
+      unit="$(plist_get "$key" <"$info")" || unit=""
+      if ! [[ $unit =~ $demo_unit ]]; then
+        fail "with ads test, $key is ${unit:-missing}, not a Google demo unit"
+      fi
+    done
     for publisher in $publishers; do
       if [ "$publisher" != "$DEMO_PUBLISHER" ]; then
         fail "with ads test, the app names the AdMob publisher pub-$publisher, not only Google's demo one"
@@ -281,12 +330,22 @@ check_ads() {
     elif [ -n "${ADMOB_APP_ID:-}" ] && [ "$app_id" != "$ADMOB_APP_ID" ]; then
       fail "with ads real, GADApplicationIdentifier is $app_id, not ADMOB_APP_ID"
     fi
-    if ! [[ $banner =~ $any_banner ]]; then
-      fail "with ads real, IsItBannerUnitID is ${banner:-missing}, not an AdMob ad unit"
-    elif [ -n "${ADMOB_BANNER_ID:-}" ] && [ "$banner" != "$ADMOB_BANNER_ID" ]; then
-      fail "with ads real, IsItBannerUnitID is $banner, not ADMOB_BANNER_ID"
-    fi
+    for pair in "${AD_UNITS[@]}"; do
+      key="${pair%%=*}"
+      variable="${pair#*=}"
+      unit="$(plist_get "$key" <"$info")" || unit=""
+      if ! [[ $unit =~ $any_unit ]]; then
+        fail "with ads real, $key is ${unit:-missing}, not an AdMob ad unit"
+      elif [ -n "${!variable:-}" ] && [ "$unit" != "${!variable}" ]; then
+        fail "with ads real, $key is $unit, not $variable"
+      fi
+    done
     facts+=("ads real: $app_id")
+  fi
+
+  if ! plist_get_each SKAdNetworkItems SKAdNetworkIdentifier <"$info" |
+    grep -F -x -e "$GOOGLE_SKADNETWORK" >/dev/null; then
+    fail "the app's Info.plist has no SKAdNetworkItems holding Google's $GOOGLE_SKADNETWORK"
   fi
 }
 
@@ -346,7 +405,7 @@ check_archive() {
     fail "the widget links the app's location code"
   fi
   check_versions "$info" "$widget_info"
-  facts+=("checked: privacy manifests, the icon, the answer font, $((${#HOOKS[@]} + ${#LITERAL_HOOKS[@]})) debug hooks in both binaries, the ad units, the widget's links, versions, encryption and fixtures")
+  facts+=("checked: privacy manifests, the icon, the answer font, $((${#HOOKS[@]} + ${#WORD_HOOKS[@]} + ${#LITERAL_HOOKS[@]})) debug hooks in both binaries, the ad units and SKAdNetworkItems, the widget's links, versions, encryption and fixtures")
 }
 
 # --- The exported app --------------------------------------------------------------------------

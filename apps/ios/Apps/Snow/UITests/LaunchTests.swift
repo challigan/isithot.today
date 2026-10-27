@@ -59,11 +59,13 @@ final class LaunchTests: XCTestCase {
     attachScreen(of: app, named: "app-offline-nothing")
   }
 
-  /// Launches the app with `-uitest` and `arguments`, and waits for the heading.
+  /// Launches the app with `-uitest`, `-noads 1` (no consent form or ad, as `launchApp`) and
+  /// `arguments`, and waits for the heading. The stub is beneath the app's own transport only:
+  /// Google's SDKs would reach the real network, under `-network off` too.
   @MainActor
   private func launch(_ arguments: [String]) -> XCUIApplication {
     let app = XCUIApplication()
-    app.launchArguments = ["-uitest"] + arguments
+    app.launchArguments = ["-uitest", "-noads", "1"] + arguments
     app.launch()
     XCTAssertTrue(heading(in: app).waitForExistence(timeout: 15), "No heading on screen")
     return app

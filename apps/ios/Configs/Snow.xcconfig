@@ -13,12 +13,20 @@ URL_SCHEME = willitsnow
 API_ORIGIN = https:/$()/willitsnow.today
 
 // Google's demo ad units in every build before the release candidate (section 14.3). The
-// release job passes ADS_UNITS = real with ADMOB_APP_ID and ADMOB_BANNER_ID, which are
-// repository variables, not secrets.
+// release job passes ADS_UNITS = real with ADMOB_APP_ID, ADMOB_BANNER_ID, ADMOB_PAGE_BANNER_ID
+// and ADMOB_INTERSTITIAL_ID, which are repository variables, not secrets. The home banner and
+// the page-end banner are separate units; Google's demo adaptive banner serves both the anchored
+// and the inline sizes, so a test build uses it for both.
 ADS_UNITS = test
 GAD_APP_ID_test = ca-app-pub-3940256099942544~1458002511
 GAD_BANNER_test = ca-app-pub-3940256099942544/2435281174
+GAD_PAGE_BANNER_test = ca-app-pub-3940256099942544/2435281174
+GAD_INTERSTITIAL_test = ca-app-pub-3940256099942544/4411468910
 GAD_APP_ID_real = $(ADMOB_APP_ID)
 GAD_BANNER_real = $(ADMOB_BANNER_ID)
+GAD_PAGE_BANNER_real = $(ADMOB_PAGE_BANNER_ID)
+GAD_INTERSTITIAL_real = $(ADMOB_INTERSTITIAL_ID)
 GAD_APP_ID = $(GAD_APP_ID_$(ADS_UNITS))
 GAD_BANNER = $(GAD_BANNER_$(ADS_UNITS))
+GAD_PAGE_BANNER = $(GAD_PAGE_BANNER_$(ADS_UNITS))
+GAD_INTERSTITIAL = $(GAD_INTERSTITIAL_$(ADS_UNITS))

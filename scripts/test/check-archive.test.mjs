@@ -18,10 +18,34 @@ afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 const APP_GROUP = 'group.today.willitsnow.app';
 const DEMO_APP = 'ca-app-pub-3940256099942544~1458002511';
+// Google's demo adaptive banner, which serves the page-end banner's inline size too.
 const DEMO_BANNER = 'ca-app-pub-3940256099942544/2435281174';
+const DEMO_INTERSTITIAL = 'ca-app-pub-3940256099942544/4411468910';
 // Made up, shaped as Carl's will be.
 const CARL_APP = 'ca-app-pub-1234567890123456~1234567890';
 const CARL_BANNER = 'ca-app-pub-1234567890123456/0987654321';
+const CARL_PAGE_BANNER = 'ca-app-pub-1234567890123456/1122334455';
+const CARL_INTERSTITIAL = 'ca-app-pub-1234567890123456/5566778899';
+// A real build's Info.plist keys, and the repository variables they come from.
+const REAL = {
+  GADApplicationIdentifier: CARL_APP,
+  IsItBannerUnitID: CARL_BANNER,
+  IsItPageBannerUnitID: CARL_PAGE_BANNER,
+  IsItInterstitialUnitID: CARL_INTERSTITIAL,
+};
+const REAL_ENV = {
+  ADMOB_APP_ID: CARL_APP,
+  ADMOB_BANNER_ID: CARL_BANNER,
+  ADMOB_PAGE_BANNER_ID: CARL_PAGE_BANNER,
+  ADMOB_INTERSTITIAL_ID: CARL_INTERSTITIAL,
+};
+// Each ad unit's Info.plist key, its repository variable, and Carl's unit.
+const UNITS = [
+  ['IsItBannerUnitID', 'ADMOB_BANNER_ID', CARL_BANNER],
+  ['IsItPageBannerUnitID', 'ADMOB_PAGE_BANNER_ID', CARL_PAGE_BANNER],
+  ['IsItInterstitialUnitID', 'ADMOB_INTERSTITIAL_ID', CARL_INTERSTITIAL],
+];
+const GOOGLE_SKADNETWORK = 'cstr6suwn9.skadnetwork';
 const HOOKS = [
   '-uitest',
   '-fixture',
@@ -131,6 +155,8 @@ const NOW_CODE = [0x528dc5a8, 0x72aeede8];
 const NETWORK_CODE = [0xd28dc5b3, 0xf2ae8cb3, 0xf2cdeef3, 0xf2ed6e53];
 // "-location" (9 bytes): its first 8, "-locatio", built in x19 as "-network" is above.
 const LOCATION_CODE = [0xd28d85b3, 0xf2ac6df3, 0xf2ce8c33, 0xf2eded33];
+// "-route" (6 bytes), as LLVM builds it in x6 (scripts/test/swift-small-strings.test.mjs).
+const ROUTE_CODE = [0xd28e45a6, 0xf2aeade6, 0xf2ccae86];
 
 const PRIVACY = plist({ NSPrivacyTracking: false, NSPrivacyCollectedDataTypes: [] });
 
@@ -143,6 +169,12 @@ function appInfo(over = {}) {
     GADApplicationIdentifier: DEMO_APP,
     ITSAppUsesNonExemptEncryption: false,
     IsItBannerUnitID: DEMO_BANNER,
+    IsItInterstitialUnitID: DEMO_INTERSTITIAL,
+    IsItPageBannerUnitID: DEMO_BANNER,
+    SKAdNetworkItems: [
+      { SKAdNetworkIdentifier: GOOGLE_SKADNETWORK },
+      { SKAdNetworkIdentifier: '4fzdc2evr5.skadnetwork' },
+    ],
     // As actool adds it for the AppIcon set.
     CFBundleIcons: {
       CFBundlePrimaryIcon: { CFBundleIconFiles: ['AppIcon60x60'], CFBundleIconName: 'AppIcon' },
@@ -239,6 +271,8 @@ function run(args, env = {}) {
       BUILD_NUMBER: '',
       ADMOB_APP_ID: '',
       ADMOB_BANNER_ID: '',
+      ADMOB_PAGE_BANNER_ID: '',
+      ADMOB_INTERSTITIAL_ID: '',
       ...env,
     },
   });
@@ -271,7 +305,7 @@ describe('an archive that passes', () => {
         '',
         '- WillItSnow 1.0 (101)',
         `- ads test: Google's demo units (${DEMO_APP})`,
-        "- checked: privacy manifests, the icon, the answer font, 15 debug hooks in both binaries, the ad units, the widget's links, versions, encryption and fixtures",
+        "- checked: privacy manifests, the icon, the answer font, 15 debug hooks in both binaries, the ad units and SKAdNetworkItems, the widget's links, versions, encryption and fixtures",
         '',
       ].join('\n'),
     );
@@ -279,18 +313,20 @@ describe('an archive that passes', () => {
   });
 
   it("passes a real build with Carl's IDs", () => {
-    const dir = archive({
-      files: {
-        'Info.plist': appInfo({
-          GADApplicationIdentifier: CARL_APP,
-          IsItBannerUnitID: CARL_BANNER,
-        }),
-      },
-    });
-    const result = check(dir, 'real', { ADMOB_APP_ID: CARL_APP, ADMOB_BANNER_ID: CARL_BANNER });
+    const dir = archive({ files: { 'Info.plist': appInfo(REAL) } });
+    const result = check(dir, 'real', REAL_ENV);
     expect(result.errors).toEqual([]);
     expect(result.status).toBe(0);
     expect(result.summary).toContain(`- ads real: ${CARL_APP}`);
+  });
+
+  it("passes with Google's SKAdNetwork identifier anywhere in SKAdNetworkItems", () => {
+    const items = [
+      { SKAdNetworkIdentifier: '4fzdc2evr5.skadnetwork' },
+      { SKAdNetworkIdentifier: GOOGLE_SKADNETWORK },
+    ];
+    const dir = archive({ files: { 'Info.plist': appInfo({ SKAdNetworkItems: items }) } });
+    expect(check(dir).errors).toEqual([]);
   });
 
   it('passes with "-now" and the like inside ordinary text', () => {
@@ -303,6 +339,15 @@ describe('an archive that passes', () => {
           'ad-network',
           'use-location',
         ]),
+      },
+    });
+    expect(check(dir).errors).toEqual([]);
+  });
+
+  it('passes with "-route" followed by a letter, as in OpenSSL\'s name in Google\'s SDK', () => {
+    const dir = archive({
+      files: {
+        WillItSnow: binary(['sbgp-routerIdentifier', 'X509v3 sbgp-routerIdentifier', '-routeX']),
       },
     });
     expect(check(dir).errors).toEqual([]);
@@ -408,6 +453,14 @@ describe('an archive that fails', () => {
     ]);
   });
 
+  it.each(['-route', '-route https://x', 'launch -route=willitsnow://x'])(
+    'fails on the debug hook -route where no letter follows it: %j',
+    (text) => {
+      const dir = archive({ files: { WillItSnow: binary(['sbgp-routerIdentifier', text]) } });
+      expect(check(dir).errors).toEqual([`the app binary contains the debug hook -route: ${text}`]);
+    },
+  );
+
   it('fails when the widget binary contains a debug hook', () => {
     const dir = archive({
       files: { [`${WIDGET}/WillItSnowWidgets`]: binary(['http://127.0.0.1:8080']) },
@@ -429,6 +482,10 @@ describe('an archive that fails', () => {
     const widget = archive({ files: { [`${WIDGET}/WillItSnowWidgets`]: binary([], NOW_CODE) } });
     expect(check(widget).errors).toEqual([
       'the widget binary builds the debug hook -now as a short Swift literal',
+    ]);
+    const route = archive({ files: { WillItSnow: binary(['will it snow?'], ROUTE_CODE) } });
+    expect(check(route).errors).toEqual([
+      'the app binary builds the debug hook -route as a short Swift literal',
     ]);
   });
 
@@ -452,43 +509,86 @@ describe('an archive that fails', () => {
   });
 
   it("fails a real build that names Google's demo publisher, in the binary or the Info.plist", () => {
-    const real = { GADApplicationIdentifier: CARL_APP, IsItBannerUnitID: CARL_BANNER };
     const inBinary = archive({
-      files: { 'Info.plist': appInfo(real), WillItSnow: binary([`unit ${DEMO_BANNER}`]) },
+      files: { 'Info.plist': appInfo(REAL), WillItSnow: binary([`unit ${DEMO_BANNER}`]) },
     });
     expect(check(inBinary, 'real').errors).toEqual([
       `with ads real, the app binary contains Google's demo publisher 3940256099942544: unit ${DEMO_BANNER}`,
     ]);
     const inInfo = archive({
-      files: { 'Info.plist': appInfo({ ...real, IsItBannerUnitID: DEMO_BANNER }) },
+      files: { 'Info.plist': appInfo({ ...REAL, IsItBannerUnitID: DEMO_BANNER }) },
     });
     expect(check(inInfo, 'real', { ADMOB_BANNER_ID: CARL_BANNER }).errors).toEqual([
       "with ads real, the app's Info.plist contains Google's demo publisher 3940256099942544",
       `with ads real, IsItBannerUnitID is ${DEMO_BANNER}, not ADMOB_BANNER_ID`,
+    ]);
+    const interstitial = archive({
+      files: { 'Info.plist': appInfo({ ...REAL, IsItInterstitialUnitID: DEMO_INTERSTITIAL }) },
+    });
+    expect(check(interstitial, 'real', REAL_ENV).errors).toEqual([
+      "with ads real, the app's Info.plist contains Google's demo publisher 3940256099942544",
+      `with ads real, IsItInterstitialUnitID is ${DEMO_INTERSTITIAL}, not ADMOB_INTERSTITIAL_ID`,
     ]);
   });
 
   it('fails a real build whose ad units are missing, malformed or not the variables', () => {
     const empty = archive({
       files: {
-        'Info.plist': appInfo({ GADApplicationIdentifier: '', IsItBannerUnitID: undefined }),
+        'Info.plist': appInfo({
+          GADApplicationIdentifier: '',
+          IsItBannerUnitID: undefined,
+          IsItPageBannerUnitID: undefined,
+          IsItInterstitialUnitID: undefined,
+        }),
       },
     });
     expect(check(empty, 'real').errors).toEqual([
       'with ads real, GADApplicationIdentifier is missing, not an AdMob app ID',
       'with ads real, IsItBannerUnitID is missing, not an AdMob ad unit',
+      'with ads real, IsItPageBannerUnitID is missing, not an AdMob ad unit',
+      'with ads real, IsItInterstitialUnitID is missing, not an AdMob ad unit',
     ]);
-    const other = archive({
-      files: {
-        'Info.plist': appInfo({
-          GADApplicationIdentifier: CARL_APP,
-          IsItBannerUnitID: CARL_BANNER,
-        }),
-      },
-    });
+    const other = archive({ files: { 'Info.plist': appInfo(REAL) } });
     expect(
       check(other, 'real', { ADMOB_APP_ID: 'ca-app-pub-1234567890123456~1111111111' }).errors,
     ).toEqual([`with ads real, GADApplicationIdentifier is ${CARL_APP}, not ADMOB_APP_ID`]);
+  });
+
+  it.each(UNITS)('fails a real build whose %s is malformed or not %s', (key, variable) => {
+    const malformed = archive({ files: { 'Info.plist': appInfo({ ...REAL, [key]: CARL_APP }) } });
+    expect(check(malformed, 'real', REAL_ENV).errors).toEqual([
+      `with ads real, ${key} is ${CARL_APP}, not an AdMob ad unit`,
+    ]);
+    const unit = 'ca-app-pub-1234567890123456/1111111111';
+    const other = archive({ files: { 'Info.plist': appInfo({ ...REAL, [key]: unit }) } });
+    expect(check(other, 'real', REAL_ENV).errors).toEqual([
+      `with ads real, ${key} is ${unit}, not ${variable}`,
+    ]);
+    // Without the variable, any AdMob unit will do, as with the app ID.
+    expect(check(other, 'real', { ...REAL_ENV, [variable]: '' }).errors).toEqual([]);
+  });
+
+  it("fails unless SKAdNetworkItems holds Google's SKAdNetwork identifier, test or real", () => {
+    const message = `the app's Info.plist has no SKAdNetworkItems holding Google's ${GOOGLE_SKADNETWORK}`;
+    const none = archive({ files: { 'Info.plist': appInfo({ SKAdNetworkItems: undefined }) } });
+    expect(check(none).errors).toEqual([message]);
+    const others = archive({
+      files: {
+        'Info.plist': appInfo({
+          SKAdNetworkItems: [{ SKAdNetworkIdentifier: '4fzdc2evr5.skadnetwork' }],
+        }),
+      },
+    });
+    expect(check(others).errors).toEqual([message]);
+    // A bare string isn't an item: each item is a dictionary holding SKAdNetworkIdentifier.
+    const bare = archive({
+      files: { 'Info.plist': appInfo({ SKAdNetworkItems: [GOOGLE_SKADNETWORK] }) },
+    });
+    expect(check(bare).errors).toEqual([message]);
+    const real = archive({
+      files: { 'Info.plist': appInfo({ ...REAL, SKAdNetworkItems: [] }) },
+    });
+    expect(check(real, 'real', REAL_ENV).errors).toEqual([message]);
   });
 
   it("fails a test build that contains Carl's publisher ID", () => {
@@ -509,6 +609,18 @@ describe('an archive that fails', () => {
     });
     expect(check(missing, 'test').errors).toEqual([
       'with ads test, GADApplicationIdentifier is missing, not a Google demo app ID',
+    ]);
+  });
+
+  it.each(UNITS)('fails a test build whose %s is not a Google demo unit', (key, _, unit) => {
+    const carl = archive({ files: { 'Info.plist': appInfo({ [key]: unit }) } });
+    expect(check(carl, 'test').errors).toEqual([
+      `with ads test, ${key} is ${unit}, not a Google demo unit`,
+      "with ads test, the app names the AdMob publisher pub-1234567890123456, not only Google's demo one",
+    ]);
+    const missing = archive({ files: { 'Info.plist': appInfo({ [key]: undefined }) } });
+    expect(check(missing, 'test').errors).toEqual([
+      `with ads test, ${key} is missing, not a Google demo unit`,
     ]);
   });
 
@@ -741,5 +853,46 @@ describe('plist_get', () => {
   it('fails for a key it lacks, or one only inside a dictionary', () => {
     expect(get('Missing')).toEqual(['', 1]);
     expect(get('CFBundleShortVersionString')).toEqual(['', 1]);
+  });
+});
+
+describe('plist_get_each', () => {
+  const xml = join(root, 'each.plist');
+  writeFileSync(
+    xml,
+    plist({
+      Items: [
+        { Id: 'a.skadnetwork', Other: 'x' },
+        { Other: 'y' },
+        { Other: 'z', Id: 'b.skadnetwork' },
+        'c.skadnetwork',
+      ],
+      None: [],
+      Plain: 'Id',
+      Nested: { Inner: [{ Id: 'd.skadnetwork' }] },
+    }),
+  );
+  /** The function itself, from the sourced script: its output and status. */
+  const each = (array, key) => {
+    const result = spawnSync(
+      'bash',
+      ['-c', 'source "$1"; plist_get_each "$2" "$3" <"$4"', 'bash', SCRIPT, array, key, xml],
+      { encoding: 'utf8' },
+    );
+    return [result.stdout, result.status];
+  };
+
+  it('reads the key from each dictionary of a top-level array, in order, and nothing else', () => {
+    expect(each('Items', 'Id')).toEqual(['a.skadnetwork\nb.skadnetwork\n', 0]);
+    expect(each('Items', 'Other')).toEqual(['x\ny\nz\n', 0]);
+    expect(each('None', 'Id')).toEqual(['', 0]);
+    // Not arrays.
+    expect(each('Plain', 'Id')).toEqual(['', 0]);
+    expect(each('Nested', 'Id')).toEqual(['', 0]);
+  });
+
+  it('fails for a key it lacks, or one only inside a dictionary', () => {
+    expect(each('Missing', 'Id')).toEqual(['', 1]);
+    expect(each('Inner', 'Id')).toEqual(['', 1]);
   });
 });

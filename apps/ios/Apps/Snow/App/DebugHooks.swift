@@ -1,4 +1,5 @@
 import Foundation
+import IsItAds
 import IsItModel
 import IsItServices
 import IsItState
@@ -18,8 +19,8 @@ enum DebugHooks {
 
     /// The launch arguments that change how the app starts, before the model reads `store`:
     /// `-uitest` turns animations off; `-resetStore` forgets the place, the units, the saved
-    /// answer and the recent and saved places, for a first launch (not the purchase, which only
-    /// StoreKit's code writes).
+    /// answer, the recent and saved places and when the last full-screen ad showed, for a first
+    /// launch (not the purchase, which only StoreKit's code writes).
     static func prepare(
       store: SharedStore?,
       arguments: [String] = ProcessInfo.processInfo.arguments
@@ -30,6 +31,7 @@ enum DebugHooks {
       if arguments.contains("-resetStore") {
         RecentDefaults().removeAll()
         SavedPlaceDefaults().removeAll()
+        AdDefaults().removeAll()
       }
       if arguments.contains("-resetStore"), let store {
         store.savePlace(.ip)
@@ -142,6 +144,67 @@ enum DebugHooks {
     /// `-apiOrigin <url>`: a deploy preview's API instead of willitsnow.today's (section 4).
     static func apiOrigin(arguments: [String] = ProcessInfo.processInfo.arguments) -> URL? {
       value(after: "-apiOrigin", in: arguments).flatMap { URL(string: $0) }
+    }
+
+    /// `-noads 1`: the free version's ads never start (`LiveHooks`), so a UI test's screens are
+    /// the app's own, and nothing it does reaches Google, whose SDKs the stubbed network never
+    /// covers: no consent form, no band under the pages, no box at their ends, no full-screen
+    /// ad. Any other value stops the app.
+    static func noAds(arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+      guard let value = value(after: "-noads", in: arguments) else { return false }
+      guard value == "1" else { fatalError("-noads: \(value) isn't 1") }
+      return true
+    }
+
+    /// The ads model as AdsTests read it (`AdsReadout`), over the home screen: how far the ads have
+    /// come, whether a full-screen ad is loaded and how many have shown, so a test that sees no ad
+    /// can tell Google's silence from the app's own failure. Nothing at all under `-noads 1`, so
+    /// every other UI test's tree, and so its audits, is as it was.
+    @ViewBuilder
+    static func adsReadout(
+      _ ads: AdsModel,
+      arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> some View {
+      if !noAds(arguments: arguments) {
+        AdsReadout(ads: ads)
+      }
+    }
+
+    /// `-unlocked 0|1`: whether the purchase is owned, whatever `unlock.v1` says, so a UI test
+    /// launches the free version or the paid one; nil without it. Any other value stops the app.
+    static func unlocked(arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool? {
+      guard let value = value(after: "-unlocked", in: arguments) else { return nil }
+      switch value {
+      case "0": return false
+      case "1": return true
+      default: fatalError("-unlocked: \(value) is neither 0 nor 1")
+      }
+    }
+
+    /// The store the model reads: under `-unlocked`, `store` with the purchase as that says
+    /// (`UnlockedState`), from the model's first look at it, and never written to `unlock.v1`,
+    /// which only StoreKit's code writes; `store` itself without it.
+    static func store(
+      _ store: any StoredState,
+      arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> any StoredState {
+      guard let unlocked = unlocked(arguments: arguments) else { return store }
+      return UnlockedState(store: store, unlocked: unlocked)
+    }
+
+    /// `-umpGeography eea|other`: where UMP takes the phone to be, so a UI test meets the
+    /// consent form (the EEA) or none (a region with no regulation in force) wherever it runs,
+    /// UMP forgetting its kept answer at each such launch (`GoogleAds`). Nil, for where the phone
+    /// is, without it; any other value stops the app.
+    static func umpGeography(
+      arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> ConsentGeography? {
+      guard let value = value(after: "-umpGeography", in: arguments) else { return nil }
+      switch value {
+      case "eea": return .eea
+      case "other": return .other
+      default: fatalError("-umpGeography: \(value) is neither eea nor other")
+      }
     }
 
     /// What `-openURLs` asks for: Settings records each web page and email it would open, on
@@ -262,6 +325,14 @@ enum DebugHooks {
     static func waits() -> (any AppClock)? { nil }
 
     static func apiOrigin() -> URL? { nil }
+
+    static func noAds() -> Bool { false }
+
+    static func adsReadout(_ ads: AdsModel) -> some View { EmptyView() }
+
+    static func store(_ store: any StoredState) -> any StoredState { store }
+
+    static func umpGeography() -> ConsentGeography? { nil }
 
     static func stillMotion() -> Bool { false }
 
@@ -409,6 +480,27 @@ enum DebugHooks {
       }
       return .answer(status: 200, body: answer)
     }
+  }
+
+  /// `-unlocked`'s store: whether the purchase is owned as the argument says, and everything else
+  /// as `store` keeps it.
+  private struct UnlockedState: StoredState {
+    let store: any StoredState
+    let unlocked: Bool
+
+    func loadPlace() -> Target { store.loadPlace() }
+
+    func savePlace(_ target: Target) { store.savePlace(target) }
+
+    func loadUnits() -> Units? { store.loadUnits() }
+
+    func saveUnits(_ units: Units) { store.saveUnits(units) }
+
+    func loadUnlocked() -> Bool { unlocked }
+
+    func loadToday() -> SavedToday? { store.loadToday() }
+
+    func saveToday(_ saved: SavedToday) throws { try store.saveToday(saved) }
   }
 
   /// `-location`'s stand-in for Core Location: permission as given, never a prompt, and the
@@ -564,6 +656,46 @@ enum DebugHooks {
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityLabel(Text(verbatim: label))
         .accessibilityValue(Text(verbatim: value))
+    }
+  }
+
+  /// `DebugHooks.adsReadout`: three clear elements of a point each, which show nothing and take
+  /// no tap, whose accessibility values AdsTests read: `debug-ads`, the ads' phase (idle, asking,
+  /// withheld or on); `debug-interstitial`, whether a full-screen ad is loaded, waiting for a
+  /// place to be chosen (ready or none); and `debug-shown`, how many full-screen ads have shown
+  /// and closed this launch. A view of its own, reading the model in its own body, so only it is
+  /// drawn again as they change, not the home screen. Each value is one lowercase word or a
+  /// number, shown to no one, so none of it is copy.
+  @MainActor
+  private struct AdsReadout: View {
+    let ads: AdsModel
+
+    var body: some View {
+      HStack(spacing: 0) {
+        reading("debug-ads", phase)
+        reading("debug-interstitial", ads.interstitialReady ? "ready" : "none")
+        reading("debug-shown", String(ads.interstitialsShown))
+      }
+      .allowsHitTesting(false)
+    }
+
+    /// The ads' phase as one word.
+    private var phase: String {
+      switch ads.phase {
+      case .idle: "idle"
+      case .asking: "asking"
+      case .withheld: "withheld"
+      case .on: "on"
+      }
+    }
+
+    /// A clear point identified `id`, whose accessibility value is `value`.
+    private func reading(_ id: String, _ value: String) -> some View {
+      Color.clear
+        .frame(width: 1, height: 1)
+        .accessibilityElement()
+        .accessibilityValue(Text(verbatim: value))
+        .accessibilityIdentifier(id)
     }
   }
 #endif

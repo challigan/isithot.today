@@ -4,10 +4,11 @@
  * `config.ts`, under the same names, and willitsnow.today's name, which the top bar shows, and its
  * pages and support address (core `SITES.snow` and `CONTACT_EMAIL`), which the app's Settings
  * open, so no URL or name is typed in Swift.
- * A group written whole (`SEARCH`, `AHEAD`, `WIDGET`, `CLIENT`, `PLACES`) gains a member when core adds a
- * key, and stops the generator if the new value isn't a whole number, so a Swift type is chosen
- * for it rather than guessed. `ALERTS` is not written whole: it holds the notifications run's
- * windows, quiet hours and budgets too, and the app needs only `heartbeatDays`.
+ * A group written whole (`SEARCH`, `AHEAD`, `WIDGET`, `CLIENT`, `PLACES`, `ADS`) gains a member
+ * when core or the client adds a key, and stops the generator if the new value isn't a whole
+ * number, so a Swift type is chosen for it rather than guessed. `ALERTS` is not written whole: it
+ * holds the notifications run's windows, quiet hours and budgets too, and the app needs only
+ * `heartbeatDays`.
  */
 import {
   AHEAD,
@@ -23,7 +24,7 @@ import {
   TOMORROW_FROM_HOUR,
   WIDGET,
 } from '@isithot/core';
-import { CLIENT, PLACES } from '@isithot/client';
+import { ADS, CLIENT, PLACES } from '@isithot/client';
 import {
   generatedHeader,
   swiftCall,
@@ -211,6 +212,16 @@ export function constantsSwift(): string {
       ],
       'Places',
       ints('    ', PLACES),
+    ),
+    ...group(
+      [
+        'The ads in the free version (client `ADS`): a full-screen ad at most once every',
+        '`interstitialGapMinutes`, and never one loaded `interstitialMaxAgeMinutes` or more ago; a',
+        'failed load is asked for again after `retryFirstSeconds`, the wait doubling with each',
+        'failure in a row, at most `retryMaxSeconds`.',
+      ],
+      'Ads',
+      ints('    ', ADS),
     ),
     ...group(
       [

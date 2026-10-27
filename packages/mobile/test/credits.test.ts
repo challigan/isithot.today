@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ALERTS, COPY, CREDIT_LINKS, MODELS, MODEL_AGENCIES } from '@isithot/core';
+import { ADS } from '@isithot/client';
 import { APP_COPY } from '../src/appCopy';
 import { DATA_CREDITS, LICENCES_DIR, NOTICES, modelAgencies } from '../src/credits';
 import {
@@ -208,6 +209,12 @@ describe("Your privacy and the website's privacy notice", () => {
       ],
       ['It holds no token or place.', 'it holds no token or place.'],
       ['In the free version, Google shows the ads', 'The free version shows ads from Google AdMob'],
+      // What the phone keeps for the full-screen ads' spacing (`Keys.App.lastInterstitial`).
+      ['when it last showed a full-screen ad', 'when it last showed a full-screen ad'],
+      [
+        `so it shows one at most every ${ADS.interstitialGapMinutes} minutes.`,
+        `so it shows one at most every ${ADS.interstitialGapMinutes} minutes.`,
+      ],
       [APP_COPY.privacyChoices, `Settings → ${APP_COPY.privacyChoices} lets you change it`],
       [APP_COPY.privacyPurchases, APP_COPY.privacyPurchases],
       [APP_COPY.privacyAccounts, 'It has no accounts.'],
@@ -235,5 +242,12 @@ describe("Your privacy and the website's privacy notice", () => {
     expect(new Set(days(notice))).toEqual(new Set(['90']));
     // The days the notifications run keeps a registration that has not checked in (core ALERTS).
     expect(days(APP_COPY.privacyNotifications)).toEqual([String(ALERTS.staleAfterDays)]);
+  });
+
+  it("give the full-screen ads' spacing, the app's own number", () => {
+    const minutes = (text: string) => [...text.matchAll(/(\d+) minutes?\b/g)].map((m) => m[1]);
+    // The only minutes either names, and the gap the app keeps between full-screen ads.
+    expect(minutes(APP_COPY.privacyAds)).toEqual([String(ADS.interstitialGapMinutes)]);
+    expect(minutes(notice)).toEqual([String(ADS.interstitialGapMinutes)]);
   });
 });
