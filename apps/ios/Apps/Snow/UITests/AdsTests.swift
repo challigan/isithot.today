@@ -10,17 +10,17 @@ import XCTest
 /// closes once the ad does, with no second one within 5 minutes.
 ///
 /// Google's consent tool, its form and its demo ads aren't the app's to guarantee: a test whose
-/// answer from Google doesn't come in time skips, saying which, rather than fails. Which it is,
-/// a Debug build's readout of the ads model says (`DebugHooks.adsReadout`, over the home
-/// screen): `debug-ads`, the ads' phase, and `debug-interstitial`, whether a full-screen ad is
-/// loaded. A test skips only while the ads are still asking or are withheld (UMP or Mobile Ads
-/// didn't answer, or the network didn't carry it; `notOn`), or while no full-screen ad has
-/// loaded. What is the app's fails: ads that never start in the free version, no band once they
-/// are on, a consent form skipped, a band or a box out of place, a space that moves as its ad
-/// loads, ads started or shown in the paid version, a loaded full-screen ad that doesn't show, a
-/// picker that never closes, a second full-screen ad. Nothing here is audited, since the ads' own
-/// elements are Google's (HomeAuditTests audit the home screen without them). The screens are
-/// attached for the contact sheet (`ads-…`).
+/// answer from Google doesn't come in time skips, saying which, rather than fails. Which it is, a
+/// Debug build's readout of the ads model says (`DebugHooks.adsReadout`, over the home screen):
+/// `debug-ads`, the ads' phase, `debug-interstitial`, whether a full-screen ad is loaded, and
+/// `debug-shown`, how many have shown and closed. A test skips only while the ads are still asking
+/// or are withheld (UMP or Mobile Ads didn't answer, or the network didn't carry it; `notOn`), or
+/// while no full-screen ad has loaded. What is the app's fails: ads that never start in the free
+/// version, no band once they are on, a consent form skipped, a band or a box out of place, a space
+/// that moves as its ad loads, ads started or shown in the paid version, a loaded full-screen ad
+/// that doesn't show, a picker that never closes, a second full-screen ad. Nothing here is audited,
+/// since the ads' own elements are Google's (HomeAuditTests audit the home screen without them).
+/// The screens are attached for the contact sheet (`ads-…`).
 final class AdsTests: XCTestCase {
   override func setUpWithError() throws {
     // Every frame out of place is reported, not only the first; a screen that never comes
@@ -104,7 +104,8 @@ final class AdsTests: XCTestCase {
   /// In the EEA (`-umpGeography eea`, Google's debug geography, which a Debug build asks again at
   /// each such launch, UMP forgetting its kept answer), Google's consent form comes over the home
   /// screen at launch, the ads asking until it is answered: the ads on before any form is a form
-  /// the app skipped, and fails. Once agreed to, Google's privacy options must be offered, so
+  /// the app skipped, and fails. Consent is a touch the form takes, which the ads coming on show
+  /// (`tapUntilOn`). Once agreed to, Google's privacy options must be offered, so
   /// Settings shows Privacy choices, and Your privacy's line after the ads line points to it
   /// ("See Privacy choices.").
   @MainActor
@@ -127,12 +128,11 @@ final class AdsTests: XCTestCase {
     let agree = try agreeButton(in: form)
     attach(app, as: "ads-consent-form")
     let words = agree.label
-    // Its button, not the web view: the band's banner, which the answer starts, is one too.
-    guard tapUntilGone(agree, tries: 3) else {
+    guard tapUntilOn(agree, in: app) else {
       throw XCTSkip(
-        "Google's consent form was still open after 3 tries at \(words), each a tap once one "
-          + "would reach it and 5 seconds for the form to close; a tap "
-          + (agree.exists && agree.isHittable ? "would reach it now" : "still wouldn't reach it"))
+        "Google's consent form took none of a tap, a tap at its centre and a press on \(words): "
+          + "the ads still read \(adsPhase(in: app) ?? "nothing") 10 seconds after each; a "
+          + "touch " + (agree.exists && agree.isHittable ? "would reach it now" : "wouldn't"))
     }
     try openSettings(app)
     XCTAssertTrue(
@@ -150,10 +150,12 @@ final class AdsTests: XCTestCase {
   /// an answer, so the next isn't one; once the ads are on there, the ad loads, which only the
   /// Debug readout shows (`debug-interstitial` reads ready), within 30 seconds or the test skips,
   /// Google having none to give. A place chosen in the picker then brings the ad over everything,
-  /// the picker under it, or the test fails, as the app had an ad and didn't show it; closed, the
-  /// picker closes too, onto the place chosen. Once the next ad has loaded (30 seconds again, or
-  /// the rest skips, as a choice with no ad loaded would show nothing), another place chosen,
-  /// within 5 minutes of the first ad, brings none: the picker closes straight onto it. The stub
+  /// the picker under it: the test closes it with Google's close button and waits for the app to
+  /// count it shown (`debug-shown`), or fails, as the app had an ad and didn't show it; closed,
+  /// the picker closes too, onto the place chosen. Once the next ad has loaded (30 seconds again,
+  /// or the rest skips, as a choice with no ad loaded would show nothing), another place chosen,
+  /// within 5 minutes of the first ad, brings none: no close button comes, the picker closes
+  /// straight onto it, and the app still counts one. The stub
   /// (`-network`) answers the launch's request by IP with Leeds and each place chosen with its
   /// fixture; Google's traffic goes to Google.
   @MainActor
@@ -175,24 +177,25 @@ final class AdsTests: XCTestCase {
           + "none): Google had no demo ad to give")
     }
     try choose("Kathmandu", in: app)
-    switch afterChoosing(in: app) {
-    case .picker:
-      throw HomeScreenError("The picker is still open 10 seconds after a place was chosen")
-    case .home:
-      expectPlace("Kathmandu", in: app)
+    let firstAd = closeTheAd(in: app, untilShown: 1, timeout: 40)
+    guard firstAd.shown else {
+      attach(app, as: "ads-full-screen-missing")
+      let counted = adsShown(in: app).map(String.init) ?? "nothing"
+      if firstAd.sawAd {
+        throw HomeScreenError(
+          "Google's full-screen ad came and its close button was tapped, but 40 seconds on the "
+            + "app counts none shown (debug-shown reads \(counted))")
+      }
+      let labels = app.buttons.allElementsBoundByIndex.map(\.label)
       throw HomeScreenError(
         "No full-screen ad as the place was chosen, though one was loaded (debug-interstitial "
-          + "read ready): the app didn't show it")
-    case .ad:
-      attach(app, as: "ads-full-screen")
-      try closeTheAd(in: app)
+          + "read ready): in 40 seconds no close button came and the app counts none shown "
+          + "(debug-shown reads \(counted)); the buttons: \(labels)")
     }
     // The picker closes once the ad does, onto the place chosen.
-    guard app.buttons["place"].waitForExistence(timeout: 15) else {
-      throw HomeScreenError(
-        "No home screen 15 seconds after the full-screen ad closed; the picker is "
-          + (app.find("place-search").exists ? "still open" : "closed"))
-    }
+    XCTAssertTrue(
+      gone(app.find("place-search"), within: 15),
+      "The picker is still open 15 seconds after the full-screen ad closed")
     expectPlace("Kathmandu", in: app)
 
     // The next ad, loaded once the first closed, up to 30 seconds on, well within 5 minutes of
@@ -204,15 +207,24 @@ final class AdsTests: XCTestCase {
           + "give, so that a second choice within 5 minutes brings none can't be shown")
     }
     try choose("Leeds", in: app)
-    switch afterChoosing(in: app) {
-    case .picker:
-      throw HomeScreenError("The picker is still open 10 seconds after a place was chosen")
-    case .ad:
+    // No ad's close button on the way: the picker closes straight onto Leeds, and the app still
+    // counts one ad shown.
+    let close = adCloseButton(in: app)
+    let deadline = Date().addingTimeInterval(10)
+    while !close.exists && Date() < deadline {
+      RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+    }
+    if close.exists {
       attach(app, as: "ads-full-screen-again")
       XCTFail("A second full-screen ad, within 5 minutes of the first")
-    case .home:
-      expectPlace("Leeds", in: app)
+      if close.isHittable { close.tap() }
     }
+    XCTAssertTrue(
+      gone(app.find("place-search"), within: 15),
+      "The picker is still open 25 seconds after a place was chosen")
+    expectPlace("Leeds", in: app)
+    XCTAssertEqual(
+      adsShown(in: app), 1, "The full-screen ads shown, once the second place was chosen")
   }
 
   // MARK: - Helpers
@@ -488,63 +500,46 @@ final class AdsTests: XCTestCase {
     result.tap()
   }
 
-  /// Where the screen went once a place was chosen in the picker.
-  private enum Outcome {
-    /// Something over everything: the full-screen ad.
-    case ad
-    /// The picker closed, onto the home screen.
-    case home
-    /// The picker, still open.
-    case picker
+  /// The full-screen ads the model says have shown and closed this launch (`debug-shown`,
+  /// `DebugHooks.adsReadout`); nil when the home screen has no readout, as under a sheet.
+  @MainActor
+  private func adsShown(in app: XCUIApplication) -> Int? {
+    let readout = app.find("debug-shown")
+    return readout.exists ? (readout.value as? String).flatMap { Int($0) } : nil
   }
 
-  /// Where the screen goes in the 10 seconds after a place is chosen in the picker: the home
-  /// screen, once its place button is back and the picker's search field gone (HomeView takes the
-  /// home screen out of the tree while a sheet is open, so the button comes back only once the
-  /// picker has closed); something over everything for a second on end, the place button still
-  /// out and the search field gone or covered, which is the full-screen ad (a second, so a frame
-  /// between the picker and the home screen isn't taken for one); or neither, the picker.
+  /// Google's full-screen ad's close button, labelled "Close Advertisement" (GMA 13.11.0's
+  /// `GADCloseButton`, in its binary's strings), not the picker's own Close, under the ad.
   @MainActor
-  private func afterChoosing(in app: XCUIApplication) -> Outcome {
-    let field = app.find("place-search")
-    let place = app.buttons["place"]
-    let deadline = Date().addingTimeInterval(10)
-    var covered: Date?
-    while Date() < deadline {
-      let home = place.exists
-      let picker = field.exists && field.isHittable
-      if home && !field.exists { return .home }
-      if !home && !picker {
-        let since = covered ?? Date()
-        if Date().timeIntervalSince(since) >= 1 { return .ad }
-        covered = since
-      } else {
-        covered = nil
-      }
-      RunLoop.current.run(until: Date().addingTimeInterval(0.25))
-    }
-    return covered == nil ? .picker : .ad
-  }
-
-  /// Closes the full-screen ad with its close button, a button whose label says Close (not the
-  /// picker's own, under the ad), once a tap would reach it, within 10 seconds (an ad may count
-  /// down before it can be closed); skips, listing the buttons, when there is none.
-  @MainActor
-  private func closeTheAd(in app: XCUIApplication) throws {
+  private func adCloseButton(in app: XCUIApplication) -> XCUIElement {
     let format = "label CONTAINS[c] %@ AND identifier != %@"
-    let close = app.buttons.matching(NSPredicate(format: format, "close", "picker-close"))
-      .firstMatch
-    let deadline = Date().addingTimeInterval(10)
-    while !(close.exists && close.isHittable) && Date() < deadline {
+    return app.buttons.matching(NSPredicate(format: format, "close", "picker-close")).firstMatch
+  }
+
+  /// After a place is chosen with a full-screen ad on hand: taps Google's ad's close button once
+  /// a tap would reach it (an ad may count down before it can be closed), attaching the screen
+  /// the first time, until the model counts the ad shown, which it does only once the ad has
+  /// closed (`debug-shown` reaching `count`), for up to `timeout` seconds. Whether it did, and
+  /// whether a close button ever came. The screen alone can't say: on eb5dfd8's macOS run, with
+  /// Google's ad over the picker (its screen recording shows it), XCUITest still found the home
+  /// screen's place button, and the test took the ad for the home screen.
+  @MainActor
+  private func closeTheAd(
+    in app: XCUIApplication, untilShown count: Int, timeout: TimeInterval
+  ) -> (shown: Bool, sawAd: Bool) {
+    let close = adCloseButton(in: app)
+    let deadline = Date().addingTimeInterval(timeout)
+    var sawAd = false
+    while Date() < deadline {
+      if adsShown(in: app) == count { return (true, sawAd) }
+      if close.exists && close.isHittable {
+        if !sawAd { attach(app, as: "ads-full-screen") }
+        sawAd = true
+        close.tap()
+      }
       RunLoop.current.run(until: Date().addingTimeInterval(0.5))
     }
-    guard close.exists && close.isHittable else {
-      let labels = app.buttons.allElementsBoundByIndex.map(\.label)
-      throw XCTSkip(
-        "Google's full-screen ad has no button whose label says Close that a tap would reach; "
-          + "the buttons: \(labels)")
-    }
-    close.tap()
+    return (adsShown(in: app) == count, sawAd)
   }
 
   /// Checks the home screen shows `name`, the place chosen: the place button names it, within 15
@@ -581,20 +576,26 @@ final class AdsTests: XCTestCase {
       "Google's consent form has no button labelled Consent or Accept; its buttons: \(labels)")
   }
 
-  /// Taps `button`, one of Google's consent form's, until it is gone: up to `tries` taps, each
-  /// once a tap would reach it (within 10 seconds), then 5 seconds for it to go; whether it went.
-  /// A tap as the form's page loads may not take: on 3f91596's macOS run the form was still open
-  /// 10 seconds after a single tap on Consent, made as soon as the button was in the tree.
+  /// Touches `button`, Google's consent form's, until the ads come on (the readout's `debug-ads`
+  /// reads on, which only an answer the form takes brings): a tap, then a tap at the button's
+  /// centre, then a press, each once a touch would reach it (within 10 seconds), then 10 seconds
+  /// for the ads. Whether they came on. Not whether the button went: on two macOS runs (3f91596
+  /// and eb5dfd8) it was still there after every tap, as XCUITest went on finding elements no
+  /// longer on screen (the full-screen test's place button under Google's ad).
   @MainActor
-  private func tapUntilGone(_ button: XCUIElement, tries: Int) -> Bool {
-    for _ in 0..<tries {
+  private func tapUntilOn(_ button: XCUIElement, in app: XCUIApplication) -> Bool {
+    let touches: [(XCUIElement) -> Void] = [
+      { $0.tap() },
+      { $0.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() },
+      { $0.press(forDuration: 0.2) },
+    ]
+    for touch in touches {
       let deadline = Date().addingTimeInterval(10)
       while button.exists && !button.isHittable && Date() < deadline {
         RunLoop.current.run(until: Date().addingTimeInterval(0.25))
       }
-      guard button.exists else { return true }
-      if button.isHittable { button.tap() }
-      if gone(button, within: 5) { return true }
+      if button.exists && button.isHittable { touch(button) }
+      if waitForAdsPhase(["on"], in: app, timeout: 10) == "on" { return true }
     }
     return false
   }

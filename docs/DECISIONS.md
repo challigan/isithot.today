@@ -5261,11 +5261,19 @@ when the app is at fault, and the screen alone can't tell the two apart: no band
 start looks like too, and so is no full-screen ad. So a Debug build draws a readout of the ads
 model for them (`DebugHooks.adsReadout`, over the home screen's corner, out of the pages; nothing
 under `-noads 1` or in a Release build): `debug-ads`, the phase (`idle`, `asking`, `withheld` or
-`on`), and `debug-interstitial`, `ready` or `none`. `asking` (UMP's update, its form or Mobile Ads'
+`on`); `debug-interstitial`, `ready` or `none`; and `debug-shown`, how many full-screen ads have
+shown and closed this launch (`AdsModel.interstitialsShown`). `asking` (UMP's update, its form or Mobile Ads'
 start still out) and `withheld` (UMP says no ads may be requested) skip; `idle` in a free launch,
 or no readout, fails, as does `on` with no band within 5 seconds. The full-screen test waits for
-`ready` before it chooses a place, skips if no ad ever loads, and fails if one was ready and none
-showed. Found in review, after the first macOS run's skips had blamed Google for whatever kept the
+`ready` before it chooses a place, skips if no ad ever loads, and fails if one was ready and the
+app never counts it shown. The screen can't say whether an ad showed, nor whether the consent form
+took a tap: on eb5dfd8's run Google's full-screen ad came over the picker (the screen recording
+shows "This is an interstitial test ad" over it), yet XCUITest still found the home screen's place
+button, so the test took the ad for the home screen and failed; and the form's Consent button was
+still found after every tap on both runs. So the full-screen test closes the ad with Google's own
+button ("Close Advertisement", in the SDK's strings) and waits for `debug-shown`, and the consent
+test waits for the ads to come on after each touch, trying a tap, then a tap at the button's
+centre, then a press. Found in review, after the first macOS run's skips had blamed Google for whatever kept the
 ads away.
 
 1. **The band under the pager** (`-resetStore -fixture leeds-dry -umpGeography other -unlocked 0`):
@@ -5281,16 +5289,16 @@ ads away.
    an ad and no Privacy choices; and Your privacy's four lines, none naming Google.
 3. **The EEA** (`-umpGeography eea`): Google's consent form (a web view, 30 seconds at most; the
    ads on with no form fails, since the debug geography makes UMP ask again each launch) and its
-   Consent button tapped, up to three times while it stays (on 3f91596's run one tap left the form
-   open: the button was in the tree before the form took taps), then Privacy choices in Settings
-   and "See Privacy choices." as Your privacy's fourth line.
+   Consent button touched until the ads come on (a tap, a tap at its centre, then a press; none
+   taking skips), then Privacy choices in Settings and "See Privacy choices." as Your privacy's
+   fourth line.
 4. **The full-screen ad.** A first launch saves an answer, so the second isn't a first run
    (`-network ip-first-launch,leeds-dry,kathmandu-0545`; the second at Kathmandu's moment). Once
    `debug-interstitial` reads `ready` (30 seconds at most, else it skips), Kathmandu chosen in the
-   picker must bring an ad over everything (the place button gone, and the search field gone or out
-   of reach, for a second), and closing it leaves the home screen on Kathmandu. Once the next ad is
-   `ready` (else that part can't be shown, and it skips), Leeds chosen brings none, within the 5
-   minutes.
+   picker must bring the ad: the test closes it with its close button, and the app must count it
+   shown (`debug-shown` reads 1) within 40 seconds, then the picker closes onto Kathmandu. Once the
+   next ad is `ready` (else that part can't be shown, and it skips), Leeds chosen brings none, within
+   the 5 minutes: no close button, the picker closes onto Leeds, and the count stays 1.
 
 No UI test covers Privacy choices opening Google's form, which only trying it will show, nor the
 first run's rule (`AdsModelTests` has that); and no job builds with the real units (`ads real`)
@@ -5345,14 +5353,19 @@ on its own expectation (the band's frame takes in its tint under the home indica
 the consent test skipped with the form still open after one tap, and the full-screen test skipped
 before its ad had loaded: each is now as above.
 
+**What eb5dfd8's run showed** (run 40431062162). The readout's elements were read, values and all.
+The band test passed with its frames as measured, the paid version again, and every older test
+again. Google's full-screen ad came over the picker the moment Kathmandu was chosen, from an ad
+loaded beforehand, as the policy asks; the test misread it, as above. The consent form stayed open
+after three plain taps.
+
 **For the next macOS run to show.** Each of these is unproven until then:
 
-- that `debug-ads` and `debug-interstitial` are elements XCUITest reads, with their values;
-- that the band test passes with its frames as measured, and that the consent form closes within
-  three taps of Consent, after which Privacy choices shows in Settings;
-- that the full-screen ad comes over the picker once `ready`, the picker closes when it does, and
-  none comes within 5 minutes; and that Google always says the ad closed or failed to show, without
-  which the picker would never close;
+- that the full-screen test closes the ad with "Close Advertisement" and the app counts it, the
+  picker closes when it does, and none comes within 5 minutes; and that Google always says the ad
+  closed or failed to show, without which the picker would never close;
+- that a tap at its centre or a press on Consent is one the form takes, after which Privacy
+  choices shows in Settings;
 - that the consent form, now loaded before it is shown, still comes (`ConsentForm.load` and a form's
   `present(from:)`, the names the headers give);
 - that the page-end box waits for an answer, so none shows under "Checking…".

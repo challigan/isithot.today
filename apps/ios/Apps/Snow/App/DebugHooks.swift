@@ -156,10 +156,10 @@ enum DebugHooks {
       return true
     }
 
-    /// The ads model as AdsTests read it (`AdsReadout`), over the home screen: how far the ads
-    /// have come and whether a full-screen ad is loaded, so a test that sees no ad can tell
-    /// Google's silence from the app's own failure. Nothing at all under `-noads 1`, so every
-    /// other UI test's tree, and so its audits, is as it was.
+    /// The ads model as AdsTests read it (`AdsReadout`), over the home screen: how far the ads have
+    /// come, whether a full-screen ad is loaded and how many have shown, so a test that sees no ad
+    /// can tell Google's silence from the app's own failure. Nothing at all under `-noads 1`, so
+    /// every other UI test's tree, and so its audits, is as it was.
     @ViewBuilder
     static func adsReadout(
       _ ads: AdsModel,
@@ -659,12 +659,13 @@ enum DebugHooks {
     }
   }
 
-  /// `DebugHooks.adsReadout`: two clear elements of a point each, which show nothing and take no
-  /// tap, whose accessibility values AdsTests read: `debug-ads`, the ads' phase (idle, asking,
-  /// withheld or on), and `debug-interstitial`, whether a full-screen ad is loaded, waiting for a
-  /// place to be chosen (ready or none). A view of its own, reading the model in its own body, so
-  /// only it is drawn again as they change, not the home screen. Each value is one lowercase
-  /// word, shown to no one, so none of it is copy.
+  /// `DebugHooks.adsReadout`: three clear elements of a point each, which show nothing and take
+  /// no tap, whose accessibility values AdsTests read: `debug-ads`, the ads' phase (idle, asking,
+  /// withheld or on); `debug-interstitial`, whether a full-screen ad is loaded, waiting for a
+  /// place to be chosen (ready or none); and `debug-shown`, how many full-screen ads have shown
+  /// and closed this launch. A view of its own, reading the model in its own body, so only it is
+  /// drawn again as they change, not the home screen. Each value is one lowercase word or a
+  /// number, shown to no one, so none of it is copy.
   @MainActor
   private struct AdsReadout: View {
     let ads: AdsModel
@@ -673,6 +674,7 @@ enum DebugHooks {
       HStack(spacing: 0) {
         reading("debug-ads", phase)
         reading("debug-interstitial", ads.interstitialReady ? "ready" : "none")
+        reading("debug-shown", String(ads.interstitialsShown))
       }
       .allowsHitTesting(false)
     }

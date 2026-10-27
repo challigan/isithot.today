@@ -302,6 +302,7 @@ struct AdsInterstitialTests {
     ads.clock.now = later(AdsHarness.moment, minutes: 2)
     let done = ads.choose()
     #expect(!ads.model.interstitialReady)
+    #expect(ads.model.interstitialsShown == 0)
     #expect(ads.store.loadLastInterstitial() == ads.clock.now)
     #expect(await yieldUntil { ads.platform.calls.last == "presentInterstitial" })
     await settle()
@@ -316,6 +317,7 @@ struct AdsInterstitialTests {
       ])
     #expect(ads.store.loadLastInterstitial() == later(AdsHarness.moment, minutes: 2))
     #expect(ads.model.interstitialReady)
+    #expect(ads.model.interstitialsShown == 1)
   }
 
   @Test("within 5 minutes of the last, kept from an earlier launch: done at once")
@@ -382,6 +384,7 @@ struct AdsInterstitialTests {
       #expect(await yieldUntil { done.read { $0 } == 1 })
       await settle()
       #expect(ads.store.loadLastInterstitial() == last)
+      #expect(ads.model.interstitialsShown == 0)
       #expect(
         ads.platform.interstitialCalls == [
           "loadInterstitial", "presentInterstitial", "loadInterstitial",

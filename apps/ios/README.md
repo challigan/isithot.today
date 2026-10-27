@@ -1170,8 +1170,8 @@ units over the real network: the band under the pager and the box at a page's en
 `ads-page-end`), the paid version with none, the consent form in the EEA and then Privacy choices
 (`ads-consent-form`, `ads-privacy-choices`), and the full-screen ad as a place is chosen, then none
 within 5 minutes (`ads-full-screen`). Each skips, saying why, only when Google didn't answer in
-time, which a Debug build's readout of the ads model tells it (`debug-ads`, `debug-interstitial`);
-what is the app's fails.
+time, which a Debug build's readout of the ads model tells it (`debug-ads`, `debug-interstitial`,
+`debug-shown`); what is the app's fails.
 
 **Trying it.** A Debug build run from Xcode is the free version, with Google's demo ads. `-noads 1`
 runs it without them, `-unlocked 1` as the paid version, and on the simulator `-umpGeography eea`
@@ -1375,10 +1375,10 @@ launch argument. So far there are these:
   none, so on an iPhone UMP still goes by where the phone is. Either way UMP forgets the answer it
   kept at each such launch, so the form comes again. `-resetStore` leaves UMP's own answer alone.
   Any other value stops the app;
-- the ads readout, which `AdsTests` reads: unless `-noads 1`, two clear one-point elements in the
-  home screen's corner, `debug-ads` (the ads model's phase: `idle`, `asking`, `withheld` or `on`)
-  and `debug-interstitial` (`ready` or `none`), so a test can tell Google not answering from the
-  app failing;
+- the ads readout, which `AdsTests` reads: unless `-noads 1`, three clear one-point elements in
+  the home screen's corner, `debug-ads` (the ads model's phase: `idle`, `asking`, `withheld` or
+  `on`), `debug-interstitial` (`ready` or `none`) and `debug-shown` (how many full-screen ads have
+  shown and closed), so a test can tell Google not answering from the app failing;
 - the unit tests' host: when the app only hosts the unit tests (XCTest's
   `XCTestConfigurationFilePath` in its environment), it doesn't launch (`AppModel.launch()`), so
   the hosted tests have the App Group to themselves; a launch with `-fixture` or `-network`

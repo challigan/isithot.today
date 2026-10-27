@@ -118,6 +118,9 @@ public final class AdsModel {
   /// Whether a full-screen ad is loaded, fresh or not, and waiting for a choice: what a Debug
   /// build's UI tests read to tell Google's lack of an ad from the app's failing to show one.
   public var interstitialReady: Bool { interstitialLoadedAt != nil }
+  /// How many full-screen ads have shown and closed this launch: what a Debug build's UI tests
+  /// read to know one showed, as the screen under Google's ad can't tell them.
+  public private(set) var interstitialsShown = 0
 
   @ObservationIgnored private let platform: any AdsPlatform
   @ObservationIgnored private let store: any AdsStore
@@ -291,7 +294,11 @@ public final class AdsModel {
     store.saveLastInterstitial(now)
     Task {
       let shown = await platform.presentInterstitial()
-      if !shown { store.saveLastInterstitial(last) }
+      if shown {
+        interstitialsShown += 1
+      } else {
+        store.saveLastInterstitial(last)
+      }
       done()
       loadInterstitial()
     }
