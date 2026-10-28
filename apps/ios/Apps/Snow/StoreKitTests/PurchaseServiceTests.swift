@@ -39,13 +39,8 @@ final class PurchaseServiceTests: XCTestCase {
     // By its URL in this bundle: Apple documents `init(configurationFileNamed:)` as reading a
     // file in the application's bundle, which never holds it.
     let session = try SKTestSession(contentsOf: snowStoreKitURL())
-    session.resetToDefaultState()
+    clearSimulatedErrors(session)
     session.clearTransactions()
-    session.disableDialogs = true
-    session.askToBuyEnabled = false
-    try await session.setSimulatedError(nil, forAPI: .purchase)
-    try await session.setSimulatedError(nil, forAPI: .verification)
-    try await session.setSimulatedError(nil, forAPI: .appStoreSync)
     self.session = session
     purchase = StoreKitPurchase()
   }
@@ -58,13 +53,23 @@ final class PurchaseServiceTests: XCTestCase {
     relaunched = nil
     if let session {
       session.clearTransactions()
-      try await session.setSimulatedError(nil, forAPI: .purchase)
-      try await session.setSimulatedError(nil, forAPI: .verification)
-      try await session.setSimulatedError(nil, forAPI: .appStoreSync)
       session.resetToDefaultState()
     }
     session = nil
     try await super.tearDown()
+  }
+
+  /// Clears every simulated error and puts the session's settings back:
+  /// `resetToDefaultState()`, then the dialogs off and Ask to Buy off. Never
+  /// `setSimulatedError(nil, forAPI: .purchase)`, which leaves every purchase the app makes
+  /// failing (`StoreKitError.unknown`: the test server keeps the transaction and answers
+  /// `cancel-purchase-batch` with an empty `failureType`) while `simulatedError(forAPI:
+  /// .purchase)` reads nil. `resetToDefaultState()` clears that, and a real simulated error too
+  /// (PR #41's probe, on the iOS 26.2 and 18.6 simulators, under Xcode 26.6 and 26.2).
+  private func clearSimulatedErrors(_ session: SKTestSession) {
+    session.resetToDefaultState()
+    session.disableDialogs = true
+    session.askToBuyEnabled = false
   }
 
   // MARK: - The product
@@ -357,7 +362,7 @@ final class PurchaseServiceTests: XCTestCase {
     XCTAssertEqual(purchase.model.state.attempt, .idle)
     XCTAssertFalse(purchase.model.owned)
     XCTAssertEqual(session.allTransactions().count, 0)
-    try await session.setSimulatedError(nil, forAPI: .purchase)
+    clearSimulatedErrors(session)
     await purchase.model.buy()
     XCTAssertEqual(
       purchase.platform.answers("buy"), ["buy → cancelled", "buy → completed"],
