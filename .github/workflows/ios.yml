@@ -317,16 +317,6 @@ jobs:
           echo "udid=$udid" >> "$GITHUB_OUTPUT"
       - name: Build for testing
         run: apps/ios/ci/test.sh build "${{ steps.simulator.outputs.udid }}"
-      # PROBE: the simulated-error variants alone, first, on the fresh simulator.
-      - name: The error probe
-        run: |
-          xcodebuild test-without-building \
-            -project apps/ios/WillItSnow.xcodeproj -scheme WillItSnow -testPlan StoreKit \
-            -only-testing:WillItSnowStoreKitTests/AAErrorProbe -parallel-testing-enabled NO \
-            -destination "id=${{ steps.simulator.outputs.udid }}" \
-            -derivedDataPath apps/ios/build/DerivedData \
-            -clonedSourcePackagesDirPath apps/ios/.spm \
-            -resultBundlePath apps/ios/build/Probe.xcresult 2>&1 | grep -a "PROBE \|Test Case" || true
       - name: StoreKit tests
         if: ${{ !cancelled() }}
         run: apps/ios/ci/test.sh StoreKit "${{ steps.simulator.outputs.udid }}"
