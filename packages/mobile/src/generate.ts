@@ -21,6 +21,7 @@ import { ASSETS_DIR, iconFiles } from './exportIcon';
 import { KEYS_PATH, keysSwift } from './exportKeys';
 import { PALETTES_PATH, palettesSwift } from './exportPalettes';
 import { QUESTIONS_PATH, questionsSwift } from './exportQuestions';
+import { STOREKIT_DIR, STOREKIT_PATH, storeKitJson } from './exportStoreKit';
 import {
   FIXTURES,
   SEARCH_FIXTURES,
@@ -64,6 +65,7 @@ export const OWNED_DIRS: readonly string[] = [
   ASSETS_DIR,
   FONTS_DIR,
   CONFIGS_GENERATED_DIR,
+  STOREKIT_DIR,
   UI_TESTS_GENERATED_DIR,
 ];
 
@@ -83,9 +85,10 @@ export interface AssetSources {
 
 /**
  * Every file but the fonts, in order: IsItModel's Swift (the palettes and brand colours last),
- * the Info.plist's strings (`Copy.xcconfig`), each fixture, each search fixture, each vector
- * file, worked out from the fixtures exactly as their files have them, the UI tests' screens
- * (from page.json) and surfaces (from brandColours.ts), then the glyphs and the app icon.
+ * the Info.plist's strings (`Copy.xcconfig`), the StoreKit configuration (`Snow.storekit`), each
+ * fixture, each search fixture, each vector file, worked out from the fixtures exactly as their
+ * files have them, the UI tests' screens (from page.json) and surfaces (from brandColours.ts),
+ * then the glyphs and the app icon.
  */
 export async function generatedFiles(sources: AssetSources): Promise<GeneratedFile[]> {
   const files: GeneratedFile[] = [
@@ -99,6 +102,7 @@ export async function generatedFiles(sources: AssetSources): Promise<GeneratedFi
     { path: PALETTES_PATH, contents: palettesSwift() },
     { path: BRAND_COLOURS_PATH, contents: brandColoursSwift() },
     { path: CONFIG_COPY_PATH, contents: configCopy() },
+    { path: STOREKIT_PATH, contents: storeKitJson() },
   ];
   const fixtures = new Map<string, Fixture>();
   for (const spec of FIXTURES) {

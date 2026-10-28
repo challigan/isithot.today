@@ -1397,7 +1397,9 @@ read CI; this records where the build fills or differs from the spec.
   `FEATURE_*` switches. The privacy manifests declare UserDefaults (CA92.1 and 1C8F.1 for the
   app, 1C8F.1 for the widget) and no collected data, until location and notifications arrive.
   Phase 2.3 added the font and the icon, and phase 8.3 `SKAdNetworkItems`, Google's list copied
-  by hand until `ios-nightly.yml` exists ("Ads in the iPhone app: three placements").
+  by hand until `ios-nightly.yml` exists ("Ads in the iPhone app: three placements"). Phase 7.1
+  added the StoreKit configuration, to the scheme's Run action and the StoreKit tests' bundle,
+  never to the app or its Info.plist ("The purchase in the iPhone app (phase 7.1)").
 - **XcodeGen's presets.** XcodeGen adds Xcode's template settings to each target unless a
   project xcconfig names the setting, so `Base.xcconfig` is what decides the device family
   (iPhone only), the Swift version and the icon (none; since phase 2.3 project.yml names the
@@ -2085,12 +2087,12 @@ Linux; IsItKit only fills its protocols. `apps/ios/README.md` lists the types.
   The footer's line is `AppCopy.offline` with `UpdatedLine`; an answer without `updated` has
   none. An error keeps the answer on screen, and the message is the server's, or
   `CoreCopy.unavailable` when it sent none (which the page says too since the review, below).
-- **What is stored.** `SavedToday` moved from IsItServices to IsItModel, with its codec: `v` is
-  read first, on its own, so another version's file is ignored whatever it holds.
-  `StoredUnlock` reads `unlock.v1` as `{ unlocked, checkedAt, productID }` JSON, the API's dates
-  in it; phase 7's StoreKit code writes it. `SharedStore` is the App Group's `StoredState`, and
-  `MemoryState` stands in when a Release build can't open the group (nothing is kept; the
-  widget sees nothing).
+- **What is stored.** `SavedToday` moved from IsItServices to IsItModel, with its codec: `v` is read
+  first, on its own, so another version's file is ignored whatever it holds. `StoredUnlock` reads
+  `unlock.v1` as `{ unlocked, checkedAt, productID }` JSON, the API's dates in it; phase 7's
+  StoreKit code writes it (since phase 7.1, `PurchaseModel`, through `UnlockStore`: "The purchase in
+  the iPhone app (phase 7.1)"). `SharedStore` is the App Group's `StoredState`, and `MemoryState`
+  stands in when a Release build can't open the group (nothing is kept; the widget sees nothing).
 - **Dates are exact to the millisecond.** `ApiJSON`'s encoder wrote dates with a formatter that
   cuts the `Date`'s seconds, so a moment such as .234 s, whose double is a hair below, was
   written .233: a saved answer fetched at an arbitrary moment read back a millisecond early. The
@@ -2882,7 +2884,9 @@ and licences, the static lines of Your privacy, and Report an ad (sections 10.4,
   which only phase 8's consent code can say, so the app passes false. `SettingsScreen` takes
   that flag already, `YourPrivacy` the lines kept for notifications (nil until a registration),
   and `SettingsActions` the form and the delete button, both nil. (Since phase 8.3 the app passes
-  Google's answer and the form: "Ads in the iPhone app: three placements".)
+  Google's answer and the form: "Ads in the iPhone app: three placements". Since phase 7.1 the
+  upgrade row and Restore purchase are in, as one card with no heading straight after the units,
+  until phase 8.1's Notifications come between: "The purchase in the iPhone app (phase 7.1)".)
 - **"Ads on" is the free version** (`!unlocked`), as section 14.2 starts the ads only when not
   unlocked: Report an ad shows in the free version (10.7) and Your privacy's ads line with it,
   though phase 6 builds no banner yet (phase 8.3's ads follow the same `!unlocked`). Bought,
@@ -4762,6 +4766,36 @@ swipes and the home audits' taps pass with the pages setting the view only at re
 still opens on Today before 6pm, its pages on it after every launch and tap (`offScreen`); and
 that the licence's audit passes, and the picker's still do.
 
+**What PR #36's and #39's runs showed** (PR #36: run 40242003907, job 121316022296; PR #39: run
+40562013812, job 122394234668). `HomeTests.testTheMiddleTabTurnsToTomorrowAt6pm` failed the same
+way on both, after `PagerSync` had replaced the write-back above. Once the 6pm flip had drawn
+(the palette's 0.9-second fade), the screen was still for 3.4 and 1.9 seconds. Then a tap on Now
+at (86.33, 210), the centre of `view-now`, drew the word pressed and let go: 0.992 of its width
+on PR #39's recording, 0.972 on PR #36's, whole again within 0.1 seconds. Nothing else moved,
+and for 20 seconds the tree read tomorrow's heading with Tomorrow chosen. So the touch reached
+the button and its action changed nothing on screen.
+
+- `PagerSync` can't have undone it. On iOS 18 it writes the view only at rest after a finger
+  moved the pages, and this test never touches them. So the write-back blamed for cf4eb74's tap,
+  pressed and let go with nothing chosen, is in doubt as that tap's cause too.
+- Nor any other writer of the model's view: the launch, the first answer and the return to the
+  foreground didn't run.
+- The other 15 or so switcher taps a run, in 27 logs, never failed so. What is new here is that
+  the minute's tick, not a tap, turned the middle tab, and with it the theme, the colour scheme
+  and an announcement.
+- The test's comment said no request went. One does: the fixture's hours start at 17:00Z, so a
+  quiet refresh is due at 18:00Z plus 0 to 90 seconds. It would have had to land inside the
+  touch's 50 ms.
+- What the artefacts can't show is whether the action ran, whether the model moved and the views
+  didn't, and whether UIKit ended the touch or cancelled it. It stays unexplained, and the test
+  unchanged: it fails, as it should, about one run in eight.
+- A Debug readout of the writes to the model's view and of the window's touches was built and
+  left out of PR #39: its watch-only recognizer on the window and the switcher's and pager's
+  wrapped bindings would change every UI test's touch handling to diagnose one. Should the test
+  fail again, the next step is the writes alone, in a PR of its own, then the fix where they
+  point: the switcher's button, the views' observation, or `PagerSync`. A tap that reached the
+  app is never tapped again.
+
 ## After #34's fourth full run
 
 PR #34's fourth full macOS run, on c74aa22 (run 40189947895, job 121158965836), passed 43 of the 44
@@ -4875,6 +4909,33 @@ and e1bc88e's (session scratchpad: hang-wk4).
   stopped screens share: the sources' sentence and its link rows at AX3, a link cut by the screen's
   bottom edge) or in where the pages break (`step`), read first from the trees and `-moved` screens
   attached and a spindump of testmanagerd.
+
+**What PR #37's, #38's and #39's runs showed** (PR #37's last run; PR #38's runs 40541947888
+and 40562032792; PR #39's 40562013812). The stall follows the exact screen, to about a point.
+
+- Of 342 contrast calls on the four runs with attachments, 337 took 2.0 seconds or less and four
+  stopped at 15.0 to 15.2. None took anything between, and runner speed doesn't predict either.
+- Every stop was on leeds-dry's week page at AX3, sixth screenful. The credits were at 649.7,
+  650.07, 650.7 and 656.4 points down the screen where calls stopped, and at 638.7, 643.4 and
+  653.4 where they finished. The content is the same in every run; only the scroll offset
+  differs.
+- PR #38's second run moved the page 6.3 points, from 656.4 to 650.07. That landed within half a
+  point of two other runs' stops, and the call stopped again.
+- The app logged its 36 candidates and then nothing; the screenful before, with the same 36,
+  finished. The stall is testmanagerd's. XCTest's 15 seconds can't be set: they travel in its private audit
+  configuration.
+- So `auditAgain` now moves the page up to three times (`reaudits`). Each try aims at the point
+  of the band farthest from every place a call stopped, about 11 points on the first try. It
+  lands at least 3 points (`clearOfStalls`) from each of them (`PageRoom.aims`) and shows whole
+  the same elements as before.
+- Should every try stop, the failure lists each with its move, kinds, time and where the credits
+  were. Each line of the times carries where the credits were ("week page, screenful 6 (credits
+  656.40)"), so runs build up the map of positions.
+- Checked on Linux: the re-audit runs against a fake app on c74aa22's tree. Three stops in a row
+  (moves of 8.5 points, then -11.5, then -7.2, each at least 3 from the others) fail listing all
+  three. A second try away from both stops goes on to the page's end. Issues aren't counted
+  twice, and a page that won't move fails with each band's aim. `PageRoom.aims` was checked on
+  bands cut by one, two and three stops.
 
 ## The place pill on one line, after #34 merged
 
@@ -5018,7 +5079,10 @@ banner at the end of each page (Now, Today or Tomorrow, This week), an inline ad
 website's ad box after the footer's links; and a full-screen ad (an interstitial) as the user
 chooses a place. Before any of them comes Google's consent (UMP, spec 14.2), and Settings shows
 "Privacy choices" while UMP says its form is required. Nothing starts in an unlocked session, and
-every build but the release candidate's uses Google's demo units (`ADS_UNITS = test`).
+every build but the release candidate's uses Google's demo units (`ADS_UNITS = test`). Since
+phase 7.1, a purchase made while the app runs stops all three placements at once
+(`AdsModel.stop()`), and a lock found mid-session (a refund, a Family Sharing removal) starts
+nothing until the next launch ("The purchase in the iPhone app (phase 7.1)").
 `apps/ios/README.md` ("Phase 8.3: the ads") lists the types; this records why they are as they are,
 and where the build differs from the design it was built from.
 
@@ -5244,9 +5308,12 @@ anything in either SDK, so no other hook changed. Still 15 hooks.
 `DebugHooks.swift`, each with a Release stub that names no argument: `-noads 1` (the ads never
 start, `LiveHooks`); `-unlocked 0|1` (the purchase as it says, from the model's first look at the
 store, through a store that answers `loadUnlocked()` with it and never writes `unlock.v1`, which
-only StoreKit's code writes); and `-umpGeography eea|other` (UMP's debug geography, with the answer
-it kept forgotten at each such launch, so its form comes again). Any other value stops the app,
-`-noads` included (the design didn't say). `-resetStore` forgets the last full-screen ad too.
+only StoreKit's code writes; since phase 7.1 it also puts StoreKit's stand-in in StoreKit's place,
+answering the same, so the launch's check agrees with it, as `-uitest`, `-purchase` and `-restore`
+do: "The purchase in the iPhone app (phase 7.1)"); and `-umpGeography eea|other` (UMP's debug
+geography, with the answer it kept forgotten at each such launch, so its form comes again). Any
+other value stops the app, `-noads` included (the design didn't say). `-resetStore` forgets the last
+full-screen ad too.
 
 **The UI tests: `-noads 1`, but for AdsTests.** Every older UI test's launch passes `-noads 1`
 (HomeScreens.swift's `launchApp`, FixtureLaunchTests, LaunchTests, PickerTests and SettingsTests),
@@ -5369,9 +5436,577 @@ EEA; one of the three touches on Consent was taken (the log doesn't say which), 
 Settings showed Privacy choices and Your privacy's line pointed to it. The page-end box showed its
 banner under the credits on Leeds's answer.
 
+**What PR #38's and #39's runs showed** (PR #38: runs 40541947888 and 40562032792; PR #39: run
+40562013812). "The picker is still open" failed `PickerTests.testSavingAResult` on PR #38's first
+run. On PR #39's, it failed the full-screen test twice, under 5029e0a's check: the place button
+taking a tap and the search box out of reach. Each screen recording shows the picker closing at
+once.
+
+- On PR #38's, the saved Leeds was tapped at 130.59 seconds, and Leeds' answer was on the home
+  screen by 130.98. No frame followed in the wait's 10 seconds.
+- On PR #39's, the ad closed at 60.96 seconds, and the picker was gone 70 ms later, onto
+  Kathmandu's answer.
+- XCUITest keeps no cache of its own. Each query is answered from a snapshot that the app's
+  accessibility runtime builds, and the hit test behind `isHittable` comes from the same runtime.
+  So the runtime went on serving the closed cover's subtree, for 10 and 15 seconds.
+- In the same seconds it served the home screen's own elements live: the place button's label
+  wait passed, and a tap on it landed. The lag comes and goes: AdsTests' check passed on PR #37's
+  runs and on both of PR #38's.
+- The same run's audit trees list the home screen's top bar under every sheet, though `HomeView`
+  hides it there (`.accessibilityHidden(sheet != nil)`); the pages under it are gone, as they
+  should be. So neither what XCUITest finds nor what it calls hittable says what is on screen.
+- The artefacts can't say which clause of 5029e0a's check failed: no screenshot or tree was
+  attached at the failure. Nor whether VoiceOver meets the closed picker too (its views still in
+  the window) or only automation does (a stale subtree).
+- So a Debug build draws the picker as the app holds it, under `-uitest`, ads or not
+  (`DebugHooks.pickerReadout`), in two clear points at the home screen's top right, outside what
+  a sheet hides. `debug-picker` reads `open` while the home screen has the picker open, `closing`
+  once it has closed it but SwiftUI hasn't called the picker's `onDisappear`, then `closed`, as it
+  does before any picker opens. It follows the home screen's sheet, so the ad taking the picker
+  off screen and back still reads open. `debug-pickers` counts the pickers that came on screen.
+- A test notes the count before it taps the place button (`pickersBefore`). Opening waits for
+  `open` with a higher count (`pickerOpens`), or, should the readout not be found under the
+  cover, for the search box as before. PickerTests' two closing checks and AdsTests' three pass
+  only on `closed` with a count higher than before (`pickerCloses(in:after:within:)`), so the
+  readout at rest, which reads closed too, never passes, and a reopening that never came fails
+  at its close. The place's label and the heading, read from the home screen, still say the
+  picker closed onto the place chosen.
+- Should XCUITest still find the search box once the readout reads closed, the test attaches
+  `picker-closed-lag`, failing nothing. It gives the box's frame (off the screen's foot means the
+  picker's views were still in the window; where the picker had it means a stale tree) and which
+  of the box and the place button a tap would reach. A failure gives the same, with the readout's
+  last word: `open` means the app never closed the picker; `closing` throughout means UIKit's
+  dismissal never finished.
+- Every audit now meets the readouts' one-point elements. An issue on one is set apart
+  (`DebugReadout`) and listed in the times and `-allowed`, so each run shows whether the audit
+  flags such an element at all. A Release build has none.
+- Checked on Linux: the 11 UI test files compile against the XCUITest stubs. `DebugHooks`,
+  `HomeView` and `PickerSheet` type-check in Debug and Release against the ads harness's stubs. `swift format lint --strict` passes on
+  every changed file, and so do the Swift literal guard and `check-archive.test.mjs`. No hook
+  list changes: the readouts are values, as `debug-ads` is, not launch arguments.
+
 **Still unproven on a Mac.** That the page-end box waits for an answer, so none shows under
 "Checking…": no test opens a page without one while the ads are on. It rests on one gate in
 `HomeView` (the page's `footer`), read but not run.
+
+## The purchase in the iPhone app (phase 7.1)
+
+Carl's answer to the open questions of the purchase was "Whatever you think is best boss. Are we
+ready to build the Widgets and notifications now? and the in app purchase." So 7.1 decides each
+of them here. The product is unchanged from spec section 13 and Q4: a free app with ads, and one
+non-consumable at £1.99, "Remove ads and add widgets" (`today.willitsnow.app.unlock`, reference
+name "Snow unlock"), with Family Sharing on, that takes the ads away and turns the widgets on
+(from 7.2), with Restore purchase always there. Nothing in the row, the page, the Settings rows,
+the restore lines, Snow.storekit or the review note names another app, website or weather type.
+`apps/ios/README.md` ("Phase 7.1: the purchase") lists the types; this records why they are as
+they are, and where the build differs from the design it was built from.
+
+**The decisions** (the design's numbering, which the code's comments and tests follow):
+
+1. **No price StoreKit didn't give, and always a way in from Settings.** No price or placeholder
+   is ever shown that StoreKit didn't give (section 0.2). The home row names a price
+   (`upgradeRow`), so it waits for one. Settings always has a way in: "Remove ads and add widgets
+   · £1.99" once StoreKit has a price, and "Remove ads and add widgets" with no price until then
+   (loading, unavailable, payments off). Both open the upgrade page, so a reviewer always finds
+   the purchase (App Review 2.1(b)). Restore purchase shows in every state. The page, which a
+   link can also open, says why it can't sell: a spinner while loading, then "The purchase isn't
+   available right now. Try again later." (offline, or nothing for sale yet: no Paid Apps
+   Agreement, or not attached to the version) or "In-app purchases are turned off on this
+   iPhone." The product is asked for again as Settings or the page appears, and each time the
+   app becomes active (TN3186: "retry the product request").
+2. **Restore's errors** are StoreKit's own words, as 10.5 says for a failed buy. The user
+   cancelling the sign-in shows nothing.
+3. **A revocation mid-session** locks at once (the rows, Report an ad, the widgets), but the ads
+   wait for the next launch (spec 13).
+4. **The row while the middle page reads Tomorrow:** yes, the middle page shows it under both
+   labels.
+5. **`-unlocked` once StoreKit is live, and UI tests leaking purchases:** under `-uitest`,
+   `-unlocked`, `-purchase` or `-restore` a Debug build never asks StoreKit. A stand-in
+   (`FakePurchases`) answers, and `unlock.v1` is never written, so nothing a UI test does can
+   leak.
+6. **`FEATURE_UNLOCK`** isn't in 7.1. It is built as a pull request of its own only if the Paid
+   Apps Agreement isn't Active by Mon 2 Nov (spec 23.5's fallback). README keeps it under "Not
+   here yet".
+7. **Your privacy and the purchase flag:** yes. "The app keeps a note on your iPhone of whether
+   you've made the one-off purchase." ends the purchases line, in the app and on the website's
+   notice, paired by `credits.test.ts` as phase 8.3 paired the last ad's time.
+8. **No `ProductView`.** The page is the app's own, in Settings' look, from parts the audits
+   already pass. StoreKit gives the price (`Product.displayPrice`) and the purchase
+   (`purchase(confirmIn:)`, with Apple's own confirmation sheet). This supersedes 10.5's
+   "StoreKit's `ProductView`".
+9. **A revoked update that StoreKit's entitlements haven't caught up with** (a refund, a Family
+   Sharing removal) counts: it locks at once (spec 13; Apple: the family's access "stops
+   immediately"). Every verified update heard is kept beside the entitlements until they show
+   it, and merged into every answer, so a later answer (another update, Restore purchase) can't
+   undo it. While one is still ahead of them, the entitlements are read again each time the app
+   becomes active: someone who bought it and also had it shared, whose shared copy is taken back,
+   has it back at the next foreground at the latest, or at once through Restore purchase.
+10. **A purchase StoreKit couldn't verify** (`.success(.unverified)`): no unlock, and not finished
+    (spec 13). The page shows StoreKit's own words for the failed check, as for a failed buy, and
+    Restore purchase shows them too, not "No purchase found for this Apple Account.", since
+    StoreKit does hold a purchase.
+
+Also decided: the Settings upgrade row pushes the upgrade page onto Settings' own stack (no sheet
+over a sheet); the home row and `willitsnow://upgrade` open it as a sheet of its own. The product
+ID is a generated constant (`Constants.Purchase.productID`), not an xcconfig setting: it never
+changes between builds, and the widget (7.2) links IsItModel. Ask to Buy keeps the Buy button (a
+decline sends nothing, so it is the only way to ask again). A family member who has the purchase
+through Family Sharing sees the same "Thank you." line (no new copy for v1).
+
+**One answer, one writer.** Whether the purchase is owned has one rule, `PurchaseRules.owned`
+(IsItLogic): a verified, unrevoked transaction for the product among what StoreKit holds, bought
+or shared through Family Sharing. `PurchaseModel` (IsItState) is the only code that writes
+`unlock.v1` (spec 9.6: "Written only by native StoreKit code"), through `UnlockStore`, a protocol
+apart from `StoredState`, which the `-unlocked` wrapper and the tests' fakes implement and which
+only reads it: so nothing else can write it. Every answer is written, its `checkedAt` moving on;
+the widgets reload only when what it says changes; and `changed` (the app's
+`AppModel.purchaseChanged(owned:)`) is told inside the read that gave the answer, so whoever waits
+on that read returns after the app's model has heard. StoreKit is behind `PurchasePlatform`, whose
+answers are plain values (`PurchaseFact`, `BuyResult`, `SyncResult`), because `Transaction` has no
+public initialiser and the Linux tests need to make them.
+
+**Read in turn.** Every answer reads `Transaction.currentEntitlements` whole. Reads are numbered:
+one that finishes after a newer one has begun is dropped, and whoever asked for it waits for the
+newer one, until no newer one has begun meanwhile (`settled()`). An update heard, or a purchase
+just made, goes into the list of updates heard before its read begins, so the read that dropped it
+holds it too. Three things follow. The launch's check never returns the stale `unlock.v1` while a
+newer read is out: Apple's `Transaction.updates` says "If your app has unfinished transactions,
+the updates listener receives them once, immediately after the app launches", which is as the
+check runs. Nothing is finished before an answer holding it has been kept (Apple, `finish()`:
+"after you deliver the purchased content"). And a slow launch check can't undo a purchase made
+meanwhile. Step 5's answer never overwrites one `purchaseChanged` gave (`purchaseHeard`):
+`LiveHooks.entitlement()` is a nonisolated `async` method of a plain struct, so between
+`launchEntitlement()` returning on the main actor and step 5's assignment other main-actor work
+runs, and an update kept there can speak first. A mid-session lock then starts nothing; before
+step 5, step 5 starts the ads as in any free launch. The listener and `buy` both deliver a
+purchase made in the app only in rare cases, and settling twice is harmless.
+
+**The page is the app's own, not `ProductView`** (decision 8). `ProductView` draws StoreKit's own
+layout and colours, which the audits and the contrast proof (`DrawnText`) have never passed, as
+they model only the app's surfaces; and the UI tests' stand-in can't make a `Product` for it to
+show. So the page is built from Settings' parts (`SheetPage`, `ReadingCard`, `SheetCard`, the
+primary `PillButton`, a row of a card), every one already audited in Settings and the mail
+fallback. What is still Apple's: the price (`displayPrice`, the storefront's own, never typed),
+the confirmation sheet, which the HIG says never to copy, and the words of every StoreKit failure.
+This supersedes 10.5's `ProductView(id:)`.
+
+**`purchase(confirmIn: scene)`, not `purchase()`.** Since iOS 18.2, a purchase StoreKit can't
+anchor to a window fails ("Could not find a UI anchor", in unit tests too), and the scene form is
+iOS 17's (the view controller form is 18.2's). `StoreKitPurchases` passes the scene in front, else
+any of the app's window scenes, and falls back to `purchase()` only with none. This supersedes
+13's `purchase()`.
+
+**A purchase mid-session ends all three placements.** Spec 13 said "remove the banner", and
+14.2.5 "removes the banner view": the free version now has three placements ("Ads in the iPhone
+app: three placements"), and before 7.1 a purchase hid the band and the boxes while `AdsModel`
+stayed on, so the next place chosen could still show a full-screen ad to someone who had just
+paid, the banners' retries went on asking Google, and a consent form still loading could appear
+after the purchase. Now `purchaseChanged(owned: true)`, once launch step 5 has started the ads,
+calls `AppHooks.stopAds()`, and `AdsModel.stop()` stops everything for the launch: its phase is
+`off`; Privacy choices and the
+band's height go; every waiting retry is called off; no banner loads or loads again; no
+full-screen ad loads or shows (a place chosen calls `done` at once, and one that loads after the
+stop is dropped); Mobile Ads never starts if it hasn't, including one whose start is out when the
+stop comes; and a consent form not yet asked for never is. One already on screen stays until
+answered, as UMP can't take it away, and then starts nothing; so does the privacy options form.
+`GoogleAds.stop()` takes each banner view off the screen and lets go of its delegates, and drops
+the full-screen ad on hand; one being shown is left to close (none can be, as someone buys, but an
+Ask to Buy approval can arrive under one). On screen, the band leaves the stack in the same
+transaction as `unlocked`, so the pages grow once, and each box goes. `PickerSheet` checks
+`unlocked` before `placeChosen` too. A later `start(firstRun:)` does nothing. Owned before step
+5, nothing is stopped, as nothing has started: step 5 starts no ads while it is owned, and a
+refund heard before step 5 leaves a free launch, whose ads step 5 starts (a stop then would have
+kept them off all launch). This supersedes 13's "remove the banner" and 14.2.5's "removes the
+banner view".
+
+**Revocation, re-read and merged, never trusted alone.** Spec 13 said to lock on an update's
+`revocationDate`. A refund made while the app was closed may never come as an update, and the
+entitlements leave refunded and revoked products out, so the launch's check, a full read, locks
+it. An update can arrive before the entitlements show it, in either direction, so each verified
+update for the product is kept until they do (`PurchaseRules.unseen`: an unrevoked one whose
+transaction isn't among them, a revoked one whose transaction still is) and merged into every
+answer by its transaction ID (`PurchaseRules.merging`); then decision 9's rule holds. The Linux
+tests use only the shapes StoreKit gives: Apple's `currentEntitlements` holds "A transaction for
+each non-consumable", and `currentEntitlements(for:)` "no more than one transaction", so two for
+the product arise only from a merged update. Family Sharing removal can't be made in StoreKit Test
+(no API makes a family-shared transaction); it takes the refund's path, and its rules are the three
+`familyRemoval…` tests on Linux.
+
+**An unverified purchase** (decision 10). It neither unlocks nor is finished, so StoreKit sends it
+again at the next launch, and the listener ignores it there too. The words come with the fact
+(`PurchaseFact.verificationFailure`, `VerificationError`'s `localizedDescription`), not only with
+`BuyResult.failed`, because Restore purchase needs the same words from the entitlements it reads:
+it says "No purchase found for this Apple Account." only when StoreKit holds no transaction for
+the product at all.
+
+**Restore purchase** runs `AppStore.sync()`, which may ask the user to sign in, so only from its
+two rows (the page's and Settings'), never at launch (17.4.1; Apple: only "in response to an
+explicit user action"). It always shows, owned or not and whatever the product's state, as a
+family member may need it to pick up a purchase shared after the fact. Whatever `sync()` came to,
+the entitlements are read again; then "Purchase restored.", StoreKit's words for a transaction it
+couldn't verify, "No purchase found for this Apple Account.", nothing for a cancelled sign-in, or
+StoreKit's words for a failure. The result is the row's detail line and its accessibility value.
+Only the row that was tapped says it to VoiceOver, once the restore is over, so the page pushed
+over Settings, whose own card shows the same result, speaks once.
+
+**No price, no home row; always a way in from Settings** (decision 1). Spec 10.4 only said the
+row shows "· {price}"; the checklist allowed "hidden or no price". The home row's copy names a
+price, so it waits for one. Settings' row shows without one and opens the page, which says why it
+can't sell, in one line worded for an App Store that answers with nothing to sell as much as for
+no connection ("The purchase isn't available right now. Try again later."): `products(for:)`
+answers an unknown or not-yet-live product with an empty list, so a split by
+`StoreKitError.networkError` would still need the neutral line. TN3186: purchases "might also be
+missing or unresponsive during review". `AppStore.canMakePayments` false (Screen Time, a managed
+phone) is `.blocked`, with "In-app purchases are turned off on this iPhone." and no Buy; Restore
+purchase still works there (Apple: "The StoreKit APIs always enable your app to view existing
+transactions").
+
+**Where the row sits.** On the middle page, under Today and Tomorrow alike, between the page's
+body and its footer, only on a page with an answer (its footer shows), as the box is, and never
+beside an ad: the box is after the footer's links (10.2 item 6: "There is no nag on the banner").
+It is a wide secondary pill in the page's ink on its opaque chip fill, as Retry is, so it wraps
+safely at every text size. IsItUI gives each page a slot there (`ForecastPageView`'s `cards`,
+`HomePager`'s `pageCards`), which phase 8.1's notifications card shares, above the row. Nothing
+superseded.
+
+**Settings pushes, home presents.** From Settings the page is pushed on Settings' own stack (no
+sheet over a sheet). The home row and `willitsnow://upgrade` open it as a sheet of its own, with
+Close. Settings and the upgrade sheet are one `.sheet(item:)` (`HomeSheet.Card`), so a link while
+Settings is open swaps one for the other in one presentation, which two `.sheet` modifiers can't.
+A link while the picker is open swaps its full-screen cover for the sheet: SwiftUI may log a
+presentation warning, and the worst case is the sheet not opening. The link arrives through
+`.onOpenURL`, `DeepLink.parse` and `AppModel.open`, which keeps a route that comes before the
+launch has finished for step 7; `LiveHooks.handle(.upgrade)` counts a request
+(`PurchaseModel.sheetRequests`), so the same link twice opens it twice.
+
+**Modules.** StoreKit's buying side is IsItPurchases (`StoreKitPurchases`), a new IsItKit module
+only the app links, as it does IsItAds: a widget may read the purchase but never sell it (App
+Review 4.4; spec 11.1). The read side is IsItServices' `StoreKitFacts` (each transaction as a
+`PurchaseFact`, and the entitlements, reading only), which the widget links and 7.2 uses. The
+model and its rules are in IsItCore, tested on Linux, as the ads' are. This supersedes 9.3's
+"`PurchaseService` in IsItServices", and spec 3's IsItKit `Tests/` for the SKTestSession tests
+(IsItKit has none, and StoreKit Test needs a host app).
+
+**The product ID is a generated constant, and Snow.storekit is generated.** packages/mobile
+`purchase.ts` (`PURCHASE`) holds the product's facts once: its ID, reference name, type, price in
+the GBR storefront and en_GB, and Family Sharing. `exportConstants.ts` writes
+`Constants.Purchase.productID` and `.displayPrice` ("£1.99", from `Intl.NumberFormat`; shown only
+by the Debug stand-in), and `exportStoreKit.ts` writes `Apps/Snow/StoreKit/Snow.storekit`, its
+display name and description from `APP_COPY` (`upgradeTitle`, 30 characters at most;
+`upgradeDescription`, 45 at most with no full stop, which the app never shows). The file is
+written as Xcode's StoreKit editor writes one (format 6.3; two-space indents, `" : "`, keys in
+case-insensitive order, an empty array as its brackets over a blank line, `/` unescaped), so
+opening and saving it in Xcode changes nothing: the writer gives 16 of 19 downloaded Xcode files
+back byte for byte, and the other three differ only in a synced file's `_lastSynchronizedDate`,
+which Snow.storekit hasn't. Its `identifier` and `internalID` are fixed, so it never changes
+between runs. A setting changed in Xcode's editor is a diff `pnpm mobile:check` fails on, by
+design (README, "Trying it"). The ID is checked against Snow.xcconfig's `SNOW_APP_ID` (spec 22.4's
+`today.<domain>.app.unlock`), the file against the copy (vitest, and `SnowStoreKitFileTests` in
+the bundle the StoreKit tests run from), and StoreKit's own price against the constant
+(`testTheProductIsSnowStorekits`).
+
+**StoreKit Test on CI: iOS 26.2.** StoreKit Test doesn't connect to the simulator's test
+environment on iOS 26.3 to 26.5 (FB22500243): Apple's iOS 26.6 notes list it fixed, an Apple
+engineer wrote in June 2026 that it "is fixed for simulators starting with iOS 26.6", no 26.6
+simulator runtime can be downloaded, and the runner image (20261013) has iOS 26.2, 26.4 and 26.5.
+FB22237318 (the session not using the selected configuration) is listed fixed in 26.5's notes, but
+developers still reported it there. Developers report the 26.0 to 26.2 simulators work, so the
+suite runs on an iPhone 17 with iOS 26.2, which Xcode 26.6 can test on as the app supports iOS 17
+(sources read 27 October 2026). What follows from it:
+
+- **A hosted target and a plan of its own.** `WillItSnowStoreKitTests` is hosted by the app (a
+  hostless bundle gets xctest's own StoreKit environment, and fails), in `StoreKit.xctestplan`,
+  run serially (`-parallel-testing-enabled NO`; the one test environment is shared). Its target ID
+  in the plan, `9ABD14156E9535532625D90F`, was worked out with XcodeProj 9.14.0's own formula
+  (the first 24 hex digits of the MD5 of `NT_PBXNativeTarget-WillItSnow-<target>_1`, which gives
+  the three existing plans' IDs back), since building XcodeGen here was refused;
+  `ci/xcodegen.sh` checks it on the first run.
+- **A job of its own** (`storekit`, 60 minutes), beside `ios` rather than after its UI plan: `ios`
+  already takes 42 minutes (run 40437897311, the UI tests 35.7 of them), so these steps there would
+  end near its 90-minute limit, be the steps a timeout cuts, and report an hour after the push.
+  60 minutes: setup and build about 6, the boot about 2 (6 on a slow runner) and a runtime
+  download if it comes to that about 10, so 22 at most; then the plan's 18 tests (17
+  `SKTestSession` tests and the file test) at most 60 seconds each if every purchase sheet hung
+  (FB22836426; `ci/test.sh StoreKit` turns test timeouts on, at 60 seconds a test, the least
+  XCTest gives, as it rounds an allowance up to whole minutes), 40 in all; and the 20 left for the
+  spindump and test-runner relaunch each timed-out test adds. A job cut off by its limit is
+  cancelled, and its result bundles are never uploaded (the upload needs `!cancelled()`), so the
+  limit covers the worst case: a hung sheet fails its test, and the job still reports which.
+  `ci/simulator.sh 26.2` checks the runtime is there before it looks for a device, downloads it
+  once if not, and otherwise stops with one `::error::` line naming the runtime and the fallback
+  (README, "Settled").
+- **The configuration by its URL in the test bundle** (`SKTestSession(contentsOf:)`): Apple
+  documents `init(configurationFileNamed:)` as reading a file "that you include in your
+  application's bundle", which must never hold it. Snow.storekit is in no shipped target: only
+  the StoreKit tests' bundle holds it, as a resource, and the scheme's Run action names it; the
+  release checks fail an app that bundles one, and
+  `InfoPlistTests` checks the built app (skipping test bundles, which Xcode puts in the app's
+  `PlugIns` while tests run).
+- **Each test from a cleared environment, its listener stopped after it.** setUp resets the
+  session, which clears the simulated errors that last from test to test, turns dialogs and Ask
+  to Buy off and clears its transactions; tearDown stops each `StoreKitPurchases` the test made
+  (XCTest keeps every test case, and what it holds, until the run ends, so a listener left
+  running would hear, and finish, the next tests' transactions) and clears them again. Simulated
+  errors are cleared by `resetToDefaultState()`, never by `setSimulatedError(nil, forAPI:)`
+  (below, "What PR #40's first macOS run showed").
+- **Never a pass on a broken environment.** Every buy and restore test first requires the product
+  loaded at `Constants.Purchase.displayPrice` (`readyModel()`, which stops the test otherwise).
+  A loaded product doesn't show a purchase can complete: on the broken runtimes `purchase` answers
+  `.userCancelled` at once, which alone would pass a cancel test, so the cancel test then clears
+  its simulated cancel and buys again, and needs that purchase to complete. `buy` of a product
+  never loaded fails in StoreKit's words, never as a cancel. Each test logs the simulator's iOS
+  version, so a change of runtime shows beside its effect.
+- **The app's own model doesn't race the tests.** The host app doesn't launch while it only hosts
+  tests (`DebugHooks.launches()`), and `becameActive()` does nothing before launch step 2, so the
+  app's listener never starts and can't take the tests' transactions.
+- **Moving on.** Once a simulator runtime with the fix is on the image, the plan moves to it (and
+  could rejoin the main simulator); if 26.2 goes first, it runs on a Mac with it, never skipped.
+
+This supersedes 13's "UI tests: buy and restore against the scheme's StoreKit configuration (V2)"
+and 17.2's `UpgradeTests` line ("buy and restore against `Snow.storekit`; the banner gone").
+
+**The stand-in.** XCUITest can't buy against Snow.storekit on the runner: the UI plan runs on
+26.5, the test runner's `SKTestSession` controls its own bundle's environment, not the app's, and
+Apple's confirmation sheet is the system's (V2, README "Settled"). So under `-uitest` (every UI
+test), `-unlocked`, `-purchase` or `-restore` a Debug build uses `FakePurchases`: it answers at
+once from the arguments, nothing comes through the updates, finishing does nothing, and
+`unlock.v1` is kept in memory, so no UI test writes the App Group's and none can leak a purchase
+into the next. Without `-purchase` or `-restore` it has no product, so every older UI test's home
+screens, audits and contact sheet are as they were (no home row), and their Settings shows the
+upgrade row without a price, then Restore purchase, above the privacy rows (`SettingsTests`'
+audit and snow-only check see both). `-unlocked` now stands in for StoreKit's answers too, so the
+launch's check agrees with it: this supersedes 9.8's `-unlocked` as only the store's first answer.
+The stand-in's words are the system's and StoreKit's own (`URLError(.notConnectedToInternet)`,
+`VerificationError.invalidSignature`), and its price the generated constant, so nothing in it is
+copy. It is in `#if DEBUG`, with Release stubs; `check-archive.sh` looks for `FakePurchases`,
+`-purchase` and `-restore` (18 hooks).
+
+**Ask to Buy** shows "Waiting for approval." and keeps Buy: a parent's decline sends nothing, so
+Buy is the only way to ask again. The approval comes through the updates, unlocks, and the thanks
+replaces the line. The line stays while Settings or the page closes and opens again; a failure's
+line and a restore result go as they close (`dismissResults()`).
+
+**Family Sharing.** The page's line, "Shared with your family through Family Sharing.", follows
+the product's own `isFamilyShareable`, not a constant. A family member who has it through Family
+Sharing is owned (`ownershipType == .familyShared`) and sees the same thanks as the buyer; the HIG
+suggests wording that suits both, which would be new copy, so not for v1.
+
+**Your privacy gains the purchase flag** (decision 7). `unlock.v1` is something the phone keeps,
+so Your privacy's purchases line, and the website's privacy notice with it, now read "Apple handles
+purchases. We never see your payment details. The app keeps a note on your iPhone of whether
+you've made the one-off purchase." `credits.test.ts` pairs the two, and the website's e2e test pins
+the notice's line.
+
+**`FEATURE_UNLOCK` waits** (decision 6). Spec 9.8's two compile-time switches aren't built:
+`FEATURE_ADS` has no use while the ads ship, and `FEATURE_UNLOCK` matters only for 23.5's
+fallback, a v1.0 without the purchase and the widgets if the Paid Apps Agreement is still not
+Active on Fri 13 Nov. If it isn't Active by Mon 2 Nov, the switch is built then, as a pull request
+of its own; built now it would be dormant code (section 0.2).
+
+**For 7.2: the widget trusts what it can see, and never locks.** Apple documents nothing about
+reading `Transaction.currentEntitlements` from a widget extension (V3), and in the simulator the
+Xcode test environment is the app's bundle's, so only Carl's device can measure it. So 7.2's rule:
+the widget trusts a verified entitlement it can see (`StoreKitFacts.entitlements()` with
+`PurchaseRules.owned`), and never locks on an empty or failed answer, which may mean it can't
+see; locking is the app's job, through `unlock.v1`, which `PurchaseModel` rewrites after every
+check and change and follows with `reloadAllTimelines()` whenever what it says changes.
+`willitsnow://upgrade` already opens the sheet, so the locked widget needs only its `widgetURL`.
+
+**The Settings card.** The upgrade and Restore purchase are one card with no heading, as Report
+an ad's is, first after the units (phase 8.1's Notifications will come between). Each row has an
+icon of its own (`upgrade` sparkles, `thanks` a seal, `restore` an arrow round), and a row gains
+`detail` (a line beneath the title) and `busy` (no tap meanwhile). The thanks is a `.note`, one
+element that takes no tap.
+
+**Checked on Linux.**
+
+- **IsItCore** in Docker (`isithot-swift:6.3.3`): the tests were written first and run against
+  stubs that compile: 24 of the new or changed logic and model tests failed, and 60 of the state
+  tests; the few that passed did so because doing nothing is right for them, and each failed
+  against a deliberate fault (the "not owned" rules against a stub that always answers true). Two
+  races were planted: a read that returns without waiting for the newer one fails
+  `theCheckWaitsForTheNewerAnswer` (and `anUpdateHeardDuringTheCheckNeverStartsTheAds`), and step
+  5 without `purchaseHeard` fails `aPurchaseHeardWhileStepFiveWaitsStands`. `PurchaseModelTests`
+  is 48 tests in six suites, each under a one-minute limit, so a call held and never released fails
+  in a minute, not at the job's 20; its fake platform holds and answers each call by its number,
+  so the launch's check can be held while a buy's own read goes by. The purchase, ads and upgrade
+  suites passed 20 runs in 20. The whole suite, 476 tests in 81 suites, passes with no warning.
+- **packages/mobile and the website:** the TypeScript tests were written first (5 of 6 files
+  failed); now `pnpm vitest run` passes 1735 tests in 78 files, with `pnpm mobile:check`,
+  `typecheck`, `lint` and `format:check`, and the website's e2e test of the privacy notice.
+  `swift format lint --strict` passes over every Swift file.
+- **Against stubs** (session scratchpad: iap-typecheck): IsItServices, IsItPurchases, IsItAds, the
+  app's files and the StoreKit and Unit tests that use them, type-checked in Debug and Release
+  against the real IsItCore and stub StoreKit and StoreKitTest modules with Apple's declarations
+  and isolation, with a deprecated call an error (Linux ignores iOS availability, so without it
+  `currentEntitlement(for:)`, deprecated in iOS 18.4, would pass). Most of IsItUI is compiled for
+  real there: the exhaustive switches over IsItLogic's new cases and the `pageCards` to `cards`
+  hand-off are where the packages could disagree. Eighteen planted mistakes each fail it. The UI
+  tests compile against the XCUITest stubs, whose 44 checks pass (iap-uicheck). No name,
+  identifier or launch argument one package expects is spelt differently by another, read across
+  all of them.
+- **The build's checks:** `check-archive.test.mjs`, 71 tests where there were 64 (the old script
+  fails exactly the 7 new ones); `simulator.sh`, `test.sh` and `release-check.sh` run with
+  stand-ins for `xcrun`, `xcodebuild` and `otool` (the runtime present, downloaded, failing to
+  download, downloaded but missing, listed but unavailable); shellcheck clean, and actionlint
+  too once told of the `macos-26` runner label, which it predates.
+
+**Where the build differs from its design.**
+
+- **Becoming active reads once.** `becameActive()` reads the entitlements again once while an
+  update is ahead of them (`if`), not until they catch up (`while`), which in decision 9's case
+  could read StoreKit over and over on the main actor; decision 9 says "each time the app becomes
+  active".
+- **The privacy options form, guarded too.** The design's list of `AdsModel`'s guards missed
+  `openPrivacyChoices()`: an Ask to Buy approval arriving while that form is up would have turned
+  Privacy choices back on after `stop()`. It now returns once the form does, with a test that
+  failed first; the consent form's guard is tested by Privacy choices and the phase staying off,
+  not only by no `startAds`.
+- **`RestoreRow` speaks when the restore is over**, comparing the whole row before and after, not
+  on its detail changing: a cancelled sign-in leaves the detail nil before and after, so the
+  design's trigger would have left the row waiting and later spoken another row's result.
+- **Smaller ones:** the busy Buy's spinner is in the pill's word colour (the sheet's ink tint
+  would vanish on the ink pill); the seal shows when there is nothing to buy (`UpgradePage` has no
+  `unlocked`); `UpgradeView` is internal, the app using `UpgradeSheetView`; the restore row's rules
+  are written once (`UpgradePage.restoreRow`), for the page and Settings; `HomeView` works out the
+  home row in its own body, so it watches the purchase itself; a failed restore under the stand-in
+  has the same words as a failed buy; `testARefundWhileClosedLocksAtLaunch` checks the second
+  launch saved more than before, not exactly once more, since its listener may hear the refund
+  too; `testAPurchaseElsewhereArrivesThroughUpdates` waits for the launch's check first, so only
+  the listener can unlock it; `SnowStoreKitFileTests` also checks there are no subscriptions, and
+  the GBR storefront and en_GB locale the price depends on; `HomeAuditTests`' `pages` names views
+  as strings (the UI tests link none of the app's modules), and a name that matches no page
+  throws, and `audit` gains `as:` (the attachments' name) and `showing:` (an element to wait for,
+  the row, which comes after the heading); `UpgradeTests` launch through `launch(_:extra:)`, so
+  each waits for the heading at a fixed clock; `AdsTests`' purchase case checks the pager reaches
+  at least where the band's banner ended, which holds whether XCUITest's pager ends at the safe
+  area or the window, rather than "the window's bottom"; its shared helpers (`scroll(_:toShow:in:)`,
+  `lies`, `assertSnowOnly`) moved to HomeScreens.swift; and `simulator.sh`'s error names the
+  StoreKit fallback only for 26.2.
+- **From the review:** the ads stop only once launch step 5 has started them, where the design
+  stopped them for an owned answer heard before step 5 too, which left a launch refunded before
+  step 5 with no ads at all (`AdsModel.stop()` lasts the launch); the StoreKit tests' limit is 60
+  seconds a test and the job's 60 minutes, not 120 and 45, whose sum was more than 45 for 18
+  hung tests; the App Group test clears `unlock.v1` before it buys, so a value left from Cmd-R
+  can't pass it unbought; the refund-while-closed test waits for the first launch's objects to
+  go, which an update still being handled can hold for a moment; `UpgradeTests` require Buy
+  enabled, not only there; `AdsTests`' purchase case no longer claims Privacy choices, which
+  never shows under `-umpGeography other`; and `ci/test.sh UI` copies the review screenshot to
+  `review/app-upgrade.png` in the attachments, as the export names each file by a UUID.
+- **No scratchpad citations** in the repository's comments: the design cited its research notes;
+  the code cites Apple's notes and README "Settled" instead.
+
+**Known risks.**
+
+1. **StoreKit Test on the runner.** If iOS 26.2 goes from the image, or fails as 26.3 to 26.5 do,
+   the phase's exit ("the SKTestSession tests are green") can't be met on CI. Only the `storekit`
+   job goes red; the `ios` job's plans still report. The fallback is recorded: keep the suite and
+   its plan, and run it on Carl's Mac or a newer runtime; never skip it silently.
+2. **StoreKitTest linking.** If `import StoreKitTest` doesn't link from the testing search paths,
+   add `OTHER_LDFLAGS: [-framework, StoreKitTest]` to the StoreKit target only.
+3. **The races** between the launch's check, updates, buying and restoring are closed by reading
+   in turn, every dropped read's caller waiting for the newer one, the heard updates merged into
+   every answer, and step 5 never overwriting `purchaseChanged`; each order is tested on Linux
+   with per-call gates. `settled()` ends as soon as one read finishes with none newer, which a
+   stream of updates can only delay. `startListensBeforeItChecks` relies on the main actor running
+   tasks in the order made, which held in every Linux run.
+4. **Empty `currentEntitlements` for a valid purchase** (a 2026 forum thread, unresolved) would
+   lock a payer; Restore purchase is the recovery, and always shows.
+5. **The stand-in hides StoreKit from the UI tests**: the UI plan proves only the app's part; the
+   StoreKit part is the hosted suite's and Carl's TestFlight purchase's. The archive checks prove
+   the stand-in isn't in Release.
+6. **A link while the picker is open** swaps a full-screen cover for a sheet: SwiftUI may log a
+   presentation warning, and the worst case is the sheet not opening. No test covers it.
+7. **No Paid Apps Agreement** means no price anywhere and nothing for App Review to buy (2.1(b));
+   the review note says where it is, and the fallback is `FEATURE_UNLOCK`.
+8. **Widgets free until 7.2**: the skeleton widget shows answers whether or not anyone bought, so
+   TestFlight stays with the internal group.
+9. **Xcode rewriting Snow.storekit**: a save with no change is byte for byte the same; a changed
+   setting fails `mobile:check`, by design.
+10. **A family removal while you also bought it** locks until the entitlements show your own
+    purchase: at the next foreground at the latest, or at once with Restore purchase. It can't be
+    made in StoreKit Test, so only the Linux tests show it.
+11. **Swift without a compiler**: IsItUI's views and the app compile only on macOS; the harness
+    type-checks the rest, and as much of IsItUI as its SwiftUI stub covers.
+
+**For the next macOS run to show** (what nothing on Linux can):
+
+1. That everything compiles against the real SDKs with no new warning: IsItUI's new views and
+   their SwiftUI (only stubbed on Linux), StoreKit's real isolation in IsItPurchases, the app's
+   wiring, and both test targets.
+2. That `ci/xcodegen.sh` accepts `StoreKit.xctestplan`'s target ID, `9ABD14156E9535532625D90F`,
+   worked out by formula rather than read from a generated project.
+3. The `storekit` job: that `simulator.sh 26.2` finds (or downloads) iOS 26.2 and boots the
+   iPhone 17; that `import StoreKitTest` links; that the test bundle holds Snow.storekit (else
+   setUp throws `noConfiguration`); that the 18 tests pass, and the iOS version each logs; that
+   `XCTContext.runActivity` works in the async setUp, the test timeouts apply, and the first
+   launch's objects in `testARefundWhileClosedLocksAtLaunch` go within its 10-second waits.
+4. That `XCUIApplication.open(_:)` reaches the app's `.onOpenURL` and opens the sheet, after the
+   launch has finished and over Settings (`testTheLinkOpensTheSheet`).
+5. The audits: the home row's screenfuls at Large and AX3 (`HomeAuditTests`), the sheet bought and
+   not, and the page with no product (`UpgradeTests`), Settings with its new card
+   (`SettingsTests`), the contrast proof on the primary pill and the row's chip included.
+6. That a purchase takes the ads away on screen: `debug-ads` reading `off`, the band gone and the
+   pager growing into its space, no box, no home row and no Report an ad (`AdsTests`; Privacy
+   choices never shows outside the EEA, so its going is `AdsStopTests`' on Linux); and that
+   `openYourPrivacy` still taps Your privacy without scrolling now the card sits above it.
+7. That the UI plan, with its 15 new tests, still ends well inside the `ios` job's 90 minutes,
+   and that `ios-attachments` holds `review/app-upgrade.png`, the sheet with its price, 1206 ×
+   2622, for App Review (docs/SETUP.md).
+8. The Release checks on the real binaries: no `.storekit` in the app, no StoreKitTest in its
+   strings or load commands (only the test bundle links it), no `StoreKitPurchases` in the widget,
+   and none of the 18 hooks (`archive-check`, `release-check.sh`); and `InfoPlistTests` and
+   `AppGroupTests` (`saveUnlock`, `loadUnlock`) in the Unit plan.
+
+**What PR #40's first macOS run showed** (run 40599844041), and PR #41's probe (runs
+40610138842, 40611512196 and 40616178770; a throwaway draft):
+
+- **The StoreKit plan ran** (the target ID, the link, the bundle's Snow.storekit and the iOS 26.2
+  simulator all held), and 6 of its 18 tests failed: every purchase the app made failed with
+  `StoreKitError.unknown` ("Unable to Complete Request"). The test server kept each transaction
+  but answered `cancel-purchase-batch = 1` with an empty `failureType`, which iOS reports as
+  AMSErrorDomain 305, "Server canceled the purchase". Ask to Buy, `SKTestSession.buyProduct`,
+  restore and the product load all worked.
+- **Not the runtime, nor Xcode, nor the app's code.** The same failure came on the iOS 26.2
+  simulator under Xcode 26.6 and Xcode 26.2 (17C52), and on the iOS 18.6 simulator (downloaded;
+  26.0 and 26.1 can't be), with plain `purchase()`, `purchase(confirmIn:)`, a listener started
+  first, a wait first, and a copy of Snow.storekit with its own dialogs setting off.
+- **The cause: `setSimulatedError(nil, forAPI: .purchase)`**, which setUp, tearDown and the
+  cancel test called. On a fresh simulator, run first and alone, purchases succeeded untouched,
+  after `resetToDefaultState()`, and after nil errors for `.verification` and `.appStoreSync`;
+  they failed after `setSimulatedError(nil, forAPI: .purchase)`, with or without a real error
+  set before it, while `simulatedError(forAPI: .purchase)` read nil throughout; and
+  `resetToDefaultState()` cleared that, and a real simulated error too. So the tests clear
+  simulated errors with `resetToDefaultState()` and set the dialogs and Ask to Buy off again
+  (`clearSimulatedErrors`), and never pass nil.
+- **With that fixed**, 17 of the 18 passed (run 40617315336). The cancel test's check that StoreKit
+  Test kept no transaction failed: it keeps one for a purchase whose answer it replaces with a
+  simulated error, as every probe variant's count showed, which a real cancel never makes. The
+  test checks what the app keeps instead: no `unlock.v1` written, no widget reload, nothing told
+  the app.
+- **Your privacy's audit** found its second line running up past the window's top once the
+  purchase's line made the page longer (506 points tall, its top at -150, after the reveal
+  loop): contrast failed on it, and the pixel proof needs a frame whole on screen. The page is
+  audited at its top now, as How it works and the licences are.
+
+**What only Carl's TestFlight purchase shows**: the real product and its price from the App
+Store, Apple's sheet, a purchase with his own Apple Account, the ads going, and the purchase back
+after a reinstall (docs/SETUP.md, "The app's purchase"); with 7.2, V3 and the widgets turning on.
+
+**Spec points superseded**, in one place: 3 (IsItKit `Tests/` for the SKTestSession tests: an
+app-hosted target instead); 9.3 (`PurchaseService` in IsItServices: `StoreKitPurchases` in
+IsItPurchases, `StoreKitFacts` in IsItServices, `PurchaseModel` in IsItState); 9.8 (`-unlocked`
+now stands in for StoreKit's answers too; `FEATURE_UNLOCK` deferred, decision 6); 10.4 (the
+upgrade is one card with no heading, after the units; the native `Form` was already gone with
+the website's look); 10.5 (`ProductView`: the app's own page, decision 8); 13 (`purchase()`:
+`purchase(confirmIn:)`; "remove the banner": all three placements; "UI tests: buy and restore
+against the scheme's StoreKit configuration": the stand-in and the StoreKit plan; "Carl's Sandbox
+tester on device": TestFlight with his own Apple Account, a Sandbox tester optional); 14.2.5 ("A
+purchase mid-session removes the banner view": `AdsModel.stop()`); 17.2 (`UpgradeTests` "against
+`Snow.storekit`; the banner gone": the stand-in, and AdsTests' purchase case for all three);
+17.4.8 ("The banner goes": the band, the boxes and the full-screen ad); 20.3's review note ("no
+banner ad" is now "no ads in the app"; docs/SETUP.md has the note, and 9.2 writes it into the
+listing's files); Appendix A (the scheme's test plans gain StoreKit).
 
 ## API contract
 

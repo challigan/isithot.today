@@ -1,9 +1,11 @@
 import Foundation
 import IsItAds
+import IsItLogic
 import IsItModel
 import IsItServices
 import IsItState
 import Observation
+import StoreKit
 import SwiftUI
 import UIKit
 
@@ -20,7 +22,8 @@ enum DebugHooks {
     /// The launch arguments that change how the app starts, before the model reads `store`:
     /// `-uitest` turns animations off; `-resetStore` forgets the place, the units, the saved
     /// answer, the recent and saved places and when the last full-screen ad showed, for a first
-    /// launch (not the purchase, which only StoreKit's code writes).
+    /// launch. It leaves `unlock.v1` alone, which only `PurchaseModel` writes, and which nothing
+    /// reads under StoreKit's stand-in (`standsInForStoreKit`), as every UI test runs.
     static func prepare(
       store: SharedStore?,
       arguments: [String] = ProcessInfo.processInfo.arguments
@@ -170,8 +173,37 @@ enum DebugHooks {
       }
     }
 
+    /// The place picker as the app holds it (`PickerReadout`), over the home screen, for every UI
+    /// test (`-uitest`), with the ads or without: whether the home screen has the picker `open`,
+    /// and once it hasn't, whether the picker's content has left the screen, so PickerTests and
+    /// AdsTests read the picker closed from the app, not from XCUITest's tree, which on PR #38's
+    /// and #39's macOS runs went on finding a closed picker's search box for 10 and 15 seconds
+    /// (DECISIONS, "Ads in the iPhone app: three placements"). Nothing without `-uitest`.
+    @ViewBuilder
+    static func pickerReadout(
+      open: Bool,
+      arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> some View {
+      if arguments.contains("-uitest") {
+        PickerReadout(open: open)
+      }
+    }
+
+    /// The picker's content came on screen (`PickerSheet`'s `onAppear`), for `pickerReadout`.
+    static func pickerAppeared() {
+      DebugPresence.shared.pickerOnScreen = true
+      DebugPresence.shared.pickersShown += 1
+    }
+
+    /// The picker's content left the screen (`PickerSheet`'s `onDisappear`), for `pickerReadout`.
+    static func pickerDisappeared() {
+      DebugPresence.shared.pickerOnScreen = false
+    }
+
     /// `-unlocked 0|1`: whether the purchase is owned, whatever `unlock.v1` says, so a UI test
-    /// launches the free version or the paid one; nil without it. Any other value stops the app.
+    /// launches the free version or the paid one; nil without it. It stands in for StoreKit's
+    /// answers too (`purchases(arguments:)`), so the launch's check gives the same answer rather
+    /// than the simulator's. Any other value stops the app.
     static func unlocked(arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool? {
       guard let value = value(after: "-unlocked", in: arguments) else { return nil }
       switch value {
@@ -181,15 +213,108 @@ enum DebugHooks {
       }
     }
 
-    /// The store the model reads: under `-unlocked`, `store` with the purchase as that says
-    /// (`UnlockedState`), from the model's first look at it, and never written to `unlock.v1`,
-    /// which only StoreKit's code writes; `store` itself without it.
+    /// The store the model reads: under StoreKit's stand-in, `store` with the purchase as
+    /// `-unlocked` says, or not owned without it (`UnlockedState`), from the model's first look
+    /// at it, whatever an earlier launch left in `unlock.v1`; `store` itself otherwise.
     static func store(
       _ store: any StoredState,
       arguments: [String] = ProcessInfo.processInfo.arguments
     ) -> any StoredState {
-      guard let unlocked = unlocked(arguments: arguments) else { return store }
-      return UnlockedState(store: store, unlocked: unlocked)
+      guard standsInForStoreKit(arguments: arguments) else { return store }
+      return UnlockedState(store: store, unlocked: unlocked(arguments: arguments) ?? false)
+    }
+
+    /// Whether a launch argument asks for StoreKit's stand-in (`FakePurchases`): every UI test
+    /// (`-uitest`), and `-unlocked`, `-purchase` and `-restore`. XCUITest can't buy against
+    /// Snow.storekit: on the runner's iOS 26.5 simulator StoreKit Test doesn't connect to its
+    /// test environment (FB22500243, which Apple lists as fixed from iOS 26.6, a runtime the
+    /// runner doesn't have), FB22237318 was still reported on 26.5 though its release notes list
+    /// it fixed, and the confirmation sheet is the system's. An app that asked the App Store from
+    /// a UI test would show what that store says, or a sign-in. Under it nothing writes
+    /// `unlock.v1`.
+    static func standsInForStoreKit(
+      arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> Bool {
+      ["-uitest", "-unlocked", "-purchase", "-restore"].contains { arguments.contains($0) }
+    }
+
+    /// What Buy comes to under StoreKit's stand-in (`-purchase`).
+    enum PurchaseOutcome: String, CaseIterable {
+      /// Bought and verified: owned from then on.
+      case bought
+      /// Ask to Buy: waiting for a parent, who never answers in a UI test.
+      case pending
+      case cancelled
+      /// No connection, in the system's own words (`URLError(.notConnectedToInternet)`).
+      case failed
+      /// Bought, but StoreKit's check of it failed (`invalidSignature`, in StoreKit's words), so
+      /// not owned.
+      case unverified
+    }
+
+    /// What Restore purchase comes to under StoreKit's stand-in (`-restore`).
+    enum RestoreOutcome: String, CaseIterable {
+      /// The App Store holds the purchase: owned from then on.
+      case found
+      /// Synced, and nothing owned.
+      case nothing = "none"
+      /// The sign-in cancelled.
+      case cancelled
+      /// No connection, in the system's own words.
+      case failed
+    }
+
+    /// StoreKit's stand-in, or nil for StoreKit:
+    /// - the purchase is owned as `-unlocked 0|1` says, false without it;
+    /// - the product is for sale at `Constants.Purchase.displayPrice`, with Family Sharing, under
+    ///   `-purchase` or `-restore`; otherwise the App Store has none (`.unavailable`), so every
+    ///   older UI test's home screens are as they were (no home row), and Settings shows the
+    ///   upgrade row without a price and Restore purchase;
+    /// - `-purchase bought|pending|cancelled|failed|unverified`: what Buy comes to (`bought` by
+    ///   default); `failed` is `URLError(.notConnectedToInternet)`'s own words, `unverified` a
+    ///   fact whose failure is the words of
+    ///   `VerificationResult<Transaction>.VerificationError.invalidSignature`;
+    /// - `-restore found|none|cancelled|failed`: what Restore purchase comes to (`none` by
+    ///   default); `found` makes it owned, and `failed` is the same words as Buy's.
+    /// Any other value stops the app.
+    static func purchases(
+      arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> (any PurchasePlatform)? {
+      guard standsInForStoreKit(arguments: arguments) else { return nil }
+      return FakePurchases(
+        owned: unlocked(arguments: arguments) ?? false,
+        forSale: arguments.contains("-purchase") || arguments.contains("-restore"),
+        buy: outcome("-purchase", in: arguments, otherwise: PurchaseOutcome.bought),
+        restore: outcome("-restore", in: arguments, otherwise: RestoreOutcome.nothing)
+      )
+    }
+
+    /// `unlock.v1` for StoreKit's stand-in: in memory, holding `-unlocked`'s answer, so a UI
+    /// test never writes the App Group's; nil, for the App Group, without the stand-in.
+    static func unlockStore(
+      arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> (any UnlockStore)? {
+      guard standsInForStoreKit(arguments: arguments) else { return nil }
+      let unlock = unlocked(arguments: arguments).map {
+        StoredUnlock(unlocked: $0, checkedAt: Date(), productID: Constants.Purchase.productID)
+      }
+      return MemoryUnlockStore(unlock)
+    }
+
+    /// The outcome `flag` names in `arguments`, or `otherwise` without the flag. A value that
+    /// names none, or none at all, stops the app.
+    private static func outcome<Outcome: RawRepresentable & CaseIterable>(
+      _ flag: String,
+      in arguments: [String],
+      otherwise: Outcome
+    ) -> Outcome where Outcome.RawValue == String {
+      guard arguments.contains(flag) else { return otherwise }
+      let text = value(after: flag, in: arguments) ?? ""
+      guard let outcome = Outcome(rawValue: text) else {
+        let names = Outcome.allCases.map(\.rawValue).joined(separator: ", ")
+        fatalError("\(flag): \(text) isn't one of \(names)")
+      }
+      return outcome
     }
 
     /// `-umpGeography eea|other`: where UMP takes the phone to be, so a UI test meets the
@@ -330,7 +455,17 @@ enum DebugHooks {
 
     static func adsReadout(_ ads: AdsModel) -> some View { EmptyView() }
 
+    static func pickerReadout(open: Bool) -> some View { EmptyView() }
+
+    static func pickerAppeared() {}
+
+    static func pickerDisappeared() {}
+
     static func store(_ store: any StoredState) -> any StoredState { store }
+
+    static func purchases() -> (any PurchasePlatform)? { nil }
+
+    static func unlockStore() -> (any UnlockStore)? { nil }
 
     static func umpGeography() -> ConsentGeography? { nil }
 
@@ -482,8 +617,8 @@ enum DebugHooks {
     }
   }
 
-  /// `-unlocked`'s store: whether the purchase is owned as the argument says, and everything else
-  /// as `store` keeps it.
+  /// The store under StoreKit's stand-in: whether the purchase is owned as `-unlocked` says (not
+  /// owned without it), and everything else as `store` keeps it.
   private struct UnlockedState: StoredState {
     let store: any StoredState
     let unlocked: Bool
@@ -501,6 +636,96 @@ enum DebugHooks {
     func loadToday() -> SavedToday? { store.loadToday() }
 
     func saveToday(_ saved: SavedToday) throws { try store.saveToday(saved) }
+  }
+
+  /// StoreKit's stand-in (`DebugHooks.purchases`), for the UI tests: it answers at once, from the
+  /// launch arguments alone, and never asks the App Store. Nothing comes through
+  /// `Transaction.updates` (no Ask to Buy approval comes in a UI test), and finishing does
+  /// nothing. Its one transaction is the product's, verified unless `-purchase unverified` says
+  /// StoreKit's check failed. Each answer the arguments name is a lowercase word, and each
+  /// failure the system's or StoreKit's own words, so none of it is copy.
+  @MainActor
+  private final class FakePurchases: PurchasePlatform {
+    /// Whether the purchase is owned: as `-unlocked` says, then as Buy or Restore purchase makes
+    /// it.
+    private var owned: Bool
+    /// Whether the App Store has the product for sale.
+    private let forSale: Bool
+    private let bought: DebugHooks.PurchaseOutcome
+    private let restored: DebugHooks.RestoreOutcome
+
+    init(
+      owned: Bool,
+      forSale: Bool,
+      buy: DebugHooks.PurchaseOutcome,
+      restore: DebugHooks.RestoreOutcome
+    ) {
+      self.owned = owned
+      self.forSale = forSale
+      bought = buy
+      restored = restore
+    }
+
+    func listen(_ heard: @escaping @MainActor (PurchaseFact) async -> Void) {}
+
+    func entitlements() async -> [PurchaseFact] {
+      owned ? [Self.fact(failure: nil)] : []
+    }
+
+    func product(_ id: String) async -> PurchaseState.Product {
+      guard forSale else { return .unavailable }
+      return .ready(price: Constants.Purchase.displayPrice, familyShareable: true)
+    }
+
+    func buy(_ id: String) async -> BuyResult {
+      switch bought {
+      case .bought:
+        owned = true
+        return .completed(Self.fact(failure: nil))
+      case .pending:
+        return .pending
+      case .cancelled:
+        return .cancelled
+      case .failed:
+        return .failed(Self.offline)
+      case .unverified:
+        let error = VerificationResult<StoreKit.Transaction>.VerificationError.invalidSignature
+        return .completed(Self.fact(failure: error.localizedDescription))
+      }
+    }
+
+    func finish(_ transactionID: UInt64) async {}
+
+    func sync() async -> SyncResult {
+      switch restored {
+      case .found:
+        owned = true
+        return .synced
+      case .nothing:
+        return .synced
+      case .cancelled:
+        return .cancelled
+      case .failed:
+        return .failed(Self.offline)
+      }
+    }
+
+    /// The product's one transaction: verified, unless `failure` is StoreKit's words for its
+    /// check.
+    private static func fact(failure: String?) -> PurchaseFact {
+      PurchaseFact(
+        transactionID: 1,
+        productID: Constants.Purchase.productID,
+        verificationFailure: failure,
+        revoked: false,
+        familyShared: false
+      )
+    }
+
+    /// A failure's words: no connection, as the system says it.
+    private static var offline: String {
+      URLError(.notConnectedToInternet).localizedDescription
+    }
   }
 
   /// `-location`'s stand-in for Core Location: permission as given, never a prompt, and the
@@ -661,20 +886,21 @@ enum DebugHooks {
 
   /// `DebugHooks.adsReadout`: three clear elements of a point each, which show nothing and take
   /// no tap, whose accessibility values AdsTests read: `debug-ads`, the ads' phase (idle, asking,
-  /// withheld or on); `debug-interstitial`, whether a full-screen ad is loaded, waiting for a
-  /// place to be chosen (ready or none); and `debug-shown`, how many full-screen ads have shown
-  /// and closed this launch. A view of its own, reading the model in its own body, so only it is
-  /// drawn again as they change, not the home screen. Each value is one lowercase word or a
-  /// number, shown to no one, so none of it is copy.
+  /// withheld, on, or off once a purchase stopped them); `debug-interstitial`, whether a
+  /// full-screen ad is loaded, waiting for a place to be chosen (ready or none); and
+  /// `debug-shown`, how many full-screen ads have shown and closed this launch. A view of its
+  /// own, reading the model in its own body, so only it is drawn again as they change, not the
+  /// home screen. Each value is one lowercase word or a number, shown to no one, so none of it is
+  /// copy.
   @MainActor
   private struct AdsReadout: View {
     let ads: AdsModel
 
     var body: some View {
       HStack(spacing: 0) {
-        reading("debug-ads", phase)
-        reading("debug-interstitial", ads.interstitialReady ? "ready" : "none")
-        reading("debug-shown", String(ads.interstitialsShown))
+        Reading(id: "debug-ads", value: phase)
+        Reading(id: "debug-interstitial", value: ads.interstitialReady ? "ready" : "none")
+        Reading(id: "debug-shown", value: String(ads.interstitialsShown))
       }
       .allowsHitTesting(false)
     }
@@ -686,17 +912,67 @@ enum DebugHooks {
       case .asking: "asking"
       case .withheld: "withheld"
       case .on: "on"
+      case .off: "off"
       }
     }
+  }
 
-    /// A clear point identified `id`, whose accessibility value is `value`.
-    private func reading(_ id: String, _ value: String) -> some View {
+  /// A clear point identified `id`, whose accessibility value is `value`: one element of a Debug
+  /// readout, which shows nothing.
+  private struct Reading: View {
+    let id: String
+    let value: String
+
+    var body: some View {
       Color.clear
         .frame(width: 1, height: 1)
         .accessibilityElement()
         .accessibilityValue(Text(verbatim: value))
         .accessibilityIdentifier(id)
     }
+  }
+
+  /// `DebugHooks.pickerReadout`: two clear elements of a point each, which show nothing and take no
+  /// tap, whose accessibility values PickerTests and AdsTests read. `debug-picker`: open, while the
+  /// home screen has the picker open; closing, once it has closed it but the picker's content is
+  /// still on screen (SwiftUI hasn't called its `onDisappear`); closed otherwise, as before any
+  /// picker opened. `debug-pickers`: how many times a picker's content has come on screen, so a
+  /// test knows the picker it reads is the one its tap opened, and that closed is that one
+  /// closing, not the readout at rest. Over the home
+  /// screen rather than the picker, so it is read where XCUITest kept up on PR #39's run, and the
+  /// home screen's sheet state rather than the picker's, so Google's full-screen ad over the
+  /// picker, should it take the picker off screen and back, still reads open. A view of its own,
+  /// reading `DebugPresence` in its own body, as `AdsReadout` does. Each value is one lowercase
+  /// word, shown to no one, so none of it is copy.
+  @MainActor
+  private struct PickerReadout: View {
+    let open: Bool
+
+    var body: some View {
+      HStack(spacing: 0) {
+        Reading(id: "debug-picker", value: state)
+        Reading(id: "debug-pickers", value: String(DebugPresence.shared.pickersShown))
+      }
+      .allowsHitTesting(false)
+    }
+
+    /// The picker as one word.
+    private var state: String {
+      if open { return "open" }
+      return DebugPresence.shared.pickerOnScreen ? "closing" : "closed"
+    }
+  }
+
+  /// What `PickerReadout` reads beyond the home screen's sheet: whether the picker's content is
+  /// on screen, from its `onAppear` to its `onDisappear` (`DebugHooks.pickerAppeared` and
+  /// `pickerDisappeared`), and how many times it has come on screen.
+  @MainActor
+  @Observable
+  private final class DebugPresence {
+    static let shared = DebugPresence()
+
+    var pickerOnScreen = false
+    var pickersShown = 0
   }
 #endif
 

@@ -1,11 +1,12 @@
 // swift-tools-version:6.0
 // IsItKit: the apps' Apple-only code (iOS build spec, section 9.3): the services, the location,
-// the ads, the views, the widget views and the snow topic's own code. Swift 5 language mode in
-// every target, with the minimal concurrency checking the apps build with; only IsItCore is in
-// Swift 6 mode.
+// the ads, the purchase, the views, the widget views and the snow topic's own code. Swift 5
+// language mode in every target, with the minimal concurrency checking the apps build with; only
+// IsItCore is in Swift 6 mode.
 //
 // The Google SDKs are pinned exactly, with the versions committed in apps/ios/Package.resolved.
-// Only IsItAds imports them, and the widget extension never links IsItAds, or IsItLocation.
+// Only IsItAds imports them, and the widget extension never links IsItAds, IsItLocation or
+// IsItPurchases.
 
 import PackageDescription
 
@@ -18,6 +19,7 @@ let package = Package(
     .library(name: "IsItServices", targets: ["IsItServices"]),
     .library(name: "IsItLocation", targets: ["IsItLocation"]),
     .library(name: "IsItAds", targets: ["IsItAds"]),
+    .library(name: "IsItPurchases", targets: ["IsItPurchases"]),
     .library(name: "IsItUI", targets: ["IsItUI"]),
     .library(name: "IsItWidgetUI", targets: ["IsItWidgetUI"]),
     .library(name: "SnowKit", targets: ["SnowKit"]),
@@ -36,7 +38,8 @@ let package = Package(
   ],
   targets: [
     // The services behind AppModel's protocols (IsItState): URLSession, the App Group,
-    // WidgetKit's reloads and the recent and saved places (IsItLogic's codecs).
+    // WidgetKit's reloads, the recent and saved places (IsItLogic's codecs), and what StoreKit
+    // holds for the purchase (`StoreKitFacts`, reading only, which the widget may link).
     .target(
       name: "IsItServices",
       dependencies: [
@@ -66,6 +69,19 @@ let package = Package(
           name: "GoogleUserMessagingPlatform",
           package: "swift-package-manager-google-user-messaging-platform"
         ),
+      ],
+      swiftSettings: swift5
+    ),
+    // The one-off purchase (spec section 13): StoreKit 2's product, buying, Restore purchase and
+    // the updates listener, behind PurchaseModel's `PurchasePlatform` (IsItState). Only the app
+    // links it: a widget may read the purchase (IsItServices' `StoreKitFacts`) but never sell it
+    // (App Review 4.4; spec 11.1).
+    .target(
+      name: "IsItPurchases",
+      dependencies: [
+        "IsItServices",
+        .product(name: "IsItLogic", package: "IsItCore"),
+        .product(name: "IsItState", package: "IsItCore"),
       ],
       swiftSettings: swift5
     ),

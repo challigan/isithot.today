@@ -409,3 +409,168 @@ struct AdsInterstitialTests {
     #expect(ads.store.loadLastInterstitial() == AdsHarness.moment)
   }
 }
+
+/// The purchase became owned mid-session (spec 14.2.5): `stop()`, after which nothing more is
+/// asked of Google this launch, wherever the start had got to.
+@MainActor
+@Suite("The ads stopped")
+struct AdsStopTests {
+  @Test("stopped before the start: the start does nothing")
+  func stopBeforeStartMeansNoStart() async {
+    let ads = AdsHarness()
+    ads.model.stop()
+    ads.model.start(firstRun: false)
+    await settle()
+    #expect(ads.model.phase == .off)
+    #expect(ads.platform.calls == ["stop"])
+  }
+
+  @Test("stopped while UMP's update is out: no consent form, and Mobile Ads never starts")
+  func stopWhileAskingStartsNothing() async {
+    let ads = AdsHarness(consent: .unknown, holding: [.update])
+    ads.platform.afterUpdate = .outside
+    ads.model.start(firstRun: false)
+    #expect(await yieldUntil { ads.platform.calls.contains("updateConsent") })
+    ads.model.stop()
+    #expect(ads.model.phase == .off)
+    ads.platform.release(.update)
+    await settle()
+    #expect(ads.platform.calls == ["updateConsent", "stop"])
+    #expect(ads.model.phase == .off)
+  }
+
+  @Test("stopped while the consent form is on screen: once answered, nothing starts")
+  func stopAfterTheFormStartsNothing() async {
+    let ads = AdsHarness(consent: .unknown, holding: [.form])
+    ads.platform.afterUpdate = .required
+    ads.platform.afterForm = .consented
+    ads.model.start(firstRun: false)
+    #expect(await yieldUntil { ads.platform.calls.contains("presentConsentForm") })
+    ads.model.stop()
+    ads.platform.release(.form)
+    await settle()
+    #expect(!ads.platform.calls.contains("startAds"))
+    #expect(ads.model.phase == .off)
+    #expect(!ads.model.privacyChoices)
+  }
+
+  @Test("stopped while Mobile Ads starts: off, and no banner or full-screen ad is asked for")
+  func stopWhileMobileAdsStartsLoadsNothing() async {
+    let ads = AdsHarness(holding: [.startAds])
+    ads.model.homeWidth(390)
+    ads.model.shown(.today)
+    ads.model.pageEndWidth(.today, 358)
+    ads.model.start(firstRun: false)
+    #expect(await yieldUntil { ads.platform.calls.contains("startAds") })
+    ads.model.stop()
+    ads.platform.release(.startAds)
+    await settle()
+    #expect(ads.model.phase == .off)
+    #expect(ads.platform.bannerCalls.isEmpty)
+    #expect(ads.platform.interstitialCalls.isEmpty)
+    #expect(ads.model.homeBannerHeight == nil)
+  }
+
+  @Test("stopped once on: the home band and Privacy choices go, and the banners are dropped")
+  func stopWhenOnTakesTheBandAndPrivacyChoices() async {
+    let ads = AdsHarness(consent: .consented)
+    #expect(await ads.on(firstRun: true))
+    ads.model.homeWidth(390)
+    #expect(ads.model.homeBannerHeight == 61)
+    #expect(await yieldUntil { ads.model.privacyChoices })
+    ads.model.stop()
+    #expect(ads.model.homeBannerHeight == nil)
+    #expect(!ads.model.privacyChoices)
+    #expect(ads.model.phase == .off)
+    #expect(ads.platform.calls.last == "stop")
+  }
+
+  @Test("stopped while a failed banner waits to load again: it never does")
+  func stopCallsOffTheRetries() async {
+    let ads = AdsHarness()
+    #expect(await ads.on(firstRun: true))
+    ads.model.homeWidth(390)
+    ads.platform.tell(.home, .failed)
+    #expect(ads.clock.pending == [later(AdsHarness.moment, seconds: 60)])
+    ads.model.stop()
+    #expect(ads.clock.pending.isEmpty)
+    ads.clock.now = later(AdsHarness.moment, seconds: 61)
+    #expect(await ads.clock.runNext() == false)
+    // A failure told after the stop waits for nothing either.
+    ads.platform.tell(.home, .failed)
+    #expect(ads.clock.pending.isEmpty)
+    #expect(ads.platform.bannerCalls.filter { $0 == "banner home 390" }.count == 1)
+  }
+
+  @Test("after the stop, no width or page shown loads a banner")
+  func noBannerLoadsAfterStop() async {
+    let ads = AdsHarness()
+    #expect(await ads.on(firstRun: true))
+    ads.model.stop()
+    ads.model.homeWidth(430)
+    ads.model.pageEndWidth(.week, 358)
+    ads.model.shown(.week)
+    #expect(ads.platform.bannerCalls.isEmpty)
+    #expect(ads.model.homeBannerHeight == nil)
+  }
+
+  @Test("after the stop, a place chosen shows no full-screen ad, and none is loaded")
+  func noFullScreenAdAfterStop() async {
+    let ads = AdsHarness()
+    #expect(await ads.on())
+    #expect(ads.model.interstitialReady)
+    ads.clock.now = later(AdsHarness.moment, minutes: 2)
+    ads.model.stop()
+    #expect(!ads.model.interstitialReady)
+    #expect(ads.choose().read { $0 } == 1)
+    await settle()
+    #expect(ads.platform.interstitialCalls == ["loadInterstitial"])
+    #expect(ads.store.loadLastInterstitial() == nil)
+    #expect(ads.model.interstitialsShown == 0)
+  }
+
+  @Test("a full-screen ad loading when the ads stop is dropped once it loads")
+  func aLoadUnderWayWhenStoppedIsDropped() async {
+    let ads = AdsHarness(holding: [.loadInterstitial])
+    #expect(await ads.on())
+    #expect(ads.platform.interstitialCalls == ["loadInterstitial"])
+    ads.model.stop()
+    ads.platform.release(.loadInterstitial)
+    await settle()
+    #expect(!ads.model.interstitialReady)
+  }
+
+  @Test("after the stop, Privacy choices opens nothing")
+  func privacyChoicesAfterStopDoesNothing() async {
+    let ads = AdsHarness(consent: .consented)
+    #expect(await ads.on(firstRun: true))
+    #expect(await yieldUntil { ads.model.privacyChoices })
+    ads.model.stop()
+    await ads.model.openPrivacyChoices()
+    #expect(!ads.platform.calls.contains("presentPrivacyOptions"))
+  }
+
+  @Test("stopped while the privacy options form is on screen: once answered, nothing comes back")
+  func stopWhilePrivacyOptionsShowKeepsThemGone() async {
+    let ads = AdsHarness(consent: .consented, holding: [.privacyOptions])
+    #expect(await ads.on(firstRun: true))
+    #expect(await yieldUntil { ads.model.privacyChoices })
+    let open = Task { await ads.model.openPrivacyChoices() }
+    #expect(await yieldUntil { ads.platform.calls.contains("presentPrivacyOptions") })
+    ads.model.stop()
+    ads.platform.release(.privacyOptions)
+    await open.value
+    #expect(!ads.model.privacyChoices)
+    #expect(ads.model.phase == .off)
+  }
+
+  @Test("a second stop does nothing")
+  func stopTwiceStopsOnce() async {
+    let ads = AdsHarness()
+    #expect(await ads.on(firstRun: true))
+    ads.model.stop()
+    ads.model.stop()
+    #expect(ads.platform.calls.filter { $0 == "stop" }.count == 1)
+    #expect(ads.model.phase == .off)
+  }
+}

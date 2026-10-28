@@ -210,7 +210,8 @@ final class Gate: Sendable {
 /// The later phases' steps and the phone's location, noting each call in order. The location's
 /// permission is `access` (granted unless said), and after `requestAccess()`, `answer`; its fix
 /// is at `moved`'s coordinates, or none without. With `holdingFix`, the fix waits until the test
-/// releases it (`releaseFix()`).
+/// releases it (`releaseFix()`); with `holdingEntitlement`, so does step 5's answer
+/// (`releaseEntitlement()`), so a test can act while step 5 waits.
 final class RecordingHooks: AppHooks, LocationService {
   private struct Record {
     var calls: [String] = []
@@ -223,22 +224,30 @@ final class RecordingHooks: AppHooks, LocationService {
   private let state: Locked<Record>
   private let answer: LocationAccess
   private let gate: Gate?
+  private let entitlementGate: Gate?
 
   init(
     owned: Bool? = nil,
     moved: Target? = nil,
     access: LocationAccess = .granted,
     answer: LocationAccess = .granted,
-    holdingFix: Bool = false
+    holdingFix: Bool = false,
+    holdingEntitlement: Bool = false
   ) {
     state = Locked(Record(owned: owned, moved: moved, access: access))
     self.answer = answer
     gate = holdingFix ? Gate() : nil
+    entitlementGate = holdingEntitlement ? Gate() : nil
   }
 
   /// Lets a held location fix through.
   func releaseFix() {
     gate?.open()
+  }
+
+  /// Lets step 5's held answer through.
+  func releaseEntitlement() {
+    entitlementGate?.open()
   }
 
   var calls: [String] { state.read(\.calls) }
@@ -253,6 +262,7 @@ final class RecordingHooks: AppHooks, LocationService {
 
   func entitlement() async -> Bool? {
     note("entitlement")
+    await entitlementGate?.wait()
     return state.read(\.owned)
   }
 
@@ -278,6 +288,8 @@ final class RecordingHooks: AppHooks, LocationService {
 
   func startAds() async { note("startAds") }
 
+  func stopAds() async { note("stopAds") }
+
   func syncAlerts(target: Target, units: Units?) async {
     note("syncAlerts \(target.key) \(units?.rawValue ?? "none")")
   }
@@ -290,7 +302,8 @@ final class RecordingHooks: AppHooks, LocationService {
   }
 }
 
-/// A model with fakes for everything, as a test sets them up.
+/// A model with fakes for everything, as a test sets them up. The later phases' steps are
+/// `hooks`, which is also the phone's location, unless `appHooks` are given for them.
 @MainActor
 struct Harness {
   let transport: FakeTransport
@@ -312,6 +325,7 @@ struct Harness {
     store: FakeState.Contents = FakeState.Contents(),
     replies: [FakeTransport.Reply],
     hooks: RecordingHooks = RecordingHooks(),
+    appHooks: (any AppHooks)? = nil,
     recents: [RecentPlace] = [],
     saved: [SavedPlace] = []
   ) {
@@ -330,7 +344,7 @@ struct Harness {
         location: hooks,
         recents: self.recents,
         saved: self.saved,
-        hooks: hooks,
+        hooks: appHooks ?? hooks,
         random: { range in
           precondition(range == 0...90_000, "the jitter is 0 to 90 s")
           return Harness.jitterMs

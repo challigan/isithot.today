@@ -85,7 +85,9 @@ export const APP_COPY = {
     'it leaves your phone. If you turn on notifications for your location, that rounded location ' +
     'is kept so we can tell you when snow is likely.',
 
-  // Upgrade (10.4, 10.5)
+  // Upgrade (10.4, 10.5). The title is also the Settings row until StoreKit gives a price, and
+  // the purchase's display name in App Store Connect and Snow.storekit: 30 characters at most
+  // (section 13).
   upgradeTitle: 'Remove ads and add widgets',
   upgradeSettings: 'Remove ads and add widgets · {price}',
   upgradeBody:
@@ -97,6 +99,18 @@ export const APP_COPY = {
   restore: 'Restore purchase',
   restored: 'Purchase restored.',
   nothingToRestore: 'No purchase found for this Apple Account.',
+  // The upgrade page's button, with StoreKit's `displayPrice`.
+  buy: 'Buy for {price}',
+  // The purchase's description in App Store Connect and Snow.storekit: 45 characters at most,
+  // with no full stop (section 13). The app never shows it.
+  upgradeDescription: 'No ads, plus home and lock screen widgets',
+  // What the upgrade page says instead of the button when StoreKit has no product to sell
+  // (`Product.products(for:)` answered nothing or failed: offline, or the App Store has nothing
+  // for sale yet, as before the Paid Apps Agreement is Active or while the purchase isn't
+  // attached to the version, so the line blames neither the connection nor the user), or when
+  // the phone can't make payments (`AppStore.canMakePayments`, Screen Time).
+  upgradeUnavailable: "The purchase isn't available right now. Try again later.",
+  purchasesOff: 'In-app purchases are turned off on this iPhone.',
 
   // Settings (10.4) and notifications (12.1)
   unitsFootnote: 'Temperatures follow: cm with °C, inches with °F.',
@@ -146,7 +160,8 @@ export const APP_COPY = {
   // shows one at most every 5 minutes (client `ADS.interstitialGapMinutes`), as the notice says:
   // credits.test.ts holds both numbers to the constant. "See Privacy choices." follows it only
   // while that row is in Settings: once the ads have started, while Google's consent tool says
-  // its privacy options must be offered.
+  // its privacy options must be offered. The purchases line says, as the notice does, that the
+  // phone keeps whether the one-off purchase was made (`Keys.AppGroup.unlock`).
   privacyChoices: 'Privacy choices',
   yourPrivacy: 'Your privacy',
   privacyPolicy: 'Privacy policy',
@@ -169,7 +184,9 @@ export const APP_COPY = {
     'In the free version, Google shows the ads and may collect device and usage data. The app ' +
     'keeps when it last showed a full-screen ad, so it shows one at most every 5 minutes.',
   seePrivacyChoices: 'See Privacy choices.',
-  privacyPurchases: 'Apple handles purchases. We never see your payment details.',
+  privacyPurchases:
+    'Apple handles purchases. We never see your payment details. The app keeps a note on your ' +
+    "iPhone of whether you've made the one-off purchase.",
   privacyAccounts: 'There are no accounts.',
   keptForNotifications: 'What we keep for notifications',
   deleteMyData: 'Turn off notifications and delete my data',

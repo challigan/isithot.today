@@ -6,8 +6,9 @@ import XCTest
 /// own that stays put as its ad comes or doesn't, and the box at a page's end, below the footer's
 /// links; the paid version (`-unlocked 1`) with no ad, no Report an ad and no Privacy choices; in
 /// the EEA (`-umpGeography eea`), Google's consent form first, then Privacy choices in Settings
-/// and its line in Your privacy; and the full-screen ad as a place is chosen in the picker, which
-/// closes once the ad does, with no second one within 5 minutes.
+/// and its line in Your privacy; the full-screen ad as a place is chosen in the picker, which
+/// closes once the ad does, with no second one within 5 minutes; and a purchase mid-session
+/// (`-purchase bought`, StoreKit's stand-in) taking every ad away at once.
 ///
 /// Google's consent tool, its form and its demo ads aren't the app's to guarantee: a test whose
 /// answer from Google doesn't come in time skips, saying which, rather than fails. Which it is, a
@@ -18,10 +19,15 @@ import XCTest
 /// while no full-screen ad has loaded. What is the app's fails: ads that never start in the free
 /// version, no band once they are on, a consent form skipped, a band or a box out of place, a space
 /// that moves as its ad loads, ads started or shown in the paid version, a loaded full-screen ad
-/// that doesn't show, a picker that never closes, a second full-screen ad. Nothing here is audited,
+/// that doesn't show, a picker that never closes, a second full-screen ad, an ad left once the
+/// purchase is made (that test never skips: `testBuyingTakesTheAdsAway`). Nothing here is audited,
 /// since the ads' own elements are Google's (HomeAuditTests audit the home screen without them).
 /// The screens are attached for the contact sheet (`ads-…`).
 final class AdsTests: XCTestCase {
+  /// How many pickers the app's readout had counted (`debug-pickers`) before `choose` last tapped
+  /// the place button, for `pickerCloses(in:after:within:)`.
+  private var pickersBefore = 0
+
   override func setUpWithError() throws {
     // Every frame out of place is reported, not only the first; a screen that never comes
     // throws, which stops the test, and an answer from Google that never comes skips it.
@@ -99,6 +105,112 @@ final class AdsTests: XCTestCase {
     XCTAssertEqual(lines.count, 4, "Your privacy's lines in the paid version: \(lines)")
     XCTAssertFalse(
       lines.contains { $0.contains("Google") }, "An ads line in the paid version: \(lines)")
+  }
+
+  /// A purchase mid-session takes every ad away at once (spec 14.2.5): the free version outside
+  /// the EEA, with StoreKit's stand-in selling the product (`-purchase bought`). Up to 30 seconds
+  /// for the ads to come on, then 5 for the band (`awaitTheAds`' waits), noting what `debug-ads`
+  /// read and whether the band came; then, whatever Google did, the purchase from Settings'
+  /// upgrade page, and back on the home screen: `debug-ads` reads off within 2 seconds, there is
+  /// no band, the middle page ends with no box and no upgrade row, and Settings has no Report an
+  /// ad. Privacy choices never shows outside the EEA, so its going is the model's test
+  /// (IsItCore's `AdsStopTests`). With the ads on before it, the band's space, kept from the
+  /// moment they came on, is given back: the pager runs on at least to where the band's banner
+  /// ended (to the safe area's bottom edge or the window's, which XCUITest can't tell apart); and
+  /// a band that came is gone within 2 seconds. It never skips, as what it proves is the app's:
+  /// when Google's answer didn't come in time, a note says which of those two wasn't checked and
+  /// why (`ads-after-purchase-unchecked`), and the box and its banner too when the ads never came
+  /// on, as no box is drawn then; the rest still fails if it is wrong; the ads never starting, or
+  /// no readout, fails as `notOn` says.
+  @MainActor
+  func testBuyingTakesTheAdsAway() throws {
+    let page = try HomeScreen.named("leeds-dry").opening()
+    let app = try launch([
+      "-resetStore", "-fixture", "leeds-dry", "-umpGeography", "other", "-purchase", "bought",
+    ])
+    try awaitHeading(page.heading, in: app)
+    let phase = waitForAdsPhase(["on", "withheld"], in: app, timeout: 30)
+    let band = app.find("ad-home")
+    let came = phase == "on" && band.waitForExistence(timeout: 5)
+    // What is the app's fails, as everywhere here: the ads never started, no readout, or on with
+    // no band. Still asking or withheld is Google's, and only leaves two checks out (below).
+    if phase != "on",
+      let why = notOn(phase, "30 seconds after the launch", in: app) as? HomeScreenError
+    {
+      XCTFail("\(why)")
+    }
+    if phase == "on", !came {
+      XCTFail(
+        "The ads are on (debug-ads reads on) but there is no ad band 5 seconds later; "
+          + app.homeGeometry)
+    }
+    // Where the band and its banner were, for the pager to take their space back.
+    let before = came ? homeScreen(of: app) : nil
+
+    try openSettings(app)
+    let upgrade = app.buttons["upgrade"]
+    guard upgrade.waitForExistence(timeout: 10) else {
+      throw HomeScreenError("No upgrade row in Settings")
+    }
+    upgrade.tap()
+    let buy = app.buttons["buy"]
+    guard buy.waitForExistence(timeout: 10) else {
+      throw HomeScreenError("No Buy on the upgrade page Settings' upgrade row opened")
+    }
+    buy.tap()
+    let thanks = NSPredicate(format: "label == %@", "Thank you. Ads are off and widgets are on.")
+    let outcome = XCTNSPredicateExpectation(predicate: thanks, object: app.find("upgrade-outcome"))
+    guard XCTWaiter().wait(for: [outcome], timeout: 10) == .completed else {
+      throw HomeScreenError("No thanks on the upgrade page 10 seconds after Buy")
+    }
+    app.navigationBars.buttons.element(boundBy: 0).tap()
+    app.buttons["close-settings"].tap()
+    guard app.sheetCloses(within: 5) else {
+      throw HomeScreenError("Settings is still open 5 seconds after its Close")
+    }
+
+    XCTAssertEqual(
+      waitForAdsPhase(["off"], in: app, timeout: 2), "off",
+      "debug-ads doesn't read off 2 seconds after the purchase")
+    XCTAssertTrue(
+      gone(band, within: 2), "An ad band 2 seconds after the purchase; \(app.homeGeometry)")
+    if let reach = before?.frames["ad-banner-home"]?.maxY,
+      let pager = homeScreen(of: app)?.frames["pager"]
+    {
+      XCTAssertGreaterThanOrEqual(
+        pager.maxY, reach - 0.5,
+        "The pager at \(pager) doesn't take back the band's space, where its banner ended at "
+          + "\(reach); \(app.homeGeometry)")
+    }
+    // The checks left out, and why, so a run whose ads never came says so.
+    var unchecked: [String] = []
+    if !came {
+      let why =
+        phase == "on"
+        ? "no band came in the 5 seconds after the ads came on, which fails above"
+        : "debug-ads read \(phase ?? "nothing") 30 seconds after the launch, not on"
+      unchecked.append("The pager taking back the band's space: \(why)")
+      unchecked.append("The band going within 2 seconds: \(why)")
+    } else if before?.frames["ad-banner-home"] == nil {
+      unchecked.append(
+        "The pager taking back the band's space: the band held no banner (ad-banner-home) to "
+          + "measure it by")
+    }
+    if phase != "on" {
+      unchecked.append(
+        "The box at the middle page's end, and its banner, going: debug-ads read "
+          + "\(phase ?? "nothing") 30 seconds after the launch, not on, so no box was drawn")
+    }
+    if !unchecked.isEmpty {
+      attachText(unchecked.joined(separator: "\n"), as: "ads-after-purchase-unchecked")
+    }
+    try scroll(page, toShow: "credits", in: app)
+    for id in ["ad-page-\(page.view)", "ad-banner-page-\(page.view)", "upgrade-row"] {
+      XCTAssertFalse(app.find(id).exists, "\(id) after the purchase; \(app.homeGeometry)")
+    }
+    attach(app, as: "ads-after-purchase")
+    try openSettings(app)
+    XCTAssertFalse(app.buttons["report-ad"].exists, "Report an ad after the purchase")
   }
 
   /// In the EEA (`-umpGeography eea`, Google's debug geography, which a Debug build asks again at
@@ -194,8 +306,8 @@ final class AdsTests: XCTestCase {
     }
     // The picker closes once the ad does, onto the place chosen.
     XCTAssertTrue(
-      gone(app.find("place-search"), within: 15),
-      "The picker is still open 15 seconds after the full-screen ad closed")
+      pickerCloses(in: app, after: pickersBefore, within: 15),
+      "The picker is still open 15 seconds after the full-screen ad closed; \(app.pickerReport)")
     expectPlace("Kathmandu", in: app)
 
     // The next ad, loaded once the first closed, up to 30 seconds on, well within 5 minutes of
@@ -220,8 +332,8 @@ final class AdsTests: XCTestCase {
       if close.isHittable { close.tap() }
     }
     XCTAssertTrue(
-      gone(app.find("place-search"), within: 15),
-      "The picker is still open 25 seconds after a place was chosen")
+      pickerCloses(in: app, after: pickersBefore, within: 15),
+      "The picker is still open 25 seconds after a place was chosen; \(app.pickerReport)")
     expectPlace("Leeds", in: app)
     XCTAssertEqual(
       adsShown(in: app), 1, "The full-screen ads shown, once the second place was chosen")
@@ -310,6 +422,15 @@ final class AdsTests: XCTestCase {
     case .some(let other):
       return HomeScreenError("debug-ads reads \(other) \(when), which is no phase of the ads")
     }
+  }
+
+  /// Whether `element` is gone, or goes within `timeout` seconds: an element of the home screen
+  /// itself, which no closed presentation leaves behind (`sheetClosed`).
+  @MainActor
+  private func gone(_ element: XCUIElement, within timeout: TimeInterval) -> Bool {
+    let gone = NSPredicate(format: "exists == false")
+    let waited = XCTNSPredicateExpectation(predicate: gone, object: element)
+    return XCTWaiter().wait(for: [waited], timeout: timeout) == .completed
   }
 
   /// Whether a full-screen ad is loaded, waiting for a place to be chosen, within `timeout`
@@ -454,39 +575,16 @@ final class AdsTests: XCTestCase {
       "The box at \(box): " + wrong.joined(separator: "; ") + "; \(app.homeGeometry)")
   }
 
-  /// Scrolls `page`, the page on screen, until the element `id` lies whole on screen: drags of
-  /// four fifths of the page on screen (`scrollDown`, whose drag then starts on the page, above
-  /// the band), up to 12, more than the longest page's end at Large takes; throws when it never
-  /// does.
-  @MainActor
-  private func scroll(
-    _ page: HomeScreen.Page,
-    toShow id: String,
-    in app: XCUIApplication
-  ) throws {
-    let element = app.find(id)
-    guard element.exists else {
-      throw HomeScreenError("No \(id) on the \(page.view) page; \(app.homeGeometry)")
-    }
-    var drags: [Drag] = []
-    while true {
-      let frame = settledFrame(of: element)
-      let shown = onScreen(page, in: app)
-      if lies(frame, within: shown) { return }
-      guard drags.count < 12 else {
-        throw HomeScreenError(
-          "\(id) at \(frame) never came whole on screen, within \(shown), after the drags "
-            + "\(drags); \(app.homeGeometry)")
-      }
-      drags.append(scrollDown(page, by: shown.height * 0.8, in: app))
-    }
-  }
-
   /// Opens the picker with the place button, searches for `name` and chooses the first result,
   /// which the search fixtures give (`search-leeds`, `search-kathmandu`).
   @MainActor
   private func choose(_ name: String, in app: XCUIApplication) throws {
+    pickersBefore = app.pickersShown ?? 0
     app.buttons["place"].tap()
+    if pickerOpens(in: app, after: pickersBefore, within: 10) == false {
+      throw HomeScreenError(
+        "No picker after tapping the place button; \(app.pickerReport); \(app.homeGeometry)")
+    }
     let field = app.find("place-search")
     guard field.waitForExistence(timeout: 10) else {
       throw HomeScreenError("No picker after tapping the place button; \(app.homeGeometry)")
@@ -543,8 +641,8 @@ final class AdsTests: XCTestCase {
   }
 
   /// Checks the home screen shows `name`, the place chosen: the place button names it, within 15
-  /// seconds, as the place loads; the picker is closed; and the top bar is no longer on
-  /// approximate location.
+  /// seconds, as the place loads; the picker is closed, as the app's readout says
+  /// (`pickerClosed`); and the top bar is no longer on approximate location.
   @MainActor
   private func expectPlace(_ name: String, in app: XCUIApplication) {
     let place = app.buttons["place"]
@@ -553,7 +651,7 @@ final class AdsTests: XCTestCase {
     let shown = XCTWaiter().wait(for: [waited], timeout: 15) == .completed
     XCTAssertTrue(
       shown, "The place button reads \"\(place.exists ? place.label : "nothing")\", not \(name)")
-    XCTAssertFalse(app.find("place-search").exists, "The picker is still open")
+    XCTAssertTrue(app.pickerClosed, "The picker is still open; \(app.pickerReport)")
     XCTAssertFalse(app.buttons["use-my-location"].exists, "Still on approximate location")
   }
 
@@ -600,14 +698,6 @@ final class AdsTests: XCTestCase {
     return false
   }
 
-  /// Whether `element` is gone within `timeout` seconds.
-  @MainActor
-  private func gone(_ element: XCUIElement, within timeout: TimeInterval) -> Bool {
-    let gone = NSPredicate(format: "exists == false")
-    let waited = XCTNSPredicateExpectation(predicate: gone, object: element)
-    return XCTWaiter().wait(for: [waited], timeout: timeout) == .completed
-  }
-
   /// Taps the gear, and waits for Settings (its Close).
   @MainActor
   private func openSettings(_ app: XCUIApplication) throws {
@@ -639,13 +729,6 @@ final class AdsTests: XCTestCase {
     }
     return lines
   }
-}
-
-/// Whether `inner` lies within `outer`, edge by edge, to half a point either way, as a frame read
-/// on a 3x screen may round.
-private func lies(_ inner: CGRect, within outer: CGRect) -> Bool {
-  inner.minX >= outer.minX - 0.5 && inner.maxX <= outer.maxX + 0.5
-    && inner.minY >= outer.minY - 0.5 && inner.maxY <= outer.maxY + 0.5
 }
 
 /// Whether two frames are the same, edge by edge, to half a point either way.

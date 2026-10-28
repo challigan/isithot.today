@@ -4,10 +4,11 @@
 #
 #   scripts/check-archive.sh <WillItSnow.xcarchive> <test|real>
 #       The archive, signed or not. It fails if either bundle lacks its privacy manifest or the
-#       answer font, the app has no icon, the widget links Google Mobile Ads, either binary names
-#       a debug hook, the ad units aren't Google's demo ones (test) or Carl's (real), the app's
-#       SKAdNetworkItems lack Google's, the app and widget differ in version or build,
-#       ITSAppUsesNonExemptEncryption isn't false, or the fixtures are bundled.
+#       answer font, the app has no icon, the widget links Google Mobile Ads or the app's location
+#       or purchase code, either binary names a debug hook, the ad units aren't Google's demo ones
+#       (test) or Carl's (real), the app's SKAdNetworkItems lack Google's, the app and widget
+#       differ in version or build, ITSAppUsesNonExemptEncryption isn't false, the fixtures or a
+#       StoreKit configuration are bundled, or the app links StoreKitTest.
 #   scripts/check-archive.sh --ipa <WillItSnow.ipa, or a folder holding its Payload>
 #       The exported app's signed entitlements. It fails unless the app has aps-environment
 #       production, both have the App Group, the widget has no aps-environment, and neither is
@@ -30,16 +31,21 @@ WIDGET=WillItSnowWidgets
 APP_GROUP=group.today.willitsnow.app
 # Google's demo publisher (section 14.3): every ad unit of a test build is one of its.
 DEMO_PUBLISHER=3940256099942544
-# Each ad unit's key in the app's Info.plist, and the repository variable that holds Carl's: the
-# home banner, the page-end banner and the full-screen ad.
-AD_UNITS=(IsItBannerUnitID=ADMOB_BANNER_ID IsItPageBannerUnitID=ADMOB_PAGE_BANNER_ID
-  IsItInterstitialUnitID=ADMOB_INTERSTITIAL_ID)
+# Each ad unit's key in the app's Info.plist, the repository variable that holds Carl's, and
+# Google's demo unit a test build must have there (Snow.xcconfig's GAD_*_test): the home banner,
+# the page-end banner (the adaptive banner's demo unit serves its inline size too) and the
+# full-screen ad. A demo unit of another format would load nothing, so each key's own is checked.
+AD_UNITS=(
+  IsItBannerUnitID=ADMOB_BANNER_ID=ca-app-pub-3940256099942544/2435281174
+  IsItPageBannerUnitID=ADMOB_PAGE_BANNER_ID=ca-app-pub-3940256099942544/2435281174
+  IsItInterstitialUnitID=ADMOB_INTERSTITIAL_ID=ca-app-pub-3940256099942544/4411468910
+)
 # Google's own SKAdNetwork identifier, the first of the list SKAdNetworkItems copies (section
 # 14.4).
 GOOGLE_SKADNETWORK=cstr6suwn9.skadnetwork
 # The debug hooks' names (section 18.3), looked for anywhere in strings' output and as whole
 # short literals.
-HOOKS=(-uitest -fixture -apiOrigin -umpGeography -openURLs URLProtocolStub 127.0.0.1)
+HOOKS=(-uitest -fixture -apiOrigin -umpGeography -openURLs URLProtocolStub FakePurchases 127.0.0.1)
 # Debug hooks that begin ordinary words, so looked for in strings' output only where no letter
 # follows them, and as whole short literals: Google's SDK, linked into the app, holds OpenSSL's
 # name sbgp-routerIdentifier. Matched with grep -E, so none may hold a pattern's special
@@ -47,7 +53,7 @@ HOOKS=(-uitest -fixture -apiOrigin -umpGeography -openURLs URLProtocolStub 127.0
 WORD_HOOKS=(-route)
 # DebugHooks.swift's other launch arguments (section 9.8), too short or too ordinary to look
 # for inside longer strings, so matched only as whole short literals.
-LITERAL_HOOKS=(-now -clock -unlocked -noads -resetStore -network -location)
+LITERAL_HOOKS=(-now -clock -unlocked -noads -resetStore -network -location -purchase -restore)
 
 PLUTIL="${PLUTIL:-plutil}"
 CODESIGN="${CODESIGN:-codesign}"
@@ -281,7 +287,7 @@ check_versions() {
 # The ad units for $1 (test or real), from the app's Info.plist XML $2 and its binary's strings $3,
 # and Google's SKAdNetwork identifier.
 check_ads() {
-  local ads="$1" info="$2" text="$3" app_id ours="" publishers publisher pair key variable unit
+  local ads="$1" info="$2" text="$3" app_id ours="" publishers publisher pair key variable unit demo
   local demo_app="^ca-app-pub-${DEMO_PUBLISHER}~[0-9]{10}$"
   local demo_unit="^ca-app-pub-${DEMO_PUBLISHER}/[0-9]{10}$"
   local any_app='^ca-app-pub-[0-9]{16}~[0-9]{10}$'
@@ -298,9 +304,12 @@ check_ads() {
     fi
     for pair in "${AD_UNITS[@]}"; do
       key="${pair%%=*}"
+      demo="${pair##*=}"
       unit="$(plist_get "$key" <"$info")" || unit=""
       if ! [[ $unit =~ $demo_unit ]]; then
         fail "with ads test, $key is ${unit:-missing}, not a Google demo unit"
+      elif [ "$unit" != "$demo" ]; then
+        fail "with ads test, $key is $unit, not $demo, Google's demo unit for it"
       fi
     done
     for publisher in $publishers; do
@@ -333,6 +342,7 @@ check_ads() {
     for pair in "${AD_UNITS[@]}"; do
       key="${pair%%=*}"
       variable="${pair#*=}"
+      variable="${variable%%=*}"
       unit="$(plist_get "$key" <"$info")" || unit=""
       if ! [[ $unit =~ $any_unit ]]; then
         fail "with ads real, $key is ${unit:-missing}, not an AdMob ad unit"
@@ -380,6 +390,14 @@ check_archive() {
   if [ -e "$app/Fixtures" ] || grep -r -l -F --include='*.json' '"_fixture"' "$app" >/dev/null; then
     fail "the app bundles the fixtures"
   fi
+  # Snow.storekit is a resource of the StoreKit tests' bundle alone, and StoreKitTest links only
+  # into it: the app buys from the App Store, never from a configuration of its own.
+  if [ -n "$(find "$app" -name '*.storekit')" ]; then
+    fail "the app bundles a StoreKit configuration"
+  fi
+  if grep -F -e StoreKitTest "$work/app.strings" >/dev/null; then
+    fail "the app links StoreKitTest"
+  fi
 
   if [ ! -d "$widget" ]; then
     fail "the widget extension $WIDGET.appex isn't embedded in the app"
@@ -404,8 +422,13 @@ check_archive() {
   if grep -E -e 'CLLocationManager|CoreLocationService' "$work/widget.strings" >/dev/null; then
     fail "the widget links the app's location code"
   fi
+  # Nor IsItPurchases: a widget never sells. It may read StoreKit's entitlements (StoreKitFacts,
+  # in IsItServices), so the class that buys is what is looked for.
+  if grep -F -e StoreKitPurchases "$work/widget.strings" >/dev/null; then
+    fail "the widget links the app's purchase code"
+  fi
   check_versions "$info" "$widget_info"
-  facts+=("checked: privacy manifests, the icon, the answer font, $((${#HOOKS[@]} + ${#WORD_HOOKS[@]} + ${#LITERAL_HOOKS[@]})) debug hooks in both binaries, the ad units and SKAdNetworkItems, the widget's links, versions, encryption and fixtures")
+  facts+=("checked: privacy manifests, the icon, the answer font, $((${#HOOKS[@]} + ${#WORD_HOOKS[@]} + ${#LITERAL_HOOKS[@]})) debug hooks in both binaries, the ad units and SKAdNetworkItems, the widget's links, versions, encryption, fixtures, StoreKit configurations and StoreKitTest")
 }
 
 # --- The exported app --------------------------------------------------------------------------

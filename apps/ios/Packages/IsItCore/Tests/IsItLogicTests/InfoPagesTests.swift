@@ -152,7 +152,8 @@ struct InfoPagesTests {
         "In the free version, Google shows the ads and may collect device and usage data. The "
           + "app keeps when it last showed a full-screen ad, so it shows one at most every 5 "
           + "minutes.",
-        "Apple handles purchases. We never see your payment details.",
+        "Apple handles purchases. We never see your payment details. The app keeps a note on "
+          + "your iPhone of whether you've made the one-off purchase.",
         "There are no accounts.",
       ])
     #expect(page.kept == nil)

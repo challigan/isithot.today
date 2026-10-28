@@ -7,6 +7,9 @@ import XCTest
 /// fallback with no mail app (`-openURLs nomail`); Your privacy's lines; the version line; and
 /// no word naming another app, website or weather type. Each screen is audited for
 /// accessibility and attached for the contact sheet. Every launch starts from a clean store.
+/// Settings opens on its upgrade card, which StoreKit's stand-in fills with no product for sale
+/// (no `-purchase`): "Remove ads and add widgets" with no price, then Restore purchase. The
+/// audits and the snow-only check read them with the rest; what they do is UpgradeTests'.
 /// Each page is known by its title on the page (`page-title`, `page(titled:in:)`), the website's
 /// h1, since the navigation bar draws none (IsItUI's `SheetPage`).
 final class SettingsTests: XCTestCase {
@@ -182,6 +185,13 @@ final class SettingsTests: XCTestCase {
     openSettings(app)
     tap("your-privacy", in: app)
     page(titled: "Your privacy", in: app)
+    // At its top, as How it works and the licences are, where each line on screen starts below
+    // the bar. At its end, since the purchase's line made the page longer, the second line runs
+    // up past the window's top (PR #40's first macOS run: 506 points tall, its top at -150):
+    // contrast failed on it there, and a frame not whole on screen can't be proven drawn in the
+    // content's colours (`DrawnText`).
+    try auditAccessibility(of: app, on: "Your privacy", surface: .content)
+    attachScreen(of: app, named: "app-your-privacy")
     let lines = [
       "To get the forecast, the app sends the place (a town, or your location rounded to about "
         + "5 km) and your units to our server. Until you choose a place, our server estimates a "
@@ -199,7 +209,8 @@ final class SettingsTests: XCTestCase {
         + "It holds no token or place.",
       "In the free version, Google shows the ads and may collect device and usage data. The app "
         + "keeps when it last showed a full-screen ad, so it shows one at most every 5 minutes.",
-      "Apple handles purchases. We never see your payment details.",
+      "Apple handles purchases. We never see your payment details. The app keeps a note on your "
+        + "iPhone of whether you've made the one-off purchase.",
       "There are no accounts.",
     ]
     for (index, line) in lines.enumerated() {
@@ -213,8 +224,6 @@ final class SettingsTests: XCTestCase {
     XCTAssertFalse(text("What we keep for notifications", in: app).exists)
     XCTAssertFalse(app.buttons["delete-my-data"].exists)
     assertSnowOnly(app)
-    try auditAccessibility(of: app, on: "Your privacy", surface: .content)
-    attachScreen(of: app, named: "app-your-privacy")
     let policy = app.buttons["full-policy"]
     XCTAssertGreaterThanOrEqual(policy.frame.height, 44, "The full policy's row at \(policy.frame)")
     tap("full-policy", in: app)
@@ -226,7 +235,9 @@ final class SettingsTests: XCTestCase {
   /// Launches the app with `-uitest`, `-noads 1` (no consent form or ad, as `launchApp`) and
   /// `arguments`, and waits for the answer's verdict. Still the free version (no `-unlocked`):
   /// Report an ad and the ads line show, as they follow the version, not the ads; Privacy
-  /// choices, which only Google's answer brings, never does (AdsTests show it).
+  /// choices, which only Google's answer brings, never does (AdsTests show it). `-uitest` puts
+  /// StoreKit's stand-in in StoreKit's place (DebugHooks.swift), which has no product for sale
+  /// without `-purchase`, so the upgrade row shows no price.
   @MainActor
   private func launch(_ arguments: [String]) -> XCUIApplication {
     let app = XCUIApplication()
@@ -337,21 +348,6 @@ final class SettingsTests: XCTestCase {
     let done = XCTWaiter.wait(for: [expectation], timeout: 10)
     let held = element.exists ? recorded(element) : "nothing"
     XCTAssertEqual(done, .completed, "\(element) never held \(value); it holds \"\(held)\"")
-  }
-
-  /// No text or button Settings shows names another weather type, website or app (section
-  /// 10.8). Only what can be tapped counts: the home screen under the sheet, whose answer may
-  /// well say "Rain, not snow.", is the server's, and is covered.
-  @MainActor
-  private func assertSnowOnly(_ app: XCUIApplication) {
-    let other =
-      #"(?i)\b(websites?|isithot|isitwet|isitwindy|hot|wet|wind|windy|rain|rainy|rainfall|android)\b"#
-    let shown = (app.staticTexts.allElementsBoundByIndex + app.buttons.allElementsBoundByIndex)
-      .filter { $0.isHittable }
-    XCTAssertFalse(shown.isEmpty, "Nothing on screen")
-    for element in shown {
-      XCTAssertNil(element.label.range(of: other, options: .regularExpression), element.label)
-    }
   }
 
   @MainActor

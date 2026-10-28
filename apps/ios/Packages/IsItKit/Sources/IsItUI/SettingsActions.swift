@@ -4,9 +4,9 @@ import IsItModel
 
 /// What Settings asks the app to do (iOS build spec, section 10.4). The sheet keeps no state of
 /// its own but the page on screen and the mail fallback: it draws the presenters' values
-/// (`SettingsScreen`, `YourPrivacy`, `HowItWorks`, `CreditsPage`) and hands each choice to the
-/// app through these. Web pages and emails open through SwiftUI's `openURL`, so links in text
-/// and rows alike go the same way.
+/// (`SettingsScreen`, `UpgradePage`, `YourPrivacy`, `HowItWorks`, `CreditsPage`) and hands each
+/// choice to the app through these. Web pages and emails open through SwiftUI's `openURL`, so
+/// links in text and rows alike go the same way.
 public struct SettingsActions {
   /// The snow units control: every request asks in these units from now on.
   public var setUnits: (Units) -> Void
@@ -16,6 +16,8 @@ public struct SettingsActions {
   public var copy: @MainActor (String) -> Void
   /// A bundled notice's full text, by its resource name; nil when it isn't bundled.
   public var notice: (String) -> String?
+  /// The upgrade page's, pushed on Settings' stack, and Restore purchase's on Settings' own card.
+  public var upgrade: UpgradeActions
   /// "Privacy choices": Google's privacy options form. Nil while Settings doesn't show the row:
   /// in the paid version, and while Google says the form isn't required.
   public var privacyChoices: (() -> Void)?
@@ -27,6 +29,7 @@ public struct SettingsActions {
     reportAd: @escaping @MainActor () -> MailDraft,
     copy: @escaping @MainActor (String) -> Void,
     notice: @escaping (String) -> String?,
+    upgrade: UpgradeActions,
     privacyChoices: (() -> Void)? = nil,
     deleteMyData: (() -> Void)? = nil
   ) {
@@ -34,6 +37,7 @@ public struct SettingsActions {
     self.reportAd = reportAd
     self.copy = copy
     self.notice = notice
+    self.upgrade = upgrade
     self.privacyChoices = privacyChoices
     self.deleteMyData = deleteMyData
   }

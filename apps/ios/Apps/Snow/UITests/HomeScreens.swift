@@ -163,6 +163,66 @@ extension XCUIApplication {
   /// The question and the answer: one heading element.
   var heading: XCUIElement { find("heading") }
 
+  /// The place picker as the app holds it, from its Debug readout (`debug-picker`,
+  /// `DebugHooks.pickerReadout`): open, while the home screen has it open; closing, once the home
+  /// screen has closed it but its content is still on screen; closed. Nil with no readout.
+  var pickerState: String? {
+    (try? find("debug-picker").snapshot())?.value as? String
+  }
+
+  /// Whether the place picker is closed, as the app says (`pickerState`): the home screen has
+  /// closed it, and SwiftUI has taken its content off the screen. Not as XCUITest's tree has it:
+  /// on PR #38's macOS run (40541947888) the tree held the search box (`place-search`) of a
+  /// picker the screen recording shows closed, the home screen loading the place chosen, for
+  /// the whole 10 seconds of the wait; on PR #39's (40562013812), the check that followed (the
+  /// place button taking a tap, the search box out of reach), read from the same tree, failed for
+  /// 15 (DECISIONS, "Ads in the iPhone app: three placements"). That the home screen then shows
+  /// the place chosen is the caller's to read from the screen, as XCUITest read the home screen's
+  /// own elements as they were.
+  var pickerClosed: Bool { pickerState == "closed" }
+
+  /// How many times a picker's content has come on screen this launch, from the readout
+  /// (`debug-pickers`): what tells a picker that opened and closed from the readout at rest,
+  /// which reads closed before any picker opens. Nil with no readout.
+  var pickersShown: Int? {
+    ((try? find("debug-pickers").snapshot())?.value as? String).flatMap { Int($0) }
+  }
+
+  /// The picker as the app and XCUITest have it, for a failure or `picker-closed-lag` to say: the
+  /// readout's state; then the search box and the place button, each with its frame and whether a
+  /// tap would reach it, or not found. A search box off the screen's foot (874 points down on the
+  /// iPhone 17) is the picker's views still in the window; one where the picker had it, a tree
+  /// that fell behind them.
+  var pickerReport: String {
+    func found(_ element: XCUIElement, _ name: String) -> String {
+      guard let snapshot = try? element.snapshot() else { return "no \(name)" }
+      let reach = element.exists && element.isHittable ? "a tap reaches it" : "a tap doesn't"
+      return "\(name) at \(snapshot.frame), \(reach)"
+    }
+    return "debug-picker reads \(pickerState ?? "nothing"), debug-pickers "
+      + "\(pickersShown.map(String.init) ?? "nothing"); "
+      + found(find("place-search"), "place-search") + "; " + found(buttons["place"], "place")
+  }
+
+  /// Whether Settings or the upgrade sheet is closed, as the screen shows it: the top bar's gear
+  /// is there and takes a tap, where under a sheet the home screen is out of the accessibility
+  /// tree (HomeView). Not the sheet's elements gone, which XCUITest may go on finding once it has
+  /// closed, as it did the picker's search box (`pickerClosed`).
+  var sheetClosed: Bool {
+    let gear = buttons["settings"]
+    return gear.exists && gear.isHittable
+  }
+
+  /// Whether Settings or the upgrade sheet is closed (`sheetClosed`) within `timeout` seconds.
+  func sheetCloses(within timeout: TimeInterval) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !sheetClosed {
+      guard Date() < deadline else { return false }
+      RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+    }
+    return true
+  }
+
   /// The top bar's name and controls and the switcher, which don't scroll, by identifier.
   static let homeBar = ["app-name", "place", "settings", "approximate", "use-my-location", "views"]
 
@@ -258,19 +318,22 @@ extension XCTestCase {
   }
 
   /// Launches the app on `screen`'s fixture at its moment, from a clean store (`-resetStore`),
-  /// the clock fixed there unless `clock` is "run", at `size`; and waits for the page it opens
-  /// on.
+  /// the clock fixed there unless `clock` is "run", at `size`, with `extra` launch arguments
+  /// after those (`-purchase bought`, say, for the home row StoreKit's stand-in brings); and
+  /// waits for the page it opens on.
   @MainActor
   func launch(
     _ screen: HomeScreen,
     clock: String = "fixed",
-    size: TextSize = .large
+    size: TextSize = .large,
+    extra: [String] = []
   ) throws -> XCUIApplication {
     guard let fixture = screen.fixture else {
       throw HomeScreenError("\(screen.name) has no fixture to launch on")
     }
     let app = try launchApp(
-      ["-resetStore", "-fixture", fixture, "-now", screen.now, "-clock", clock] + size.arguments)
+      ["-resetStore", "-fixture", fixture, "-now", screen.now, "-clock", clock] + size.arguments
+        + extra)
     try awaitHeading(try screen.opening().heading, in: app)
     return app
   }
@@ -290,6 +353,52 @@ extension XCTestCase {
       let shown = heading.exists ? heading.label : "no heading"
       throw HomeScreenError("The heading never read \"\(label)\"; it reads \"\(shown)\"")
     }
+  }
+
+  /// Whether the picker a tap opened is on screen within `timeout` seconds, as the app's readout
+  /// says: `debug-picker` reads open and `debug-pickers` more than `shown`, the count before the
+  /// tap. Nil when the readout couldn't be read at all, should XCUITest not find it under the
+  /// full-screen cover; the caller then waits for the picker's own elements, and
+  /// `pickerCloses(in:after:within:)` still proves a picker came and went. Read four times a
+  /// second from a snapshot, which a readout not found fails nothing.
+  @MainActor
+  func pickerOpens(in app: XCUIApplication, after shown: Int, within timeout: TimeInterval)
+    -> Bool?
+  {
+    let deadline = Date().addingTimeInterval(timeout)
+    var read = false
+    repeat {
+      if let state = app.pickerState {
+        read = true
+        if state == "open", (app.pickersShown ?? 0) > shown { return true }
+      }
+      RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+    } while Date() < deadline
+    return read ? false : nil
+  }
+
+  /// Whether the picker opened after the readout counted `shown` pickers has closed within
+  /// `timeout` seconds: `debug-picker` reads closed (`pickerClosed`) and `debug-pickers` more than
+  /// `shown`, so the readout at rest, which reads closed before any picker opens, never passes.
+  /// Read four times a second from a snapshot, which a readout not found fails nothing: not a
+  /// predicate on its value, which would read an element XCUITest may not find under the cover.
+  /// Once it is, should XCUITest still find the picker's search box, attaches what it found
+  /// (`pickerReport`) as `picker-closed-lag`, failing nothing: where the search box was, and
+  /// which of it and the place button a tap would reach, tell the picker's views still in the
+  /// window from a tree that fell behind them, which PR #39's run couldn't.
+  @MainActor
+  func pickerCloses(in app: XCUIApplication, after shown: Int, within timeout: TimeInterval)
+    -> Bool
+  {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !(app.pickerClosed && (app.pickersShown ?? 0) > shown) {
+      guard Date() < deadline else { return false }
+      RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+    }
+    if (try? app.find("place-search").snapshot()) != nil {
+      attachText(app.pickerReport, as: "picker-closed-lag")
+    }
+    return true
   }
 
   /// Taps `page`'s tab in the switcher (a tab, a button labelled as the tab reads, on the track or
@@ -370,6 +479,34 @@ extension XCTestCase {
     let to = screen.withOffset(CGVector(dx: x, dy: start - distance))
     from.press(forDuration: 0.01, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.3)
     return Drag(from: CGPoint(x: x, y: start), to: CGPoint(x: x, y: start - distance))
+  }
+
+  /// Scrolls `page`, the page on screen, until the element `id` lies whole on screen: drags of
+  /// four fifths of the page on screen (`scrollDown`, whose drag then starts on the page, above
+  /// an ad band), up to 12, more than the longest page's end at Large takes; throws when it never
+  /// does. AdsTests' box at a page's end, and UpgradeTests' home row above its footer.
+  @MainActor
+  func scroll(
+    _ page: HomeScreen.Page,
+    toShow id: String,
+    in app: XCUIApplication
+  ) throws {
+    let element = app.find(id)
+    guard element.exists else {
+      throw HomeScreenError("No \(id) on the \(page.view) page; \(app.homeGeometry)")
+    }
+    var drags: [Drag] = []
+    while true {
+      let frame = settledFrame(of: element)
+      let shown = onScreen(page, in: app)
+      if lies(frame, within: shown) { return }
+      guard drags.count < 12 else {
+        throw HomeScreenError(
+          "\(id) at \(frame) never came whole on screen, within \(shown), after the drags "
+            + "\(drags); \(app.homeGeometry)")
+      }
+      drags.append(scrollDown(page, by: shown.height * 0.8, in: app))
+    }
   }
 
   /// Checks the home screen fits the screen, as it is at launch, before any page has scrolled:
@@ -633,6 +770,35 @@ extension XCTestCase {
     add(attachment)
     return shot
   }
+
+  /// No text or button a sheet shows names another weather type, website or app (section
+  /// 10.8): Settings and the pages on its stack (SettingsTests), and the upgrade sheet
+  /// (UpgradeTests). Only what can be tapped counts: the home screen under the sheet, whose
+  /// answer may well say "Rain, not snow.", is the server's, and is covered.
+  @MainActor
+  func assertSnowOnly(
+    _ app: XCUIApplication,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    let other =
+      #"(?i)\b(websites?|isithot|isitwet|isitwindy|hot|wet|wind|windy|rain|rainy|rainfall|android)\b"#
+    let shown = (app.staticTexts.allElementsBoundByIndex + app.buttons.allElementsBoundByIndex)
+      .filter { $0.isHittable }
+    XCTAssertFalse(shown.isEmpty, "Nothing on screen", file: file, line: line)
+    for element in shown {
+      XCTAssertNil(
+        element.label.range(of: other, options: .regularExpression), element.label, file: file,
+        line: line)
+    }
+  }
+}
+
+/// Whether `inner` lies within `outer`, edge by edge, to half a point either way, as a frame read
+/// on a 3x screen may round.
+func lies(_ inner: CGRect, within outer: CGRect) -> Bool {
+  inner.minX >= outer.minX - 0.5 && inner.maxX <= outer.maxX + 0.5
+    && inner.minY >= outer.minY - 0.5 && inner.maxY <= outer.maxY + 0.5
 }
 
 /// How far above its centre `tapOutsideItsWords` taps a button whose element is `height` tall:

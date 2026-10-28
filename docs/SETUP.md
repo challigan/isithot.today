@@ -342,6 +342,98 @@ prints each notification the run would send at that moment. At that moment it pr
 example: "Snow likely in Durham tomorrow" / "1 to 2cm of snow. Mostly between 2am and 6am. 5 of 6
 forecasts expect snow."
 
+### The app's purchase (C2, C9, C16)
+
+The iPhone app sells one thing, once: **Remove ads and add widgets**, £1.99. It takes every ad away
+straight after the purchase, and from phase 7.2 it turns the widgets on. You have made the purchase
+in App Store Connect (C9); these steps check it, finish it, send it to review with the app and try
+it on your phone. StoreKit needs nothing in GitHub or Netlify: no secret and no variable.
+
+1. **The agreement (C2).** In App Store Connect, open **Business**, then **Agreements**. The
+   **Paid Apps Agreement** must say **Active**, with its tax and banking information complete.
+   Until it is Active the App Store sells nothing to the app, not even in TestFlight: the app
+   shows no price, Settings' "Remove ads and add widgets" opens a page that says "The purchase
+   isn't available right now. Try again later.", and Restore purchase still shows. If it isn't
+   Active by **Mon 2 Nov**, tell me: I'll build a switch that can leave the purchase and the
+   widgets out. Version 1.0 goes without them only if the agreement is still not Active on
+   **Fri 13 Nov** (spec section 23.5).
+
+2. **The purchase (C9).** Open **Apps**, then **willitsnow.today**, then under **Monetization**
+   **In-App Purchases**, then **Snow unlock**. Check each field against this list, which is what
+   the app and its tests sell (`apps/ios/Apps/Snow/StoreKit/Snow.storekit`, made from
+   `packages/mobile/src/purchase.ts`):
+   - **Type:** Non-Consumable.
+   - **Reference Name:** Snow unlock.
+   - **Product ID:** `today.willitsnow.app.unlock`. It can never be changed.
+   - **Price Schedule:** £1.99, with the United Kingdom as the base country or region, and every
+     other one priced from it.
+   - **Availability:** every country or region the app is in: all but mainland China (Q11).
+   - **App Store Localization**, English (U.K.): **Display Name** "Remove ads and add widgets",
+     and **Description** "No ads, plus home and lock screen widgets" (exactly, with no full stop:
+     the app's tests hold the same words).
+   - **Family Sharing:** turned on (**Turn On**, if it isn't yet). Once on it can't be turned off,
+     which is what you chose (Q4).
+
+   If App Store Connect says something different, change it there to match, or tell me if you
+   think App Store Connect is the one that is right.
+
+3. **Review Information**, further down the same page:
+   - **Screenshot:** the upgrade sheet with its price, which the app's tests take. On GitHub open
+     **Actions**, then **iOS** on the left, then the latest run with 7.1 in it (on `main` once it is
+     merged), and under **Artifacts** download **ios-attachments**. The screenshot is
+     `review/app-upgrade.png` in it (not one from the `UI` folder, whose files are named by
+     codes): 1206 × 2622 pixels, the whole iPhone 17 screen. Upload that. When phase 7.3 makes a
+     new one, with the widgets on the sheet, upload it in this one's place. GitHub keeps artefacts
+     for 5 days, and runs happen only when the app's files change: if it has gone, open that run,
+     press **Re-run all jobs**, and take it from the run that makes.
+   - **Review Notes:** paste this:
+
+     > Unlocks two things: no ads in the app, and the Snow forecast widget for the home screen
+     > and lock screen. To buy it, tap the gear at the top right of the app (Settings), then
+     > Remove ads and add widgets, then Buy. It is also the row at the end of the middle page
+     > (Today, or Tomorrow after 6pm). Restore purchase is in Settings, beneath it. If the App
+     > Store doesn't answer, Settings still shows Remove ads and add widgets, without a price,
+     > and its page says the purchase isn't available right now.
+
+   Press **Save**. The purchase's status then changes from **Missing Metadata** to **Ready to
+   Submit**.
+
+4. **With version 1.0 (C24).** A first in-app purchase goes to App Review with a version of the
+   app, never on its own. On the version's page (**Apps**, **willitsnow.today**, then **1.0**
+   under **iOS App**), find **In-App Purchases and Subscriptions**, add **Snow unlock** there,
+   then submit the version as usual (spec section 21.4). App Review then sees the two together.
+
+5. **On your iPhone, from TestFlight**, once a build with 7.1 in it has reached you:
+   1. Open the app, tap the gear, then **Remove ads and add widgets · £1.99**, then **Buy for
+      £1.99**, and confirm on Apple's own sheet. A TestFlight build buys in Apple's test
+      environment with your own Apple Account, so nothing is charged and you need no Sandbox
+      tester. The ads go at once: the band under the pages, the ad at the end of each page, and
+      no more full-screen ads. The page and Settings then say "Thank you. Ads are off and widgets
+      are on."
+   2. If there is no price, and the page says the purchase isn't available right now, the App
+      Store has nothing to sell the app yet. Check that the agreement is Active (step 1), and
+      that the purchase has its price and its English (U.K.) name (step 2); it doesn't need to be
+      Ready to Submit for TestFlight. A change in App Store Connect can take up to an hour to
+      reach TestFlight, so try again later.
+   3. Delete the app, install it again from TestFlight and open it. It should come back as the
+      paid version by itself, as Apple remembers the purchase. Open Settings and tap **Restore
+      purchase** anyway: it should say "Purchase restored."
+   4. Until phase 7.2, the widget shows its answers whether or not you bought, so keep
+      TestFlight to the internal group (you).
+
+   If any step shows something else, tell me what it said, with a screenshot.
+
+6. **A Sandbox tester (C16) is optional.** TestFlight never uses one, and a build you run from
+   Xcode sells from Snow.storekit, Xcode's local stand-in for the App Store, which needs no
+   account (apps/ios/README.md, "Phase 7.1: the purchase", "Trying it"). Only a build from Xcode
+   with that turned off (**Product → Scheme → Edit Scheme → Run → Options**, **StoreKit
+   Configuration** set to None) buys from Apple's test environment, and needs one: **Users and
+   Access → Sandbox → Test Accounts**, then **+**, with an email address that isn't an Apple
+   Account already. On the iPhone, with Developer Mode on, try one purchase in a build Xcode
+   installed; **Settings → Developer → Sandbox Apple Account → Sign In** appears after that
+   (Apple, "Testing In-App Purchases with sandbox"). Refunds, Ask to Buy and a purchase taken
+   back are already tested on CI (the StoreKit tests).
+
 ## 6. Uptime monitor
 
 Any free monitor (UptimeRobot, Better Stack) on:

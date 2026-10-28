@@ -945,3 +945,115 @@ struct AppModelSavedTests {
     #expect(model.lists == PlaceLists(saved: [], recent: model.recents))
   }
 }
+
+/// StoreKit's answer changing while the app runs (phase 7.1), as `PurchaseModel` tells the model
+/// (`purchaseChanged(owned:)`): `unlocked` follows at once, a purchase stops the ads for good
+/// this launch, and a refund starts nothing until the next launch (spec 13). Step 5's answer
+/// never overwrites one heard before it.
+@MainActor
+@Suite("The purchase heard while the app runs")
+struct AppModelPurchaseTests {
+  /// aberdeen-snow at its own moment, `unlocked` as stored, with `hooks`.
+  func opened(unlocked: Bool = false, hooks: RecordingHooks = RecordingHooks()) throws
+    -> Harness
+  {
+    Harness(
+      now: try fixtureNow("aberdeen-snow"),
+      store: .init(place: aberdeen, units: .c, unlocked: unlocked),
+      replies: [try FakeTransport.fixture("aberdeen-snow")],
+      hooks: hooks
+    )
+  }
+
+  @Test("bought mid-session: unlocked at once, and the ads stop")
+  func buyingMidSessionStopsTheAds() async throws {
+    let h = try opened()
+    await h.model.launch()
+    #expect(!h.model.unlocked)
+    #expect(h.hooks.calls.contains("startAds"))
+    await h.model.purchaseChanged(owned: true)
+    #expect(h.model.unlocked)
+    #expect(h.hooks.calls.last == "stopAds")
+  }
+
+  @Test("refunded mid-session: locked at once, and nothing starts until the next launch")
+  func aRefundMidSessionStartsNothing() async throws {
+    let h = try opened(unlocked: true, hooks: RecordingHooks(owned: true))
+    await h.model.launch()
+    #expect(h.model.unlocked)
+    let before = h.hooks.calls
+    await h.model.purchaseChanged(owned: false)
+    #expect(!h.model.unlocked)
+    #expect(h.hooks.calls == before)
+    #expect(!h.hooks.calls.contains("startAds"))
+    #expect(!h.hooks.calls.contains("stopAds"))
+  }
+
+  @Test("the answer the model already has changes nothing")
+  func theSameAnswerChangesNothing() async throws {
+    let h = try opened()
+    await h.model.launch()
+    let before = h.hooks.calls
+    await h.model.purchaseChanged(owned: false)
+    #expect(!h.model.unlocked)
+    #expect(h.hooks.calls == before)
+  }
+
+  @Test("owned before step 5, with no answer from the hook: the ads never start")
+  func ownedBeforeStepFiveNeverStartsTheAds() async throws {
+    let h = try opened(hooks: RecordingHooks(owned: nil))
+    await h.model.purchaseChanged(owned: true)
+    #expect(h.model.unlocked)
+    await h.model.launch()
+    #expect(h.model.unlocked)
+    #expect(!h.hooks.calls.contains("startAds"))
+  }
+
+  @Test("the hook's own answer at step 5, owned: the ads never start")
+  func theHooksOwnedAnswerNeverStartsTheAds() async throws {
+    let h = try opened(hooks: RecordingHooks(owned: true))
+    #expect(!h.model.unlocked)
+    await h.model.launch()
+    #expect(h.model.unlocked)
+    #expect(!h.hooks.calls.contains("startAds"))
+  }
+
+  @Test("a purchase heard while step 5 waits stands: its older answer doesn't overwrite it")
+  func aPurchaseHeardWhileStepFiveWaitsStands() async throws {
+    let h = try opened(hooks: RecordingHooks(owned: false, holdingEntitlement: true))
+    let launch = Task { await h.model.launch() }
+    try #require(
+      await yieldUntil { h.hooks.calls.contains("entitlement") }, "step 5 was never reached")
+    await h.model.purchaseChanged(owned: true)
+    h.hooks.releaseEntitlement()
+    await launch.value
+    #expect(h.model.unlocked)
+    #expect(!h.hooks.calls.contains("startAds"))
+  }
+
+  @Test("refunded before step 5: a free launch, so the ads start")
+  func aRefundHeardBeforeStepFiveStartsTheAds() async throws {
+    let h = try opened(unlocked: true, hooks: RecordingHooks(owned: nil))
+    #expect(h.model.unlocked)
+    await h.model.purchaseChanged(owned: false)
+    #expect(!h.model.unlocked)
+    await h.model.launch()
+    #expect(!h.model.unlocked)
+    #expect(h.hooks.calls.contains("startAds"))
+    #expect(!h.hooks.calls.contains("stopAds"))
+  }
+
+  @Test("owned, then refunded, before step 5: nothing was stopped, so the ads start")
+  func ownedThenRefundedBeforeStepFiveStartsTheAds() async throws {
+    let h = try opened(hooks: RecordingHooks(owned: nil))
+    await h.model.purchaseChanged(owned: true)
+    #expect(h.model.unlocked)
+    await h.model.purchaseChanged(owned: false)
+    #expect(!h.model.unlocked)
+    await h.model.launch()
+    #expect(!h.model.unlocked)
+    // Stopped, the ads would stay off for the launch (`AdsModel.stop()`): a free launch with none.
+    #expect(!h.hooks.calls.contains("stopAds"))
+    #expect(h.hooks.calls.contains("startAds"))
+  }
+}

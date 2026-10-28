@@ -24,7 +24,8 @@ public final class AppModel {
   public private(set) var phase: AppPhase
   /// The holds for a phone clock running fast (`Freshness.hold`), kept while the app runs.
   public private(set) var holds = Freshness.Holds()
-  /// Whether the purchase is owned: `unlock.v1`, then StoreKit's check (phase 7).
+  /// Whether the purchase is owned: `unlock.v1`, then StoreKit's check at launch step 5, and
+  /// from then on, or from sooner, each change `PurchaseModel` tells (`purchaseChanged(owned:)`).
   public private(set) var unlocked: Bool
   /// The view on screen; the pager and the switcher set it as the user moves. The app opens on
   /// the view for the time of day (`MiddleDay.defaultView`) once: from the saved answer it
@@ -65,6 +66,12 @@ public final class AppModel {
   /// time of day.
   @ObservationIgnored private var opened: Bool
   @ObservationIgnored private var launchFinished = false
+  /// Whether `PurchaseModel` has told the model an answer this launch (`purchaseChanged`): step
+  /// 5's answer, which may have been read before it, then leaves `unlocked` alone.
+  @ObservationIgnored private var purchaseHeard = false
+  /// Whether step 5 has started the ads (`hooks.startAds()`): only then does a purchase stop
+  /// them (`purchaseChanged`).
+  @ObservationIgnored private var adsStarted = false
   /// Counts the fetches started; only the latest one's answer is shown.
   @ObservationIgnored private var requests = 0
   @ObservationIgnored private var refreshWork: ScheduledWork?
@@ -107,9 +114,10 @@ public final class AppModel {
   /// writes the App Group and reloads the widgets; step 4, for "My location", takes one
   /// location fix when permission is already granted, never asking (`fixMoved(from:)`), and
   /// fetches again only when the place's 0.05° cell changed and the place is still the one the
-  /// fix was for, so a place chosen meanwhile stands; step 5 starts the ads once the check has
-  /// finished, only when not unlocked (phase 8); step 6 syncs the notifications (phase 8); step
-  /// 7 handles a pending route (phases 6 and 8).
+  /// fix was for, so a place chosen meanwhile stands; step 5 takes the check's answer, unless
+  /// `PurchaseModel` has told a newer one meanwhile, and starts the ads only when not unlocked
+  /// (phase 8); step 6 syncs the notifications (phase 8); step 7 handles a pending route (phases
+  /// 6 and 8).
   public func launch() async {
     guard !launched else { return }
     launched = true
@@ -129,8 +137,11 @@ public final class AppModel {
         await load(.plain)
       }
     }
-    if let owned = await hooks.entitlement() { unlocked = owned }
-    if !unlocked { await hooks.startAds() }
+    if let owned = await hooks.entitlement(), !purchaseHeard { unlocked = owned }
+    if !unlocked {
+      adsStarted = true
+      await hooks.startAds()
+    }
     await hooks.syncAlerts(target: target, units: units)
     launchFinished = true
     if let pending = route {
@@ -215,6 +226,23 @@ public final class AppModel {
   /// The user has read the notice.
   public func dismissNotice() {
     notice = nil
+  }
+
+  // MARK: - The purchase
+
+  /// StoreKit's answer changed (a purchase, an Ask to Buy approval, a restore, a refund or a
+  /// Family Sharing removal, or the launch's check disagreeing with `unlock.v1`), as
+  /// `PurchaseModel` tells it: `unlocked` follows at once, so the home row, the band, the boxes,
+  /// Report an ad, Privacy choices and Your privacy's ads line go or come back with it, and step 5
+  /// keeps it. Owned once step 5 has started the ads, they stop for good this launch
+  /// (`hooks.stopAds()`); owned before step 5, step 5 doesn't start them, and nothing is stopped.
+  /// No longer owned mid-session, nothing starts: the ads start at the next launch (spec 13);
+  /// before step 5, step 5 starts them, as in any free launch, whatever was heard before.
+  public func purchaseChanged(owned: Bool) async {
+    purchaseHeard = true
+    guard owned != unlocked else { return }
+    unlocked = owned
+    if owned, adsStarted { await environment.hooks.stopAds() }
   }
 
   // MARK: - The place picker

@@ -47,9 +47,10 @@ targets:
       # the home screen's presenters.
       - package: IsItCore
         products: [IsItModel, IsItLogic, IsItState]
-      # IsItLocation (Core Location) is the app's alone, as IsItAds is: never the widget's.
+      # IsItLocation (Core Location) is the app's alone, as IsItAds is: never the widget's. So is
+      # IsItPurchases: the purchase is the app's alone, as the ads are.
       - package: IsItKit
-        products: [IsItServices, IsItLocation, IsItUI, IsItAds, SnowKit]
+        products: [IsItServices, IsItLocation, IsItUI, IsItAds, IsItPurchases, SnowKit]
       - target: WillItSnowWidgets
   WillItSnowWidgets:
     type: app-extension
@@ -70,7 +71,8 @@ targets:
       - package: IsItCore
         products: [IsItModel]
       # Never IsItAds: the widget links no ads code (sections 9.1 and 18.3); nor IsItLocation,
-      # so no location API is in its binary.
+      # so no location API is in its binary; nor IsItPurchases: a widget never sells (App Review
+      # 4.4).
       - package: IsItKit
         products: [IsItServices, IsItWidgetUI, SnowKit]
   WillItSnowTests:
@@ -92,14 +94,39 @@ targets:
         products: [IsItModel]
       - package: IsItKit
         products: [IsItServices, IsItUI, IsItWidgetUI, SnowKit]
+  # The SKTestSession tests (spec 13 and 17.2), hosted by the app as StoreKit Test needs (a
+  # hostless bundle gets xctest's own StoreKit environment), in a plan of their own on the iOS
+  # 26.2 simulator (StoreKit.xctestplan; ci/test.sh StoreKit; ios.yml's storekit job).
+  # Snow.storekit is a resource of this bundle only, loaded by its URL in this bundle
+  # (SKTestSession(contentsOf:)), whichever bundle a named lookup would search, so the app's
+  # bundle never holds it. StoreKitTest links by its import, from the testing search paths every
+  # test bundle has.
+  WillItSnowStoreKitTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Apps/Snow/StoreKitTests
+      - path: Apps/Snow/StoreKit/Snow.storekit
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: today.willitsnow.app.storekittests
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: WillItSnow
+      - package: IsItCore
+        products: [IsItModel, IsItLogic, IsItState]
+      - package: IsItKit
+        products: [IsItServices, IsItPurchases]
   WillItSnowUITests:
     type: bundle.ui-testing
     platform: iOS
     sources:
       # FixtureLaunchTests, LaunchTests, phase 5.4's HomeTests, OfflineTests and HomeAuditTests
       # with HomeScreens.swift, phase 6's PickerTests and SettingsTests with ScreenAudit.swift,
-      # every audit's contrast proof in DrawnText.swift, and phase 8.3's AdsTests, the only ones
-      # launched without -noads 1; Generated/HomeScreens.json (pnpm mobile:generate, from
+      # every audit's contrast proof in DrawnText.swift, phase 8.3's AdsTests, the only ones
+      # launched without -noads 1, and phase 7.1's UpgradeTests, over StoreKit's stand-in
+      # (DebugHooks.swift); Generated/HomeScreens.json (pnpm mobile:generate, from
       # page.json) and Generated/Surfaces.json (from brandColours.ts) are resources of the bundle,
       # where the tests read what each screen shows and the colours it is drawn in.
       - path: Apps/Snow/UITests
@@ -115,6 +142,7 @@ schemes:
       targets:
         WillItSnow: all
         WillItSnowTests: [test]
+        WillItSnowStoreKitTests: [test]
         WillItSnowUITests: [test]
     run:
       config: Debug
@@ -122,12 +150,17 @@ schemes:
       commandLineArguments:
         '-fixture aberdeen-snow': false
         '-fixture leeds-dry': false
+      # Cmd-R in Xcode buys from Snow.storekit, with Xcode's transaction manager to approve,
+      # refund and revoke; CI never runs the Run action, and XcodeGen writes no StoreKit setting
+      # into the Test action.
+      storeKitConfiguration: Apps/Snow/StoreKit/Snow.storekit
     test:
       config: Debug
       testPlans:
         - path: TestPlans/Unit.xctestplan
           defaultPlan: true
         - path: TestPlans/UI.xctestplan
+        - path: TestPlans/StoreKit.xctestplan
     profile:
       config: Release
     analyze:

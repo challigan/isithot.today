@@ -12,20 +12,25 @@ import XCTest
 /// (`AuditKinds.passes`): the kinds that read the screen as it is, contrast and then the other
 /// four, then the Dynamic Type and clipped-text checks, which lay the app out at other text sizes
 /// and leave a page scrolled past its end at the size checked short of where it was, so the page
-/// is put back before the next scroll (`restore`).
+/// is put back before the next scroll (`restore`). The upgrade row (spec 10.2, item 6), which
+/// StoreKit's stand-in brings only with a product for sale, is audited the same way, on
+/// leeds-dry's middle page launched with one (`-purchase bought`), at Large and at AX3, where its
+/// words wrap; no other launch here has the row.
 ///
 /// The attachments are named so that the contact sheet, which tiles them in their names' order
 /// (`ci/contact-sheet.mjs`), shows them fixture by fixture, Large then AX3, each page in the
 /// switcher's order, top to bottom: `home-<fixture>-1-large-1-now-01`, `…-1-large-1-now-02`, …,
 /// `…-1-large-2-today-01` (or `-2-tomorrow-01`), …, `…-1-large-3-this-week-01`, …, then
-/// `home-<fixture>-2-ax3-1-now-01` and so on.
+/// `home-<fixture>-2-ax3-1-now-01` and so on; the row's after leeds-dry's own, as
+/// `home-leeds-dry-upgrade-1-large-2-today-01` and so on.
 ///
 /// Every issue an audit finds fails the test, but for the exceptions in `exceptions`, each with
 /// why it isn't a fault to fix in the app. An element of the page is judged on a screenful that
 /// shows it whole (`AuditLog`). Each call goes through `runAudit` (ScreenAudit.swift): timed, the
-/// times attached at the test's end as `home-<fixture>-<order>-audit-times`. One that doesn't
-/// finish in time isn't run again on the same screen: the page is moved a few points, showing
-/// whole the same elements, and audited again in all three calls (`auditAgain`).
+/// times attached at the test's end as `home-<fixture>-<order>-audit-times`, each with where the
+/// credits were. One that doesn't finish in time isn't run again on the same screen: the page is
+/// moved a few points, showing whole the same elements, and audited again in all three calls, up
+/// to `reaudits` times, each a few points from every place a call stopped (`auditAgain`).
 final class HomeAuditTests: XCTestCase {
   override func setUpWithError() throws {
     continueAfterFailure = true
@@ -61,6 +66,27 @@ final class HomeAuditTests: XCTestCase {
     try audit("leeds-dry", at: .ax3)
   }
 
+  @MainActor
+  func testLeedsDryWithTheUpgradeRowAtLarge() throws {
+    try auditTheUpgradeRow(at: .large)
+  }
+
+  @MainActor
+  func testLeedsDryWithTheUpgradeRowAtAX3() throws {
+    try auditTheUpgradeRow(at: .ax3)
+  }
+
+  /// leeds-dry's middle page, the one page with the upgrade row, launched with a product for sale
+  /// (`-purchase bought`, StoreKit's stand-in), so the row sits above its footer; attached as
+  /// `home-leeds-dry-upgrade-…`. The row comes once the stand-in has answered, which the audit
+  /// waits for.
+  @MainActor
+  private func auditTheUpgradeRow(at size: TextSize) throws {
+    try audit(
+      "leeds-dry", at: size, extra: ["-purchase", "bought"], pages: ["today"],
+      as: "leeds-dry-upgrade", showing: "upgrade-row")
+  }
+
   /// An issue the audit raises that isn't a fault to fix in the app, and why: which kind, and
   /// how to know its element.
   struct Exception {
@@ -68,6 +94,18 @@ final class HomeAuditTests: XCTestCase {
     /// Whether an issue of `type` is this exception, from its element and the screen.
     let matches: (_ element: AuditedElement) -> Bool
     let why: String
+  }
+
+  /// The calls that stopped on each of `auditAgain`'s tries, in order, as the test's failure says
+  /// them, each with its place (how far the page was moved), kinds, time and where the credits
+  /// were.
+  struct ReauditStops: Error, CustomStringConvertible {
+    let stops: [AuditFailure]
+
+    var description: String {
+      "a call stopped on \(stops.count == 1 ? "its one try" : "each of its \(stops.count) tries"): "
+        + stops.map(\.description).joined(separator: "; then ")
+    }
   }
 
   /// The issues allowed, each matched as narrowly as its element allows, with its reason: the
@@ -112,18 +150,40 @@ final class HomeAuditTests: XCTestCase {
   /// is safe: the next scroll is worked out from where the page is.
   static let restoringSlack: CGFloat = 24
 
-  /// Opens `name` at `size`, checks the switcher is the one for that size, and for each page in
-  /// the switcher's order shows it by its tab, checks its heading, and from its top to its end
-  /// attaches and audits each screenful. Fails, once, listing every issue found on any page
-  /// that isn't an exception.
+  /// Opens `name` at `size`, launched with `extra` arguments too, checks the switcher is the one
+  /// for that size, and for each page in the switcher's order, or only those whose views are in
+  /// `pages` ("now", "today", "week") when given, shows it by its tab, checks its heading, and
+  /// from its top to its end attaches and audits each screenful. The attachments are named for
+  /// `label`, `name` without one. With `showing`, the identifier of an element of the page the
+  /// launch opens on that comes a moment later (the upgrade row, once StoreKit's stand-in has
+  /// answered), the test waits up to 10 seconds for it before it reads anything, and stops
+  /// without it rather than audit a page without what it is for. Fails, once, listing every issue
+  /// found on any page that isn't an exception.
   @MainActor
-  private func audit(_ name: String, at size: TextSize) throws {
+  private func audit(
+    _ name: String,
+    at size: TextSize,
+    extra: [String] = [],
+    pages: Set<String>? = nil,
+    as label: String? = nil,
+    showing: String? = nil
+  ) throws {
     let screen = try HomeScreen.named(name)
-    let app = try launch(screen, size: size)
+    if let pages, let missing = pages.subtracting(screen.pages.map(\.view)).sorted().first {
+      throw HomeScreenError("\(name) has no \(missing) page to audit")
+    }
+    let label = label ?? name
+    let app = try launch(screen, size: size, extra: extra)
     let order: String
     switch size {
     case .large: order = "1-large"
     case .ax3: order = "2-ax3"
+    }
+    // What the launch brings a moment later, before the checks and audits read the screen.
+    if let showing, !app.find(showing).waitForExistence(timeout: 10) {
+      throw HomeScreenError(
+        "\(label) at \(order): no \(showing) 10 seconds after launching with \(extra); "
+          + app.homeGeometry)
     }
     // At an accessibility size the switcher's tabs wrap onto a second line, and at Large they
     // share the track's one: so the size reached the app.
@@ -132,22 +192,24 @@ final class HomeAuditTests: XCTestCase {
       "The switcher isn't the one for \(order): the text size didn't reach the app")
     // The top bar under the status bar, and every page's end below the screen, at both sizes on
     // main's first macOS run.
-    expectFits(app, "\(name) at \(order)")
+    expectFits(app, "\(label) at \(order)")
     // The window-sized element with no label, on every screenful of PR #33's two macOS runs.
-    expectNoBareElements(app, "\(name) at \(order)")
+    expectNoBareElements(app, "\(label) at \(order)")
     // Every page's colours, from brandColours.ts, once checked against TypeScript's samples.
     let surfaces = try SurfaceFile.bundled()
     let found = AuditLog()
     let times = AuditTimes()
     // Every call's time, however the test ends (ci/xcresult-summary.mjs `timings` lists them).
-    defer { attachText(times.text, as: "home-\(name)-\(order)-audit-times") }
-    for (index, page) in screen.pages.enumerated() {
+    defer { attachText(times.text, as: "home-\(label)-\(order)-audit-times") }
+    // Numbered by the switcher's order whichever are audited, so a page's attachments are named
+    // alike in every test.
+    for (index, page) in screen.pages.enumerated() where pages?.contains(page.view) ?? true {
       try tap(page, in: app)
       XCTAssertEqual(app.heading.label, page.heading, "\(page.view) page at \(order)")
       let tab = page.label.lowercased().replacingOccurrences(of: " ", with: "-")
       let colours = try surfaces.colours(.page(band: page.band), window: app.frame)
       try audit(
-        page, as: "home-\(name)-\(order)-\(index + 1)-\(tab)", in: app, at: size,
+        page, as: "home-\(label)-\(order)-\(index + 1)-\(tab)", in: app, at: size,
         colours: colours, noting: found, timing: times)
     }
     // What the exceptions allowed and which no issue needed, for the log and the result bundle:
@@ -157,10 +219,10 @@ final class HomeAuditTests: XCTestCase {
       "Not needed: \(Self.exceptions[$0].why)"
     }
     let report = found.allowed.map { "Allowed: \($0)" } + unneeded + times.report
-    attachText(report.joined(separator: "\n"), as: "home-\(name)-\(order)-allowed")
+    attachText(report.joined(separator: "\n"), as: "home-\(label)-\(order)-allowed")
     XCTAssertTrue(
       found.unexpected.isEmpty,
-      "\(found.unexpected.count) accessibility issues on \(name) at \(order), in the window at "
+      "\(found.unexpected.count) accessibility issues on \(label) at \(order), in the window at "
         + "\(app.frame):\n" + (found.unexpected + report).joined(separator: "\n"))
   }
 
@@ -175,10 +237,12 @@ final class HomeAuditTests: XCTestCase {
   /// on the same screen: the screenful's other calls aren't made, and the page is moved a few
   /// points, showing whole what the screenful showed whole, and audited again in all three calls
   /// as a screenful of its own, `<name>-<k>-moved`, what the stopped screenful's calls done found
-  /// dropped so that none is counted twice (`auditAgain`); the next scroll starts from there.
-  /// Fails, with where the page and its credits were, when the credits aren't there, the app has
-  /// left the foreground, an audit can't run, a call doesn't finish in time on the moved screenful
-  /// too or the page can't be moved so, a call but the resizing one moves the page, the page stops
+  /// dropped so that none is counted twice, and again, a few points from every place a call
+  /// stopped, should one stop there too, up to `reaudits` times (`-moved-2`, `-moved-3`;
+  /// `auditAgain`); the next scroll starts from the one whose calls all finished. Fails, with
+  /// where the page and its credits were, when the credits aren't there, the app has left the
+  /// foreground, an audit can't run, a call doesn't finish in time on every moved screenful or
+  /// the page can't be moved so, a call but the resizing one moves the page, the page stops
   /// scrolling before its end, or its end never comes into view; for the last two, with what
   /// `stopped` finds too.
   @MainActor
@@ -295,9 +359,12 @@ final class HomeAuditTests: XCTestCase {
   ) throws {
     // A contrast issue's pixels, from the screenful as attached.
     let pixels = { (frame: CGRect) in ScreenPixels(shot, in: frame, window: run.colours.window) }
+    // Where the credits were, for the times: a position on the page, to the third of a point, that
+    // runs can be told apart by (DECISIONS, "After #34's fourth full run").
+    let at = "\(place) (credits \(String(format: "%.2f", Double(screenful.credits.minY))))"
     for kinds in AuditKinds.passes {
       let issues = try runAudit(
-        of: run.app, for: kinds, at: place, timing: run.times, onTimeout: .handBack)
+        of: run.app, for: kinds, at: at, timing: run.times, onTimeout: .handBack)
       // Where the credits are once the call is done: how far it moved the page, by which each
       // issue's element is noted where it was on the screenful.
       let end = settledFrame(of: run.credits)
@@ -323,27 +390,29 @@ final class HomeAuditTests: XCTestCase {
 
   /// After a call on `screenful` (attached as `label`) didn't finish in time (`failure`), the
   /// screenful's other calls not made: attaches the app's element tree as `<label>-tree`, what
-  /// was on screen as the call stopped; puts the page back should the call have moved it
-  /// (`restore`); checks the app is as the test had it (`unsettled`); moves the page a few points
-  /// so that it shows whole exactly the elements the screenful showed whole (`moveAFewPoints`);
-  /// and attaches the screen as `<label>-moved` and audits it in all three calls, a screenful of
-  /// its own in `seen`, so every kind runs on the same content and the proof reads the pixels
+  /// was on screen as the call stopped; then, up to `reaudits` times, puts the page back should a
+  /// call have moved it (`restore`), checks the app is as the test had it (`unsettled`), moves the
+  /// page a few points, showing whole exactly the elements the screenful showed whole, and away
+  /// from every place a call on them has stopped (`moveAFewPoints`), and attaches the screen as
+  /// `<label>-moved` (then `-moved-2`, `-moved-3`) and audits it in all three calls, a screenful
+  /// of its own in `seen`, so every kind runs on the same content and the proof reads the pixels
   /// audited. Before those calls it drops what was noted since `noted`, what the stopped
-  /// screenful's calls done found (`AuditLog.drop`), which the moved screenful's calls find again
-  /// on the same whole elements: so none is counted twice, as `runAudit` drops a sheet's first
-  /// attempt's. Gives the moved screenful, for the next scroll to start from; nil, having failed
-  /// the test with each attempt's time and where the credits were, when the page can't be moved
-  /// so (the stopped screenful's issues then kept) or a call on the moved screenful fails too.
+  /// screenful's calls done found (`AuditLog.drop`), and any a stopped try's found, which the next
+  /// calls find again on the same whole elements: so none is counted twice, as `runAudit` drops a
+  /// sheet's first attempt's. Gives the moved screenful whose calls all finished, for the next
+  /// scroll to start from; nil, having failed the test with each attempt's move, time and where
+  /// the credits were, when the page can't be moved so (the issues noted then kept), a call on a
+  /// moved screenful fails otherwise, or one stops on every try.
   ///
   /// Not the same call again on the same screen: on PR #34's run on c74aa22 the contrast call on
   /// leeds-dry's week page at AX3, fourth screenful, stopped for XCTest's 15 seconds twice, run
-  /// again on the same still screen, as it had on fdb3182's fifth. The screens near them that
-  /// passed were other builds': with shorter week rows (87.3 points at AX3 against c74aa22's
-  /// 89.7), so that "BBC Weather" showed whole where c74aa22's cut it, or another tree (50
-  /// contrast candidates against 36). No run has audited the same content a few points away, so
-  /// this is a test of the idea that the stall needs that exact screen, not a cure for a cause
-  /// shown: should the moved screenful stop too, the stall follows what the screen shows, and
-  /// this is no fix (DECISIONS, "After #34's fourth full run").
+  /// again on the same still screen, as it had on fdb3182's fifth. Nor one move: on PR #37's last
+  /// run, PR #38's two and PR #39's, the contrast call on the same page's sixth screenful stopped
+  /// with the credits at 649.7, 650.07, 650.7 and 656.4 points down the screen, and finished at
+  /// 638.7, 643.4 and 653.4; PR #38's second run's one move, 6.3 points from 656.4, landed at
+  /// 650.07, within half a point of two other runs' stops. The stall follows the exact screen, to
+  /// about a point, in bands no run has mapped: so each try aims as far as it may from every place
+  /// a call stopped (DECISIONS, "After #34's fourth full run").
   @MainActor
   private func auditAgain(
     after failure: AuditFailure,
@@ -358,56 +427,86 @@ final class HomeAuditTests: XCTestCase {
     var failure = failure
     failure.at = "with the credits at \(screenful.credits)"
     attachText(run.app.debugDescription, as: "\(label)-tree")
-    drags += restore(run.page, to: screenful, in: run.app, credits: run.credits)
-    let distance: CGFloat
-    do {
-      if let why = unsettled(run.app, at: run.size) { throw HomeScreenError(why) }
-      distance = try moveAFewPoints(
-        run.page, from: screenful, in: run.app, credits: run.credits, drags: &drags)
-    } catch {
-      failure.notRunAgain = "its screenful wasn't audited again a few points away: \(error)"
-      XCTFail("\(failure); " + Screenful.describe(seen))
-      return nil
-    }
-    let again =
-      "\(place), scrolled \(pointsText(abs(distance))) points \(distance > 0 ? "down" : "up")"
-    guard
-      case (let moved, let shot)? = attachScreenful(
-        as: "\(label)-moved", at: again, with: run, tree: nil)
-    else { return nil }
-    seen.append(moved)
-    run.found.drop(since: noted)
-    do {
-      try auditCalls(on: moved, shot: shot, at: again, with: run)
-    } catch {
-      if var second = error as? AuditFailure {
-        second.at = "with the credits at \(moved.credits)"
-        failure.elsewhere = second
-      } else {
-        failure.elsewhere = error
+    // Where a call stopped, as moves of the content from the screenful: the screenful's own first.
+    var stalled: [CGFloat] = [0]
+    var stops: [AuditFailure] = []
+    for attempt in 1...Self.reaudits {
+      drags += restore(run.page, to: screenful, in: run.app, credits: run.credits)
+      let distance: CGFloat
+      do {
+        if let why = unsettled(run.app, at: run.size) { throw HomeScreenError(why) }
+        distance = try moveAFewPoints(
+          run.page, from: screenful, awayFrom: stalled, in: run.app, credits: run.credits,
+          drags: &drags)
+      } catch {
+        failure.notRunAgain = "its screenful wasn't audited again a few points away: \(error)"
+        if !stops.isEmpty { failure.elsewhere = ReauditStops(stops: stops) }
+        XCTFail("\(failure); " + Screenful.describe(seen))
+        return nil
       }
-      XCTFail(
-        "\(failure); the app's state is \(run.app.state.rawValue), " + Screenful.describe(seen))
-      return nil
+      let again =
+        "\(place), scrolled \(pointsText(abs(distance))) points \(distance > 0 ? "down" : "up")"
+      let suffix = attempt == 1 ? "-moved" : "-moved-\(attempt)"
+      guard
+        case (let moved, let shot)? = attachScreenful(
+          as: label + suffix, at: again, with: run, tree: nil)
+      else { return nil }
+      seen.append(moved)
+      run.found.drop(since: noted)
+      do {
+        try auditCalls(on: moved, shot: shot, at: again, with: run)
+        return moved
+      } catch var second as AuditFailure where isAuditTimeout(second.first) {
+        second.at = "with the credits at \(moved.credits)"
+        stops.append(second)
+        stalled.append(distance)
+      } catch {
+        if var second = error as? AuditFailure {
+          second.at = "with the credits at \(moved.credits)"
+          failure.elsewhere = second
+        } else {
+          failure.elsewhere = error
+        }
+        XCTFail(
+          "\(failure); the app's state is \(run.app.state.rawValue), " + Screenful.describe(seen))
+        return nil
+      }
     }
-    return moved
+    failure.elsewhere = ReauditStops(stops: stops)
+    XCTFail(
+      "\(failure); the app's state is \(run.app.state.rawValue), " + Screenful.describe(seen))
+    return nil
   }
 
+  /// How many times `auditAgain` audits a stopped screenful's content again, each a few points
+  /// from every place a call on it stopped: three, at worst 45 seconds more of stopped calls.
+  static let reaudits = 3
+
+  /// How far a move `moveAFewPoints` lands from every place a call stopped, at least: as far as a
+  /// move must go from the screenful (`nudge`), and more than the 0.4 to 0.6 points by which PR
+  /// #38's second run's move missed the other runs' stops.
+  static let clearOfStalls: CGFloat = 3
+
   /// Moves the page a few points from where `screenful` had it, so that it shows whole exactly
-  /// the elements the screenful showed whole (`Screenful.showsWhole`), and gives how far its
-  /// content moved up the screen (down, should it be negative). From one snapshot of the page,
-  /// how far it may move each way (`PageRoom`) gives the moves to aim for (`PageRoom.windows`,
-  /// `nudge`), the way with the wider band of moves first (up on a tie). Each drag aims for the
-  /// middle of the moves allowed, longer by what a drag spends before the page moves: reckoned at
-  /// first as `deadTravel`, then as the last drag's, measured from where the credits went; at
-  /// most `nudgingDrags` drags a way. The page's place is read from the credits once it has
-  /// settled (`settledFrame`), and once it is among the moves allowed, a second snapshot must show
+  /// the elements the screenful showed whole (`Screenful.showsWhole`), and at least
+  /// `clearOfStalls` points from each move in `stalled`, where a call on them stopped (the
+  /// screenful's own, 0, among them); gives how far its content moved up the screen (down,
+  /// should it be negative). From one snapshot of the page, how far it may move each way
+  /// (`PageRoom`) gives the bands of moves to aim for (`PageRoom.windows`, `nudge`), less those too
+  /// near a stall (`PageRoom.aims`), each with its aim: the point of it farthest from every stall,
+  /// a point inside its ends, so the first try aims about 11 points from the screenful; the band
+  /// whose aim is farthest from them first, the way with the wider band first on a tie (up on a
+  /// tie of those). Each drag aims there, longer by what a drag spends before the page moves:
+  /// reckoned at first as `deadTravel`, then as the last drag's, measured from where the credits
+  /// went; at most `nudgingDrags` drags a band. The page's place is read from the credits once it
+  /// has settled (`settledFrame`), and once it is in any band left, a second snapshot must show
   /// whole the same elements, by type, identifier, label and place on the page
-  /// (`PageElements.change`). Throws, with what each way came to, when no way gets there.
+  /// (`PageElements.change`). Throws, with what each band came to, when none gets there.
   @MainActor
   func moveAFewPoints(
     _ page: HomeScreen.Page,
     from screenful: Screenful,
+    awayFrom stalled: [CGFloat] = [0],
     in app: XCUIApplication,
     credits: XCUIElement,
     drags: inout [Drag]
@@ -421,14 +520,21 @@ final class HomeAuditTests: XCTestCase {
     guard !windows.isEmpty else {
       throw HomeScreenError("no room to move it \(pointsText(Self.nudge.least)) points: \(room)")
     }
+    let aims = PageRoom.aims(windows, awayFrom: stalled, clear: Self.clearOfStalls, inset: 1)
+    guard !aims.isEmpty else {
+      throw HomeScreenError(
+        "no move of \(PageRoom.describe(windows)) (room \(room)) is \(pointsText(Self.clearOfStalls))"
+          + " points from every place a call stopped, \(PageRoom.describe(moves: stalled))")
+    }
+    let allowed = { (at: CGFloat) in aims.contains { $0.band.contains(at) } }
     var dead = Self.deadTravel
     var tried: [String] = []
-    for window in windows {
+    for (band, aim) in aims {
       var at = screenful.credits.minY - settledFrame(of: credits).minY
       var count = 0
-      while !window.contains(at), count < Self.nudgingDrags {
+      while !allowed(at), count < Self.nudgingDrags {
         count += 1
-        let want = (window.lowerBound + window.upperBound) / 2 - at
+        let want = aim - at
         let length = dead + abs(want)
         drags.append(scrollDown(page, by: want < 0 ? -length : length, in: app))
         let now = screenful.credits.minY - settledFrame(of: credits).minY
@@ -436,8 +542,10 @@ final class HomeAuditTests: XCTestCase {
         dead = went >= 0.5 ? max(length - went, 0) : length
         at = now
       }
-      let way = "\(PageRoom.describe(window)) (room \(room))"
-      guard window.contains(at) else {
+      let way =
+        "\(PageRoom.describe(band)), aiming at \(pointsText(aim)) (room \(room), stopped at "
+        + "\(PageRoom.describe(moves: stalled)))"
+      guard allowed(at) else {
         tried.append("\(way): \(count) drags left it at \(pointsText(at))")
         continue
       }
@@ -806,11 +914,71 @@ struct PageRoom: Equatable, CustomStringConvertible {
     return found
   }
 
+  /// `windows`' bands of moves less `clear` points either side of each move in `stalled` (a move
+  /// `clear` from one is kept), each with the move to aim for: the point of the band farthest from
+  /// every stalled move, held `inset` inside the band's ends (its middle, should it be narrower
+  /// than twice that). The band whose aim is farthest from them first; `windows`' order on a tie
+  /// (the way with the wider band first, up on a tie). With only the screenful's own stall, 0, a
+  /// band of 3 to 12 points is aimed at 11.
+  static func aims(
+    _ windows: [ClosedRange<CGFloat>],
+    awayFrom stalled: [CGFloat],
+    clear: CGFloat,
+    inset: CGFloat
+  ) -> [(band: ClosedRange<CGFloat>, aim: CGFloat)] {
+    let stops = stalled.sorted()
+    // The distance from `move` to the nearest stall.
+    let clearance = { (move: CGFloat) in stops.map { abs(move - $0) }.min() ?? .infinity }
+    var found: [(band: ClosedRange<CGFloat>, aim: CGFloat, clearance: CGFloat)] = []
+    for window in windows {
+      var bands = [window]
+      for stop in stops {
+        bands = bands.flatMap { band -> [ClosedRange<CGFloat>] in
+          var left: [ClosedRange<CGFloat>] = []
+          if band.lowerBound <= stop - clear {
+            left.append(band.lowerBound...min(band.upperBound, stop - clear))
+          }
+          if band.upperBound >= stop + clear {
+            left.append(max(band.lowerBound, stop + clear)...band.upperBound)
+          }
+          return left
+        }
+      }
+      for band in bands {
+        // The farthest point from every stall: an end of the band, or midway between two stalls.
+        let middles = zip(stops, stops.dropFirst()).map { ($0 + $1) / 2 }
+        let candidates = [band.lowerBound, band.upperBound] + middles.filter(band.contains)
+        let far = candidates.max { clearance($0) < clearance($1) } ?? band.lowerBound
+        let aim =
+          band.upperBound - band.lowerBound < 2 * inset
+          ? (band.lowerBound + band.upperBound) / 2
+          : min(max(far, band.lowerBound + inset), band.upperBound - inset)
+        found.append((band, aim, clearance(aim)))
+      }
+    }
+    // Stable: `windows`' order stays on a tie.
+    let ranked = found.enumerated().sorted {
+      $0.element.clearance != $1.element.clearance
+        ? $0.element.clearance > $1.element.clearance : $0.offset < $1.offset
+    }
+    return ranked.map { ($0.element.band, $0.element.aim) }
+  }
+
   /// A band of moves as a failure says it: "the content 3.0 to 12.0 points down".
   static func describe(_ window: ClosedRange<CGFloat>) -> String {
     let way = window.lowerBound < 0 ? "down" : "up"
     let ends = [abs(window.lowerBound), abs(window.upperBound)].sorted()
     return "the content \(pointsText(ends[0])) to \(pointsText(ends[1])) points \(way)"
+  }
+
+  /// Bands of moves as a failure says them: each `describe`d, "or" between them.
+  static func describe(_ windows: [ClosedRange<CGFloat>]) -> String {
+    windows.map { describe($0) }.joined(separator: " or ")
+  }
+
+  /// Moves as a failure says them, each signed, the content up the screen positive: "0.0, 10.5".
+  static func describe(moves: [CGFloat]) -> String {
+    moves.map { pointsText($0) }.joined(separator: ", ")
   }
 
   var description: String {
