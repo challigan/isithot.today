@@ -5979,6 +5979,11 @@ element that takes no tap.
   `resetToDefaultState()` cleared that, and a real simulated error too. So the tests clear
   simulated errors with `resetToDefaultState()` and set the dialogs and Ask to Buy off again
   (`clearSimulatedErrors`), and never pass nil.
+- **With that fixed**, 17 of the 18 passed (run 40617315336). The cancel test's check that StoreKit
+  Test kept no transaction failed: it keeps one for a purchase whose answer it replaces with a
+  simulated error, as every probe variant's count showed, which a real cancel never makes. The
+  test checks what the app keeps instead: no `unlock.v1` written, no widget reload, nothing told
+  the app.
 - **Your privacy's audit** found its second line running up past the window's top once the
   purchase's line made the page longer (506 points tall, its top at -150, after the reveal
   loop): contrast failed on it, and the pixel proof needs a frame whole on screen. The page is

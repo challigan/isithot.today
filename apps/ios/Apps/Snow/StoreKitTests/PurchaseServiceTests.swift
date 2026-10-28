@@ -347,9 +347,13 @@ final class PurchaseServiceTests: XCTestCase {
   }
 
   /// StoreKit was asked, with the product ready, so the attempt went through `.buying` and came
-  /// back: a cancel changes nothing (10.5). Then, the simulated cancel cleared, the same model
-  /// buys, so a test environment whose `purchase` answers `.userCancelled` to everything (the
-  /// broken simulator runtimes' symptom, which a loaded product doesn't rule out) fails here.
+  /// back: a cancel changes nothing the app keeps (10.5), so no `unlock.v1`, no widget reload and
+  /// nothing told the app. StoreKit Test's own transactions aren't checked: it keeps one for a
+  /// purchase whose answer it replaces with a simulated error (PR #41's probe, and PR #40's run
+  /// with that fixed), which a real cancel never makes. Then, the simulated cancel cleared, the
+  /// same model buys, so a test environment whose `purchase` answers `.userCancelled` to
+  /// everything (the broken simulator runtimes' symptom, which a loaded product doesn't rule out)
+  /// fails here.
   func testACancelledPurchaseChangesNothing() async throws {
     let session = try XCTUnwrap(session)
     let purchase = try XCTUnwrap(purchase)
@@ -361,7 +365,9 @@ final class PurchaseServiceTests: XCTestCase {
     XCTAssertEqual(purchase.platform.answers("buy"), ["buy → cancelled"])
     XCTAssertEqual(purchase.model.state.attempt, .idle)
     XCTAssertFalse(purchase.model.owned)
-    XCTAssertEqual(session.allTransactions().count, 0)
+    XCTAssertEqual(purchase.store.saves, 0, "a cancel wrote unlock.v1")
+    XCTAssertEqual(purchase.widgets.reloads, 0, "a cancel reloaded the widgets")
+    XCTAssertEqual(purchase.changes, [], "a cancel told the app the purchase changed")
     clearSimulatedErrors(session)
     await purchase.model.buy()
     XCTAssertEqual(
