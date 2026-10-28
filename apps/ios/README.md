@@ -1305,7 +1305,9 @@ website's privacy notice. On the macOS CI:
   test's listener is stopped in `tearDown`, and every buy and restore test first requires the
   product loaded (`readyModel()`), and the cancel test buys again once its simulated cancel is
   cleared, so a test environment that cancels every purchase fails rather than passing as a
-  cancel. Each test logs the simulator's iOS version. It runs on an iPhone 17 with iOS 26.2
+  cancel. Simulated errors are cleared by `resetToDefaultState()`, never by
+  `setSimulatedError(nil, forAPI:)`, which leaves every later purchase failing (docs/DECISIONS.md,
+  "What PR #40's first macOS run showed"). Each test logs the simulator's iOS version. It runs on an iPhone 17 with iOS 26.2
   (below, "Settled"), in a job of its own (`storekit`), with test timeouts on and 60 seconds a
   test (`ci/test.sh StoreKit`).
 - **The Unit plan:** `AppGroupTests` writes `unlock.v1` through `saveUnlock(_:)`, and
