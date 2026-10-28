@@ -260,12 +260,14 @@ jobs:
   # timeout cuts, and report an hour after the push. The ios job's setup, then its own simulator,
   # build and plan.
   storekit:
-    name: StoreKit tests on the iOS 26.2 simulator (Xcode ${{ matrix.xcode }})
-    # PROBE: which Xcode's StoreKit Test server lets the app's own purchases through.
+    name: StoreKit tests on the iOS ${{ matrix.ios }} simulator (Xcode ${{ matrix.xcode }})
+    # PROBE: which simulator runtime lets the app's own purchases through StoreKit Test (26.2
+    # cancels them under Xcode 26.6 and 26.2 alike).
     strategy:
       fail-fast: false
       matrix:
-        xcode: ['26.6', '26.2']
+        xcode: ['26.6']
+        ios: ['26.1', '26.0', '18.6']
     runs-on: macos-26
     # Setup and the build take about 6 minutes, the boot about 2 (6 on a slow runner), and a
     # runtime download, if it comes to that, about 10: 22 at most. Then 18 tests (17
@@ -304,10 +306,10 @@ jobs:
             -clonedSourcePackagesDirPath apps/ios/.spm -onlyUsePackageVersionsFromResolvedFile
       # Assigned first, so that a failure in simulator.sh fails this step, not the next one. A
       # runner without the runtime downloads it; if it can't, simulator.sh says so in one error.
-      - name: Boot the iOS 26.2 simulator
+      - name: Boot the iOS ${{ matrix.ios }} simulator
         id: simulator
         run: |
-          udid="$(apps/ios/ci/simulator.sh 26.2)"
+          udid="$(apps/ios/ci/simulator.sh ${{ matrix.ios }})"
           if [ -z "$udid" ]; then
             echo "::error::simulator.sh printed no UDID"
             exit 1
@@ -317,16 +319,11 @@ jobs:
         run: apps/ios/ci/test.sh build "${{ steps.simulator.outputs.udid }}"
       - name: StoreKit tests
         run: apps/ios/ci/test.sh StoreKit "${{ steps.simulator.outputs.udid }}"
-      - name: The probe's notes
-        if: ${{ !cancelled() && steps.simulator.outcome == 'success' }}
-        run: |
-          xcrun xcresulttool get log --type console --path apps/ios/build/StoreKit.xcresult \
-            | grep -a "PROBE " | awk '!seen[$0]++' || echo "no PROBE lines in the console log"
       - name: Upload the result bundles
         if: ${{ !cancelled() && steps.simulator.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: storekit-results-xcode${{ matrix.xcode }}
+          name: storekit-results-ios${{ matrix.ios }}
           path: |
             apps/ios/build/*.xcresult
             apps/ios/build/*.json

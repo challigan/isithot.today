@@ -14,20 +14,19 @@
 set -euo pipefail
 
 version="${1:-26.5}"
+# PROBE: any runtime, downloaded if the runner hasn't it; an iPhone 16 on iOS 18.
+fallback="probe: no iOS $version"
 case "$version" in
-  26.5) fallback="move the plans to a runtime the image has" ;;
-  26.2)
-    fallback="run the StoreKit plan on a Mac with iOS 26.2, or move it to a newer runtime where"
-    fallback+=" StoreKit Test is fixed (apps/ios/README.md, \"Settled\")"
+  18.*)
+    NAME="iPhone 16"
+    DEVICE_TYPE=com.apple.CoreSimulator.SimDeviceType.iPhone-16
     ;;
   *)
-    echo "simulator.sh: $version is not 26.5 or 26.2" >&2
-    exit 2
+    NAME="iPhone 17"
+    DEVICE_TYPE=com.apple.CoreSimulator.SimDeviceType.iPhone-17
     ;;
 esac
-NAME="iPhone 17"
 RUNTIME="com.apple.CoreSimulator.SimRuntime.iOS-${version//./-}"
-DEVICE_TYPE=com.apple.CoreSimulator.SimDeviceType.iPhone-17
 APP_ID=today.willitsnow.app
 
 # Whether the runner has the runtime, ready to use.
