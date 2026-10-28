@@ -5743,10 +5743,12 @@ suite runs on an iPhone 17 with iOS 26.2, which Xcode 26.6 can test on as the ap
   `InfoPlistTests` checks the built app (skipping test bundles, which Xcode puts in the app's
   `PlugIns` while tests run).
 - **Each test from a cleared environment, its listener stopped after it.** setUp resets the
-  session, clears its transactions, turns dialogs and Ask to Buy off and clears the three
-  simulated errors, which last from test to test; tearDown stops each `StoreKitPurchases` the test
-  made (XCTest keeps every test case, and what it holds, until the run ends, so a listener left
-  running would hear, and finish, the next tests' transactions) and clears them again.
+  session, which clears the simulated errors that last from test to test, turns dialogs and Ask
+  to Buy off and clears its transactions; tearDown stops each `StoreKitPurchases` the test made
+  (XCTest keeps every test case, and what it holds, until the run ends, so a listener left
+  running would hear, and finish, the next tests' transactions) and clears them again. Simulated
+  errors are cleared by `resetToDefaultState()`, never by `setSimulatedError(nil, forAPI:)`
+  (below, "What PR #40's first macOS run showed").
 - **Never a pass on a broken environment.** Every buy and restore test first requires the product
   loaded at `Constants.Purchase.displayPrice` (`readyModel()`, which stops the test otherwise).
   A loaded product doesn't show a purchase can complete: on the broken runtimes `purchase` answers
@@ -5955,6 +5957,37 @@ element that takes no tap.
    strings or load commands (only the test bundle links it), no `StoreKitPurchases` in the widget,
    and none of the 18 hooks (`archive-check`, `release-check.sh`); and `InfoPlistTests` and
    `AppGroupTests` (`saveUnlock`, `loadUnlock`) in the Unit plan.
+
+**What PR #40's first macOS run showed** (run 40599844041), and PR #41's probe (runs
+40610138842, 40611512196 and 40616178770; a throwaway draft):
+
+- **The StoreKit plan ran** (the target ID, the link, the bundle's Snow.storekit and the iOS 26.2
+  simulator all held), and 6 of its 18 tests failed: every purchase the app made failed with
+  `StoreKitError.unknown` ("Unable to Complete Request"). The test server kept each transaction
+  but answered `cancel-purchase-batch = 1` with an empty `failureType`, which iOS reports as
+  AMSErrorDomain 305, "Server canceled the purchase". Ask to Buy, `SKTestSession.buyProduct`,
+  restore and the product load all worked.
+- **Not the runtime, nor Xcode, nor the app's code.** The same failure came on the iOS 26.2
+  simulator under Xcode 26.6 and Xcode 26.2 (17C52), and on the iOS 18.6 simulator (downloaded;
+  26.0 and 26.1 can't be), with plain `purchase()`, `purchase(confirmIn:)`, a listener started
+  first, a wait first, and a copy of Snow.storekit with its own dialogs setting off.
+- **The cause: `setSimulatedError(nil, forAPI: .purchase)`**, which setUp, tearDown and the
+  cancel test called. On a fresh simulator, run first and alone, purchases succeeded untouched,
+  after `resetToDefaultState()`, and after nil errors for `.verification` and `.appStoreSync`;
+  they failed after `setSimulatedError(nil, forAPI: .purchase)`, with or without a real error
+  set before it, while `simulatedError(forAPI: .purchase)` read nil throughout; and
+  `resetToDefaultState()` cleared that, and a real simulated error too. So the tests clear
+  simulated errors with `resetToDefaultState()` and set the dialogs and Ask to Buy off again
+  (`clearSimulatedErrors`), and never pass nil.
+- **With that fixed**, 17 of the 18 passed (run 40617315336). The cancel test's check that StoreKit
+  Test kept no transaction failed: it keeps one for a purchase whose answer it replaces with a
+  simulated error, as every probe variant's count showed, which a real cancel never makes. The
+  test checks what the app keeps instead: no `unlock.v1` written, no widget reload, nothing told
+  the app.
+- **Your privacy's audit** found its second line running up past the window's top once the
+  purchase's line made the page longer (506 points tall, its top at -150, after the reveal
+  loop): contrast failed on it, and the pixel proof needs a frame whole on screen. The page is
+  audited at its top now, as How it works and the licences are.
 
 **What only Carl's TestFlight purchase shows**: the real product and its price from the App
 Store, Apple's sheet, a purchase with his own Apple Account, the ads going, and the purchase back
