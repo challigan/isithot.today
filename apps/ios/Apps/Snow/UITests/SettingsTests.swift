@@ -185,6 +185,13 @@ final class SettingsTests: XCTestCase {
     openSettings(app)
     tap("your-privacy", in: app)
     page(titled: "Your privacy", in: app)
+    // At its top, as How it works and the licences are, where each line on screen starts below
+    // the bar. Lower down, since the purchase's line, the second line runs up past the window's
+    // top wherever the page stops (PR #40's first macOS run: 506 points tall, its top at -150):
+    // contrast failed on it there, and a frame not whole on screen can't be proven drawn in the
+    // content's colours (`DrawnText`).
+    try auditAccessibility(of: app, on: "Your privacy", surface: .content)
+    attachScreen(of: app, named: "app-your-privacy")
     let lines = [
       "To get the forecast, the app sends the place (a town, or your location rounded to about "
         + "5 km) and your units to our server. Until you choose a place, our server estimates a "
@@ -217,8 +224,6 @@ final class SettingsTests: XCTestCase {
     XCTAssertFalse(text("What we keep for notifications", in: app).exists)
     XCTAssertFalse(app.buttons["delete-my-data"].exists)
     assertSnowOnly(app)
-    try auditAccessibility(of: app, on: "Your privacy", surface: .content)
-    attachScreen(of: app, named: "app-your-privacy")
     let policy = app.buttons["full-policy"]
     XCTAssertGreaterThanOrEqual(policy.frame.height, 44, "The full policy's row at \(policy.frame)")
     tap("full-policy", in: app)
