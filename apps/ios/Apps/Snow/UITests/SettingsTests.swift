@@ -186,8 +186,8 @@ final class SettingsTests: XCTestCase {
     tap("your-privacy", in: app)
     page(titled: "Your privacy", in: app)
     // At its top, as How it works and the licences are, where each line on screen starts below
-    // the bar. Lower down, since the purchase's line, the second line runs up past the window's
-    // top wherever the page stops (PR #40's first macOS run: 506 points tall, its top at -150):
+    // the bar. At its end, since the purchase's line made the page longer, the second line runs
+    // up past the window's top (PR #40's first macOS run: 506 points tall, its top at -150):
     // contrast failed on it there, and a frame not whole on screen can't be proven drawn in the
     // content's colours (`DrawnText`).
     try auditAccessibility(of: app, on: "Your privacy", surface: .content)
