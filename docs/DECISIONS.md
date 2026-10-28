@@ -2116,6 +2116,19 @@ Linux; IsItKit only fills its protocols. `apps/ios/README.md` lists the types.
   IsItServices and the widget's provider type-check on Linux against stubs of WidgetKit and
   `containerURL`; whether `XCTestConfigurationFilePath` is in the hosted app's environment on
   Xcode 26.6 is from long practice, not checked.
+- **What phases 7.2 and 8.1 share is made once, before either**, so neither writes its own copy
+  (two `Target.ownName`s in IsItState don't compile). `Target.ownName` (IsItModel) is a city
+  page's or a coordinate target's own name, nil when there is none or it is empty, and for
+  approximate IP location; `AppModel.placeName` reads it, so the top bar names a place as before,
+  and the widgets' timeline and a notification's place read the same one. A route to a view that
+  comes while the app is still away keeps its view over the return's reset to the view for the
+  time of day (`routedWhileAway`, cleared by that return and by leaving again): a widget's link
+  can arrive before the return, and a widget tapped after more than 30 minutes away would
+  otherwise open on the view for the time of day, not the one it names. Phase 8.1 extends it to
+  a notification's place. `check_collects` in `scripts/check-archive.sh` fails unless a bundle's
+  privacy manifest declares a collected data type. It is called for the app's coarse location,
+  which its manifest already declares; the widget's coarse location (7.2) and the app's device ID
+  (8.1) are one more call each.
 
 ## The iPhone app's Today page (IsItCore, IsItKit, apps/ios; phase 5.1, the page half)
 

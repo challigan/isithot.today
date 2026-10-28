@@ -200,12 +200,12 @@ reach the key.
   notes and the Xcode version;
 - **Archive, signed, ads test**: whether it built, and each compiler error or warning with its
   file and line;
-- **Archive checks**: both bundles have privacy manifests and the answer font; the app has its
-  icon; the widget links no Google Mobile Ads, no location code and no purchase code; neither
-  binary names any of the 18 debug hooks; the three ad units are Google's demo ones (test) or
-  yours (real); the app's `SKAdNetworkItems` hold Google's; the app and widget have the same
-  version and build; `ITSAppUsesNonExemptEncryption` is false; no fixture and no StoreKit
-  configuration is bundled, and the app doesn't link StoreKitTest. Each failure is named;
+- **Archive checks**: both bundles have privacy manifests, the app's declaring coarse location, and
+  the answer font; the app has its icon; the widget links no Google Mobile Ads, no location code and
+  no purchase code; neither binary names any of the 18 debug hooks; the three ad units are Google's
+  demo ones (test) or yours (real); the app's `SKAdNetworkItems` hold Google's; the app and widget
+  have the same version and build; `ITSAppUsesNonExemptEncryption` is false; no fixture and no
+  StoreKit configuration is bundled, and the app doesn't link StoreKitTest. Each failure is named;
 - **Export**: the `.ipa` and its size;
 - **Signed app checks**: the app gets notifications in production, both have the App Group, the
   widget doesn't get notifications, and neither is debuggable;

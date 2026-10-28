@@ -80,6 +80,10 @@ public final class AppModel {
   /// While the app is in the background, when the quiet refresh or the retry after a failure is
   /// due: on the return it is due then still, at once if that time has passed.
   @ObservationIgnored private var dueOnReturn: Date?
+  /// Whether a route to a view came while the app was still in the background (a widget's link
+  /// can arrive before the return): its view then stands over the return's reset to the view for
+  /// the time of day. That return clears it, and so does leaving again.
+  @ObservationIgnored private var routedWhileAway = false
   /// A place the picker chose without a name (the device's), which joins the recent places
   /// under its answer's name when that answer arrives.
   @ObservationIgnored private var unnamedChoice: Target?
@@ -162,6 +166,7 @@ public final class AppModel {
     // Told twice before coming back, what was due when the app first left is due still.
     if awayFrom == nil { dueOnReturn = nextRefreshAt }
     awayFrom = environment.clock.now
+    routedWhileAway = false
     cancelRefresh()
   }
 
@@ -170,7 +175,8 @@ public final class AppModel {
   /// answer is out of date, past its hours or missing. Otherwise what was due when the app left
   /// is scheduled again for its own time (at once when that has passed): the quiet refresh at
   /// the next forecast hour, or the retry a minute after a failure. Does nothing unless the app
-  /// was in the background, or before the launch.
+  /// was in the background, or before the launch. A route to a view that came while the app was
+  /// away (a widget tapped) keeps its view: only the fetch is the return's.
   public func willEnterForeground() async {
     guard let away = awayFrom else { return }
     let due = dueOnReturn
@@ -185,7 +191,8 @@ public final class AppModel {
       at: now,
       holds: holds
     )
-    if back.resetView { shownView = MiddleDay.defaultView(response, at: now) }
+    if back.resetView, !routedWhileAway { shownView = MiddleDay.defaultView(response, at: now) }
+    routedWhileAway = false
     if let fetch = back.fetch {
       await load(fetch)
     } else if let response {
@@ -215,10 +222,13 @@ public final class AppModel {
   /// A route to a view (a widget's) puts that view on screen, over the view for the time of day
   /// the launch chose (section 10.2: "unless a route says otherwise"), and an answer still to
   /// come after a failed launch keeps it; every route then goes to the later phases' hooks.
+  /// One followed while the app is still away keeps its view over the return's reset too
+  /// (`routedWhileAway`).
   private func follow(_ route: DeepLink.Route) async {
     if case .view(let shown) = route {
       shownView = shown
       opened = true
+      if awayFrom != nil { routedWhileAway = true }
     }
     await environment.hooks.handle(route)
   }
@@ -383,17 +393,11 @@ public final class AppModel {
   /// minute tick: the system's, or in a Debug build launched on a fixture, the fixture's.
   public var now: Date { environment.clock.now }
 
-  /// The place as the top bar names it: the place's own name (a city page's, a searched
-  /// place's), else the answer's; nil while neither is known (approximate IP location before
-  /// the first answer).
+  /// The place as the top bar names it: the place's own name (`Target.ownName`: a city page's, a
+  /// searched place's), else the answer's; nil while neither is known (approximate IP location
+  /// before the first answer).
   public var placeName: String? {
-    let own: String?
-    switch target {
-    case .ip: own = nil
-    case .city(_, let name): own = name
-    case .coords(let place): own = place.name
-    }
-    return [own, response?.location.name].compactMap { $0 }.first { !$0.isEmpty }
+    [target.ownName, response?.location.name].compactMap { $0 }.first { !$0.isEmpty }
   }
 
   /// The top bar (`HomeTopBar`): the place, and on approximate IP location the line beneath

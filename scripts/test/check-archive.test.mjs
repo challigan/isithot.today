@@ -164,7 +164,26 @@ const PURCHASE_CODE = [0xd28e05a0, 0xf2ae4ea0, 0xf2cd0c60, 0xf2ee6c20, 0xd2800ca
 // "-restore" (8 bytes) built in x0, then its second word, 0xE8 and nothing else, in x1.
 const RESTORE_CODE = [0xd28e45a0, 0xf2ae6ca0, 0xf2cdee80, 0xf2ecae40, 0xd2fd0001];
 
-const PRIVACY = plist({ NSPrivacyTracking: false, NSPrivacyCollectedDataTypes: [] });
+/**
+ * A privacy manifest that collects `types` (NSPrivacyCollectedDataType…), each as the app's own
+ * declares it: linked, not tracking, for the app's functionality.
+ */
+function collects(...types) {
+  return plist({
+    NSPrivacyTracking: false,
+    NSPrivacyCollectedDataTypes: types.map((type) => ({
+      NSPrivacyCollectedDataType: type,
+      NSPrivacyCollectedDataTypeLinked: true,
+      NSPrivacyCollectedDataTypeTracking: false,
+      NSPrivacyCollectedDataTypePurposes: ['NSPrivacyCollectedDataTypePurposeAppFunctionality'],
+    })),
+  });
+}
+
+// What each bundle's manifest says it collects: the app, the phone's rounded place (coarse
+// location); the widget, nothing yet.
+const APP_PRIVACY = collects('NSPrivacyCollectedDataTypeCoarseLocation');
+const WIDGET_PRIVACY = collects();
 
 function appInfo(over = {}) {
   return plist({
@@ -215,12 +234,12 @@ function archive({ files = {}, omit = [] } = {}) {
   const app = 'Products/Applications/WillItSnow.app';
   const all = {
     'Info.plist': appInfo(),
-    'PrivacyInfo.xcprivacy': PRIVACY,
+    'PrivacyInfo.xcprivacy': APP_PRIVACY,
     'Assets.car': 'compiled asset catalogue',
     'BricolageAnswer.ttf': 'font',
     WillItSnow: binary(['will it snow?', 'today.willitsnow.app']),
     'PlugIns/WillItSnowWidgets.appex/Info.plist': widgetInfo(),
-    'PlugIns/WillItSnowWidgets.appex/PrivacyInfo.xcprivacy': PRIVACY,
+    'PlugIns/WillItSnowWidgets.appex/PrivacyInfo.xcprivacy': WIDGET_PRIVACY,
     'PlugIns/WillItSnowWidgets.appex/BricolageAnswer.ttf': 'font',
     'PlugIns/WillItSnowWidgets.appex/WillItSnowWidgets': binary([
       '/usr/lib/swift/libswiftWidgetKit.dylib',
@@ -311,7 +330,7 @@ describe('an archive that passes', () => {
         '',
         '- WillItSnow 1.0 (101)',
         `- ads test: Google's demo units (${DEMO_APP})`,
-        "- checked: privacy manifests, the icon, the answer font, 18 debug hooks in both binaries, the ad units and SKAdNetworkItems, the widget's links, versions, encryption, fixtures, StoreKit configurations and StoreKitTest",
+        "- checked: privacy manifests and what they collect, the icon, the answer font, 18 debug hooks in both binaries, the ad units and SKAdNetworkItems, the widget's links, versions, encryption, fixtures, StoreKit configurations and StoreKitTest",
         '',
       ].join('\n'),
     );
@@ -397,6 +416,20 @@ describe('an archive that fails', () => {
     expect(check(broken).errors).toEqual([
       "WillItSnowWidgets.appex's PrivacyInfo.xcprivacy isn't a plist",
     ]);
+  });
+
+  it("fails when the app's manifest doesn't declare coarse location", () => {
+    const missing =
+      "WillItSnow.app's PrivacyInfo.xcprivacy doesn't declare NSPrivacyCollectedDataTypeCoarseLocation";
+    const manifests = [
+      collects(),
+      collects('NSPrivacyCollectedDataTypePreciseLocation'),
+      plist({ NSPrivacyTracking: false }),
+    ];
+    for (const manifest of manifests) {
+      const dir = archive({ files: { 'PrivacyInfo.xcprivacy': manifest } });
+      expect(check(dir).errors).toEqual([missing]);
+    }
   });
 
   it.each([

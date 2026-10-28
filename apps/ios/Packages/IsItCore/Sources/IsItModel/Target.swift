@@ -68,6 +68,19 @@ extension Target {
     }
   }
 
+  /// The place's own name, which names it ahead of the answer's: a city page's, or a coordinate
+  /// target's (a searched place's; the phone's own point has none). Nil when there is none, or it
+  /// is empty, and for approximate IP location.
+  public var ownName: String? {
+    let own: String?
+    switch self {
+    case .ip: own = nil
+    case .city(_, let name): own = name
+    case .coords(let place): own = place.name
+    }
+    return own?.isEmpty == false ? own : nil
+  }
+
   /// The device's location, rounded to the forecast grid before it goes anywhere (client
   /// `deviceTarget`).
   public static func device(lat: Double, lon: Double) -> Target {

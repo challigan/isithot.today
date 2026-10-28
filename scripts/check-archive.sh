@@ -8,7 +8,8 @@
 #       or purchase code, either binary names a debug hook, the ad units aren't Google's demo ones
 #       (test) or Carl's (real), the app's SKAdNetworkItems lack Google's, the app and widget
 #       differ in version or build, ITSAppUsesNonExemptEncryption isn't false, the fixtures or a
-#       StoreKit configuration are bundled, or the app links StoreKitTest.
+#       StoreKit configuration are bundled, the app links StoreKitTest, or the app's manifest
+#       doesn't declare coarse location.
 #   scripts/check-archive.sh --ipa <WillItSnow.ipa, or a folder holding its Payload>
 #       The exported app's signed entitlements. It fails unless the app has aps-environment
 #       production, both have the App Group, the widget has no aps-environment, and neither is
@@ -194,6 +195,18 @@ check_privacy() {
   fi
 }
 
+# The bundle at $1 declares in its privacy manifest that it collects the data type $2 (an
+# NSPrivacyCollectedDataType of NSPrivacyCollectedDataTypes). A manifest that is missing or isn't
+# a plist is check_privacy's failure alone.
+check_collects() {
+  local xml="$work/privacy.xml"
+  plist_xml "$1/PrivacyInfo.xcprivacy" >"$xml" 2>/dev/null || return 0
+  if ! plist_get_each NSPrivacyCollectedDataTypes NSPrivacyCollectedDataType <"$xml" |
+    grep -F -x -e "$2" >/dev/null; then
+    fail "$(basename "$1")'s PrivacyInfo.xcprivacy doesn't declare $2"
+  fi
+}
+
 # The app at $1, whose Info.plist XML is $2, has its icon: App Store Connect refuses a build
 # without one (ITMS-90022). actool compiles the AppIcon set into Assets.car and names it in
 # CFBundleIcons, CFBundlePrimaryIcon, CFBundleIconName.
@@ -374,6 +387,8 @@ check_archive() {
     return 0
   fi
   check_privacy "$app"
+  # The app sends the phone's place, rounded to the forecast grid (section 15.1).
+  check_collects "$app" NSPrivacyCollectedDataTypeCoarseLocation
   check_icon "$app" "$info"
   check_font "$app" "$info"
   read_binary "$(executable "$app" "$info")" "$work/app"
@@ -428,7 +443,7 @@ check_archive() {
     fail "the widget links the app's purchase code"
   fi
   check_versions "$info" "$widget_info"
-  facts+=("checked: privacy manifests, the icon, the answer font, $((${#HOOKS[@]} + ${#WORD_HOOKS[@]} + ${#LITERAL_HOOKS[@]})) debug hooks in both binaries, the ad units and SKAdNetworkItems, the widget's links, versions, encryption, fixtures, StoreKit configurations and StoreKitTest")
+  facts+=("checked: privacy manifests and what they collect, the icon, the answer font, $((${#HOOKS[@]} + ${#WORD_HOOKS[@]} + ${#LITERAL_HOOKS[@]})) debug hooks in both binaries, the ad units and SKAdNetworkItems, the widget's links, versions, encryption, fixtures, StoreKit configurations and StoreKitTest")
 }
 
 # --- The exported app --------------------------------------------------------------------------
