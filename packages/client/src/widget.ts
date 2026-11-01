@@ -39,7 +39,10 @@ export interface WidgetEntry {
   slot: 'today' | 'tomorrow';
   day: ApiSnowDay | null;
   now: { answer: string; verdict: string; band: SnowBand } | null;
-  /** Up to 4 days after the middle view's day. */
+  /**
+   * Every day of the week after the middle view's day: up to 6, or the whole week's 7 without
+   * that day. The medium widget shows as many of them as fit.
+   */
   week: WidgetDay[];
   /** The palette and glyph: the middle view's day's band, else `nosnow`. */
   palette: SnowBand;
@@ -88,7 +91,6 @@ export function widgetEntries(
       now: now && { answer: now.answer, verdict: now.verdict, band: now.band },
       week: (picked.week?.days ?? [])
         .filter((d) => d.date > after)
-        .slice(0, 4)
         .map((d) => ({
           date: d.date,
           label: d.label,

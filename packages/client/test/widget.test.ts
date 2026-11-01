@@ -49,9 +49,13 @@ function expectSound(res: TodayResponse, now: number, entries: WidgetEntry[]): v
     const day = tomorrow ? res.snow!.days[1]! : pickHour(res, e.date)!.today!;
     expect(e).toMatchObject({ state: 'ok', slot: tomorrow ? 'tomorrow' : 'today', day });
     expect(e.palette).toBe(day.band);
-    // Up to four days, from the day after the middle one.
-    expect(e.week.length).toBeLessThanOrEqual(4);
-    expect(e.week.length).toBeGreaterThan(0);
+    // Every day of the hour's week after the middle one, in order: five or six of its seven.
+    const week = pickHour(res, e.date)!.week!.days;
+    expect(e.week.map((d) => d.date)).toEqual(
+      week.map((d) => d.date).filter((date) => date > day.date),
+    );
+    expect(e.week.length).toBeGreaterThanOrEqual(5);
+    expect(e.week.length).toBeLessThanOrEqual(6);
     expect(e.week[0]!.date > day.date).toBe(true);
   }
 }
@@ -93,15 +97,18 @@ describe('widgetEntries: an ordinary day in London', () => {
       slot: 'today',
       day: snow.days[0],
       now: { answer: snow.now!.answer, verdict: snow.now!.verdict, band: snow.now!.band },
-      week: snow.week!.days.slice(1, 5).map(({ chance: _c, reason: _r, ...d }) => d),
+      // All six days after today, not the first four.
+      week: snow.week!.days.slice(1).map(({ chance: _c, reason: _r, ...d }) => d),
       palette: 'nosnow',
     });
-    // From 6pm the list starts the day after tomorrow.
+    expect(entries[0]!.week).toHaveLength(6);
+    // From 6pm the list starts the day after tomorrow, and runs to the week's end.
     expect(entries[1]!.week.map((d) => d.date)).toEqual([
       '2026-12-03',
       '2026-12-04',
       '2026-12-05',
       '2026-12-06',
+      '2026-12-07',
     ]);
     expect(entries[1]!.now).toEqual({
       answer: snow.ahead![0]!.now.answer,
@@ -361,10 +368,11 @@ describe('widgetEntries: locked, and what an answer may lack', () => {
       week: [],
       palette: 'nosnow',
     });
-    // Without its middle day, the list starts with the first day there is.
+    // Without its middle day, the list is the whole week, from the first day there is.
     const noTomorrow: TodayResponse = { ...res, snow: { ...snow, days: snow.days.slice(0, 1) } };
     const first = widgetEntries(noTomorrow, { fetchedAt: made, now, unlocked: true }).entries[0]!;
-    expect(first.week.map((d) => d.date)).toEqual(snow.week!.days.slice(0, 4).map((d) => d.date));
+    expect(first.week.map((d) => d.date)).toEqual(snow.week!.days.map((d) => d.date));
+    expect(first.week).toHaveLength(7);
   });
 });
 

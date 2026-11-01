@@ -162,6 +162,41 @@ final class WidgetSnapshotTests: XCTestCase {
     try attach(sample, as: "placeholder", in: .small, .full, redacted: true)
   }
 
+  /// The medium with all six days after the middle day (docs/DECISIONS.md, "After Carl's first
+  /// look"): durham-tomorrow at 5:59pm, whose Now line is the one Carl saw cut short, "No. Too
+  /// warm for snow.", over Thu (snow) and Fri (heavy snow), then four more. At Large on the
+  /// 430-wide row it is `widget-medium-durham-tomorrow-1759-full`; here it is at XXXL, the
+  /// largest size before the accessibility sizes, and at both in the `Link` the widget draws it
+  /// in, to set beside the tiles without; and on the 393-wide row (`-narrow`) at both, where the
+  /// half is 13 points narrower. Then the same week with Thu "Snow possible", the longest band
+  /// label, first: at XXXL, and narrow at Large. By the fonts' metrics: four rows with dots at
+  /// Large, two without at XXXL; narrow, three at Large, Fri's label wrapped beside its dots, and
+  /// one at XXXL; with "Snow possible" first, one row at XXXL, its label wrapped, and narrow at
+  /// Large three rows without dots, as with them Thu's and Fri's labels would wrap and cost a row.
+  @MainActor
+  func testTheMediumsWeek() throws {
+    let durham = try TestFixtures.response("durham-tomorrow")
+    let face = try firstFace(durham, at: durham.updatedAt.addingTimeInterval(-6 * 60))
+    XCTAssertEqual(face.slot, "Today")
+    XCTAssertNotNil(face.now)
+    XCTAssertEqual(face.week.count, 6)
+    try attach(face, as: "week", in: .medium, .full, textSize: .xxxLarge)
+    for textSize in [DynamicTypeSize.large, .xxxLarge] {
+      try attach(face, as: "week", in: .medium, .full, textSize: textSize, interactive: true)
+      try attach(face, as: "week", in: .medium, .full, textSize: textSize, narrow: true)
+    }
+
+    let maybe = try XCTUnwrap(Self.banded.first { $0.band == .maybesnow })
+    let response = try durhamWeek(thursday: maybe)
+    let maybeFirst = try firstFace(response, at: response.updatedAt.addingTimeInterval(-6 * 60))
+    XCTAssertEqual(maybeFirst.week.count, 6)
+    XCTAssertEqual(maybeFirst.week.first?.band, .maybesnow)
+    XCTAssertEqual(maybeFirst.week.first?.bandLabel, CoreCopy.snowBandLabel(.maybesnow))
+    XCTAssertEqual(maybeFirst.week.first?.agreement?.snowy, maybe.snowy)
+    try attach(maybeFirst, as: "week-maybesnow", in: .medium, .full, textSize: .xxxLarge)
+    try attach(maybeFirst, as: "week-maybesnow", in: .medium, .full, narrow: true)
+  }
+
   /// The snow medium with its right half a `Link` to the week, as the widget draws it, where
   /// every other tile has none: whether `ImageRenderer` draws the link's label, or the
   /// placeholder it draws for a view Core Animation composites (Apple, `ImageRenderer`).
@@ -179,6 +214,40 @@ final class WidgetSnapshotTests: XCTestCase {
   /// re-banded in its JSON as the server words `day`'s band: its label, or for no snow its
   /// reason's, too warm.
   private func durhamTomorrow(_ day: Banded) throws -> TodayResponse {
+    try durham { snow in
+      var days = try XCTUnwrap(snow["days"] as? [[String: Any]])
+      let warm = day.band == .nosnow
+      days[1]["band"] = day.band.rawValue
+      days[1]["answer"] = day.answer
+      days[1]["bandLabel"] = try XCTUnwrap(
+        warm ? CoreCopy.snowReasonLabel(.warm) : CoreCopy.snowBandLabel(day.band))
+      days[1]["reason"] = warm ? SnowReason.warm.rawValue as Any : NSNull()
+      days[1]["amount"] = day.amount
+      days[1]["snowy"] = day.snowy
+      days[1]["total"] = 6
+      snow["days"] = days
+    }
+  }
+
+  /// durham-tomorrow with its week's Thursday (`snow.week.days[1]`), the medium's first row
+  /// before 6pm, re-banded in its JSON as the server words snow in `day`'s band: its label.
+  private func durhamWeek(thursday day: Banded) throws -> TodayResponse {
+    try durham { snow in
+      var week = try XCTUnwrap(snow["week"] as? [String: Any])
+      var days = try XCTUnwrap(week["days"] as? [[String: Any]])
+      days[1]["band"] = day.band.rawValue
+      days[1]["bandLabel"] = try XCTUnwrap(CoreCopy.snowBandLabel(day.band))
+      days[1]["reason"] = NSNull()
+      days[1]["amount"] = day.amount
+      days[1]["snowy"] = day.snowy
+      days[1]["total"] = 6
+      week["days"] = days
+      snow["week"] = week
+    }
+  }
+
+  /// durham-tomorrow from the test bundle, its `snow` changed by `edit` in its JSON.
+  private func durham(_ edit: (inout [String: Any]) throws -> Void) throws -> TodayResponse {
     let url = try XCTUnwrap(
       Bundle(for: WidgetSnapshotTests.self).url(
         forResource: "durham-tomorrow",
@@ -190,17 +259,7 @@ final class WidgetSnapshotTests: XCTestCase {
     let read = try JSONSerialization.jsonObject(with: Data(contentsOf: url))
     var json = try XCTUnwrap(read as? [String: Any])
     var snow = try XCTUnwrap(json["snow"] as? [String: Any])
-    var days = try XCTUnwrap(snow["days"] as? [[String: Any]])
-    let warm = day.band == .nosnow
-    days[1]["band"] = day.band.rawValue
-    days[1]["answer"] = day.answer
-    days[1]["bandLabel"] = try XCTUnwrap(
-      warm ? CoreCopy.snowReasonLabel(.warm) : CoreCopy.snowBandLabel(day.band))
-    days[1]["reason"] = warm ? SnowReason.warm.rawValue as Any : NSNull()
-    days[1]["amount"] = day.amount
-    days[1]["snowy"] = day.snowy
-    days[1]["total"] = 6
-    snow["days"] = days
+    try edit(&snow)
     json["snow"] = snow
     return try TodayResponse.decode(from: JSONSerialization.data(withJSONObject: json))
   }
@@ -220,8 +279,9 @@ final class WidgetSnapshotTests: XCTestCase {
   }
 
   /// Draws `face` in `family` and `mode` and attaches it as `widget-<family>-<name>-<mode>`, with
-  /// `-ax3` at that size and `-link` with the medium's link, in the contact sheet's alphabet, so
-  /// the tiles sort by family. `redacted` masks it as WidgetKit's placeholder does.
+  /// `-xxxl` or `-ax3` at those sizes, `-narrow` at the 393-wide row's size (`narrowMedium`) and
+  /// `-link` with the medium's link, in the contact sheet's alphabet, so the tiles sort by
+  /// family. `redacted` masks it as WidgetKit's placeholder does.
   @MainActor
   private func attach(
     _ face: WidgetFace,
@@ -230,22 +290,27 @@ final class WidgetSnapshotTests: XCTestCase {
     _ mode: Mode,
     textSize: DynamicTypeSize = .large,
     interactive: Bool = false,
+    narrow: Bool = false,
     redacted: Bool = false
   ) throws {
     let tile =
       "widget-\(family.rawValue)-\(name)-\(mode.rawValue)"
-      + (textSize == .large ? "" : "-ax3") + (interactive ? "-link" : "")
+      + Self.sizeName(textSize) + (narrow ? "-narrow" : "") + (interactive ? "-link" : "")
+    XCTAssertTrue(!narrow || family == .medium, "\(tile): only the medium has a narrow size here")
+    let size = narrow ? Self.narrowMedium : Self.size(family)
     let look = WidgetLook(
       family: family, fullColour: mode.fullColour, showsBackground: mode.showsBackground,
       interactive: interactive)
     let widget = ForecastWidgetView(face: face, look: look, art: Self.art)
       .redacted(reason: redacted ? .placeholder : [])
       .padding(Self.onHomeScreen(family) ? Self.margin : 0)
-    let image = try render(widget, in: family, mode, band: face.band, textSize: textSize)
-    XCTAssertEqual(image.size, Self.size(family), tile)
+    let image = try render(
+      widget, in: family, mode, band: face.band, textSize: textSize, size: size)
+    XCTAssertEqual(image.size, size, tile)
     XCTAssertEqual(image.scale, Self.scale, tile)
     let png = try XCTUnwrap(image.pngData(), "No PNG for \(tile)")
-    let backdrop = try render(Color.clear, in: family, mode, band: face.band, textSize: textSize)
+    let backdrop = try render(
+      Color.clear, in: family, mode, band: face.band, textSize: textSize, size: size)
     XCTAssertNotEqual(png, backdrop.pngData(), "\(tile) drew nothing over its backdrop")
 
     // PNG, as the contact sheet reads it.
@@ -255,18 +320,18 @@ final class WidgetSnapshotTests: XCTestCase {
     add(attachment)
   }
 
-  /// `content` as a widget of `family` frames it: at its size, over `mode`'s backdrop in `band`'s
+  /// `content` as a widget of `family` frames it: at `size`, over `mode`'s backdrop in `band`'s
   /// palette, clipped to the widget's shape, in `mode`'s rendering mode and at `textSize`, drawn
-  /// at 3x and proposed the family's size.
+  /// at 3x and proposed that size.
   @MainActor
   private func render<Content: View>(
     _ content: Content,
     in family: WidgetLook.Family,
     _ mode: Mode,
     band: SnowBand,
-    textSize: DynamicTypeSize
+    textSize: DynamicTypeSize,
+    size: CGSize
   ) throws -> UIImage {
-    let size = Self.size(family)
     let tile =
       content
       .frame(width: size.width, height: size.height)
@@ -278,6 +343,16 @@ final class WidgetSnapshotTests: XCTestCase {
     renderer.scale = Self.scale
     renderer.proposedSize = ProposedViewSize(size)
     return try XCTUnwrap(renderer.uiImage, "ImageRenderer drew nothing")
+  }
+
+  /// The end of a tile's name at `textSize`: none at Large, the default.
+  private static func sizeName(_ textSize: DynamicTypeSize) -> String {
+    switch textSize {
+    case .large: ""
+    case .xxxLarge: "-xxxl"
+    case .accessibility3: "-ax3"
+    default: "-\(textSize)"
+    }
   }
 
   /// Each family's size in points, the HIG's for 430-wide iPhones: the small and the medium are
@@ -292,6 +367,11 @@ final class WidgetSnapshotTests: XCTestCase {
     case .inline: CGSize(width: 257, height: 26)
     }
   }
+
+  /// The medium at the HIG's size for 393-wide iPhones, brandColours.ts's `WIDGET_SIZES_NARROW`,
+  /// the contrast gate's other rect, which widgetSizes.test.ts holds this to: each half 13 points
+  /// narrower than the 430-wide row's, and 12 shorter.
+  private static let narrowMedium = CGSize(width: 338, height: 158)
 
   /// The Home Screen's families, which WidgetKit's margins pad; the Lock Screen's draw to their
   /// edges.

@@ -462,7 +462,8 @@ already exist, and the release job's cloud signing makes the widget's profile as
       Buy it, go back to the Home Screen, and within a few seconds both show answers (phase 7's
       exit). If you bought in 7.1's build, they show answers at once: your place, Today (Tomorrow
       after 6pm), the answer, the band with the amount or why not, and the dots; and on the
-      medium's right half, Now and up to four days.
+      medium's right half, Now (up to two lines), then as many of the week's days as fit below
+      it, each row whole.
    3. **Taps.** The small opens the app on Today (Tomorrow after 6pm). The medium's right half
       opens This week, and its left half Today.
    4. **The Lock Screen.** Touch and hold the Lock Screen, tap **Customise**, and add the round
@@ -478,8 +479,9 @@ already exist, and the release job's cloud signing makes the widget's profile as
    9. **VoiceOver.** Each widget reads one sentence, such as "Durham. Tomorrow: Yes. Snow, 4cm. 6
       of 6 forecasts expect snow."; the medium's right half reads Now, then the days.
    10. **Larger Text** (**Settings → Accessibility → Display & Text Size → Larger Text**, at its
-       largest) and **Bold Text**: still readable. The answer shrinks to fit, and the medium shows
-       fewer days.
+       largest) and **Bold Text**: still readable. The answer shrinks to fit. The medium shows
+       fewer days, each one whole (usually none at the accessibility sizes), and its Now line
+       wraps and shrinks, dropping the word "Now" above it before any of its own words.
    11. **Offline.** Aeroplane mode overnight: the widget keeps its hours, then says "No recent
        forecast. Open the app to refresh.", never an old hour.
    12. **A restart.** Restart the phone and leave it locked for a while. The Lock Screen widgets

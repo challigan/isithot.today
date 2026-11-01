@@ -227,16 +227,23 @@ struct WidgetFaceTests {
   }
 
   @Test(
-    "the medium's rows read as the app's week page reads the same days",
-    arguments: ["aberdeen-snow", "durham-tomorrow"])
-  func theWeekRowsReadAsTheAppsDo(_ fixture: String) throws {
+    "the medium's rows are every day after the middle day, read as the app's week page reads them",
+    arguments: [
+      // At 9:05am the middle day is today: the six days after it.
+      ("aberdeen-snow", ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue"]),
+      // At 6:05pm it is tomorrow, Thursday: the five after it, not the first four.
+      ("durham-tomorrow", ["Fri", "Sat", "Sun", "Mon", "Tue"]),
+    ])
+  func theWeekRowsReadAsTheAppsDo(_ fixture: String, _ labels: [String]) throws {
     let now = try #require(ApiJSON.parseDate(try Fixtures.info(fixture).now))
     let res = try answers(fixture)
     let entry = try #require(
       WidgetPlanner.entries(res, fetchedAt: now, now: now, unlocked: true).entries.first)
     let rows = WidgetFace(entry, unit: .cm).week
     let page = try #require(HomePage(res, view: .week, at: now, phase: .ready).week?.rows)
-    #expect(rows.count == 4)
+    #expect(rows.map(\.label) == labels)
+    // They run to the week's end.
+    #expect(page.suffix(labels.count).map(\.label) == labels)
     // A week's seven labels are distinct, so a row is matched by its label.
     for row in rows {
       let same = try #require(page.first { $0.label == row.label }, "\(row.label)")

@@ -89,7 +89,10 @@ export interface WidgetFace {
   spokenGauge: string;
   /** The medium's right half: Now ("Now", "No. Too warm for snow."), or null without it. */
   now: { label: string; text: string; spoken: string } | null;
-  /** The medium's right half: up to 4 days after the middle day. */
+  /**
+   * The medium's right half: every day of the week after the middle day (up to 6, or all 7
+   * without a middle day), of which the medium shows as many whole rows as fit under Now.
+   */
   week: WidgetWeekRow[];
   /** The right half's link, view/week; '' when locked or stale. */
   weekLink: string;

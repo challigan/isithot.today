@@ -6369,9 +6369,12 @@ re-banded in the test: the answer, band label, amount 0 to 25 and counts) in eve
 Screen families in full colour, accented and StandBy, the Lock Screen ones vibrant (iPhone draws
 them in nothing else), 54 tiles; locked and stale in every family and mode, 18; ten real fixture
 moments and durham-tomorrow at 6:05pm on the Lock Screen, 23; AX3, 4; the gallery and the
-placeholder, 3; and the medium with its `Link`, to see whether `ImageRenderer` draws it. 103 tiles,
-at the HIG's 430-wide row (small 170, medium 364 by 170, circular 76, rectangular 172 by 76, inline
-257 by 26), which `widgetSizes.test.ts` holds to the contrast gate's. The test draws the palette
+placeholder, 3; the medium with its `Link`, to see whether `ImageRenderer` draws it; and, since
+Carl's first look (below), the medium with all six days after the middle day: at XXXL, in its `Link`
+at Large and XXXL, at the 393-wide row's size (338 by 158, `-narrow`) at both, and with "Snow
+possible" first at XXXL and narrow at Large, 7. 110 tiles, at the HIG's 430-wide row (small 170,
+medium 364 by 170, circular 76, rectangular 172 by 76, inline 257 by 26) but for the narrow mediums,
+which `widgetSizes.test.ts` holds to the contrast gate's two rows. The test draws the palette
 itself, as `containerBackground` draws nothing outside a widget, and the accented, StandBy and
 vibrant tiles are approximations over mid grey (0x8e8e93), black and 0x1c1c1e, since only WidgetKit
 draws the real glass, tint and Lock Screen. Each asserts it drew something over its backdrop, its
@@ -6433,8 +6436,9 @@ them is two blocks, their vectors regenerated, no strings.
 - **`privacyApis.test.ts` is stricter** than the design's walk: it reads the generated folders too,
   as they ship, and matches the five names case-insensitively inside longer ones
   (`contentModificationDateKey`), as Apple's list does.
-- **`WidgetSample.swift` is 2.5 KB, not 1.5:** four week rows in two-space JSON. Every line is
-  under 100 columns, and a test holds it under 3,000 bytes.
+- **`WidgetSample.swift` is 2.7 KB, not 1.5:** five week rows in two-space JSON (four, 2.5 KB,
+  until Carl's first look, below). Every line is under 100 columns, and a test holds it under
+  3,000 bytes.
 - **The test fakes that hold give up after 10 seconds**, not never: Swift Testing's time limit
   can't end a test body that ignores cancellation, so the first mutant run (a `Deadline` that
   waits) hung the whole suite. Ten seconds is 200 times every limit tested, and such a mutant now
@@ -6497,8 +6501,12 @@ them is two blocks, their vectors regenerated, no strings.
 8. **SnowKit's glyphs in the extension** rest on Xcode copying the package's resource bundle into
    the appex: `WidgetBundleTests` and the archive check prove it on the first run; if not,
    `project.yml` copies it (one build phase).
-9. **Memory** (30 MB, forum reports): one answer, the 2.5 KB sample, vector glyphs, about thirty
-   entries at most.
+9. **Memory** (30 MB, forum reports): one answer, the 2.7 KB sample, vector glyphs, about thirty
+   entries at most. Since Carl's first look the medium's right half holds every way to show the
+   week, each list built whole: for six days with dots, 13 lists, 42 rows in all, each with its
+   day, glyph and four copies of its band's label (two of them hidden, measuring), so about 210
+   lines of text where there were 6 rows; unmeasured, as the log line is written before any view
+   is drawn.
 10. **Fonts in the extension** are proven by the archive check, `WidgetBundleTests` and the log
     line's `font=`, not by a render in the extension's own process.
 11. **Merging with 8.1 and 8.2:** in the files both touch, each track's lines stay at least one
@@ -6509,8 +6517,9 @@ them is two blocks, their vectors regenerated, no strings.
     full macOS run with both: about 56 minutes of the ios job's 90.
 12. **Swift without a compiler:** the views and the extension compile only on macOS; the harness
     type-checks them against stubs with Apple's shapes.
-13. **Snapshot sizes** are the HIG's 430-wide row, not the iPhone 17's own; the log line's `width`
-    and `height` tell the real ones on the device, and the contrast gate judges both rows.
+13. **Snapshot sizes** are the HIG's 430-wide row (and its 393-wide medium for four of the week's
+    tiles), not the iPhone 17's own; the log line's `width` and `height` tell the real ones on the
+    device, and the contrast gate judges both rows.
 14. **The link UI test** needs `XCUIApplication.open(_:)` to reach `.onOpenURL`, which 7.1's run
     proves first; if it doesn't, the test goes with 7.1's, and AppModelTests' route tests stand.
 15. **Netlify's quota:** the widgets add requests for each widget on each phone: once every 4 hours
@@ -6524,7 +6533,9 @@ them is two blocks, their vectors regenerated, no strings.
    `WillItSnowTests` with IsItLogic and IsItState linked.
 2. The snapshots draw: every tile, the gauge's (whether `ImageRenderer` draws a `Gauge`) and
    `widget-medium-snow-ok-full-link` (whether it draws a `Link`'s label or a placeholder) in
-   particular, and the 103 tiles on the contact sheet, grouped by family.
+   particular, and the 110 tiles on the contact sheet, grouped by family; the week's tiles
+   (`widget-medium-week-…`) with as many rows as the fonts' metrics say ("After Carl's first
+   look"), none cut off, no word cut short, and the `-link` ones laid out as those without.
 3. The embedded appex (`WidgetBundleTests`): its `IsItAPIOrigin` expanded to the app's https
    origin, its App Group, the four fonts listed, carried and named as `BrandFont` names them,
    SnowKit's bundle with `Assets.car` and the snow glyph in it, its PrivacyInfo.xcprivacy's Coarse
@@ -6572,6 +6583,47 @@ optional refund on a Debug build is in Carl's widget checks, docs/SETUP.md); 20.
 widget lines in the merged words, docs/SETUP.md, "The app's widgets"); V3 ("A Debug log in the
 provider during the snapshot tests": a log line in every build, read on the device, StoreKit asked
 on every timeline); 23.3 (7.3 and 7.4 cut, to 1.1).
+
+**After Carl's first look.** On his iPhone (iOS 26, a large iPhone), the medium widget for Newcastle
+showed on its right half "Now", then "No. Too warm for…" on one line, then two rows (Mon, Tue), with
+room below for about two more, and he asked: "can it fill the space with the rest of the days?" The
+brief found three causes. The planner kept four of the days after the middle day (`slice(0, 4)` in
+client `widgetEntries`, `prefix(4)` in `WidgetPlanner`), though the week has up to six after it; the
+right half's `ViewThatFits` tried four rows, then two, then none, with no three; and Now's line (two
+lines at most) and the rows shared the height at the default layout priority, so Now got one line.
+The first two are plain in the code. The third is the brief's reading: by the fonts' metrics the old
+stack would have given Now its two lines and shown four rows at Large on a 364 by 170 medium, so
+Carl's text size, or the phone, differs from the model, and his Text Size setting is worth asking
+before his report is called fixed. Now, TypeScript first, the face carries every day after the
+middle day (six, or the week's seven with no middle day; `widget.json`, `widgetFace.json` and the
+sample regenerated, the sample with five rows). The medium gives Now its lines first, by a layout
+priority (SwiftUI offers the higher-priority child all the space but the minimum the others need,
+and the rows need none): up to XXXL, two lines at most, shrinking to `WidgetType`'s 0.75, which by
+the metrics every Now line fits on every iPhone medium the HIG lists, from the SE's to the 430-wide
+row's; at the accessibility sizes, as many lines as the height holds, shrinking to half (12.5 points
+at AX1, over the HIG's 11), and the word "Now" above it goes before any of its own words (VoiceOver
+reads "Now: …" either way). Not `fixedSize`: a fixed Now taller than the half would draw past the
+widget's edge. By the metrics one Now line still ends in "…": "Maybe. Snow showers around." at AX5
+on the SE's medium. Then the medium shows as many whole rows as fit, from all of them down to one,
+then none (`ViewThatFits`, which takes the first child whose ideal size fits): no row cut off, and
+no gap another whole row would fill. A row's words are never cut short: its band's label shrinks to
+0.85 on one line, as before, then wraps at its words at full size, the row as tall as its lines;
+where even a word won't fit, the row isn't drawn and the list ends before it, as the days run in
+order. The review of the first build found that rows left out for width alone emptied the right half
+at XL and XXL on snowy days; wrapping ends that below XXXL. The dots are the list's choice: a row
+without them means no forecast has data for its day, so they go from every row at once, and only
+where keeping them would cost a row, as the small family's go first. That happens at Large when a
+long label ("Snow possible", "Heavy snow") would wrap beside them and lose a row, so snowy weeks
+often show their rows without dots. By the metrics, durham's week at 5:59pm shows four rows with
+dots at Large on the 364 by 170 medium and three on the 393-wide 338 by 158, two and one at XXXL,
+and none under Now at the accessibility sizes. At XXXL on the SE's and the 375- and 393-wide mediums
+one row fits under Now, and only on one line, so a week whose next day is snowy (a label that wraps)
+shows Now alone there; rows without glyphs would fit most of those, a third way to show each list,
+not taken for its cost (every list is built whole: known risk 9, above). VoiceOver still reads the
+right half as one element, Now and the rows shown. `WidgetSnapshotTests` adds seven tiles of the
+medium with six days (`widget-medium-week-…`): at XXXL; in its `Link` at Large and XXXL, as the
+widget draws it; at the 393-wide size at both; and with "Snow possible" first at XXXL and narrow at
+Large. The next macOS run's tiles, and Carl's iPhone, show the real counts.
 
 ## API contract
 
