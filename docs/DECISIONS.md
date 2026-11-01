@@ -4655,17 +4655,19 @@ TypeScript and the docs).
   heading Now's, as the waits' debug descriptions read the pages and the heading too.
 - **So the tap reached the button**, on a still screen: no thumb's or pager's animation could
   have swallowed it, and the segment kept its frame and identity (the same word shrank and grew
-  back smoothly).
+  back smoothly). (Its touch began on the button, but the simulator cancelled it before it ended;
+  "What the simulator's log showed", below.)
 - **Its release was drawn late.** In every switcher tap that worked with a recording (3405dd3's
   durham-tomorrow at Large and leeds-dry at AX3, and this run's Now) the new page is drawn 0.03 to
   0.07 seconds after the press, and 0.13 to 0.18 before XCUITest's record of the tap. Here the
   press lasted 0.11 to 0.16 seconds and the release was drawn only 0.05 to 0.10 before the record:
   more work on the main thread than a release's scale, most likely the action's update. Yet the
-  frame after it still had Now chosen.
+  frame after it still had Now chosen. (No action ran: the app had no lift, as below.)
 - **What could choose Now.** None of `AppModel`'s own moves would here: the launch, the return
   after a long time away and the first answer each set the view for the time of day, Today, and
   no route was opened. Only the Now tab and the pager's `scrollPosition(id:)` setter could.
-- **The cause, inferred, not proven.** The tab's action set the view to Today, and in the same
+- **The cause, inferred, not proven** (not this tap's: the simulator cancelled its touch; "What
+  the simulator's log showed", below). The tab's action set the view to Today, and in the same
   update the pager's two-way binding wrote back the page the scroll view still showed, Now, before
   the move to Today was applied. The pager wrote whatever page it reported straight into the view,
   the weakness phase 5.2 already named for an animated scroll's pages on the way. Whether a report
@@ -4709,7 +4711,10 @@ TypeScript and the docs).
   audits at once, with the page's frame; pages that didn't follow a tap fail the tap.
   `onChange(of:initial: true)` is then the next to try.
 - **No wait or retry is added**: the tap came on a screen still for 2.1 seconds, as a user's
-  would, so it was right to fail, and tapping again would hide exactly this. `tap(_:in:)`'s
+  would, so it was right to fail, and tapping again would hide exactly this. (Since PR #40 the
+  rule is that a tap the app completed is never tapped again: this tap's touch, the simulator's
+  log later showed, was cancelled before the app had a tap at all, and such a tap is tapped once
+  more; "What the simulator's log showed", below.) `tap(_:in:)`'s
   failure now also says where the tab was, the tab the app has chosen and where the pages are
   (`homeGeometry`, whose `page-<view>` is the chosen view's page). The old tab still chosen is a
   tap that never took or was undone; the new one chosen with its page off the screen is pages
@@ -4792,7 +4797,8 @@ way on both, after `PagerSync` had replaced the write-back above. Once the 6pm f
 at (86.33, 210), the centre of `view-now`, drew the word pressed and let go: 0.992 of its width
 on PR #39's recording, 0.972 on PR #36's, whole again within 0.1 seconds. Nothing else moved,
 and for 20 seconds the tree read tomorrow's heading with Tomorrow chosen. So the touch reached
-the button and its action changed nothing on screen.
+the button and its action changed nothing on screen. (It began on the button and was cancelled
+before it ended, so no action ran: "What the simulator's log showed", below.)
 
 - `PagerSync` can't have undone it. On iOS 18 it writes the view only at rest after a finger
   moved the pages, and this test never touches them. So the write-back blamed for cf4eb74's tap,
@@ -4801,19 +4807,84 @@ the button and its action changed nothing on screen.
   foreground didn't run.
 - The other 15 or so switcher taps a run, in 27 logs, never failed so. What is new here is that
   the minute's tick, not a tap, turned the middle tab, and with it the theme, the colour scheme
-  and an announcement.
+  and an announcement. (There are about 47 switcher taps a run, and the tick played no part:
+  below.)
 - The test's comment said no request went. One does: the fixture's hours start at 17:00Z, so a
   quiet refresh is due at 18:00Z plus 0 to 90 seconds. It would have had to land inside the
   touch's 50 ms.
-- What the artefacts can't show is whether the action ran, whether the model moved and the views
-  didn't, and whether UIKit ended the touch or cancelled it. It stays unexplained, and the test
-  unchanged: it fails, as it should, about one run in eight.
-- A Debug readout of the writes to the model's view and of the window's touches was built and
-  left out of PR #39: its watch-only recognizer on the window and the switcher's and pager's
-  wrapped bindings would change every UI test's touch handling to diagnose one. Should the test
-  fail again, the next step is the writes alone, in a PR of its own, then the fix where they
-  point: the switcher's button, the views' observation, or `PagerSync`. A tap that reached the
-  app is never tapped again.
+
+**What the simulator's log showed** (PR #40: run 40620576828; PR #39: run 40562013812; PR #36:
+run 40242003907; cf4eb74: run 40174838258). The taps on a tab that were drawn pressed, let go and
+changed nothing were never the app's. Each run's `ios-results` keeps the simulator's log, in the
+xcresult's `system.logarchive`. XCUITest plays every gesture through a new virtual touchscreen,
+which backboardd adds and then removes. At each of these taps backboardd added it twice (`***
+unknown digitizer`), so the touch's down went to one record of it and the rest of the touch, its
+lift with it, to the other, which dropped them (`didn't see a previous touch down or range-in event
+for pathIndex:2; skipping event`, seven times). When XCUITest removed the touchscreen, about 0.18
+seconds later, backboardd cancelled the touch still down in the app's window (`cancel -- digitizer
+did disappear`, `canceling paths`). So the app had a touch begin and then cancelled, with no lift,
+and a button acts only on a touch that ends on it. XCUITest still called the tap confirmed.
+
+- On PR #40's run the down reached the app's window at 03:07:27.571 and the cancel at .747, and
+  nothing between them was sent to a window. The recording shows Now pressed and let go and
+  nothing else moving; it can't show what ended the press, which on its frames may have come
+  before the cancel (a `systemGestureStateChange` evaluation at .664 is the open candidate).
+  PR #39's and PR #36's 6pm taps on Now, and cf4eb74's tap on Today in `testLeedsDry`, have the
+  same lines.
+- Of the 1,354 gestures in those four runs, backboardd added the touchscreen twice six times.
+  Five lost their touch, and each of the five is a failure in its job's log: the four taps, and
+  on PR #36's run the drag in `testAberdeenSnowAtAX3` that "left the credits" where they were. The
+  sixth, cf4eb74's tap on Now at AX3, got all its events to one record and worked. Every other
+  gesture had one record and its lift, among them 185 of the 190 taps on a tab.
+- All three tab-tap failures since `PagerSync` were the first gesture after a long pause (57, 127
+  and 131 seconds), but those runs were fetched for those failures, so they can't measure a
+  pause effect. Over the 28 job logs where the long-pause tests ran, their first taps failed 3
+  times in 84 (the 6pm test twice, the Retry test once,
+  `testPastItsLastHourNoRecentForecastOnEveryPage` never), against once for the far more numerous
+  short-pause tab taps: a suggested risk of a few per cent a tap, not a measured one.
+  `*** already have a main display digitizer` comes with every gesture and means nothing.
+- So the minute's tick, the theme, the colour scheme, the announcement and the quiet refresh
+  played no part (PR #40's failure had none of them), `PagerSync` undid nothing, and nothing in
+  the app wrote the view. Nor was cf4eb74's tap the old write-back, as "After #34's second full
+  run" said: it lost its touch the same way, 2.4 seconds after the gesture before. `PagerSync`
+  stays for its own reasons.
+- The app changes nothing for real use: a button that acted on a cancelled touch would act on
+  touches people cancel too. A Debug build counts the touches the system cancels (`debug-cancels`,
+  read as `UIApplication.sendEvent` is given each event, before any recognizer sees it, which
+  changes no delivery), so far shown only on Linux (below). A tab tap that changed nothing is
+  tapped once more only when that count rose during it; the drags and the Retry, place and
+  settings taps read it the same way, and their failures, and some after other gestures, name
+  it. The other gestures, about 70 direct taps, swipes and presses, are not watched. A tap
+  the app completed is never tapped again; a cancelled touch never made one. The readout of the
+  writes to the model's view, built and left out of PR #39 as the next step, isn't needed.
+  `HomeTests.testASystemGestureCountsACancelledTouch` is the positive control for the count and
+  for the helper that reads it (`cancelled(_:in:within:until:_:)`): a drag up from the home
+  indicator, or failing that one down from the top right corner, whose touch the system takes,
+  played through the helper, must raise it, or the re-tap can't be relied on.
+- To check a run: read backboardd's lines between testmanagerd's `Synthesizing event` for the
+  gesture and the next one. `*** unknown digitizer` with `canceling paths` is a touch the
+  simulator cancelled.
+- **Checked on Linux, against stubs:** the app in Debug and Release with the new `DebugHooks`
+  code, which Release compiles none of (session scratchpad: iap-typecheck, with `@objc` dropped
+  and `#selector` stubbed, as Linux has no Objective-C runtime); Swift 6.3.3 showing that `+= 0`
+  on an `@Observable` property still tells its observers, so the count is written only when a
+  touch was cancelled; the 12 UI test files compiled against the XCUITest stubs, and copies run
+  against fake apps (iap-uicheck): the helper (a count that rises, never rises, reads late, or
+  isn't there), the tab tap's re-tap, the gear's under an earlier Settings' Close still in the
+  tree and the place button's under an earlier picker's search box (each tapped once more on a
+  cancel, only once more, and never after a tap the app completed, the last two failing with the
+  guards as they were), and the audit's drags played again; 65 checks in all. And
+  `swift format lint --strict` over every Swift file changed.
+
+**For the next macOS run to show.** That `testASystemGestureCountsACancelledTouch` passes, and
+which gesture raised the count (its `gesture-cancelled` attachment): that is the proof that the
+exchange of `sendEvent(_:)` installs, `#selector` finding the fileprivate method, and that a
+cancel the system makes reaches `sendEvent(_:)` with its touch in the cancelled phase. That
+`debug-cancels` reads 0 after a launch, before any gesture. And that the job stays inside its
+time for the extra reads: two snapshots a drag, Retry's 2 seconds, and up to 2 more for a tap
+whose page or sheet is slow to come. Until then the re-tap rests on a count
+nothing on a simulator has shown working, and a run whose control fails says so before any
+re-tap is trusted.
 
 ## After #34's fourth full run
 
@@ -5763,11 +5834,14 @@ suite runs on an iPhone 17 with iOS 26.2, which Xcode 26.6 can test on as the ap
   `PlugIns` while tests run).
 - **Each test from a cleared environment, its listener stopped after it.** setUp resets the
   session, which clears the simulated errors that last from test to test, turns dialogs and Ask
-  to Buy off and clears its transactions; tearDown stops each `StoreKitPurchases` the test made
-  (XCTest keeps every test case, and what it holds, until the run ends, so a listener left
-  running would hear, and finish, the next tests' transactions) and clears them again. Simulated
-  errors are cleared by `resetToDefaultState()`, never by `setSimulatedError(nil, forAPI:)`
-  (below, "What PR #40's first macOS run showed").
+  to Buy off and clears its transactions. tearDown waits until no update is still being handled
+  (`hear` finishes after it keeps, and a finish still out would land on the next test's
+  transaction, as IDs start again at 0 after a clear: "What PR #40's run on de59e36 showed"),
+  then stops each `StoreKitPurchases` the test made (XCTest keeps every test case, and what it
+  holds, until the run ends, so a listener left running would hear, and finish, the next tests'
+  transactions), waits again for an update that came in between, and clears them again.
+  Simulated errors are cleared by `resetToDefaultState()`, never by
+  `setSimulatedError(nil, forAPI:)` (below, "What PR #40's first macOS run showed").
 - **Never a pass on a broken environment.** Every buy and restore test first requires the product
   loaded at `Constants.Purchase.displayPrice` (`readyModel()`, which stops the test otherwise).
   A loaded product doesn't show a purchase can complete: on the broken runtimes `purchase` answers
@@ -6011,6 +6085,36 @@ element that takes no tap.
   purchase's line made the page longer (506 points tall, its top at -150, after the reveal
   loop): contrast failed on it, and the pixel proof needs a frame whole on screen. The page is
   audited at its top now, as How it works and the licences are.
+
+**What PR #40's run on de59e36 showed** (run 41294270258; 4812fd5's run 40620576828 passed all
+18):
+
+- **testARefundLocksAgain failed: StoreKit Test never sent the refund.** After
+  `refundTransaction`, storekitd synced the subscription status but never the transaction
+  history, and sent the app nothing (no "Sending N receipts"). The app wrote no line for ten
+  seconds, so the model kept the purchase: owned, `unlock.v1` unlocked, one widget reload,
+  `[true]` told the app.
+- **The cause was the test before it.** testAPurchaseElsewhereArrivesThroughUpdates ends once
+  its listener's answer is kept, which `hear` does before it finishes, so its
+  `Transaction.finish()` was still out through tearDown's clear and the next test's setUp. Its
+  `inAppTransactionDone` reached StoreKit Test 1.15 ms after the refund test's buy, and
+  transaction IDs start again at 0 after every clear, so both named transaction 0. The test
+  server answered both, and its history then held nothing ("Setting 0 unfinished transactions",
+  revision `0_0,5`), as after no other purchase in either run; the refund of 0 then changed no
+  history, so nothing was sent. 4812fd5's run had the same late finish, landing about 120 ms
+  after the purchase instead of during it: it finished that test's transaction ("Transaction is
+  already finished" for the test's own finish), and the refund still came.
+  testAskToBuyWaitsThenApproved's finish outlived it too, and found nothing left to finish (404).
+- **Not de59e36**: its app change runs only under `-uitest`, and the host launched with no
+  arguments.
+- **So tearDown waits for any update a listener is still handling** (`RecordingPlatform` counts
+  them around the model's `hear`) before it stops the listener, and again after, then clears;
+  and it attaches each test's calls with their times and transaction IDs. The refund test
+  requires "heard → revoked", so a refund StoreKit Test never sends fails as that, not as the
+  model. No change to the app: it finishes after it keeps (spec 13), and the App Store never
+  reuses a transaction ID.
+- **Inferred, not seen**: the done's transaction ID (its query is redacted) and what the test
+  server did with two requests for 0 at once (it logs nothing of it). It happened once.
 
 **What only Carl's TestFlight purchase shows**: the real product and its price from the App
 Store, Apple's sheet, a purchase with his own Apple Account, the ads going, and the purchase back

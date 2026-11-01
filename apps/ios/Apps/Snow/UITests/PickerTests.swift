@@ -51,7 +51,7 @@ final class PickerTests: XCTestCase {
     result.tap()
     XCTAssertTrue(
       pickerCloses(in: app, after: pickersBefore, within: 10),
-      "The picker is still open; \(app.pickerReport)")
+      "The picker is still open; \(app.pickerReport); \(app.cancelsReport)")
     wait(for: heading(in: app), label: "Leeds. Will it snow today? No.")
     XCTAssertEqual(app.buttons["place"].label, "Place: Leeds. Change place.")
     XCTAssertFalse(app.buttons["use-my-location"].exists, "Still on approximate location")
@@ -123,14 +123,16 @@ final class PickerTests: XCTestCase {
     waitUntilGone(recent, "Recent places while typing")
     XCTAssertTrue(clear.waitForExistence(timeout: 5), "No clear button with text typed")
     clear.tap()
-    XCTAssertTrue(leeds.waitForExistence(timeout: 10), "No recent places once cleared")
+    XCTAssertTrue(
+      leeds.waitForExistence(timeout: 10), "No recent places once cleared; \(app.cancelsReport)")
     waitUntilGone(clear, "The clear button after clearing")
     XCTAssertTrue(app.keyboards.firstMatch.exists, "The keyboard went with the text")
 
     // Deleted: press and hold, then Delete in its menu.
     leeds.press(forDuration: 1.2)
     let delete = menuItem("Delete", in: app)
-    XCTAssertTrue(delete.waitForExistence(timeout: 5), "No Delete on press and hold")
+    XCTAssertTrue(
+      delete.waitForExistence(timeout: 5), "No Delete on press and hold; \(app.cancelsReport)")
     delete.tap()
     waitUntilGone(leeds, "Leeds is still a recent place")
     XCTAssertFalse(recent.exists, "Recent, over no recent places")
@@ -155,7 +157,8 @@ final class PickerTests: XCTestCase {
     XCTAssertTrue(searchField(in: first).exists, "The star closed the picker")
     first.buttons["clear-search"].tap()
     let saved = first.buttons["saved-city:leeds-gb"]
-    XCTAssertTrue(saved.waitForExistence(timeout: 10), "Leeds isn't under Saved")
+    XCTAssertTrue(
+      saved.waitForExistence(timeout: 10), "Leeds isn't under Saved; \(first.cancelsReport)")
     XCTAssertEqual(saved.label, "Leeds, England, United Kingdom")
     XCTAssertEqual(first.staticTexts["saved-heading"].label, "Saved")
     XCTAssertFalse(first.buttons["recent-city:leeds-gb"].exists, "Leeds is under Recent too")
@@ -163,7 +166,7 @@ final class PickerTests: XCTestCase {
     first.buttons["picker-close"].tap()
     XCTAssertTrue(
       first.buttons["use-my-location"].waitForExistence(timeout: 10),
-      "No longer on approximate location")
+      "No longer on approximate location; \(first.cancelsReport)")
     first.terminate()
 
     // Kept: opened again, Leeds is still saved; chosen, the sheet closes and Leeds loads.
@@ -174,7 +177,7 @@ final class PickerTests: XCTestCase {
     kept.tap()
     XCTAssertTrue(
       pickerCloses(in: app, after: pickersBefore, within: 10),
-      "The picker is still open; \(app.pickerReport)")
+      "The picker is still open; \(app.pickerReport); \(app.cancelsReport)")
     wait(for: heading(in: app), label: "Leeds. Will it snow today? No.")
     XCTAssertEqual(app.buttons["place"].label, "Place: Leeds. Change place.")
     // Still under Saved, and not under Recent.
@@ -204,7 +207,8 @@ final class PickerTests: XCTestCase {
     XCTAssertEqual(recentStar.label, "Save Leeds")
     recentStar.tap()
     let saved = app.buttons["saved-city:leeds-gb"]
-    XCTAssertTrue(saved.waitForExistence(timeout: 10), "Leeds didn't move to Saved")
+    XCTAssertTrue(
+      saved.waitForExistence(timeout: 10), "Leeds didn't move to Saved; \(app.cancelsReport)")
     waitUntilGone(app.staticTexts["recent-heading"], "Recent, with its only place saved")
     XCTAssertFalse(hint.exists, "The hint, with a place saved")
 
@@ -213,19 +217,24 @@ final class PickerTests: XCTestCase {
     XCTAssertEqual(savedStar.label, "Remove Leeds from saved places")
     savedStar.tap()
     let recent = app.buttons["recent-city:leeds-gb"]
-    XCTAssertTrue(recent.waitForExistence(timeout: 10), "Leeds isn't back under Recent")
+    XCTAssertTrue(
+      recent.waitForExistence(timeout: 10), "Leeds isn't back under Recent; \(app.cancelsReport)")
     XCTAssertTrue(hint.waitForExistence(timeout: 5), "No hint once nothing is saved")
     XCTAssertFalse(saved.exists, "Leeds is still saved")
 
     // Saved again, then removed from its press-and-hold menu.
     recentStar.tap()
-    XCTAssertTrue(saved.waitForExistence(timeout: 10), "Leeds didn't move to Saved again")
+    XCTAssertTrue(
+      saved.waitForExistence(timeout: 10),
+      "Leeds didn't move to Saved again; \(app.cancelsReport)")
     saved.press(forDuration: 1.2)
     let remove = menuItem("Remove Leeds from saved places", in: app)
-    XCTAssertTrue(remove.waitForExistence(timeout: 5), "No Remove on press and hold")
+    XCTAssertTrue(
+      remove.waitForExistence(timeout: 5), "No Remove on press and hold; \(app.cancelsReport)")
     remove.tap()
     waitUntilGone(saved, "Leeds is still saved")
-    XCTAssertTrue(recent.waitForExistence(timeout: 10), "Leeds isn't back under Recent")
+    XCTAssertTrue(
+      recent.waitForExistence(timeout: 10), "Leeds isn't back under Recent; \(app.cancelsReport)")
   }
 
   /// With location access off, "Use my location" says so, with Open Settings, and the search
@@ -237,7 +246,9 @@ final class PickerTests: XCTestCase {
     let app = launch(["-resetStore", "-network", "ip-first-launch", "-location", "denied"])
     tapOutsideItsWords(app.buttons["use-my-location"])
     let detail = app.staticTexts["location-detail"]
-    XCTAssertTrue(detail.waitForExistence(timeout: 10), "No line for location access off")
+    XCTAssertTrue(
+      detail.waitForExistence(timeout: 10),
+      "No line for location access off; \(app.cancelsReport)")
     XCTAssertEqual(detail.label, "Location access is off. Search for a place instead.")
     XCTAssertEqual(app.buttons["open-settings"].label, "Open Settings")
     // The picker's own row says the same.
@@ -266,7 +277,7 @@ final class PickerTests: XCTestCase {
     XCTAssertEqual(opened.label, "Last link opened")
     app.buttons["picker-use-my-location"].tap()
     let open = app.buttons["open-settings"]
-    XCTAssertTrue(open.waitForExistence(timeout: 10), "No Open Settings")
+    XCTAssertTrue(open.waitForExistence(timeout: 10), "No Open Settings; \(app.cancelsReport)")
     open.tap()
     let settingsPage = NSPredicate(format: "value BEGINSWITH %@", "app-settings:")
     wait(for: [expectation(for: settingsPage, evaluatedWith: opened)], timeout: 10)
@@ -303,7 +314,9 @@ final class PickerTests: XCTestCase {
     _ = openPicker(in: app, focusing: false)
     XCTAssertTrue(app.buttons["recent-city:leeds-gb"].waitForExistence(timeout: 10))
     app.buttons["picker-use-my-location"].tap()
-    XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10), "No Open Settings")
+    XCTAssertTrue(
+      app.buttons["open-settings"].waitForExistence(timeout: 10),
+      "No Open Settings; \(app.cancelsReport)")
     attachScreen(of: app, named: "picker-audit")
     try auditAccessibility(
       of: app, on: "the picker, with a recent place and location access off",
@@ -355,7 +368,8 @@ final class PickerTests: XCTestCase {
     wait(for: star, label: "Remove Leeds from saved places")
     app.buttons["clear-search"].tap()
     XCTAssertTrue(
-      app.buttons["saved-city:leeds-gb"].waitForExistence(timeout: 10), "Leeds isn't under Saved")
+      app.buttons["saved-city:leeds-gb"].waitForExistence(timeout: 10),
+      "Leeds isn't under Saved; \(app.cancelsReport)")
     putTheKeyboardAway(app)
     attachScreen(of: app, named: "picker-dark")
     try auditAccessibility(
@@ -386,11 +400,14 @@ final class PickerTests: XCTestCase {
     wait(for: star, label: "Remove Kathmandu from saved places")
     app.buttons["clear-search"].tap()
     let saved = app.buttons["saved-search:27.7,85.3"]
-    XCTAssertTrue(saved.waitForExistence(timeout: 10), "Kathmandu isn't under Saved")
+    XCTAssertTrue(
+      saved.waitForExistence(timeout: 10), "Kathmandu isn't under Saved; \(app.cancelsReport)")
     XCTAssertEqual(saved.label, "Kathmandu, Bagmati Province, Nepal")
     XCTAssertTrue(app.buttons["recent-city:leeds-gb"].exists, "Leeds isn't under Recent")
     app.buttons["picker-use-my-location"].tap()
-    XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10), "No Open Settings")
+    XCTAssertTrue(
+      app.buttons["open-settings"].waitForExistence(timeout: 10),
+      "No Open Settings; \(app.cancelsReport)")
     putTheKeyboardAway(app)
     attachScreen(of: app, named: name)
     let at = size == .ax3 ? "AX3" : "Large"
@@ -432,22 +449,36 @@ final class PickerTests: XCTestCase {
   /// Opens the picker with the place button, and gives its search field, focused unless not
   /// `focusing`, with no clear button while it is empty. Notes the pickers the app's readout had
   /// counted (`pickersBefore`), and waits for it to read a new one open (`pickerOpens`), so a
-  /// closed picker's search box that XCUITest still finds is never taken for this one's. With no
-  /// picker, the failure says where the top bar was: on main's first macOS run the place button
-  /// was under the status bar, where the tap never reached it.
+  /// closed picker's search box that XCUITest still finds is never taken for this one's. A tap
+  /// whose touch the system cancelled (`cancelled(_:in:within:until:_:)`) and that opened no
+  /// picker is tapped once more; a tap the app completed never is. With no picker, the failure
+  /// says where the top bar was (on main's first macOS run the place button was under the status
+  /// bar, where the tap never reached it) and `debug-cancels`.
   @MainActor
   private func openPicker(in app: XCUIApplication, focusing: Bool = true) -> XCUIElement {
     pickersBefore = app.pickersShown ?? 0
-    app.buttons["place"].tap()
+    let before = pickersBefore
+    let place = app.buttons["place"]
+    let field = searchField(in: app)
+    // Whether the readout reads this tap's picker open; nil when it can't be read, as under the
+    // picker it may not be (`pickerOpens`).
+    let open = { app.pickerState.map { $0 == "open" && (app.pickersShown ?? 0) > before } }
+    // The search box ends the wait only while the readout can't be read: an earlier picker's may
+    // still be in XCUITest's tree. Only the readout, read and not open, has the tap played again.
+    let shown = { open() ?? field.exists }
+    if cancelled("tap on the place button", in: app, within: 2, until: shown, { place.tap() }),
+      open() == false
+    {
+      _ = cancelled("second tap on the place button", in: app) { place.tap() }
+    }
     let opened = pickerOpens(in: app, after: pickersBefore, within: 10)
     XCTAssertNotEqual(
       opened, false,
-      "No picker after tapping the place button; \(app.pickerReport); "
+      "No picker after tapping the place button; \(app.pickerReport); \(app.cancelsReport); "
         + app.homeGeometry)
-    let field = searchField(in: app)
     XCTAssertTrue(
       field.waitForExistence(timeout: 10),
-      "No picker after tapping the place button; \(app.homeGeometry)")
+      "No picker after tapping the place button; \(app.cancelsReport); \(app.homeGeometry)")
     XCTAssertEqual(field.placeholderValue, "Town or city")
     XCTAssertFalse(app.buttons["clear-search"].exists, "A clear button with nothing typed")
     XCTAssertTrue(app.buttons["picker-use-my-location"].exists, "No Use my location")

@@ -3,8 +3,9 @@ import XCTest
 /// The home screen (iOS build spec, sections 10.2, 16 and 17.2): each page of Now, Today
 /// (Tomorrow from 6pm) and This week, reached by the switcher and by swiping, for
 /// aberdeen-snow, durham-tomorrow and leeds-dry; the view it opens on either side of 6pm; the
-/// middle tab turning to Tomorrow at 6pm while the app is open; and a place under "Nearby:"
-/// loading in place. Every launch is on a fixture (`-fixture`, never the network), from a clean
+/// middle tab turning to Tomorrow at 6pm while the app is open; a place under "Nearby:" loading
+/// in place; and the Debug count of touches the system cancels seeing one, which the UI tests'
+/// re-taps rest on. Every launch is on a fixture (`-fixture`, never the network), from a clean
 /// store, with the model's clock at the screen's moment and fixed there (`-clock fixed`), except
 /// where it must run. What each page should say is `HomeScreens.json`'s, generated from page.json,
 /// so nothing here types a page's words: each check compares what VoiceOver hears, the heading
@@ -99,7 +100,9 @@ final class HomeTests: XCTestCase {
       app.find("page-\(aberdeen.defaultView)").swipeUp()
       swipes += 1
     }
-    guard button.isHittable else { throw HomeScreenError("No \(place) under Nearby") }
+    guard button.isHittable else {
+      throw HomeScreenError("No \(place) under Nearby; \(app.cancelsReport)")
+    }
     button.tap()
     let shown = try nearby.page(aberdeen.defaultView)
     try awaitHeading(shown.heading, in: app)
@@ -130,7 +133,9 @@ final class HomeTests: XCTestCase {
       app.find("page-week").swipeUp()
       swipes += 1
     }
-    guard button.isHittable else { throw HomeScreenError("No \(place) under Nearby") }
+    guard button.isHittable else {
+      throw HomeScreenError("No \(place) under Nearby; \(app.cancelsReport)")
+    }
     let element = button.frame
     XCTAssertLessThan(element.height, 44, "\(place)'s element at \(element) isn't its words")
     tapOutsideItsWords(button)
@@ -139,6 +144,58 @@ final class HomeTests: XCTestCase {
     expect(shown, in: app)
     expect(nearby.topBar, in: app)
     XCTAssertTrue(app.buttons[shown.label].isSelected, "The view moved from This week")
+  }
+
+  /// `debug-cancels` counts a touch the system takes from the app, and the cancels' helper
+  /// (`cancelled(_:in:within:until:_:)`) sees the count rise: the positive control for the
+  /// re-taps and the drags played again on a cancelled touch, whose branches otherwise run only
+  /// when the simulator cancels a gesture. Each gesture goes through the helper, as every watched
+  /// gesture does: a drag up from the home indicator, which the go-home gesture takes, cancelling
+  /// the touch that began in the app; should the helper not see the count rise, a drag down from
+  /// the top right corner, which Control Centre takes. Within each, the home button then puts
+  /// away whatever the drag brought, Control Centre or the home screen, and the app is brought
+  /// back to the foreground before the helper reads the count, so the test leaves nothing over
+  /// the next. The helper's `gesture-cancelled` names the gesture that raised the count. Neither
+  /// raising it fails: the re-tap rule rests on the count and the helper seeing the system's
+  /// cancels, and this is their only proof that they can.
+  @MainActor
+  func testASystemGestureCountsACancelledTouch() throws {
+    let app = try launch(try HomeScreen.named("aberdeen-snow"))
+    let gestures: [(name: String, from: CGVector, to: CGVector)] = [
+      (
+        "a drag up from the home indicator", CGVector(dx: 0.5, dy: 0.995),
+        CGVector(dx: 0.5, dy: 0.4)
+      ),
+      (
+        "a drag down from the top right corner", CGVector(dx: 0.9, dy: 0),
+        CGVector(dx: 0.9, dy: 0.5)
+      ),
+    ]
+    var counts: [String] = []
+    for gesture in gestures {
+      let before = try XCTUnwrap(
+        app.touchesCancelled, "No debug-cancels readout before \(gesture.name)")
+      var back = false
+      let rose = cancelled(gesture.name, in: app, within: 5) {
+        app.coordinate(withNormalizedOffset: gesture.from)
+          .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: gesture.to))
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        back = app.wait(for: .runningForeground, timeout: 10)
+      }
+      guard back else {
+        throw HomeScreenError(
+          "The app didn't come back to the foreground after \(gesture.name) (state "
+            + "\(app.state.rawValue))")
+      }
+      if rose { return }
+      counts.append("\(gesture.name): debug-cancels \(before) before, then \(app.cancelsReport)")
+    }
+    XCTFail(
+      "The cancels' helper saw debug-cancels count no touch the system took from the app ("
+        + counts.joined(separator: "; ")
+        + "): the re-tap rule (a tap the simulator cancelled tapped once more, a cancelled drag "
+        + "played again) can't be relied on, as the count may miss the simulator's cancels too")
   }
 
   /// Opens `name` on its fixture at its moment, and reads every page: the one it opens on, then

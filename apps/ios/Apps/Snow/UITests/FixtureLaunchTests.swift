@@ -77,10 +77,10 @@ final class FixtureLaunchTests: XCTestCase {
     show("This week", in: app, heading: "Aberdeen. Will it snow this week? Yes.")
     attachScreen(of: app, named: "app-aberdeen-snow-week")
     app.swipeRight()
-    waitForHeading("Aberdeen. Will it snow today? Yes.", in: app)
+    waitForHeading("Aberdeen. Will it snow today? Yes.", in: app, after: "a swipe right")
     XCTAssertTrue(app.buttons["Today"].isSelected, "The Today tab isn't selected after a swipe")
     app.swipeRight()
-    waitForHeading("Aberdeen. Is it snowing right now? No.", in: app)
+    waitForHeading("Aberdeen. Is it snowing right now? No.", in: app, after: "a swipe right")
     XCTAssertTrue(app.buttons["Now"].isSelected, "The Now tab isn't selected after a swipe")
   }
 
@@ -95,7 +95,7 @@ final class FixtureLaunchTests: XCTestCase {
       app.swipeUp()
       swipes += 1
     }
-    XCTAssertTrue(dundee.isHittable, "No Dundee under Nearby")
+    XCTAssertTrue(dundee.isHittable, "No Dundee under Nearby; \(app.cancelsReport)")
     dundee.tap()
     let moved = NSPredicate(format: "label == %@", "Dundee. Will it snow today? Yes.")
     let loaded = expectation(for: moved, evaluatedWith: heading(in: app))
@@ -124,21 +124,37 @@ final class FixtureLaunchTests: XCTestCase {
     app.descendants(matching: .any).matching(identifier: "heading").firstMatch
   }
 
-  /// Taps the switcher's tab labelled `tab`, and waits for its page's heading.
+  /// Taps the switcher's tab labelled `tab`, and waits for its page's heading. A tap whose touch
+  /// the system cancelled (`cancelled(_:in:within:until:_:)`, read for up to 2 seconds or until
+  /// the heading comes) and whose heading hasn't come is tapped once more, as `tap(_:in:)` does:
+  /// the app never had it as a tap. A tap the app completed is never tapped again.
   @MainActor
   private func show(_ tab: String, in app: XCUIApplication, heading label: String) {
     let button = app.buttons[tab]
     XCTAssertTrue(button.waitForExistence(timeout: 15), "No \(tab) tab")
-    button.tap()
-    waitForHeading(label, in: app)
+    let shown = heading(in: app)
+    let arrived = { shown.exists && shown.label == label }
+    if cancelled("tap on \(tab)", in: app, within: 2, until: arrived, { button.tap() }),
+      !arrived()
+    {
+      _ = cancelled("second tap on \(tab)", in: app) { button.tap() }
+    }
+    waitForHeading(label, in: app, after: "a tap on \(tab)")
     XCTAssertTrue(button.isSelected, "The \(tab) tab isn't selected")
   }
 
-  /// Waits for the page on screen's heading to read `label`.
+  /// Waits for the page on screen's heading to read `label` after `what`, a tap or a swipe. When
+  /// it doesn't within 15 seconds, fails, stopping the test, with what it reads and what
+  /// `debug-cancels` reads, so a gesture the simulator cancelled names itself.
   @MainActor
-  private func waitForHeading(_ label: String, in app: XCUIApplication) {
-    let shown = NSPredicate(format: "label == %@", label)
-    wait(for: [expectation(for: shown, evaluatedWith: heading(in: app))], timeout: 15)
+  private func waitForHeading(_ label: String, in app: XCUIApplication, after what: String) {
+    let shown = heading(in: app)
+    let reads = NSPredicate(format: "label == %@", label)
+    let waited = XCTNSPredicateExpectation(predicate: reads, object: shown)
+    guard XCTWaiter().wait(for: [waited], timeout: 15) != .completed else { return }
+    XCTFail(
+      "The heading never read \"\(label)\" after \(what); it reads \""
+        + (shown.exists ? shown.label : "no heading") + "\"; \(app.cancelsReport)")
   }
 
   @MainActor

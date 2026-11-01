@@ -45,10 +45,27 @@ final class PurchaseServiceTests: XCTestCase {
     purchase = StoreKitPurchase()
   }
 
-  /// Each listener stops first: XCTest keeps every test case, and what it holds, until the run
-  /// ends, so a listener left running would hear, and finish, the next tests' transactions.
+  /// Each listener stops, once any update it was handling is done: XCTest keeps every test case,
+  /// and what it holds, until the run ends, so a listener left running would hear, and finish,
+  /// the next tests' transactions. And `hear` keeps the answer before it finishes, so a test that
+  /// waited only for the answer (`eventually`) can end with `Transaction.finish()` still out. Its
+  /// `inAppTransactionDone` would then reach StoreKit Test after the clear below, as the next
+  /// test buys, and transaction IDs start again at 0 after a clear, so it names that test's
+  /// purchase (PR #40's run 41294270258: StoreKit Test then never sent that test's refund). The
+  /// wait comes before the listener stops, so the finish runs in a task nothing has cancelled,
+  /// and again after, for an update that came between the two.
   override func tearDown() async throws {
-    for made in [purchase, relaunched] { made?.storeKit.stopListening() }
+    for (made, name) in [(purchase, "the launch"), (relaunched, "the relaunch")] {
+      guard let made else { continue }
+      let handling = "an update \(name)'s listener was still handling"
+      await eventually(handling, { made.platform.hearing }, is: 0)
+      made.storeKit.stopListening()
+      await eventually(handling, { made.platform.hearing }, is: 0)
+      let calls = XCTAttachment(string: made.platform.timeline.joined(separator: "\n"))
+      calls.name = "StoreKit calls, \(name)"
+      calls.lifetime = .keepAlways
+      add(calls)
+    }
     purchase = nil
     relaunched = nil
     if let session {
@@ -198,6 +215,11 @@ final class PurchaseServiceTests: XCTestCase {
     try session.refundTransaction(identifier: bought.identifier)
 
     await eventually("owned", { purchase.model.owned }, is: false)
+    // If it never locks, which side stalled: no "heard → revoked" is StoreKit Test never giving
+    // the listener the refund (PR #40's run 41294270258); heard, and still owned, is the model.
+    let calls = purchase.platform.calls
+    XCTAssertTrue(
+      calls.contains("heard → revoked"), "StoreKit never gave the listener the refund: \(calls)")
     XCTAssertEqual(purchase.store.loadUnlock()?.unlocked, false)
     XCTAssertEqual(purchase.widgets.reloads, 2)
     XCTAssertEqual(purchase.changes, [true, false])
