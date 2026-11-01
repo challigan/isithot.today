@@ -17,6 +17,17 @@ const root = mkdtempSync(join(tmpdir(), 'check-archive-'));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 const APP_GROUP = 'group.today.willitsnow.app';
+// The server the app and the widget ask: Snow.xcconfig's API_ORIGIN.
+const ORIGIN = 'https://willitsnow.today';
+// The brand fonts each bundle carries and names in UIAppFonts, in BrandFont's order.
+const FONTS = [
+  'BricolageText-Regular.ttf',
+  'BricolageText-Medium.ttf',
+  'BricolageText-SemiBold.ttf',
+  'BricolageAnswer.ttf',
+];
+// SwiftPM's resource bundle for SnowKit, as Xcode copies it into each bundle that links it.
+const GLYPHS = 'IsItKit_SnowKit.bundle/Assets.car';
 const DEMO_APP = 'ca-app-pub-3940256099942544~1458002511';
 // Google's demo adaptive banner, which serves the page-end banner's inline size too.
 const DEMO_BANNER = 'ca-app-pub-3940256099942544/2435281174';
@@ -181,9 +192,9 @@ function collects(...types) {
 }
 
 // What each bundle's manifest says it collects: the app, the phone's rounded place (coarse
-// location); the widget, nothing yet.
+// location); the widget, the same place, which it asks for too.
 const APP_PRIVACY = collects('NSPrivacyCollectedDataTypeCoarseLocation');
-const WIDGET_PRIVACY = collects();
+const WIDGET_PRIVACY = collects('NSPrivacyCollectedDataTypeCoarseLocation');
 
 function appInfo(over = {}) {
   return plist({
@@ -193,6 +204,7 @@ function appInfo(over = {}) {
     CFBundleVersion: '101',
     GADApplicationIdentifier: DEMO_APP,
     ITSAppUsesNonExemptEncryption: false,
+    IsItAPIOrigin: ORIGIN,
     IsItBannerUnitID: DEMO_BANNER,
     IsItInterstitialUnitID: DEMO_INTERSTITIAL,
     IsItPageBannerUnitID: DEMO_BANNER,
@@ -204,7 +216,7 @@ function appInfo(over = {}) {
     CFBundleIcons: {
       CFBundlePrimaryIcon: { CFBundleIconFiles: ['AppIcon60x60'], CFBundleIconName: 'AppIcon' },
     },
-    UIAppFonts: ['BricolageAnswer.ttf'],
+    UIAppFonts: FONTS,
     UIApplicationSceneManifest: { UIApplicationSupportsMultipleScenes: false },
     ...over,
   });
@@ -216,14 +228,23 @@ function widgetInfo(over = {}) {
     CFBundleIdentifier: 'today.willitsnow.app.widgets',
     CFBundleShortVersionString: '1.0',
     CFBundleVersion: '101',
+    IsItAPIOrigin: ORIGIN,
     NSExtension: { NSExtensionPointIdentifier: 'com.apple.widgetkit-extension' },
-    UIAppFonts: ['BricolageAnswer.ttf'],
+    UIAppFonts: FONTS,
     ...over,
   });
 }
 
 let count = 0;
 const fresh = (name) => join(root, `${name}-${++count}`);
+
+/** What the bundle at `dir` (`''` for the app) draws with: every font, and SnowKit's glyphs. */
+function carried(dir) {
+  return Object.fromEntries([
+    ...FONTS.map((font) => [`${dir}${font}`, 'font']),
+    [`${dir}${GLYPHS}`, 'compiled asset catalogue'],
+  ]);
+}
 
 /**
  * A fake Release archive that passes every check, with `files` (paths under the app) added,
@@ -236,11 +257,11 @@ function archive({ files = {}, omit = [] } = {}) {
     'Info.plist': appInfo(),
     'PrivacyInfo.xcprivacy': APP_PRIVACY,
     'Assets.car': 'compiled asset catalogue',
-    'BricolageAnswer.ttf': 'font',
+    ...carried(''),
     WillItSnow: binary(['will it snow?', 'today.willitsnow.app']),
     'PlugIns/WillItSnowWidgets.appex/Info.plist': widgetInfo(),
     'PlugIns/WillItSnowWidgets.appex/PrivacyInfo.xcprivacy': WIDGET_PRIVACY,
-    'PlugIns/WillItSnowWidgets.appex/BricolageAnswer.ttf': 'font',
+    ...carried('PlugIns/WillItSnowWidgets.appex/'),
     'PlugIns/WillItSnowWidgets.appex/WillItSnowWidgets': binary([
       '/usr/lib/swift/libswiftWidgetKit.dylib',
     ]),
@@ -330,7 +351,7 @@ describe('an archive that passes', () => {
         '',
         '- WillItSnow 1.0 (101)',
         `- ads test: Google's demo units (${DEMO_APP})`,
-        "- checked: privacy manifests and what they collect, the icon, the answer font, 18 debug hooks in both binaries, the ad units and SKAdNetworkItems, the widget's links, versions, encryption, fixtures, StoreKit configurations and StoreKitTest",
+        "- checked: privacy manifests and what they collect, the icon, the four fonts, the widget's glyphs and origin, 18 debug hooks in both binaries, the ad units and SKAdNetworkItems, the widget's links, versions, encryption, fixtures, StoreKit configurations and StoreKitTest",
         '',
       ].join('\n'),
     );
@@ -468,12 +489,75 @@ describe('an archive that fails', () => {
     ]);
     expect(
       check(archive({ files: { 'Info.plist': appInfo({ UIAppFonts: undefined }) } })).errors,
-    ).toEqual(["WillItSnow.app's UIAppFonts doesn't name BricolageAnswer.ttf"]);
+    ).toEqual(FONTS.map((font) => `WillItSnow.app's UIAppFonts doesn't name ${font}`));
     expect(
       check(
         archive({ files: { [`${WIDGET}/Info.plist`]: widgetInfo({ UIAppFonts: ['Other.ttf'] }) } }),
       ).errors,
-    ).toEqual(["WillItSnowWidgets.appex's UIAppFonts doesn't name BricolageAnswer.ttf"]);
+    ).toEqual(FONTS.map((font) => `WillItSnowWidgets.appex's UIAppFonts doesn't name ${font}`));
+  });
+
+  it('fails when either bundle lacks a text face, or UIAppFonts leaves one out', () => {
+    expect(check(archive({ omit: [`${WIDGET}/BricolageText-Medium.ttf`] })).errors).toEqual([
+      'WillItSnowWidgets.appex has no BricolageText-Medium.ttf',
+    ]);
+    const unnamed = FONTS.filter((font) => font !== 'BricolageText-Medium.ttf');
+    expect(
+      check(archive({ files: { [`${WIDGET}/Info.plist`]: widgetInfo({ UIAppFonts: unnamed }) } }))
+        .errors,
+    ).toEqual(["WillItSnowWidgets.appex's UIAppFonts doesn't name BricolageText-Medium.ttf"]);
+    expect(check(archive({ omit: ['BricolageText-Regular.ttf'] })).errors).toEqual([
+      'WillItSnow.app has no BricolageText-Regular.ttf',
+    ]);
+    const noSemiBold = FONTS.filter((font) => font !== 'BricolageText-SemiBold.ttf');
+    expect(
+      check(archive({ files: { 'Info.plist': appInfo({ UIAppFonts: noSemiBold }) } })).errors,
+    ).toEqual(["WillItSnow.app's UIAppFonts doesn't name BricolageText-SemiBold.ttf"]);
+  });
+
+  it("fails when the widget lacks SnowKit's glyphs, or holds them only deeper down", () => {
+    const missing =
+      "the widget lacks SnowKit's glyphs: no *SnowKit*.bundle/Assets.car at its top level";
+    // The app's copy, outside the widget, is never taken for the widget's.
+    expect(check(archive({ omit: [`${WIDGET}/${GLYPHS}`] })).errors).toEqual([missing]);
+    // A bundle with no catalogue in it is no better.
+    const empty = archive({
+      omit: [`${WIDGET}/${GLYPHS}`],
+      files: { [`${WIDGET}/IsItKit_SnowKit.bundle/Info.plist`]: plist({}) },
+    });
+    expect(check(empty).errors).toEqual([missing]);
+    // Bundle.module looks at the widget's top level, so a copy deeper down draws nothing.
+    const deeper = archive({
+      omit: [`${WIDGET}/${GLYPHS}`],
+      files: { [`${WIDGET}/Frameworks/${GLYPHS}`]: 'compiled asset catalogue' },
+    });
+    expect(check(deeper).errors).toEqual([missing]);
+  });
+
+  it("fails unless the widget asks the app's server, over HTTPS", () => {
+    const widget = (origin) =>
+      archive({ files: { [`${WIDGET}/Info.plist`]: widgetInfo({ IsItAPIOrigin: origin }) } });
+    expect(check(widget(undefined)).errors).toEqual(['the widget has no IsItAPIOrigin']);
+    expect(check(widget('')).errors).toEqual(['the widget has no IsItAPIOrigin']);
+    expect(check(widget('http://willitsnow.today')).errors).toEqual([
+      "the widget's IsItAPIOrigin is http://willitsnow.today, not https://",
+    ]);
+    expect(check(widget('https://preview.willitsnow.today')).errors).toEqual([
+      `the widget's IsItAPIOrigin is https://preview.willitsnow.today, the app's ${ORIGIN}`,
+    ]);
+    const noAppOrigin = archive({ files: { 'Info.plist': appInfo({ IsItAPIOrigin: undefined }) } });
+    expect(check(noAppOrigin).errors).toEqual([
+      `the widget's IsItAPIOrigin is ${ORIGIN}, the app's missing`,
+    ]);
+  });
+
+  it("fails when the widget's manifest doesn't declare coarse location", () => {
+    const missing =
+      "WillItSnowWidgets.appex's PrivacyInfo.xcprivacy doesn't declare NSPrivacyCollectedDataTypeCoarseLocation";
+    for (const manifest of [collects(), collects('NSPrivacyCollectedDataTypePreciseLocation')]) {
+      const dir = archive({ files: { [`${WIDGET}/PrivacyInfo.xcprivacy`]: manifest } });
+      expect(check(dir).errors).toEqual([missing]);
+    }
   });
 
   it.each(['CLLocationManager', 'CoreLocationService'])(
@@ -773,7 +857,7 @@ describe('an archive that fails', () => {
       omit: [
         `${WIDGET}/Info.plist`,
         `${WIDGET}/PrivacyInfo.xcprivacy`,
-        `${WIDGET}/BricolageAnswer.ttf`,
+        ...Object.keys(carried(`${WIDGET}/`)),
         `${WIDGET}/WillItSnowWidgets`,
       ],
     });

@@ -1377,12 +1377,15 @@ read CI; this records where the build fills or differs from the spec.
   version. Without the App Group, Debug builds of the app fall back to their own defaults and
   caches (`DebugHooks.storeFallback`, so the conditional stays in `DebugHooks.swift`); the widget
   never does, since only the app saves answers. A fixture is saved under the key
-  `fixture:<name>`: the place keys are ported in phase 3.
+  `fixture:<name>`: the place keys are ported in phase 3. (Since phase 7.2 the widget saves the
+  answers it fetches too, under guards, and still never falls back: a container of its own would
+  hold no answer and no purchase. "The widgets in the iPhone app (phase 7.2)".)
 - **The skeleton's widget** is the small family only, one entry with no reload: the app reloads
   the timelines when it saves. With nothing saved it draws the shape of an answer with no words.
   It has no gallery name or description yet, because those are app copy (phase 2.2). It can't
   show an old answer as current, because until the app fetches, the only answer it can find is a
-  Debug fixture.
+  Debug fixture. (Phase 7.2 replaced it with five families, locked and stale: "The widgets in the
+  iPhone app (phase 7.2)".)
 - **Fixtures in the app.** Debug builds bundle the `Fixtures` folder IsItCore's tests read, as a
   folder reference; `EXCLUDED_SOURCE_FILE_NAMES = Fixtures` leaves it out of Release. The unit
   test bundle has its own copy.
@@ -2110,7 +2113,8 @@ Linux; IsItKit only fills its protocols. `apps/ios/README.md` lists the types.
   too: "The iPhone app's home screen, connected", below.)
 - **The skeleton's widget can't show an old hour.** It now finds real answers, so its provider
   shows the hour `HourPicker.pick` gives (an entry now and at each hour ahead), and nothing from
-  `usableUntil` on, until phase 7's planner replaces it.
+  `usableUntil` on, until phase 7's planner replaces it. (It did, in phase 7.2: `WidgetTimeline`
+  plans with `WidgetPlanner`, "The widgets in the iPhone app (phase 7.2)".)
 - **Not proven here:** `URLSessionTransport`, `SharedStore`'s defaults, `WidgetCenterReloader`,
   the app's wiring and the debug hooks are Apple only, built and run only by the macOS jobs.
   IsItServices and the widget's provider type-check on Linux against stubs of WidgetKit and
@@ -4063,7 +4067,9 @@ font for the Swift. No screen uses them yet: the home screen moves to them in st
 - **Registered by the app and the widget.** Both Info.plists list all four files in
   `UIAppFonts`, since an extension can't load the app's fonts; `project.yml` needed no change,
   as the Fonts folder was already a resource of both. `check-archive.sh` still checks only the
-  answer font in a Release bundle (on the Later list).
+  answer font in a Release bundle (on the Later list). (Done in phase 7.2, as the widget now draws
+  the text faces: each bundle must carry all four and name each in `UIAppFonts`, "The widgets in
+  the iPhone app (phase 7.2)".)
 - **Tested where it can be.** On Linux: `exportFont.test.ts` (each face current, stale and
   missing; its names, weight and regular bit; a glyph for every letter of "Météo-France Łódź
   Reykjavík Kraków Malmö 0.9cm 100% ° ’ … · –" in its cmap), `appFonts.test.ts` (both plists'
@@ -5824,6 +5830,9 @@ the widget trusts a verified entitlement it can see (`StoreKitFacts.entitlements
 see; locking is the app's job, through `unlock.v1`, which `PurchaseModel` rewrites after every
 check and change and follows with `reloadAllTimelines()` whenever what it says changes.
 `willitsnow://upgrade` already opens the sheet, so the locked widget needs only its `widgetURL`.
+Done in 7.2, which adds the 2 s wait, StoreKit asked on every timeline, the flag absent (locked,
+looked at again within the hour, and never a request) and the refund window: "The widgets in the
+iPhone app (phase 7.2)", decisions 1 to 3.
 
 **The Settings card.** The upgrade and Restore purchase are one card with no heading, as Report
 an ad's is, first after the units (phase 8.1's Notifications will come between). Each row has an
@@ -5933,7 +5942,8 @@ element that takes no tap.
 7. **No Paid Apps Agreement** means no price anywhere and nothing for App Review to buy (2.1(b));
    the review note says where it is, and the fallback is `FEATURE_UNLOCK`.
 8. **Widgets free until 7.2**: the skeleton widget shows answers whether or not anyone bought, so
-   TestFlight stays with the internal group.
+   TestFlight stays with the internal group. Resolved in 7.2: the widgets are locked until the
+   purchase, so TestFlight can go to external testers (Q6).
 9. **Xcode rewriting Snow.storekit**: a save with no change is byte for byte the same; a changed
    setting fails `mobile:check`, by design.
 10. **A family removal while you also bought it** locks until the entitlements show your own
@@ -6004,7 +6014,8 @@ element that takes no tap.
 
 **What only Carl's TestFlight purchase shows**: the real product and its price from the App
 Store, Apple's sheet, a purchase with his own Apple Account, the ads going, and the purchase back
-after a reinstall (docs/SETUP.md, "The app's purchase"); with 7.2, V3 and the widgets turning on.
+after a reinstall (docs/SETUP.md, "The app's purchase"); with 7.2, V3 (read from the widget's log
+line) and the widgets turning on (docs/SETUP.md, "The app's widgets (phase 7.2)").
 
 **Spec points superseded**, in one place: 3 (IsItKit `Tests/` for the SKTestSession tests: an
 app-hosted target instead); 9.3 (`PurchaseService` in IsItServices: `StoreKitPurchases` in
@@ -6020,6 +6031,443 @@ purchase mid-session removes the banner view": `AdsModel.stop()`); 17.2 (`Upgrad
 17.4.8 ("The banner goes": the band, the boxes and the full-screen ad); 20.3's review note ("no
 banner ad" is now "no ads in the app"; docs/SETUP.md has the note, and 9.2 writes it into the
 listing's files); Appendix A (the scheme's test plans gain StoreKit).
+
+## The widgets in the iPhone app (phase 7.2)
+
+Carl's brief for v1 stands: snow only, never naming another app, website or weather type; free
+with ads, and the £1.99 non-consumable `today.willitsnow.app.unlock` takes the ads away and turns
+the widgets on; British English and sentence case; every word in the Swift from generated copy.
+Phase 7's exit is "The contact sheet has every family × band × state", and, on Carl's iPhone,
+buying the unlock from TestFlight and adding the widgets. Carl cut 7.3 (the upgrade page's live
+widget previews and the composed App Store widget screenshot) and 7.4 (the App Shortcut) to 1.1
+(spec 23.3), so neither is built, but 7.2 leaves each a few lines away: every widget view is
+public and takes plain values (`ForecastWidgetView(face:look:art:)`, `WidgetLook`,
+`PaletteBackground`), so 7.3 adds IsItWidgetUI to the app and draws them in `UpgradeView`'s
+marked slot, and the snapshots `widget-<family>-durham-tomorrow-1805-full` are the composed
+screenshot's inputs; `WidgetTimeline.answer(at:)` is the fetch-or-saved half with no purchase
+check (the shortcut is free), `ForecastAnswerView(face:look:art:)` the medium's left half on its
+own, and `AppCopy.widgetStale` its stale dialog. `intentTitle` and `intentPhrase` stay in
+`appCopy.ts` as `APP_INTENT_KEYS`, never generated into Swift, so nothing of 7.4 is in any build.
+`apps/ios/README.md` ("Phase 7.2: the widgets") lists the types; this records why they are as
+they are, and where the build differs from the design it was built from.
+
+**The decisions** (the design's numbering, which the code's comments and tests follow):
+
+1. **When the widget is unlocked.** `unlock.v1` says unlocked, or StoreKit's entitlements, read in
+   the extension and waited for 2 s at most (`Constants.Purchase.widgetCheckMs`), hold a verified,
+   unrevoked transaction for the product (`PurchaseRules.owned`). StoreKit is asked on every
+   timeline, started first and run beside the answer; with the flag unlocked its answer changes
+   nothing and is only logged. A late, empty, unverified or revoked answer never locks on its own:
+   locking is the app's, through `unlock.v1`.
+2. **A locked plan's reload, and a plan with no flag.** `.never` when `unlock.v1` is there and
+   says locked, as the app reloads every timeline when it changes (spec 6.5). With no readable
+   `unlock.v1` (the app hasn't checked yet, or the phone hasn't been unlocked since it started,
+   when the App Group's defaults read as nothing), the locked plan looks again after
+   `WIDGET.retryMinutes` (60), so a payer's Lock Screen widget can't be stuck locked by a restart.
+   A locked plan never asks the server, and nor does a plan with no flag that StoreKit alone
+   unlocks: it plans from the answer saved for the place it can read, else the stale face.
+3. **A refund the app has locked before StoreKit catches up** (7.1's decision 9): accepted. The
+   widget's own check may still see the transaction, so it stays unlocked until its next reload,
+   at most `WIDGET.refreshHours` (4 h) after StoreKit drops it.
+4. **Which answer the widget plans from** (11.2 steps 3 to 5): TypeScript first, client
+   `widgetReuses` and `widgetFallsBack`, ported as `WidgetSource`. The saved answer with no
+   request when it is for the place (`Target.key`, byte for byte) in the units asked for (any,
+   while none is chosen), saved under `WIDGET.reuseMinutes` ago and not after now, and still with
+   an hour now (`pickHour`); otherwise a request as the app asks; if that fails, the saved answer
+   only for the same place and units, however old (the planner makes it stale past
+   `usableUntil`), else the stale entry.
+5. **The widget saves what it fetched** (11.2 step 4), so the app paints it at its next launch:
+   once per request, only while `place.v1` and `units.v1` still say what it asked for, and never
+   over an answer for the same place saved after the request began. It never reloads timelines.
+6. **No new reloads** (11.2's "free reloads"). The app already reloads after every answer it saves
+   and every change of `unlock.v1`; a place or units change is followed by a fetch whose save
+   reloads. AppModel is untouched by 7.2; the shared commit before it keeps a route's view over
+   the return's reset, so a widget tapped after 30 minutes away opens on the view it names ("The
+   iPhone app's data and launch").
+7. **The gallery and the placeholder** (11.3): the real design with sample data, durham-tomorrow at
+   6:05pm in Durham ("Durham", "Tomorrow", "Yes.", "Snow · 4cm", six of six), the TypeScript face
+   generated as JSON into `IsItModel/Generated/WidgetSample.swift` and decoded once
+   (`WidgetFace.sample`).
+8. **Agreement dots** (11.1's "six dots"): one dot for each model with data, filled for each that
+   expects snow, hollow for the rest; none without counts. The circular family is the system's
+   `Gauge` in `.accessoryCircularCapacity`, the glyph in the middle; no `AgreementRing`.
+9. **Type.** The Home Screen families in Bricolage, on a widget type scale of their own, each size
+   relative to a text style, Large to AX5, Bold Text stepping the face up as the app does
+   (`BrandFont.bolder`, moved to IsItLogic); the Lock Screen families in the system's text styles.
+10. **Colour and rendering modes.** Every family and state puts its band's background in
+    `containerBackground(for: .widget)`. The ink is the palette's only in full colour with the
+    background shown, and opaque white elsewhere, which WidgetKit tints or maps; the glyph and the
+    answer word are `widgetAccentable()`. Never `containerBackgroundRemovable(false)`, never
+    `widgetAccentedRenderingMode` (iOS 18). Hierarchy by face and size, never by opacity.
+11. **Taps.** One `widgetURL` a widget: `willitsnow://view/today` for an answer and the stale
+    state, `willitsnow://upgrade` when locked; the medium's right half is a `Link` to
+    `willitsnow://view/week`, only with an answer. No `Link` in the locked or stale layouts.
+12. **Words.** Nine new templates; every family's words built by a TypeScript reference
+    (`widgetFace.ts`) with golden vectors, ported as `WidgetFace.swift`. Each tap target is one
+    VoiceOver element reading one sentence, nothing read twice. The gallery's description stays
+    the spec's, noun first. No accessibility identifiers.
+13. **Modules.** No new topic edge: IsItWidgetUI gains IsItState and stays topic-free, given the
+    glyphs and palettes as a value (`WidgetArt`) by the extension, which links SnowKit. The
+    provider's work is plain async code in IsItState (`WidgetTimeline`), tested on Linux.
+14. **The request.** Inline in `getTimeline`, one per process and query (`FetchGate.shared`; every
+    test makes its own), with a hard 12 s limit twice over: the widget's own `URLSession`, one per
+    process, has `timeoutIntervalForResource` at `Constants.Client.requestTimeoutMs`, and
+    `WidgetTimeline` stops waiting at the same limit (`Deadline`). No background session. Every
+    path calls the completion.
+15. **V3's measurement.** One `os.Logger` line per timeline in every build, at `.notice`, with no
+    place, key, URL or transaction in it, worded by `WidgetTimeline.Plan.logLine` and read with
+    Console.app on a Mac with the iPhone attached.
+16. **Snapshots** (11.4): `ImageRenderer` at 3x in the Unit plan, every family × band in its modes,
+    locked and stale, ten fixture moments, AX3, the gallery and the placeholder; review artefacts,
+    not pixel gates. The gate is the contrast vitest.
+17. **UI tests.** No Home Screen test; one UI test opens each link a widget gives and checks the
+    page it lands on. The provider's bridge to WidgetKit and the extension's factory are
+    app-hosted unit tests.
+18. **CarPlay.** Not disfavoured: without CarPlay support the small widget is glance-only there,
+    as Apple describes.
+19. **The medium's week rows** (cut-list item 2): built apart (`WidgetFace.week`, `WeekRowView`),
+    with no words of their own, so a cut removes two blocks and their vectors, and nothing is left
+    hidden.
+20. **7.3 and 7.4:** cut by Carl, to 1.1 (above).
+
+**The widget trusts what it can see, and never locks** (decisions 1 to 3). 7.1 left the rule
+("For 7.2", above): a verified entitlement the widget can see unlocks, an empty or failed answer
+never locks, as it may only mean the extension can't see the purchase (Apple documents nothing
+about `Transaction.currentEntitlements` in a widget extension, V3). Three things are added here.
+The wait is 2 s at most because iOS 26.4 and 26.5 are reported to leave `currentEntitlements`
+silent until a restart (FB22349195, reports from June and August 2026), and a `for await` with no
+end would leave the timeline unfinished, which WidgetKit answers by asking again about 40 seconds
+later (a forum report); `Deadline` races two unstructured tasks for one continuation, claimed once
+under a lock, since a task group would wait for a child that ignores cancellation. StoreKit is
+asked on every timeline, the flag notwithstanding, because V3 can only be read on a phone that has
+bought: Carl bought in 7.1's build, and `PurchaseModel` rewrites the flag after every check, so a
+StoreKit asked only without the flag would log `unasked` on his phone for ever. With the flag
+unlocked, a payer's timeline waits for StoreKit only while StoreKit is slower than the answer. And
+the flag can be absent: before the phone's first unlock since it started, the App Group reads as
+nothing, `unlock.v1` as absent and `place.v1` as approximate IP location
+(`SharedStore.loadPlace`). So a locked plan with no flag looks again within the hour, and one that
+StoreKit unlocks plans from the answer saved for the place it can read and never asks: a request
+then would put the network's town under the payer's widget, against decision 4. The refund window
+(decision 3) is accepted rather than an hourly re-check, which would find the saved answer an
+hour old at each reload and ask the server 24 times a day, against the 6 the budget allows.
+
+**Which answer, TypeScript first** (decisions 4 and 5). `widgetReuses` and `widgetFallsBack` are the
+client's, with `widgetSource.json` (336 cases: five fixtures saved under their own key, asked for
+their own key, another and their own with a trailing space, in each units, at moments either side of
+the hour's boundary and of `usableUntil`), ported as `WidgetSource` and checked case by case.
+Another place's answer is never shown, even offline: under this place's name it would be wrong,
+where the stale face says plainly that there is no recent forecast. The guarded save keeps the app's
+answer when the app has moved on: a place or units changed while the request was out, or an answer
+for the place saved after it began, is left alone. The app may write between the check and the
+write; both answers are fresh and the file is replaced whole, so either is right. Because the app
+already reloads after every answer it saves (decision 6), 11.2's "place or units change" is met by
+the answer the app then saves; when that fetch fails, the widget keeps its timeline, named for its
+place, until its own reload, whose key check asks for the new place.
+
+**The gallery's sample** (decision 7). Apple's guidance for the gallery is to use sample data, and
+the user's own answer may be none, locked or stale while they browse it; the placeholder must come
+at once, with no I/O. The sample is durham-tomorrow at 6:05pm, faced by the TypeScript reference
+(`widgetSampleFace`), generated as JSON into `WidgetSample.swift` and decoded once by
+`WidgetFace.sample` (the stale face should it ever not decode, which a Linux test fails first). It
+is shown whatever the purchase, so the gallery shows what buying brings. Only the face is
+generated, not the fixture, so the sample brings no other topic's answers (the fixture's other
+blocks) into either binary. On the app's pages and in the widget alike, a day without snow says
+why in the server's words (leeds-dry's Today, "Rain"; Now's "Raining, not snowing."): that is the
+snow answer's own reason, so the snow-only checks (`WidgetFaceTests.snowOnly`,
+`widgetFace.test.ts`) take the answer's own words out first and hold what the widget words itself
+to snow only, as the app's tests leave the server's words to the server.
+
+**The dots and the gauge** (decision 8). The spec's six dots would be wrong on a day only five
+models cover (durham-tomorrow's Sunday): one dot per model with data says what the count is.
+Filled and hollow differ by shape as well as colour, which a tinted Home Screen and the Lock
+Screen take away. The circular family is the system's capacity gauge, as the spec names it, with
+the glyph at its centre (the style draws `currentValueLabel` there); a widget-only `AgreementRing`
+would draw what the system already draws. `AgreementDots` is IsItWidgetUI's.
+
+**Type, colour and rendering modes** (decisions 9 and 10). The widget's sizes are its own
+(`WidgetType`: place and slot 13, the answer 40, the detail 15, Now 13 and 15, the rows 13, the
+message 15, at Large), as the app's `TextRole` sizes are a page's. Nothing is caption2, and no
+line shrinks under 11 points at Large once its `minimumScaleFactor` has worked, the HIG's floor:
+none of 13 points below 0.85, none of 15 below 0.75, and the Lock Screen's 12-point caption not at
+all. The background is the app's page model on the widget's own rect, the gradient and the glow
+(`PaletteBackground`), with no glow under Increase Contrast. No pixel proof reaches the Home
+Screen, so the gate is packages/mobile's contrast model: the ink's worst ratio over the widget's
+whole rect, sampled every 2 points (`inkOnWidget`), at the HIG's sizes for 430- and 393-wide
+iPhones (Apple lists none for the iPhone 17's 402), every band at least 4.5:1 with the glow:
+nosnow 10.09, flakes 8.28, maybesnow 4.96 (small) and 5.35 (medium), snow 5.02 and 5.49 (5.51
+narrow), heavysnow 6.36 and 6.95, deepsnow 6.29 and 6.84 (6.32 narrow small). Without the glow the
+four dark bands would read 6.26, 7.32, 10.2 and 14.16, so the glow stays, as the website's and the
+app's do. Where WidgetKit removes the background, white ink is 21:1 on StandBy's black, and the
+system's own elsewhere. The palettes are fixed in both appearances, as the app's pages are.
+
+**Taps and links** (decision 11). One `widgetURL` per widget, as WidgetKit allows one per
+hierarchy; the medium's right half is a `Link`, the only other target, to This week, and only with
+an answer: a locked or stale face has one meaning, and one tap. The URLs come from client
+`routeLink`, the inverse of `parseDeepLink` (`DeepLink.link` in Swift, nil for a place, which only
+a notification carries), checked against `links.json` and parsed back to its route in both
+languages. `willitsnow://upgrade` already opens the upgrade sheet (7.1).
+
+**The words** (decision 12). Nine templates in `appCopy.ts`, filled only with core's and the
+server's words (`viewLabel`, the band label, the answer and verdict, core's agreement line, "Not
+available right now."): `widgetSlotAnswer` ("Tomorrow · Yes."), `widgetSlotLine` ("Tomorrow:
+Heavy snow"), `widgetBandAmount` ("Heavy snow · 5cm") and `widgetBandAmountSpoken` ("Heavy snow,
+5cm"), `widgetHeading`, `widgetSentence` and `widgetSentenceShort` (the sentences each target
+reads), `widgetGauge` (the circular family's) and `widgetNow` ("No. Too warm for snow."). A "·" is
+shown and never read: each pair shown with one has a spoken twin. No widget string names a price
+or a purchase (11.1, App Review 4.4), which copy.test.ts holds. Every family's words are built by
+`widgetFace.ts`, whose 36 golden faces `WidgetFace.swift` is checked against, as `page.ts` is for
+`HomePage`; the week's rows read through `spokenWeekDay`, shared with the app's week page, so the
+two read alike. The medium's visible "Now" is hidden from VoiceOver, as `.combine` merges every
+child that isn't hidden and its line already reads "Now: …". No accessibility identifiers: nothing
+can query a widget's elements (no UI test reaches the Home Screen, and the snapshots read pixels).
+
+**Modules** (decision 13). IsItWidgetUI gains IsItState, as it names `WidgetTimeline`; the widget
+and the unit tests link IsItLogic and IsItState too (`project.yml`). So IsItState's `PurchaseModel`
+and `AdsModel` come into the widget, unused: neither holds a StoreKit purchase or an ads SDK (those
+are IsItPurchases' and IsItAds', which the widget never links), and the grep check holds that none
+of the widget's own files names `PurchaseModel` or calls `saveUnlock`. IsItWidgetUI holds the
+provider, every family's layout, the locked and stale faces and the dots, topic-free as IsItUI is:
+the extension gives it SnowKit's glyphs and IsItModel's palettes as `WidgetArt`, so a later topic
+reuses every layout. The provider's work is `WidgetTimeline` in IsItState, plain async code over
+`WidgetStore` (`SharedStore` on iOS) and `EntitlementReader` (`StoreKitEntitlements`, IsItServices),
+so it is tested on Linux, and a widget intent (22.6) or the App Shortcut can build one too.
+`BrandFont.bolder` moved from IsItUI to IsItLogic (`BrandFace.swift`), so the app and the widget
+step up under Bold Text by one rule.
+
+**The request** (decision 14). Inline in `getTimeline`, with no background session: the answer is
+small, and the timeline must end. The app's 12 s are idle timers, and the system may stop an
+extension mid-request, so the widget's session limits the whole request
+(`timeoutIntervalForResource`), and `Deadline` stops waiting at the same limit whatever the
+transport does. The session is made once a process, beside `WidgetTimeline.live(in:)`: a session
+never invalidated is kept until the process ends (Apple, `URLSession`). One request per query at a
+time in the process (`FetchGate.shared`), so a small, a medium and a Lock Screen widget reloaded
+together ask once and save once; across processes the saved answer does the same, through
+`WidgetSource.reuses`. `gate:` has no default: Swift Testing runs tests in parallel, and every
+`WidgetTimelineTests` case asks the same URL, so each test makes its own gate.
+`FetchGate.callers(for:)` is the one member only tests call: two tasks started together reach the
+actor in no set order, and a test that holds a request lets it go only once the count shows every
+caller has joined, or the single-flight tests would pass or fail by scheduling.
+
+**V3's log line** (decision 15). `family=… width=… height=…` `unlock=flag|storeKit|no`
+`storekit=unasked|late|answered:N` `source=locked|reused|fetched|saved|none` `entries=N`
+`font=ok|missing`, at `.notice`, `privacy: .public`, subsystem the extension's bundle ID
+(`today.willitsnow.app.widgets`), category `timeline`. TestFlight builds are Release, so a
+Debug-only log (the spec's "A Debug log in the provider during the snapshot tests") would answer
+nothing, and in the simulator the Xcode StoreKit environment is the app's bundle's, so only a phone
+can. Every token is `key=value` with no bare word, so the prose guard reads none, and none is one of
+`check-archive.sh`'s hooks. `width` and `height` are the family's real size on the phone, which the
+snapshots' sizes are checked against; `font` says whether the extension found the answer font. The
+behaviour is safe whatever V3's answer is.
+
+**The snapshots** (decision 16). `ForecastWidgetView` drawn by `ImageRenderer` at 3x, faced by the
+real `WidgetPlanner` and `WidgetFace`: each of the six bands (durham-tomorrow with its tomorrow
+re-banded in the test: the answer, band label, amount 0 to 25 and counts) in every family, the Home
+Screen families in full colour, accented and StandBy, the Lock Screen ones vibrant (iPhone draws
+them in nothing else), 54 tiles; locked and stale in every family and mode, 18; ten real fixture
+moments and durham-tomorrow at 6:05pm on the Lock Screen, 23; AX3, 4; the gallery and the
+placeholder, 3; and the medium with its `Link`, to see whether `ImageRenderer` draws it. 103 tiles,
+at the HIG's 430-wide row (small 170, medium 364 by 170, circular 76, rectangular 172 by 76, inline
+257 by 26), which `widgetSizes.test.ts` holds to the contrast gate's. The test draws the palette
+itself, as `containerBackground` draws nothing outside a widget, and the accented, StandBy and
+vibrant tiles are approximations over mid grey (0x8e8e93), black and 0x1c1c1e, since only WidgetKit
+draws the real glass, tint and Lock Screen. Each asserts it drew something over its backdrop, its
+size and its scale; none compares pixels. **No Home Screen UI test** (decision 17): XCUITest has no
+documented way to add a widget, and neither the element tree nor the contrast proof reaches
+SpringBoard. `WidgetLinkTests` opens each view a link can name (`view/week` and `view/today`, which
+widgets give, and `view/now`) and checks the page it lands on as `tap(_:in:)` does: the heading, the
+tab, and the page's frame (`pageOffScreen`), as the heading is in the tree wherever the pages are;
+the locked widget's `willitsnow://upgrade` is UpgradeTests'. `TimelineProviderContext` has no public
+initialiser, so no test can call `getTimeline`: `ForecastProvider.timeline(_:)` maps a plan to what
+WidgetKit is given (`TimelineReloadPolicy` is `Equatable`), which WidgetProviderTests checks, and
+the harness's grep check holds that every `getTimeline` and `getSnapshot` path calls its completion.
+
+**CarPlay** (decision 18) is not disfavoured: the small widget shows there, glance-only.
+**The week rows for the cut** (decision 19): if cut-list item 2 is taken on Fri 6 Nov, removing
+them is two blocks, their vectors regenerated, no strings.
+
+**Checked on Linux.**
+
+- **packages/mobile and the client** (`pnpm vitest run`: 1791 tests in 82 files; and
+  `pnpm mobile:check`, `typecheck`, `lint` and `format:check`): the tests were written first and
+  failed first (the generator's, the privacy grep's, the widget sizes', the archive checks' 7 new
+  ones), and breaking each rule (the reuse boundary, a save after now, the upgrade link, the gauge's
+  fallback, a row with one count) fails a test. The client's source and `brandColours.ts` have full
+  coverage.
+- **IsItCore** in Docker (`isithot-swift:6.3.3`): every new test was written first and run against
+  stubs that compile, and 59 failed; the five that passed are right for a stub that does nothing.
+  The whole suite, 543 tests in 88 suites, passes from an empty build with no warning, and the
+  single-flight and timeline suites passed 20 runs in 20. Eleven mutants (StoreKit's empty answer
+  locking a flag that says unlocked; StoreKit not asked, or awaited without its limit, with the
+  flag; a request with no flag; a late answer locking with `.never` and no flag; `<=` for
+  `reuseMinutes`; the save without the place check, or outside the gate; a gate that never shares;
+  the fallback for any key; a `Deadline` that waits for the work) each fail the test named for it.
+- **Against stubs** (session scratchpad: widgets-typecheck): IsItServices with
+  `WidgetServices.swift`, IsItWidgetUI, IsItUI's `BrandType.swift`, SnowKit, the extension and the
+  app-hosted widget tests, type-checked in Debug and Release against the real IsItCore and stub
+  `WidgetKit`, `os`, `CoreText` and XCTest attachment modules with Apple's shapes (the context with
+  no public initialiser, the get-only `widgetFamily`, `@escaping @Sendable` completions). The
+  grep checks pass, and 14 planted mistakes fail it, among them a `Link` in the locked face, a test
+  setting `\.widgetFamily`, `WidgetArt` without `@Sendable`, a completion called twice or never,
+  and the saved answer written with complete file protection. `WidgetLinkTests` compiles against
+  the XCUITest stubs (widgets-uicheck), whose 46 checks pass. `swift format lint --strict` passes
+  over every Swift file.
+- **The project:** XcodeGen 2.46.0, built here, generates `WillItSnow.xcodeproj`; against the
+  project before 7.2 the only difference is IsItLogic and IsItState added to the widget and the
+  unit tests, every target's ID unchanged, and `ci/xcodegen.sh`'s test plan check passes on it.
+  Both widget plists parse, and the widget's Coarse Location entry is the app's.
+- **The archive checks:** `check-archive.test.mjs` and `appFonts.test.ts`, 79 tests, of which the
+  old script fails exactly the 7 new ones.
+
+**Where the build differs from its design.**
+
+- **The glyph check is the widget's only.** The design said each bundle; RECONCILE's final words
+  for both tracks name only the widget, which is the risk (the app's glyphs are its own tests'),
+  and a shell glob at the bundle's top level replaces `find -maxdepth 2`.
+- **Inches in the face vectors** come from denver-f's week rows ("Friday, 0.2in, snow possible,
+  …"): its middle day has no snow at any usable moment. A decimal amount in the detail line is
+  shrewsbury-maybe's ("Snow possible · 0.5cm").
+- **`privacyApis.test.ts` is stricter** than the design's walk: it reads the generated folders too,
+  as they ship, and matches the five names case-insensitively inside longer ones
+  (`contentModificationDateKey`), as Apple's list does.
+- **`WidgetSample.swift` is 2.5 KB, not 1.5:** four week rows in two-space JSON. Every line is
+  under 100 columns, and a test holds it under 3,000 bytes.
+- **The test fakes that hold give up after 10 seconds**, not never: Swift Testing's time limit
+  can't end a test body that ignores cancellation, so the first mutant run (a `Deadline` that
+  waits) hung the whole suite. Ten seconds is 200 times every limit tested, and such a mutant now
+  fails on its timing.
+- **`FetchGate` forgets a finished request** when its first caller comes back, with every caller's
+  count, and `Deadline` turns a negative, NaN or overflowing limit into 0 or the largest wait,
+  rather than trapping.
+- **`HomePage.agreementLine(snowy:total:)`** is a new internal port of core's agreement line, so the
+  face's gauge and sentence and the week rows share one rule; `page.json` still passes byte for
+  byte.
+- **The extension, without its App Group, logs nothing:** its one stale entry, looked at again
+  after the retry, has no plan for `logLine` to word.
+- **A family WidgetKit has but the widget doesn't offer** draws as small through `default:`, not
+  `@unknown default:`, which would warn on the known cases left out (`systemLarge`).
+- **The medium's link unwraps its URL** rather than force-unwrapping it, and its rows take the
+  face's ink, so the `Link`'s tint never recolours them. A week row's day is a column at least 30
+  scaled points wide, not exactly, so "Wed" can't truncate under Bold Text.
+- **Each family reads its own sentence:** the small and medium `spoken`, the rectangular
+  `spokenShort`, the circular `spokenGauge`; locked or stale, all three are the message.
+- **`SharedStore.saveToday`'s doc says "complete file protection" in words**, so the harness's
+  grep for the API's name never matches a comment.
+- **The Unit plan's tests**, smaller: `@MainActor` on each method and helper, as the target's
+  other snapshot tests have it; the re-banded fixture read from the test bundle's JSON; "drew
+  something" judged against a clear tile over the same backdrop; corners of 22 points for the Home
+  Screen, 8 for the rectangular and inline, a circle for the circular. `AppGroupTests` sets
+  `units.v1` to the answer's in every test, so reuse doesn't depend on what the simulator kept;
+  its locked test saves a usable answer first, so the plan is locked despite one it would reuse;
+  and its other-version test first reads the answer through `saved(at:)` before it changes the
+  version, so the version alone ignores it. `NoEntitlements` is a private three-line struct in
+  each file that needs one.
+- **The archive check's header** says "names no https API origin", as it refuses `http://` too.
+- **The harness's planted "entry that isn't Sendable"** was dropped: no entry crosses an isolation
+  boundary (the provider's task builds its timeline and calls the completion in place), so the
+  compiler can't hold the code to it; `ForecastEntry` stays `Sendable` as WidgetKit asks.
+
+**Known risks.**
+
+1. **`ImageRenderer` and controls.** `Gauge` and `Link` may draw as placeholders (Apple: views
+   "composited by Core Animation layers"). The snapshots use `interactive: false`, one tile shows
+   the `Link`, and a placeholder gauge tile is a review artefact only; the widget itself is the
+   device's to check.
+2. **V3.** StoreKit may never answer in the extension, or answer late: at most 2 s spent, and the
+   flag decides. A payer's timeline asks too, beside the answer, so it may wait up to 2 s more when
+   StoreKit is slow, and a StoreKit that never answers leaves one waiting task behind per timeline
+   until the process ends: a few a day, each a suspended loop. A refund may show in the widget up
+   to 4 h after the app has locked (decision 3).
+3. **The extension's request** may be cut short by the system: the resource timeout, the deadline
+   and the fallback always finish the timeline, and every path calls its completion.
+4. **Entries closer than 5 minutes** (now and the next hour, the last hour and `usableUntil`):
+   WidgetKit may show one a few minutes late, so the stale entry can come a little after
+   `usableUntil`; the planner and its vectors are left alone.
+5. **The 6pm entry with a phone clock behind the server** is missing, as `widget.json` pins: Today
+   until the next hour ahead.
+6. **A crowd at `usableUntil`:** every phone on the same cached answer reloads at the same moment;
+   the CDN answers them (spec 5.6). No jitter added.
+7. **Before the first unlock after a restart** the App Group can't be read: the locked plan looks
+   again within the hour, and a payer's widget that StoreKit unlocks plans from what it can read,
+   with no request. Whether WidgetKit asks for a timeline then at all is undocumented ("displays a
+   placeholder until a person authenticates", Apple); either way the widget shows no other town.
+8. **SnowKit's glyphs in the extension** rest on Xcode copying the package's resource bundle into
+   the appex: `WidgetBundleTests` and the archive check prove it on the first run; if not,
+   `project.yml` copies it (one build phase).
+9. **Memory** (30 MB, forum reports): one answer, the 2.5 KB sample, vector glyphs, about thirty
+   entries at most.
+10. **Fonts in the extension** are proven by the archive check, `WidgetBundleTests` and the log
+    line's `font=`, not by a render in the extension's own process.
+11. **Merging with 8.1 and 8.2:** in the files both touch, each track's lines stay at least one
+    unchanged line from the other's, and whichever merges second regenerates the generated files and
+    keeps both sides' rows in the shared tables. 8.1's `HTTPTransport.send` breaks nothing of 7.2's,
+    which writes no conformer, and 8.1 keeps `URLSessionTransport.configuration()`, `session()` and
+    `init(session:)`, which `widgetSession()` and `AppGroupTests` call. The second to merge gets one
+    full macOS run with both: about 56 minutes of the ios job's 90.
+12. **Swift without a compiler:** the views and the extension compile only on macOS; the harness
+    type-checks them against stubs with Apple's shapes.
+13. **Snapshot sizes** are the HIG's 430-wide row, not the iPhone 17's own; the log line's `width`
+    and `height` tell the real ones on the device, and the contrast gate judges both rows.
+14. **The link UI test** needs `XCUIApplication.open(_:)` to reach `.onOpenURL`, which 7.1's run
+    proves first; if it doesn't, the test goes with 7.1's, and AppModelTests' route tests stand.
+15. **Netlify's quota:** the widgets add requests for each widget on each phone: once every 4 hours
+    while the server answers (six a day), and once an hour while it fails or has nothing usable;
+    `WIDGET.refreshHours` 4 → 6 in packages/core cuts the first by a third (spec 5.9).
+
+**For the next macOS run to show** (what nothing on Linux can):
+
+1. That everything compiles against the real SDKs with no new warning: IsItWidgetUI, the
+   extension, `WidgetServices.swift`, IsItUI's `BrandType.swift` without `bolder`, and
+   `WillItSnowTests` with IsItLogic and IsItState linked.
+2. The snapshots draw: every tile, the gauge's (whether `ImageRenderer` draws a `Gauge`) and
+   `widget-medium-snow-ok-full-link` (whether it draws a `Link`'s label or a placeholder) in
+   particular, and the 103 tiles on the contact sheet, grouped by family.
+3. The embedded appex (`WidgetBundleTests`): its `IsItAPIOrigin` expanded to the app's https
+   origin, its App Group, the four fonts listed, carried and named as `BrandFont` names them,
+   SnowKit's bundle with `Assets.car` and the snow glyph in it, its PrivacyInfo.xcprivacy's Coarse
+   Location, and `WidgetTimeline.live(in:)` opening the group from the appex's own plist; and,
+   over a plist of the test's own, the factory asking the origin it names, waiting at
+   `FetchGate.shared`, and giving no timeline without `IsItAppGroup` (which ran on Linux too, over
+   a temporary folder for the group).
+4. V1 through the new code (`AppGroupTests`): the real timeline over the real group, reused, each
+   hour ahead then stale, locked by the flag and without it.
+5. `WidgetProviderTests`: the reload policies WidgetKit is given, and the look for every family and
+   rendering mode.
+6. `WidgetLinkTests`: that `XCUIApplication.open(_:)` reaches `.onOpenURL`, and that each link
+   selects its tab and brings its page on screen, within the UI plan's time (about 40 seconds
+   more).
+7. The archive checks' new lines on a real archive (`archive-check`): the four fonts in both
+   bundles and in each `UIAppFonts`, SnowKit's glyphs at the widget's top level, the widget's
+   origin, its Coarse Location; and still no `StoreKitPurchases`, ads or location code and none of
+   the 18 hooks in the widget (`release-check.sh` too).
+
+**What only Carl's iPhone shows** (docs/SETUP.md, "The app's widgets (phase 7.2)"): WidgetKit's
+own drawing (the tint, the glass, the removed backgrounds, the redaction), the extension's process
+(its fonts, its StoreKit, V3, its network and memory), the Lock Screen, StandBy at night, the
+gallery, a restart left locked, and the widgets turning on with the purchase from TestFlight.
+
+**Spec points superseded**, in one place: 6.5 ("Locked. One `locked` entry, and reload 'never'":
+also looked at again after `WIDGET.retryMinutes` when `unlock.v1` is absent, in IsItState; the
+planner unchanged); 9.1 and Appendix A (the widget links IsItLogic and IsItState as well as
+IsItModel, IsItServices, IsItWidgetUI and SnowKit); 9.3 (IsItWidgetUI holds every layout and the
+dots, topic-free, with the art given; SnowKit gains no widget layouts; `AgreementDots` is
+IsItWidgetUI's and there is no `AgreementRing`; the provider's logic is IsItState's
+`WidgetTimeline`); 9.7 ("a T2 test renders the answer word in the widget": `WidgetBundleTests`, the
+archive check and the device instead; `UIAppFonts` lists all four faces, already settled); 9.8 (the
+widget has no debug hook, and its log line is none); 11.1 ("six agreement dots": `total` dots; the
+Lock Screen families in the system font; the sentences as `widgetFace.ts` words them); 11.2 (step 1
+as decisions 1 to 3; step 2 also after the retry with no flag; step 5 only for the same place and
+units; "free reloads" as decision 6; the 12 s timeout a hard limit on the whole request); 11.3
+("Open willitsnow to turn on widgets.": the merged "Open the app to turn on widgets.", already
+settled); 11.4 (the matrix as decision 16; locked and stale in every family and mode rather than
+every band, as both are nosnow; the composed screenshot is 7.3's, cut); 15.1 (the widget's Coarse
+Location, as written; its file-timestamp grep test, `privacyApis.test.ts`, now exists); 16 ("Glyphs
+and gradients use `accessibilityIgnoresInvertColors()`": not in the widget either, as in the app,
+until Carl decides; "the dots and the ring have their own labels": in the widget the dots are inside
+each tap target's one sentence, which reads the agreement, and there is no ring); 17.4 step 8 (the
+optional refund on a Debug build is in Carl's widget checks, docs/SETUP.md); 20.5 (the review note's
+widget lines in the merged words, docs/SETUP.md, "The app's widgets"); V3 ("A Debug log in the
+provider during the snapshot tests": a log line in every build, read on the device, StoreKit asked
+on every timeline); 23.3 (7.3 and 7.4 cut, to 1.1).
 
 ## API contract
 

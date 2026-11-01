@@ -37,7 +37,7 @@ import {
   rgb,
   swiftHex,
 } from '../src/exportPalettes';
-import { PURCHASE, PURCHASE_DISPLAY_PRICE } from '../src/purchase';
+import { PURCHASE, PURCHASE_DISPLAY_PRICE, PURCHASE_WIDGET_CHECK_MS } from '../src/purchase';
 import { generatedHeader, swiftInt } from '../src/swift';
 
 /** The members of `public enum <name> {`, trimmed, to its closing brace at the same indent. */
@@ -130,7 +130,10 @@ describe('constantsSwift', () => {
     expect(members(swift, 'Purchase')).toEqual([
       'public static let productID = "today.willitsnow.app.unlock"',
       'public static let displayPrice = "£1.99"',
+      'public static let widgetCheckMs = 2000',
     ]);
+    // How long the widget waits for StoreKit's entitlements (spec 11.2 step 1, V3).
+    expect(PURCHASE_WIDGET_CHECK_MS).toBe(2000);
     // The app's own ID with `.unlock` after it (spec 22.4's pattern).
     const xcconfig = readFileSync(
       new URL('../../../apps/ios/Configs/Snow.xcconfig', import.meta.url),

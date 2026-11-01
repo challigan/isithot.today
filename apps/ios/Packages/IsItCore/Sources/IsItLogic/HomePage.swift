@@ -177,26 +177,13 @@ public struct HomePage: Sendable, Equatable {
 
     /// The row for `day` of `week`, in the answer's unit, its dot at `left` (`Week`'s, from the
     /// week's snowiest day). VoiceOver hears the day's name in full ("Today" for the week's
-    /// first day, which the server labels so, else the weekday of its date), the amount, the
-    /// band label starting in lower case, as it is mid-sentence, and the agreement (core
-    /// `snowAgreementLine`, which `AppCopy.dayAgreement` words as core does).
+    /// first day, which the server labels so, else the weekday of its date), then the rest as
+    /// `HomePage.spokenWeekDay` reads it.
     public init(day: ApiSnowWeekDay, of week: ApiSnowWeek, unit: SnowUnit, left: Double) {
       let amount = StripGeometry.amountText(day.amount, unit)
       let name =
         day.date == week.from
         ? day.label : CivilDate.weekday(day.date).map { CoreCopy.weekdays[$0] } ?? day.label
-      let band = day.bandLabel.prefix(1).lowercased() + day.bandLabel.dropFirst()
-      let spoken: String
-      if let snowy = day.snowy, let total = day.total {
-        let values = (snowy: String(snowy), total: String(total))
-        let agreement =
-          snowy == 1
-          ? AppCopy.dayAgreementOne(snowy: values.snowy, total: values.total)
-          : AppCopy.dayAgreement(snowy: values.snowy, total: values.total)
-        spoken = AppCopy.weekRowLabel(day: name, amount: amount, band: band, agreement: agreement)
-      } else {
-        spoken = AppCopy.weekRowLabelShort(day: name, amount: amount, band: band)
-      }
       self.init(
         label: day.label,
         amount: amount,
@@ -204,9 +191,35 @@ public struct HomePage: Sendable, Equatable {
         left: left,
         snowy: day.snowy,
         total: day.total,
-        spoken: spoken
+        spoken: HomePage.spokenWeekDay(
+          name: name, amount: amount, bandLabel: day.bandLabel, snowy: day.snowy, total: day.total)
       )
     }
+  }
+
+  /// A day of the week as VoiceOver reads it, on the week's page and on the medium widget
+  /// (packages/mobile `spokenWeekDay`): the day's name, the amount ("2cm"), the band label
+  /// starting in lower case, as it is mid-sentence, and the agreement (`agreementLine`) when both
+  /// counts are there; without them, as in an answer saved before the week's days had them,
+  /// `AppCopy.weekRowLabelShort`.
+  static func spokenWeekDay(
+    name: String, amount: String, bandLabel: String, snowy: Int?, total: Int?
+  ) -> String {
+    let band = bandLabel.prefix(1).lowercased() + bandLabel.dropFirst()
+    guard let snowy, let total else {
+      return AppCopy.weekRowLabelShort(day: name, amount: amount, band: band)
+    }
+    return AppCopy.weekRowLabel(
+      day: name, amount: amount, band: band, agreement: agreementLine(snowy: snowy, total: total))
+  }
+
+  /// "5 of 6 forecasts expect snow", or "1 of 6 forecasts expects snow" (core
+  /// `snowAgreementLine`, which `AppCopy.dayAgreement` and `dayAgreementOne` word as core does).
+  static func agreementLine(snowy: Int, total: Int) -> String {
+    let values = (snowy: String(snowy), total: String(total))
+    return snowy == 1
+      ? AppCopy.dayAgreementOne(snowy: values.snowy, total: values.total)
+      : AppCopy.dayAgreement(snowy: values.snowy, total: values.total)
   }
 
   /// What the week page shows below its verdict and detail: "The week ahead", then a row for

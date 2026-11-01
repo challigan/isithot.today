@@ -19,6 +19,10 @@ import {
   SURFACES_PATH,
   SURFACE_SAMPLES,
   UNUSED_SHARES,
+  WIDGET_SIZES,
+  WIDGET_SIZES_NARROW,
+  WIDGET_STEP,
+  backgroundAt,
   bandPairs,
   brandColoursSwift,
   card,
@@ -26,6 +30,7 @@ import {
   contentPairs,
   contrast,
   hex,
+  inkOnWidget,
   luminance,
   mix,
   over,
@@ -212,6 +217,104 @@ describe('the background models', () => {
     expect(luminance(card(SNOW_PALETTES.nosnow))).toBeGreaterThan(
       luminance(colour(SNOW_PALETTES.nosnow.pill)),
     );
+  });
+});
+
+/**
+ * Ink's worst ratio on each band's widget, worked out for the design (DESIGN.md section 2.6,
+ * scripts/widget_contrast.py) at each size: small and medium at 430 points wide, then at 393.
+ */
+const WIDGET_FIGURES: Record<SnowBand, [number, number, number, number]> = {
+  nosnow: [10.09, 10.09, 10.09, 10.09],
+  flakes: [8.28, 8.28, 8.28, 8.28],
+  maybesnow: [4.96, 5.35, 4.96, 5.35],
+  snow: [5.02, 5.49, 5.02, 5.51],
+  heavysnow: [6.36, 6.95, 6.36, 6.95],
+  deepsnow: [6.29, 6.84, 6.32, 6.84],
+};
+
+/** The same without the glow, under Increase Contrast, on the four dark bands. */
+const WIDGET_FIGURES_INCREASED: Partial<Record<SnowBand, number>> = {
+  maybesnow: 6.26,
+  snow: 7.32,
+  heavysnow: 10.2,
+  deepsnow: 14.16,
+};
+
+describe('the widget’s background', () => {
+  const sizes = [
+    WIDGET_SIZES.small,
+    WIDGET_SIZES.medium,
+    WIDGET_SIZES_NARROW.small,
+    WIDGET_SIZES_NARROW.medium,
+  ];
+
+  it('is judged at the HIG’s sizes for 430 and 393 points wide', () => {
+    expect(WIDGET_SIZES).toEqual({
+      small: { width: 170, height: 170 },
+      medium: { width: 364, height: 170 },
+    });
+    expect(WIDGET_SIZES_NARROW).toEqual({
+      small: { width: 158, height: 158 },
+      medium: { width: 338, height: 158 },
+    });
+  });
+
+  it.each(bands)('%s: ink passes on every widget size, glow and all', (band, p) => {
+    for (const size of sizes) {
+      expect(inkOnWidget(p, size), `${size.width} by ${size.height}`).toBeGreaterThanOrEqual(
+        BODY_TEXT_CONTRAST,
+      );
+    }
+    expect(sizes.map((size) => inkOnWidget(p, size))).toEqual(WIDGET_FIGURES[band]);
+  });
+
+  it.each(bands)('%s: and without the glow, under Increase Contrast', (band, p) => {
+    for (const size of sizes) {
+      expect(inkOnWidget(p, size, false)).toBeGreaterThanOrEqual(inkOnWidget(p, size));
+    }
+    const increased = WIDGET_FIGURES_INCREASED[band];
+    if (increased !== undefined) expect(inkOnWidget(p, WIDGET_SIZES.small, false)).toBe(increased);
+  });
+
+  it('draws the page’s model over any rectangle, the screen’s as the page does', () => {
+    const p = SNOW_PALETTES.snow;
+    const glow = [0.88 * SCREEN.width, 0.06 * SCREEN.height] as const;
+    for (const [x, y] of [
+      [0, 0],
+      [SCREEN.width, 0],
+      [0, SCREEN.height],
+      [SCREEN.width, SCREEN.height],
+      glow,
+    ]) {
+      expect(backgroundAt(p, x!, y!, SCREEN)).toEqual(pageAt(p, x!, y!));
+      expect(backgroundAt(p, x!, y!)).toEqual(pageAt(p, x!, y!));
+      expect(backgroundAt(p, x!, y!, SCREEN, false)).toEqual(pageAt(p, x!, y!, false));
+    }
+    // Over a widget: g1 at its top left, g2 at its bottom right, the glow at (88%, 6%) of it.
+    const { width, height } = WIDGET_SIZES.medium;
+    expect(hex(backgroundAt(p, 0, 0, WIDGET_SIZES.medium, false))).toBe(p.g1);
+    expect(hex(backgroundAt(p, width, height, WIDGET_SIZES.medium, false))).toBe(p.g2);
+    const [cx, cy] = [0.88 * width, 0.06 * height];
+    expect(backgroundAt(p, cx, cy, WIDGET_SIZES.medium)).toEqual(
+      mix(backgroundAt(p, cx, cy, WIDGET_SIZES.medium, false), colour(p.g3), 0.2),
+    );
+  });
+
+  it('finds the worst point of a widget every 2 points, its edges included', () => {
+    const seen: [number, number][] = [];
+    expect(
+      worst(
+        (x, y) => {
+          seen.push([x, y]);
+          return 3 + x / 1000 + y / 10_000 + 0.004_9;
+        },
+        { ...WIDGET_SIZES.small, step: WIDGET_STEP },
+      ),
+    ).toBe(3);
+    expect(WIDGET_STEP).toBe(2);
+    expect(seen).toHaveLength(86 * 86);
+    expect(seen.at(-1)).toEqual([170, 170]);
   });
 });
 

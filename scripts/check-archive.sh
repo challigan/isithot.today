@@ -3,12 +3,13 @@
 # sections 9.8 and 18.3, steps 3 and 4).
 #
 #   scripts/check-archive.sh <WillItSnow.xcarchive> <test|real>
-#       The archive, signed or not. It fails if either bundle lacks its privacy manifest or the
-#       answer font, the app has no icon, the widget links Google Mobile Ads or the app's location
+#       The archive, signed or not. It fails if either bundle lacks its privacy manifest or one of
+#       the four fonts, the app has no icon, the widget lacks SnowKit's glyphs or names no https API
+#       origin, or another than the app's, the widget links Google Mobile Ads or the app's location
 #       or purchase code, either binary names a debug hook, the ad units aren't Google's demo ones
 #       (test) or Carl's (real), the app's SKAdNetworkItems lack Google's, the app and widget
 #       differ in version or build, ITSAppUsesNonExemptEncryption isn't false, the fixtures or a
-#       StoreKit configuration are bundled, the app links StoreKitTest, or the app's manifest
+#       StoreKit configuration are bundled, the app links StoreKitTest, or either bundle's manifest
 #       doesn't declare coarse location.
 #   scripts/check-archive.sh --ipa <WillItSnow.ipa, or a folder holding its Payload>
 #       The exported app's signed entitlements. It fails unless the app has aps-environment
@@ -30,6 +31,14 @@ set -euo pipefail
 APP=WillItSnow
 WIDGET=WillItSnowWidgets
 APP_GROUP=group.today.willitsnow.app
+# The brand fonts each bundle carries and names in UIAppFonts, BrandFont's files in its order
+# (packages/mobile/test/appFonts.test.ts holds them to BRAND_FONTS).
+FONT_FILES=(
+  BricolageText-Regular.ttf
+  BricolageText-Medium.ttf
+  BricolageText-SemiBold.ttf
+  BricolageAnswer.ttf
+)
 # Google's demo publisher (section 14.3): every ad unit of a test build is one of its.
 DEMO_PUBLISHER=3940256099942544
 # Each ad unit's key in the app's Info.plist, the repository variable that holds Carl's, and
@@ -220,15 +229,47 @@ check_icon() {
   fi
 }
 
-# The bundle at $1, whose Info.plist XML is $2, carries the answer font and names it in
-# UIAppFonts: an extension can't load fonts from the app's bundle (spec section 9.7).
-check_font() {
-  local name
+# The bundle at $1, whose Info.plist XML is $2, carries every brand font and names each in
+# UIAppFonts: an extension can't load fonts from the app's bundle (spec section 9.7), and a face
+# left out would fall back to the system font without a word.
+check_fonts() {
+  local name fonts font
   name="$(basename "$1")"
-  if [ ! -f "$1/BricolageAnswer.ttf" ]; then
-    fail "$name has no BricolageAnswer.ttf"
-  elif ! plist_get UIAppFonts <"$2" | grep -F -x -e BricolageAnswer.ttf >/dev/null; then
-    fail "$name's UIAppFonts doesn't name BricolageAnswer.ttf"
+  fonts="$(plist_get UIAppFonts <"$2")" || fonts=""
+  for font in "${FONT_FILES[@]}"; do
+    if [ ! -f "$1/$font" ]; then
+      fail "$name has no $font"
+    elif ! grep -F -x -e "$font" <<<"$fonts" >/dev/null; then
+      fail "$name's UIAppFonts doesn't name $font"
+    fi
+  done
+}
+
+# The widget at $1 holds SnowKit's glyphs: SwiftPM's resource bundle for SnowKit
+# (IsItKit_SnowKit.bundle), with its compiled Assets.car, at the widget's top level, where
+# SnowKit's Bundle.module looks in the extension: the app's copy is out of its reach. Without it
+# the widget would draw no glyph, without a word.
+check_glyphs() {
+  local catalogue
+  for catalogue in "$1"/*SnowKit*.bundle/Assets.car; do
+    if [ -f "$catalogue" ]; then return 0; fi
+  done
+  fail "the widget lacks SnowKit's glyphs: no *SnowKit*.bundle/Assets.car at its top level"
+}
+
+# The widget (Info.plist XML $2) asks the server the app asks (the app's Info.plist XML $1), over
+# HTTPS: IsItAPIOrigin, from Snow.xcconfig's API_ORIGIN. Without it the widget would ask the
+# client's default origin, whatever the app's build asks.
+check_origin() {
+  local origin widget_origin
+  origin="$(plist_get IsItAPIOrigin <"$1")" || origin=""
+  widget_origin="$(plist_get IsItAPIOrigin <"$2")" || widget_origin=""
+  if [ -z "$widget_origin" ]; then
+    fail "the widget has no IsItAPIOrigin"
+  elif [[ $widget_origin != https://* ]]; then
+    fail "the widget's IsItAPIOrigin is $widget_origin, not https://"
+  elif [ "$widget_origin" != "$origin" ]; then
+    fail "the widget's IsItAPIOrigin is $widget_origin, the app's ${origin:-missing}"
   fi
 }
 
@@ -390,7 +431,7 @@ check_archive() {
   # The app sends the phone's place, rounded to the forecast grid (section 15.1).
   check_collects "$app" NSPrivacyCollectedDataTypeCoarseLocation
   check_icon "$app" "$info"
-  check_font "$app" "$info"
+  check_fonts "$app" "$info"
   read_binary "$(executable "$app" "$info")" "$work/app"
   check_hooks "$work/app" "the app binary"
   check_ads "$2" "$info" "$work/app.strings"
@@ -423,7 +464,12 @@ check_archive() {
     return 0
   fi
   check_privacy "$widget"
-  check_font "$widget" "$widget_info"
+  # The widget sends the rounded place too, when it asks for its own answer (sections 11.2 and
+  # 15.1).
+  check_collects "$widget" NSPrivacyCollectedDataTypeCoarseLocation
+  check_fonts "$widget" "$widget_info"
+  check_glyphs "$widget"
+  check_origin "$info" "$widget_info"
   read_binary "$(executable "$widget" "$widget_info")" "$work/widget"
   check_hooks "$work/widget" "the widget binary"
   # Linked dynamically, the framework's path is in the load commands; statically, its classes'
@@ -443,7 +489,7 @@ check_archive() {
     fail "the widget links the app's purchase code"
   fi
   check_versions "$info" "$widget_info"
-  facts+=("checked: privacy manifests and what they collect, the icon, the answer font, $((${#HOOKS[@]} + ${#WORD_HOOKS[@]} + ${#LITERAL_HOOKS[@]})) debug hooks in both binaries, the ad units and SKAdNetworkItems, the widget's links, versions, encryption, fixtures, StoreKit configurations and StoreKitTest")
+  facts+=("checked: privacy manifests and what they collect, the icon, the four fonts, the widget's glyphs and origin, $((${#HOOKS[@]} + ${#WORD_HOOKS[@]} + ${#LITERAL_HOOKS[@]})) debug hooks in both binaries, the ad units and SKAdNetworkItems, the widget's links, versions, encryption, fixtures, StoreKit configurations and StoreKitTest")
 }
 
 # --- The exported app --------------------------------------------------------------------------

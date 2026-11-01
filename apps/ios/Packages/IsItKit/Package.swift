@@ -96,12 +96,16 @@ let package = Package(
       ],
       swiftSettings: swift5
     ),
+    // The widget's provider, entry view and every family's layout, topic-free: the extension
+    // gives it the glyphs and palettes (`WidgetArt`), as the app gives IsItUI its own; linked by
+    // the widget, and by the unit tests that draw it.
     .target(
       name: "IsItWidgetUI",
       dependencies: [
         "IsItServices",
         .product(name: "IsItModel", package: "IsItCore"),
         .product(name: "IsItLogic", package: "IsItCore"),
+        .product(name: "IsItState", package: "IsItCore"),
       ],
       swiftSettings: swift5
     ),

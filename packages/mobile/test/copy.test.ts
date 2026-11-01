@@ -305,6 +305,15 @@ describe('APP_COPY', () => {
       noticeProjectPage: ['name'],
       recorderLine: ['name', 'value'],
       agreementShort: ['snowy', 'total'],
+      widgetSlotAnswer: ['slot', 'answer'],
+      widgetSlotLine: ['slot', 'text'],
+      widgetBandAmount: ['band', 'amount'],
+      widgetBandAmountSpoken: ['band', 'amount'],
+      widgetHeading: ['place', 'slot', 'answer'],
+      widgetSentence: ['heading', 'detail', 'agreement'],
+      widgetSentenceShort: ['heading', 'detail'],
+      widgetGauge: ['slot', 'agreement'],
+      widgetNow: ['answer', 'verdict'],
       intentPhrase: ['app'],
     });
   });
@@ -569,5 +578,76 @@ describe('the labels the accessibility audit reads', () => {
     expect(fill(APP_COPY.recorderLine, { name: APP_COPY.recorderUnits, value: 'f' })).toBe(
       'Units last asked for: f',
     );
+  });
+});
+
+describe('the widget’s words', () => {
+  const widget = Object.entries(APP_COPY).filter(([key]) => key.startsWith('widget'));
+  /** The templates VoiceOver reads, each with a twin that is shown. */
+  const SPOKEN = [
+    'widgetBandAmountSpoken',
+    'widgetHeading',
+    'widgetSentence',
+    'widgetSentenceShort',
+    'widgetGauge',
+  ] as const;
+
+  it('keeps the gallery’s, the locked and the stale words as section 11 has them', () => {
+    expect(APP_COPY.widgetName).toBe('Snow forecast');
+    expect(APP_COPY.widgetDescription).toBe("Today's snow answer, then tomorrow's from 6pm.");
+    expect(APP_COPY.widgetLocked).toBe('Open the app to turn on widgets.');
+    expect(APP_COPY.widgetStale).toBe('No recent forecast. Open the app to refresh.');
+  });
+
+  it('fills in as section 11.1’s examples read', () => {
+    expect(fill(APP_COPY.widgetSlotAnswer, { slot: 'Tomorrow', answer: 'Yes.' })).toBe(
+      'Tomorrow · Yes.',
+    );
+    expect(fill(APP_COPY.widgetBandAmount, { band: 'Snow', amount: '2cm' })).toBe('Snow · 2cm');
+    expect(fill(APP_COPY.agreementShort, { snowy: '5', total: '6' })).toBe('5 of 6 forecasts');
+    expect(fill(APP_COPY.widgetSlotLine, { slot: 'Tomorrow', text: 'Heavy snow' })).toBe(
+      'Tomorrow: Heavy snow',
+    );
+    expect(fill(APP_COPY.widgetSlotLine, { slot: 'Today', text: 'Too warm' })).toBe(
+      'Today: Too warm',
+    );
+    expect(
+      fill(APP_COPY.widgetGauge, { slot: 'Tomorrow', agreement: '5 of 6 forecasts expect snow' }),
+    ).toBe('Tomorrow: 5 of 6 forecasts expect snow.');
+    expect(fill(APP_COPY.widgetNow, { answer: 'No.', verdict: "It's not snowing." })).toBe(
+      "No. It's not snowing.",
+    );
+  });
+
+  it('reads a whole widget as a sentence, its spoken words without the shown “·”', () => {
+    const heading = fill(APP_COPY.widgetHeading, {
+      place: 'Durham',
+      slot: 'Tomorrow',
+      answer: 'Yes.',
+    });
+    expect(heading).toBe('Durham. Tomorrow: Yes.');
+    const detail = fill(APP_COPY.widgetBandAmountSpoken, { band: 'Snow', amount: '4cm' });
+    expect(detail).toBe('Snow, 4cm');
+    expect(
+      fill(APP_COPY.widgetSentence, {
+        heading,
+        detail,
+        agreement: '6 of 6 forecasts expect snow',
+      }),
+    ).toBe('Durham. Tomorrow: Yes. Snow, 4cm. 6 of 6 forecasts expect snow.');
+    expect(fill(APP_COPY.widgetSentenceShort, { heading, detail })).toBe(
+      'Durham. Tomorrow: Yes. Snow, 4cm.',
+    );
+    for (const key of SPOKEN) expect(APP_COPY[key], key).not.toContain('·');
+    for (const key of ['widgetSentence', 'widgetSentenceShort', 'widgetGauge'] as const) {
+      expect(APP_COPY[key].endsWith('.'), key).toBe(true);
+    }
+  });
+
+  it('names no price, purchase or ad (section 11.1: no commerce)', () => {
+    expect(widget.length).toBeGreaterThanOrEqual(13);
+    for (const [key, text] of widget) {
+      expect(text, key).not.toMatch(/£|\bprice\b|\bbuy\b|purchase|upgrade|unlock|\bads?\b/i);
+    }
   });
 });

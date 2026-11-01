@@ -67,6 +67,8 @@ struct ConstantsTests {
   func purchase() {
     #expect(Constants.Purchase.productID == "today.willitsnow.app.unlock")
     #expect(Constants.Purchase.displayPrice == "£1.99")
+    // How long the widget waits for StoreKit's entitlements, ms (spec 11.2 step 1).
+    #expect(Constants.Purchase.widgetCheckMs == 2_000)
   }
 }
 
