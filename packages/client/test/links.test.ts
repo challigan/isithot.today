@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { notificationRoute, parseDeepLink } from '../src/links';
+import { VIEWS } from '@isithot/core';
+import { notificationRoute, parseDeepLink, routeLink, type Route } from '../src/links';
 import type { Target } from '../src/target';
 
 describe('parseDeepLink', () => {
@@ -136,5 +137,32 @@ describe('notificationRoute', () => {
     ]) {
       expect(notificationRoute(bad, on('2026-12-01')), JSON.stringify(bad)).toBeNull();
     }
+  });
+});
+
+describe('routeLink', () => {
+  it('links to a view, the upgrade or the notification settings', () => {
+    expect(routeLink({ kind: 'view', view: 'now' })).toBe('willitsnow://view/now');
+    expect(routeLink({ kind: 'view', view: 'today' })).toBe('willitsnow://view/today');
+    expect(routeLink({ kind: 'view', view: 'week' })).toBe('willitsnow://view/week');
+    expect(routeLink({ kind: 'upgrade' })).toBe('willitsnow://upgrade');
+    expect(routeLink({ kind: 'settings', section: 'notifications' })).toBe(
+      'willitsnow://settings/notifications',
+    );
+  });
+
+  it('gives a link parseDeepLink reads back as the same route', () => {
+    const routes: Route[] = [
+      ...VIEWS.map((view) => ({ kind: 'view', view }) as const),
+      { kind: 'upgrade' },
+      { kind: 'settings', section: 'notifications' },
+    ];
+    for (const route of routes) expect(parseDeepLink(routeLink(route)!)).toEqual(route);
+  });
+
+  it('is null for a place, which only a notification carries', () => {
+    expect(
+      routeLink({ kind: 'place', target: { kind: 'city', slug: 'durham-gb' }, view: 'today' }),
+    ).toBeNull();
   });
 });

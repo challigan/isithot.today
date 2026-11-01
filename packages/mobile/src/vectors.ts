@@ -26,6 +26,7 @@ import {
   GRID,
   HOUR,
   VIEWS,
+  WIDGET,
   creditParts,
   defaultView,
   localDateTime,
@@ -64,6 +65,7 @@ import {
   registrationBody,
   removeRecent,
   resultDetail,
+  routeLink,
   savePlace,
   searchInput,
   searchQuery,
@@ -76,6 +78,8 @@ import {
   updatedLine,
   usableUntil,
   widgetEntries,
+  widgetFallsBack,
+  widgetReuses,
   type AlertPrefs,
   type Holds,
   type Permission,
@@ -83,6 +87,8 @@ import {
   type PlaceTarget,
   type PushEnv,
   type RecentPlace,
+  type Route,
+  type SavedAnswer,
   type SavedPlace,
   type Target,
   type WidgetEntry,
@@ -90,6 +96,7 @@ import {
 import { APP_COPY } from './appCopy';
 import type { Fixture } from './fixtures';
 import { homePage, homeTopBar, type PageInput, type PagePhase } from './page';
+import { widgetFace } from './widgetFace';
 
 export interface VectorCase {
   /** The function this case is for. */
@@ -1732,10 +1739,21 @@ function linkVectors(): VectorFile {
   ]) {
     route(payload, '2026-12-16');
   }
+
+  // The links a widget opens (and Settings' notifications), each parseDeepLink's inverse; none
+  // for a place, which only a notification carries.
+  const routes: Route[] = [
+    ...VIEWS.map((view): Route => ({ kind: 'view', view })),
+    { kind: 'upgrade' },
+    { kind: 'settings', section: 'notifications' },
+    { kind: 'place', target: { kind: 'city', slug: 'durham-gb', name: 'Durham' }, view: 'today' },
+  ];
+  for (const r of routes) add('routeLink', { route: r }, routeLink(r));
   return vectorFile(
     [
       ['client', 'parseDeepLink'],
       ['client', 'notificationRoute'],
+      ['client', 'routeLink'],
     ],
     cases,
   );
@@ -2039,9 +2057,164 @@ function savedVectors(): VectorFile {
   );
 }
 
+// ---- widgetSource.json and widgetFace.json ----------------------------------------------------
+
+/**
+ * The answers the widget's choice is checked on: a city in °C with snow, one without, the evening
+ * before snow, a searched place in °F, and a forecast that ends before its stale cut-off.
+ */
+const SOURCE_FIXTURES = [
+  'aberdeen-snow',
+  'leeds-dry',
+  'durham-tomorrow',
+  'denver-f',
+  'forecast-ends',
+] as const;
+
+function widgetSourceVectors(fixtures: FixtureSet): VectorFile {
+  const { cases, add } = collector();
+  const fx = (name: string): Fixture => {
+    const f = fixtures.get(name);
+    if (!f) throw new Error(`No fixture ${name}`);
+    return f;
+  };
+  // The saved answer is a fixture's whole response under `savedKey` at `savedAt`, or nothing.
+  const ask = (
+    name: string | null,
+    savedKey: string | null,
+    savedAt: number | null,
+    asked: { key: string; units: Units | null; now: number },
+  ): void => {
+    const saved: SavedAnswer | null =
+      name === null ? null : { key: savedKey!, savedAt: savedAt!, response: fx(name) };
+    const { key, units, now } = asked;
+    const input = { fixture: name, savedKey, savedAt, key, units };
+    add('widgetReuses', { ...input, now }, widgetReuses(saved, asked));
+    add('widgetFallsBack', input, widgetFallsBack(saved, { key, units }));
+  };
+  const reuse = WIDGET.reuseMinutes * MINUTE;
+  for (const name of SOURCE_FIXTURES) {
+    const f = fx(name);
+    // Each saved under its own key, as the app keys it, when it was fetched.
+    const target = targetFromQuery(f._fixture.query);
+    if (!target) throw new Error(`No place in ${name}'s query`);
+    const own = targetKey(target);
+    const savedAt = madeAt(f);
+    // Its own key, another place's, and its own with a space more (compared exactly).
+    const keys = [own, own === 'city:leeds-gb' ? 'city:aberdeen-gb' : 'city:leeds-gb', `${own} `];
+    const units: (Units | null)[] = [f.units, f.units === 'c' ? 'f' : 'c', null];
+    // Saved a moment after now (a clock moved back), then up to the reuse limit and past it.
+    const nows = [
+      savedAt - 1,
+      savedAt,
+      savedAt + 10 * MINUTE,
+      savedAt + reuse - 1,
+      savedAt + reuse,
+      savedAt + 3 * HOUR,
+    ];
+    for (const key of keys) {
+      for (const u of units)
+        for (const now of nows) ask(name, own, savedAt, { key, units: u, now });
+    }
+    // Saved ten minutes before it has nothing to show: a millisecond before then, and then.
+    const until = usableUntil(f);
+    for (const now of [until - 1, until]) {
+      ask(name, own, until - 10 * MINUTE, { key: own, units: f.units, now });
+    }
+  }
+  // Nothing saved.
+  const aberdeen = madeAt(fx('aberdeen-snow'));
+  for (const units of ['c', 'f', null] as const) {
+    ask(null, null, null, { key: 'city:aberdeen-gb', units, now: aberdeen });
+  }
+  return vectorFile(
+    [
+      ['client', 'widgetReuses'],
+      ['client', 'widgetFallsBack'],
+    ],
+    cases,
+  );
+}
+
+function widgetFaceVectors(fixtures: FixtureSet): VectorFile {
+  const { cases, add } = collector();
+  const fx = (name: string): Fixture => {
+    const f = fixtures.get(name);
+    if (!f) throw new Error(`No fixture ${name}`);
+    return f;
+  };
+  // A face of the plan widget.json's `widgetEntries` makes from the same input, at `index` (the
+  // first entry), or at every index; in the answer's unit, or cm without one.
+  const face = (
+    name: string | null,
+    now: number,
+    o: {
+      unlocked?: boolean;
+      placeName?: string;
+      without?: readonly string[];
+      every?: boolean;
+    } = {},
+  ): void => {
+    const whole = name === null ? null : fx(name);
+    const f = whole && o.without ? withoutBlocks(whole, o.without) : whole;
+    const options = {
+      fetchedAt: whole ? madeAt(whole) : now - HOUR,
+      now,
+      unlocked: o.unlocked ?? true,
+      ...(o.placeName === undefined ? {} : { placeName: o.placeName }),
+    };
+    const { entries } = widgetEntries(f, options);
+    const unit = f?.snow?.unit ?? 'cm';
+    for (const [index, entry] of entries.entries()) {
+      if (index > 0 && !o.every) break;
+      add(
+        'widgetFace',
+        { fixture: name, ...(o.without ? { without: o.without } : {}), ...options, index },
+        widgetFace(entry, unit),
+      );
+    }
+  };
+  const local = (name: string, days: number, hh: number, mm: number): number[] => {
+    const f = fx(name);
+    return localMoments(zoneOf(f), addDays(dateOf(f), days), hh, mm);
+  };
+
+  // Every answer's first entry when it was fetched: A few flakes (reykjavik-mixed), inches
+  // (denver-f), two forecasts (limited), and the right half without Now or rows (no-now,
+  // no-week); then the old one at its cut-off, stale.
+  for (const [name, f] of fixtures) face(name, madeAt(f));
+  face('old-forecast', usableUntil(fx('old-forecast')));
+  // Every entry of aberdeen-snow's plan from its fetch, the last of them stale.
+  const aberdeen = madeAt(fx('aberdeen-snow'));
+  face('aberdeen-snow', aberdeen, { every: true });
+  // Durham before 6pm and after: Today, then Tomorrow, the gallery's sample.
+  for (const now of [
+    ...local('durham-tomorrow', 0, 17, 59),
+    ...local('durham-tomorrow', 0, 18, 5),
+  ]) {
+    face('durham-tomorrow', now);
+  }
+  // Locked; no answer at all; and the heading without a place, and with the app's name for it.
+  const durham = madeAt(fx('durham-tomorrow'));
+  face('aberdeen-snow', aberdeen, { unlocked: false });
+  face(null, aberdeen);
+  face('aberdeen-snow', aberdeen, { placeName: '' });
+  face('durham-tomorrow', durham, { placeName: 'Home' });
+  // A row without counts, as an answer saved before the week's days had them.
+  face('durham-tomorrow', durham, {
+    without: ['snow.week.days.2.snowy', 'snow.week.days.2.total'],
+  });
+  // From 11:30pm, an answer whose snow has no tomorrow: no middle day, and the rows from Today.
+  for (const now of local('durham-tomorrow', 0, 23, 30)) {
+    face('durham-tomorrow', now, { without: ['snow.days.1'] });
+  }
+  return vectorFile([['mobile', 'widgetFace']], cases);
+}
+
 /**
  * Every vector file, in the spec's order (section 7.4's, then phase 5's `page.json`, phase 6's
  * `search.json` and the saved places' `saved.json`), from `fixtures` (each as its file has it).
+ * Then phase 7.2's widget files: the widget's choice of answer and its face.
  * Throws when a fixture a vector needs is missing.
  */
 export function vectorFiles(fixtures: FixtureSet): NamedVectors[] {
@@ -2062,6 +2235,8 @@ export function vectorFiles(fixtures: FixtureSet): NamedVectors[] {
     { name: 'page', vectors: pageVectors(fixtures) },
     { name: 'search', vectors: searchVectors() },
     { name: 'saved', vectors: savedVectors() },
+    { name: 'widgetSource', vectors: widgetSourceVectors(fixtures) },
+    { name: 'widgetFace', vectors: widgetFaceVectors(fixtures) },
   ];
 }
 

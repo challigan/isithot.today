@@ -5,7 +5,14 @@
  *
  * Swift: `IsItLogic/WidgetPlanner.swift`, checked against the golden vectors in `widget.json`.
  */
-import { HOUR, WIDGET, type ApiSnowDay, type SnowBand, type TodayResponse } from '@isithot/core';
+import {
+  HOUR,
+  WIDGET,
+  type ApiSnowDay,
+  type SnowBand,
+  type TodayResponse,
+  type Units,
+} from '@isithot/core';
 import { usableUntil } from './freshness';
 import { middleDay, pickHour } from './hours';
 
@@ -98,4 +105,45 @@ export function widgetEntries(
     .map((a) => Date.parse(a.time))
     .filter((t) => t > o.now && t < until);
   return { entries: [...[o.now, ...later].map(entry), blank(until, 'stale')], reloadAt };
+}
+
+/** The last good answer as the App Group keeps it (`today.v1.json`, spec 9.6). */
+export interface SavedAnswer {
+  /** The place it is for (`targetKey`). */
+  key: string;
+  /** When it was fetched, epoch ms. */
+  savedAt: number;
+  response: TodayResponse;
+}
+
+/**
+ * Whether a widget plans from the saved answer without asking (spec 11.2 step 3): it is for the
+ * place (`key`, compared exactly) in the units asked for (any, while none is chosen), it was
+ * fetched under `WIDGET.reuseMinutes` before `now` and not after it (a clock moved back), and it
+ * still has an hour to show (`pickHour`). Otherwise the widget asks, as the app does.
+ *
+ * Swift: `IsItLogic/WidgetSource.swift`, checked against the golden vectors in
+ * `widgetSource.json`.
+ */
+export function widgetReuses(
+  saved: SavedAnswer | null,
+  o: { key: string; units: Units | null; now: number },
+): boolean {
+  if (!widgetFallsBack(saved, o)) return false;
+  const age = o.now - saved!.savedAt;
+  return (
+    age >= 0 && age < WIDGET.reuseMinutes * MINUTE && pickHour(saved!.response, o.now) !== null
+  );
+}
+
+/**
+ * Whether a widget whose request failed plans from the saved answer (step 5): only when it is for
+ * the same place in the same units, however old, as the planner makes it stale past
+ * `usableUntil`. Never another place's answer under this place's name.
+ */
+export function widgetFallsBack(
+  saved: SavedAnswer | null,
+  o: { key: string; units: Units | null },
+): boolean {
+  return !!saved && saved.key === o.key && (!o.units || saved.response.units === o.units);
 }

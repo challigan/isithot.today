@@ -45,6 +45,23 @@ export function parseDeepLink(url: string): Route | null {
 }
 
 /**
+ * The willitsnow:// link that opens `route` (`parseDeepLink`'s inverse): a view, the upgrade, or
+ * Settings' notifications. Null for a place, which only a notification's payload carries.
+ */
+export function routeLink(route: Route): string | null {
+  switch (route.kind) {
+    case 'view':
+      return `willitsnow://view/${route.view}`;
+    case 'upgrade':
+      return 'willitsnow://upgrade';
+    case 'settings':
+      return `willitsnow://settings/${route.section}`;
+    case 'place':
+      return null;
+  }
+}
+
+/**
  * Where a tap on a notification goes: to the notification's own place, which need not be the one
  * on screen. It opens on the notification's view (the middle one) while the day it was about is
  * still today or tomorrow there: after 6pm the middle view reads Tomorrow and after midnight

@@ -21,3 +21,12 @@ export const PURCHASE_DISPLAY_PRICE = new Intl.NumberFormat('en-GB', {
   style: 'currency',
   currency: 'GBP',
 }).format(Number(PURCHASE.price));
+
+/**
+ * How long the widget waits for StoreKit's entitlements before it goes on with `unlock.v1` alone
+ * (iOS build spec 11.2 step 1, V3). iOS 26.4 and 26.5 are reported to leave
+ * `Transaction.currentEntitlements` silent until a restart, and a timeline never finished is asked
+ * for again and again. An answer that comes late, or empty, never locks (DECISIONS, "The widgets
+ * in the iPhone app (phase 7.2)").
+ */
+export const PURCHASE_WIDGET_CHECK_MS = 2000;

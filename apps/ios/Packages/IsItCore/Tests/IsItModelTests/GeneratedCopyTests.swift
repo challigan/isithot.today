@@ -149,4 +149,31 @@ struct AppCopyTests {
     )
     #expect(AppCopy.placeButtonLabel(place: #"\(x) $1"#) == #"Place: \(x) $1. Change place."#)
   }
+
+  @Test("the widget's words")
+  func widget() {
+    #expect(AppCopy.widgetLocked == "Open the app to turn on widgets.")
+    #expect(AppCopy.widgetStale == "No recent forecast. Open the app to refresh.")
+    #expect(AppCopy.widgetSlotAnswer(slot: "Tomorrow", answer: "Yes.") == "Tomorrow · Yes.")
+    #expect(AppCopy.widgetSlotLine(slot: "Today", text: "Too warm") == "Today: Too warm")
+    #expect(AppCopy.widgetBandAmount(band: "Heavy snow", amount: "5cm") == "Heavy snow · 5cm")
+    #expect(
+      AppCopy.widgetBandAmountSpoken(band: "Heavy snow", amount: "5cm") == "Heavy snow, 5cm")
+    #expect(
+      AppCopy.widgetHeading(place: "Durham", slot: "Tomorrow", answer: "Yes.")
+        == "Durham. Tomorrow: Yes.")
+    #expect(
+      AppCopy.widgetSentence(
+        heading: "Durham. Tomorrow: Yes.", detail: "Snow, 4cm",
+        agreement: "6 of 6 forecasts expect snow")
+        == "Durham. Tomorrow: Yes. Snow, 4cm. 6 of 6 forecasts expect snow.")
+    #expect(
+      AppCopy.widgetSentenceShort(heading: "Tomorrow: Yes.", detail: "Snow, 4cm")
+        == "Tomorrow: Yes. Snow, 4cm.")
+    #expect(
+      AppCopy.widgetGauge(slot: "Tomorrow", agreement: "6 of 6 forecasts expect snow")
+        == "Tomorrow: 6 of 6 forecasts expect snow.")
+    #expect(
+      AppCopy.widgetNow(answer: "No.", verdict: "Too warm for snow.") == "No. Too warm for snow.")
+  }
 }

@@ -186,19 +186,43 @@ function weekLeft(item: WeekItem): number {
 }
 
 /**
- * A day of the week as VoiceOver reads it: the day's name ("Today" for the week's first day, which
- * the server labels so, else the weekday in full, from the date), the amount, the band label
- * starting in lower case, as it is mid-sentence, and the agreement (core `snowAgreementLine`).
+ * A day of the week as VoiceOver reads it, on the week's page and on the medium widget: the day's
+ * name, the amount ("2cm"), the band label starting in lower case, as it is mid-sentence, and the
+ * agreement (core `snowAgreementLine`) when both counts are numbers; without them, as an answer
+ * saved before the week's days had them, `APP_COPY.weekRowLabelShort`.
+ */
+export function spokenWeekDay(o: {
+  name: string;
+  amount: string;
+  bandLabel: string;
+  snowy?: number | null;
+  total?: number | null;
+}): string {
+  const band = o.bandLabel.charAt(0).toLowerCase() + o.bandLabel.slice(1);
+  if (typeof o.snowy !== 'number' || typeof o.total !== 'number') {
+    return fill(APP_COPY.weekRowLabelShort, { day: o.name, amount: o.amount, band });
+  }
+  return fill(APP_COPY.weekRowLabel, {
+    day: o.name,
+    amount: o.amount,
+    band,
+    agreement: snowAgreementLine(o.snowy, o.total),
+  });
+}
+
+/**
+ * A day of the week's page as VoiceOver reads it (`spokenWeekDay`): its name is "Today" for the
+ * week's first day, which the server labels so, else the weekday in full, from the date.
  */
 function spokenDay(week: ApiSnowWeek, day: ApiSnowWeekDay, item: WeekItem): string {
   const name =
     day.date === week.from ? day.label : WEEKDAYS[new Date(parseDate(day.date)).getUTCDay()]!;
-  const band = item.bandLabel.charAt(0).toLowerCase() + item.bandLabel.slice(1);
-  return fill(APP_COPY.weekRowLabel, {
-    day: name,
+  return spokenWeekDay({
+    name,
     amount: item.value,
-    band,
-    agreement: snowAgreementLine(day.snowy, day.total),
+    bandLabel: item.bandLabel,
+    snowy: day.snowy,
+    total: day.total,
   });
 }
 

@@ -150,8 +150,11 @@ public enum Constants {
   /// Snow.storekit and App Store Connect name too, and the price Snow.storekit sells it at as
   /// StoreKit shows it there, which only a Debug build's stand-in shows: a Release build shows
   /// the App Store's own `displayPrice`.
+  /// The widget waits `widgetCheckMs` at most for StoreKit's entitlements, then goes on with
+  /// `unlock.v1` alone (spec 11.2 step 1).
   public enum Purchase {
     public static let productID = "today.willitsnow.app.unlock"
     public static let displayPrice = "£1.99"
+    public static let widgetCheckMs = 2000
   }
 }

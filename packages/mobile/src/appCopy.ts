@@ -279,6 +279,26 @@ export const APP_COPY = {
   widgetLocked: 'Open the app to turn on widgets.',
   widgetStale: 'No recent forecast. Open the app to refresh.',
   agreementShort: '{snowy} of {total} forecasts',
+  // What the five families show and VoiceOver reads (11.1): the rectangular family's first line
+  // ("Tomorrow · Yes."), the inline family ("Tomorrow: Heavy snow"), the band and the amount
+  // ("Heavy snow · 5cm"), and Now on the medium's right half ("No. Too warm for snow."); then the
+  // sentences each tap target reads ("Durham. Tomorrow: Yes. Snow, 4cm. 6 of 6 forecasts expect
+  // snow."), and the circular family's ("Tomorrow: 6 of 6 forecasts expect snow."). A "·" is
+  // shown and never read: each pair shown with one has a spoken twin. Every word in the slots is
+  // core's or the server's (`viewLabel`, the band label, the answer and verdict, core's
+  // `snowAgreementLine`, which `dayAgreement` and `dayAgreementOne` word in Swift, and
+  // `COPY.notAvailable`), and no widget string names a price or a purchase (11.1, App Review
+  // 4.4). The week's rows on the medium read the app's own `weekRowLabel` and
+  // `weekRowLabelShort`, so they have no words of their own here.
+  widgetSlotAnswer: '{slot} · {answer}',
+  widgetSlotLine: '{slot}: {text}',
+  widgetBandAmount: '{band} · {amount}',
+  widgetBandAmountSpoken: '{band}, {amount}',
+  widgetHeading: '{place}. {slot}: {answer}',
+  widgetSentence: '{heading} {detail}. {agreement}.',
+  widgetSentenceShort: '{heading} {detail}.',
+  widgetGauge: '{slot}: {agreement}.',
+  widgetNow: '{answer} {verdict}',
 
   // The App Shortcut (11.5). `{app}` is App Shortcuts' own token for the app's name. Not in
   // AppCopy.swift: see APP_INTENT_KEYS.

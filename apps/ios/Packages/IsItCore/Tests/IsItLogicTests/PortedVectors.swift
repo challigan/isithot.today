@@ -61,7 +61,8 @@ enum PortedVectors {
     PortedVector("alerts", by: "3.4: AlertSync.action, .body, .fingerprint", port: .alerts),
 
     // client parseDeepLink, notificationRoute
-    PortedVector("links", by: "3.4: DeepLink.parse, .route(payload:)", port: .links),
+    PortedVector(
+      "links", by: "3.4: DeepLink.parse, .route(payload:); 7.2: DeepLink.link", port: .links),
 
     // client addRecent, removeRecent
     PortedVector("recent", by: "3.4: RecentPlaces", port: .recent),
@@ -76,5 +77,11 @@ enum PortedVectors {
     // client isSaved, canSave, savePlace, unsavePlace, choosePlace, shownRecent (the picker's
     // saved places, in the website's look's step 4)
     PortedVector("saved", by: "Look step 4: SavedPlaces", port: .saved),
+
+    // client widgetReuses, widgetFallsBack (which answer a widget plans from)
+    PortedVector("widgetSource", by: "7.2: WidgetSource.reuses, .fallsBack", port: .widgetSource),
+
+    // packages/mobile widgetFace (what a widget entry shows in every family)
+    PortedVector("widgetFace", by: "7.2: WidgetFace", port: .widgetFace),
   ]
 }

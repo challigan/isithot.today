@@ -1,3 +1,4 @@
+import IsItLogic
 import IsItModel
 import SwiftUI
 
@@ -137,18 +138,6 @@ enum TextRole: CaseIterable {
   /// 208 (120.6 on a 402-point iPhone).
   static func answerSize(pageWidth: CGFloat) -> CGFloat {
     min(max(0.30 * pageWidth, 96), 208)
-  }
-}
-
-extension BrandFont {
-  /// The next face up, for Bold Text: Regular to Medium, Medium to SemiBold. SemiBold and the
-  /// answer's face are as bold as the app's faces go.
-  var bolder: BrandFont {
-    switch self {
-    case .textRegular: .textMedium
-    case .textMedium: .textSemiBold
-    case .textSemiBold, .answer: self
-    }
   }
 }
 

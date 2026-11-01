@@ -563,6 +563,43 @@ struct AppModelRefreshTests {
     #expect(h.model.fetchedAt == later(made, minutes: 33))
   }
 
+  @Test("a route to a view while away keeps its view over the return; a return alone resets it")
+  func aRouteWhileAwayKeepsItsViewOverTheReturn() async throws {
+    let h = try await launched([try FakeTransport.fixture("aberdeen-snow")])
+    let made = try fixtureNow("aberdeen-snow")
+    h.clock.now = later(made, minutes: 2)
+    h.model.didEnterBackground()
+    // A widget tapped 31 minutes later: its link can come before the app is back.
+    h.clock.now = later(made, minutes: 33)
+    await h.model.open(.view(.week))
+    await h.model.willEnterForeground()
+    #expect(h.model.view == .week)
+    #expect(h.hooks.routes == [.view(.week)])
+    #expect(h.transport.requests.count == 2)
+    // The route kept its view for that return only: the next long one resets it.
+    h.model.didEnterBackground()
+    h.clock.now = later(made, minutes: 64)
+    await h.model.willEnterForeground()
+    #expect(h.model.view == .today)
+  }
+
+  @Test("a route to a view while away, then told of the background again: the return resets it")
+  func leavingAgainDropsARoutesView() async throws {
+    let h = try await launched([try FakeTransport.fixture("aberdeen-snow")])
+    let made = try fixtureNow("aberdeen-snow")
+    h.clock.now = later(made, minutes: 2)
+    h.model.didEnterBackground()
+    h.clock.now = later(made, minutes: 3)
+    await h.model.open(.view(.week))
+    // Away again before the app was back: leaving forgets the route, so this return resets the
+    // view. The return forgets it too, but no test sees that: a leaving always comes between.
+    h.model.didEnterBackground()
+    h.clock.now = later(made, minutes: 34)
+    await h.model.willEnterForeground()
+    #expect(h.model.view == .today)
+    #expect(h.hooks.routes == [.view(.week)])
+  }
+
   @Test("back past the hour, a fetch past the caches")
   func backOutOfDate() async throws {
     let h = try await launched([try FakeTransport.fixture("aberdeen-snow")])

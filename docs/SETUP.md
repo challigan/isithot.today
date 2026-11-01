@@ -418,8 +418,8 @@ it on your phone. StoreKit needs nothing in GitHub or Netlify: no secret and no 
    3. Delete the app, install it again from TestFlight and open it. It should come back as the
       paid version by itself, as Apple remembers the purchase. Open Settings and tap **Restore
       purchase** anyway: it should say "Purchase restored."
-   4. Until phase 7.2, the widget shows its answers whether or not you bought, so keep
-      TestFlight to the internal group (you).
+   4. From phase 7.2 the widgets are locked until the purchase, so TestFlight can go to external
+      testers (Q6).
 
    If any step shows something else, tell me what it said, with a screenshot.
 
@@ -433,6 +433,91 @@ it on your phone. StoreKit needs nothing in GitHub or Netlify: no secret and no 
    installed; **Settings → Developer → Sandbox Apple Account → Sign In** appears after that
    (Apple, "Testing In-App Purchases with sandbox"). Refunds, Ask to Buy and a purchase taken
    back are already tested on CI (the StoreKit tests).
+
+### The app's widgets (phase 7.2)
+
+The widget, **Snow forecast**, comes with the purchase: a small and a medium one for the Home
+Screen, and a round, a rectangular and an inline one for the Lock Screen. No new secret, variable,
+capability, identifier or profile is needed anywhere; in App Store Connect only the review note and
+the description change (step 4). The widget's App ID with its App Group (C8) and the purchase (C9)
+already exist, and the release job's cloud signing makes the widget's profile as it does the app's.
+
+1. **Check the widget's App ID once.** In the Apple Developer site, open **Certificates,
+   Identifiers & Profiles**, then **Identifiers**, then `today.willitsnow.app.widgets`. **App
+   Groups** should be ticked, and its **Configure** should show `group.today.willitsnow.app`.
+   Nothing else should be ticked (no Push Notifications). Only if an archive's signing fails on the
+   widget does anything more need doing here.
+
+2. **TestFlight.** Once a build with 7.2 reaches you, the widgets are locked until the purchase,
+   so the external group (Q6, if yes) can have it.
+
+3. **On your iPhone, from TestFlight.** Open the app once first: a widget appears in the gallery
+   only once its app has been opened since it was installed.
+   1. **The gallery.** Touch and hold the Home Screen, tap **Edit**, then **Add Widget**, and
+      search for "will it snow". It shows "Snow forecast", "Today's snow answer, then tomorrow's
+      from 6pm." and the sample, small and medium: Durham, Tomorrow, Yes., Snow · 4cm and six
+      dots. No price.
+   2. **Small and medium.** Add both. If you haven't bought yet, each says "Open the app to turn
+      on widgets." on the light palette, with no price. Tap one: the app opens on the purchase.
+      Buy it, go back to the Home Screen, and within a few seconds both show answers (phase 7's
+      exit). If you bought in 7.1's build, they show answers at once: your place, Today (Tomorrow
+      after 6pm), the answer, the band with the amount or why not, and the dots; and on the
+      medium's right half, Now and up to four days.
+   3. **Taps.** The small opens the app on Today (Tomorrow after 6pm). The medium's right half
+      opens This week, and its left half Today.
+   4. **The Lock Screen.** Touch and hold the Lock Screen, tap **Customise**, and add the round
+      one, the rectangular one and the one above the clock. Each shows today's or tomorrow's
+      answer, and a tap opens the app.
+   5. **It follows the app.** Choose another place, and change the units to inches. Back on the
+      Home Screen, the widgets follow within a few seconds.
+   6. **6pm.** Without opening the app, the widget says Tomorrow from 6pm.
+   7. **StandBy.** Charge the iPhone on its side while it is locked, and add the widget to
+      StandBy's stack: white on black, and red at night.
+   8. **Appearance.** Touch and hold the Home Screen, tap **Edit**, then **Customise**, and try
+      Dark, then Clear, then Tinted. It stays readable, and the glyph and the answer take the tint.
+   9. **VoiceOver.** Each widget reads one sentence, such as "Durham. Tomorrow: Yes. Snow, 4cm. 6
+      of 6 forecasts expect snow."; the medium's right half reads Now, then the days.
+   10. **Larger Text** (**Settings → Accessibility → Display & Text Size → Larger Text**, at its
+       largest) and **Bold Text**: still readable. The answer shrinks to fit, and the medium shows
+       fewer days.
+   11. **Offline.** Aeroplane mode overnight: the widget keeps its hours, then says "No recent
+       forecast. Open the app to refresh.", never an old hour.
+   12. **A restart.** Restart the phone and leave it locked for a while. The Lock Screen widgets
+       show grey shapes until you unlock, then answers within the hour, or at once when you open
+       the app. Meanwhile one may say "Open the app to turn on widgets." or "No recent forecast.
+       Open the app to refresh.": before the first unlock the widget can't read what the app
+       keeps, and it waits rather than show another town.
+   13. **Optional, V3** (only if you use your Mac): connect the iPhone, open Console.app, choose the
+       iPhone, press **Start streaming**, and search for `subsystem:today.willitsnow.app.widgets`.
+       Then remove a widget and add it again (or pull down on the app's page to refresh it, which
+       reloads every widget). Each line says `unlock=` and `storekit=`. Tell me what `storekit=`
+       said (`answered:1`, `answered:0` or `late`). The widget asks StoreKit every time, even though
+       you have bought, so this works on your phone as it is. Any answer is fine, and so is skipping
+       it.
+   14. **Optional, a refund** (only with a Debug build run from Xcode on your iPhone,
+       apps/ios/README.md, "Building on a Mac"): buy from Snow.storekit, add a widget, then
+       refund the purchase in Xcode (**Debug → StoreKit → Manage Transactions**). The app locks,
+       and within a few seconds the widgets say "Open the app to turn on widgets.". The StoreKit
+       tests already cover refunds, so skipping it is fine.
+
+   If anything shows something else, send me a screenshot and what it said.
+
+4. **App Review** (with C22: the version's **App Review Information**, and the listing's files).
+   Add this to the review notes:
+
+   > The Snow forecast widget comes with the one-off purchase, Remove ads and add widgets. To add
+   > it, touch and hold the Home Screen, tap Edit, then Add Widget, search for "will it snow" and
+   > choose Snow forecast; or add it to the Lock Screen. Before the purchase, the widget says
+   > "Open the app to turn on widgets." and shows no price; tapping it opens the purchase in the
+   > app.
+
+   The App Store description must also say the widgets come with the purchase (App Review 2.3.2).
+
+5. **Netlify:** nothing new. The weekly look at function invocations (C17) now includes the
+   widgets' requests, besides the app's: for each widget on each phone, once every 4 hours while
+   the server answers (six a day), and once an hour while it fails or has nothing usable. So a
+   failing spell (429s or errors) shows up as more invocations, not fewer. If they climb while the
+   server answers, changing `WIDGET.refreshHours` from 4 to 6 in packages/core cuts them by a third.
 
 ## 6. Uptime monitor
 
