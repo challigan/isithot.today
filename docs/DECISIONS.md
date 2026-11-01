@@ -6625,6 +6625,15 @@ medium with six days (`widget-medium-week-…`): at XXXL; in its `Link` at Large
 widget draws it; at the 393-wide size at both; and with "Snow possible" first at XXXL and narrow at
 Large. The next macOS run's tiles, and Carl's iPhone, show the real counts.
 
+**What PR #44's first macOS run showed.** Every check passed, and the tiles match the metrics: four
+rows with dots at Large on the 364 by 170 medium, three on the 338 by 158, two at XXXL, and at AX3
+Now alone on three lines with no word cut. "Snow possible" first stays on one line at Large on the
+338 by 158. The `-link` tiles showed one fault no test checks: in the `Link` around the right half,
+the widget as it is on a Home Screen, Now's second line was centred under its first ("No. Too warm"
+/ "for snow."), as a button centres its label's lines. The right half now sets
+`multilineTextAlignment(.leading)`, so Now's lines, and a wrapped band label's, start at the left in
+the `Link` as without it. Only the next run's `-link` tiles show it.
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,

@@ -178,6 +178,10 @@ struct ForecastMediumView: View {
           .frame(height: 0)
       }
     }
+    // A `Link`'s label centres the lines of its texts, as a button's does: PR #44's first macOS
+    // run drew Now's second line centred under its first in the `-link` tiles, the widget as it is
+    // on a Home Screen. Now's lines, and a wrapped band label's, start at the left, as the rest do.
+    .multilineTextAlignment(.leading)
     .foregroundStyle(look.ink(face.band, in: art))
     .accessibilityElement(children: .combine)
   }
