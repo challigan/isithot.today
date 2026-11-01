@@ -70,6 +70,25 @@ final class NotificationsTests: XCTestCase {
     try auditAccessibility(of: app, on: "Settings, notifications on", surface: .content)
     attach(app, as: "app-notifications-on")
 
+    try openYourPrivacy(in: app)
+    try waitFor(app.find("kept-heading"), label: Copy.kept)
+    let id = app.find("kept-line-0").label
+    XCTAssertNotNil(id.range(of: #"^ID [0-9a-f]{8}$"#, options: .regularExpression), id)
+    XCTAssertEqual(app.find("kept-line-1").label, Copy.keptPlace)
+    XCTAssertEqual(app.find("kept-line-2").label, Copy.keptUnits)
+    XCTAssertEqual(app.find("kept-line-3").label, Copy.evening)
+    XCTAssertFalse(app.find("kept-line-4").exists, "A kept line too many")
+    // At its top, where the kept block is, every line on screen below the bar.
+    try auditAccessibility(of: app, on: "Your privacy, registered", surface: .content)
+    attach(app, as: "app-your-privacy-registered")
+    try tap("delete-my-data", in: app)
+    try waitFor(app.find("delete-status"), label: Copy.deleteDone)
+    XCTAssertTrue(gone(app.find("kept-line-0")), "The kept block is still there once deleted")
+    back(in: app)
+    try page(titled: "Settings", in: app)
+    try expectSwitch(app.find("notify-evening"), on: false)
+    XCTAssertTrue(gone(app.find("notify-test")), "The test is still there with every switch off")
+
     // Last, once every audit is done: the recorder's lines at the sheet's foot wrap the whole
     // URL, which at the audits' largest text sizes would squeeze the screen above them
     // (SettingsTests).
@@ -103,6 +122,8 @@ final class NotificationsTests: XCTestCase {
     let app = launch(Self.leeds + ["-notifications", "authorized"])
     try openSettings(app)
     try turnOnTheEvening(in: app)
+    try openYourPrivacy(in: app)
+    XCTAssertTrue(app.find("kept-line-0").waitForExistence(timeout: 10), "Nothing kept")
     app.terminate()
 
     // What the first launch kept, Leeds and the registration, with the permission now denied.
@@ -110,6 +131,10 @@ final class NotificationsTests: XCTestCase {
     try openSettings(again)
     try waitFor(again.find("notify-notice"), label: Copy.notifyDenied)
     try expectSwitch(again.find("notify-evening"), on: false)
+    try openYourPrivacy(in: again)
+    XCTAssertTrue(again.find("privacy-line-0").waitForExistence(timeout: 10), "No privacy lines")
+    // The DELETE answered 204, so nothing is kept.
+    XCTAssertTrue(gone(again.find("kept-heading")), "Still kept once denied")
   }
 
   /// Each answer to "Send a test notification", in turn, in its own words: one too many this
@@ -125,6 +150,8 @@ final class NotificationsTests: XCTestCase {
       try tap("notify-test", in: app)
       try waitFor(app.find("notify-test"), value: result)
     }
+    try openYourPrivacy(in: app)
+    XCTAssertTrue(app.find("kept-line-0").waitForExistence(timeout: 10), "Not registered afresh")
   }
 
   /// A change with no connection: the switch stays on, and the status line says it wasn't saved,

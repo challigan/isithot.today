@@ -8,6 +8,7 @@ import {
   SNOW_BAND_LABELS,
   SNOW_REASON_LABELS,
   UNITS_LABELS,
+  UNIT_NAMES,
   VIEWS,
   WEEKDAYS,
   question,
@@ -296,6 +297,9 @@ describe('APP_COPY', () => {
       upgradeSettings: ['price'],
       buy: ['price'],
       notifyPlaceOnScreen: ['place'],
+      keptID: ['id'],
+      keptPlace: ['place', 'zone'],
+      keptUnits: ['label', 'units'],
       reportAdSubject: ['version'],
       reportAdMail: ['time', 'place'],
       reportAdBody: ['email'],
@@ -386,6 +390,26 @@ describe('APP_COPY', () => {
     );
     expect(APP_COPY.notifyNotSaved).toBe(
       "Couldn't save your notification choices. The app will try again when you next open it.",
+    );
+  });
+
+  it('words what Your privacy shows is kept, and what its button deleted', () => {
+    // The kept lines, filled as the page fills them, then what the button did. The server
+    // deletes the record, not the notes keyed by its ID that `privacyNotifications` says outlive
+    // it, so the line names only what went.
+    expect(fill(APP_COPY.keptID, { id: '3f9c1a2b' })).toBe('ID 3f9c1a2b');
+    expect(fill(APP_COPY.keptPlace, { place: 'Leeds', zone: 'Europe/London' })).toBe(
+      'Leeds, Europe/London',
+    );
+    expect(fill(APP_COPY.keptUnits, { label: COPY.snowUnitsLabel, units: UNIT_NAMES.snow.c })).toBe(
+      'Snow units: cm',
+    );
+    expect(APP_COPY.deleteDone).toBe(
+      "Notifications are off. We've deleted your notification token, place, units and choices.",
+    );
+    expect(APP_COPY.deleteNotYet).toBe(
+      "Couldn't reach our server, so nothing is deleted yet. The app will try again when you " +
+        'next open it.',
     );
   });
 

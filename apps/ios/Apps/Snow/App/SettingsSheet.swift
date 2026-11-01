@@ -31,16 +31,17 @@ import UIKit
 /// place, whose page this builds from the model in its body too, so the pushed page follows the
 /// model, and the test. "Use my location" and "Search" at approximate location ask the home
 /// screen for the picker, which closes Settings first. The permission is read again as
-/// Settings or the place page appears, and the test's result and the place page's problem go as
-/// Settings closes. What the server keeps for them, in Your privacy with its delete button, is
-/// phase 8.2's.
+/// Settings or the place page appears, and the test's result, the place page's problem and the
+/// delete's line go as Settings closes. While registered, Your privacy shows what the server
+/// keeps for them first, from `alertSync.v1`, with "Turn off notifications and delete my data"
+/// (phase 8.2).
 struct SettingsSheet: View {
   let model: AppModel
   /// The free version's ads.
   let ads: AdsModel
   /// The purchase: the upgrade card and its page.
   let purchases: PurchaseModel
-  /// The notifications: their section and the place page.
+  /// The notifications: their section, the place page and Your privacy's kept block.
   let notifications: NotificationsModel
 
   @Environment(\.openURL) private var openURL
@@ -63,7 +64,12 @@ struct SettingsSheet: View {
       ),
       notifications: NotificationSettings(state, onScreen: onScreen),
       notificationPlace: NotificationPlacePage(state, onScreen: onScreen),
-      privacy: YourPrivacy(adsOn: !model.unlocked, privacyChoices: choices),
+      privacy: YourPrivacy(
+        adsOn: !model.unlocked,
+        privacyChoices: choices,
+        kept: YourPrivacy.keptLines(state.registration),
+        deleteStatus: YourPrivacy.deleteStatus(state.delete)
+      ),
       upgrade: UpgradePage(unlocked: model.unlocked, purchase: purchases.state),
       actions: SettingsActions(
         setUnits: { units in Task { await model.setUnits(units) } },
@@ -79,6 +85,8 @@ struct SettingsSheet: View {
         notice: AppBundle.notice,
         upgrade: .live(purchases),
         privacyChoices: choices ? { Task { await ads.openPrivacyChoices() } } : nil,
+        deleteMyData: state.registration == nil
+          ? nil : { Task { await notifications.deleteMyData() } },
         notifications: NotificationActions(
           setSwitch: { which, on in
             Task { await notifications.setSwitch(which, on: on, onScreen: model.onScreen) }

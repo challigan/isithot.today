@@ -1,6 +1,7 @@
 import Foundation
 import IsItLogic
 import IsItModel
+import IsItTestSupport
 import Testing
 
 @Suite("How it works, Credits and licences, and Your privacy")
@@ -139,7 +140,8 @@ struct InfoPagesTests {
           + "5 km) and your units to our server. Until you choose a place, our server estimates a "
           + "rough one from your internet connection. Place names you search for go to Open-Meteo, "
           + "our forecast provider, to find matching places. The app keeps your place, units, "
-          + "recent and saved places and the last forecast on your iPhone.",
+          + "recent and saved places, your notification choices and the last forecast on your "
+          + "iPhone.",
         "Only while notifications are on, we keep your device's notification token, an ID made "
           + "from it, the place, its time zone, your units and which notifications you chose, "
           + "with a few details such as the app's version and when it last checked in. We delete "
@@ -157,6 +159,7 @@ struct InfoPagesTests {
         "There are no accounts.",
       ])
     #expect(page.kept == nil)
+    #expect(page.deleteStatus == nil)
     let policy = try #require(page.policy)
     #expect(policy.title == "Privacy policy")
     #expect(policy.id == "full-policy")
@@ -189,6 +192,70 @@ struct InfoPagesTests {
     #expect(kept.delete == "Turn off notifications and delete my data")
     for line in YourPrivacy(adsOn: true, privacyChoices: true).lines {
       #expect(otherTopic(in: line) == nil, "\(line)")
+    }
+  }
+
+  @Test("the kept lines are the last registration's: the ID, the place, the units, the switches")
+  func keptLines() throws {
+    let leeds = try registration("put-leeds")
+    let id = try deviceResponse("put-leeds").id
+    #expect(
+      YourPrivacy.keptLines(leeds) == [
+        "ID " + id.prefix(8), "Leeds, Europe/London", "Snow units: cm",
+        "Evening before (about 6pm)",
+      ])
+    #expect(YourPrivacy.keptLines(leeds)?.first == "ID b8465956")
+    #expect(YourPrivacy.keptLines(try registration("put-leeds", units: .f))?[2] == "Snow units: in")
+    #expect(
+      YourPrivacy.keptLines(try registration("put-kathmandu"))?[1] == "Kathmandu, Asia/Kathmandu")
+    #expect(YourPrivacy.keptLines(nil) == nil)
+  }
+
+  @Test("each switch the server holds on is a kept line, in Settings' words and order")
+  func keptSwitches() throws {
+    let leeds = try registration("put-leeds")
+    func lines(_ snow: AlertPrefs) throws -> [String] {
+      let response = DeviceResponse(
+        id: leeds.response.id, place: leeds.response.place,
+        alerts: RegistrationBody.Alerts(snow: snow), seenAt: leeds.response.seenAt)
+      var kept = leeds
+      kept.response = response
+      return Array(try #require(YourPrivacy.keptLines(kept)).dropFirst(3))
+    }
+    #expect(
+      try lines(AlertPrefs(evening: true, morning: true, possible: true)) == [
+        "Evening before (about 6pm)", "On the day (about 7am)", "Also when snow is possible",
+      ])
+    #expect(
+      try lines(AlertPrefs(morning: true, possible: true)) == [
+        "On the day (about 7am)", "Also when snow is possible",
+      ])
+    #expect(try lines(AlertPrefs()) == [])
+    let page = YourPrivacy(adsOn: false, privacyChoices: false, kept: YourPrivacy.keptLines(leeds))
+    #expect(page.kept?.lines == YourPrivacy.keptLines(leeds))
+    for line in try #require(YourPrivacy.keptLines(leeds)) {
+      #expect(otherTopic(in: line) == nil, "\(line)")
+    }
+  }
+
+  @Test("what the delete did, in words, once it has")
+  func deleteStatus() {
+    #expect(
+      YourPrivacy.deleteStatus(.done)
+        == "Notifications are off. We've deleted your notification token, place, units and "
+        + "choices.")
+    #expect(
+      YourPrivacy.deleteStatus(.notYet)
+        == "Couldn't reach our server, so nothing is deleted yet. The app will try again when you "
+        + "next open it.")
+    #expect(YourPrivacy.deleteStatus(.idle) == nil)
+    #expect(YourPrivacy.deleteStatus(.deleting) == nil)
+    let page = YourPrivacy(
+      adsOn: false, privacyChoices: false, deleteStatus: YourPrivacy.deleteStatus(.done))
+    #expect(page.deleteStatus == AppCopy.deleteDone)
+    #expect(page.kept == nil)
+    for text in [AppCopy.deleteDone, AppCopy.deleteNotYet] {
+      #expect(otherTopic(in: text) == nil, "\(text)")
     }
   }
 }

@@ -21,7 +21,7 @@ public struct SettingsActions {
   /// "Privacy choices": Google's privacy options form. Nil while Settings doesn't show the row:
   /// in the paid version, and while Google says the form isn't required.
   public var privacyChoices: (() -> Void)?
-  /// "Turn off notifications and delete my data". Nil until phase 8.2 brings it.
+  /// "Turn off notifications and delete my data". Nil while not registered for notifications.
   public var deleteMyData: (() -> Void)?
   /// Settings → Notifications' and the place page's.
   public var notifications: NotificationActions

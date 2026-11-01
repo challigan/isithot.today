@@ -153,6 +153,19 @@ struct AppCopyTests {
     #expect(AppCopy.cardOn.hasPrefix("Done. You'll get a notification the evening before snow"))
   }
 
+  @Test("what Your privacy shows is kept, the slots filled, and what its button did (phase 8.2)")
+  func kept() {
+    #expect(AppCopy.keptID(id: "b8465956") == "ID b8465956")
+    #expect(
+      AppCopy.keptPlace(place: "Leeds", zone: "Europe/London") == "Leeds, Europe/London")
+    #expect(
+      AppCopy.keptUnits(label: CoreCopy.snowUnitsLabel, units: CoreCopy.snowUnitName(.c))
+        == "Snow units: cm")
+    #expect(AppCopy.deleteDone.hasPrefix("Notifications are off. We've deleted"))
+    #expect(AppCopy.deleteNotYet.hasPrefix("Couldn't reach our server, so nothing is deleted yet."))
+    #expect(AppCopy.privacyForecast.contains("your notification choices and the last forecast"))
+  }
+
   @Test("strings with slots are functions that fill them, the text around kept as it is")
   func slots() {
     #expect(AppCopy.placeButtonLabel(place: "Leeds") == "Place: Leeds. Change place.")

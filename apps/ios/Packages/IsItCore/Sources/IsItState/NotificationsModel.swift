@@ -194,10 +194,12 @@ public final class NotificationsModel {
     pickerRequests += 1
   }
 
-  /// Settings closed: the test result and the place problem go. A test under way stays.
+  /// Settings closed: the test result, the place problem and the delete's line go. A test or a
+  /// delete under way stays.
   public func dismissResults() {
     if case .done = state.test { state.test = .idle }
     state.placeProblem = nil
+    if state.delete == .done || state.delete == .notYet { state.delete = .idle }
   }
 
   // MARK: - The card
@@ -223,6 +225,25 @@ public final class NotificationsModel {
     dismissCardForGood()
   }
 
+  // MARK: - Your privacy (8.2)
+
+  /// "Turn off notifications and delete my data": every switch off, the place forgotten, the
+  /// card put away (one this session's "Turn on" made say it was done too), and the server's
+  /// record deleted with the token last sent. Done once it is deleted; not yet when the delete
+  /// didn't reach the server, which a later sync then does, making it done. No confirmation:
+  /// turning notifications on again undoes it.
+  public func deleteMyData() async {
+    await start(from: nil)
+    state.delete = .deleting
+    state.settings = AlertSettings()
+    store.saveSettings(state.settings)
+    dismissCardForGood()
+    state.cardTurnedOn = false
+    sync()
+    await synced()
+    state.delete = state.registration == nil ? .done : .notYet
+  }
+
   // MARK: - Links
 
   /// A link asked for Settings → Notifications.
@@ -238,8 +259,8 @@ public final class NotificationsModel {
     return [place.key: response.place.timezone]
   }
 
-  /// Waits for the start, the sync under way and any it queued (the tests and `sendTest`). A
-  /// retry scheduled is not waited for.
+  /// Waits for the start, the sync under way and any it queued (the tests, `sendTest` and
+  /// `deleteMyData`). A retry scheduled is not waited for.
   public func synced() async {
     await starting?.value
     while let syncing { await syncing.value }
@@ -247,8 +268,8 @@ public final class NotificationsModel {
 
   // MARK: - The start
 
-  /// Starts the model once (from the first `screenChanged`, or the first Settings or card
-  /// action, which may come before launch step 6), and waits for the start. `onScreen`
+  /// Starts the model once (from the first `screenChanged`, or the first Settings, card or
+  /// privacy action, which may come before launch step 6), and waits for the start. `onScreen`
   /// gives the place when none was given yet, and the units while none are known, as after an
   /// offline first launch, whose step 6 had no answer to take them from.
   private func start(from onScreen: OnScreen?) async {
@@ -480,6 +501,7 @@ public final class NotificationsModel {
     case .forgotten, .stored:
       keep(registration: nil)
       state.status = .ok
+      if state.delete == .notYet { state.delete = .done }
     case .retry(let seconds):
       retry(after: seconds)
     case .placeRefused, .failed:

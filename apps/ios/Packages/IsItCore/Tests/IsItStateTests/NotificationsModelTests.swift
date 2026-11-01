@@ -956,8 +956,104 @@ struct NotificationTestSendTests {
 }
 
 @MainActor
-@Suite("The card and the links", .timeLimit(.minutes(1)))
+@Suite("The card, Your privacy and the links", .timeLimit(.minutes(1)))
 struct NotificationCardAndPrivacyTests {
+  @Test("Turn off notifications and delete my data, with the token last sent")
+  func deleteMyDataUsesTheLastToken() async throws {
+    let now = try devicesMoment()
+    let h = NotificationsHarness(
+      now: now, settings: eveningInLeeds, registration: try registration(at: now),
+      replies: [try deviceReply("delete")])
+    h.model.screenChanged(target: leedsCity, units: .c)
+    await h.model.synced()
+    await h.model.deleteMyData()
+    #expect(try h.requests == [try identity(.delete, token: fixtureToken())])
+    #expect(h.model.state.delete == .done)
+    #expect(h.model.state.registration == nil)
+    #expect(h.store.loadRegistration() == nil)
+    #expect(h.store.loadSettings() == AlertSettings())
+    #expect(h.model.state.settings == AlertSettings())
+    #expect(h.store.loadCardDismissed())
+    h.model.dismissResults()
+    #expect(h.model.state.delete == .idle)
+  }
+
+  @Test("the delete names the record by the token last sent, not a newer one the server lacks")
+  func deleteMyDataWithANewerToken() async throws {
+    let now = try devicesMoment()
+    let h = NotificationsHarness(
+      now: now, settings: eveningInLeeds, registration: try registration(at: now),
+      replies: [.failure(.notConnectedToInternet), try deviceReply("delete")])
+    h.model.screenChanged(target: leedsCity, units: .c)
+    h.model.tokenArrived(otherToken)
+    await h.model.synced()
+    #expect(h.model.state.registration?.token == (try fixtureToken()))
+    await h.model.deleteMyData()
+    #expect(
+      try h.requests == [
+        try put(eveningInLeeds, token: otherToken), try identity(.delete, token: fixtureToken()),
+      ])
+    #expect(h.model.state.delete == .done)
+    #expect(h.store.loadRegistration() == nil)
+  }
+
+  @Test("offline, the delete says it will try again, and the next sync deletes")
+  func deleteMyDataOffline() async throws {
+    let now = try devicesMoment()
+    let h = NotificationsHarness(
+      now: now, settings: eveningInLeeds, registration: try registration(at: now),
+      replies: [.failure(.notConnectedToInternet), try deviceReply("delete")])
+    h.model.screenChanged(target: leedsCity, units: .c)
+    await h.model.deleteMyData()
+    #expect(h.model.state.delete == .notYet)
+    #expect(h.store.loadSettings() == AlertSettings())
+    #expect(h.store.loadRegistration() != nil)
+    await h.model.becameActive()
+    await h.model.synced()
+    #expect(h.model.state.delete == .done)
+    #expect(h.store.loadRegistration() == nil)
+  }
+
+  @Test("deleting while a PUT is out deletes what that PUT registered")
+  func deleteWhileAPutIsOut() async throws {
+    let h = NotificationsHarness(
+      now: try devicesMoment(), settings: eveningInLeeds,
+      replies: [try deviceReply("put-leeds"), try deviceReply("delete")])
+    h.transport.hold(1)
+    h.model.tokenArrived(try fixtureToken())
+    h.model.screenChanged(target: leedsCity, units: .c)
+    #expect(await yieldUntil { h.transport.requests.count == 1 }, "the PUT was never sent")
+    let deleting = Task { await h.model.deleteMyData() }
+    #expect(await yieldUntil { h.model.state.delete == .deleting })
+    h.transport.release(1)
+    await deleting.value
+    #expect(try h.requests.map(\.method) == [.put, .delete])
+    #expect(h.model.state.delete == .done)
+    #expect(h.store.loadRegistration() == nil)
+  }
+
+  @Test("the delete puts the card away, even one this session's Turn on made say it was done")
+  func deleteMyDataPutsTheCardAway() async throws {
+    let h = NotificationsHarness(now: try devicesMoment())
+    await h.model.turnOnFromCard(onScreen: onScreen(leedsCity))
+    #expect(NotificationCard.card(h.model.state, onScreen: onScreen(leedsCity))?.kind == .turnedOn)
+    await h.model.deleteMyData()
+    #expect(h.model.state.delete == .done)
+    #expect(!h.model.state.cardTurnedOn)
+    #expect(NotificationCard.card(h.model.state, onScreen: onScreen(leedsCity)) == nil)
+  }
+
+  @Test("before the start, the delete starts the model first")
+  func deleteMyDataBeforeTheStart() async throws {
+    let now = try devicesMoment()
+    let h = NotificationsHarness(
+      now: now, settings: eveningInLeeds, registration: try registration(at: now),
+      replies: [try deviceReply("delete")])
+    await h.model.deleteMyData()
+    #expect(h.platform.reads == 1)
+    #expect(h.model.state.delete == .done)
+  }
+
   @Test("Not now puts the card away for good; Turn on takes the place on screen")
   func theCard() async throws {
     let h = NotificationsHarness(now: try devicesMoment())

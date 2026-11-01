@@ -60,6 +60,10 @@ final class NotificationPermissionTests: XCTestCase {
     }
 
     try expectOn(evening)
+    try reveal(app.buttons["your-privacy"], in: app)
+    app.buttons["your-privacy"].tap()
+    XCTAssertTrue(
+      app.find("kept-line-0").waitForExistence(timeout: 10), "Your privacy keeps nothing")
   }
 
   // MARK: - Helpers
