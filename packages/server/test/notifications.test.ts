@@ -16,7 +16,9 @@ import {
   handleDeviceDelete,
   handleDevicePut,
   handleDeviceTest,
+  idsKey,
   jwtKey,
+  regKey,
   resolveServerConfig,
   runAlerts,
   sentKey,
@@ -128,6 +130,22 @@ async function world() {
       expect(reply.status).toBe(200);
       return (await reply.json()) as DeviceResponse;
     },
+    /** The updated app's registration (version 2): its whole set of places at once. */
+    putSet: (t: string, set: { here: unknown; saved: unknown[]; deviceTz?: string }) =>
+      handleDevicePut(
+        call('PUT', 'devices', {
+          v: 2,
+          app: 'snow',
+          platform: 'ios',
+          env: 'sandbox',
+          token: t,
+          units: 'c',
+          appVersion: '1.0 (130)',
+          alerts: { snow: { evening: true, morning: false, possible: false } },
+          ...set,
+        }),
+        platform,
+      ),
     remove: (t: string) =>
       handleDeviceDelete(call('DELETE', 'devices', { app: 'snow', token: t }), platform),
     test: (t: string) =>
@@ -156,6 +174,15 @@ async function world() {
 
 const registrations = (store: MemoryAlertStore) =>
   store.keys().filter((k) => k.startsWith('reg/') || k.startsWith('ids/'));
+
+/** A version 2 registration's answer, as far as these tests read it (section 3.3, step 10). */
+interface SetReply {
+  id: string;
+  deviceTz?: string;
+  here: { name: string; timezone: string; query: string; follows: 'device' | 'ip' } | null;
+  saved: { pid: string; name: string; timezone: string; query: string }[];
+  refused: unknown[];
+}
 
 describe('a registration from PUT to the push', () => {
   it("is notified by the run at the place's 18:05, and a DELETE stops the next day's", async () => {
@@ -337,6 +364,80 @@ describe('a registration from PUT to the push', () => {
       name: 'New York',
       kind: 'evening',
     });
+  });
+});
+
+describe('a phone with saved places, from PUT to the pushes', () => {
+  it('moves an 8.1 registration to a set, notifies each place once at 18:05, and a DELETE removes every one', async () => {
+    const w = await world();
+    const t = token(40);
+    // An 8.1 build registers Durham.
+    w.at(SNOWY - 60 * MINUTE);
+    const before = await w.put(t, { place: 'durham-gb' });
+    // The updated app: where the phone is (in Durham), Hexham and Oslo saved.
+    w.at(SNOWY - 30 * MINUTE);
+    const res = await w.putSet(t, {
+      deviceTz: 'Europe/London',
+      here: { lat: 54.8, lon: -1.6, source: 'device' },
+      saved: [
+        { lat: 54.97, lon: -2.1, name: 'Hexham', country: 'GB', source: 'search' },
+        { place: 'oslo-no' },
+      ],
+    });
+    expect(res.status).toBe(200);
+    const reply = (await res.json()) as SetReply;
+    expect(reply).toMatchObject({
+      id: before.id,
+      deviceTz: 'Europe/London',
+      here: {
+        name: 'Durham',
+        timezone: 'Europe/London',
+        query: 'lat=54.8&lon=-1.6&source=device',
+        follows: 'device',
+      },
+      refused: [],
+    });
+    expect(reply.saved.map((p) => p.name)).toEqual(['Hexham', 'Oslo']);
+    const [hexham, oslo] = reply.saved as [SetReply['saved'][number], SetReply['saved'][number]];
+    expect(new Set([hexham.pid, oslo.pid]).size).toBe(2);
+    for (const { pid } of reply.saved) expect(pid).toMatch(/^[0-9a-f]{12}$/);
+    // One record a place, each in its place's zone: the 8.1 record is now where the phone is.
+    expect(registrations(w.store)).toEqual(
+      [
+        regKey('Europe/London', 'snow', reply.id),
+        regKey(hexham.timezone, 'snow', reply.id, hexham.pid),
+        regKey(oslo.timezone, 'snow', reply.id, oslo.pid),
+        idsKey('snow', reply.id),
+      ].sort(),
+    );
+
+    // 18:05 in London, 19:05 in Oslo: snow likely tomorrow at all three.
+    const first = await w.run(SNOWY);
+    expect(first).toMatchObject({ records: 3, sent: 3, silent: 0, errors: 0 });
+    expect(w.devices()).toEqual([t, t, t]);
+    const pushes = w.fake.seen.map((s) => {
+      const body = JSON.parse(s.body);
+      return [s.headers['apns-collapse-id'], body.aps['thread-id'], body.name, body.place];
+    });
+    expect(pushes.sort()).toEqual(
+      [
+        ['snow-evening-2026-11-12', 'snow', 'Durham', 'lat=54.8&lon=-1.6&source=device'],
+        [`snow-evening-2026-11-12-${hexham.pid}`, `snow-${hexham.pid}`, 'Hexham', hexham.query],
+        [`snow-evening-2026-11-12-${oslo.pid}`, `snow-${oslo.pid}`, 'Oslo', 'place=oslo-no'],
+      ].sort(),
+    );
+    // 18:05 on the phone too, so each with its sound.
+    for (const { aps } of w.payloads() as { aps: Record<string, unknown> }[]) {
+      expect(aps).toMatchObject({ sound: 'default', 'interruption-level': 'active' });
+    }
+    // None twice.
+    expect(await w.run(SNOWY + 15 * MINUTE)).toMatchObject({ sent: 0 });
+    expect(w.fake.seen).toHaveLength(3);
+
+    // One DELETE removes every place, and the ids entry with the salt in it.
+    w.at(SNOWY + 15 * 60 * MINUTE);
+    expect((await w.remove(t)).status).toBe(204);
+    expect(registrations(w.store)).toEqual([]);
   });
 });
 

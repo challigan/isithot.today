@@ -1032,7 +1032,9 @@ The storage and sending half of the full job (iOS build spec, sections 8.3 and 8
   deploy preview check (register, then list `reg/v1/`) settles it.
 - **Deleting a registration re-reads it first.** A record written or refreshed since the run read
   it (a new `updatedAt` or `seenAt`) is kept, and the `ids` key goes only while it still names the
-  same zone.
+  same zone. (Since "Notifications: several places on one phone", the run and the sender forget
+  every place of a phone this way, through `forgetDevice`, and the `ids` key goes last, only while
+  it is unchanged and once all it names has gone: decision 33 there.)
 - **The provider token is shared through the store** (`apns/v1/jwt/<env>`), reused under 50
   minutes and only when it was made with the current key for the current team, so a rotated key
   takes effect at once. A 403 drops it, unless another run has already made a new one. No copy is
@@ -1068,7 +1070,9 @@ How the apps register for notifications (iOS build spec, sections 8.2 and 8.3): 
 - **The body is checked whole before anything is read or written,** and is at most 2 KB (413
   `too_large`). It has the app, the platform (`ios`), the environment, a hex token of 64 to 200
   characters, the units, the three switches (booleans only), an optional app version, and the
-  place in one of its three forms.
+  place in one of its three forms. (Since "Notifications: several places on one phone", at most
+  8 KB, and a body with `v: 2` has where the phone is and its saved places instead of one place:
+  decisions 19 and 20 there.)
   - Anything but letters, digits, spaces and `. ( ) _ + -` in the app version ("1.0 (112)", at
     most 40 characters) is a 400 `bad_request`. It is logged with Apple's refusals, and a line
     separator (U+2028), a C1 control (U+0085) or a direction override (U+202E) in it could forge
@@ -1076,7 +1080,11 @@ How the apps register for notifications (iOS build spec, sections 8.2 and 8.3): 
   - Only `snow` is live: `wet`, `wind`, `hot` and `all` are a 400 `app_not_live`.
   - The token is lower-cased first, so a device has one id whichever case it sends.
   - No place, or the IP location's empty one, is a 400 `bad_location`. So is a slug with no page:
-    where `/api/v1/today` says 404, a registration says the place is wrong.
+    where `/api/v1/today` says 404, a registration says the place is wrong. (For a body with
+    `v: 2`, since "Notifications: several places on one phone", the server locates where the phone
+    is from its connection when asked to, a saved place whose page has gone is dropped into
+    `refused`, and only a set with nothing left to keep is a 400 `bad_location`: decisions 2, 5
+    and 34 there.)
   - Fields it does not know are ignored.
   - A contract test sends it every body the client's `registrationBody` makes: each place form,
     unnamed searched places, both units and environments, and every switch combination.
@@ -1104,7 +1112,12 @@ How the apps register for notifications (iOS build spec, sections 8.2 and 8.3): 
   stored record's `updatedAt`, so it needs no key of its own. A delete is never refused. Two
   writes in the same instant both pass; Netlify's rule bounds those.
 - **Keys and moves.** Only these handlers write `reg/` and `ids/`, and each write replaces the
-  value whole.
+  value whole. (Since "Notifications: several places on one phone", this bullet and the one above
+  hold for a body without `v`, 8.1's, which first deletes any saved places. A body with `v: 2`
+  writes the device's set: a record per place, the places it no longer has deleted first, and the
+  ids key, with the salt, naming each record before it is written; its minute is timed from that
+  key's own `updatedAt`, which moves only when a registration fully succeeds: decisions 18, 20 and
+  32 there.)
   - A new registration writes its ids key first, then the record, so a DELETE after a failure
     between the two still finds it.
   - A move between zones takes four steps: the ids key naming the new zone and the ones left
@@ -1119,7 +1132,10 @@ How the apps register for notifications (iOS build spec, sections 8.2 and 8.3): 
   the hour (UTC) for the id, with `Retry-After` to the next hour. Otherwise one push at once, and
   202 `{ sent: true }`. It sends tomorrow's real evening notification when the rule sends one for
   the place (with the record's "possible" choice, whatever its evening switch says), and
-  otherwise "Test notification".
+  otherwise "Test notification". (Since "Notifications: several places on one phone", one push for
+  each of up to two places, where the phone is and the saved place saved last, then
+  `{ sent: true, count: 2 }`; the quiet hours by the phone's clock when a saved place is tested;
+  and each place's own collapse id and thread: decision 25 there.)
   - **It goes through the run's sender** (`sendAlerts`, with no claim key, since the hour's slot
     has already counted it). So Apple's answers mean what they mean for the run, the provider
     token is the run's, shared through the store and dropped on a 403, and the quiet hours are
@@ -1163,17 +1179,26 @@ How the apps register for notifications (iOS build spec, sections 8.2 and 8.3): 
   `createDeps`'s own: a cache read slower than 1.5 s logs its key, and the handlers used to leave
   those to the plain console. A test checks every line the tests log, and one runs a PUT and a
   test send on the functions' own dependencies with a slow Blobs edge.
-- **Junk registrations. Needs a decision before the public launch.** A made-up token is a new id,
-  so the one-write-a-minute rule never applies to it, and only Netlify's 10 a minute per IP on
-  each domain bounds them. Junk at a place with no snow is never pushed, so Apple never refuses
-  it, and it stays for 90 days. Since the run judges each registration once a window, each costs
-  at most one forecast a window (and none where it shares a place), the run's cap still bounds a
-  run (60 forecasts free, 300 with the key), and a zone gets through 480 or 2,400 places a window.
-  Past that, junk padding one zone would push real registrations out. Two ways to close it, both
-  Carl's call: App Attest or DeviceCheck (an app change, the real fix), or a daily limit of new
-  registrations per IP, which means keeping a keyed hash of the IP for a day (research section
-  11 promises the IP is never stored, so the privacy notice would change) and could refuse people
-  behind one mobile network's address.
+- **Junk registrations. Carl decides by Fri 13 Nov.** 1.0 (Mon 23 Nov) is the public launch this
+  waited for. A made-up token is a new id, so the one-write-a-minute rule never applies to it, and
+  only Netlify's 10 a minute per IP on each domain bounds them: 10 records a minute from bodies
+  without `v`, and since "Notifications: several places on one phone", up to 40 from bodies with
+  `v: 2` (the free place and 3 new saved places each), with up to 40 forecast lookups, each of
+  which may start a request for a new cell's climate normals in the background. That is within
+  `/api/v1/today`'s own 60 a minute per IP, so nothing new is exposed upstream; the stored junk is
+  the problem. Junk at a place with no snow is never pushed, so Apple never refuses it, and it
+  stays for 90 days. Since the run judges each registration once a window, each costs at most one
+  forecast a window (and none where it shares a place), the run's cap still bounds a run (60
+  forecasts free, 300 with the key), and a zone gets through 480 or 2,400 places a window. One IP
+  can fill that in about 12 or 60 minutes (48 minutes or 4 hours with bodies without `v`), and past
+  it junk padding one zone would push real registrations out. The run's tie-break, the group with
+  the oldest registration first among groups of one size, slows that; it doesn't stop it. Two ways
+  to close it, both Carl's call: App Attest or DeviceCheck (an app change, the real fix), or a
+  daily limit of new registrations per IP, which means keeping a keyed hash of the IP for a day
+  (research section 11 promises the IP is never stored, so the privacy notice would change) and
+  could refuse people behind one mobile network's address. Recommended: launch with the caps and
+  decide again for 1.0.1, with the run's daily count of devices with saved places to go on
+  ("Notifications: several places on one phone", decision 26).
 
 ## Notifications: the run (packages/server alerts.ts)
 
@@ -1245,6 +1270,8 @@ any other trigger could call it.
   nothing.
 - **Stale.** A record whose `seenAt` (else `updatedAt`) is more than 90 days old is deleted when
   read, whatever its switches, through `forgetRegistration`, which keeps one refreshed since.
+  (Since "Notifications: several places on one phone", through `forgetDevice`, which forgets every
+  place of the phone by the same rule: decision 33 there.)
 - **ALERTS_FORCE_IDS** takes prefixes of 8 to 32 hex characters, in any case. A shorter one would
   force many registrations at once, so it is ignored and counted as an error, without being
   quoted. A forced registration gets one notification per window per day whatever the band: the
@@ -1304,6 +1331,312 @@ any other trigger could call it.
   the same made-up device goes through the same sender to Apple's sandbox, which refuses it, and
   the registration is deleted (SETUP section 5). The run's own path to Apple can be checked on
   production once it sends, with the same device.
+
+## Notifications: several places on one phone (packages/server, packages/core)
+
+Carl's premium feature: the free notification follows where the phone is (its location if shared,
+otherwise the town its internet connection is in), and the one-off purchase adds notifications for
+saved places, a bell beside each starred place. His answers on Sun 1 Nov were to build it as
+designed and that 1.0 waits for the bells. This is the server half, a pull request of its own from
+main ("Notifications for several places on one phone (server)"), merged before any app build that
+uses it; the app's halves are phases 8.4a ("where you are") and 8.4b (the bells), in sections of
+their own. It is backward compatible: a body from 8.1's TestFlight builds is answered exactly as
+before. No Netlify variable is new, the run's switches mean what they did, and `ALERTS_FORCE_IDS`
+forces every place of a phone. This records the design's decisions that the server carries, as
+built, and where the build differs from the design.
+
+**The decisions** (the design's numbering, which the code's comments follow). Where the phone is:
+
+2. **The server locates the approximate place, at each registration.** A version 2 body says
+   `here: { "source": "ip" }` when the phone's location isn't shared, and the server locates the
+   request's own connection with `locateFromIpOnly(geo)` (`today.ts`, beside the private
+   `locateFromIp`, which is unchanged): a place only when Netlify's `geo` names a town as well as
+   giving valid coordinates, and never the fallback city, so a country-only match never stands for
+   where someone is. `devices.mts` passes `geo` built exactly as `today.mts` builds it (a test holds
+   the two the same), and `DevicesPlatform.geo` is optional. Not the app: it has an IP answer only
+   while the screen shows the approximate place, and with no `geo` `/api/v1/today` answers London,
+   still marked `source: 'ip'`.
+3. **How often it moves.** Every version 2 body is located afresh, so the free place moves when the
+   phone registers. The app sends the phone's location at each launch and return when access is
+   already allowed, and while the free place is approximate it registers each time it is opened,
+   at most once every `ALERTS.hereRefreshMinutes` (60, new in core beside `heartbeatDays`): both
+   from phase 8.4a. Reverse geocoding is a local index, so a refresh costs writes, and a forecast
+   only for a new cell. No background location.
+4. **Location withdrawn.** A version 2 body with `here` from the connection deletes a stored free
+   place that wasn't located from a connection (the phone's own point, or an 8.1 record) first,
+   before any lookup, even when the connection can't be located or the new cell's lookup then
+   fails: the server never keeps the phone's location once it isn't shared.
+5. **The connection can't be located.** A stored free place located from a connection
+   (`follows: 'ip'`) is kept, re-stamped, for `ALERTS.ipPlaceKeepDays` (7) after its `locatedAt`,
+   which isn't refreshed meanwhile; after that, or for any other free place, it is deleted and the
+   reply's `here` is null. With no free place and no saved place left, the whole set is forgotten,
+   as a 204 forgets it, then 400 `bad_location`: "We couldn't tell where you are from your internet
+   connection. Try again later, or use your location." (the app shows the server's words; a test
+   pins them).
+
+The shape:
+
+18. **One record per place, in its own zone**, so windows, quiet hours, claims and done markers
+    stay per zone. The free place keeps `reg/v1/<tz>/snow.<id>`, so every 8.1 record already is
+    one; a saved place is `reg/v1/<tz>/snow.<id>.<pid>`. `parseRegKey` now takes a 32-hex id and an
+    optional 12-hex pid, and refuses anything else (the old `[0-9a-f]+` let any length through);
+    the longest zone's key stays under Blobs' 600 bytes. The pid is the first 12 hex of HMAC-SHA256
+    over the place's canonical query, keyed with the device's salt (`newSalt`: 16 random bytes, kept
+    as 32 hex characters, which are the key as they stand), made at its first version 2 write and
+    kept only in its ids entry. Without the salt, no pid in a key, a claim, a judgement or a log can
+    be matched to a place by hashing candidates (300 city slugs, about 26 million cells), and a
+    DELETE, or forgetting, deletes it with the ids entry, so the notes the run leaves for a few days
+    name no place (a test hashes every city slug, alone and keyed by the id, against a pid after a
+    DELETE). Two saved places of one registration with the same pid (about one in 6 × 10^12) are a
+    logged 500 `server_error`, never one record. Records stay `v: 1`, read by shape, and gain
+    `slot` (a saved place's pid), `follows`, `locatedAt` and `shadowedBy` (the free place's),
+    `country` (the forecast's) and `deviceTz` (saved places' only). Each place is claimed, judged
+    and logged by its own name, `snow.<id>` or `snow.<id>.<pid>`, so a phone's second place in a
+    window isn't `taken` by the first's claim; the run takes the zone, app, id and pid from the
+    key, whatever the record says.
+19. **One request carries the whole set**, a version 2 body (`v: 2`, with `here` and `saved`), which
+    replaces what is stored: one fingerprint, one heartbeat and one write a minute for the device,
+    as 8.1's sync already works. A request per place would meet the one-write-a-minute rule and
+    Netlify's 10 a minute per IP at once. The ids entry becomes version 2,
+    `{ v: 2, tz?, from?, saved, salt, updatedAt? }`: `tz` and `from` mean for the free record what
+    they meant, so main's code rolled back still finds it, and `saved` names the saved records'
+    keys, most recently saved last. `keysOf` (alertStore.ts) gives every key a version 1 or 2 entry
+    names, to the handlers and the run alike. The design's `leaving` is read but never written: a
+    place is deleted before the entry stops naming it (decision 32).
+20. **Limits.** At most `ALERTS.savedPlacesMax` (10) saved places, as many as can be saved
+    (`PLACES.savedMax`; core can't import the client, so the devices tests, which import both,
+    hold the two equal).
+    Bodies of all three endpoints at most 8,192 bytes (`DEVICE_LIMITS.bodyBytes`, was 2,048): ten
+    searched places with 80-character names and regions in 3-byte characters are about 6.6 KB. One
+    write a minute for each device, timed from a version 2 entry's `updatedAt` (from the free
+    record's, as before, under a version 1 entry), which moves only when a registration fully
+    succeeds, so a retry after a 503 or a 429 isn't refused. At most `ALERTS.newPlacesPerPut` (3)
+    saved places new to the set in one request: the first three in the body's order are stored, and
+    the answer is 429 `rate_limited` with `Retry-After: 60`, "Up to 3 new places are added at a
+    time. Try again in a minute.", which 8.1's sync already honours, so restoring 10 bells takes
+    about 3 minutes. A place's zone, name and country are looked up only when it is new to the set
+    (no stored record with the same canonical query), all at once under one budget,
+    `DEVICE_LIMITS.putLookupMs` (8 s): one lookup takes at most about 7.5 s, and the app waits 12 s
+    for the whole request (`CLIENT.requestTimeoutMs`, an idle timer that a request answered only at
+    the end uses up), so the store's reads and writes either side still leave time for the answer
+    to reach it; a failure or the budget running out is a 503 `upstream_unavailable`, with the rest
+    written. Records are written and deleted 4 at once (`DEVICE_LIMITS.writesAtOnce`). A
+    registration costs N + 1 reads (the ids key, then the records it names, at once), at most two
+    ids writes (three, and one more read, for the first with a saved place, which stores its salt
+    before the lookups: decision 32), a write for each place, the deletes of places left, and a
+    forecast for each new cell. Three tests an hour, as before.
+21. **The phone's night.** A saved place's windows and quiet hours stay at the place, as the free
+    place's do, but during the phone's own night (21:00 to 06:59 in its `deviceTz`, by core's
+    `inQuietHours`) its notification still goes, silently: `interruption-level` `passive` and no
+    `sound`, which Apple adds to the notification list "without lighting up the screen or playing
+    a sound", with no entitlement. Nothing is skipped or deferred, so done and judged markers are as
+    before, and a Whistler evening on a UK phone is in Notification Centre by morning rather than
+    never sent. The body's `deviceTz` (a zone of at most 64 characters that the server's `Intl`
+    accepts; anything else is treated as absent, so a zone newer than the server's ICU never
+    refuses a registration) is kept on saved records only, and the reply gives it only while a
+    saved place keeps it. The run counts these pushes, sent or logged, as `silent` (`2 silent` in
+    its line). The sender still refuses anything in the place's own quiet hours.
+22. **One notification per place.** A saved place has its own collapse id,
+    `snow-evening-2026-12-02-<pid>` (36 bytes), and thread, `snow-<pid>`: core's
+    `collapseId(topic, kind, date, slot?)` and new `threadId(topic, slot?)`. The free place keeps
+    `snow-<kind>-<date>` and the thread `snow`, so an 8.1 phone updated on a snowy evening isn't
+    notified twice. `alertPush` takes `thread` (and `quiet`, decision 21) as optional inputs, the
+    thread defaulting to the topic, so the free place's payload, and an 8.1 record's, are as before
+    byte for byte. Without this, two places on one evening merge into one notification.
+23. **One town under two names**, decided at the registration: when the free place's point equals a
+    saved place's (both on the 0.05° grid), the free record is written with `shadowedBy: <pid>`.
+    Only saved places actually written count, so one held back by the cap, or whose lookup failed,
+    never silences the free place; and a free place kept as it was, because its new cell's lookup
+    failed, is re-stamped without `shadowedBy` once its saved place has gone. The run sets a
+    shadowed free record aside before grouping: it needs no forecast, sends nothing and is finished
+    with, judged where its zone is left unfinished, so later runs skip it unread. Only the saved
+    place's notification goes, under the name the person chose.
+24. **The payload's route** is unchanged: every record carries its own `query` and `name`, so a tap
+    opens that place. An approximate free place is stored as its point on the grid, canonicalised as
+    a device point is (`lat=…&lon=…&source=device`), so a tap opens that cell under the forecast's
+    name for it.
+25. **The test send.** The same body, `{ app, token }`, and at most two pushes: where the phone is
+    (unless a saved place shadows it) and the last saved place the ids entry names, the one saved
+    most recently, so a reviewer who rings one bell sees that place's test. Quiet hours by the
+    phone's clock: the saved record's `deviceTz`, else the free place's zone; 409 only in the
+    phone's night. With no saved place the words are 8.1's ("…at the place. Try again after 7am
+    there."); with one, "Nothing is sent from 9pm to 7am on your iPhone. Try again after 7am."
+    `Retry-After` now counts whole minutes (the old ceiling gave 14,101 s for 3 h 55 min, a
+    floating-point error; 8.1's fixture, exactly 9 hours, is unchanged). One claim of the hour's
+    three; both forecasts waited for at once under the one 3 s wait; collapse ids `snow-test` and
+    `snow-test-<pid>`, or for the real notification `collapseId('snow', 'evening', date, slot)`,
+    and a thread for each place. Both go through the run's sender, one after another on one
+    session (`apnsConcurrency: 1`), none started more than 8 s after the sends begin
+    (`DEVICE_LIMITS.testDeadlineMs`), each with the phone's zone as its `quietTz`, so the sender
+    agrees with the 409. Once Apple refuses the token the sender forgets the phone and sends it
+    nothing more (decision 33), and the answer is 404. 202 `{ sent: true }` for one push, and
+    `{ sent: true, count: 2 }` for two: `count` only above 1 (decision 38).
+26. **Entitlement: the app gates, the server caps**, for 23 Nov, as the ads and widgets already
+    trust the app: the server takes the free place and up to 10 saved places from any phone. The
+    cost: made-up tokens can fill a zone's window (480 places free, 2,400 with the key) and push
+    real registrations out for up to 90 days; decisions 20 and 37 slow that, they don't stop it
+    ("Junk registrations", in "Notifications: the devices endpoints"). App Attest or DeviceCheck is
+    Carl's call, by Fri 13 Nov; recommended: leave it to 1.0.1. Verifying the signed transaction
+    (the app sends `jwsRepresentation`, and the server checks it offline against Apple's root
+    certificates; 1.5 to 2.5 days, with traps: it must take Sandbox in production, where TestFlight
+    and App Review buy, and refuse Xcode's and local testing's, and it adds Purchase History to App
+    Privacy) is the follow-up if the numbers show abuse, and the numbers now exist: the run's 03:00
+    UTC cleanup logs `alerts-run: cleanup: 12 devices with saved places` (distinct ids with a pid
+    key, from one listing of `reg/v1/`), once a day: only the run that finishes the cleanup lists
+    and counts, after the old keys have gone, so a cleanup cut short, carried on by the next run in
+    the hour, never logs it twice; a listing that fails leaves the cleanup unfinished, so the next
+    run in the hour counts. Each month Carl compares it with Snow unlock units in App
+    Store Connect: more devices than 6 × units + 10 (with Family Sharing a purchase reaches up to 6)
+    means verifying in the next update. The version 2 body ignores fields it doesn't know, so a
+    `transaction` can be added without a new version.
+27. **8.1 records and builds.** No data migration: an 8.1 record is the device's free-place record
+    as it stands, replaced by the first version 2 registration that locates the phone, and deleted
+    by one that can't (decision 5). A body without `v` (8.1's TestFlight builds) is answered exactly
+    as before, any of the three place forms with the version 1 reply, and replaces the set with its
+    one place: saved records are deleted first, before anything can fail, and the ids entry goes
+    back to version 1's `{ tz }`, with no salt; against a version 2 entry it is held to that
+    entry's `updatedAt`. That path is one function (`putPlace`), to delete once those builds have
+    expired, 90 days after the last 8.1 upload (by early February 2027). **Order:** this deploys
+    before the first app build that sends version 2 reaches TestFlight (main's server answers such
+    a body 400), and is merged once C18's test notification has arrived, so C18 tests the server
+    its build was made against. **Rollback:** main's code skips saved keys as unparsable, finds the
+    free record through a version 2 entry's `tz`, and leaves such an entry alone while the free
+    place stays in its zone; its DELETE removes only the free record and the ids key, so saved
+    records are orphaned, and forgotten at 90 days once rolled forward (decision 33). Once a build
+    that sends version 2 is out, roll forward only.
+
+What the design's three reviews added:
+
+32. **Removals land first.** A registration works out its set's keys with no forecast
+    (canonicalising needs none) and deletes every stored place the set no longer has, and the free
+    place when there is none (or by decision 4), before any lookup can fail; the old ids entry
+    still names them, so a DELETE after a failure finds what is left. A device's first set with a
+    saved place stores its new salt next, in an entry naming what is left (for a new device only
+    if no entry is there yet), and reads it back after the lookups, taking the salt another
+    registration overlapping this one stored first (an app's retry, say), so each saved place gets
+    one pid and one record. Then the new places are looked up, and the rest goes in this order:
+    the ids entry naming everything about to be written and the zones the free place is leaving
+    (skipped when it already names them, with the same salt); the records, every one with the one
+    `updatedAt` and `seenAt`; the free place's copy in a zone it left; the ids entry naming what is
+    there, always written, since the run may have forgotten the device meanwhile, or, with nothing
+    there, deleted if as the registration left it, so a device that ends with no place, an
+    ordinary forecast outage on a first registration say, keeps no ids key or salt. So a failed
+    lookup costs only the additions (503,
+    the rest written), never an unstar, a refund or a bell turned off, and a free place that moves
+    is deleted only once its successor is written, so a failing lookup never leaves a phone
+    without one (decision 4 apart). A test fails the store at each of the writes in turn and
+    checks that a DELETE then removes every copy; others forget the device during a
+    registration's lookups, and send two first registrations at once, and check the same.
+33. **Forgetting is per record.** `forgetDevice` (alertStore.ts) replaces `forgetRegistration`
+    (removed) for the run and the sender, starting from the record that set it off: one the run
+    found stale, or whose push Apple refused (the token, not the place, so every place goes). A
+    record goes only if its `updatedAt` and `seenAt` are still the trigger's, as a whole set's are,
+    written with one stamp: the trigger's own record first (written since, or a store failure, and
+    nothing else is touched, so a set written meanwhile keeps every place); then every other key its
+    ids entry names, at once (one by one, 11 records of a read and a delete at up to 1.5 s each
+    could outlast the run's 20 s); then the ids key and the salt in it, re-read, only if unchanged
+    and all it names has gone, and is still gone read again after it (a registration may have
+    written a record back, with an entry the same as before). A record its ids entry doesn't name
+    (an orphan: a rollback, two registrations overlapping) is thus forgotten alone, by its own
+    stamp, as is the trigger when the ids key can't be read. `deleted` means the trigger's record
+    has gone, so its zone can finish; `changed` or `failed` leaves a stale record's zone unfinished,
+    as before. Once a phone is forgotten, the sender starts none of its other pushes in that call
+    (`deferred`): a test stops at the first refusal, and the run's other places of that phone find
+    their records gone next time.
+34. **One bad saved place** doesn't refuse the set: a city slug that has gone from
+    `data/cities.json` is dropped, the rest are stored, and the reply lists it in `refused` as
+    `{ index, code: 'not_found' }`. Two that canonicalise to one query count once. A malformed
+    body, a malformed or out-of-range `here` or saved point, the phone's location among the saved
+    places, more than 10, or a `v` other than 2 is still a 400, `bad_request` (8.1's bodies keep
+    `bad_location`).
+35. **The Today card** is the app's (phase 8.4a), shown only while the screen shows where the phone
+    is. The server's part is the reply's `here` (name, zone, query, country and `follows`), so the
+    card's Done line and Settings can name the town the server located.
+36. **Logs.** The free place's zone as before; saved places only as counts and pids, never their
+    zones, which beside the 8-character ID people are told to email would build a trip log:
+    `devices: registered snow.3f9c1a2b… in Europe/London, 2 saved, 2 zones` (or
+    `moved … to … from …`, `(not located)`, and `; 1 not looked up`, `; 1 held back` or
+    `; 1 refused`). A saved
+    place is named `snow.3f9c1a2b….1a2b3c4d5e6f` (`redact` shortens only runs of 32 hex or more).
+    Where a line would carry a saved place's zone it doesn't: the run's unreadable-record error,
+    the sender's quiet-hours refusal, the test's (`quiet hours on the phone`), and `scrub` blanks
+    the zone of a saved key a store's error quotes (`reg/v1/…/`). A dry run's line for a saved
+    place has no words, which name the place, and ends ` (silent)` when it would be. The log
+    tests run the version 2 registration, the test send and the run's new lines, and check that no
+    saved place's zone appears.
+37. **The sender's order and the run's ties.** `sendAlerts` sends each environment's phones in
+    turn, each phone's least relevant push first, so one phone's pushes are side by side only once
+    no other phone is waiting (Apple's advice for 429s) and the one Apple keeps for an offline
+    phone is likelier the deepest snow. `judge()` breaks ties between groups of the same size by
+    the oldest `createdAt` among their records (one without counts as newest), so a fresh flood
+    can't push established registrations out of a run's fetch cap.
+38. **8.1's fixtures stay byte-identical.** Once 8.1/8.2 is on main its device fixtures are made by
+    these handlers, so nothing they produce changes: `count` only above 1, `DevicesPlatform.geo`
+    optional, `alertPush`'s thread optional, 8.1's 409 words for a device with no saved place, the
+    free place's collapse id and thread. Checked before the rebase by replaying 8.1's 15 device
+    fixture requests (its `deviceFixtures.ts`) through these handlers: all 15 byte-identical. After
+    the rebase on 8.1-merged main, the bar is `pnpm mobile:check` and `deviceFixtures.test.ts`
+    passing with no packages/mobile or apps/ios file changed, and the iOS workflow, which runs on
+    `packages/server/**`, green.
+
+**Where the build differs from its design.**
+
+- **The write order** (decision 32). The design wrote the ids entry naming old and new places
+  before the deletes and lookups. A new saved place's key holds its zone, known only after its
+  lookup, so its record would have been written before any ids entry named it, and a failure in
+  between would have left a record no DELETE could find. Deleting first, while the old entry still
+  names what goes, keeps the design's guarantee, with the same two ids writes at most (three for
+  a device's first set with a saved place, below).
+- **Decision 4 reaches a failed lookup.** The design replaced a free place only once its successor
+  was written; for the phone's own point, after location is withdrawn, it is deleted first, so the
+  point can't outlive the withdrawal through a 503.
+- **`shadowedBy`** looks at the saved places written, not every saved place of the body
+  (decision 23); a shadowed record is set aside before grouping, not in `decide`, so no forecast is
+  asked for it.
+- **Refusals** in version 2 bodies are `bad_request`, and `refused`'s code is `not_found`
+  (decision 34); a `v` other than 2 is refused rather than ignored.
+- **One body limit** for all three endpoints, 8,192 (decision 20).
+- **The test's deadline** runs from when the sends start, and its stop after Apple's refusal is the
+  sender's, for the run as well (decisions 25 and 33).
+- **`forgetDevice`** tries the trigger's record first and the rest at once (decision 33).
+- **The lookup budget** is 8 s, not 12: the app's own 12 s covers the whole request, so with 12 s
+  of lookups the app would give up before the 503 came (decision 20).
+- **A new salt is stored before the lookups**, as the design's entry was, but alone with what is
+  left, not naming new places whose zones aren't known yet; and a set that ends with no place
+  keeps no ids key, which the design didn't say (decision 32).
+- **The pid's key** is the salt's 32 hex characters as stored, not the 16 bytes they spell: the
+  same entropy. A test pins three pids worked out separately, so it can't drift.
+- **`who`** keeps `idPrefix`'s ellipsis, `snow.3f9c1a2b….1a2b3c4d5e6f`.
+
+**Checked on Linux.** Every rule above was written as a failing test first. `alertStore.test.ts`:
+keys with and without a pid (13- and 8-hex suffixes refused), the longest zone's key, `placeId`,
+`keysOf`, and `forgetDevice` (a set, an 8.1 entry, a record written since, a stale orphan, an entry
+main's code rewrote as `{ tz }`, a registration landing between the ids read and the deletes, a
+record written back before the ids key goes, a failing store). `devices.test.ts`: every version 2
+refusal, each free-place case (the connection with and without a town, a place from a connection
+kept for 7 days and no longer, a withdrawn location, an 8.1 record, nothing at all), the cap and its
+retry, the lookup budget, a heartbeat with no forecast, `shadowedBy` set and cleared (on a free
+place kept through a failed lookup too), a refund, a failure at each write followed by a DELETE, a
+lookup that throws after the removals, the run forgetting the device during the lookups, two first
+registrations at once, nothing kept when nothing could be looked up, a body without `v` after a set,
+the DELETE of a set and its salt, the test send's cases, and the logs. `today.test.ts`:
+`locateFromIpOnly`. `alerts.test.ts`: two places in one zone and window, two zones, a London phone's
+Whistler evening either side of the clocks changing, a Fernando de Noronha evening whose sound the
+change turns on, a shadowed free place, forcing, a stale phone, claims by place, the tie-break, the
+daily count (once, after a cleanup cut short), an 8.1 record byte for byte, and no saved zone in any
+line. `push.test.ts`: a refused saved place forgets the phone, the quiet payload, the thread, the
+order, `quietTz`. `notifications.test.ts`, end to end: an 8.1 registration, then a version 2 body on
+the same token, then the run at 18:05 (one notification per place), then a DELETE that leaves
+nothing. Core: both ids, and decision 30's test that no notification's words name the purchase, a
+bell, a price or an upgrade. The dry-run script adds two saved places on a phone in Tokyo;
+`--now 2026-12-02T18:05:00Z` prints a line for each, silent, and `2 silent` in the run's line.
+
+**Superseded**, in one place, each with a note where it stands: in "Notifications: the devices
+endpoints", the 2 KB limit, "No place, or the IP location's empty one, is a 400" (for version 2
+bodies), one write per id a minute timed from the record and the move's single record (both now for
+8.1's bodies only), and the test's one push; in "Notifications: the alert store and the push layer"
+and "Notifications: the run", forgetting one registration; in "The app's support page and privacy
+notice (S8)", the deletion timing reasoned from the weekly check-in alone.
 
 ## The iPhone app's foundations (packages/mobile, apps/ios)
 
@@ -2844,7 +3177,15 @@ the website carries both for the snow app (iOS build spec, section 5.8 and 15.5)
     pages say so, and that the in-app switches delete at once. The 90 days count from the app's
     last PUT, and with nothing changed it puts again only every `ALERTS.heartbeatDays` (7), so a
     registration can go about 83 days after the app was last opened: "about 90 days" in the
-    notice, "about three months" on the support page.
+    notice, "about three months" on the support page. (Since "Notifications: several places on
+    one phone", every place a PUT writes gets the same stamp, so a phone's places go together,
+    when the run first finds one stale. While the free place is approximate, the app puts each
+    time it is opened, at most once every `ALERTS.hereRefreshMinutes` (60, from phase 8.4a), so
+    its places go about 90 days after it was last opened; otherwise it still puts weekly with
+    nothing changed, so they can go about 83 days after. Both are still "about 90 days" and "about
+    three months". A place located from the connection can go sooner: the first PUT more than
+    `ALERTS.ipPlaceKeepDays` (7) after it was located whose connection can't be located deletes
+    it.)
   - **In the app's copy since phase 6.2.** Section 15.5's text and `APP_COPY.privacyNotifications`
     (the app's summary, above the live data and the link to this notice) had the shorter list and
     "90 days after you last open the app". Phase 6.2 gave the app's lines the notice's facts:

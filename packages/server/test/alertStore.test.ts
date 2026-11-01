@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import {
   ALERT_STORE_TIMEOUT_MS,
   AlertStoreError,
+  DEVICE_APPS,
   MemoryAlertStore,
   REG_PREFIX,
   SafeAlertStore,
@@ -15,11 +16,14 @@ import {
   createBlobsAlertStore,
   doneKey,
   donePrefix,
-  forgetRegistration,
+  forgetDevice,
   idPrefix,
   idsKey,
   jwtKey,
+  keysOf,
+  newSalt,
   parseRegKey,
+  placeId,
   redact,
   regKey,
   regZonePrefix,
@@ -30,10 +34,13 @@ import {
   zoneOfDirectory,
   type AlertStore,
   type BlobsStoreLike,
+  type DeviceIdsEntry,
 } from '../src';
 
 const TOKEN = 'ab'.repeat(32);
 const ID = '815fd83640110117669cc8280c00f201';
+/** A saved place's pid: 12 hex characters. */
+const PID = '1a2b3c4d5e6f';
 const NOW = Date.UTC(2026, 11, 1, 18, 5, 0);
 
 describe('keys', () => {
@@ -74,6 +81,58 @@ describe('keys', () => {
     expect(zoneOfDirectory('reg/v1/Europe%2FLondon/')).toBe('Europe/London');
     expect(zoneOfDirectory('reg/v1/%E0%A4%A')).toBeNull();
     expect(zoneOfDirectory('sent/v1/2026-12-01')).toBeNull();
+  });
+
+  it("builds a saved place's key, its pid after the id, and reads it back", () => {
+    expect(regKey('Europe/London', 'snow', ID, PID)).toBe(
+      `reg/v1/Europe%2FLondon/snow.${ID}.${PID}`,
+    );
+    expect(regKey('Europe/London', 'snow', ID, undefined)).toBe(
+      regKey('Europe/London', 'snow', ID),
+    );
+    expect(parseRegKey(regKey('America/Argentina/Buenos_Aires', 'snow', ID, PID))).toEqual({
+      tz: 'America/Argentina/Buenos_Aires',
+      app: 'snow',
+      id: ID,
+      pid: PID,
+    });
+    // The free place's key reads as it always has, with no pid at all.
+    expect(Object.keys(parseRegKey(regKey('Europe/London', 'snow', ID))!)).toEqual([
+      'tz',
+      'app',
+      'id',
+    ]);
+  });
+
+  it('refuses a key whose id is not 32 hex characters or whose pid is not 12', () => {
+    const london = 'reg/v1/Europe%2FLondon/snow.';
+    for (const tail of [
+      `${ID}.${PID}0`,
+      `${ID}.${PID.slice(0, 8)}`,
+      `${ID}.${PID.toUpperCase()}`,
+      `${ID}.`,
+      `${ID}.${PID}.${PID}`,
+      `${ID}x`,
+      ID.slice(1),
+      `${ID}0`,
+      `${ID.slice(1)}.${PID}`,
+      ID.toUpperCase(),
+    ]) {
+      expect(parseRegKey(`${london}${tail}`), tail).toBeNull();
+    }
+    expect(parseRegKey(`${london}${ID}`)).not.toBeNull();
+  });
+
+  it("keeps the longest zone's saved key, for any app, inside Blobs' 600 bytes", async () => {
+    const zones = Intl.supportedValuesOf('timeZone');
+    expect(zones.length).toBeGreaterThan(300);
+    const keys = zones.flatMap((tz) =>
+      DEVICE_APPS.map((app) => regKey(tz, app, 'f'.repeat(32), 'f'.repeat(12))),
+    );
+    const longest = keys.reduce((a, b) => (Buffer.byteLength(b) > Buffer.byteLength(a) ? b : a));
+    expect(Buffer.byteLength(longest)).toBeLessThan(600);
+    expect(await new MemoryAlertStore().set(longest, {})).toBe(true);
+    expect(parseRegKey(longest)).not.toBeNull();
   });
 
   it('redacts ids, device tokens and provider tokens for the log', () => {
@@ -425,9 +484,11 @@ describe("createBlobsAlertStore, against Netlify's local Blobs server", () => {
     expect(await store.set(claim, { at: 'two' }, { onlyIfNew: true })).toBe(false);
     expect(await store.get(claim)).toEqual({ at: 'one' });
 
-    await store.set(regKey('America/Argentina/Buenos_Aires', 'snow', 'a1'), {});
-    await store.set(regKey('Asia/Kolkata', 'snow', 'b1'), {});
-    await store.set(regKey('Asia/Kolkata', 'snow', 'b2'), {});
+    // Ids as registrationId makes them (parseRegKey reads no other kind).
+    const [a1, b1, b2] = ['a1', 'b1', 'b2'].map((t) => registrationId('snow', t.repeat(32)));
+    await store.set(regKey('America/Argentina/Buenos_Aires', 'snow', a1!), {});
+    await store.set(regKey('Asia/Kolkata', 'snow', b1!), {});
+    await store.set(regKey('Asia/Kolkata', 'snow', b2!), {});
     const zones = await store.list(REG_PREFIX, { directories: true });
     expect(zones.keys).toEqual([]);
     expect(zones.directories.sort()).toEqual([
@@ -439,18 +500,17 @@ describe("createBlobsAlertStore, against Netlify's local Blobs server", () => {
       'Asia/Kolkata',
     ]);
     const kolkata = await store.list(regZonePrefix('Asia/Kolkata'));
-    expect(kolkata.keys.sort()).toEqual([
-      'reg/v1/Asia%2FKolkata/snow.b1',
-      'reg/v1/Asia%2FKolkata/snow.b2',
-    ]);
+    expect(kolkata.keys.sort()).toEqual(
+      [`reg/v1/Asia%2FKolkata/snow.${b1}`, `reg/v1/Asia%2FKolkata/snow.${b2}`].sort(),
+    );
     expect(kolkata.keys.map((key) => parseRegKey(key)?.tz)).toEqual([
       'Asia/Kolkata',
       'Asia/Kolkata',
     ]);
-    await store.delete(regKey('Asia/Kolkata', 'snow', 'b1'));
-    await store.delete(regKey('Asia/Kolkata', 'snow', 'b1'));
+    await store.delete(regKey('Asia/Kolkata', 'snow', b1!));
+    await store.delete(regKey('Asia/Kolkata', 'snow', b1!));
     expect((await store.list(regZonePrefix('Asia/Kolkata'))).keys).toEqual([
-      'reg/v1/Asia%2FKolkata/snow.b2',
+      `reg/v1/Asia%2FKolkata/snow.${b2}`,
     ]);
   });
 
@@ -479,68 +539,370 @@ describe('claimTestSend', () => {
   });
 });
 
-describe('forgetRegistration', () => {
-  const record = {
-    id: ID,
-    app: 'snow',
+describe('placeId and newSalt', () => {
+  const SALT = '00112233445566778899aabbccddeeff';
+
+  it('makes a new salt of 16 random bytes, as hex, each time', () => {
+    const salts = Array.from({ length: 20 }, () => newSalt());
+    for (const salt of salts) expect(salt).toMatch(/^[0-9a-f]{32}$/);
+    expect(new Set(salts).size).toBe(20);
+  });
+
+  it('is the first 12 hex of HMAC-SHA256(salt, query): stable for one salt, another for another', () => {
+    // Worked out apart from this code (Python's hmac), so the derivation cannot drift.
+    expect(placeId(SALT, 'place=durham-gb')).toBe('883bf8d96e0f');
+    expect(placeId(SALT, 'lat=27.7&lon=85.3&source=search')).toBe('d8f3500a2355');
+    expect(placeId('ffeeddccbbaa99887766554433221100', 'place=durham-gb')).toBe('e44664db5684');
+    expect(placeId(SALT, 'place=durham-gb')).toBe(placeId(SALT, 'place=durham-gb'));
+    const salt = newSalt();
+    expect(placeId(salt, 'place=durham-gb')).not.toBe(placeId(newSalt(), 'place=durham-gb'));
+    expect(placeId(salt, 'place=durham-gb')).not.toBe(placeId(salt, 'place=leeds-gb'));
+  });
+
+  it("makes a pid a saved place's key carries and gives back", () => {
+    const pid = placeId(newSalt(), 'place=durham-gb');
+    expect(pid).toMatch(/^[0-9a-f]{12}$/);
+    expect(parseRegKey(regKey('Europe/London', 'snow', ID, pid))?.pid).toBe(pid);
+    // A log keeps a pid whole (it is under 32 hex) and still cuts the id short.
+    expect(redact(regKey('Europe/London', 'snow', ID, pid))).toBe(
+      `reg/v1/Europe%2FLondon/snow.815fd836….${pid}`,
+    );
+  });
+});
+
+describe('keysOf', () => {
+  const OTHER = registrationId('snow', 'cd'.repeat(32));
+  const london = regKey('Europe/London', 'snow', ID);
+  const durham = regKey('Europe/London', 'snow', ID, PID);
+  const kathmandu = regKey('Asia/Kathmandu', 'snow', ID, '6f5e4d3c2b1a');
+
+  it("names a v1 entry's zone, and the zones it is leaving, as keys", () => {
+    expect(keysOf({ tz: 'Europe/London' } satisfies DeviceIdsEntry, 'snow', ID)).toEqual([london]);
+    expect(
+      keysOf({ tz: 'Europe/London', from: ['Asia/Kolkata'] } satisfies DeviceIdsEntry, 'snow', ID),
+    ).toEqual([london, regKey('Asia/Kolkata', 'snow', ID)]);
+  });
+
+  it("names a v2 entry's free record, then its saved and leaving keys, each once", () => {
+    const entry: DeviceIdsEntry = {
+      v: 2,
+      tz: 'Europe/London',
+      from: ['Asia/Kolkata'],
+      saved: [durham, kathmandu],
+      leaving: [kathmandu, regKey('America/Denver', 'snow', ID, 'aaaaaaaaaaaa')],
+      salt: newSalt(),
+      updatedAt: '2026-11-20T19:02:11.000Z',
+    };
+    expect(keysOf(entry, 'snow', ID)).toEqual([
+      london,
+      regKey('Asia/Kolkata', 'snow', ID),
+      durham,
+      kathmandu,
+      regKey('America/Denver', 'snow', ID, 'aaaaaaaaaaaa'),
+    ]);
+    // No free place: only the saved ones.
+    expect(keysOf({ v: 2, saved: [durham], salt: newSalt() }, 'snow', ID)).toEqual([durham]);
+  });
+
+  it("names only this device's registration keys, and nothing for anything malformed", () => {
+    expect(
+      keysOf(
+        {
+          v: 2,
+          saved: [
+            durham,
+            regKey('Europe/London', 'snow', OTHER, PID),
+            regKey('Europe/London', 'wind', ID, PID),
+            idsKey('snow', ID),
+            7,
+          ],
+          leaving: 'not a list',
+          salt: newSalt(),
+        },
+        'snow',
+        ID,
+      ),
+    ).toEqual([durham]);
+    for (const entry of [null, undefined, 'Europe/London', 7, [], { tz: 7 }, { saved: {} }]) {
+      expect(keysOf(entry, 'snow', ID)).toEqual([]);
+    }
+    expect(keysOf({ tz: 'Europe/London', from: [7, 'Asia/Kolkata'] }, 'snow', ID)).toEqual([
+      london,
+      regKey('Asia/Kolkata', 'snow', ID),
+    ]);
+  });
+});
+
+describe('forgetDevice', () => {
+  /** The stamp every record of one registration shares. */
+  const STAMP = { updatedAt: '2026-08-20T19:02:11.000Z', seenAt: '2026-08-28T08:00:00.000Z' };
+  /** A later registration's. */
+  const LATER = { updatedAt: '2026-12-01T18:04:00.000Z', seenAt: '2026-12-01T18:04:00.000Z' };
+  const here = { tz: 'Europe/London', ...STAMP };
+  const durham = { tz: 'Europe/London', slot: PID, ...STAMP };
+  const kathmandu = { tz: 'Asia/Kathmandu', slot: '6f5e4d3c2b1a', ...STAMP };
+  type Slot = { tz: string; slot?: string; updatedAt: string; seenAt?: string };
+  const keyOf = (s: Slot, id = ID): string => regKey(s.tz, 'snow', id, s.slot);
+  const record = (s: Slot, id = ID) => ({ v: 1, id, app: 'snow', ...s });
+  const entry = (slots: Slot[], salt = '00112233445566778899aabbccddeeff'): DeviceIdsEntry => ({
+    v: 2,
     tz: 'Europe/London',
-    updatedAt: '2026-11-20T19:02:11.000Z',
-    seenAt: '2026-11-28T08:00:00.000Z',
-  };
-  const seed = async (store: AlertStore, stored = record, where = record.tz) => {
-    await store.set(regKey(stored.tz, stored.app, stored.id), stored);
-    await store.set(idsKey(stored.app, stored.id), { tz: where });
-  };
+    saved: slots.filter((s) => s.slot).map((s) => keyOf(s)),
+    salt,
+    updatedAt: STAMP.updatedAt,
+  });
+  /** A set of three places (free, Durham, Kathmandu), all from one registration. */
+  async function seedSet(store: AlertStore): Promise<void> {
+    for (const s of [here, durham, kathmandu]) await store.set(keyOf(s), record(s));
+    await store.set(idsKey('snow', ID), entry([here, durham, kathmandu]));
+  }
 
-  it('deletes the record and its ids key when the record is as it was read', async () => {
+  it('deletes a set: every record its ids entry names, then the entry and its salt', async () => {
+    for (const trigger of [here, durham, kathmandu]) {
+      const store = new MemoryAlertStore();
+      await seedSet(store);
+      expect(await forgetDevice(store, 'snow', ID, trigger)).toBe('deleted');
+      expect(store.keys()).toEqual([]);
+      // Already gone counts as deleted.
+      expect(await forgetDevice(store, 'snow', ID, trigger)).toBe('deleted');
+    }
+  });
+
+  it('deletes a v1 entry and its one record (an 8.1 registration)', async () => {
     const store = new MemoryAlertStore();
-    await seed(store);
-    expect(await forgetRegistration(store, record)).toBe('deleted');
+    await store.set(keyOf(here), record(here));
+    await store.set(idsKey('snow', ID), { tz: 'Europe/London' } satisfies DeviceIdsEntry);
+    expect(await forgetDevice(store, 'snow', ID, here)).toBe('deleted');
     expect(store.keys()).toEqual([]);
-    // Already gone counts as deleted.
-    expect(await forgetRegistration(store, record)).toBe('deleted');
   });
 
-  it('keeps a record written or refreshed since it was read', async () => {
-    const store = new MemoryAlertStore();
-    await seed(store, { ...record, updatedAt: '2026-12-01T18:04:00.000Z' });
-    expect(await forgetRegistration(store, record)).toBe('changed');
-    await seed(store, { ...record, seenAt: '2026-12-01T18:04:00.000Z' });
-    expect(await forgetRegistration(store, record)).toBe('changed');
-    expect(store.keys()).toHaveLength(2);
+  it('keeps every record when the one that set it off was written or refreshed since', async () => {
+    for (const since of [
+      { updatedAt: LATER.updatedAt },
+      { seenAt: LATER.seenAt },
+      { updatedAt: LATER.updatedAt, seenAt: LATER.seenAt },
+    ]) {
+      const store = new MemoryAlertStore();
+      await seedSet(store);
+      await store.set(keyOf(durham), record({ ...durham, ...since }));
+      const before = store.keys();
+      expect(await forgetDevice(store, 'snow', ID, durham)).toBe('changed');
+      expect(store.keys()).toEqual(before);
+    }
   });
 
-  it('leaves an ids key that points at another zone (the device moved)', async () => {
+  it('deletes a stale orphan saved record alone, by its own stamp', async () => {
+    // No ids entry at all (two PUTs of one token overlapping, or a DELETE under a rollback).
+    const alone = new MemoryAlertStore();
+    await alone.set(keyOf(durham), record(durham));
+    expect(await forgetDevice(alone, 'snow', ID, durham)).toBe('deleted');
+    expect(alone.keys()).toEqual([]);
+
+    // An entry that doesn't name it, for records written since: they and the entry stay.
     const store = new MemoryAlertStore();
-    await seed(store, record, 'Asia/Kolkata');
-    expect(await forgetRegistration(store, record)).toBe('deleted');
-    expect(store.keys()).toEqual([idsKey('snow', ID)]);
+    const fresh = [here, kathmandu].map((s) => ({ ...s, ...LATER }));
+    for (const s of fresh) await store.set(keyOf(s), record(s));
+    await store.set(idsKey('snow', ID), entry(fresh));
+    await store.set(keyOf(durham), record(durham));
+    expect(await forgetDevice(store, 'snow', ID, durham)).toBe('deleted');
+    expect(store.keys()).toEqual([idsKey('snow', ID), keyOf(kathmandu), keyOf(here)].sort());
+  });
+
+  it("still loses a v2 entry's saved records at 90 days once main's code rewrote it as { tz }", async () => {
+    // Rolled back: main's PUT re-stamped the free record and wrote { tz }, naming it alone.
+    const store = new MemoryAlertStore();
+    await store.set(keyOf(here), record({ ...here, ...LATER }));
+    await store.set(idsKey('snow', ID), { tz: 'Europe/London' } satisfies DeviceIdsEntry);
+    for (const s of [durham, kathmandu]) await store.set(keyOf(s), record(s));
+    // Rolled forward, each orphan goes when the run finds it stale, and only it.
+    expect(await forgetDevice(store, 'snow', ID, durham)).toBe('deleted');
+    expect(store.keys()).toEqual([idsKey('snow', ID), keyOf(kathmandu), keyOf(here)].sort());
+    expect(await forgetDevice(store, 'snow', ID, kathmandu)).toBe('deleted');
+    expect(store.keys()).toEqual([idsKey('snow', ID), keyOf(here)].sort());
+  });
+
+  it('keeps the new records of a PUT landing between the ids read and the deletes', async () => {
+    const inner = new MemoryAlertStore();
+    await seedSet(inner);
+    let landed = false;
+    // The PUT: every place re-stamped, then the entry naming them, as a v2 PUT writes them.
+    const put = async () => {
+      landed = true;
+      for (const s of [here, durham, kathmandu])
+        await inner.set(keyOf(s), record({ ...s, ...LATER }));
+      await inner.set(idsKey('snow', ID), { ...entry([here, durham, kathmandu]), ...LATER });
+    };
+    const store: AlertStore = {
+      get: async (key) => {
+        const value = await inner.get(key);
+        if (key === idsKey('snow', ID) && !landed) await put();
+        return value as never;
+      },
+      set: (key, value, options) => inner.set(key, value, options),
+      list: (prefix, options) => inner.list(prefix, options),
+      delete: (key) => inner.delete(key),
+    };
+    expect(await forgetDevice(store, 'snow', ID, durham)).toBe('changed');
+    expect(landed).toBe(true);
+    expect(inner.keys()).toHaveLength(4);
+    for (const s of [here, durham, kathmandu]) {
+      expect(await inner.get(keyOf(s))).toMatchObject(LATER);
+    }
+  });
+
+  it('keeps the other records of a PUT landing after the trigger went, and the entry it wrote', async () => {
+    const inner = new MemoryAlertStore();
+    await seedSet(inner);
+    let landed = false;
+    const store: AlertStore = {
+      get: (key) => inner.get(key),
+      set: (key, value, options) => inner.set(key, value, options),
+      list: (prefix, options) => inner.list(prefix, options),
+      delete: async (key) => {
+        await inner.delete(key);
+        if (key === keyOf(here) && !landed) {
+          landed = true;
+          for (const s of [here, durham, kathmandu]) {
+            await inner.set(keyOf(s), record({ ...s, ...LATER }));
+          }
+          await inner.set(idsKey('snow', ID), { ...entry([here, durham, kathmandu]), ...LATER });
+        }
+      },
+    };
+    expect(await forgetDevice(store, 'snow', ID, here)).toBe('deleted');
+    expect(landed).toBe(true);
+    expect(inner.keys()).toHaveLength(4);
+    for (const s of [durham, kathmandu]) {
+      expect(await inner.get(keyOf(s))).toMatchObject(LATER);
+    }
+  });
+
+  it('keeps an ids entry rewritten since it was read, though everything it named has gone', async () => {
+    const inner = new MemoryAlertStore();
+    await seedSet(inner);
+    const next = { ...entry([here]), leaving: [keyOf(durham), keyOf(kathmandu)] };
+    const store: AlertStore = {
+      get: (key) => inner.get(key),
+      set: (key, value, options) => inner.set(key, value, options),
+      list: (prefix, options) => inner.list(prefix, options),
+      delete: async (key) => {
+        await inner.delete(key);
+        // A PUT's removals-first entry, written just as the last record goes.
+        if (key === keyOf(kathmandu)) await inner.set(idsKey('snow', ID), next);
+      },
+    };
+    expect(await forgetDevice(store, 'snow', ID, here)).toBe('deleted');
+    expect(inner.keys()).toEqual([idsKey('snow', ID)]);
+    expect(await inner.get(idsKey('snow', ID))).toEqual(next);
+  });
+
+  it('keeps the ids entry when a record it names was written again after the deletes', async () => {
+    // A PUT that wrote its records after they were deleted here, and an entry the same as before
+    // (one cut short keeps the previous updatedAt), just before the entry is read again.
+    const inner = new MemoryAlertStore();
+    await seedSet(inner);
+    let reads = 0;
+    const store: AlertStore = {
+      get: async (key) => {
+        if (key === idsKey('snow', ID) && ++reads === 2) {
+          for (const s of [here, durham]) await inner.set(keyOf(s), record({ ...s, ...LATER }));
+          await inner.set(idsKey('snow', ID), entry([here, durham, kathmandu]));
+        }
+        return inner.get(key);
+      },
+      set: (key, value, options) => inner.set(key, value, options),
+      list: (prefix, options) => inner.list(prefix, options),
+      delete: (key) => inner.delete(key),
+    };
+    expect(await forgetDevice(store, 'snow', ID, here)).toBe('deleted');
+    expect(reads).toBe(2);
+    expect(inner.keys()).toEqual([idsKey('snow', ID), keyOf(durham), keyOf(here)].sort());
+  });
+
+  it("keeps a moved device's newer record, and the entry naming it", async () => {
+    const store = new MemoryAlertStore();
+    const moved = { tz: 'Asia/Kolkata', ...LATER };
+    await store.set(keyOf(here), record(here));
+    await store.set(keyOf(moved), record(moved));
+    await store.set(idsKey('snow', ID), { tz: 'Asia/Kolkata' } satisfies DeviceIdsEntry);
+    expect(await forgetDevice(store, 'snow', ID, here)).toBe('deleted');
+    expect(store.keys()).toEqual([idsKey('snow', ID), keyOf(moved)]);
+  });
+
+  it("goes on with the rest of the set when the trigger's record has already gone", async () => {
+    const store = new MemoryAlertStore();
+    await seedSet(store);
+    await store.delete(keyOf(kathmandu));
+    expect(await forgetDevice(store, 'snow', ID, kathmandu)).toBe('deleted');
+    expect(store.keys()).toEqual([]);
+  });
+
+  it("never touches another device's records, even one its entry wrongly names", async () => {
+    const OTHER = registrationId('snow', 'cd'.repeat(32));
+    const store = new MemoryAlertStore();
+    await seedSet(store);
+    const theirs = [keyOf(here, OTHER), keyOf(durham, OTHER)];
+    for (const key of theirs) await store.set(key, { ...STAMP });
+    await store.set(idsKey('snow', OTHER), { tz: 'Europe/London' });
+    await store.set(idsKey('snow', ID), {
+      ...entry([here, durham, kathmandu]),
+      leaving: [theirs[1]],
+    });
+    expect(await forgetDevice(store, 'snow', ID, here)).toBe('deleted');
+    expect(store.keys()).toEqual([idsKey('snow', OTHER), ...theirs].sort());
   });
 
   it('deletes nothing it is unsure of when the store fails', async () => {
-    const inner = new MemoryAlertStore();
-    await seed(inner);
-    const failOn = (op: string, prefix: string): AlertStore =>
+    const failOn = (inner: AlertStore, op: 'get' | 'delete', key: string): AlertStore =>
       new SafeAlertStore(
         {
-          get: (key) =>
-            op === 'get' && key.startsWith(prefix)
-              ? Promise.reject(new Error('down'))
-              : inner.get(key),
-          set: (key, value, options) => inner.set(key, value, options),
+          get: (k) =>
+            op === 'get' && k === key ? Promise.reject(new Error('down')) : inner.get(k),
+          set: (k, value, options) => inner.set(k, value, options),
           list: (prefix, options) => inner.list(prefix, options),
-          delete: (key) =>
-            op === 'delete' && key.startsWith(prefix)
-              ? Promise.reject(new Error('down'))
-              : inner.delete(key),
+          delete: (k) =>
+            op === 'delete' && k === key ? Promise.reject(new Error('down')) : inner.delete(k),
         },
         () => {},
       );
-    expect(await forgetRegistration(failOn('get', 'reg/'), record)).toBe('failed');
-    expect(await forgetRegistration(failOn('delete', 'reg/'), record)).toBe('failed');
-    expect(inner.keys()).toHaveLength(2);
-    // The record goes; an ids key that cannot be checked stays, pointing at nothing.
-    expect(await forgetRegistration(failOn('get', 'ids/'), record)).toBe('deleted');
-    expect(inner.keys()).toEqual([idsKey('snow', ID)]);
+    const seeded = async (): Promise<MemoryAlertStore> => {
+      const inner = new MemoryAlertStore();
+      await seedSet(inner);
+      return inner;
+    };
+    const all = [idsKey('snow', ID), keyOf(here), keyOf(durham), keyOf(kathmandu)].sort();
+
+    // The trigger's own record can't be read or deleted: nothing goes.
+    for (const op of ['get', 'delete'] as const) {
+      const inner = await seeded();
+      expect(await forgetDevice(failOn(inner, op, keyOf(durham)), 'snow', ID, durham)).toBe(
+        'failed',
+      );
+      expect(inner.keys()).toEqual(all);
+    }
+    // Another record can't be read or deleted: it stays, and so does the entry naming it.
+    for (const op of ['get', 'delete'] as const) {
+      const inner = await seeded();
+      expect(await forgetDevice(failOn(inner, op, keyOf(kathmandu)), 'snow', ID, durham)).toBe(
+        'deleted',
+      );
+      expect(inner.keys()).toEqual([idsKey('snow', ID), keyOf(kathmandu)].sort());
+    }
+    // The entry can't be read: the trigger is forgotten alone, by its own stamp.
+    {
+      const inner = await seeded();
+      expect(await forgetDevice(failOn(inner, 'get', idsKey('snow', ID)), 'snow', ID, durham)).toBe(
+        'deleted',
+      );
+      expect(inner.keys()).toEqual(all.filter((k) => k !== keyOf(durham)));
+    }
+    // The entry can't be deleted: it stays, naming nothing; the next registration replaces it.
+    {
+      const inner = await seeded();
+      expect(
+        await forgetDevice(failOn(inner, 'delete', idsKey('snow', ID)), 'snow', ID, durham),
+      ).toBe('deleted');
+      expect(inner.keys()).toEqual([idsKey('snow', ID)]);
+    }
   });
 });

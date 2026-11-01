@@ -318,6 +318,17 @@ preview's store is new with every deploy, so the settings go in before the previ
    and one at about 7am at your place, for each switch you have on: the real one when snow is
    likely, otherwise "Test notification". The log line says `sent 1` and `1 forced` for those
    runs. Everyone else (TestFlight testers) gets only real notifications, when snow is likely.
+
+   **Then, once that test has arrived (Wed 4 Nov): the server for several places, 10 minutes.**
+   Merge the pull request "Notifications for several places on one phone (server)". Netlify
+   deploys it by itself: there is nothing to set and no redeploy to start. At the next quarter
+   hour, **Logs → Functions → alerts-run** shows the run's line with `errors 0`. Then, in the 8.1
+   TestFlight build, Settings → Notifications → **Send a test notification** (between 7am and 9pm
+   at your notifications' place): it still arrives within seconds. Nothing else changes on your
+   phone. If either check shows something else, tell me what it said. Until an app build that uses
+   the new server is out, the previous deploy can be put back without harm: **Deploys**, choose
+   the one before, **Publish deploy**.
+
 3. **By Thu 12 Nov:** it is already fully on. Press **Send a test notification** in the current
    TestFlight build; it must arrive before submission. The review notes should say that nothing
    is sent from 9pm to 7am at the chosen place, test notifications included.

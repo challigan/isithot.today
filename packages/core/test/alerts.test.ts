@@ -9,6 +9,7 @@ import {
   inQuietHours,
   snowAlert,
   testAlert,
+  threadId,
   type AlertKind,
   type TopicAlertPrefs,
 } from '../src/alerts';
@@ -414,6 +415,21 @@ describe('every notification', () => {
     }
   });
 
+  it('never mentions the purchase, a bell, a price or an upgrade (no marketing)', () => {
+    // The upsell lives in the app (a locked bell, the search screen's lines, Settings), never in
+    // a notification (decision 30). The test above keeps out other apps and weather types.
+    const marketing =
+      /purchase|buy|upgrade|unlock|bell|£|\$|€|price|premium|one-off|subscri|\bads?\b|widget/i;
+    for (const text of strings(ALERT_COPY)) expect(text).not.toMatch(marketing);
+    for (const { title, body } of all) {
+      expect(title).not.toMatch(marketing);
+      expect(body).not.toMatch(marketing);
+    }
+    expect('Unlock saved places').toMatch(marketing);
+    expect('Bells for £1.99').toMatch(marketing);
+    expect('No ads, widgets and more').toMatch(marketing);
+  });
+
   it('is in sentence case, about snow, with full stops on the body only', () => {
     for (const { title, body, name } of all) {
       const rest = name && name !== COPY.yourLocation ? title.replace(name, '') : title;
@@ -678,6 +694,41 @@ describe('collapseId', () => {
   });
 });
 
+describe("a saved place's ids", () => {
+  const PID = '1a2b3c4d5e6f';
+
+  it("adds the slot to a saved place's collapse id, and leaves the free place's as it was", () => {
+    expect(collapseId('snow', 'evening', '2026-12-02', PID)).toBe(
+      'snow-evening-2026-12-02-1a2b3c4d5e6f',
+    );
+    expect(collapseId('snow', 'morning', '2026-12-02', PID)).toBe(
+      'snow-morning-2026-12-02-1a2b3c4d5e6f',
+    );
+    expect(collapseId('snow', 'evening', '2026-12-02', undefined)).toBe('snow-evening-2026-12-02');
+    // Two places about one day are two notifications, and neither replaces the free place's.
+    const ids = [undefined, PID, '6f5e4d3c2b1a'].map((slot) =>
+      collapseId('snow', 'evening', '2026-12-02', slot),
+    );
+    expect(new Set(ids).size).toBe(3);
+    // 36 bytes for snow; Apple allows 64.
+    expect(new TextEncoder().encode(ids[1]).length).toBe(36);
+    for (const topic of TOPICS) {
+      for (const kind of ALERT_KINDS) {
+        expect(
+          new TextEncoder().encode(collapseId(topic, kind, '2026-12-02', PID)).length,
+        ).toBeLessThanOrEqual(64);
+      }
+    }
+  });
+
+  it("threads the free place's notifications under the topic, and each saved place's apart", () => {
+    expect(threadId('snow')).toBe('snow');
+    expect(threadId('snow', undefined)).toBe('snow');
+    expect(threadId('snow', PID)).toBe('snow-1a2b3c4d5e6f');
+    expect(threadId('snow', '6f5e4d3c2b1a')).not.toBe(threadId('snow', PID));
+  });
+});
+
 describe('ALERTS', () => {
   it('is as the spec sets it', () => {
     expect(ALERTS).toEqual({
@@ -695,7 +746,20 @@ describe('ALERTS', () => {
       heartbeatDays: 7,
       apnsPriority: { evening: 5, morning: 10 },
       testPerHour: 3,
+      savedPlacesMax: 10,
+      newPlacesPerPut: 3,
+      hereRefreshMinutes: 60,
+      ipPlaceKeepDays: 7,
     });
+  });
+
+  it("keeps the saved places' limits and the free place's refresh in step with the rest", () => {
+    expect(ALERTS.newPlacesPerPut).toBeGreaterThanOrEqual(1);
+    expect(ALERTS.newPlacesPerPut).toBeLessThanOrEqual(ALERTS.savedPlacesMax);
+    // An approximate free place refreshes more often than the heartbeat, and is kept for less
+    // time than a registration that is never seen again.
+    expect(ALERTS.hereRefreshMinutes).toBeLessThan(ALERTS.heartbeatDays * 24 * 60);
+    expect(ALERTS.ipPlaceKeepDays).toBeLessThan(ALERTS.staleAfterDays);
   });
 
   it('keeps every window out of the quiet hours, with time to deliver before they start', () => {

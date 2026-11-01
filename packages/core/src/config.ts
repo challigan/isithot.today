@@ -579,10 +579,27 @@ export const ALERTS = {
    * `heartbeatDays` while it is used.
    */
   heartbeatDays: 7,
+  /**
+   * While its free place ("where you are") is approximate, from its internet connection, the app
+   * registers again each time it is opened, at most this often, minutes.
+   */
+  hereRefreshMinutes: 60,
   /** Apple's priority: 5 (when it suits the phone) for the evening, 10 (at once) for the morning. */
   apnsPriority: { evening: 5, morning: 10 },
   /** Test notifications a registration may ask for in an hour. */
   testPerHour: 3,
+  /** Saved places a device may have notifications for, as many as can be saved (`PLACES.savedMax`). */
+  savedPlacesMax: 10,
+  /**
+   * Saved places new to a device's set that one registration may add; the rest wait for the next,
+   * a minute later (429 with `Retry-After`).
+   */
+  newPlacesPerPut: 3,
+  /**
+   * A free place located from the connection is kept this long, days, by a registration whose
+   * connection can't be located; after that, or for any other free place, it is deleted.
+   */
+  ipPlaceKeepDays: 7,
 } as const;
 
 /**
