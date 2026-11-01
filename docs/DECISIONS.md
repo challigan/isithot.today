@@ -5815,11 +5815,14 @@ suite runs on an iPhone 17 with iOS 26.2, which Xcode 26.6 can test on as the ap
   `PlugIns` while tests run).
 - **Each test from a cleared environment, its listener stopped after it.** setUp resets the
   session, which clears the simulated errors that last from test to test, turns dialogs and Ask
-  to Buy off and clears its transactions; tearDown stops each `StoreKitPurchases` the test made
-  (XCTest keeps every test case, and what it holds, until the run ends, so a listener left
-  running would hear, and finish, the next tests' transactions) and clears them again. Simulated
-  errors are cleared by `resetToDefaultState()`, never by `setSimulatedError(nil, forAPI:)`
-  (below, "What PR #40's first macOS run showed").
+  to Buy off and clears its transactions. tearDown waits until no update is still being handled
+  (`hear` finishes after it keeps, and a finish still out would land on the next test's
+  transaction, as IDs start again at 0 after a clear: "What PR #40's run on de59e36 showed"),
+  then stops each `StoreKitPurchases` the test made (XCTest keeps every test case, and what it
+  holds, until the run ends, so a listener left running would hear, and finish, the next tests'
+  transactions), waits again for an update that came in between, and clears them again.
+  Simulated errors are cleared by `resetToDefaultState()`, never by
+  `setSimulatedError(nil, forAPI:)` (below, "What PR #40's first macOS run showed").
 - **Never a pass on a broken environment.** Every buy and restore test first requires the product
   loaded at `Constants.Purchase.displayPrice` (`readyModel()`, which stops the test otherwise).
   A loaded product doesn't show a purchase can complete: on the broken runtimes `purchase` answers
@@ -6059,6 +6062,36 @@ element that takes no tap.
   purchase's line made the page longer (506 points tall, its top at -150, after the reveal
   loop): contrast failed on it, and the pixel proof needs a frame whole on screen. The page is
   audited at its top now, as How it works and the licences are.
+
+**What PR #40's run on de59e36 showed** (run 41294270258; 4812fd5's run 40620576828 passed all
+18):
+
+- **testARefundLocksAgain failed: StoreKit Test never sent the refund.** After
+  `refundTransaction`, storekitd synced the subscription status but never the transaction
+  history, and sent the app nothing (no "Sending N receipts"). The app wrote no line for ten
+  seconds, so the model kept the purchase: owned, `unlock.v1` unlocked, one widget reload,
+  `[true]` told the app.
+- **The cause was the test before it.** testAPurchaseElsewhereArrivesThroughUpdates ends once
+  its listener's answer is kept, which `hear` does before it finishes, so its
+  `Transaction.finish()` was still out through tearDown's clear and the next test's setUp. Its
+  `inAppTransactionDone` reached StoreKit Test 1.15 ms after the refund test's buy, and
+  transaction IDs start again at 0 after every clear, so both named transaction 0. The test
+  server answered both, and its history then held nothing ("Setting 0 unfinished transactions",
+  revision `0_0,5`), as after no other purchase in either run; the refund of 0 then changed no
+  history, so nothing was sent. 4812fd5's run had the same late finish, landing about 120 ms
+  after the purchase instead of during it: it finished that test's transaction ("Transaction is
+  already finished" for the test's own finish), and the refund still came.
+  testAskToBuyWaitsThenApproved's finish outlived it too, and found nothing left to finish (404).
+- **Not de59e36**: its app change runs only under `-uitest`, and the host launched with no
+  arguments.
+- **So tearDown waits for any update a listener is still handling** (`RecordingPlatform` counts
+  them around the model's `hear`) before it stops the listener, and again after, then clears;
+  and it attaches each test's calls with their times and transaction IDs. The refund test
+  requires "heard → revoked", so a refund StoreKit Test never sends fails as that, not as the
+  model. No change to the app: it finishes after it keeps (spec 13), and the App Store never
+  reuses a transaction ID.
+- **Inferred, not seen**: the done's transaction ID (its query is redacted) and what the test
+  server did with two requests for 0 at once (it logs nothing of it). It happened once.
 
 **What only Carl's TestFlight purchase shows**: the real product and its price from the App
 Store, Apple's sheet, a purchase with his own Apple Account, the ads going, and the purchase back
