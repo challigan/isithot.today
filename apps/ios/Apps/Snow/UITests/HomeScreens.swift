@@ -188,6 +188,19 @@ extension XCUIApplication {
     ((try? find("debug-pickers").snapshot())?.value as? String).flatMap { Int($0) }
   }
 
+  /// How many touches the system has cancelled in the app this launch (`debug-cancels`,
+  /// DebugHooks' `TouchWatch`), by which a gesture knows the simulator cancelled its touch
+  /// (`cancelled(_:in:within:until:_:)`). Nil with no readout.
+  var touchesCancelled: Int? {
+    ((try? find("debug-cancels").snapshot())?.value as? String).flatMap { Int($0) }
+  }
+
+  /// `debug-cancels` as a failure says it, so a gesture the simulator cancelled names itself
+  /// rather than reading as the app's fault.
+  var cancelsReport: String {
+    "debug-cancels reads \(touchesCancelled.map(String.init) ?? "nothing")"
+  }
+
   /// The picker as the app and XCUITest have it, for a failure or `picker-closed-lag` to say: the
   /// readout's state; then the search box and the place button, each with its frame and whether a
   /// tap would reach it, or not found. A search box off the screen's foot (874 points down on the
@@ -289,15 +302,19 @@ extension XCUIApplication {
   }
 }
 
-/// A drag that scrolled a page: where it started and ended on screen, and whether it was putting
-/// the page back where an audit had moved it from (`HomeAuditTests.restore`).
+/// A drag that scrolled a page: where it started and ended on screen, whether it was putting
+/// the page back where an audit had moved it from (`HomeAuditTests.restore`), and whether the
+/// system cancelled its touch meanwhile (`cancelled(_:in:within:until:_:)`), so that the page may
+/// not have moved with it.
 struct Drag: CustomStringConvertible {
   let from: CGPoint
   let to: CGPoint
   var restoring = false
+  var cancelled = false
 
   var description: String {
     "(\(from.x), \(from.y)) to (\(to.x), \(to.y))" + (restoring ? " putting the page back" : "")
+      + (cancelled ? ", its touch cancelled" : "")
   }
 }
 
@@ -401,10 +418,45 @@ extension XCTestCase {
     return true
   }
 
+  /// Plays `gesture` and says whether the system cancelled a touch in the app meanwhile:
+  /// `debug-cancels` above its count just before, read after the gesture until `done()` holds or
+  /// `timeout` seconds pass (0: read once). On the CI simulator backboardd sometimes registers a
+  /// gesture's touchscreen twice, drops the touch's lift and cancels the touch as the touchscreen
+  /// goes, while XCUITest still counts the gesture delivered (DECISIONS, "What the simulator's log
+  /// showed"). The cancels on record reached the app before XCUITest's gesture returned, so the
+  /// first read normally sees one; `timeout` covers a tree that reads it late. Attaches
+  /// `gesture-cancelled` with what was played and both counts when it rose. False with no
+  /// readout.
+  @MainActor
+  func cancelled(
+    _ what: String,
+    in app: XCUIApplication,
+    within timeout: TimeInterval = 0,
+    until done: () -> Bool = { false },
+    _ gesture: () -> Void
+  ) -> Bool {
+    let before = app.touchesCancelled
+    gesture()
+    guard let before else { return false }
+    let deadline = Date().addingTimeInterval(timeout)
+    while true {
+      if let after = app.touchesCancelled, after > before {
+        attachText(
+          "\(what): debug-cancels \(before) before, \(after) after", as: "gesture-cancelled")
+        return true
+      }
+      if done() || Date() >= deadline { return false }
+      RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+    }
+  }
+
   /// Taps `page`'s tab in the switcher (a tab, a button labelled as the tab reads, on the track or
   /// at accessibility sizes a chip of its own), waits for its heading, and checks its page is the
-  /// one on screen (`pageOffScreen`) and the tab is the one selected. A heading that never comes
-  /// fails with where the tab was, the tab the app has chosen and where the pages are
+  /// one on screen (`pageOffScreen`) and the tab is the one selected. A tap whose touch the system
+  /// cancelled (`cancelled(_:in:within:until:_:)`, read for up to 2 seconds or until the heading
+  /// comes) and whose heading hasn't come is tapped once more: the app never had it as a tap. A
+  /// tap the app completed is never tapped again. A heading that never comes fails with where the
+  /// tab was, the tab the app has chosen, `debug-cancels` and where the pages are
   /// (`homeGeometry`: the page in the tree is the chosen view's).
   @MainActor
   func tap(_ page: HomeScreen.Page, in app: XCUIApplication) throws {
@@ -412,18 +464,28 @@ extension XCTestCase {
     guard tab.waitForExistence(timeout: 10) else {
       throw HomeScreenError("No \(page.label) tab")
     }
-    tab.tap()
+    let heading = app.heading
+    let arrived = { heading.exists && heading.label == page.heading }
+    if cancelled("tap on \(page.label)", in: app, within: 2, until: arrived, { tab.tap() }),
+      !arrived()
+    {
+      // The system cancelled the touch, so the app never had a tap (DECISIONS, "What the
+      // simulator's log showed"): tap once more, itself watched, so a second cancel names itself.
+      _ = cancelled("second tap on \(page.label)", in: app) { tab.tap() }
+    }
     do {
       try awaitHeading(page.heading, in: app)
     } catch {
       // Which tab the app has chosen, and where the pages are, tell a tap that never took or was
       // undone (the old tab still chosen, as on PR #34's run on cf4eb74) from pages that didn't
-      // follow it (the new tab chosen, its page off the screen).
+      // follow it (the new tab chosen, its page off the screen); and `debug-cancels` a tap the
+      // system cancelled, as every such tap on record was, from one the app got wrong.
       let chosen = app.find("views").buttons.allElementsBoundByIndex
         .filter { $0.isSelected }.map { $0.label }
       throw HomeScreenError(
         "\(error) after a tap on \(page.label) at \(tab.frame); the tab chosen: "
-          + (chosen.isEmpty ? "none" : chosen.joined(separator: ", ")) + "; \(app.homeGeometry)")
+          + (chosen.isEmpty ? "none" : chosen.joined(separator: ", "))
+          + "; \(app.cancelsReport); \(app.homeGeometry)")
     }
     // The heading is read from the chosen view's page wherever the pages are: only the page's
     // frame shows they followed the tap.
@@ -463,7 +525,9 @@ extension XCTestCase {
   /// drag, from 90% of the page's frame down its middle, never moved a page past its first scroll
   /// on PR #31's macOS run, and at AX3 the audit after it found no app to audit.) The page moves
   /// by less than the drag: the scroll view spends its first 13 to 20 points before the page
-  /// moves (PR #33's macOS run). Gives the drag, for a failure to say.
+  /// moves (PR #33's macOS run). Gives the drag, for a failure to say, with whether the system
+  /// cancelled its touch (`cancelled(_:in:within:until:_:)`): on PR #36's run the drag that "left
+  /// the credits" where they were was one the simulator cancelled.
   @MainActor
   @discardableResult
   func scrollDown(
@@ -477,8 +541,11 @@ extension XCTestCase {
     let start = min(shown.minY + shown.height * 0.1 + max(distance, 0), app.frame.maxY - 80)
     let from = screen.withOffset(CGVector(dx: x, dy: start))
     let to = screen.withOffset(CGVector(dx: x, dy: start - distance))
-    from.press(forDuration: 0.01, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.3)
-    return Drag(from: CGPoint(x: x, y: start), to: CGPoint(x: x, y: start - distance))
+    let cancelled = self.cancelled("drag on the \(page.view) page", in: app) {
+      from.press(forDuration: 0.01, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.3)
+    }
+    return Drag(
+      from: CGPoint(x: x, y: start), to: CGPoint(x: x, y: start - distance), cancelled: cancelled)
   }
 
   /// Scrolls `page`, the page on screen, until the element `id` lies whole on screen: drags of
@@ -503,7 +570,7 @@ extension XCTestCase {
       guard drags.count < 12 else {
         throw HomeScreenError(
           "\(id) at \(frame) never came whole on screen, within \(shown), after the drags "
-            + "\(drags); \(app.homeGeometry)")
+            + "\(drags); \(app.cancelsReport); \(app.homeGeometry)")
       }
       drags.append(scrollDown(page, by: shown.height * 0.8, in: app))
     }

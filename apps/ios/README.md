@@ -700,6 +700,13 @@ file and line):
   tests with a running clock (this flip, and `OfflineTests`' end of the saved answer's hours)
   start `RUNNING_LEAD_MS` (packages/mobile `vectors.ts`, two minutes) before their moment, so a
   slow launch can't pass it before the test has read the screen.
+  `testASystemGestureCountsACancelledTouch` is the positive control for `debug-cancels` and the
+  helper that reads it (below, "A gesture the simulator cancelled"), each gesture played through
+  that helper: a drag up from the home indicator, which the go-home gesture takes, and should the
+  helper not see the count rise a drag down from the top right corner, which Control Centre takes;
+  within each, the home button then puts away whatever came and the app is brought back to the
+  foreground. The helper's `gesture-cancelled` names the gesture that raised the count; neither
+  raising it fails, saying the re-tap can't be relied on.
 - `OfflineTests`: each first saves aberdeen-snow from its fixture, then opens again over the
   app's own transport with the network stubbed. `testOfflineAnHourOnShowsThatHour` (`-network
 off` at 10:30am): the 10am hour on Now and Today, and the offline line on every page.
@@ -744,8 +751,8 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   #33's contrast exception for the details and the places nearby alone became the proof for
   every text element after PR #34's first full run.) The issues allowed and any exception a test didn't need are attached
   (`home-<fixture>-<size>-allowed`) and listed in its failure. An issue on one of a Debug build's
-  readouts (`debug-picker` and `debug-pickers`: a point square at most, which a Release build
-  hasn't, `DebugReadout`) is set apart, failing nothing, and listed in
+  readouts (`debug-picker`, `debug-pickers` and `debug-cancels`: a point square at most, which a
+  Release build hasn't, `DebugReadout`) is set apart, failing nothing, and listed in
   the times and `-allowed`, every audit's, the sheets' too. Each page's first screenful also
   attaches the app's element tree (`<page>-tree`). Each call goes through `runAudit`
   (ScreenAudit.swift), which times it and reads its issues once it is done, outside XCTest's
@@ -775,6 +782,33 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   or a drag it didn't take), and attaches the app's element tree as `<name>-tree-stopped`. For a
   new issue, fix the app, or, when it is proven not a fault, add it there with its reason and its
   evidence (DECISIONS, "The iPhone app's UI tests, after PR #33's second macOS run").
+
+**A gesture the simulator cancelled.** On the CI simulator backboardd sometimes registers the
+virtual touchscreen XCUITest plays a gesture through twice, drops the touch's lift and cancels the
+touch as the touchscreen goes; the app, rightly, takes no action on a cancelled touch, and XCUITest
+still calls the gesture delivered (DECISIONS, "What the simulator's log showed"). So the switcher's
+tab taps, Retry, the place button, the gear and `scrollDown`'s drags go through one helper,
+`cancelled(_:in:within:until:_:)` (HomeScreens.swift), which plays the gesture and says whether
+`debug-cancels`, the Debug count of touches the system cancelled (below, "Debug hooks"), rose
+meanwhile: read after the gesture, until what it opens has opened or up to its timeout, false with
+no readout, and attaching `gesture-cancelled` when it rose. A tab tap (`tap(_:in:)`, and
+`FixtureLaunchTests`' `show`, each reading for up to 2 seconds or until the heading comes) whose
+count rose and whose heading hasn't come is tapped once more; so are Retry (`OfflineTests`, whose
+request fails again at once, so the count alone tells), the place button (`PickerTests`'
+`openPicker`, `AdsTests`' `choose`: no picker open, as the readout says, its search box ending the
+wait only while the readout can't be read) and the gear (`openSettings` in `AdsTests`,
+`SettingsTests` and `UpgradeTests`: the gear still there and taking a tap, `sheetClosed`, not
+Close, which XCUITest may go on finding once an earlier Settings has closed). A tap the app
+completed is never tapped again; a cancelled touch never made one. Each is tapped again once at
+most, the second tap watched too. `scrollDown`'s drag goes through the same helper and its `Drag`
+says whether its touch was cancelled, which every drag list in a failure prints; `HomeAuditTests`
+plays a step's cancelled drag once more before judging the page to scroll no further, and
+`restore` goes round again after one, within its 12 drags. Their failures say what `debug-cancels`
+reads (`cancelsReport`): a heading, a picker or Settings that never came, a page that scrolls no
+further or an element never brought on screen; so do some failures after other gestures. The rest,
+about 70 direct taps, swipes and presses (on the picker's rows, stars and menus, Settings' rows,
+Buy and the like), are not watched: a cancel among them is never played again, and shows only in
+a failure that names the count, risen with no `gesture-cancelled` attachment for it.
 
 **The contact sheet** tiles every attachment in its names' order (`ci/contact-sheet.mjs`, five
 screens to a row). `HomeAuditTests` attaches every screenful it audits as
@@ -1128,7 +1162,9 @@ text pair the proof can allow to 4.5:1 on every band.
 - **The tests.** `PickerTests` and `SettingsTests` launch the same app; the picker's Open
   Settings is read from the recorder (`testOpenSettingsOpensTheAppsPage`), as Settings' rows are.
   When a tap on the place button or the gear opens nothing, the failure says where the window,
-  the top bar's controls, the switcher, the pager and the page were (`homeGeometry`).
+  the top bar's controls, the switcher, the pager and the page were (`homeGeometry`), and what
+  `debug-cancels` reads; one whose touch the system cancelled is tapped once more (above, "A
+  gesture the simulator cancelled").
   Phase 5.4's tests and phase 6's share the launch arguments (below, "Debug hooks"): `-network`
   takes a comma list of fixtures, or `off` or `unavailable`; `-clock fixed` and `-now` fix the
   moment; `-resetStore` forgets the recent and saved places too. Their identifiers differ, and
@@ -1552,6 +1588,7 @@ launch argument. So far there are these:
 
 - `-uitest` turns animations off, and keeps the glyphs' flakes still (`stillMotion()`), as
   `-now` does too; since phase 7.1 it also puts StoreKit's stand-in in StoreKit's place (below);
+  and since PR #40 it counts the touches the system cancels, for `debug-cancels` (below);
 - `-resetStore` forgets the place, the units, the saved answer, the recent and saved places and
   when the last full-screen ad showed before the model reads them, for a first launch (not
   `unlock.v1`, which only `PurchaseModel` writes, and which nothing reads under the stand-in);
@@ -1634,8 +1671,9 @@ launch argument. So far there are these:
   `off` once a purchase has stopped them), `debug-interstitial` (`ready` or `none`) and
   `debug-shown` (how many full-screen ads have shown and closed), so a test can tell Google not
   answering from the app failing;
-- the picker's readout, which `PickerTests` and `AdsTests` read: under `-uitest`, ads or not, two
-  clear one-point elements at the home screen's top right, outside what a sheet hides:
+- the picker's readout, which the UI tests read (its first two elements `PickerTests` and
+  `AdsTests`, `debug-cancels` the gesture helper): under `-uitest`, ads or not, three clear
+  one-point elements at the home screen's top right, outside what a sheet hides:
   `debug-picker`, `open` while the home screen has the picker open, `closing` once it has closed
   it but SwiftUI hasn't yet taken the picker's content off the screen (its `onDisappear`), then
   `closed`, as before any picker opened; and `debug-pickers`, how many times a picker's content
@@ -1644,7 +1682,14 @@ launch argument. So far there are these:
   closed only by `closed` with a higher count than before, so the readout at rest never passes;
   not by XCUITest's tree, which on PR #38's and #39's runs went on finding a closed picker's search
   box for 10 and 15 seconds (DECISIONS, "Ads in the iPhone app: three placements"). It attaches
-  `picker-closed-lag` when the tree still has the search box once the readout reads `closed`;
+  `picker-closed-lag` when the tree still has the search box once the readout reads `closed`. The
+  third, `debug-cancels`, is how many touches the system has cancelled in the app this launch,
+  which the gesture helper reads (above, "A gesture the simulator cancelled"):
+  `TouchWatch` exchanges `UIApplication.sendEvent(_:)` for a method that counts each touch the
+  event holds in the cancelled phase and then calls the original with the same event, so the
+  phases it reads are the system's (backboardd's cancel, a system gesture, deactivation), read
+  before UIKit dispatches the event and before any recognizer sees it, and no event's delivery
+  changes. It adds no recognizer and wraps no binding;
 - the unit tests' host: when the app only hosts the unit tests (XCTest's
   `XCTestConfigurationFilePath` in its environment), it doesn't launch (`AppModel.launch()`), so
   the hosted tests have the App Group to themselves, and its `PurchaseModel` never starts (its

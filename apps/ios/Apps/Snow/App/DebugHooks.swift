@@ -20,7 +20,8 @@ enum DebugHooks {
     static let storeFallback = true
 
     /// The launch arguments that change how the app starts, before the model reads `store`:
-    /// `-uitest` turns animations off; `-resetStore` forgets the place, the units, the saved
+    /// `-uitest` turns animations off and counts the touches the system cancels, for
+    /// `debug-cancels` (`TouchWatch`); `-resetStore` forgets the place, the units, the saved
     /// answer, the recent and saved places and when the last full-screen ad showed, for a first
     /// launch. It leaves `unlock.v1` alone, which only `PurchaseModel` writes, and which nothing
     /// reads under StoreKit's stand-in (`standsInForStoreKit`), as every UI test runs.
@@ -30,6 +31,7 @@ enum DebugHooks {
     ) {
       if arguments.contains("-uitest") {
         UIView.setAnimationsEnabled(false)
+        TouchWatch.install()
       }
       if arguments.contains("-resetStore") {
         RecentDefaults().removeAll()
@@ -178,7 +180,9 @@ enum DebugHooks {
     /// and once it hasn't, whether the picker's content has left the screen, so PickerTests and
     /// AdsTests read the picker closed from the app, not from XCUITest's tree, which on PR #38's
     /// and #39's macOS runs went on finding a closed picker's search box for 10 and 15 seconds
-    /// (DECISIONS, "Ads in the iPhone app: three placements"). Nothing without `-uitest`.
+    /// (DECISIONS, "Ads in the iPhone app: three placements"); and how many touches the system
+    /// has cancelled (`TouchWatch`), by which the UI tests' gestures know one the simulator
+    /// cancelled. Nothing without `-uitest`.
     @ViewBuilder
     static func pickerReadout(
       open: Bool,
@@ -932,18 +936,21 @@ enum DebugHooks {
     }
   }
 
-  /// `DebugHooks.pickerReadout`: two clear elements of a point each, which show nothing and take no
-  /// tap, whose accessibility values PickerTests and AdsTests read. `debug-picker`: open, while the
-  /// home screen has the picker open; closing, once it has closed it but the picker's content is
-  /// still on screen (SwiftUI hasn't called its `onDisappear`); closed otherwise, as before any
-  /// picker opened. `debug-pickers`: how many times a picker's content has come on screen, so a
-  /// test knows the picker it reads is the one its tap opened, and that closed is that one
-  /// closing, not the readout at rest. Over the home
+  /// `DebugHooks.pickerReadout`: three clear elements of a point each, which show nothing and take
+  /// no tap, whose accessibility values the UI tests read. `debug-picker`: open, while the home
+  /// screen has the picker open; closing, once it has closed it but the picker's content is still
+  /// on screen (SwiftUI hasn't called its `onDisappear`); closed otherwise, as before any picker
+  /// opened. `debug-pickers`: how many times a picker's content has come on screen, so a test
+  /// knows the picker it reads is the one its tap opened, and that closed is that one closing, not
+  /// the readout at rest. `debug-cancels`: how many touches the system has cancelled in the app
+  /// this launch (`TouchWatch`), so a gesture that changed nothing can say the simulator cancelled
+  /// its touch, which the app then never had as a tap. Over the home
   /// screen rather than the picker, so it is read where XCUITest kept up on PR #39's run, and the
   /// home screen's sheet state rather than the picker's, so Google's full-screen ad over the
   /// picker, should it take the picker off screen and back, still reads open. A view of its own,
-  /// reading `DebugPresence` in its own body, as `AdsReadout` does. Each value is one lowercase
-  /// word, shown to no one, so none of it is copy.
+  /// reading `DebugPresence` in its own body, as `AdsReadout` does, drawn again only as a value
+  /// changes. Each value is one lowercase word or a number, shown to no one, so none of it is
+  /// copy.
   @MainActor
   private struct PickerReadout: View {
     let open: Bool
@@ -952,6 +959,7 @@ enum DebugHooks {
       HStack(spacing: 0) {
         Reading(id: "debug-picker", value: state)
         Reading(id: "debug-pickers", value: String(DebugPresence.shared.pickersShown))
+        Reading(id: "debug-cancels", value: String(DebugPresence.shared.touchesCancelled))
       }
       .allowsHitTesting(false)
     }
@@ -965,7 +973,8 @@ enum DebugHooks {
 
   /// What `PickerReadout` reads beyond the home screen's sheet: whether the picker's content is
   /// on screen, from its `onAppear` to its `onDisappear` (`DebugHooks.pickerAppeared` and
-  /// `pickerDisappeared`), and how many times it has come on screen.
+  /// `pickerDisappeared`), how many times it has come on screen, and how many touches the system
+  /// has cancelled.
   @MainActor
   @Observable
   private final class DebugPresence {
@@ -973,6 +982,58 @@ enum DebugHooks {
 
     var pickerOnScreen = false
     var pickersShown = 0
+    /// How many touches the system cancelled in the app this launch (`TouchWatch`).
+    var touchesCancelled = 0
+  }
+
+  /// `-uitest`'s count of the touches the system cancelled, for `debug-cancels`: on the CI
+  /// simulator backboardd sometimes registers a synthesised gesture's touchscreen twice and
+  /// cancels the touch when it goes, so a tap is drawn pressed and let go with no action
+  /// (DECISIONS, "What the simulator's log showed"). It reads each event at
+  /// `UIApplication.sendEvent(_:)`'s entry, before UIKit dispatches it to a window or any gesture
+  /// recognizer sees it, then passes it on unchanged: no recognizer, no change to any touch's
+  /// delivery. So the phases it counts are the ones the system set (backboardd's cancels, a
+  /// system gesture taking the touch, deactivation), never a recognizer's later cancel of a
+  /// view's touches.
+  @MainActor
+  private enum TouchWatch {
+    private static var installed = false
+
+    /// Exchanges `sendEvent(_:)` with `debugWatchedSendEvent(_:)`, once: a second call, or one
+    /// that finds either method missing, changes nothing, so the original is never exchanged
+    /// back or lost.
+    static func install() {
+      guard !installed,
+        let original = class_getInstanceMethod(
+          UIApplication.self, #selector(UIApplication.sendEvent(_:))),
+        let watched = class_getInstanceMethod(
+          UIApplication.self, #selector(UIApplication.debugWatchedSendEvent(_:)))
+      else { return }
+      method_exchangeImplementations(original, watched)
+      installed = true
+    }
+
+    /// Counts the touches `event` holds that the system has cancelled, writing the count only when
+    /// there are some: `+= 0` would still tell the readout the count changed (an `@Observable`
+    /// property changed in place always does), drawing it again at every touch's down, move and
+    /// lift.
+    fileprivate static func saw(_ event: UIEvent) {
+      guard event.type == .touches, let touches = event.allTouches else { return }
+      let cancelled = touches.filter { $0.phase == .cancelled }.count
+      if cancelled > 0 {
+        DebugPresence.shared.touchesCancelled += cancelled
+      }
+    }
+  }
+
+  extension UIApplication {
+    /// `sendEvent(_:)` once `TouchWatch.install()` has exchanged the two: counted, then
+    /// delivered by the original, now under this name. `dynamic`, so the call below goes through
+    /// the Objective-C runtime, which the exchange changed, and never straight back here.
+    @objc fileprivate dynamic func debugWatchedSendEvent(_ event: UIEvent) {
+      TouchWatch.saw(event)
+      debugWatchedSendEvent(event)
+    }
   }
 #endif
 

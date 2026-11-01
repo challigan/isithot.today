@@ -155,18 +155,21 @@ final class AdsTests: XCTestCase {
     upgrade.tap()
     let buy = app.buttons["buy"]
     guard buy.waitForExistence(timeout: 10) else {
-      throw HomeScreenError("No Buy on the upgrade page Settings' upgrade row opened")
+      throw HomeScreenError(
+        "No Buy on the upgrade page Settings' upgrade row opened; \(app.cancelsReport)")
     }
     buy.tap()
     let thanks = NSPredicate(format: "label == %@", "Thank you. Ads are off and widgets are on.")
     let outcome = XCTNSPredicateExpectation(predicate: thanks, object: app.find("upgrade-outcome"))
     guard XCTWaiter().wait(for: [outcome], timeout: 10) == .completed else {
-      throw HomeScreenError("No thanks on the upgrade page 10 seconds after Buy")
+      throw HomeScreenError(
+        "No thanks on the upgrade page 10 seconds after Buy; \(app.cancelsReport)")
     }
     app.navigationBars.buttons.element(boundBy: 0).tap()
     app.buttons["close-settings"].tap()
     guard app.sheetCloses(within: 5) else {
-      throw HomeScreenError("Settings is still open 5 seconds after its Close")
+      throw HomeScreenError(
+        "Settings is still open 5 seconds after its Close; \(app.cancelsReport)")
     }
 
     XCTAssertEqual(
@@ -244,7 +247,8 @@ final class AdsTests: XCTestCase {
       throw XCTSkip(
         "Google's consent form took none of a tap, a tap at its centre and a press on \(words): "
           + "the ads still read \(adsPhase(in: app) ?? "nothing") 10 seconds after each; a "
-          + "touch " + (agree.exists && agree.isHittable ? "would reach it now" : "wouldn't"))
+          + "touch " + (agree.exists && agree.isHittable ? "would reach it now" : "wouldn't")
+          + "; \(app.cancelsReport)")
     }
     try openSettings(app)
     XCTAssertTrue(
@@ -576,18 +580,34 @@ final class AdsTests: XCTestCase {
   }
 
   /// Opens the picker with the place button, searches for `name` and chooses the first result,
-  /// which the search fixtures give (`search-leeds`, `search-kathmandu`).
+  /// which the search fixtures give (`search-leeds`, `search-kathmandu`). A tap on the place
+  /// button whose touch the system cancelled (`cancelled(_:in:within:until:_:)`) and that opened
+  /// no picker is tapped once more; a tap the app completed never is.
   @MainActor
   private func choose(_ name: String, in app: XCUIApplication) throws {
     pickersBefore = app.pickersShown ?? 0
-    app.buttons["place"].tap()
+    let before = pickersBefore
+    let place = app.buttons["place"]
+    let field = app.find("place-search")
+    // Whether the readout reads this tap's picker open; nil when it can't be read, as under the
+    // picker it may not be (`pickerOpens`).
+    let open = { app.pickerState.map { $0 == "open" && (app.pickersShown ?? 0) > before } }
+    // The search box ends the wait only while the readout can't be read: an earlier picker's may
+    // still be in XCUITest's tree. Only the readout, read and not open, has the tap played again.
+    let shown = { open() ?? field.exists }
+    if cancelled("tap on the place button", in: app, within: 2, until: shown, { place.tap() }),
+      open() == false
+    {
+      _ = cancelled("second tap on the place button", in: app) { place.tap() }
+    }
     if pickerOpens(in: app, after: pickersBefore, within: 10) == false {
       throw HomeScreenError(
-        "No picker after tapping the place button; \(app.pickerReport); \(app.homeGeometry)")
+        "No picker after tapping the place button; \(app.pickerReport); \(app.cancelsReport); "
+          + app.homeGeometry)
     }
-    let field = app.find("place-search")
     guard field.waitForExistence(timeout: 10) else {
-      throw HomeScreenError("No picker after tapping the place button; \(app.homeGeometry)")
+      throw HomeScreenError(
+        "No picker after tapping the place button; \(app.cancelsReport); \(app.homeGeometry)")
     }
     field.tap()
     field.typeText(name)
@@ -698,12 +718,24 @@ final class AdsTests: XCTestCase {
     return false
   }
 
-  /// Taps the gear, and waits for Settings (its Close).
+  /// Taps the gear, and waits for Settings (its Close). A tap whose touch the system cancelled
+  /// (`cancelled(_:in:within:until:_:)`) and that opened no Settings is tapped once more; a tap
+  /// the app completed never is.
   @MainActor
   private func openSettings(_ app: XCUIApplication) throws {
-    app.buttons["settings"].tap()
-    guard app.buttons["close-settings"].waitForExistence(timeout: 5) else {
-      throw HomeScreenError("No Settings after tapping the gear; \(app.homeGeometry)")
+    let gear = app.buttons["settings"]
+    let close = app.buttons["close-settings"]
+    // Opened, and not opened, as the home screen shows it (`sheetClosed`), not by Close, which
+    // XCUITest may go on finding once an earlier Settings has closed.
+    let opened = { !app.sheetClosed }
+    if cancelled("tap on the gear", in: app, within: 2, until: opened, { gear.tap() }),
+      app.sheetClosed
+    {
+      _ = cancelled("second tap on the gear", in: app) { gear.tap() }
+    }
+    guard close.waitForExistence(timeout: 5) else {
+      throw HomeScreenError(
+        "No Settings after tapping the gear; \(app.cancelsReport); \(app.homeGeometry)")
     }
   }
 
@@ -713,7 +745,7 @@ final class AdsTests: XCTestCase {
     app.buttons["your-privacy"].tap()
     let titled = NSPredicate(format: "identifier == 'page-title' AND label == %@", "Your privacy")
     guard app.staticTexts.matching(titled).firstMatch.waitForExistence(timeout: 5) else {
-      throw HomeScreenError("No Your privacy after tapping its row")
+      throw HomeScreenError("No Your privacy after tapping its row; \(app.cancelsReport)")
     }
   }
 

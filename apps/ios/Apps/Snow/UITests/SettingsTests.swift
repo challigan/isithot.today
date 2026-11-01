@@ -159,7 +159,7 @@ final class SettingsTests: XCTestCase {
     XCTAssertFalse(app.staticTexts["copy-confirmation"].exists)
     app.buttons["copy-address"].tap()
     let copied = app.staticTexts["copy-confirmation"]
-    XCTAssertTrue(copied.waitForExistence(timeout: 5), "No confirmation")
+    XCTAssertTrue(copied.waitForExistence(timeout: 5), "No confirmation; \(app.cancelsReport)")
     XCTAssertEqual(copied.label, "Address copied.")
     try auditAccessibility(of: app, on: "Report an ad's fallback", surface: .content)
     attachScreen(of: app, named: "app-report-ad-fallback")
@@ -247,15 +247,26 @@ final class SettingsTests: XCTestCase {
     return app
   }
 
-  /// Taps the gear, and waits for the sheet, with its Close and its title. With no sheet, the
-  /// failure says where the top bar was: on main's first macOS run the gear was under the status
-  /// bar, where the tap never reached it.
+  /// Taps the gear, and waits for the sheet, with its Close and its title. A tap whose touch the
+  /// system cancelled (`cancelled(_:in:within:until:_:)`) and that opened no sheet is tapped once
+  /// more; a tap the app completed never is. With no sheet, the failure says where the top bar
+  /// was (on main's first macOS run the gear was under the status bar, where the tap never
+  /// reached it) and `debug-cancels`.
   @MainActor
   private func openSettings(_ app: XCUIApplication) {
-    app.buttons["settings"].tap()
+    let gear = app.buttons["settings"]
+    let close = app.buttons["close-settings"]
+    // Opened, and not opened, as the home screen shows it (`sheetClosed`), not by Close, which
+    // XCUITest may go on finding once an earlier Settings has closed.
+    let opened = { !app.sheetClosed }
+    if cancelled("tap on the gear", in: app, within: 2, until: opened, { gear.tap() }),
+      app.sheetClosed
+    {
+      _ = cancelled("second tap on the gear", in: app) { gear.tap() }
+    }
     XCTAssertTrue(
-      app.buttons["close-settings"].waitForExistence(timeout: 5),
-      "No Settings after tapping the gear; \(app.homeGeometry)")
+      close.waitForExistence(timeout: 5),
+      "No Settings after tapping the gear; \(app.cancelsReport); \(app.homeGeometry)")
     page(titled: "Settings", in: app)
   }
 
@@ -271,7 +282,9 @@ final class SettingsTests: XCTestCase {
     if app.staticTexts.matching(titled).firstMatch.waitForExistence(timeout: 5) { return }
     let shown = app.staticTexts.matching(identifier: "page-title").allElementsBoundByIndex
       .map(\.label)
-    XCTFail("No page titled \"\(title)\"; the titles on screen: \(shown)", file: file, line: line)
+    XCTFail(
+      "No page titled \"\(title)\"; the titles on screen: \(shown); \(app.cancelsReport)",
+      file: file, line: line)
   }
 
   /// The recorder's line whose value is the last URL the app would have opened.
@@ -309,7 +322,8 @@ final class SettingsTests: XCTestCase {
     XCTAssertTrue(
       reachable(element, in: app),
       "Can't reach \(element), at \(element.exists ? "\(element.frame)" : "nowhere"), with the "
-        + "Debug recorder's lines at \(recorder.exists ? "\(recorder.frame)" : "nowhere")")
+        + "Debug recorder's lines at \(recorder.exists ? "\(recorder.frame)" : "nowhere"); "
+        + app.cancelsReport)
   }
 
   /// Whether a tap on `element` would land on it: it is there and hittable, it has stopped moving

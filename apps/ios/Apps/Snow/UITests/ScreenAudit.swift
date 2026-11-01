@@ -460,13 +460,14 @@ final class AuditTimes {
 }
 
 /// A Debug build's readouts over the screens the UI tests audit, which they read and no one sees
-/// (DebugHooks.swift): the picker's (`debug-picker` and `debug-pickers`), over every screen, each
-/// a clear element of a point with a value and no label. A Release build has none, so an issue on one says
+/// (DebugHooks.swift): the picker's and the cancelled touches' (`debug-picker`, `debug-pickers` and
+/// `debug-cancels`), over every screen, each a clear element of a point with a value and no label.
+/// A Release build has none, so an issue on one says
 /// nothing of the app's screens: `runAudit` sets it apart (`AuditTimes.setApart`), and the times
 /// attached say whether the audit flags such an element at all. The URL recorder's lines
 /// (`debug-opened`, `debug-units`), on screen and read as any text is, are audited as they are.
 enum DebugReadout {
-  static let identifiers: Set<String> = ["debug-picker", "debug-pickers"]
+  static let identifiers: Set<String> = ["debug-picker", "debug-pickers", "debug-cancels"]
 
   /// Whether `element`, an issue's, is one: identified as one, and a point square at most (to
   /// the pixel, `onPixels`).
