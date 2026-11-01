@@ -6929,6 +6929,10 @@ its `onDismiss`.
   gone before the Home Screen's "before" shot; keeps its "before" shots in a temporary folder;
   fails if `terminate` finds the app not running (a crash would otherwise let the over-the-app shot
   pass on the Home Screen's banner); and says so when `simctl push` itself fails.
+- **The card's buttons and Settings' audits**, since PR #43's first macOS run (below): the buttons
+  wrap in a `FlowLayout`, not a `ViewThatFits` of a row and a column; and Settings is audited at
+  its top only, where the design had it audited there and again scrolled to its Notifications, so
+  no audit checks the Met Office warnings row's contrast or the "on" state's footer's (below).
 - **The UI tests:** each Settings audit runs before the link it taps (the Met Office link last), as
   SettingsTests does, since a URL in the recorder squeezes the screen at the audits' largest text
   sizes; a fourth older tap goes through the scroll-then-tap helper (UpgradeTests'
@@ -6987,7 +6991,9 @@ its `onDismiss`.
 13. **Swift without a compiler.** IsItUI's new views and the app compile only on macOS; the harness
     type-checks the rest, and as much of IsItUI as its SwiftUI stub covers.
 14. **CI time.** About 53 of the `ios` job's 90 minutes with 8.1 alone, about 56 with 7.2's widget
-    snapshots and link test too; the UI plan goes from about 36 to about 48 minutes.
+    snapshots and link test too; the UI plan goes from about 36 to about 48 minutes. (It took 85
+    and 70.7 on PR #43's first run, and the job may now run for 120: below, "What PR #43's first
+    macOS run showed".)
 15. **The full-screen ad after the card's Search.** The card's Search opens the pill's kind of
     picker, which may show the free version's full-screen ad on a choice, as the pill's does:
     Google's two actions (the tap, the choice) hold. Accepted.
@@ -7008,7 +7014,8 @@ its `onDismiss`.
    on the Home Screen, that each shot differs from the one before it after 12 and 8 seconds' waits,
    and that the two reach the contact sheet from `attachments/Push`.
 5. The card's audits at Large and AX3 (`HomeAuditTests`, leeds-dry's card for a place and the first
-   launch's for approximate location), its buttons one under another at AX3.
+   launch's for approximate location), its buttons one under another at AX3. (They failed, as two
+   copies in a `ViewThatFits`; they now wrap in a `FlowLayout`: below.)
 6. The hand-overs: Settings' "Search" and the card's opening the picker (Settings closing first,
    through `present(_:)`), and `willitsnow://settings/notifications` opening Settings over the home
    screen (`XCUIApplication.open`).
@@ -7022,6 +7029,7 @@ its `onDismiss`.
 10. That the older UI tests still pass: their screens with the card hidden as before, and their
     taps on `upgrade` and `your-privacy` reaching the rows below the new section.
 11. That the UI plan, with its 15 new tests, ends at about 48 minutes, inside the `ios` job's 90.
+    (It took 70.7, and the job 85: below.)
 12. The Release checks on the real binaries: none of the 25 hooks in either, `FakeNotifications`
     and `DevicesStub` among them; the app's `IsItPushEnvironment` production and its manifest's
     device ID; no notifications code in the widget (all `archive-check`'s: `release-check.sh` is
@@ -7063,6 +7071,130 @@ notifications add no readout, so `DebugReadout` sets apart the same three. Check
 merged harness (session scratchpad: merge-81's p78-uicheck, NotificationsCancelCheck): a cancelled
 gear or place tap is tapped once more, a completed one never, and one cancelled twice fails naming
 the count.
+
+**What PR #43's first macOS run showed** (run 41350233287, on 96de081, merged with main). The
+app, the widget and their tests built, the Unit plan passed (46 of 46), the banner step showed the
+notification over the app and on the Home Screen, and the Release build had no debug hooks. Of the
+UI plan's 80 tests 73 passed, the switch rows' values ("1" and "0"), the place page's audit, the
+system's prompt and the routes among them, and 7 failed, every one an accessibility audit: the
+card's four `HomeAuditTests` cases and `NotificationsTests`' three Settings audits. None is
+excepted; each is fixed where it starts.
+
+- **The card's buttons were two copies each.** `NotificationCardView` laid them out in a
+  `ViewThatFits` of an `HStack` and a `VStack` of the same `PillButton`s, as the design drew it,
+  against the rule every screen keeps ("The iPhone app in the website's look": each element laid
+  out once, never `ViewThatFits`). Which copy is drawn depends on the text size. The card is 326
+  points wide inside its padding; the first launch's three buttons need 147.7 + 78.3 + 89 and two
+  gaps of 10, 335, so they are a row up to Medium and a column from Large; Leeds's two are a row
+  up to AX2, by their widths (181.7 at Large), and a column from AX3 (151.7 + 10 + 166 = 327.7).
+  The issues are exactly those buttons, never the card's line or anything below the card:
+  - at Large, Leeds's row failed `dynamicType`, "partially unsupported", on `card-turn-on` and
+    `card-not-now` (screenful 2, at y 375);
+  - wherever a column was audited, `textClipped` failed with no element, one issue for each card
+    button on screen or scrolled above it: Leeds at AX3, 2 on each of screenfuls 4 to 6; the
+    first launch at AX3, 2 on screenful 4 (Search cut at the screen's foot, Not now below it) and
+    3 on each of 5 to 7; and the first launch at Large, 2 on each of screenfuls 2 and 3, where all
+    three were whole (which two, and why not three, the issues don't say).
+
+  Nothing was clipped: the screen recordings of the audit's sweeps through the 12 sizes show the
+  line and the buttons whole at every size they are on screen. The line, the font (`labelStrong`,
+  in which the first launch's column passed `dynamicType` at Large), `PillButton` and the footer
+  are cleared by what passed on this run: leeds-dry without the card at Large and AX3, and the
+  upgrade row, a `PillButton` in `labelStrong` in the same slot above the same footer, at both.
+  It is PR #33's fault again: the top bar's approximate line, in a `ViewThatFits` of a row and a
+  column, failed `dynamicType` the same way, and had no Dynamic Type issue on #33's next run as
+  one `FlowLayout`. So the card's buttons are one `FlowLayout` now (10 apart, lines 10 apart),
+  each laid out once at every size. By the trees' widths: Leeds's on one line at Large and two at
+  AX3; the first launch's on one line at Medium, "Use my location" and "Search" then "Not now" at
+  Large, and "Use my location" (294.3) then "Search" and "Not now" (142.7 + 10 + 166 = 318.7) at
+  AX3; a pill wider than the card is offered its width, so its words wrap. The design's "or one
+  under another" is now the footer's wrapping.
+  `packages/mobile/test/swiftLayouts.test.ts` fails on `ViewThatFits` in the code of IsItUI and
+  the app (not their comments, where Layouts.swift and HomePager.swift say why not); it failed on
+  the card first. The widgets' faces keep theirs: no audit runs on a widget.
+
+  **Not claimed:** why the audit fails a copy. It isn't simply a view swapped at a text size: the
+  switcher swaps its `PillSegments` for `TabChip`s at AX1 (`isAccessibilitySize`), and its
+  buttons passed both checks at Large and AX3 on this run, the card's tests included. What the
+  runs show is narrower: copies in a `ViewThatFits` failed, twice, and one view in a `FlowLayout`
+  passed. Nor is it shown that VoiceOver loses its place on the card: the words grew at every
+  size.
+
+- **Settings was audited scrolled.** Before each of its three audits (the gate, on and denied) the
+  test dragged Settings about 200 points (`showNotifications`), so the Notifications heading lay
+  just under the bar (13 points under its foot at 132, 9.3 in the gate test), on the premise that
+  every text on screen then starts below the bar. Each failed the same three `contrast` issues,
+  each "not proven" by `DrawnText`:
+  - the units' footnote, "Temperatures follow: …", at y 82 (78.3), under the bar and Close: no
+    pixel of it in the content's colours;
+  - "in", the units control, at y 20 (16.3), above the sheet's top at 62: its pixels are the
+    status bar's icons (#000000) and the Home Screen behind the sheet (#cbb9b1) ("cm", beside it,
+    was not flagged);
+  - the Notifications heading, its white at 245 to 253, never #ffffff (3,109 pixels of #ffffff
+    at Settings' top), 21% of its pixels none of the surface's colours (27% in the gate test),
+    though its contrast is 6.20:1.
+
+  The premise missed two things. `SheetPage` is an eager `ScrollView`, so what has scrolled under
+  the bar or off the sheet stays in the tree, and Apple's check reads its contrast against
+  whatever pixels are there (the home pages' lesson: "An element a screenful cuts is judged where
+  it is whole", PR #31's run). And while the page is scrolled, iOS 26's top scroll-edge effect,
+  the bar's background by choice ("The iPhone app in the website's look"), fades the scroll
+  view's content from the sheet's top at 62 to 186.8, 54.8 points below the bar's foot: the units
+  card shows at 19% to 55% there, over a background that is unchanged. Each failing tree has the
+  effect's `AdditionalDimmingOverlay` over Settings' scroll view (scrolled 21%, 22% and 30%); no
+  passing sheet audit has one over the page it audits. Not a fault in the app: at its top the same
+  Settings, in the same gate state, passed all three audit calls on this run with nothing allowed
+  (`SettingsTests.testUnitsChangeAsksInTheNewUnits`, with "in" chosen where the gate test has
+  "cm"). Nor an exception: the faded heading isn't drawn in the surface's colours, and the
+  footnote and "in" have no text on screen, so the pixel proof has nothing to allow.
+
+  So Settings is audited at its top, as every sheet is (SettingsTests; Your privacy since PR #40's
+  run), which the design had planned beside the scrolled audit; the scrolled one is the one gone.
+  `showNotifications` has gone; `openSettings` notes where Settings' title lies once it has opened
+  (`noteSettingsTop`; 136 on this run), and before each audit `expectSettingsAtItsTop` throws,
+  naming both positions, unless the title is within half a point of it. It never drags: at the
+  top a drag down can pull the sheet down to close, and nothing in the app stops that. No step of
+  the three tests scrolls before its audit (the rows they tap are whole at the top), so the check
+  only stops a later `reveal` bringing the effect back. Checked on Linux (merge-81's p78-uicheck,
+  SheetScrollCheck, which checked `showNotifications` before): at the top it passes with no drag,
+  and within half a point; scrolled by a reveal, or to where this run's `showNotifications` drag
+  left it (the heading 13 points under the bar), or by 0.6, it throws naming both, with no drag;
+  never noted, it says so.
+
+  **What the top leaves out** of the contrast check, so that no audit checks it from now on: the
+  Met Office warnings row (`notify-warnings`, on and denied), under the Debug recorder's lines
+  (858 to 912 on, 811 to 865 denied), and the Notifications footer in the "on" state, cut by the
+  content's foot at 794 (791 to 841.7); the denied state's footer crosses it by 0.7 (744 to
+  794.7). This run's scrolled audits did contrast-check all three whole, above the content's foot
+  (the warnings row at 659.7 to 713.7 on and 612.7 to 666.7 denied, the "on" footer at 592.7 to
+  643.4), and they passed, nothing allowed on either screen; they were not among the three
+  issues. So the test is looser than the design, which audited Settings scrolled to its
+  Notifications as well. What stands for the three now: the warnings row is a row that leaves the
+  app, built as every such row is (`RowLabel` with `end: .leaves`, in `SheetRowStyle`), and rows
+  built that way passed whole on this run: Credits' "Weather data by Open-Meteo.com" (562 to
+  635.3) and "CC BY 4.0" (635.7 to 689.7), and the typeface licence's "Bricolage Grotesque's
+  project page" (200.3 to 263); the denied state's "Open Settings", built the same way, is whole
+  at Settings' top (about 453.6 to 507.6) and checked there. Cut at the content's foot as the "on"
+  footer is, Credits' "CC BY-SA 4.0" (791.7 to 845.7) passed on main, and the footer's own style
+  is checked whole in the gate state (578.3 to 629). If they must be checked again, the way is
+  HomeAuditTests' hold-until-whole, adapted to a sheet, with the edge effect's foot (186.8), not
+  the bar's, as the top of what it reads: a screenful at the top, then one scrolled, whose issues
+  on what the fade or the sheet's top cuts are judged on the screenful that showed them whole.
+  That is new machinery for every sheet that only a macOS run can try, so it isn't added here.
+  Dynamic Type and clipped text are checked for every element wherever it is.
+
+- **The job's time.** The `ios` job took 85 of its 90 minutes (the simulator's boot 4.5, the UI
+  plan 70.7: its 80 tests 4,136 seconds, `HomeAuditTests` 1,776 of them), where risk 14 had put
+  it at 56. The fixes add a little: the three Settings tests go on past their audits, and "Your
+  privacy, registered" is audited for the first time. A slower runner would have been cut off
+  before its results, so the job may run for 120 minutes; a public repository's macOS minutes
+  cost nothing. No test is dropped or skipped for time.
+
+- **For the next macOS run to show:** that the card's four audits pass with its buttons in the
+  `FlowLayout`, the first launch's 2 + 1 at Large among them; that the three Settings audits
+  pass at the top, the Notifications footers cut at the content's foot and the gate's "cm"
+  included; that "Your privacy, registered", which this run never reached, passes; and the job's
+  time.
 
 ## API contract
 

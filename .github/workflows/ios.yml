@@ -103,9 +103,12 @@ jobs:
     # 7.1's UpgradeTests, the upgrade row's two HomeAuditTests cases and AdsTests' purchase add a
     # few minutes; the StoreKit plan has a job of its own (storekit, below). Phases 8.1 and 8.2's
     # NotificationsTests, NotificationPermissionTests and the notification card's four
-    # HomeAuditTests cases add about 11 minutes and the banner (ci/push.sh) about one, and phase
-    # 7.2's widget snapshots and link test add about two minutes: about 56 of the 90.
-    timeout-minutes: 90
+    # HomeAuditTests cases, the banner (ci/push.sh) and 7.2's widget snapshots and link test were
+    # put at about 56 minutes in all. PR #43's first run with them took 85 (run 41350233287: the
+    # simulator's boot 4.5, the UI plan 70.7), 5 short of the 90 this was, so a slower runner
+    # would have been cut off before its results. 120 leaves more than half an hour; a public
+    # repository's macOS minutes cost nothing.
+    timeout-minutes: 120
     # The attachments' artefact ID, set only when they were uploaded. The runner evaluates job
     # outputs after the last step whatever the result, so failed tests still set it.
     outputs:

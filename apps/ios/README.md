@@ -282,6 +282,7 @@ There is no Xcode here, so iOS code is only compiled on GitHub's macOS runners. 
 ```sh
 pnpm mobile:check                     # the Swift, fixtures, vectors, glyphs, icon and font are as generated
 pnpm vitest run packages/mobile/test/swiftLiterals.test.ts   # no words typed in the Swift (phase 6, below)
+pnpm vitest run packages/mobile/test/swiftLayouts.test.ts    # no ViewThatFits where the audits look (8.1)
 docker run --rm -v "$PWD/apps/ios":/w -w /w swift:6.3.3-noble \
   swift format lint --strict --recursive Packages Apps          # every Swift file, as CI lints it
 docker run --rm -v "$PWD/apps/ios/Packages/IsItCore":/w -w /w swift:6.3.3-noble \
@@ -403,11 +404,12 @@ coalesce (`syncsCoalesce`) and a permission rule that deletes on "not determined
 and `.toggle` element types added (alerts-uicheck), with two new checks there: the contrast proof
 on a synthetic switch row, on and off in the content colours, refusing UIKit's green and grey
 tracks, a grey knob, the hairline stroked over the track, the track's ink in the wrong share and
-the row dimmed (SwitchCheck); and NotificationsTests' scrolling of Settings against a fake sheet
-(SheetScrollCheck). XcodeGen, built on Linux as above, generates the project with
-IsItNotifications linked by the app and its unit tests and not by the widget. DECISIONS ("The
-iPhone app's notifications (phases 8.1 and 8.2)") says what was checked and what only macOS can
-show.
+the row dimmed (SwitchCheck); and NotificationsTests' scrolling of Settings against a fake sheet,
+with, since PR #43's first macOS run, its check that Settings is still at its top for an audit,
+refusing a page scrolled more than half a point and never dragging (SheetScrollCheck). XcodeGen,
+built on Linux as above, generates the project with IsItNotifications linked by the app and its
+unit tests and not by the widget. DECISIONS ("The iPhone app's notifications (phases 8.1 and
+8.2)") says what was checked and what only macOS can show.
 
 Merged, the two phases' harnesses are one type-check and one UI check (session scratchpad:
 merge-81's p78-typecheck and p78-uicheck), the notifications' with the widgets' and the tab-tap
@@ -1773,9 +1775,11 @@ has each answer and why ("The iPhone app's notifications (phases 8.1 and 8.2)").
     cell, the answer on screen's when the screen shows that cell.
 - **What shows: the Today card** (`notification-card`), on the middle page (Today and Tomorrow
   alike), only with an answer, above the upgrade row, in the free and paid versions alike: a chip
-  card with its line (`card-line`) and bordered chip buttons, side by side or one under another
-  when they don't fit. Four kinds: a place on screen ("Get a notification the evening before snow
-  is likely here.", "Turn on" and "Not now"); approximate location ("Choose a place for
+  card with its line (`card-line`) and bordered chip buttons, side by side, wrapping onto the
+  next line when one doesn't fit, as the footer's links do (`FlowLayout`: each button laid out
+  once, never a `ViewThatFits` of copies, which failed the audits on PR #43's first macOS run).
+  Four kinds: a place on screen ("Get a notification the evening before snow is likely here.",
+  "Turn on" and "Not now"); approximate location ("Choose a place for
   notifications: use your location or search for a town.", "Use my location", "Search" and "Not
   now"); refused this session ("Notifications are off for this app in Settings.", "Open Settings"
   and "Not now"); and turned on this session ("Done. You'll get a notification the evening before
@@ -1943,9 +1947,14 @@ through `syncReply` and `testOutcome`. On the macOS CI:
   the place page and "Use my location"; the card's "Turn on"; the card at approximate location,
   and "Not now" kept over a relaunch; and a cold-start tap's route to Durham, a malformed one and
   the settings link. They audit Settings at approximate location, on and denied, the place page
-  and Your privacy registered. `NotificationPermissionTests.testTheSystemPromptAllows` is the one
-  test that meets the system's prompt, through SpringBoard; it skips, never passes, when the
-  simulator has already allowed them. `HomeAuditTests` gains four card cases (leeds-dry's card for
+  and Your privacy registered, each at its top: Settings is checked to be where it opened
+  (`expectSettingsAtItsTop`), as a scrolled sheet's faded, covered text fails the contrast check
+  (PR #43's first macOS run, in DECISIONS). So no audit checks the contrast of the Met Office
+  warnings row, under the Debug recorder at the top, or of the "on" state's footer, cut by the
+  content's foot; that run's scrolled audits checked them whole and they passed.
+  `NotificationPermissionTests.testTheSystemPromptAllows` is the one test that meets the system's
+  prompt, through SpringBoard; it skips, never passes, when the simulator has already allowed
+  them. `HomeAuditTests` gains four card cases (leeds-dry's card for
   a place and the first launch's for approximate location, each at Large and AX3). Every older UI
   test launches with the card hidden (`-uitest`), so their home screens and audits are as they
   were; their taps on Settings rows under the new card scroll first. The new tests' gear, place
@@ -2051,13 +2060,14 @@ full-screen ad: choose places on a later launch.
 | `swift-linux`   | ubuntu, `swift:6.3.3-noble` | every Swift file lints; IsItCore's tests pass (with `tzdata`), the vector guard included: every vector file checked by its port (above)                                                                                                                                                                                                                                                                                                                                                                    |
 | `ios`           | `macos-26`, Xcode 26.6      | the project generates; packages resolve to the pins; the app, widget and tests build for the iPhone 17 simulator (iOS 26.5), with the icon and glyph catalogues; the Unit and UI plans pass, with the Unit plan's widget snapshots; after the UI plan, `ci/push.sh` shows the notification banner over the app and on the Home Screen (`simctl push`); a Release build has no debug hooks, no fixtures, no StoreKit configuration and no StoreKitTest, and no ads, location or purchase code in the widget |
 | `archive-check` | `macos-26`, Xcode 26.6      | an unsigned Release archive for iPhones builds and passes `scripts/check-archive.sh` with ads test: the release job's archive checks, on every pull request, with no key                                                                                                                                                                                                                                                                                                                                   |
-| `storekit`      | `macos-26`, Xcode 26.6      | the StoreKit plan passes on an iPhone 17 simulator with iOS 26.2 (downloaded if the runner lacks it), each test allowed 60 seconds, within 60 minutes; beside `ios`, not after its UI plan, which already takes most of that job's 90                                                                                                                                                                                                                                                                      |
+| `storekit`      | `macos-26`, Xcode 26.6      | the StoreKit plan passes on an iPhone 17 simulator with iOS 26.2 (downloaded if the runner lacks it), each test allowed 60 seconds, within 60 minutes; beside `ios`, not after its UI plan, which already takes most of that job's 120                                                                                                                                                                                                                                                                     |
 | `contact-sheet` | ubuntu                      | tiles every attached screen and widget, and push.sh's two banner screenshots, into one PNG, whenever `ios` uploaded attachments (failed tests included); skipped when `ios` failed before its tests ran                                                                                                                                                                                                                                                                                                    |
 
 No job needs a secret. The `ios` job pins `macos-26` (never `macos-latest`, never `-xlarge`) and
-selects Xcode 26.6 explicitly. It caches `apps/ios/.spm` (the package checkouts and Google's
-binary SDKs) on the hash of `Package.resolved`, and the XcodeGen zip, whose SHA-256 is checked
-on every run. It uploads, for five days:
+selects Xcode 26.6 explicitly. It may run for 120 minutes: PR #43's first run, with the widgets
+and the notifications, took 85 of the 90 it had. It caches `apps/ios/.spm` (the package
+checkouts and Google's binary SDKs) on the hash of `Package.resolved`, and the XcodeGen zip,
+whose SHA-256 is checked on every run. It uploads, for five days:
 
 - `ios-results`: `Build.xcresult`, `Unit.xcresult`, `UI.xcresult`, and the JSON xcresulttool
   read from them;

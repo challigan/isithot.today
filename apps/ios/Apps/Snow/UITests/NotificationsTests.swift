@@ -21,11 +21,16 @@ import XCTest
 /// XCUITest's tree, which lags the screen. The gear, the place button and the switcher's tabs are
 /// tapped as every UI test taps them, once more only when the system cancelled the touch
 /// (`cancelled(_:in:within:until:_:)`), and a failure after a gesture names `debug-cancels`
-/// (`cancelsReport`). Every tap is on an element whole on screen (`reveal`),
-/// as the Notifications card moves every Settings row below the units down. Settings is audited
-/// with the Notifications heading scrolled to just under the bar, so every text on screen starts
-/// below it, and the pages on its stack at their tops, each audited screen attached for the
-/// contact sheet; the card's audits are HomeAuditTests'.
+/// (`cancelsReport`). Every tap is on an element whole on screen (`reveal`), as the
+/// Notifications section moves every Settings row below the units down. Settings is audited at
+/// its top, as every sheet is (SettingsTests, and Your privacy since PR #40's run), and the pages
+/// on its stack at theirs, each audited screen attached for the contact sheet; the card's audits
+/// are HomeAuditTests'. Scrolled at all, iOS 26's scroll-edge effect fades the page from the
+/// sheet's top to about 125 points below it, and the page keeps what has scrolled under the bar,
+/// or off the sheet, in the tree, where the contrast check reads it against whatever is there:
+/// audited with the Notifications heading just under the bar, the units' footnote, "in" and the
+/// heading itself failed it (PR #43's first macOS run). So each Settings audit first checks that
+/// Settings is still where it opened (`expectSettingsAtItsTop`).
 final class NotificationsTests: XCTestCase {
   /// Leeds, a city's page: its fixture, kept as the place to launch on.
   private static let leeds = ["-fixture", "leeds-dry", "-place", "place=leeds-gb"]
@@ -33,6 +38,10 @@ final class NotificationsTests: XCTestCase {
   /// The app the test launched last (`launch`), whose `debug-cancels` a wait's failure names, as
   /// each wait follows a gesture.
   private var launched: XCUIApplication?
+
+  /// Where Settings' title lay when `openSettings` last opened it, at its top
+  /// (`noteSettingsTop`).
+  private var settingsTop: CGFloat?
 
   override func setUpWithError() throws {
     continueAfterFailure = false
@@ -48,7 +57,7 @@ final class NotificationsTests: XCTestCase {
     XCTAssertTrue(app.find("notify-use-my-location").exists, "No Use my location")
     XCTAssertTrue(app.find("notify-search").exists, "No Search")
     XCTAssertFalse(app.find("notify-evening").exists, "A switch at approximate location")
-    try showNotifications(in: app)
+    try expectSettingsAtItsTop(in: app)
     try auditAccessibility(
       of: app, on: "Settings, notifications at approximate location", surface: .content)
     attach(app, as: "app-notifications-gate")
@@ -75,7 +84,7 @@ final class NotificationsTests: XCTestCase {
     try waitFor(app.find("notify-place"), value: "Leeds")
     try tap("notify-test", in: app)
     try waitFor(app.find("notify-test"), value: Copy.testSent)
-    try showNotifications(in: app)
+    try expectSettingsAtItsTop(in: app)
     try auditAccessibility(of: app, on: "Settings, notifications on", surface: .content)
     attach(app, as: "app-notifications-on")
 
@@ -116,7 +125,7 @@ final class NotificationsTests: XCTestCase {
     try tap("notify-evening", in: app)
     try waitFor(app.find("notify-notice"), label: Copy.notifyDenied)
     try expectSwitch(evening, on: false)
-    try showNotifications(in: app)
+    try expectSettingsAtItsTop(in: app)
     try auditAccessibility(of: app, on: "Settings, notifications denied", surface: .content)
     attach(app, as: "app-notifications-denied")
     try tap("notify-open-settings", in: app)
@@ -372,6 +381,7 @@ final class NotificationsTests: XCTestCase {
     guard app.find("notifications-heading").waitForExistence(timeout: 5) else {
       throw HomeScreenError("No Notifications in Settings")
     }
+    noteSettingsTop(in: app)
   }
 
   /// Opens Your privacy from Settings' row, and waits for its title on the page.
@@ -551,23 +561,37 @@ final class NotificationsTests: XCTestCase {
       withVelocity: .slow, thenHoldForDuration: 0.3)
   }
 
-  /// Scrolls Settings until the Notifications heading lies just under the navigation bar, its
-  /// top within 24 points of the bar's foot, so the section fills the screen below it and every
-  /// text on screen starts below the bar, as the audit's proof needs (`DrawnText`); throws, with
-  /// where the heading was after each drag, when it never does.
+  /// Settings' title on its page (`page-title`), which scrolls with it.
   @MainActor
-  private func showNotifications(in app: XCUIApplication) throws {
-    let heading = app.find("notifications-heading")
-    var seen: [CGFloat] = []
-    for _ in 0..<6 {
-      let below = settledFrame(of: heading).minY - shown(in: app).minY
-      if (0...24).contains(below) { return }
-      seen.append(below)
-      drag(by: below - 12, in: app)
+  private func settingsTitle(in app: XCUIApplication) -> XCUIElement {
+    let titled = NSPredicate(format: "identifier == 'page-title' AND label == 'Settings'")
+    return app.staticTexts.matching(titled).firstMatch
+  }
+
+  /// Notes where Settings' title lies once it has stopped moving, Settings having just opened at
+  /// its top, for `expectSettingsAtItsTop`.
+  @MainActor
+  private func noteSettingsTop(in app: XCUIApplication) {
+    settingsTop = settledFrame(of: settingsTitle(in: app)).minY
+  }
+
+  /// Throws unless Settings is at its top, its title within half a point of where it lay when
+  /// Settings opened (`noteSettingsTop`), saying where it is. Settings is audited only there: a
+  /// tap on a row not whole on screen (`reveal`) scrolls it, and scrolled, iOS 26's scroll-edge
+  /// effect fades the page under the bar and the tree keeps what has gone under the bar or off
+  /// the sheet, which the contrast check then reads against other pixels (PR #43's first macOS
+  /// run). It never drags: at the top, a drag down can pull the sheet down to close.
+  @MainActor
+  private func expectSettingsAtItsTop(in app: XCUIApplication) throws {
+    guard let top = settingsTop else {
+      throw HomeScreenError("Settings' top was never noted: open it with openSettings")
     }
-    throw HomeScreenError(
-      "The Notifications heading never came to just under the bar: it was \(seen) points below "
-        + "it; \(app.cancelsReport)")
+    let now = settledFrame(of: settingsTitle(in: app)).minY
+    guard abs(now - top) <= 0.5 else {
+      throw HomeScreenError(
+        "Settings isn't at its top for its audit: its title is at \(now), where it opened at "
+          + "\(top); \(app.cancelsReport)")
+    }
   }
 
   /// Shows the middle page of `screen`, a HomeScreens.json screen on the launch's fixture, the
