@@ -2,7 +2,9 @@
  * The fonts the app and its widget register (DECISIONS, "The iPhone app in the website's look"):
  * both Info.plists' `UIAppFonts` list every file `BrandFont` names, in its order. An extension
  * can't load the app's fonts, so the widget lists them too, and a face left out of either would
- * fall back to the system font without a word, which nothing on Linux would see.
+ * fall back to the system font without a word, which nothing on Linux would see. The archive
+ * check (scripts/check-archive.sh's `FONT_FILES`) looks for the same files in both bundles of a
+ * Release archive, and in each `UIAppFonts` there.
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -42,5 +44,17 @@ describe('UIAppFonts', () => {
     expect(plistStrings(plist, 'UIAppFonts')).toEqual(['x.ttf', 'y.ttf']);
     expect(() => plistStrings(plist, 'C')).toThrow(/No C/);
     expect(() => plistStrings('<key>C</key><string>c</string>', 'C')).toThrow(/isn't an array/);
+  });
+});
+
+describe('the archive check', () => {
+  it("looks for every brand font's file, in BrandFont's order", () => {
+    const script = readFileSync(
+      new URL('../../../scripts/check-archive.sh', import.meta.url),
+      'utf8',
+    );
+    const list = /^FONT_FILES=\(([^)]*)\)$/m.exec(script);
+    expect(list, 'FONT_FILES').not.toBeNull();
+    expect(list![1]!.trim().split(/\s+/)).toEqual(BRAND_FONTS.map((f) => `${f.name}.ttf`));
   });
 });

@@ -40,6 +40,18 @@ public enum DeepLink {
     }
   }
 
+  /// The willitsnow:// link that opens `route` (client `routeLink`), `parse(_:)`'s inverse: a
+  /// view, the upgrade, or Settings' notifications, as a widget taps through. Nil for a place,
+  /// which only a notification's payload carries.
+  public static func link(_ route: Route) -> String? {
+    switch route {
+    case .view(let view): "willitsnow://view/\(view.rawValue)"
+    case .upgrade: "willitsnow://upgrade"
+    case .settings(let section): "willitsnow://settings/\(section.rawValue)"
+    case .place: nil
+    }
+  }
+
   /// `parse(_:)` for the URL the system opens the app with.
   public static func parse(_ url: URL) -> Route? {
     parse(url.absoluteString)

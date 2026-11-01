@@ -72,8 +72,8 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Apps/Snow/Widgets/Widgets.entitlements
     dependencies:
       - package: IsItCore
-        products: [IsItModel]
-      # Never IsItAds: the widget links no ads code (sections 9.1 and 18.3); nor IsItLocation,
+        products: [IsItModel, IsItLogic, IsItState]
+      # Never IsItAds: the widget links no ads SDK (sections 9.1 and 18.3); nor IsItLocation,
       # so no location API is in its binary; nor IsItPurchases: a widget never sells (App Review
       # 4.4).
       # Nor IsItNotifications: only the app registers for notifications.
@@ -126,6 +126,8 @@ targets:
     type: bundle.ui-testing
     platform: iOS
     sources:
+      # Phase 7.2's WidgetLinkTests opens each view a link can name (view/week, view/today,
+      # view/now) and checks the page it opens; a locked widget's link, upgrade, is UpgradeTests'.
       # FixtureLaunchTests, LaunchTests, phase 5.4's HomeTests, OfflineTests and HomeAuditTests
       # with HomeScreens.swift, phase 6's PickerTests and SettingsTests with ScreenAudit.swift,
       # every audit's contrast proof in DrawnText.swift, phase 8.3's AdsTests, the only ones

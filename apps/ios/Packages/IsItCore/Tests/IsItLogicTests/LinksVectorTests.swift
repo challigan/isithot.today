@@ -9,7 +9,8 @@ extension VectorPort {
   /// and `DeepLink.route(payload:placeNow:)`. A payload is any JSON, as a notification's
   /// `userInfo` holds it: it reaches the port as `JSONSerialization` reads it, and the place's
   /// date (`placeToday`) as a `LocalDateTime`'s. Each route is decoded from the client's JSON and
-  /// compared whole.
+  /// compared whole. And client `routeLink`, ported as `DeepLink.link`: the link for each route,
+  /// or nil for a place's.
   static let links = VectorPort { file in
     struct Link: Decodable, Sendable {
       let url: String
@@ -26,6 +27,13 @@ extension VectorPort {
       DeepLink.route(payload: try tap.payload.foundation()) { _ in
         tap.placeToday.map { LocalDateTime(date: $0, hours: 0) }
       }
+    }
+
+    struct Routed: Decodable, Sendable {
+      let route: DeepLink.Route
+    }
+    try file.compare("routeLink", input: Routed.self, output: String?.self) {
+      DeepLink.link($0.route)
     }
   }
 }
@@ -89,6 +97,16 @@ struct DeepLinkTests {
   func roundTrip(_ route: DeepLink.Route) throws {
     let read = try JSONDecoder().decode(DeepLink.Route.self, from: JSONEncoder().encode(route))
     #expect(read == route)
+  }
+
+  @Test("every link parses back to its route, and a place's route has none")
+  func links() throws {
+    let routes = AppView.allCases.map(DeepLink.Route.view) + [.upgrade, .settings(.notifications)]
+    for route in routes {
+      let link = try #require(DeepLink.link(route), "\(route)")
+      #expect(DeepLink.parse(link) == route, "\(link)")
+    }
+    #expect(DeepLink.link(.place(.city(slug: "durham-gb"), view: .today)) == nil)
   }
 }
 

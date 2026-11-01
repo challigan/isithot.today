@@ -13,6 +13,7 @@ struct VectorFilesTests {
       try Vectors.names() == [
         "alerts", "freshness", "grid", "hours", "links", "page", "placeTime", "query",
         "questions", "recent", "saved", "search", "strip", "target", "tomorrow", "widget",
+        "widgetFace", "widgetSource",
       ])
   }
 

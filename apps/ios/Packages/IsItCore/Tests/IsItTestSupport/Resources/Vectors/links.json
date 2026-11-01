@@ -1,6 +1,6 @@
 {
-  "fn": "parseDeepLink, notificationRoute",
-  "source": "client@parseDeepLink, client@notificationRoute",
+  "fn": "parseDeepLink, notificationRoute, routeLink",
+  "source": "client@parseDeepLink, client@notificationRoute, client@routeLink",
   "cases": [
     {"fn":"parseDeepLink","in":{"url":"willitsnow://view/now"},"out":{"kind":"view","view":"now"}},
     {"fn":"parseDeepLink","in":{"url":"willitsnow://view/today"},"out":{"kind":"view","view":"today"}},
@@ -74,6 +74,12 @@
     {"fn":"notificationRoute","in":{"payload":{"topic":"snow","kind":"evening","date":"2026-12-17","view":"today","place":"","name":"Durham"},"placeToday":"2026-12-16"},"out":null},
     {"fn":"notificationRoute","in":{"payload":{"topic":"snow","kind":"evening","date":"2026-12-17","view":"today","place":"units=c","name":"Durham"},"placeToday":"2026-12-16"},"out":null},
     {"fn":"notificationRoute","in":{"payload":{"topic":"snow","kind":"evening","date":"2026-12-17","view":"today","place":"place=","name":"Durham"},"placeToday":"2026-12-16"},"out":null},
-    {"fn":"notificationRoute","in":{"payload":{"topic":"snow","kind":"evening","date":"2026-12-17","view":"today","place":"lat=91&lon=0","name":"Durham"},"placeToday":"2026-12-16"},"out":null}
+    {"fn":"notificationRoute","in":{"payload":{"topic":"snow","kind":"evening","date":"2026-12-17","view":"today","place":"lat=91&lon=0","name":"Durham"},"placeToday":"2026-12-16"},"out":null},
+    {"fn":"routeLink","in":{"route":{"kind":"view","view":"now"}},"out":"willitsnow://view/now"},
+    {"fn":"routeLink","in":{"route":{"kind":"view","view":"today"}},"out":"willitsnow://view/today"},
+    {"fn":"routeLink","in":{"route":{"kind":"view","view":"week"}},"out":"willitsnow://view/week"},
+    {"fn":"routeLink","in":{"route":{"kind":"upgrade"}},"out":"willitsnow://upgrade"},
+    {"fn":"routeLink","in":{"route":{"kind":"settings","section":"notifications"}},"out":"willitsnow://settings/notifications"},
+    {"fn":"routeLink","in":{"route":{"kind":"place","target":{"kind":"city","slug":"durham-gb","name":"Durham"},"view":"today"}},"out":null}
   ]
 }

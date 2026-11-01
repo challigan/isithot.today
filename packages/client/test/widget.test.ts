@@ -1,8 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { localDateTime, showsTomorrow, type TodayResponse } from '@isithot/core';
+import {
+  WIDGET,
+  localDateTime,
+  showsTomorrow,
+  type TodayResponse,
+  type Units,
+} from '@isithot/core';
 import { usableUntil } from '../src/freshness';
 import { pickHour } from '../src/hours';
-import { widgetEntries, type WidgetEntry } from '../src/widget';
+import {
+  widgetEntries,
+  widgetFallsBack,
+  widgetReuses,
+  type SavedAnswer,
+  type WidgetEntry,
+} from '../src/widget';
 import { HOUR, MINUTE, STALE, answer, hourStart, snowDay } from './fixtures';
 
 const at = (s: string): number => Date.parse(s);
@@ -353,5 +365,59 @@ describe('widgetEntries: locked, and what an answer may lack', () => {
     const noTomorrow: TodayResponse = { ...res, snow: { ...snow, days: snow.days.slice(0, 1) } };
     const first = widgetEntries(noTomorrow, { fetchedAt: made, now, unlocked: true }).entries[0]!;
     expect(first.week.map((d) => d.date)).toEqual(snow.week!.days.slice(0, 4).map((d) => d.date));
+  });
+});
+
+describe('widgetReuses and widgetFallsBack', () => {
+  // Aberdeen's answer as the app saved it when it was fetched, at 9:05am on 2 December.
+  const made = at('2026-12-02T09:05:00Z');
+  const res = answer({ tz: 'Europe/London', at: made, name: 'Aberdeen' });
+  const key = 'city:aberdeen-gb';
+  const saved = (savedAt = made): SavedAnswer => ({ key, savedAt, response: res });
+  const asked = (now: number, o: { key?: string; units?: Units | null } = {}) => ({
+    key: o.key ?? key,
+    units: o.units === undefined ? 'c' : o.units,
+    now,
+  });
+
+  it('reuses the answer for the place, saved ten minutes ago, with no request', () => {
+    expect(widgetReuses(saved(), asked(made + 10 * MINUTE))).toBe(true);
+    expect(widgetReuses(saved(), asked(made + 10 * MINUTE, { key: 'city:leeds-gb' }))).toBe(false);
+    // The key is compared exactly: one space more is another place.
+    expect(widgetReuses(saved(), asked(made + 10 * MINUTE, { key: `${key} ` }))).toBe(false);
+  });
+
+  it('asks again in other units, and reuses any while none is chosen', () => {
+    expect(res.units).toBe('c');
+    expect(widgetReuses(saved(), asked(made + 10 * MINUTE, { units: 'f' }))).toBe(false);
+    expect(widgetReuses(saved(), asked(made + 10 * MINUTE, { units: null }))).toBe(true);
+  });
+
+  it('reuses it until WIDGET.reuseMinutes after it was saved, and never one saved after now', () => {
+    const limit = made + WIDGET.reuseMinutes * MINUTE;
+    expect(widgetReuses(saved(), asked(made))).toBe(true);
+    expect(widgetReuses(saved(), asked(limit - 1))).toBe(true);
+    expect(widgetReuses(saved(), asked(limit))).toBe(false);
+    // A clock moved back: saved a moment after now.
+    expect(widgetReuses(saved(made + 1), asked(made))).toBe(false);
+  });
+
+  it('asks again once the answer has no hour to show, however recently it was saved', () => {
+    const until = usableUntil(res);
+    expect(widgetReuses(saved(until - 10 * MINUTE), asked(until - 1))).toBe(true);
+    expect(widgetReuses(saved(until - 10 * MINUTE), asked(until))).toBe(false);
+  });
+
+  it('falls back on the place’s answer in its units however old, never on another place’s', () => {
+    expect(widgetFallsBack(saved(made - 7 * 24 * HOUR), { key, units: 'c' })).toBe(true);
+    expect(widgetFallsBack(saved(), { key, units: null })).toBe(true);
+    expect(widgetFallsBack(saved(), { key: 'city:leeds-gb', units: 'c' })).toBe(false);
+    expect(widgetFallsBack(saved(), { key: `${key} `, units: 'c' })).toBe(false);
+    expect(widgetFallsBack(saved(), { key, units: 'f' })).toBe(false);
+  });
+
+  it('has nothing to reuse or fall back on when nothing is saved', () => {
+    expect(widgetReuses(null, asked(made))).toBe(false);
+    expect(widgetFallsBack(null, { key, units: 'c' })).toBe(false);
   });
 });

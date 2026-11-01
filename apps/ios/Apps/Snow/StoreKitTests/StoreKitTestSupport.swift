@@ -13,6 +13,13 @@ final class RecordingPlatform: PurchasePlatform {
   let storeKit: StoreKitPurchases
   /// Each call, with its answer, in order.
   private(set) var calls: [String] = []
+  /// `calls` again, each with the time it was noted (UTC, to the millisecond, as the simulator's
+  /// log has it) and the transactions it names: attached to every StoreKit test (tearDown), so a
+  /// failure lines up with storekitd's own lines.
+  private(set) var timeline: [String] = []
+  /// Updates the listener has handed to the model whose handling (the model's read, then the
+  /// finish) hasn't returned yet. tearDown waits for none before it clears the environment.
+  private(set) var hearing = 0
   /// What the last buy came to, as StoreKit gave it.
   private(set) var lastBuy: BuyResult?
 
@@ -21,42 +28,55 @@ final class RecordingPlatform: PurchasePlatform {
   }
 
   func listen(_ heard: @escaping @MainActor (PurchaseFact) async -> Void) {
-    calls.append("listen")
+    note("listen")
     // Weakly, so a listener still waiting for an update keeps nothing of the test's alive.
     storeKit.listen { [weak self] fact in
-      self?.calls.append("heard → \(Self.word(fact))")
+      self?.note("heard → \(Self.word(fact))", [fact.transactionID])
+      self?.hearing += 1
       await heard(fact)
+      self?.hearing -= 1
     }
   }
 
   func entitlements() async -> [PurchaseFact] {
     let facts = await storeKit.entitlements()
-    calls.append("entitlements → \(facts.map(Self.word).joined(separator: ", "))")
+    note(
+      "entitlements → \(facts.map(Self.word).joined(separator: ", "))", facts.map(\.transactionID))
     return facts
   }
 
   func product(_ id: String) async -> PurchaseState.Product {
     let product = await storeKit.product(id)
-    calls.append("product → \(Self.word(product))")
+    note("product → \(Self.word(product))")
     return product
   }
 
   func buy(_ id: String) async -> BuyResult {
     let result = await storeKit.buy(id)
     lastBuy = result
-    calls.append("buy → \(Self.word(result))")
+    var bought: [UInt64] = []
+    if case .completed(let fact) = result { bought = [fact.transactionID] }
+    note("buy → \(Self.word(result))", bought)
     return result
   }
 
   func finish(_ transactionID: UInt64) async {
     await storeKit.finish(transactionID)
-    calls.append("finish")
+    note("finish", [transactionID])
   }
 
   func sync() async -> SyncResult {
     let result = await storeKit.sync()
-    calls.append("sync → \(Self.word(result))")
+    note("sync → \(Self.word(result))")
     return result
+  }
+
+  /// Notes `call` in `calls`, and in `timeline` with the time and `transactions`.
+  private func note(_ call: String, _ transactions: [UInt64] = []) {
+    calls.append(call)
+    let time = Date().formatted(Date.ISO8601FormatStyle(includingFractionalSeconds: true))
+    let ids = transactions.map(String.init).joined(separator: ", ")
+    timeline.append(ids.isEmpty ? "\(time) \(call)" : "\(time) \(call) [transaction \(ids)]")
   }
 
   /// The notes of every `call` ("buy", "sync"), in order.

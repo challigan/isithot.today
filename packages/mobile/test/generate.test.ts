@@ -23,6 +23,7 @@ import { constantsSwift } from '../src/exportConstants';
 import { coreCopySwift } from '../src/exportCoreCopy';
 import { creditsSwift } from '../src/exportCredits';
 import { STOREKIT_DIR, storeKitJson } from '../src/exportStoreKit';
+import { WIDGET_SAMPLE_PATH, widgetSampleSwift } from '../src/exportWidgetSample';
 import {
   BRAND_FONTS,
   BRAND_FONTS_PATH,
@@ -92,6 +93,7 @@ describe('generatedFiles', () => {
       ...['grid', 'target', 'query', 'placeTime', 'tomorrow', 'freshness', 'hours'],
       ...['questions', 'strip', 'widget', 'alerts', 'links', 'recent', 'page', 'search'],
       'saved',
+      ...['widgetSource', 'widgetFace'],
     ];
     const resourcePaths = [
       ...FIXTURES.map((s) => `${resources}/Fixtures/${s.name}.json`),
@@ -113,6 +115,7 @@ describe('generatedFiles', () => {
       'apps/ios/Configs/Generated/Copy.xcconfig',
       'apps/ios/Apps/Snow/StoreKit/Snow.storekit',
       ...resourcePaths,
+      `${model}/WidgetSample.swift`,
       HOME_SCREENS_PATH,
       SURFACES_PATH,
       ...assets.map((f) => f.path),
@@ -144,7 +147,7 @@ describe('generatedFiles', () => {
     expect(DEVICE_FIXTURES_DIR).toBe(`${FIXTURES_DIR}/Devices`);
     expect(PAYLOADS_DIR).toBe(`${FIXTURES_DIR}/Payloads`);
     expect(SEARCH_FIXTURES_DIR).toBe(`${FIXTURES_DIR}/Search`);
-    const first = 11 + resourcePaths.length + 2;
+    const first = 11 + resourcePaths.length + 3;
     for (const [i, f] of assets.entries()) {
       expect(sameContents(files[first + i]!.contents, f.contents)).toBe(true);
     }
@@ -183,6 +186,10 @@ describe('generatedFiles', () => {
     );
     // And the surfaces their contrast proof reads, beside them.
     expect(files.find((f) => f.path === SURFACES_PATH)!.contents).toBe(surfacesJson());
+    // The widget gallery's sample, faced from the same fixture.
+    expect(files.find((f) => f.path === WIDGET_SAMPLE_PATH)!.contents).toBe(
+      widgetSampleSwift(fixtures),
+    );
   });
 
   it('starts every Swift file with the header that names its source', () => {

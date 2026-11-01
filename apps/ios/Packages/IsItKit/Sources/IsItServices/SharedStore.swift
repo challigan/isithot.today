@@ -63,6 +63,8 @@ public struct SharedStore: StoredState, UnlockStore, @unchecked Sendable {
   }
 
   /// Saves `saved` as the last good answer, replacing the one before.
+  /// Written `.atomic` with the default protection, never complete file protection, so the Lock
+  /// Screen widgets can read it while the phone is locked, once unlocked since it started.
   public func saveToday(_ saved: SavedToday) throws {
     let data = try saved.encoded()
     try FileManager.default.createDirectory(

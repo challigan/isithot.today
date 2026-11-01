@@ -53,9 +53,10 @@ struct HomeView: View {
       // pages' own audits are HomeAuditTests'. Nor are their changes announced (`covered`).
       .accessibilityHidden(sheet != nil)
     }
-    // A Debug build's readout of the picker for the UI tests (`DebugHooks.pickerReadout`): at the
-    // top right of the safe area, clear of the gear, out of the pages and their minute's redraw,
-    // and out of what a sheet hides, so it is read as the picker closes. None in a Release build.
+    // A Debug build's readout of the picker and of the touches the system cancelled, for the UI
+    // tests (`DebugHooks.pickerReadout`): at the top right of the safe area, clear of the gear,
+    // out of the pages and their minute's redraw, and out of what a sheet hides, so it is read as
+    // the picker closes and after every gesture the UI tests watch. None in a Release build.
     .overlay(alignment: .topTrailing) {
       DebugHooks.pickerReadout(open: sheet.picker != nil)
     }

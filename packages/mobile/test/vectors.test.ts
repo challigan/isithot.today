@@ -5,6 +5,7 @@ import {
   ERROR_MESSAGES,
   GRID,
   SITES,
+  WIDGET,
   creditParts,
   defaultView,
   localDateTime,
@@ -41,6 +42,7 @@ import {
   registrationBody,
   removeRecent,
   resultDetail,
+  routeLink,
   savePlace,
   searchInput,
   searchQuery,
@@ -56,6 +58,8 @@ import {
   updatedLine,
   usableUntil,
   widgetEntries,
+  widgetFallsBack,
+  widgetReuses,
 } from '@isithot/client';
 import { APP_COPY } from '../src/appCopy';
 import { FIXTURES, fixtureJson, makeFixture, type Fixture } from '../src/fixtures';
@@ -73,6 +77,7 @@ import {
   type NamedVectors,
   type VectorCase,
 } from '../src/vectors';
+import { widgetFace } from '../src/widgetFace';
 
 const fixtures = new Map<string, Fixture>();
 let files: NamedVectors[];
@@ -88,6 +93,11 @@ const fx = (name: string | null): Fixture | null => (name === null ? null : fixt
 /** The case's answer: its fixture, without the blocks `in.without` lists. */
 const res = (i: In): Fixture =>
   i.without ? withoutBlocks(fx(i.fixture)!, i.without) : fx(i.fixture)!;
+/** The saved answer a case names: its fixture's answer under its key and time, or nothing. */
+const savedOf = (i: In) =>
+  i.fixture === null ? null : { key: i.savedKey, savedAt: i.savedAt, response: res(i) };
+/** The unit a case's face is in: its answer's, or cm without one. */
+const unitOf = (i: In) => (i.fixture === null ? 'cm' : res(i).snow!.unit);
 
 /**
  * Each function called afresh from a case's input alone, with the paths in its output read back
@@ -120,6 +130,8 @@ const replay: Record<string, (i: In) => unknown> = {
   viewDisplay: (i) =>
     viewDisplay(res(i), 'snow', 'today', 'ready', { tomorrow: i.tomorrow }).models,
   widgetEntries: (i) => widgetEntries(i.fixture === null ? null : res(i), i),
+  widgetReuses: (i) => widgetReuses(savedOf(i), i),
+  widgetFallsBack: (i) => widgetFallsBack(savedOf(i), i),
   alertPlaceAllowed: (i) => alertPlaceAllowed(i.target),
   registrationBody: (i) => registrationBody(i),
   fingerprint: (i) => fingerprint(i.body),
@@ -131,6 +143,7 @@ const replay: Record<string, (i: In) => unknown> = {
   testOutcome: (i) => testOutcome(i.status, i.text),
   parseDeepLink: (i) => parseDeepLink(i.url),
   notificationRoute: (i) => notificationRoute(i.payload, () => i.placeToday),
+  routeLink: (i) => routeLink(i.route),
   addRecent: (i) => addRecent(i.list, i.target, i.name, i.max, i.detail),
   isSaved: (i) => isSaved(i.saved, i.target),
   canSave: (i) => canSave(i.saved, i.target),
@@ -143,6 +156,8 @@ const replay: Record<string, (i: In) => unknown> = {
   resultDetail: (i) => resultDetail(i.result),
   homePage: (i) => homePage(i.fixture === null ? null : res(i), i),
   homeTopBar: (i) => homeTopBar(i.placeName, i.approximate, i.notice),
+  widgetFace: (i) =>
+    widgetFace(widgetEntries(i.fixture === null ? null : res(i), i).entries[i.index]!, unitOf(i)),
   creditParts: (i) => creditParts(i.text),
 };
 
@@ -193,6 +208,9 @@ const PAGE_FILES = ['page'];
 /** Phase 6's: the picker's search box; then its saved places (the website's look, step 4). */
 const PICKER_FILES = ['search', 'saved'];
 
+/** Phase 7.2's: the widget's choice of answer, then its face. */
+const WIDGET_FILES = ['widgetSource', 'widgetFace'];
+
 /** The functions whose reference is core's; the rest are the client's. */
 const CORE = [
   'roundToGrid',
@@ -206,8 +224,9 @@ const CORE = [
 ];
 
 /** The functions whose reference is packages/mobile's own, built on core's and the client's. */
-const MOBILE = ['homePage', 'homeTopBar'];
+const MOBILE = ['homePage', 'homeTopBar', 'widgetFace'];
 
+const MINUTE = 60 * 1000;
 const file = (name: string) => files.find((f) => f.name === name)!.vectors;
 const casesFor = (name: string, fn: string) => file(name).cases.filter((c) => c.fn === fn);
 const local = (zone: string, now: number) => {
@@ -216,8 +235,13 @@ const local = (zone: string, now: number) => {
 };
 
 describe('vectorFiles', () => {
-  it('writes every file section 7.4 names, in its order, then the page and the picker’s', () => {
-    expect(files.map((f) => f.name)).toEqual([...SPEC_FILES, ...PAGE_FILES, ...PICKER_FILES]);
+  it('writes every file section 7.4 names, in its order, then the page, the picker’s and the widget’s', () => {
+    expect(files.map((f) => f.name)).toEqual([
+      ...SPEC_FILES,
+      ...PAGE_FILES,
+      ...PICKER_FILES,
+      ...WIDGET_FILES,
+    ]);
   });
 
   it('gives every output the reference gives for its input', () => {
@@ -593,6 +617,108 @@ describe('the cases cover what section 7.4 asks for', () => {
     ).toBe(true);
   });
 
+  it('widgetSource: both answers of each, the boundary at reuseMinutes, a future save, every units case', () => {
+    const reuses = casesFor('widgetSource', 'widgetReuses');
+    const fallsBack = casesFor('widgetSource', 'widgetFallsBack');
+    expect(new Set(reuses.map((c) => c.out))).toEqual(new Set([true, false]));
+    expect(new Set(fallsBack.map((c) => c.out))).toEqual(new Set([true, false]));
+    const age = (c: VectorCase) => (c.in as In).now - (c.in as In).savedAt;
+    const limit = WIDGET.reuseMinutes * MINUTE;
+    const own = reuses.filter(
+      (c) =>
+        (c.in as In).fixture !== null &&
+        (c.in as In).key === (c.in as In).savedKey &&
+        (c.in as In).units === res(c.in as In).units,
+    );
+    // Its own key and units: an hour less a millisecond is reused, an hour isn't, nor a future
+    // save.
+    expect(own.some((c) => age(c) === limit - 1 && c.out === true)).toBe(true);
+    expect(own.some((c) => age(c) === limit && c.out === false)).toBe(true);
+    expect(own.some((c) => age(c) === -1 && c.out === false)).toBe(true);
+    // Its own units, the other and none, for both functions.
+    for (const cases of [reuses, fallsBack]) {
+      const units = cases
+        .filter((c) => (c.in as In).fixture !== null)
+        .map((c) => (c.in as In).units);
+      expect(new Set(units)).toEqual(new Set(['c', 'f', null]));
+      expect(cases.some((c) => (c.in as In).fixture === null && c.out === false)).toBe(true);
+      // A key with a space more is another place.
+      expect(
+        cases.some((c) => (c.in as In).key === `${(c.in as In).savedKey} ` && c.out === false),
+      ).toBe(true);
+    }
+    // Saved shortly before it has nothing to show: reused a millisecond before, not at it.
+    const ending = reuses.filter((c) => (c.in as In).fixture !== null && c.out === true);
+    expect(ending.some((c) => (c.in as In).now === usableUntil(res(c.in as In)) - 1)).toBe(true);
+    expect(
+      reuses.some(
+        (c) =>
+          (c.in as In).fixture !== null &&
+          (c.in as In).now === usableUntil(res(c.in as In)) &&
+          age(c) < limit &&
+          c.out === false,
+      ),
+    ).toBe(true);
+    // Each saved under its own key, as the app keys it.
+    for (const c of [...reuses, ...fallsBack].filter((c) => (c.in as In).fixture !== null)) {
+      const f = fx((c.in as In).fixture)!;
+      expect((c.in as In).savedKey).toBe(targetKey(targetFromQuery(f._fixture.query)!));
+    }
+  });
+
+  it('widgetFace: all three states, a heading with and without a place, a row without counts, no middle day, inches and aberdeen’s whole timeline', () => {
+    const cases = casesFor('widgetFace', 'widgetFace');
+    const outs = cases.map((c) => c.out as any);
+    expect(new Set(outs.map((o) => o.state))).toEqual(new Set(['ok', 'locked', 'stale']));
+    expect(outs.some((o) => o.state === 'ok' && o.spoken.startsWith(`${o.place}. `))).toBe(true);
+    const placeless = cases.find((c) => (c.in as In).placeName === '')!.out as any;
+    expect(placeless.spoken.startsWith(`${placeless.slot}: `)).toBe(true);
+    expect(cases.some((c) => (c.in as In).placeName === 'Home')).toBe(true);
+    expect(
+      outs.some((o) =>
+        o.week.some((r: any) => r.agreement === null && !r.spoken.includes('forecast')),
+      ),
+    ).toBe(true);
+    expect(
+      outs.some(
+        (o) =>
+          o.state === 'ok' &&
+          o.answer === '' &&
+          o.detail === COPY.notAvailable &&
+          o.band === 'nosnow',
+      ),
+    ).toBe(true);
+    // Inches: denver-f's rows ("Friday, 0.2in, snow possible, …"), its Today being rain.
+    const inches = (text: string) => /\d(\.\d+)?in\b/.test(text);
+    expect(outs.some((o) => o.week.some((r: any) => inches(r.spoken)))).toBe(true);
+    // Every entry of aberdeen-snow's plan from its fetch, the last of them stale.
+    const aberdeen = fixtures.get('aberdeen-snow')!;
+    const made = Date.parse(aberdeen.snow!.days[0]!.from);
+    const plan = widgetEntries(aberdeen, { fetchedAt: made, now: made, unlocked: true }).entries;
+    const indexes = cases
+      .filter(
+        (c) =>
+          (c.in as In).fixture === 'aberdeen-snow' &&
+          (c.in as In).now === made &&
+          (c.in as In).unlocked &&
+          (c.in as In).placeName === undefined,
+      )
+      .map((c) => (c.in as In).index);
+    expect(plan).toHaveLength(8);
+    expect(indexes).toEqual(plan.map((_, i) => i));
+    // Durham at 5:59pm reads Today, and at 6:05pm Tomorrow.
+    const durham = (hh: number, mm: number) =>
+      cases.find(
+        (c) =>
+          (c.in as In).fixture === 'durham-tomorrow' &&
+          !(c.in as In).without &&
+          (c.in as In).placeName === undefined &&
+          local('Europe/London', (c.in as In).now) === `2026-12-16 ${hh * 60 + mm}`,
+      )!.out as any;
+    expect(durham(17, 59).slot).toBe('Today');
+    expect(durham(18, 5).slot).toBe('Tomorrow');
+  });
+
   it('alerts: every outcome of section 6.6’s rules', () => {
     const outs = new Set(casesFor('alerts', 'alertAction').map((c) => c.out));
     expect(outs).toEqual(new Set(['put', 'delete', 'none', 'needsPlace', 'needsToken']));
@@ -658,6 +784,18 @@ describe('the cases cover what section 7.4 asks for', () => {
       new Set(['view', 'upgrade', 'settings', 'place', null]),
     );
     expect(routes.some((r) => r?.view === 'default')).toBe(true);
+    // Every link a widget opens, which parses back to its route; none for a place.
+    const links = casesFor('links', 'routeLink');
+    expect(new Set(links.map((c) => (c.in as In).route.kind))).toEqual(
+      new Set(['view', 'upgrade', 'settings', 'place']),
+    );
+    for (const c of links) {
+      const route = (c.in as In).route;
+      expect(c.out === null ? null : parseDeepLink(c.out as string), JSON.stringify(route)).toEqual(
+        route.kind === 'place' ? null : route,
+      );
+    }
+    expect(links.filter((c) => (c.in as In).route.kind === 'view')).toHaveLength(3);
   });
 
   it('page: every fixture and view, each state, and the footer’s lines', () => {

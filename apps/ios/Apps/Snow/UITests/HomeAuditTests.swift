@@ -287,7 +287,9 @@ final class HomeAuditTests: XCTestCase {
   /// as a screenful of its own, `<name>-<k>-moved`, what the stopped screenful's calls done found
   /// dropped so that none is counted twice, and again, a few points from every place a call
   /// stopped, should one stop there too, up to `reaudits` times (`-moved-2`, `-moved-3`;
-  /// `auditAgain`); the next scroll starts from the one whose calls all finished. Fails, with
+  /// `auditAgain`); the next scroll starts from the one whose calls all finished. A step's drag
+  /// whose touch the system cancelled (`Drag.cancelled`), the page left where it was, is played
+  /// once more before the page is judged to scroll no further. Fails, with
   /// where the page and its credits were, when the credits aren't there, the app has left the
   /// foreground, an audit can't run, a call doesn't finish in time on every moved screenful or
   /// the page can't be moved so, a call but the resizing one moves the page, the page stops
@@ -350,8 +352,15 @@ final class HomeAuditTests: XCTestCase {
       if screenful.credits.maxY <= screenful.page.maxY { return }
       drags += restore(page, to: screenful, in: app, credits: credits)
       let before = settledFrame(of: credits)
-      drags.append(scrollDown(page, by: step(page, from: screenful, in: app), in: app))
-      let after = settledFrame(of: credits)
+      let drag = scrollDown(page, by: step(page, from: screenful, in: app), in: app)
+      drags.append(drag)
+      var after = settledFrame(of: credits)
+      // A drag whose touch the system cancelled may have left the page where it was, as on PR
+      // #36's run: played once more, once a step, before the page is judged.
+      if drag.cancelled, after.minY > screenful.credits.minY - 1 {
+        drags.append(scrollDown(page, by: step(page, from: screenful, in: app), in: app))
+        after = settledFrame(of: credits)
+      }
       // Restore leaves the page at most restoringSlack short of the screenful, and the step moves
       // it at least a quarter of the page on screen less a drag's slack: a page that moves ends
       // well past the screenful.
@@ -489,7 +498,7 @@ final class HomeAuditTests: XCTestCase {
       } catch {
         failure.notRunAgain = "its screenful wasn't audited again a few points away: \(error)"
         if !stops.isEmpty { failure.elsewhere = ReauditStops(stops: stops) }
-        XCTFail("\(failure); " + Screenful.describe(seen))
+        XCTFail("\(failure); " + Screenful.describe(seen) + "; \(run.app.cancelsReport)")
         return nil
       }
       let again =
@@ -626,7 +635,8 @@ final class HomeAuditTests: XCTestCase {
 
   /// Puts the page back where `screenful` had it, after an audit moved it back up: scrolls down,
   /// at most four fifths of the page on screen a drag, until the credits are within
-  /// `restoringSlack` points short of where they were, or a drag moves the page no more. Never
+  /// `restoringSlack` points short of where they were, or a drag moves the page no more (one whose
+  /// touch the system cancelled goes round again, within `restoringDrags`). Never
   /// past it: a drag moves the page by less than its length, as the scroll view spends its first
   /// points before the page moves, and the next scroll is worked out from where the page then is
   /// (`step`), so no part of the page goes unaudited. The Dynamic Type check does move it: it
@@ -651,7 +661,8 @@ final class HomeAuditTests: XCTestCase {
       drag.restoring = true
       drags.append(drag)
       let next = settledFrame(of: credits)
-      if abs(next.minY - now.minY) < 1 { break }
+      // A drag the page didn't take stops it, but not one the system cancelled.
+      if abs(next.minY - now.minY) < 1, !drag.cancelled { break }
       now = next
     }
     return drags
@@ -687,12 +698,14 @@ final class HomeAuditTests: XCTestCase {
 
   /// What a page that stopped short of its end shows, for its failure to say, beyond where the
   /// page and its credits were on each screenful: the page's whole frame, the part off screen
-  /// too, and the window's; each drag; the page's lowest elements, by which the page's content
-  /// reaches below its frame or not; and where the credits went on a swipe up by XCUITest's own
-  /// gesture, which tells a page at the end of its scroll range from a drag the page didn't
-  /// take. Attaches the app's element tree as `<name>-tree-stopped` (`<name>-tree` is the
-  /// page's first screenful's). On main's first macOS run, every page at AX3 stopped 1,000 to
-  /// 1,600 points short of its end, and the log couldn't say why.
+  /// too, and the window's; each drag, with whether its touch was cancelled; the page's lowest
+  /// elements, by which the page's content reaches below its frame or not; where the credits went
+  /// on a swipe up by XCUITest's own gesture, which tells a page at the end of its scroll range
+  /// from a drag the page didn't take; and what `debug-cancels` reads after that swipe
+  /// (`cancelsReport`), so a drag the simulator cancelled names itself. Attaches the app's
+  /// element tree as `<name>-tree-stopped` (`<name>-tree` is the page's first screenful's). On
+  /// main's first macOS run, every page at AX3 stopped 1,000 to 1,600 points short of its end,
+  /// and the log couldn't say why.
   @MainActor
   private func stopped(
     _ page: HomeScreen.Page,
@@ -726,7 +739,7 @@ final class HomeAuditTests: XCTestCase {
     return "the page's whole frame \(frame), in the window at \(app.frame); the drags "
       + drags.map(\.description).joined(separator: ", ")
       + "; the page's lowest elements \(lowest); a swipe up by XCUITest then moved the credits "
-      + "from \(before) to \(after)"
+      + "from \(before) to \(after); \(app.cancelsReport)"
   }
 
   /// How far to scroll the page from `screenful` for the next one: so the first of the page's

@@ -28,6 +28,7 @@ import { KEYS_PATH, keysSwift } from './exportKeys';
 import { PALETTES_PATH, palettesSwift } from './exportPalettes';
 import { QUESTIONS_PATH, questionsSwift } from './exportQuestions';
 import { STOREKIT_DIR, STOREKIT_PATH, storeKitJson } from './exportStoreKit';
+import { WIDGET_SAMPLE_PATH, widgetSampleSwift } from './exportWidgetSample';
 import {
   FIXTURES,
   SEARCH_FIXTURES,
@@ -60,7 +61,8 @@ export const VECTORS_DIR = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Res
 
 /**
  * IsItModel's generated Swift: the copy, the questions, the constants, the credits, the keys,
- * the fonts' names, the palettes and the shares the app mixes them by.
+ * the fonts' names, the palettes and the shares the app mixes them by, and the widget gallery's
+ * sample.
  */
 export const MODEL_GENERATED_DIR = 'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated';
 
@@ -102,7 +104,8 @@ export interface AssetSources {
  * the Info.plist's strings (`Copy.xcconfig`), the StoreKit configuration (`Snow.storekit`), each
  * fixture, each search fixture, each vector file, worked out from the fixtures exactly as their
  * files have them, the UI tests' screens (from page.json) and surfaces (from brandColours.ts),
- * then the glyphs and the app icon.
+ * then the glyphs and the app icon. The widget gallery's sample comes straight after the vector
+ * files, faced from the same fixtures.
  */
 export async function generatedFiles(sources: AssetSources): Promise<GeneratedFile[]> {
   const files: GeneratedFile[] = [
@@ -141,6 +144,8 @@ export async function generatedFiles(sources: AssetSources): Promise<GeneratedFi
   for (const { name, vectors: file } of vectors) {
     files.push({ path: `${VECTORS_DIR}/${name}.json`, contents: vectorJson(file) });
   }
+  // The widget gallery's sample, faced from its fixture as the vectors are.
+  files.push({ path: WIDGET_SAMPLE_PATH, contents: widgetSampleSwift(fixtures) });
   const page = vectors.find((v) => v.name === 'page');
   if (!page) throw new Error('No page.json');
   files.push({ path: HOME_SCREENS_PATH, contents: homeScreensJson(fixtures, page.vectors) });

@@ -15,7 +15,10 @@
  * The model is the app's own, the same as `PageBackground` and `SheetBackground`: its
  * approximation of the website's 168° (`along`), not CSS's own line. Mixes are in sRGB, rounded
  * to 8 bits as a screen draws them, and a pair's ratio is its worst anywhere on a 402 by 874
- * point screen, sampled every 6 points, rounded down.
+ * point screen, sampled every 6 points, rounded down. The widget's background is the page's model
+ * over the widget's own rectangle (`backgroundAt`), and ink's worst on it (`inkOnWidget`) is the
+ * widget's contrast gate, sampled every 2 points at the HIG's widget sizes, since no pixel proof
+ * reaches the Home Screen.
  * `brandColoursSwift` writes the shares and the content card's colour into IsItModel, where
  * IsItUI and the Linux tests read the same numbers; `surfacesJson` writes the surfaces, their
  * models and every band's palette for the UI tests, whose contrast proof judges a screenshot's
@@ -82,6 +85,31 @@ export const UNUSED_SHARES = { pageButton: 0.1, pageSoft: 0.85, pageDetail: 0.9 
 /** The screen the pairs are measured on, in points: an iPhone 17's, sampled every `step`. */
 export const SCREEN = { width: 402, height: 874, step: 6 } as const;
 
+/** A rectangle a background is drawn over, in points: the screen, or a widget. */
+export interface Area {
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * The Home Screen widgets' sizes in points, small and medium: the HIG's row for 430-wide iPhones,
+ * the snapshots' sizes. Apple lists no row for the iPhone 17's 402, so the 393-wide row
+ * (`WIDGET_SIZES_NARROW`) is judged too.
+ */
+export const WIDGET_SIZES = {
+  small: { width: 170, height: 170 },
+  medium: { width: 364, height: 170 },
+} as const satisfies Record<string, Area>;
+
+/** The HIG's widget sizes for 393-wide iPhones. */
+export const WIDGET_SIZES_NARROW = {
+  small: { width: 158, height: 158 },
+  medium: { width: 338, height: 158 },
+} as const satisfies Record<string, Area>;
+
+/** How far apart a widget is sampled, in points: finer than the screen, as a widget is small. */
+export const WIDGET_STEP = 2;
+
 /** The content surface's palette: the website's content pages' (`Palettes.content`). */
 export const CONTENT_PALETTE: Palette = SNOW_PALETTES[CONTENT_BAND];
 
@@ -136,35 +164,46 @@ export const BACKGROUND_MODEL = {
  */
 const length = (x: number, y: number): number => Math.sqrt(x * x + y * y);
 
-/** How far along the gradient's line (`BACKGROUND_MODEL`) a point is, 0 to 1. */
-function along(x: number, y: number): number {
+/** How far along the gradient's line (`BACKGROUND_MODEL`) over `area` a point is, 0 to 1. */
+function along(x: number, y: number, area: Area): number {
   const { from, to } = BACKGROUND_MODEL;
-  const [x0, y0] = [from[0] * SCREEN.width, from[1] * SCREEN.height];
-  const [dx, dy] = [(to[0] - from[0]) * SCREEN.width, (to[1] - from[1]) * SCREEN.height];
+  const [x0, y0] = [from[0] * area.width, from[1] * area.height];
+  const [dx, dy] = [(to[0] - from[0]) * area.width, (to[1] - from[1]) * area.height];
   const t = ((x - x0) * dx + (y - y0) * dy) / (dx * dx + dy * dy);
   return Math.min(Math.max(t, 0), 1);
 }
 
 /**
- * A page's background at (x, y): the gradient from g1 to g2, and over it the g3 glow centred at
- * (88%, 6%), from `glow` to nothing at 52% of the way to the farthest corner. Without the glow
- * under Increase Contrast.
+ * The page's background over `area` at (x, y): the gradient from g1 to g2, and over it the g3
+ * glow centred at (88%, 6%), from `glow` to nothing at 52% of the way to the farthest corner.
+ * Without the glow under Increase Contrast. The screen's is a page's (`pageAt`); a widget's own
+ * rectangle is the widget's.
  */
-export function pageAt(p: Palette, x: number, y: number, glow = true): Rgb {
-  const base = mix(colour(p.g1), colour(p.g2), along(x, y));
+export function backgroundAt(
+  p: Palette,
+  x: number,
+  y: number,
+  area: Area = SCREEN,
+  glow = true,
+): Rgb {
+  const base = mix(colour(p.g1), colour(p.g2), along(x, y, area));
   if (!glow) return base;
   const { glowCentre, glowReach } = BACKGROUND_MODEL;
-  const [cx, cy] = [glowCentre[0] * SCREEN.width, glowCentre[1] * SCREEN.height];
-  const radius =
-    length(Math.max(cx, SCREEN.width - cx), Math.max(cy, SCREEN.height - cy)) * glowReach;
+  const [cx, cy] = [glowCentre[0] * area.width, glowCentre[1] * area.height];
+  const radius = length(Math.max(cx, area.width - cx), Math.max(cy, area.height - cy)) * glowReach;
   const fade = Math.max(0, 1 - length(x - cx, y - cy) / radius);
   return mix(base, colour(p.g3), opacity(p.glow) * fade);
+}
+
+/** A page's background at (x, y) on the screen (`backgroundAt` over `SCREEN`). */
+export function pageAt(p: Palette, x: number, y: number, glow = true): Rgb {
+  return backgroundAt(p, x, y, SCREEN, glow);
 }
 
 /** The sheet's background at (x, y): `pill` to pill with `sheetEnd` of g2, at 168°, no glow. */
 export function sheetAt(p: Palette, x: number, y: number): Rgb {
   const pill = colour(p.pill);
-  return mix(pill, mix(pill, colour(p.g2), BRAND_SHARES.sheetEnd), along(x, y));
+  return mix(pill, mix(pill, colour(p.g2), BRAND_SHARES.sheetEnd), along(x, y, SCREEN));
 }
 
 /** Whether a palette's ink is the light one (white on the dark bands). */
@@ -178,13 +217,32 @@ export function card(p: Palette): Rgb {
   return mix(colour(p.pill), lightInk(p) ? [0, 0, 0] : [255, 255, 255], BRAND_SHARES.card);
 }
 
-/** The worst of `ratio` at every sampled point of the screen, rounded down to two decimals. */
-export function worst(ratio: (x: number, y: number) => number): number {
+/**
+ * The worst of `ratio` at every sampled point of the screen (or of `area`, every `step` points),
+ * rounded down to two decimals.
+ */
+export function worst(
+  ratio: (x: number, y: number) => number,
+  area: Area & { readonly step: number } = SCREEN,
+): number {
   let least = Infinity;
-  for (let x = 0; x <= SCREEN.width; x += SCREEN.step) {
-    for (let y = 0; y <= SCREEN.height; y += SCREEN.step) least = Math.min(least, ratio(x, y));
+  for (let x = 0; x <= area.width; x += area.step) {
+    for (let y = 0; y <= area.height; y += area.step) least = Math.min(least, ratio(x, y));
   }
   return ratioDown(least);
+}
+
+/**
+ * Ink's worst ratio over a widget of `size` in the band's palette, the background as the widget
+ * draws it in full colour (`backgroundAt` over its own rectangle), sampled every `WIDGET_STEP`
+ * points, rounded down to two decimals. Without the glow under Increase Contrast.
+ */
+export function inkOnWidget(p: Palette, size: Area, glow = true): number {
+  const ink = colour(p.ink);
+  return worst((x, y) => contrast(ink, backgroundAt(p, x, y, size, glow)), {
+    ...size,
+    step: WIDGET_STEP,
+  });
 }
 
 /** Every pair a band's page and sheet make, each its worst on the screen. */

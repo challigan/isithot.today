@@ -29,7 +29,7 @@ import {
   WIDGET,
 } from '@isithot/core';
 import { ADS, CLIENT, PLACES } from '@isithot/client';
-import { PURCHASE, PURCHASE_DISPLAY_PRICE } from './purchase';
+import { PURCHASE, PURCHASE_DISPLAY_PRICE, PURCHASE_WIDGET_CHECK_MS } from './purchase';
 import {
   generatedHeader,
   swiftCall,
@@ -267,11 +267,14 @@ export function constantsSwift(): string {
         'Snow.storekit and App Store Connect name too, and the price Snow.storekit sells it at as',
         "StoreKit shows it there, which only a Debug build's stand-in shows: a Release build shows",
         "the App Store's own `displayPrice`.",
+        "The widget waits `widgetCheckMs` at most for StoreKit's entitlements, then goes on with",
+        '`unlock.v1` alone (spec 11.2 step 1).',
       ],
       'Purchase',
       [
         ...swiftLet('    ', 'public static let productID', swiftString(PURCHASE.productID)),
         ...swiftLet('    ', 'public static let displayPrice', swiftString(PURCHASE_DISPLAY_PRICE)),
+        ...swiftLet('    ', 'public static let widgetCheckMs', swiftInt(PURCHASE_WIDGET_CHECK_MS)),
       ],
     ),
     '}',

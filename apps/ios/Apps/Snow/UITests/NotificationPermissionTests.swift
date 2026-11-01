@@ -27,10 +27,18 @@ final class NotificationPermissionTests: XCTestCase {
     ]
     app.launch()
     XCTAssertTrue(app.staticTexts["verdict"].waitForExistence(timeout: 15), "No answer on screen")
-    app.buttons["settings"].tap()
+    // The gear as every UI test taps it: once more only when the system cancelled the touch
+    // (`cancelled(_:in:within:until:_:)`) and no Settings opened (SettingsTests' `openSettings`).
+    let gear = app.buttons["settings"]
+    let opened = { !app.sheetClosed }
+    if cancelled("tap on the gear", in: app, within: 2, until: opened, { gear.tap() }),
+      app.sheetClosed
+    {
+      _ = cancelled("second tap on the gear", in: app) { gear.tap() }
+    }
     XCTAssertTrue(
       app.buttons["close-settings"].waitForExistence(timeout: 5),
-      "No Settings after tapping the gear; \(app.homeGeometry)")
+      "No Settings after tapping the gear; \(app.cancelsReport); \(app.homeGeometry)")
     let evening = app.find("notify-evening")
     try reveal(evening, in: app)
     XCTAssertEqual(isOn(evening), false, "The evening switch is on at a first launch")
@@ -55,15 +63,18 @@ final class NotificationPermissionTests: XCTestCase {
     } else {
       attachText(springboard.debugDescription, as: "springboard-tree")
       attachText(app.debugDescription, as: "app-tree")
-      XCTFail("No notification prompt 10 seconds after turning the evening notification on")
+      XCTFail(
+        "No notification prompt 10 seconds after turning the evening notification on; "
+          + app.cancelsReport)
       return
     }
 
-    try expectOn(evening)
+    try expectOn(evening, in: app)
     try reveal(app.buttons["your-privacy"], in: app)
     app.buttons["your-privacy"].tap()
     XCTAssertTrue(
-      app.find("kept-line-0").waitForExistence(timeout: 10), "Your privacy keeps nothing")
+      app.find("kept-line-0").waitForExistence(timeout: 10),
+      "Your privacy keeps nothing; \(app.cancelsReport)")
   }
 
   // MARK: - Helpers
@@ -80,14 +91,15 @@ final class NotificationPermissionTests: XCTestCase {
   }
 
   /// Waits up to 10 seconds for the switch `element` to be on, read four times a second; throws,
-  /// saying what it read, when it isn't.
+  /// saying what it read and `app`'s `debug-cancels`, when it isn't.
   @MainActor
-  private func expectOn(_ element: XCUIElement) throws {
+  private func expectOn(_ element: XCUIElement, in app: XCUIApplication) throws {
     let deadline = Date().addingTimeInterval(10)
     while isOn(element) != true {
       guard Date() < deadline else {
         let value = element.exists ? "\(element.value ?? "no value")" : "nothing, not being there"
-        throw HomeScreenError("\(element) never turned on once allowed; its value: \(value)")
+        throw HomeScreenError(
+          "\(element) never turned on once allowed; its value: \(value); \(app.cancelsReport)")
       }
       RunLoop.current.run(until: Date().addingTimeInterval(0.25))
     }
@@ -107,7 +119,8 @@ final class NotificationPermissionTests: XCTestCase {
       swipes += 1
     }
     guard whole(element, in: app) else {
-      throw HomeScreenError("\(element) at \(element.frame) never came whole on screen")
+      throw HomeScreenError(
+        "\(element) at \(element.frame) never came whole on screen; \(app.cancelsReport)")
     }
   }
 

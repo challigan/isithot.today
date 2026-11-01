@@ -290,4 +290,40 @@ public enum AppCopy {
   public static func agreementShort(snowy: String, total: String) -> String {
     "\(snowy) of \(total) forecasts"
   }
+
+  public static func widgetSlotAnswer(slot: String, answer: String) -> String {
+    "\(slot) · \(answer)"
+  }
+
+  public static func widgetSlotLine(slot: String, text: String) -> String {
+    "\(slot): \(text)"
+  }
+
+  public static func widgetBandAmount(band: String, amount: String) -> String {
+    "\(band) · \(amount)"
+  }
+
+  public static func widgetBandAmountSpoken(band: String, amount: String) -> String {
+    "\(band), \(amount)"
+  }
+
+  public static func widgetHeading(place: String, slot: String, answer: String) -> String {
+    "\(place). \(slot): \(answer)"
+  }
+
+  public static func widgetSentence(heading: String, detail: String, agreement: String) -> String {
+    "\(heading) \(detail). \(agreement)."
+  }
+
+  public static func widgetSentenceShort(heading: String, detail: String) -> String {
+    "\(heading) \(detail)."
+  }
+
+  public static func widgetGauge(slot: String, agreement: String) -> String {
+    "\(slot): \(agreement)."
+  }
+
+  public static func widgetNow(answer: String, verdict: String) -> String {
+    "\(answer) \(verdict)"
+  }
 }

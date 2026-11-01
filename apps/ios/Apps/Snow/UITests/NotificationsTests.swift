@@ -18,7 +18,10 @@ import XCTest
 /// the fixtures the server's own code wrote, so no request leaves the phone. Each step waits for
 /// what the app shows, never a sleep: a switch's value (`isOn`), a line's words, the test row's
 /// result, the kept block; and the picker by the app's own readout (`pickerOpens`), not by
-/// XCUITest's tree, which lags the screen. Every tap is on an element whole on screen (`reveal`),
+/// XCUITest's tree, which lags the screen. The gear, the place button and the switcher's tabs are
+/// tapped as every UI test taps them, once more only when the system cancelled the touch
+/// (`cancelled(_:in:within:until:_:)`), and a failure after a gesture names `debug-cancels`
+/// (`cancelsReport`). Every tap is on an element whole on screen (`reveal`),
 /// as the Notifications card moves every Settings row below the units down. Settings is audited
 /// with the Notifications heading scrolled to just under the bar, so every text on screen starts
 /// below it, and the pages on its stack at their tops, each audited screen attached for the
@@ -26,6 +29,10 @@ import XCTest
 final class NotificationsTests: XCTestCase {
   /// Leeds, a city's page: its fixture, kept as the place to launch on.
   private static let leeds = ["-fixture", "leeds-dry", "-place", "place=leeds-gb"]
+
+  /// The app the test launched last (`launch`), whose `debug-cancels` a wait's failure names, as
+  /// each wait follows a gesture.
+  private var launched: XCUIApplication?
 
   override func setUpWithError() throws {
     continueAfterFailure = false
@@ -62,7 +69,9 @@ final class NotificationsTests: XCTestCase {
     let app = launch(Self.leeds + ["-notifications", "allow"])
     try openSettings(app)
     try turnOnTheEvening(in: app)
-    XCTAssertTrue(app.find("notify-possible").waitForExistence(timeout: 10), "No possible switch")
+    XCTAssertTrue(
+      app.find("notify-possible").waitForExistence(timeout: 10),
+      "No possible switch; \(app.cancelsReport)")
     try waitFor(app.find("notify-place"), value: "Leeds")
     try tap("notify-test", in: app)
     try waitFor(app.find("notify-test"), value: Copy.testSent)
@@ -236,7 +245,9 @@ final class NotificationsTests: XCTestCase {
     try closeThePicker(in: app, after: shown)
     try showTheCard(in: app, on: "picker-first-launch")
     app.find("card-not-now").tap()
-    XCTAssertTrue(gone(app.find("notification-card")), "The card is still there after Not now")
+    XCTAssertTrue(
+      gone(app.find("notification-card")),
+      "The card is still there after Not now; \(app.cancelsReport)")
     app.terminate()
 
     let again = launch(launching, reset: false)
@@ -262,8 +273,7 @@ final class NotificationsTests: XCTestCase {
     try awaitHeading(middle.heading, in: app)
     XCTAssertTrue(app.buttons[middle.label].isSelected, "The \(middle.label) tab isn't selected")
     let shown = app.pickersShown ?? 0
-    app.buttons["place"].tap()
-    try expectThePicker(in: app, after: shown, "after tapping the place button")
+    try openThePicker(in: app, after: shown)
     let recent = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "recent-"))
       .firstMatch
     XCTAssertTrue(recent.waitForExistence(timeout: 10), "Nothing under Recent")
@@ -333,16 +343,30 @@ final class NotificationsTests: XCTestCase {
       ["-uitest", "-noads", "1", "-clock", "fixed", "-openURLs", "record"]
       + (reset ? ["-resetStore"] : []) + extra
     app.launch()
+    launched = app
     XCTAssertTrue(app.staticTexts["verdict"].waitForExistence(timeout: 15), "No answer on screen")
     return app
   }
 
-  /// Taps the gear, and waits for Settings, by its Close and its title, with its Notifications.
+  /// Taps the gear, and waits for Settings, by its Close and its title, with its Notifications. A
+  /// tap whose touch the system cancelled (`cancelled(_:in:within:until:_:)`) and that opened no
+  /// Settings is tapped once more; a tap the app completed never is (SettingsTests'
+  /// `openSettings`).
   @MainActor
   private func openSettings(_ app: XCUIApplication) throws {
-    app.buttons["settings"].tap()
-    guard app.buttons["close-settings"].waitForExistence(timeout: 5) else {
-      throw HomeScreenError("No Settings after tapping the gear; \(app.homeGeometry)")
+    let gear = app.buttons["settings"]
+    let close = app.buttons["close-settings"]
+    // Opened, and not opened, as the home screen shows it (`sheetClosed`), not by Close, which
+    // XCUITest may go on finding once an earlier Settings has closed.
+    let opened = { !app.sheetClosed }
+    if cancelled("tap on the gear", in: app, within: 2, until: opened, { gear.tap() }),
+      app.sheetClosed
+    {
+      _ = cancelled("second tap on the gear", in: app) { gear.tap() }
+    }
+    guard close.waitForExistence(timeout: 5) else {
+      throw HomeScreenError(
+        "No Settings after tapping the gear; \(app.cancelsReport); \(app.homeGeometry)")
     }
     try page(titled: "Settings", in: app)
     guard app.find("notifications-heading").waitForExistence(timeout: 5) else {
@@ -375,7 +399,8 @@ final class NotificationsTests: XCTestCase {
     if app.staticTexts.matching(titled).firstMatch.waitForExistence(timeout: 5) { return }
     let shown = app.staticTexts.matching(identifier: "page-title").allElementsBoundByIndex
       .map(\.label)
-    throw HomeScreenError("No page titled \"\(title)\"; the titles on screen: \(shown)")
+    throw HomeScreenError(
+      "No page titled \"\(title)\"; the titles on screen: \(shown); \(app.cancelsReport)")
   }
 
   /// Goes back one page on Settings' stack.
@@ -404,7 +429,8 @@ final class NotificationsTests: XCTestCase {
     while isOn(element) != on {
       guard Date() < deadline else {
         let value = element.exists ? "\(element.value ?? "no value")" : "nothing, not being there"
-        throw HomeScreenError("\(element) never turned \(on ? "on" : "off"); its value: \(value)")
+        throw HomeScreenError(
+          "\(element) never turned \(on ? "on" : "off"); its value: \(value); \(cancels)")
       }
       RunLoop.current.run(until: Date().addingTimeInterval(0.25))
     }
@@ -418,7 +444,7 @@ final class NotificationsTests: XCTestCase {
     let waited = XCTNSPredicateExpectation(predicate: reads, object: element)
     guard XCTWaiter().wait(for: [waited], timeout: 10) == .completed else {
       let shown = element.exists ? "\"\(element.label)\"" : "nothing, not being there"
-      throw HomeScreenError("\(element) never read \"\(label)\"; it reads \(shown)")
+      throw HomeScreenError("\(element) never read \"\(label)\"; it reads \(shown); \(cancels)")
     }
   }
 
@@ -430,8 +456,15 @@ final class NotificationsTests: XCTestCase {
     let waited = XCTNSPredicateExpectation(predicate: holds, object: element)
     guard XCTWaiter().wait(for: [waited], timeout: 10) == .completed else {
       let held = element.exists ? "\"\(element.value as? String ?? "")\"" : "nothing"
-      throw HomeScreenError("\(element) never held \"\(value)\"; it holds \(held)")
+      throw HomeScreenError("\(element) never held \"\(value)\"; it holds \(held); \(cancels)")
     }
+  }
+
+  /// The launched app's `debug-cancels` (`cancelsReport`), for a wait's failure: a gesture the
+  /// simulator cancelled then names itself.
+  @MainActor
+  private var cancels: String {
+    launched?.cancelsReport ?? "debug-cancels reads nothing"
   }
 
   /// Whether `element` is gone, or goes within 10 seconds. Each test asks only once it has read
@@ -472,7 +505,8 @@ final class NotificationsTests: XCTestCase {
     }
     guard whole(element, in: app) else {
       throw HomeScreenError(
-        "\(element) at \(element.frame) never came whole on screen, within \(shown(in: app))")
+        "\(element) at \(element.frame) never came whole on screen, within \(shown(in: app)); "
+          + app.cancelsReport)
     }
   }
 
@@ -532,7 +566,8 @@ final class NotificationsTests: XCTestCase {
       drag(by: below - 12, in: app)
     }
     throw HomeScreenError(
-      "The Notifications heading never came to just under the bar: it was \(seen) points below it")
+      "The Notifications heading never came to just under the bar: it was \(seen) points below "
+        + "it; \(app.cancelsReport)")
   }
 
   /// Shows the middle page of `screen`, a HomeScreens.json screen on the launch's fixture, the
@@ -550,11 +585,33 @@ final class NotificationsTests: XCTestCase {
   @MainActor
   private func expectThePicker(in app: XCUIApplication, after shown: Int, _ what: String) throws {
     guard pickerOpens(in: app, after: shown, within: 10) != false else {
-      throw HomeScreenError("No picker \(what); \(app.pickerReport)")
+      throw HomeScreenError("No picker \(what); \(app.pickerReport); \(app.cancelsReport)")
     }
     guard app.find("place-search").waitForExistence(timeout: 10) else {
-      throw HomeScreenError("No picker \(what); \(app.homeGeometry)")
+      throw HomeScreenError("No picker \(what); \(app.cancelsReport); \(app.homeGeometry)")
     }
+  }
+
+  /// Taps the place button and waits for the picker it opens, after the readout counted `shown`
+  /// (`expectThePicker`). A tap whose touch the system cancelled
+  /// (`cancelled(_:in:within:until:_:)`) and that opened no picker is tapped once more; a tap the
+  /// app completed never is (PickerTests' `openPicker`).
+  @MainActor
+  private func openThePicker(in app: XCUIApplication, after shown: Int) throws {
+    let place = app.buttons["place"]
+    let field = app.find("place-search")
+    // Whether the readout reads this tap's picker open; nil when it can't be read, as under the
+    // picker it may not be (`pickerOpens`).
+    let open = { app.pickerState.map { $0 == "open" && (app.pickersShown ?? 0) > shown } }
+    // The search box ends the wait only while the readout can't be read: an earlier picker's may
+    // still be in XCUITest's tree. Only the readout, read and not open, has the tap played again.
+    let opened = { open() ?? field.exists }
+    if cancelled("tap on the place button", in: app, within: 2, until: opened, { place.tap() }),
+      open() == false
+    {
+      _ = cancelled("second tap on the place button", in: app) { place.tap() }
+    }
+    try expectThePicker(in: app, after: shown, "after tapping the place button")
   }
 
   /// Closes the picker opened after the readout counted `shown`, and waits for the readout to say
@@ -563,7 +620,7 @@ final class NotificationsTests: XCTestCase {
   private func closeThePicker(in app: XCUIApplication, after shown: Int) throws {
     app.buttons["picker-close"].tap()
     guard pickerCloses(in: app, after: shown, within: 10) else {
-      throw HomeScreenError("The picker is still open; \(app.pickerReport)")
+      throw HomeScreenError("The picker is still open; \(app.pickerReport); \(app.cancelsReport)")
     }
   }
 }

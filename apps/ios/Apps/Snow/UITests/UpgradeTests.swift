@@ -355,12 +355,24 @@ final class UpgradeTests: XCTestCase {
     XCTAssertTrue(app.buttons["report-ad"].exists, "No Report an ad in the free version")
   }
 
-  /// Taps the gear, and waits for Settings, by its Close and its title.
+  /// Taps the gear, and waits for Settings, by its Close and its title. A tap whose touch the
+  /// system cancelled (`cancelled(_:in:within:until:_:)`) and that opened no Settings is tapped
+  /// once more; a tap the app completed never is.
   @MainActor
   private func openSettings(_ app: XCUIApplication) throws {
-    app.buttons["settings"].tap()
-    guard app.buttons["close-settings"].waitForExistence(timeout: 5) else {
-      throw HomeScreenError("No Settings after tapping the gear; \(app.homeGeometry)")
+    let gear = app.buttons["settings"]
+    let close = app.buttons["close-settings"]
+    // Opened, and not opened, as the home screen shows it (`sheetClosed`), not by Close, which
+    // XCUITest may go on finding once an earlier Settings has closed.
+    let opened = { !app.sheetClosed }
+    if cancelled("tap on the gear", in: app, within: 2, until: opened, { gear.tap() }),
+      app.sheetClosed
+    {
+      _ = cancelled("second tap on the gear", in: app) { gear.tap() }
+    }
+    guard close.waitForExistence(timeout: 5) else {
+      throw HomeScreenError(
+        "No Settings after tapping the gear; \(app.cancelsReport); \(app.homeGeometry)")
     }
     try page(titled: "Settings", in: app)
   }
@@ -371,7 +383,8 @@ final class UpgradeTests: XCTestCase {
   private func close(_ id: String, in app: XCUIApplication) throws {
     app.buttons[id].tap()
     guard app.sheetCloses(within: 5) else {
-      throw HomeScreenError("The sheet is still open 5 seconds after \(id)")
+      throw HomeScreenError(
+        "The sheet is still open 5 seconds after \(id); \(app.cancelsReport)")
     }
   }
 
@@ -383,7 +396,8 @@ final class UpgradeTests: XCTestCase {
     if app.staticTexts.matching(titled).firstMatch.waitForExistence(timeout: 5) { return }
     let shown = app.staticTexts.matching(identifier: "page-title").allElementsBoundByIndex
       .map(\.label)
-    throw HomeScreenError("No page titled \"\(title)\"; the titles on screen: \(shown)")
+    throw HomeScreenError(
+      "No page titled \"\(title)\"; the titles on screen: \(shown); \(app.cancelsReport)")
   }
 
   /// Goes back one page on Settings' stack.
