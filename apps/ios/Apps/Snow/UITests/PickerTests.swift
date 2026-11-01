@@ -12,6 +12,10 @@ import XCTest
 /// in the website's look (IsItUI's PlacePickerView): a place's star saves or removes it, and a
 /// row's press-and-hold menu holds the same and Delete, since the rows aren't a `List` to swipe.
 final class PickerTests: XCTestCase {
+  /// How many pickers the app's readout had counted (`debug-pickers`) before `openPicker` last
+  /// tapped the place button, for `pickerCloses(in:after:within:)`.
+  private var pickersBefore = 0
+
   override func setUpWithError() throws {
     continueAfterFailure = false
   }
@@ -45,7 +49,9 @@ final class PickerTests: XCTestCase {
     XCTAssertFalse(app.buttons["result-1"].exists, "More than search-leeds's one result")
     attachScreen(of: app, named: "picker-results")
     result.tap()
-    waitUntilGone(searchField(in: app), "The picker is still open")
+    XCTAssertTrue(
+      pickerCloses(in: app, after: pickersBefore, within: 10),
+      "The picker is still open; \(app.pickerReport)")
     wait(for: heading(in: app), label: "Leeds. Will it snow today? No.")
     XCTAssertEqual(app.buttons["place"].label, "Place: Leeds. Change place.")
     XCTAssertFalse(app.buttons["use-my-location"].exists, "Still on approximate location")
@@ -166,7 +172,9 @@ final class PickerTests: XCTestCase {
     let kept = app.buttons["saved-city:leeds-gb"]
     XCTAssertTrue(kept.waitForExistence(timeout: 10), "Leeds isn't saved after a relaunch")
     kept.tap()
-    waitUntilGone(searchField(in: app), "The picker is still open")
+    XCTAssertTrue(
+      pickerCloses(in: app, after: pickersBefore, within: 10),
+      "The picker is still open; \(app.pickerReport)")
     wait(for: heading(in: app), label: "Leeds. Will it snow today? No.")
     XCTAssertEqual(app.buttons["place"].label, "Place: Leeds. Change place.")
     // Still under Saved, and not under Recent.
@@ -422,12 +430,20 @@ final class PickerTests: XCTestCase {
   }
 
   /// Opens the picker with the place button, and gives its search field, focused unless not
-  /// `focusing`, with no clear button while it is empty. With no picker, the failure says where
-  /// the top bar was: on main's first macOS run the place button was under the status bar, where
-  /// the tap never reached it.
+  /// `focusing`, with no clear button while it is empty. Notes the pickers the app's readout had
+  /// counted (`pickersBefore`), and waits for it to read a new one open (`pickerOpens`), so a
+  /// closed picker's search box that XCUITest still finds is never taken for this one's. With no
+  /// picker, the failure says where the top bar was: on main's first macOS run the place button
+  /// was under the status bar, where the tap never reached it.
   @MainActor
   private func openPicker(in app: XCUIApplication, focusing: Bool = true) -> XCUIElement {
+    pickersBefore = app.pickersShown ?? 0
     app.buttons["place"].tap()
+    let opened = pickerOpens(in: app, after: pickersBefore, within: 10)
+    XCTAssertNotEqual(
+      opened, false,
+      "No picker after tapping the place button; \(app.pickerReport); "
+        + app.homeGeometry)
     let field = searchField(in: app)
     XCTAssertTrue(
       field.waitForExistence(timeout: 10),

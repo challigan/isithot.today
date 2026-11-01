@@ -624,6 +624,19 @@ describe('an archive that fails', () => {
     ]);
   });
 
+  // A demo unit of another format loads nothing: the banners would show and the full-screen ad
+  // never would, as on a phone, with every unit Google's.
+  it.each([
+    ['IsItInterstitialUnitID', DEMO_BANNER, DEMO_INTERSTITIAL],
+    ['IsItBannerUnitID', DEMO_INTERSTITIAL, DEMO_BANNER],
+    ['IsItPageBannerUnitID', DEMO_INTERSTITIAL, DEMO_BANNER],
+  ])('fails a test build whose %s is the demo unit of another format', (key, unit, own) => {
+    const swapped = archive({ files: { 'Info.plist': appInfo({ [key]: unit }) } });
+    expect(check(swapped, 'test').errors).toEqual([
+      `with ads test, ${key} is ${unit}, not ${own}, Google's demo unit for it`,
+    ]);
+  });
+
   it('fails when the app and widget differ in build or version, or the build is not BUILD_NUMBER', () => {
     const build = archive({
       files: { [`${WIDGET}/Info.plist`]: widgetInfo({ CFBundleVersion: '100' }) },

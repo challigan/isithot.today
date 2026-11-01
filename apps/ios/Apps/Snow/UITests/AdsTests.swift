@@ -22,6 +22,10 @@ import XCTest
 /// since the ads' own elements are Google's (HomeAuditTests audit the home screen without them).
 /// The screens are attached for the contact sheet (`ads-…`).
 final class AdsTests: XCTestCase {
+  /// How many pickers the app's readout had counted (`debug-pickers`) before `choose` last tapped
+  /// the place button, for `pickerCloses(in:after:within:)`.
+  private var pickersBefore = 0
+
   override func setUpWithError() throws {
     // Every frame out of place is reported, not only the first; a screen that never comes
     // throws, which stops the test, and an answer from Google that never comes skips it.
@@ -194,8 +198,8 @@ final class AdsTests: XCTestCase {
     }
     // The picker closes once the ad does, onto the place chosen.
     XCTAssertTrue(
-      gone(app.find("place-search"), within: 15),
-      "The picker is still open 15 seconds after the full-screen ad closed")
+      pickerCloses(in: app, after: pickersBefore, within: 15),
+      "The picker is still open 15 seconds after the full-screen ad closed; \(app.pickerReport)")
     expectPlace("Kathmandu", in: app)
 
     // The next ad, loaded once the first closed, up to 30 seconds on, well within 5 minutes of
@@ -220,8 +224,8 @@ final class AdsTests: XCTestCase {
       if close.isHittable { close.tap() }
     }
     XCTAssertTrue(
-      gone(app.find("place-search"), within: 15),
-      "The picker is still open 25 seconds after a place was chosen")
+      pickerCloses(in: app, after: pickersBefore, within: 15),
+      "The picker is still open 25 seconds after a place was chosen; \(app.pickerReport)")
     expectPlace("Leeds", in: app)
     XCTAssertEqual(
       adsShown(in: app), 1, "The full-screen ads shown, once the second place was chosen")
@@ -486,7 +490,12 @@ final class AdsTests: XCTestCase {
   /// which the search fixtures give (`search-leeds`, `search-kathmandu`).
   @MainActor
   private func choose(_ name: String, in app: XCUIApplication) throws {
+    pickersBefore = app.pickersShown ?? 0
     app.buttons["place"].tap()
+    if pickerOpens(in: app, after: pickersBefore, within: 10) == false {
+      throw HomeScreenError(
+        "No picker after tapping the place button; \(app.pickerReport); \(app.homeGeometry)")
+    }
     let field = app.find("place-search")
     guard field.waitForExistence(timeout: 10) else {
       throw HomeScreenError("No picker after tapping the place button; \(app.homeGeometry)")
@@ -543,8 +552,8 @@ final class AdsTests: XCTestCase {
   }
 
   /// Checks the home screen shows `name`, the place chosen: the place button names it, within 15
-  /// seconds, as the place loads; the picker is closed; and the top bar is no longer on
-  /// approximate location.
+  /// seconds, as the place loads; the picker is closed, as the app's readout says
+  /// (`pickerClosed`); and the top bar is no longer on approximate location.
   @MainActor
   private func expectPlace(_ name: String, in app: XCUIApplication) {
     let place = app.buttons["place"]
@@ -553,7 +562,7 @@ final class AdsTests: XCTestCase {
     let shown = XCTWaiter().wait(for: [waited], timeout: 15) == .completed
     XCTAssertTrue(
       shown, "The place button reads \"\(place.exists ? place.label : "nothing")\", not \(name)")
-    XCTAssertFalse(app.find("place-search").exists, "The picker is still open")
+    XCTAssertTrue(app.pickerClosed, "The picker is still open; \(app.pickerReport)")
     XCTAssertFalse(app.buttons["use-my-location"].exists, "Still on approximate location")
   }
 
@@ -598,14 +607,6 @@ final class AdsTests: XCTestCase {
       if waitForAdsPhase(["on"], in: app, timeout: 10) == "on" { return true }
     }
     return false
-  }
-
-  /// Whether `element` is gone within `timeout` seconds.
-  @MainActor
-  private func gone(_ element: XCUIElement, within timeout: TimeInterval) -> Bool {
-    let gone = NSPredicate(format: "exists == false")
-    let waited = XCTNSPredicateExpectation(predicate: gone, object: element)
-    return XCTWaiter().wait(for: [waited], timeout: timeout) == .completed
   }
 
   /// Taps the gear, and waits for Settings (its Close).

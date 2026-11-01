@@ -30,10 +30,15 @@ WIDGET=WillItSnowWidgets
 APP_GROUP=group.today.willitsnow.app
 # Google's demo publisher (section 14.3): every ad unit of a test build is one of its.
 DEMO_PUBLISHER=3940256099942544
-# Each ad unit's key in the app's Info.plist, and the repository variable that holds Carl's: the
-# home banner, the page-end banner and the full-screen ad.
-AD_UNITS=(IsItBannerUnitID=ADMOB_BANNER_ID IsItPageBannerUnitID=ADMOB_PAGE_BANNER_ID
-  IsItInterstitialUnitID=ADMOB_INTERSTITIAL_ID)
+# Each ad unit's key in the app's Info.plist, the repository variable that holds Carl's, and
+# Google's demo unit a test build must have there (Snow.xcconfig's GAD_*_test): the home banner,
+# the page-end banner (the adaptive banner's demo unit serves its inline size too) and the
+# full-screen ad. A demo unit of another format would load nothing, so each key's own is checked.
+AD_UNITS=(
+  IsItBannerUnitID=ADMOB_BANNER_ID=ca-app-pub-3940256099942544/2435281174
+  IsItPageBannerUnitID=ADMOB_PAGE_BANNER_ID=ca-app-pub-3940256099942544/2435281174
+  IsItInterstitialUnitID=ADMOB_INTERSTITIAL_ID=ca-app-pub-3940256099942544/4411468910
+)
 # Google's own SKAdNetwork identifier, the first of the list SKAdNetworkItems copies (section
 # 14.4).
 GOOGLE_SKADNETWORK=cstr6suwn9.skadnetwork
@@ -281,7 +286,7 @@ check_versions() {
 # The ad units for $1 (test or real), from the app's Info.plist XML $2 and its binary's strings $3,
 # and Google's SKAdNetwork identifier.
 check_ads() {
-  local ads="$1" info="$2" text="$3" app_id ours="" publishers publisher pair key variable unit
+  local ads="$1" info="$2" text="$3" app_id ours="" publishers publisher pair key variable unit demo
   local demo_app="^ca-app-pub-${DEMO_PUBLISHER}~[0-9]{10}$"
   local demo_unit="^ca-app-pub-${DEMO_PUBLISHER}/[0-9]{10}$"
   local any_app='^ca-app-pub-[0-9]{16}~[0-9]{10}$'
@@ -298,9 +303,12 @@ check_ads() {
     fi
     for pair in "${AD_UNITS[@]}"; do
       key="${pair%%=*}"
+      demo="${pair##*=}"
       unit="$(plist_get "$key" <"$info")" || unit=""
       if ! [[ $unit =~ $demo_unit ]]; then
         fail "with ads test, $key is ${unit:-missing}, not a Google demo unit"
+      elif [ "$unit" != "$demo" ]; then
+        fail "with ads test, $key is $unit, not $demo, Google's demo unit for it"
       fi
     done
     for publisher in $publishers; do
@@ -333,6 +341,7 @@ check_ads() {
     for pair in "${AD_UNITS[@]}"; do
       key="${pair%%=*}"
       variable="${pair#*=}"
+      variable="${variable%%=*}"
       unit="$(plist_get "$key" <"$info")" || unit=""
       if ! [[ $unit =~ $any_unit ]]; then
         fail "with ads real, $key is ${unit:-missing}, not an AdMob ad unit"

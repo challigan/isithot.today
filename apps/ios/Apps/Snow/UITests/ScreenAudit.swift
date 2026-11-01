@@ -26,7 +26,8 @@ import XCTest
 /// test stopped at its audit, before it attached its screen, so nothing showed what the audit
 /// had read. Each call's time is attached as `audit-<screen>-times`, however the audit ends, and
 /// the issues allowed as `audit-<screen>-allowed`, which the failure lists too, so that a proof
-/// that allows too much shows in every run.
+/// that allows too much shows in every run, with any issue set apart on a Debug build's readout
+/// (`DebugReadout`), which a Release build hasn't.
 extension XCTestCase {
   @MainActor
   func auditAccessibility(
@@ -60,7 +61,7 @@ extension XCTestCase {
         found.note(issue, shot: shot)
       }
     }
-    let allowed = found.allowed.map { "Allowed: \($0)" }
+    let allowed = found.allowed.map { "Allowed: \($0)" } + times.readoutIssues
     attachText(
       allowed.isEmpty ? "Nothing allowed on \(surface)" : allowed.joined(separator: "\n"),
       as: "\(name)-allowed")
@@ -75,7 +76,8 @@ extension XCTestCase {
   /// order found, for the caller to read once the call is done: the handler only keeps each, so
   /// what the tests read of an issue (its element's properties, the credits' frame, a screenshot's
   /// pixels) is read outside the call, and outside XCTest's deadline for it. Each call's time,
-  /// and its issues' count, go into `times`.
+  /// and its issues' count, go into `times`; an issue on a Debug build's readout, which a Release
+  /// build hasn't, is set apart there instead (`DebugReadout`).
   ///
   /// A call that didn't finish in time (XCTest's "Audit failed to complete in time", -56,
   /// `isAuditTimeout`: XCTest gives each call 15 seconds, as testmanagerd logs) does as
@@ -105,8 +107,9 @@ extension XCTestCase {
   ) throws -> [XCUIAccessibilityAuditIssue] {
     let first = timedAudit(of: app, for: kinds)
     guard let error = first.error else {
-      times.add(AuditTime(place, kinds, first.seconds, issues: first.issues.count))
-      return first.issues
+      let issues = times.setApart(first.issues, at: place, kinds)
+      times.add(AuditTime(place, kinds, first.seconds, issues: issues.count))
+      return issues
     }
     var failure = AuditFailure(place: place, kinds: kinds, first: error, after: first.seconds)
     guard isAuditTimeout(error) else {
@@ -128,8 +131,9 @@ extension XCTestCase {
     let second = timedAudit(of: app, for: kinds)
     guard let again = second.error else {
       let note = "\(timedOut); ran again"
-      times.add(AuditTime(place, kinds, second.seconds, issues: second.issues.count, note: note))
-      return second.issues
+      let issues = times.setApart(second.issues, at: place, kinds)
+      times.add(AuditTime(place, kinds, second.seconds, issues: issues.count, note: note))
+      return issues
     }
     failure.second = (again, second.seconds)
     let how =
@@ -334,7 +338,8 @@ struct AuditFailure: Error, CustomStringConvertible, LocalizedError {
   /// The second attempt's error and time, on the same screen.
   var second: (error: Error, after: Double)?
   /// How the audit of a home screenful moved a few points failed (another `AuditFailure`, with
-  /// its own place, kinds, time and where the credits were).
+  /// its own place, kinds, time and where the credits were), or each try's, should a call have
+  /// stopped on every one (`HomeAuditTests.ReauditStops`).
   var elsewhere: Error?
 
   init(place: String, kinds: XCUIAccessibilityAuditType, first: Error, after: Double) {
@@ -351,7 +356,7 @@ struct AuditFailure: Error, CustomStringConvertible, LocalizedError {
     let timedOut = "\(audit) didn't finish in time (\(first)) \(firstTime)"
     if let elsewhere {
       return "\(timedOut); then its screenful, audited again with the page moved a few points, "
-        + "failed too: \(elsewhere)"
+        + "failed too: \(elsewhere)" + (notRunAgain.map { "; and \($0)" } ?? "")
     }
     if let notRunAgain { return "\(timedOut), and wasn't run again: \(notRunAgain)" }
     guard let second else { return timedOut }
@@ -409,28 +414,67 @@ struct AuditTime {
 /// A test's or a screen's audit calls, timed (`runAudit`), attached as text a line a call
 /// (`AuditTime.line`): `print` reaches neither the log nor the result bundle, so CI lists the
 /// slowest calls and every one that timed out from the attachments (ci/xcresult-summary.mjs
-/// `timings`), and a timeout's time says roughly how long XCTest's deadline is.
+/// `timings`), and a timeout's time says roughly how long XCTest's deadline is. After the calls,
+/// a line for each issue set apart on a Debug readout (`setApart`), which `timings` skips.
 @MainActor
 final class AuditTimes {
   private(set) var calls: [AuditTime] = []
+  /// Each issue `runAudit` set apart on a Debug readout, where and of which kinds.
+  private(set) var readoutIssues: [String] = []
 
   func add(_ time: AuditTime) {
     calls.append(time)
   }
 
-  /// The attachment: the columns, then a line a call.
-  var text: String {
-    ([AuditTime.header] + calls.map(\.line)).joined(separator: "\n")
+  /// `issues`, found at `place` by a call of `kinds`, but those on a Debug readout
+  /// (`DebugReadout`), each noted in `readoutIssues` instead, failing nothing.
+  func setApart(
+    _ issues: [XCUIAccessibilityAuditIssue],
+    at place: String,
+    _ kinds: XCUIAccessibilityAuditType
+  ) -> [XCUIAccessibilityAuditIssue] {
+    issues.filter { issue in
+      guard DebugReadout.holds(issue.element) else { return true }
+      readoutIssues.append(
+        "Set apart, on a Debug readout: \(place), \(kinds.names): \(issue.auditType.names): "
+          + "\(issue.compactDescription) (\(describeElement(issue.element)))")
+      return false
+    }
   }
 
-  /// For a test's report: its slowest call, then each other that didn't go as a call should.
+  /// The attachment: the columns, then a line a call, then a line an issue set apart.
+  var text: String {
+    ([AuditTime.header] + calls.map(\.line) + readoutIssues).joined(separator: "\n")
+  }
+
+  /// For a test's report: its slowest call, then each other that didn't go as a call should,
+  /// then each issue set apart on a Debug readout.
   var report: [String] {
     guard let slowest = calls.indices.max(by: { calls[$0].seconds < calls[$1].seconds }) else {
-      return []
+      return readoutIssues
     }
     let others = calls.indices.filter { $0 != slowest && !calls[$0].note.isEmpty }
     return ["Slowest audit call: \(calls[slowest].summary)"]
-      + others.map { "Audit call: \(calls[$0].summary)" }
+      + others.map { "Audit call: \(calls[$0].summary)" } + readoutIssues
+  }
+}
+
+/// A Debug build's readouts over the screens the UI tests audit, which they read and no one sees
+/// (DebugHooks.swift): the picker's (`debug-picker` and `debug-pickers`), over every screen, each
+/// a clear element of a point with a value and no label. A Release build has none, so an issue on one says
+/// nothing of the app's screens: `runAudit` sets it apart (`AuditTimes.setApart`), and the times
+/// attached say whether the audit flags such an element at all. The URL recorder's lines
+/// (`debug-opened`, `debug-units`), on screen and read as any text is, are audited as they are.
+enum DebugReadout {
+  static let identifiers: Set<String> = ["debug-picker", "debug-pickers"]
+
+  /// Whether `element`, an issue's, is one: identified as one, and a point square at most (to
+  /// the pixel, `onPixels`).
+  @MainActor
+  static func holds(_ element: XCUIElement?) -> Bool {
+    guard let element, identifiers.contains(element.identifier) else { return false }
+    let frame = element.frame
+    return onPixels(frame.width) <= 1 && onPixels(frame.height) <= 1
   }
 }
 

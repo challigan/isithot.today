@@ -41,6 +41,12 @@ struct HomeView: View {
       // pages' own audits are HomeAuditTests'. Nor are their changes announced (`covered`).
       .accessibilityHidden(sheet != nil)
     }
+    // A Debug build's readout of the picker for the UI tests (`DebugHooks.pickerReadout`): at the
+    // top right of the safe area, clear of the gear, out of the pages and their minute's redraw,
+    // and out of what a sheet hides, so it is read as the picker closes. None in a Release build.
+    .overlay(alignment: .topTrailing) {
+      DebugHooks.pickerReadout(open: sheet.picker != nil)
+    }
     // The picker wears the band of the page on screen, which `PickerSheet` reads from the model
     // in its own body, so it follows a refresh while open and never follows Dark Mode, as the
     // pages don't (the sheet surface, IsItUI's PlacePickerView). Settings wears the website's

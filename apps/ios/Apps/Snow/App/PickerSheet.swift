@@ -23,7 +23,8 @@ struct PickerRequest: Identifiable, Equatable {
 /// the picker (`AdsModel.placeChosen`), and the picker closes as the ad does: the pill's tap and
 /// the choice are the two actions Google asks for before such an ad. The "Use my exact location"
 /// chip's picker never shows one, as its fix chooses the place after that one tap. A star saves
-/// or removes a place and chooses nothing.
+/// or removes a place and chooses nothing. A Debug build notes the picker's content coming on
+/// screen and leaving it, for the UI tests' readout of the picker (`DebugHooks.pickerReadout`).
 struct PickerSheet: View {
   let model: AppModel
   /// The free version's ads.
@@ -79,12 +80,16 @@ struct PickerSheet: View {
       }
     }
     .onAppear {
+      DebugHooks.pickerAppeared()
       // Not in `.task`, which is cancelled as the sheet closes, and would cancel the fetch of
       // the place the fix chose with it.
       guard request.locating, !started else { return }
       started = true
       Task { await picker.useMyLocation() }
     }
-    .onDisappear { picker.close() }
+    .onDisappear {
+      DebugHooks.pickerDisappeared()
+      picker.close()
+    }
   }
 }
