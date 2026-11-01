@@ -9,6 +9,13 @@ import {
   makeSearchFixture,
   type Fixture,
 } from '../src/fixtures';
+import {
+  DEVICE_FIXTURES,
+  PAYLOAD_FILES,
+  deviceFixtureJson,
+  makeDeviceFixture,
+  payloadFiles,
+} from '../src/deviceFixtures';
 import { SURFACES_PATH, brandColoursSwift, surfacesJson } from '../src/brandColours';
 import { appCopySwift } from '../src/exportAppCopy';
 import { CONFIGS_GENERATED_DIR, configCopy } from '../src/exportConfigCopy';
@@ -40,9 +47,11 @@ import { keysSwift } from '../src/exportKeys';
 import { palettesSwift } from '../src/exportPalettes';
 import { questionsSwift } from '../src/exportQuestions';
 import {
+  DEVICE_FIXTURES_DIR,
   FIXTURES_DIR,
   MODEL_GENERATED_DIR,
   OWNED_DIRS,
+  PAYLOADS_DIR,
   SEARCH_FIXTURES_DIR,
   VECTORS_DIR,
   drift,
@@ -87,6 +96,8 @@ describe('generatedFiles', () => {
     const resourcePaths = [
       ...FIXTURES.map((s) => `${resources}/Fixtures/${s.name}.json`),
       ...SEARCH_FIXTURES.map((s) => `${resources}/Fixtures/Search/${s.name}.json`),
+      ...DEVICE_FIXTURES.map((s) => `${resources}/Fixtures/Devices/${s.name}.json`),
+      ...PAYLOAD_FILES.map((name) => `${resources}/Fixtures/Payloads/${name}`),
       ...vectors.map((name) => `${resources}/Vectors/${name}.json`),
     ];
     expect(files.map((f) => f.path)).toEqual([
@@ -122,6 +133,16 @@ describe('generatedFiles', () => {
     expect(files[12]!.contents).toBe(fixtureJson(await makeFixture(FIXTURES[1]!)));
     const search = files.find((f) => f.path.endsWith('/Fixtures/Search/search-leeds.json'))!;
     expect(search.contents).toBe(fixtureJson(await makeSearchFixture(SEARCH_FIXTURES[0]!)));
+    // The devices fixtures, and the payloads from durham-tomorrow as its file has it.
+    const put = files.find((f) => f.path === `${DEVICE_FIXTURES_DIR}/put-leeds.json`)!;
+    expect(put.contents).toBe(deviceFixtureJson(await makeDeviceFixture(DEVICE_FIXTURES[0]!)));
+    const durham = text(files.find((f) => f.path === `${FIXTURES_DIR}/durham-tomorrow.json`)!);
+    for (const { name, contents } of payloadFiles(JSON.parse(durham) as Fixture)) {
+      const payload = files.find((f) => f.path === `${PAYLOADS_DIR}/${name}`);
+      expect(payload?.contents, name).toBe(contents);
+    }
+    expect(DEVICE_FIXTURES_DIR).toBe(`${FIXTURES_DIR}/Devices`);
+    expect(PAYLOADS_DIR).toBe(`${FIXTURES_DIR}/Payloads`);
     expect(SEARCH_FIXTURES_DIR).toBe(`${FIXTURES_DIR}/Search`);
     const first = 11 + resourcePaths.length + 2;
     for (const [i, f] of assets.entries()) {

@@ -2,16 +2,21 @@ import Foundation
 import IsItAds
 import IsItLogic
 import IsItModel
+import IsItNotifications
 import IsItServices
 import IsItState
 import Observation
 import StoreKit
 import SwiftUI
 import UIKit
+import os
 
 /// Every test and debug hook in the app (iOS build spec, section 9.8), here and nowhere else.
 /// A Release build compiles none of them: there each one is a stub that does nothing and names
 /// no launch argument, and the fixtures aren't in its bundle (`EXCLUDED_SOURCE_FILE_NAMES`).
+/// Phase 8.1's hooks stand in for the system's notifications (`-notifications`, `-pushToken`),
+/// the devices calls (`-devices`), the card's being put away under `-uitest` (`-alertCard`), the
+/// place a test launches on (`-place`) and a notification's tap (`-route`).
 @MainActor
 enum DebugHooks {
   #if DEBUG
@@ -21,9 +26,13 @@ enum DebugHooks {
 
     /// The launch arguments that change how the app starts, before the model reads `store`:
     /// `-uitest` turns animations off; `-resetStore` forgets the place, the units, the saved
-    /// answer, the recent and saved places and when the last full-screen ad showed, for a first
-    /// launch. It leaves `unlock.v1` alone, which only `PurchaseModel` writes, and which nothing
-    /// reads under StoreKit's stand-in (`standsInForStoreKit`), as every UI test runs.
+    /// answer, the recent and saved places, when the last full-screen ad showed, and the
+    /// notifications' switches and place, their registration and the card's being put away
+    /// (`alerts.v1`, `alertSync.v1`, `ui.alertCard`), for a first launch. It leaves `unlock.v1`
+    /// alone, which only `PurchaseModel` writes, and which nothing reads under StoreKit's stand-in
+    /// (`standsInForStoreKit`), as every UI test runs. Then `-place <query>` keeps that place
+    /// (`Target(query:)`, a city's or a searched place's) as the one to launch on; a query that
+    /// is no place, or approximate location's, stops the app.
     static func prepare(
       store: SharedStore?,
       arguments: [String] = ProcessInfo.processInfo.arguments
@@ -35,6 +44,7 @@ enum DebugHooks {
         RecentDefaults().removeAll()
         SavedPlaceDefaults().removeAll()
         AdDefaults().removeAll()
+        NotificationDefaults().removeAll()
       }
       if arguments.contains("-resetStore"), let store {
         store.savePlace(.ip)
@@ -44,6 +54,13 @@ enum DebugHooks {
         } catch {
           fatalError("-resetStore: the saved answer can't be removed: \(error)")
         }
+      }
+      if let query = value(after: "-place", in: arguments) {
+        guard let target = Target(query: query), target != .ip else {
+          fatalError("-place: \(query) isn't a place's query")
+        }
+        guard let store else { fatalError("-place: there is no store to keep \(query) in") }
+        store.savePlace(target)
       }
     }
 
@@ -63,6 +80,9 @@ enum DebugHooks {
     ///   `-network off` has no connection at all; `-network unavailable` answers every request
     ///   as the server does when the forecasts can't be had (503 `upstream_unavailable`).
     ///
+    /// Under either, the notifications' devices calls are answered from `Fixtures/Devices` as
+    /// `-devices` says (`DevicesStub`).
+    ///
     /// A name with no fixture, or one that doesn't decode, stops the app, so a UI test can't pass
     /// on the wrong screen. Nil, for willitsnow.today, without either.
     static func transport(
@@ -72,11 +92,12 @@ enum DebugHooks {
       if let name = value(after: "-fixture", in: arguments) {
         let data = answerData(name)
         try? store?.removeToday()
-        return FixtureTransport(body: data, searches: SearchStub())
+        return FixtureTransport(body: data, searches: SearchStub(), devices: DevicesStub.shared)
       }
       guard value(after: "-network", in: arguments) != nil else { return nil }
       // Read now, on the main thread, so a bad name stops the launch rather than a request.
       _ = URLProtocolStub.server
+      _ = DevicesStub.shared
       let configuration = URLSessionTransport.configuration()
       configuration.protocolClasses = [URLProtocolStub.self]
       return URLSessionTransport(session: URLSession(configuration: configuration))
@@ -332,6 +353,132 @@ enum DebugHooks {
       }
     }
 
+    /// What `-notifications` stands in for: the permission not yet asked, with the prompt
+    /// allowing (`allow`, the default) or refusing (`deny`); that state from the start
+    /// (`authorized`, `denied`, `provisional`); or the real centre's (`system`).
+    enum NotificationsMode: String, CaseIterable {
+      case allow
+      case deny
+      case authorized
+      case denied
+      case provisional
+      case system
+    }
+
+    /// What the stand-in's registration gives (`-pushToken`): a token in hex, nothing (as some
+    /// devices give), or the failure.
+    enum PushTokenAnswer {
+      case token(String)
+      case nothing
+      case failure
+    }
+
+    /// Whether a launch argument asks for the notifications' stand-in (`FakeNotifications`):
+    /// every UI test (`-uitest`), and `-notifications` and `-pushToken`. Under it the real
+    /// centre is asked nothing, nor given its delegate, unless `-notifications system`, so no UI
+    /// test leaves a permission behind but the one that means to.
+    static func standsInForNotifications(
+      arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> Bool {
+      ["-uitest", "-notifications", "-pushToken"].contains { arguments.contains($0) }
+    }
+
+    /// The notifications' stand-in, or nil for the system's (`UserNotificationsPlatform`):
+    /// - `-notifications allow|deny|authorized|denied|provisional|system`, the permission
+    ///   (`allow` by default): asked from not determined, the prompt's answer is kept; `system`
+    ///   asks the real centre, for NotificationPermissionTests and the banner step only;
+    /// - `-pushToken <hex>|none|fail`, what registering gives: that token (by default
+    ///   `Fixtures/Devices/put-leeds.json`'s, so the devices stub knows it, and no real token is
+    ///   in the app or a test), no token, or the failure.
+    /// Any other value stops the app.
+    static func notifications(
+      arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> (any NotificationPlatform)? {
+      guard standsInForNotifications(arguments: arguments) else { return nil }
+      return FakeNotifications(
+        mode: outcome("-notifications", in: arguments, otherwise: NotificationsMode.allow),
+        token: pushToken(arguments: arguments)
+      )
+    }
+
+    /// Whether the app delegate gives the real centre its delegate: always but under the
+    /// notifications' stand-in, where only `-notifications system` does (the banner step's
+    /// `simctl push` needs the app's `willPresent`).
+    static func usesNotificationCenter(
+      arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> Bool {
+      guard standsInForNotifications(arguments: arguments) else { return true }
+      return value(after: "-notifications", in: arguments) == NotificationsMode.system.rawValue
+    }
+
+    /// `-pushToken`'s answer: put-leeds's token without it. Hex is lowercase and 64 to 200
+    /// digits, as the server takes; any other value stops the app.
+    private static func pushToken(arguments: [String]) -> PushTokenAnswer {
+      guard let text = value(after: "-pushToken", in: arguments) else {
+        return .token(devicesFixture("put-leeds", body: TokenBody.self).note.body.token)
+      }
+      switch text {
+      case "none": return .nothing
+      case "fail": return .failure
+      default:
+        guard (64...200).contains(text.count), text.allSatisfy({ hexDigits.contains($0) }) else {
+          fatalError("-pushToken: \(text) isn't hex, none or fail")
+        }
+        return .token(text)
+      }
+    }
+
+    /// The digits of a token in hex.
+    private static let hexDigits = Set("0123456789abcdef")
+
+    /// The store the notifications keep their keys in: under `-uitest` the card reads as put away
+    /// (`CardHidden`) unless `-alertCard shown`, so every older UI test's home screens, and so
+    /// their audits, are as they were; `store` itself otherwise. Any other value stops the app.
+    static func notificationStore(
+      _ store: NotificationDefaults,
+      arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> any NotificationStore {
+      if let shown = value(after: "-alertCard", in: arguments) {
+        guard shown == "shown" else { fatalError("-alertCard: \(shown) isn't shown") }
+        return store
+      }
+      return arguments.contains("-uitest") ? CardHidden(store: store) : store
+    }
+
+    /// `-route <name>`: the payload `Fixtures/Payloads/<name>.json` holds, the server's own
+    /// (`alertPush()`), which the app posts to its inbox as a tap that launched it; nil without
+    /// it. A name with no payload stops the app.
+    static func route(arguments: [String] = ProcessInfo.processInfo.arguments) -> Data? {
+      guard let name = value(after: "-route", in: arguments) else { return nil }
+      guard
+        let url = Bundle.main.url(
+          forResource: name, withExtension: "json", subdirectory: "Fixtures/Payloads"),
+        let data = try? Data(contentsOf: url)
+      else { fatalError("The app has no Fixtures/Payloads/\(name).json") }
+      return data
+    }
+
+    /// A notification's tap whose payload routes nowhere: one line in the Debug log, which holds
+    /// none of the payload (section 12.3). The app opens as usual.
+    static func unrouted() {
+      Logger(subsystem: Bundle.main.bundleIdentifier ?? "", category: "notifications")
+        .debug("A notification's payload routes nowhere.")
+    }
+
+    /// A devices fixture (`Fixtures/Devices/<name>.json`), its request's body read as `Body`. A
+    /// name with no fixture, or one that doesn't decode, stops the app.
+    fileprivate nonisolated static func devicesFixture<Body: Decodable>(
+      _ name: String, body: Body.Type
+    ) -> DevicesFixture<Body> {
+      guard
+        let url = Bundle.main.url(
+          forResource: name, withExtension: "json", subdirectory: "Fixtures/Devices"),
+        let data = try? Data(contentsOf: url),
+        let fixture = try? JSONDecoder().decode(DevicesFixture<Body>.self, from: data)
+      else { fatalError("Fixtures/Devices/\(name).json is missing or doesn't decode") }
+      return fixture
+    }
+
     /// What `-openURLs` asks for: Settings records each web page and email it would open, on
     /// screen (`debugRecorder()`), instead of leaving the app; with `nomail` it also refuses
     /// every email, as a phone with no mail app does, so the fallback sheet shows.
@@ -474,16 +621,28 @@ enum DebugHooks {
     nonisolated static func launches() -> Bool { true }
 
     static func location() -> (any LocationService)? { nil }
+
+    static func notifications() -> (any NotificationPlatform)? { nil }
+
+    static func usesNotificationCenter() -> Bool { true }
+
+    static func notificationStore(_ store: NotificationDefaults) -> any NotificationStore { store }
+
+    static func route() -> Data? { nil }
+
+    static func unrouted() {}
   #endif
 }
 
 #if DEBUG
   /// `-fixture`'s server: every request for an answer answered with the same fixture, with
   /// status 200, and the picker's searches as `-network` answers them. The units each request
-  /// asked in are noted for the recorder (`DebugRecorder`).
+  /// asked in are noted for the recorder (`DebugRecorder`). The devices calls are answered as
+  /// `-devices` says (`DevicesStub`), and not noted: they ask in no units.
   private struct FixtureTransport: HTTPTransport {
     let body: Data
     let searches: SearchStub
+    let devices: DevicesStub
 
     func get(_ request: HTTPRequest) async throws -> HTTPResponse {
       DebugRecorder.requested(request.url)
@@ -491,6 +650,15 @@ enum DebugHooks {
         return HTTPResponse(status: found.status, body: found.body)
       }
       return HTTPResponse(status: 200, body: body)
+    }
+
+    func send(_ request: HTTPRequest) async throws -> HTTPResponse {
+      switch devices.reply(method: request.method.rawValue, url: request.url, body: request.body) {
+      case .failure(let code):
+        throw URLError(code)
+      case .answer(let status, let body, let retryAfter):
+        return HTTPResponse(status: status, body: body, retryAfter: retryAfter)
+      }
     }
   }
 
@@ -741,6 +909,213 @@ enum DebugHooks {
     func fix() async -> LocationFix { answer }
   }
 
+  /// The notifications' stand-in (`DebugHooks.notifications`), for the UI tests: the permission
+  /// as `-notifications` says, never the system's prompt, and the token `-pushToken` names,
+  /// posted to the inbox as UIKit's would be, a moment after registering. Under `-notifications
+  /// system` the permission is the real centre's (`UserNotificationsPlatform`), and the token
+  /// still the stand-in's, which the devices stub knows.
+  @MainActor
+  private final class FakeNotifications: NotificationPlatform {
+    /// The real centre, under `system`.
+    private let system: UserNotificationsPlatform?
+    private var status: AlertSync.Permission
+    /// Whether the prompt allows, when it is asked for from not determined.
+    private let allows: Bool
+    private let token: DebugHooks.PushTokenAnswer
+
+    init(mode: DebugHooks.NotificationsMode, token: DebugHooks.PushTokenAnswer) {
+      self.token = token
+      system = mode == .system ? UserNotificationsPlatform() : nil
+      allows = mode != .deny
+      switch mode {
+      case .allow, .deny, .system: status = .notDetermined
+      case .authorized: status = .authorized
+      case .denied: status = .denied
+      case .provisional: status = .provisional
+      }
+    }
+
+    func permission() async -> AlertSync.Permission {
+      if let system { return await system.permission() }
+      return status
+    }
+
+    func requestPermission() async -> Bool {
+      if let system { return await system.requestPermission() }
+      if status == .notDetermined { status = allows ? .authorized : .denied }
+      return status == .authorized || status == .provisional
+    }
+
+    func register() {
+      switch token {
+      case .token(let hex):
+        Task { NotificationInbox.shared.post(.token(hex)) }
+      case .failure:
+        Task { NotificationInbox.shared.post(.registrationFailed) }
+      case .nothing:
+        break
+      }
+    }
+  }
+
+  /// The notifications' keys under `-uitest` without `-alertCard shown`: as `store` keeps them,
+  /// but the card reads as put away, and putting it away writes nothing.
+  private struct CardHidden: NotificationStore {
+    let store: NotificationDefaults
+
+    func loadSettings() -> AlertSettings { store.loadSettings() }
+
+    func saveSettings(_ settings: AlertSettings) { store.saveSettings(settings) }
+
+    func loadRegistration() -> AlertRegistration? { store.loadRegistration() }
+
+    func saveRegistration(_ registration: AlertRegistration?) {
+      store.saveRegistration(registration)
+    }
+
+    func loadCardDismissed() -> Bool { true }
+
+    func saveCardDismissed(_ dismissed: Bool) {}
+  }
+
+  /// A devices fixture as the hooks read it (`Fixtures/Devices`): its request's body, and the
+  /// server's reply, its status, `Retry-After` and text, as the server sent them.
+  private struct DevicesFixture<Body: Decodable>: Decodable {
+    struct Note: Decodable {
+      let body: Body
+    }
+
+    let note: Note
+    let status: Int
+    let retryAfter: String?
+    let text: String
+
+    enum CodingKeys: String, CodingKey {
+      case note = "_fixture"
+      case status, retryAfter, text
+    }
+  }
+
+  /// A devices request's body, as far as its token.
+  private struct TokenBody: Decodable {
+    let token: String
+  }
+
+  /// `-devices sent|dryrun|limited|quiet|gone|down[,…]|offline`: the server's devices calls,
+  /// under `-fixture` (`FixtureTransport.send`) and `-network` (`URLProtocolStub`), from
+  /// `Fixtures/Devices`, which the server's own code wrote:
+  /// - `PUT /api/v1/devices`: with evening and morning off, 204, as the server forgets the
+  ///   device; else the reply of the `put-*` fixture registered for the same place, with the
+  ///   switches the request sent, as the server echoes them, 200; for any other place,
+  ///   `put-bad-place`'s 400;
+  /// - `DELETE /api/v1/devices`: 204;
+  /// - `POST /api/v1/devices/test`: the `test-*` fixture of each of `-devices`' names in turn,
+  ///   the last repeating (`sent` by default), with its `Retry-After`;
+  /// - `offline`: every devices call fails with no connection.
+  /// A name with no fixture stops the app.
+  private final class DevicesStub: @unchecked Sendable {
+    enum Reply {
+      case failure(URLError.Code)
+      case answer(status: Int, body: Data, retryAfter: String?)
+    }
+
+    /// Read once, from the launch arguments.
+    static let shared = DevicesStub(arguments: ProcessInfo.processInfo.arguments)
+
+    /// The test sends' answers, in turn.
+    private let tests: [DevicesFixture<TokenBody>]
+    /// Every device call fails.
+    private let offline: Bool
+    /// Each place registered with 200, and the server's reply for it.
+    private let places: [(place: RegistrationBody.Place, reply: DeviceResponse)]
+    private let badPlace: DevicesFixture<RegistrationBody>
+    private let lock = NSLock()
+    /// The next test send's place in `tests`.
+    private var turn = 0
+
+    init(arguments: [String]) {
+      let names = DebugHooks.value(after: "-devices", in: arguments) ?? "sent"
+      offline = names == "offline"
+      tests = (offline ? [] : names.split(separator: ",")).map { name in
+        guard ["sent", "dryrun", "limited", "quiet", "gone", "down"].contains(name) else {
+          fatalError("-devices: \(name) isn't sent, dryrun, limited, quiet, gone, down or offline")
+        }
+        return DebugHooks.devicesFixture("test-\(name)", body: TokenBody.self)
+      }
+      places = Self.registered().map { fixture in
+        guard
+          let reply = try? JSONDecoder().decode(DeviceResponse.self, from: Data(fixture.text.utf8))
+        else { fatalError("A put fixture's reply doesn't decode") }
+        return (fixture.note.body.place, reply)
+      }
+      badPlace = DebugHooks.devicesFixture("put-bad-place", body: RegistrationBody.self)
+    }
+
+    /// Whether `url` is a devices call.
+    static func handles(_ url: URL) -> Bool {
+      url.path.hasPrefix("/api/v1/devices")
+    }
+
+    /// The reply to `method` on `url` with `body`.
+    func reply(method: String, url: URL, body: Data?) -> Reply {
+      if offline { return .failure(.notConnectedToInternet) }
+      switch (method, url.path) {
+      case (HTTPMethod.put.rawValue, "/api/v1/devices"):
+        return registered(body)
+      case (HTTPMethod.delete.rawValue, "/api/v1/devices"):
+        return .answer(status: 204, body: Data(), retryAfter: nil)
+      case (HTTPMethod.post.rawValue, "/api/v1/devices/test"):
+        let fixture = nextTest()
+        return .answer(
+          status: fixture.status, body: Data(fixture.text.utf8), retryAfter: fixture.retryAfter)
+      default:
+        return .answer(status: 404, body: Data(), retryAfter: nil)
+      }
+    }
+
+    /// A PUT's reply: forgotten with no switch on, the place's record, or the place refused.
+    private func registered(_ body: Data?) -> Reply {
+      guard let body, let sent = try? JSONDecoder().decode(RegistrationBody.self, from: body)
+      else { return .answer(status: 400, body: Data(), retryAfter: nil) }
+      if !sent.alerts.snow.evening, !sent.alerts.snow.morning {
+        return .answer(status: 204, body: Data(), retryAfter: nil)
+      }
+      guard let found = places.first(where: { $0.place == sent.place })?.reply,
+        let echoed = try? JSONEncoder().encode(
+          DeviceResponse(
+            id: found.id, place: found.place, alerts: sent.alerts, seenAt: found.seenAt))
+      else {
+        return .answer(
+          status: badPlace.status, body: Data(badPlace.text.utf8), retryAfter: badPlace.retryAfter)
+      }
+      return .answer(status: 200, body: echoed, retryAfter: nil)
+    }
+
+    /// The test send's answer now, the last repeating once all are given.
+    private func nextTest() -> DevicesFixture<TokenBody> {
+      lock.withLock {
+        let fixture = tests[min(turn, tests.count - 1)]
+        turn += 1
+        return fixture
+      }
+    }
+
+    /// The `put-*` fixtures the server answered with 200, each a place's registration.
+    private static func registered() -> [DevicesFixture<RegistrationBody>] {
+      let folder = Bundle.main.url(forResource: "Fixtures", withExtension: nil)?
+        .appendingPathComponent("Devices", isDirectory: true)
+      let urls = folder.flatMap {
+        try? FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil)
+      }
+      return (urls ?? [])
+        .map { $0.deletingPathExtension().lastPathComponent }
+        .filter { $0.hasPrefix("put-") }
+        .sorted()
+        .map { DebugHooks.devicesFixture($0, body: RegistrationBody.self) }
+        .filter { $0.status == 200 }
+    }
+  }
+
   /// Section 9.8's URLProtocol stub: under `-network`, the network beneath the app's own
   /// URLSession transport, answering as `StubServer` says.
   private final class URLProtocolStub: URLProtocol {
@@ -753,30 +1128,67 @@ enum DebugHooks {
 
     override func startLoading() {
       guard let client else { return }
+      if let url = request.url, DevicesStub.handles(url) {
+        // Not noted for the recorder: a devices call asks in no units.
+        let reply = DevicesStub.shared.reply(
+          method: request.httpMethod ?? "", url: url, body: Self.body(of: request))
+        switch reply {
+        case .failure(let code):
+          client.urlProtocol(self, didFailWithError: URLError(code))
+        case .answer(let status, let body, let retryAfter):
+          answer(client, status: status, body: body, retryAfter: retryAfter)
+        }
+        return
+      }
       if let url = request.url { DebugRecorder.requested(url) }
       switch Self.server?.reply(to: request) ?? .failure(.notConnectedToInternet) {
       case .failure(let code):
         client.urlProtocol(self, didFailWithError: URLError(code))
       case .answer(let status, let body):
-        guard
-          let url = request.url,
-          let response = HTTPURLResponse(
-            url: url,
-            statusCode: status,
-            httpVersion: "HTTP/1.1",
-            headerFields: ["Content-Type": "application/json"]
-          )
-        else {
-          client.urlProtocol(self, didFailWithError: URLError(.badURL))
-          return
-        }
-        client.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client.urlProtocol(self, didLoad: body)
-        client.urlProtocolDidFinishLoading(self)
+        answer(client, status: status, body: body, retryAfter: nil)
       }
     }
 
     override func stopLoading() {}
+
+    /// Hands the client a JSON answer, with its `Retry-After` when it has one.
+    private func answer(
+      _ client: any URLProtocolClient, status: Int, body: Data, retryAfter: String?
+    ) {
+      var headers = ["Content-Type": "application/json"]
+      headers["Retry-After"] = retryAfter
+      guard
+        let url = request.url,
+        let response = HTTPURLResponse(
+          url: url,
+          statusCode: status,
+          httpVersion: "HTTP/1.1",
+          headerFields: headers
+        )
+      else {
+        client.urlProtocol(self, didFailWithError: URLError(.badURL))
+        return
+      }
+      client.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+      client.urlProtocol(self, didLoad: body)
+      client.urlProtocolDidFinishLoading(self)
+    }
+
+    /// A request's body: a URLProtocol is given it as a stream, not as `httpBody`.
+    private static func body(of request: URLRequest) -> Data? {
+      if let body = request.httpBody { return body }
+      guard let stream = request.httpBodyStream else { return nil }
+      stream.open()
+      defer { stream.close() }
+      var data = Data()
+      var buffer = [UInt8](repeating: 0, count: 4096)
+      while stream.hasBytesAvailable {
+        let count = stream.read(&buffer, maxLength: buffer.count)
+        guard count > 0 else { break }
+        data.append(buffer, count: count)
+      }
+      return data
+    }
   }
 
   /// What a fixture says about itself (`_fixture`), as far as the hooks read it: its query and

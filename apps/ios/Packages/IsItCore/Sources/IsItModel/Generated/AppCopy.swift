@@ -151,14 +151,26 @@ public enum AppCopy {
   public static let notifyFollows = "Follows your location each time you open the app."
   public static let needsPlace =
     "Choose a place for notifications: use your location or search for a town."
+  public static let notifyPlaceTitle = "Notification place"
+  public static let notifyLocationDenied = "Location access is off for this app in Settings."
+  public static let notifyLocationUnavailable =
+    "Couldn't find your location. Try again, or use the place on screen."
+  public static let notifyLocationTryAgain = "Couldn't find your location. Try again."
   public static let sendTest = "Send a test notification"
   public static let testSent = "Sent. It should arrive in a few seconds."
   public static let testLimited = "You can send 3 test notifications an hour. Try again later."
   public static let testFailed = "Couldn't send a test notification. Try again later."
+  public static let testDryRun = "Our server isn't sending notifications yet, so nothing was sent."
+  public static let testQuiet =
+    "Nothing is sent from 9pm to 7am at the place. Try again after 7am there."
+  public static let notifyNotSaved =
+    "Couldn't save your notification choices. The app will try again when you next open it."
   public static let notifyFooter =
     "These are forecasts, not official warnings. Times are at the place. Open the app at least every few months to keep notifications on."
   public static let notifyDenied = "Notifications are off for this app in Settings."
   public static let openSettings = "Open Settings"
+  public static let cardOn =
+    "Done. You'll get a notification the evening before snow is likely here. You can change this in Settings."
   public static let settingsPrivacy = "Privacy"
   public static let settingsAbout = "About"
   public static let settingsHelp = "Help"

@@ -1,0 +1,32 @@
+{
+  "_fixture": {
+    "request": "PUT /api/v1/devices",
+    "body": {
+      "app": "snow",
+      "platform": "ios",
+      "env": "sandbox",
+      "token": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "place": {
+        "lat": 27.7,
+        "lon": 85.3,
+        "source": "search",
+        "name": "Kathmandu",
+        "country": "NP"
+      },
+      "units": "c",
+      "alerts": {
+        "snow": {
+          "evening": true,
+          "morning": false,
+          "possible": false
+        }
+      },
+      "appVersion": "1.0 (42)"
+    },
+    "now": "2026-12-02T11:45:00.000Z",
+    "note": "A searched place with no city page, Kathmandu, as choosing search-kathmandu’s result sends it: its point, name and country. Its zone is the place’s own (UTC+5:45), as kathmandu-0545 has it."
+  },
+  "status": 200,
+  "retryAfter": null,
+  "text": "{\"id\":\"b8465956ef925aabc7c87a9e561f462d\",\"place\":{\"name\":\"Kathmandu\",\"timezone\":\"Asia/Kathmandu\",\"query\":\"lat=27.7&lon=85.3&name=Kathmandu&country=NP&source=search\"},\"alerts\":{\"snow\":{\"evening\":true,\"morning\":false,\"possible\":false}},\"seenAt\":\"2026-12-02T11:45:00.000Z\"}"
+}

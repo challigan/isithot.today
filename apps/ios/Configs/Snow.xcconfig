@@ -11,6 +11,12 @@ APP_GROUP_ID = group.today.willitsnow.app
 URL_SCHEME = willitsnow
 // "//" starts a comment in an xcconfig, so the URL is split with $().
 API_ORIGIN = https:/$()/willitsnow.today
+// The APNs environment a notification registration names (Info.plist's IsItPushEnvironment),
+// which is the provisioning profile's for every build but a Release build run from Xcode on a
+// phone (README): the sandbox in Debug, production in Release, TestFlight's and the App Store's.
+// check-archive.sh proves a Release archive says production.
+PUSH_ENV = production
+PUSH_ENV[config=Debug] = sandbox
 
 // Google's demo ad units in every build before the release candidate (section 14.3). The
 // release job passes ADS_UNITS = real with ADMOB_APP_ID, ADMOB_BANNER_ID, ADMOB_PAGE_BANNER_ID

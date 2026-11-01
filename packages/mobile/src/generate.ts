@@ -4,6 +4,12 @@
  * build the app without Node, and the check stops a hand edit or a stale copy.
  */
 import { BRAND_COLOURS_PATH, SURFACES_PATH, brandColoursSwift, surfacesJson } from './brandColours';
+import {
+  DEVICE_FIXTURES,
+  deviceFixtureJson,
+  makeDeviceFixture,
+  payloadFiles,
+} from './deviceFixtures';
 import { APP_COPY_PATH, appCopySwift } from './exportAppCopy';
 import { CONFIGS_GENERATED_DIR, CONFIG_COPY_PATH, configCopy } from './exportConfigCopy';
 import { CONSTANTS_PATH, constantsSwift } from './exportConstants';
@@ -40,6 +46,14 @@ export const FIXTURES_DIR = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Re
 
 /** The search fixtures, in a folder of their own inside the fixtures', so they ship with them. */
 export const SEARCH_FIXTURES_DIR = `${FIXTURES_DIR}/Search`;
+
+/**
+ * The devices fixtures, the server's replies to the app's notification requests, and the
+ * notification payloads a phone receives, each in a folder of their own beside the search
+ * fixtures', so they ship with them too.
+ */
+export const DEVICE_FIXTURES_DIR = `${FIXTURES_DIR}/Devices`;
+export const PAYLOADS_DIR = `${FIXTURES_DIR}/Payloads`;
 
 /** The golden vectors, beside the fixtures they name, for IsItLogic's tests (phase 3). */
 export const VECTORS_DIR = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources/Vectors';
@@ -113,6 +127,15 @@ export async function generatedFiles(sources: AssetSources): Promise<GeneratedFi
   for (const spec of SEARCH_FIXTURES) {
     const contents = fixtureJson(await makeSearchFixture(spec));
     files.push({ path: `${SEARCH_FIXTURES_DIR}/${spec.name}.json`, contents });
+  }
+  for (const spec of DEVICE_FIXTURES) {
+    const contents = deviceFixtureJson(await makeDeviceFixture(spec));
+    files.push({ path: `${DEVICE_FIXTURES_DIR}/${spec.name}.json`, contents });
+  }
+  const durham = fixtures.get('durham-tomorrow');
+  if (!durham) throw new Error('No durham-tomorrow.json');
+  for (const { name, contents } of payloadFiles(durham)) {
+    files.push({ path: `${PAYLOADS_DIR}/${name}`, contents });
   }
   const vectors = vectorFiles(fixtures);
   for (const { name, vectors: file } of vectors) {

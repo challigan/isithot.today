@@ -126,15 +126,35 @@ export const APP_COPY = {
   notifyPlaceMyLocation: 'Use my location',
   notifyFollows: 'Follows your location each time you open the app.',
   needsPlace: 'Choose a place for notifications: use your location or search for a town.',
+  // The page the place row opens on Settings' stack, by its title, and what it says when "Use my
+  // location" finds location access off for the app in iPhone Settings, or a fix that found
+  // nothing: with the place on screen to choose when the page offers it (a city's page or a
+  // searched place), else without (the phone's own place, or approximate location).
+  notifyPlaceTitle: 'Notification place',
+  notifyLocationDenied: 'Location access is off for this app in Settings.',
+  notifyLocationUnavailable: "Couldn't find your location. Try again, or use the place on screen.",
+  notifyLocationTryAgain: "Couldn't find your location. Try again.",
   sendTest: 'Send a test notification',
   testSent: 'Sent. It should arrive in a few seconds.',
   testLimited: 'You can send 3 test notifications an hour. Try again later.',
   testFailed: "Couldn't send a test notification. Try again later.",
+  // The test's other answers: the server's dry run, which sends nothing (section 8.8's second
+  // state), and its quiet hours, the 409's own words (server devices.ts, core `ALERTS.quiet`).
+  testDryRun: "Our server isn't sending notifications yet, so nothing was sent.",
+  testQuiet: 'Nothing is sent from 9pm to 7am at the place. Try again after 7am there.',
+  // The section's line when a change didn't reach the server and the app will send it again.
+  notifyNotSaved:
+    "Couldn't save your notification choices. The app will try again when you next open it.",
   notifyFooter:
     'These are forecasts, not official warnings. Times are at the place. Open the app at least ' +
     'every few months to keep notifications on.',
   notifyDenied: 'Notifications are off for this app in Settings.',
   openSettings: 'Open Settings',
+  // The Today card once its "Turn on" has turned the evening's notifications on, for the rest of
+  // the session, with no buttons.
+  cardOn:
+    "Done. You'll get a notification the evening before snow is likely here. You can change this " +
+    'in Settings.',
 
   // Settings' sections (10.4): the headings of the privacy, about and help rows.
   settingsPrivacy: 'Privacy',
@@ -154,7 +174,7 @@ export const APP_COPY = {
   // with nothing to send, in a zone it left unfinished, so the next run skips it: "some forecast
   // checks that found nothing to send"). Searches go to Open-Meteo, and the phone keeps the place,
   // units, recent and saved places and last answer, none of which leaves it but the place chosen
-  // (phase 8.1, notifications in the app, adds the notification choices to both this line and the
+  // (phase 8.2, notifications in the app, adds the notification choices to both this line and the
   // notice's). The ads line, in the free version only, says what Google may collect, and that the
   // phone keeps when the app last showed a full-screen ad (`Keys.App.lastInterstitial`), so it
   // shows one at most every 5 minutes (client `ADS.interstitialGapMinutes`), as the notice says:

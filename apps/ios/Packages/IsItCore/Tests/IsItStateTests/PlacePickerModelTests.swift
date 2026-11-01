@@ -58,6 +58,11 @@ final class HeldTransport: HTTPTransport {
     if state.read({ $0[index].cancelled }) { throw URLError(.cancelled) }
     return try reply(request)
   }
+
+  /// A devices call, held as a GET is.
+  func send(_ request: HTTPRequest) async throws -> HTTPResponse {
+    try await get(request)
+  }
 }
 
 /// The search box (iOS build spec, sections 4 and 10.3): a pause after typing, from 2 letters,

@@ -1,0 +1,28 @@
+{
+  "_fixture": {
+    "request": "PUT /api/v1/devices",
+    "body": {
+      "app": "snow",
+      "platform": "ios",
+      "env": "sandbox",
+      "token": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "place": {
+        "place": "leeds-gb"
+      },
+      "units": "c",
+      "alerts": {
+        "snow": {
+          "evening": true,
+          "morning": false,
+          "possible": false
+        }
+      },
+      "appVersion": "1.0 (42)"
+    },
+    "now": "2026-12-01T09:05:00.000Z",
+    "note": "put-leeds’s PUT answered by Netlify’s rate limit, before the handler: 429 rate_limited, with a minute in Retry-After. A test send gets the same reply."
+  },
+  "status": 429,
+  "retryAfter": "60",
+  "text": "{\"error\":{\"code\":\"rate_limited\",\"message\":\"Too many requests. Try again in a minute.\"}}"
+}

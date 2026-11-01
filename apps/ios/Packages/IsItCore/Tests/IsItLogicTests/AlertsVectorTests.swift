@@ -8,6 +8,11 @@ extension VectorPort {
   /// `alerts.json`: client `alertPlaceAllowed`, `registrationBody`, `fingerprint` and
   /// `alertAction`, ported as `AlertSync.placeAllowed`, `.body`, `.fingerprint` and `.action`.
   /// A body is decoded from the client's JSON and compared whole; a fingerprint byte for byte.
+  /// Then the place and the switches the app keeps (`firstAlertPlace`, `followLocation`,
+  /// `setAlert`, as `AlertSync.firstPlace`, `.following` and `.setting`) and what the server's
+  /// replies mean (`syncReply`, `testOutcome`, as `AlertSync.syncReply` and `.testOutcome`, the
+  /// reply's text as the bytes a transport hands over), each output decoded from the client's
+  /// JSON.
   static let alerts = VectorPort { file in
     struct Place: Decodable, Sendable {
       let target: Target?
@@ -71,6 +76,49 @@ extension VectorPort {
         appVersion: $0.appVersion
       )
     }
+
+    struct First: Decodable, Sendable {
+      let onScreen: Target
+      let name: String?
+    }
+    try file.compare("firstAlertPlace", input: First.self, output: AlertPlace?.self) {
+      AlertSync.firstPlace(onScreen: $0.onScreen, name: $0.name)
+    }
+
+    struct Fix: Decodable, Sendable {
+      let place: AlertPlace?
+      let fix: Target
+    }
+    // The client gives the place itself back when nothing changes; the port gives nil.
+    try file.compare("followLocation", input: Fix.self, output: AlertPlace?.self) {
+      AlertSync.following($0.place, fix: $0.fix) ?? $0.place
+    }
+
+    struct Setting: Decodable, Sendable {
+      let prefs: AlertPrefs
+      let which: AlertSwitch
+      let on: Bool
+    }
+    try file.compare("setAlert", input: Setting.self, output: AlertPrefs.self) {
+      AlertSync.setting($0.prefs, $0.which, on: $0.on)
+    }
+
+    struct Reply: Decodable, Sendable {
+      let status: Int
+      let text: String
+      let retryAfter: String?
+    }
+    try file.compare("syncReply", input: Reply.self, output: AlertSync.SyncReply.self) {
+      AlertSync.syncReply(status: $0.status, body: Data($0.text.utf8), retryAfter: $0.retryAfter)
+    }
+
+    struct TestReply: Decodable, Sendable {
+      let status: Int
+      let text: String
+    }
+    try file.compare("testOutcome", input: TestReply.self, output: AlertSync.TestOutcome.self) {
+      AlertSync.testOutcome(status: $0.status, body: Data($0.text.utf8))
+    }
   }
 }
 
@@ -103,5 +151,16 @@ struct AlertSyncTests {
     let read = try JSONDecoder().decode(RegistrationBody.self, from: JSONEncoder().encode(body))
     #expect(read == body)
     #expect(AlertSync.fingerprint(read) == AlertSync.fingerprint(body))
+  }
+
+  @Test("a DELETE's and a test's body is the app and the token, and reads back as itself")
+  func identity() throws {
+    let identity = DeviceIdentity(token: "a1b2")
+    #expect(identity.app == .snow)
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = .sortedKeys
+    let json = try encoder.encode(identity)
+    #expect(String(decoding: json, as: UTF8.self) == #"{"app":"snow","token":"a1b2"}"#)
+    #expect(try JSONDecoder().decode(DeviceIdentity.self, from: json) == identity)
   }
 }

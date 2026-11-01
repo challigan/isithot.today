@@ -57,8 +57,13 @@ enum PortedVectors {
     // client widgetEntries
     PortedVector("widget", by: "3.4: WidgetPlanner.entries", port: .widget),
 
-    // client alertPlaceAllowed, registrationBody, fingerprint, alertAction
-    PortedVector("alerts", by: "3.4: AlertSync.action, .body, .fingerprint", port: .alerts),
+    // client alertPlaceAllowed, registrationBody, fingerprint, alertAction; and (8.1)
+    // firstAlertPlace, followLocation, setAlert, syncReply, testOutcome
+    PortedVector(
+      "alerts",
+      by: "3.4: AlertSync.action, .body, .fingerprint; 8.1: AlertSync.firstPlace, .following, "
+        + ".setting, .syncReply, .testOutcome",
+      port: .alerts),
 
     // client parseDeepLink, notificationRoute
     PortedVector("links", by: "3.4: DeepLink.parse, .route(payload:)", port: .links),

@@ -26,6 +26,8 @@ import {
   dayUntil,
   deviceTarget,
   fingerprint,
+  firstAlertPlace,
+  followLocation,
   freshQuery,
   hold,
   hourUntil,
@@ -43,9 +45,12 @@ import {
   searchInput,
   searchQuery,
   searchTarget,
+  setAlert,
   shownRecent,
+  syncReply,
   targetFromQuery,
   targetKey,
+  testOutcome,
   todayQuery,
   unsavePlace,
   updatedLine,
@@ -119,6 +124,11 @@ const replay: Record<string, (i: In) => unknown> = {
   registrationBody: (i) => registrationBody(i),
   fingerprint: (i) => fingerprint(i.body),
   alertAction: (i) => alertAction(i),
+  firstAlertPlace: (i) => firstAlertPlace(i.onScreen, i.name),
+  followLocation: (i) => followLocation(i.place, i.fix),
+  setAlert: (i) => setAlert(i.prefs, i.which, i.on),
+  syncReply: (i) => syncReply(i.status, i.text, i.retryAfter),
+  testOutcome: (i) => testOutcome(i.status, i.text),
   parseDeepLink: (i) => parseDeepLink(i.url),
   notificationRoute: (i) => notificationRoute(i.payload, () => i.placeToday),
   addRecent: (i) => addRecent(i.list, i.target, i.name, i.max, i.detail),
@@ -595,6 +605,48 @@ describe('the cases cover what section 7.4 asks for', () => {
     );
     expect(new Set(unnamed.map((c) => (c.in as In).place.name))).toEqual(new Set(['', undefined]));
     expect(unnamed.every((c) => !('name' in (c.out as any).place))).toBe(true);
+    // The notification place: none for IP, chosen under a name or none, the phone's followed.
+    const first = casesFor('alerts', 'firstAlertPlace').map((c) => c.out as any);
+    expect(first).toContainEqual(null);
+    expect(new Set(first.filter(Boolean).map((p) => p.follows))).toEqual(new Set([true, false]));
+    expect(new Set(first.filter((p) => p && !p.follows).map((p) => p.name))).toEqual(
+      new Set(['', 'Leeds']),
+    );
+    // Followed to another cell, and left as it was for every other fix.
+    const follow = casesFor('alerts', 'followLocation');
+    const moved = follow.filter(
+      (c) => JSON.stringify(c.out) !== JSON.stringify((c.in as In).place),
+    );
+    expect(moved.map((c) => (c.out as any).target)).toEqual([
+      { kind: 'coords', source: 'device', lat: 53.85, lon: -1.55 },
+    ]);
+    expect(follow.length).toBeGreaterThan(moved.length);
+    // Every switch, both ways, from every state; "possible" alone refused.
+    const switches = casesFor('alerts', 'setAlert');
+    expect(switches).toHaveLength(6 * 3 * 2);
+    expect(
+      switches.some(
+        (c) =>
+          (c.in as In).which === 'possible' &&
+          (c.in as In).on &&
+          !(c.out as any).possible &&
+          !(c.out as any).evening,
+      ),
+    ).toBe(true);
+    // What every reply to a sync and to a test means.
+    expect(new Set(casesFor('alerts', 'syncReply').map((c) => (c.out as any).kind))).toEqual(
+      new Set(['stored', 'forgotten', 'retry', 'placeRefused', 'failed']),
+    );
+    expect(
+      new Set(
+        casesFor('alerts', 'syncReply')
+          .filter((c) => (c.out as any).kind === 'retry')
+          .map((c) => (c.out as any).afterSeconds),
+      ),
+    ).toEqual(new Set([42, 999999, 7, 50, 60]));
+    expect(new Set(casesFor('alerts', 'testOutcome').map((c) => c.out))).toEqual(
+      new Set(['sent', 'dryRun', 'limited', 'quiet', 'notRegistered', 'failed']),
+    );
   });
 
   it('links: every route, malformed payloads and past dates', () => {

@@ -7,11 +7,13 @@ import SwiftUI
 import UIKit
 
 /// The Settings sheet (iOS build spec, section 10.4), from the model: IsItLogic's presenters
-/// (`SettingsScreen`, `YourPrivacy`, `UpgradePage`) for the model's units and purchase, drawn by
-/// IsItUI's `SettingsView`, with the app's own services behind the actions: the units through
-/// `AppModel.setUnits(_:)`, the purchase through `PurchaseModel`, the pasteboard, the bundled
-/// notices and the bundle's version. HomeView presents it, under the Debug recorder as it does
-/// the picker.
+/// (`SettingsScreen`, `NotificationSettings`, `NotificationPlacePage`, `YourPrivacy`,
+/// `UpgradePage`) for the model's units, notifications and purchase, drawn by IsItUI's
+/// `SettingsView`, with the app's own services behind the actions: the units through
+/// `AppModel.setUnits(_:)`, the notifications through `NotificationsModel`, the purchase through
+/// `PurchaseModel`, the pasteboard, the bundled notices and the bundle's version. HomeView
+/// presents it, under the Debug recorder as it does the picker, so iOS Settings' pages and the
+/// Met Office's are recorded as every other link is.
 ///
 /// The upgrade card comes first: "Remove ads and add widgets", with StoreKit's price once it has
 /// given one, pushes the upgrade page onto Settings' own stack (no sheet over a sheet), or the
@@ -23,20 +25,33 @@ import UIKit
 /// form is required (`AdsModel.privacyChoices`), opens that form, and Your privacy points to it
 /// meanwhile. "Ads on" is the free version, as section 14.2 starts the ads only when not
 /// unlocked; the purchase sets `unlocked` the moment it is owned (`AppModel.purchaseChanged`),
-/// which hides both at once, and Report an ad with them. The notifications are phase 8.1's, so
-/// the data kept for them (with its delete button) doesn't show yet: that phase passes the last
-/// registration's lines.
+/// which hides both at once, and Report an ad with them.
+///
+/// Notifications (section 12.1) sit between the units and the upgrade card: the switches, the
+/// place, whose page this builds from the model in its body too, so the pushed page follows the
+/// model, and the test. "Use my location" and "Search" at approximate location ask the home
+/// screen for the picker, which closes Settings first. The permission is read again as
+/// Settings or the place page appears, and the test's result and the place page's problem go as
+/// Settings closes. What the server keeps for them, in Your privacy with its delete button, is
+/// phase 8.2's.
 struct SettingsSheet: View {
   let model: AppModel
   /// The free version's ads.
   let ads: AdsModel
   /// The purchase: the upgrade card and its page.
   let purchases: PurchaseModel
+  /// The notifications: their section and the place page.
+  let notifications: NotificationsModel
+
+  @Environment(\.openURL) private var openURL
 
   var body: some View {
     let model = model
     let ads = ads
     let purchases = purchases
+    let notifications = notifications
+    let state = notifications.state
+    let onScreen = model.onScreen
     let choices = !model.unlocked && ads.privacyChoices
     SettingsView(
       screen: SettingsScreen(
@@ -46,6 +61,8 @@ struct SettingsSheet: View {
         purchase: purchases.state,
         version: AppBundle.version
       ),
+      notifications: NotificationSettings(state, onScreen: onScreen),
+      notificationPlace: NotificationPlacePage(state, onScreen: onScreen),
       privacy: YourPrivacy(adsOn: !model.unlocked, privacyChoices: choices),
       upgrade: UpgradePage(unlocked: model.unlocked, purchase: purchases.state),
       actions: SettingsActions(
@@ -61,21 +78,67 @@ struct SettingsSheet: View {
         copy: { UIPasteboard.general.string = $0 },
         notice: AppBundle.notice,
         upgrade: .live(purchases),
-        privacyChoices: choices ? { Task { await ads.openPrivacyChoices() } } : nil
+        privacyChoices: choices ? { Task { await ads.openPrivacyChoices() } } : nil,
+        notifications: NotificationActions(
+          setSwitch: { which, on in
+            Task { await notifications.setSwitch(which, on: on, onScreen: model.onScreen) }
+          },
+          perform: perform,
+          appeared: { Task { await notifications.refreshPermission() } }
+        )
       )
     )
     .task { await purchases.loadProduct() }
-    .onDisappear { purchases.dismissResults() }
+    .onDisappear {
+      purchases.dismissResults()
+      notifications.dismissResults()
+    }
+  }
+
+  /// A row of Settings → Notifications or of its place page: the test; the picker, finding the
+  /// phone or searching; iOS Settings' page for the app's notifications, or for its location
+  /// access (through the environment's `openURL`, so a Debug build's recorder records both); a
+  /// place choice.
+  private func perform(_ action: SettingsScreen.NotificationAction) {
+    let notifications = notifications
+    switch action {
+    case .sendTest:
+      Task { await notifications.sendTest() }
+    case .useMyLocation:
+      notifications.requestPicker(locating: true)
+    case .search:
+      notifications.requestPicker(locating: false)
+    case .openNotificationSettings:
+      open(UIApplication.openNotificationSettingsURLString)
+    case .openLocationSettings:
+      open(UIApplication.openSettingsURLString)
+    case .choose(let choice):
+      Task { await notifications.choosePlace(choice) }
+    }
+  }
+
+  /// Opens one of iOS Settings' pages for the app.
+  private func open(_ text: String) {
+    if let url = URL(string: text) { openURL(url) }
   }
 }
 
-/// What the app's bundle holds that Settings shows: its version and build (Info.plist), and the
-/// notices it bundles (`Resources/Licences`).
+/// What the app's bundle holds that Settings and the notifications show or send: its version
+/// and build (Info.plist), the APNs environment its registrations name, and the notices it
+/// bundles (`Resources/Licences`).
 enum AppBundle {
   static let version = AppVersion(
     version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
     build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
   )
+
+  /// The Info.plist's `IsItPushEnvironment` (`PUSH_ENV` in Snow.xcconfig: the sandbox in Debug,
+  /// production in Release), which a registration names so the server sends through the APNs
+  /// environment the token belongs to; production when absent or unreadable, as an App Store
+  /// build's is.
+  static let pushEnvironment: RegistrationBody.Env =
+    (Bundle.main.object(forInfoDictionaryKey: "IsItPushEnvironment") as? String)
+    .flatMap(RegistrationBody.Env.init(rawValue:)) ?? .production
 
   /// A bundled notice's full text, by its resource name; nil when it isn't bundled.
   static func notice(_ file: String) -> String? {

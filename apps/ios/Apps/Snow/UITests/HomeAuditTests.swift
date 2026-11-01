@@ -15,14 +15,19 @@ import XCTest
 /// is put back before the next scroll (`restore`). The upgrade row (spec 10.2, item 6), which
 /// StoreKit's stand-in brings only with a product for sale, is audited the same way, on
 /// leeds-dry's middle page launched with one (`-purchase bought`), at Large and at AX3, where its
-/// words wrap; no other launch here has the row.
+/// words wrap; no other launch here has the row. So is the notifications card (item 5), which
+/// `-uitest` hides from every other launch, so that their screens are as they were: shown
+/// (`-alertCard shown`) on leeds-dry's middle page with Leeds kept as the place (`-place`), the
+/// card for the place on screen, and on picker-first-launch's, on approximate location, the card
+/// that asks for a place.
 ///
 /// The attachments are named so that the contact sheet, which tiles them in their names' order
 /// (`ci/contact-sheet.mjs`), shows them fixture by fixture, Large then AX3, each page in the
 /// switcher's order, top to bottom: `home-<fixture>-1-large-1-now-01`, `…-1-large-1-now-02`, …,
 /// `…-1-large-2-today-01` (or `-2-tomorrow-01`), …, `…-1-large-3-this-week-01`, …, then
 /// `home-<fixture>-2-ax3-1-now-01` and so on; the row's after leeds-dry's own, as
-/// `home-leeds-dry-upgrade-1-large-2-today-01` and so on.
+/// `home-leeds-dry-upgrade-1-large-2-today-01` and so on, and the cards' as
+/// `home-leeds-dry-card-…` and `home-first-launch-card-…`.
 ///
 /// Every issue an audit finds fails the test, but for the exceptions in `exceptions`, each with
 /// why it isn't a fault to fix in the app. An element of the page is judged on a screenful that
@@ -76,6 +81,26 @@ final class HomeAuditTests: XCTestCase {
     try auditTheUpgradeRow(at: .ax3)
   }
 
+  @MainActor
+  func testLeedsDryWithTheNotificationCardAtLarge() throws {
+    try auditTheChosenCard(at: .large)
+  }
+
+  @MainActor
+  func testLeedsDryWithTheNotificationCardAtAX3() throws {
+    try auditTheChosenCard(at: .ax3)
+  }
+
+  @MainActor
+  func testFirstLaunchWithTheNotificationCardAtLarge() throws {
+    try auditTheApproximateCard(at: .large)
+  }
+
+  @MainActor
+  func testFirstLaunchWithTheNotificationCardAtAX3() throws {
+    try auditTheApproximateCard(at: .ax3)
+  }
+
   /// leeds-dry's middle page, the one page with the upgrade row, launched with a product for sale
   /// (`-purchase bought`, StoreKit's stand-in), so the row sits above its footer; attached as
   /// `home-leeds-dry-upgrade-…`. The row comes once the stand-in has answered, which the audit
@@ -85,6 +110,29 @@ final class HomeAuditTests: XCTestCase {
     try audit(
       "leeds-dry", at: size, extra: ["-purchase", "bought"], pages: ["today"],
       as: "leeds-dry-upgrade", showing: "upgrade-row")
+  }
+
+  /// leeds-dry's middle page with the notifications card (`-alertCard shown`) for Leeds, kept as
+  /// the place (`-place`), so the card offers "Turn on" and "Not now"; attached as
+  /// `home-leeds-dry-card-…`. The card comes once the notifications' state is read, which the
+  /// audit waits for.
+  @MainActor
+  private func auditTheChosenCard(at size: TextSize) throws {
+    try audit(
+      "leeds-dry", at: size, extra: ["-alertCard", "shown", "-place", "place=leeds-gb"],
+      pages: ["today"], as: "leeds-dry-card", showing: "notification-card")
+  }
+
+  /// picker-first-launch's middle page, the first launch on approximate location (the
+  /// ip-first-launch fixture at 12:05), with the card that asks for a place: "Use my location",
+  /// "Search" and "Not now"; attached as `home-first-launch-card-…`. The card that says
+  /// notifications are off and the one that says they are on are the same view with other words
+  /// and fewer buttons: NotificationsTests attaches the one that says they are on.
+  @MainActor
+  private func auditTheApproximateCard(at size: TextSize) throws {
+    try audit(
+      "picker-first-launch", at: size, extra: ["-alertCard", "shown"], pages: ["today"],
+      as: "first-launch-card", showing: "notification-card")
   }
 
   /// An issue the audit raises that isn't a fault to fix in the app, and why: which kind, and

@@ -1,0 +1,28 @@
+{
+  "_fixture": {
+    "request": "PUT /api/v1/devices",
+    "body": {
+      "app": "snow",
+      "platform": "ios",
+      "env": "sandbox",
+      "token": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "place": {
+        "place": "leeds-gb"
+      },
+      "units": "c",
+      "alerts": {
+        "snow": {
+          "evening": true,
+          "morning": false,
+          "possible": false
+        }
+      },
+      "appVersion": "1.0 (42)"
+    },
+    "now": "2026-12-01T09:05:00.000Z",
+    "note": "The first registration, for Leeds, a city page, with the evening switched on, at leeds-dry’s moment (9:05am on 1 December): the ID Your privacy shows, the place’s name, zone and query, and the switches the server holds."
+  },
+  "status": 200,
+  "retryAfter": null,
+  "text": "{\"id\":\"b8465956ef925aabc7c87a9e561f462d\",\"place\":{\"name\":\"Leeds\",\"timezone\":\"Europe/London\",\"query\":\"place=leeds-gb\"},\"alerts\":{\"snow\":{\"evening\":true,\"morning\":false,\"possible\":false}},\"seenAt\":\"2026-12-01T09:05:00.000Z\"}"
+}

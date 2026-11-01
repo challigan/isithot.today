@@ -5,8 +5,8 @@
 // IsItCore is in Swift 6 mode.
 //
 // The Google SDKs are pinned exactly, with the versions committed in apps/ios/Package.resolved.
-// Only IsItAds imports them, and the widget extension never links IsItAds, IsItLocation or
-// IsItPurchases.
+// Only IsItAds imports them, and the widget extension never links IsItAds, IsItLocation,
+// IsItPurchases or IsItNotifications.
 
 import PackageDescription
 
@@ -20,6 +20,7 @@ let package = Package(
     .library(name: "IsItLocation", targets: ["IsItLocation"]),
     .library(name: "IsItAds", targets: ["IsItAds"]),
     .library(name: "IsItPurchases", targets: ["IsItPurchases"]),
+    .library(name: "IsItNotifications", targets: ["IsItNotifications"]),
     .library(name: "IsItUI", targets: ["IsItUI"]),
     .library(name: "IsItWidgetUI", targets: ["IsItWidgetUI"]),
     .library(name: "SnowKit", targets: ["SnowKit"]),
@@ -80,6 +81,20 @@ let package = Package(
       name: "IsItPurchases",
       dependencies: [
         "IsItServices",
+        .product(name: "IsItLogic", package: "IsItCore"),
+        .product(name: "IsItState", package: "IsItCore"),
+      ],
+      swiftSettings: swift5
+    ),
+    // The system's notifications behind NotificationsModel's `NotificationPlatform` (IsItState):
+    // UserNotifications' permission, UIKit's registration for a push token, the centre's
+    // delegate, and the app's own defaults for alerts.v1, alertSync.v1 and ui.alertCard. Only the
+    // app links it: the widget links IsItServices, and `registerForRemoteNotifications` is
+    // unavailable in an extension.
+    .target(
+      name: "IsItNotifications",
+      dependencies: [
+        .product(name: "IsItModel", package: "IsItCore"),
         .product(name: "IsItLogic", package: "IsItCore"),
         .product(name: "IsItState", package: "IsItCore"),
       ],

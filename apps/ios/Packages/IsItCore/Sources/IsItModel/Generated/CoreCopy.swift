@@ -19,6 +19,7 @@ public enum CoreCopy {
   public static let searchNoResults = "No places found."
   public static let searchTooShort = "Type at least 2 letters."
   public static let close = "Close"
+  public static let yourLocation = "Your location"
   public static let outboundIntro = "Want the full picture? See the forecast on"
   public static let nearby = "Nearby:"
   public static let forecastCredit = "Weather data by Open-Meteo.com (CC BY 4.0), modified"

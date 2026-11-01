@@ -14,6 +14,7 @@ struct CoreCopyTests {
     #expect(CoreCopy.retry == "Retry")
     #expect(CoreCopy.approximate == "Using approximate location.")
     #expect(CoreCopy.useMyLocation == "Use my location")
+    #expect(CoreCopy.yourLocation == "Your location")
     #expect(CoreCopy.searchPlaceholder == "Town or city")
     #expect(CoreCopy.searchTooShort == "Type at least 2 letters.")
     #expect(CoreCopy.outboundIntro == "Want the full picture? See the forecast on")
@@ -132,6 +133,24 @@ struct AppCopyTests {
     #expect(
       AppCopy.upgradeUnavailable == "The purchase isn't available right now. Try again later.")
     #expect(AppCopy.purchasesOff == "In-app purchases are turned off on this iPhone.")
+  }
+
+  @Test("the notifications' words (phase 8.1)")
+  func notifications() {
+    #expect(AppCopy.notifyPlaceTitle == "Notification place")
+    #expect(AppCopy.notifyLocationDenied == "Location access is off for this app in Settings.")
+    #expect(
+      AppCopy.notifyLocationUnavailable
+        == "Couldn't find your location. Try again, or use the place on screen.")
+    #expect(
+      AppCopy.testDryRun == "Our server isn't sending notifications yet, so nothing was sent.")
+    #expect(
+      AppCopy.testQuiet
+        == "Nothing is sent from 9pm to 7am at the place. Try again after 7am there.")
+    #expect(
+      AppCopy.notifyNotSaved
+        == "Couldn't save your notification choices. The app will try again when you next open it.")
+    #expect(AppCopy.cardOn.hasPrefix("Done. You'll get a notification the evening before snow"))
   }
 
   @Test("strings with slots are functions that fill them, the text around kept as it is")

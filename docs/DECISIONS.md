@@ -1102,7 +1102,10 @@ How the apps register for notifications (iOS build spec, sections 8.2 and 8.3): 
   never send is data kept for nothing.
 - **One write per id a minute** (429 `rate_limited`, with `Retry-After`), checked against the
   stored record's `updatedAt`, so it needs no key of its own. A delete is never refused. Two
-  writes in the same instant both pass; Netlify's rule bounds those.
+  writes in the same instant both pass; Netlify's rule bounds those. (Since phase 8.1 the app's
+  sync deletes once evening and morning are both off, and tries a refused write once more at its
+  `Retry-After`, or after 60 seconds without one: "The iPhone app's notifications (phases 8.1
+  and 8.2)", decision 13.)
 - **Keys and moves.** Only these handlers write `reg/` and `ids/`, and each write replaces the
   value whole.
   - A new registration writes its ids key first, then the record, so a DELETE after a failure
@@ -1129,7 +1132,9 @@ How the apps register for notifications (iOS build spec, sections 8.2 and 8.3): 
     claimed, so a test pressed at night costs none of the three. Section 8.6 has the sender never
     send in those hours, and one rule for every push keeps that true. The cost is that App Review,
     pressing the button at night at the place it chose, sees a failure, so the review notes say
-    so; the app shows `testFailed` until it has words of its own for this code.
+    so. Since phase 8.1 the app has words of its own for this code, `testQuiet`: "Nothing is sent
+    from 9pm to 7am at the place. Try again after 7am there." ("The iPhone app's notifications
+    (phases 8.1 and 8.2)", decision 14).
   - Priority 10, and Apple stops trying after 15 minutes: a test that arrived hours later would
     only confuse, and a real evening notification's 21:00 would have passed for a late test.
   - The real notification keeps its collapse id (`snow-evening-<date>`), so the scheduled one
@@ -2053,7 +2058,10 @@ Linux; IsItKit only fills its protocols. `apps/ios/README.md` lists the types.
   the widget reloads, the later phases' steps (`AppHooks`, with `NoHooks` doing nothing:
   StoreKit in phase 7, the location fix in phase 6, the ads and notifications in phase 8, and
   routes in phases 6 and 8) and the jitter's random source. Every protocol is `Sendable`, so the
-  main-actor model can call them across isolation in Swift 6 mode.
+  main-actor model can call them across isolation in Swift 6 mode. (Phase 8.1 filled step 6,
+  `syncAlerts`, which hands the place on screen and its units to `NotificationsModel` and returns
+  at once, and the route to Settings → Notifications; a notification's `.place` route is AppModel's
+  own, on screen before the hooks hear it: "The iPhone app's notifications (phases 8.1 and 8.2)".)
 - **The launch** (`init(environment:)`, then `launch()`): step 1 in `init`, so the saved answer
   is on the first frame. It paints when its key is the target's, byte for byte as the website
   compares keys, and `HourPicker.pick` is non-nil (nil from `usableUntil` on), and, beyond the
@@ -2741,7 +2749,9 @@ approximate line's "Use my location", with search, "Use my location" and the rec
   the answer saved for the widgets and the widgets reloaded), then phase 8's `syncAlerts` hook is
   called, so a notification place that follows the device's location can follow it; `AlertSync`
   decides, and a chosen notification place never follows browsing (section 12.1). The sheet
-  closes as the place is chosen, not when its answer arrives.
+  closes as the place is chosen, not when its answer arrives. (Since phase 8.1 the hook hands the
+  place to `NotificationsModel`, which moves a place that follows the phone with
+  `AlertSync.following`: "The iPhone app's notifications (phases 8.1 and 8.2)".)
 - **Recent places.** A search result or a recent place joins the list at once, under its name;
   the device's place has no name of its own, so it joins under its answer's name when the answer
   arrives (`RecentPlace`'s rule: "a device location's comes from its answer"), and not at all if
@@ -2899,7 +2909,10 @@ and licences, the static lines of Your privacy, and Report an ad (sections 10.4,
   and `SettingsActions` the form and the delete button, both nil. (Since phase 8.3 the app passes
   Google's answer and the form: "Ads in the iPhone app: three placements". Since phase 7.1 the
   upgrade row and Restore purchase are in, as one card with no heading straight after the units,
-  until phase 8.1's Notifications come between: "The purchase in the iPhone app (phase 7.1)".)
+  until phase 8.1's Notifications come between: "The purchase in the iPhone app (phase 7.1)".
+  Since phases 8.1 and 8.2 Notifications sits after the units, before the upgrade card, and Your
+  privacy shows what the server keeps for them first, with the delete: "The iPhone app's
+  notifications (phases 8.1 and 8.2)".)
 - **"Ads on" is the free version** (`!unlocked`), as section 14.2 starts the ads only when not
   unlocked: Report an ad shows in the free version (10.7) and Your privacy's ads line with it,
   though phase 6 builds no banner yet (phase 8.3's ads follow the same `!unlocked`). Bought,
@@ -3078,7 +3091,9 @@ it.
   places and last forecast on the iPhone (still five lines, as section 10.6 has them).
   `credits.test.ts` holds each to the notice's words; "Open-Meteo" joins the sentence-case test's
   names. The 90 days are written out in the copy, and since main (PR #30) was merged in, the test
-  checks them against `ALERTS.staleAfterDays` as well as against the notice.
+  checks them against `ALERTS.staleAfterDays` as well as against the notice. (Since phase 8.2 the
+  forecast line names "your notification choices" too, before the last forecast, as the notice
+  does: "The iPhone app's notifications (phases 8.1 and 8.2)".)
 - **The literal guard catches a word however a view is given it.** It missed a lowercase word
   passed to `Text(verbatim:)` (how every view here draws text) or to an accessibility label,
   a unit beside an interpolation (`"\(depth) cm"`, `"\(snowy) of \(total)"`), and a capitalised
@@ -3087,7 +3102,8 @@ it.
   `verbatim`, `prompt`, `title` or `message`, when it is a view's or label modifier's unlabelled
   argument, or UIKit's announcement's; and anywhere, one word set beside other text with a space
   is prose. Only a lowercase word or a symbol alone outside any view still passes, as a key's
-  shape. The shipped Swift passed unchanged: no literal is given to `Text(verbatim:)`.
+  shape. The shipped Swift passed unchanged: no literal is given to `Text(verbatim:)`. (Phase
+  8.2's ID line is `AppCopy.keptID`, "ID {id}", so the Swift holds no such literal.)
 - **"Copied." is announced with UIKit.** `MailFallbackView` posted iOS 17's
   `AccessibilityNotification.Announcement`, which the Accessibility framework declares and IsItUI
   didn't import; whether SwiftUI re-exports it was never shown. It now posts
@@ -3281,6 +3297,9 @@ What the review of phases 5 and 6 put together found, and what changed for it.
   that scale at accessibility sizes. Drawing the switcher the same way and dropping the exception
   is Carl's call, below. `SettingsTests` finds the units by their group (`app.find("units")`, not
   `segmentedControls["units"]`), and now also checks the other choice isn't selected each time.
+  (Since phase 8.1 the notification switches are the second control Settings draws itself,
+  `SheetSwitchStyle`, a SwiftUI `Toggle` in the content surface's own colours: "The iPhone app's
+  notifications (phases 8.1 and 8.2)", "The app's own switch".)
 - **VoiceOver hears nothing from under a sheet.** The pages left the accessibility tree under a
   sheet, but their announcements were still posted: at 6pm with Settings open on Durham's Today,
   the minute's tick turned the middle page to Tomorrow and VoiceOver spoke "Durham. Will it snow
@@ -4588,6 +4607,13 @@ and element detection are never allowed, and no other check changes.
   `pill` on an ink fill are not modelled, nor Increase Contrast's heavier lines and absent glow
   (the UI tests run at standard settings): Apple's check has not failed them, and should it, they
   fail.
+- **Since phase 8.1, switches too.** A switch or toggle with a label is a text element to the
+  proof (`MeasuredContrast.isText`), its capsule a mark it draws (`drawsMarks`), so Settings'
+  notification switches, which the app draws in the content surface's own colours
+  (`SheetSwitchStyle`: on, the ink; off, a hairline on the card round the wash; a card knob), are
+  judged by the same pixel proof, unchanged: a switch in any colour the surface hasn't, UIKit's
+  green or grey track among them, is refused. The Linux harness proves a synthetic switch row, on
+  and off, and refuses those mutants ("The iPhone app's notifications (phases 8.1 and 8.2)").
 
 **The evidence, in the Linux harness** (session scratchpad, look-uicheck: the UI test files
 type-checked against XCUITest stubs, and checks against fakes and the run's pixels).
@@ -5679,8 +5705,8 @@ body and its footer, only on a page with an answer (its footer shows), as the bo
 beside an ad: the box is after the footer's links (10.2 item 6: "There is no nag on the banner").
 It is a wide secondary pill in the page's ink on its opaque chip fill, as Retry is, so it wraps
 safely at every text size. IsItUI gives each page a slot there (`ForecastPageView`'s `cards`,
-`HomePager`'s `pageCards`), which phase 8.1's notifications card shares, above the row. Nothing
-superseded.
+`HomePager`'s `pageCards`), which phase 8.1's notifications card shares, above the row (since
+8.1, as planned). Nothing superseded.
 
 **Settings pushes, home presents.** From Settings the page is pushed on Settings' own stack (no
 sheet over a sheet). The home row and `willitsnow://upgrade` open it as a sheet of its own, with
@@ -5826,7 +5852,7 @@ check and change and follows with `reloadAllTimelines()` whenever what it says c
 `willitsnow://upgrade` already opens the sheet, so the locked widget needs only its `widgetURL`.
 
 **The Settings card.** The upgrade and Restore purchase are one card with no heading, as Report
-an ad's is, first after the units (phase 8.1's Notifications will come between). Each row has an
+an ad's is, after the units (since phase 8.1 the Notifications card comes between). Each row has an
 icon of its own (`upgrade` sparkles, `thanks` a seal, `restore` an arrow round), and a row gains
 `detail` (a line beneath the title) and `busy` (no tap meanwhile). The thanks is a `.note`, one
 element that takes no tap.
@@ -6020,6 +6046,457 @@ purchase mid-session removes the banner view": `AdsModel.stop()`); 17.2 (`Upgrad
 17.4.8 ("The banner goes": the band, the boxes and the full-screen ad); 20.3's review note ("no
 banner ad" is now "no ads in the app"; docs/SETUP.md has the note, and 9.2 writes it into the
 listing's files); Appendix A (the scheme's test plans gain StoreKit).
+
+## The iPhone app's notifications (phases 8.1 and 8.2)
+
+Carl's word on phases 7 and 8 was "Whatever you think is best boss.", so 8.1 and 8.2 decide every
+open point of notifications in the app here. His rules hold throughout: snow only, and nothing in a
+notification, the card, Settings, Your privacy, a fixture the app shows or the review note names
+another app, website or weather type; British English in sentence case; "notification", never
+"alert", "warning" or "danger", in anything a user reads (the footer's "not official warnings" and
+core's "Met Office warnings" link apart); every Swift string from generated copy; no device token
+in a log line, attachment, readout or fixture but a fixture's own; and notifications free for
+everyone (spec 10.5). The server side was merged before ("Notifications: the devices endpoints"
+and "Notifications: the run", above); the app changes no server source, only its contract test.
+`apps/ios/README.md` ("Phases 8.1 and 8.2: notifications") lists the types; this records why they
+are as they are, and where the build differs from the design it was built from.
+
+**The decisions** (the design's numbering, which the code's comments and tests follow):
+
+1. **One pull request, two commits.** "Notifications in the app (phases 8.1 and 8.2)", with 8.2's
+   parts (Your privacy's live data, "Turn off notifications and delete my data", the privacy line)
+   in a commit of their own so a reviewer can read them apart. C18 on Wed 4 Nov needs the ID that
+   8.2's Your privacy shows, on the same TestFlight build that first registers; 8.2's UI checks
+   sit inside 8.1's tests, so a second PR would rerun the whole UI plan for a handful of
+   assertions.
+2. **Where the code lives.** The rules TypeScript first (client `alerts.ts`, `alerts.json`), ported
+   to IsItLogic. The state in a new `NotificationsModel` (IsItState, tested on Linux) behind
+   `NotificationPlatform` and `NotificationStore`. UserNotifications, UIKit's registration for a
+   token, the centre's delegate and the app's defaults for the three keys in a new app-only IsItKit
+   module, IsItNotifications, as IsItLocation and IsItPurchases are: IsItServices is linked by the
+   widget, where `registerForRemoteNotifications` is unavailable. The words are `AppCopy`'s, not
+   SnowKit's. This supersedes spec 3 and 9.3.
+3. **Not in AppModel.** Spec 9.4's `AppModel.alertPrefs` and `alertPlace` are
+   `NotificationsModel`'s. AppModel keeps the merged hook `syncAlerts(target:units:)` and every
+   order test stands; LiveHooks hands it to the model, which returns at once (the sync runs in a
+   task), as the ads' start does, so a pending route never waits on a PUT.
+4. **Routes.** A cold-start tap is held in `AppModel.route` until the launch has finished, as links
+   already were (12.3's "until the first paint" is superseded). `follow(_:)` puts a `.place` route
+   on screen itself: another place is chosen as the picker chooses one (`choose`: `place.v1`, the
+   recents, a fetch, the sync), the place on screen only gets its view, and a route with no view
+   opens on the place's view for the time of day. A route that comes while the app is still away
+   keeps its view over the return's reset to the view for the time of day. That guard, for `.view`
+   routes with its test, is the commit both tracks start from (above, "The iPhone app's data and
+   launch", what phases 7.2 and 8.1 share), so the widget's taps have it whichever PR merges first;
+   8.1 extends the same flag to `.place` routes.
+5. **`placeNow`.** A pure `NotificationRouter.route(json:now:zones:)` (IsItLogic) over
+   `DeepLink.route(payload:placeNow:)`, with each known place's time zone by `Target.key`: the
+   registration's (`DeviceResponse.place`), then the answer on screen's. A place in neither is
+   taken as current, as the client rule says.
+6. **The centre's delegate** (`NotificationDelegate`, IsItNotifications) is a non-isolated
+   `NSObject` with the completion-handler witnesses of `willPresent`, `didReceive` and
+   `openSettingsFor`, never the async forms and never `@preconcurrency`. Each copies `userInfo` out
+   as JSON `Data` (`Sendable`), then in one `Task { @MainActor in … }` posts it and calls the
+   system's completion handler there. 12.3's "passes `userInfo` unchanged" becomes "passes
+   `userInfo`'s JSON". Why, below ("The delegate's shape").
+7. **The delegate early enough, and the hand-off.** `AppDelegate`, through
+   `@UIApplicationDelegateAdaptor` (the app's only one), sets the centre's delegate in
+   `application(_:willFinishLaunchingWithOptions:)`, as Apple asks ("before your app finishes
+   launching"), and owns it, since the centre holds it weakly. It and the two token callbacks post
+   to `NotificationInbox.shared` (IsItState, main actor), which keeps every event, in order, until
+   `WillItSnowApp.init` attaches the handler, so the order of `App.init` and the adaptor never
+   matters. The inbox delivers one event at a time, so a token and a tap posted together arrive in
+   order.
+8. **Permission** is asked only at the first switch turned on, in Settings or by the card's "Turn
+   on", with `[.alert, .sound, .providesAppNotificationSettings]`; the third adds iOS Settings' link
+   to the app's own notification settings, which opens Settings → Notifications. It is read again
+   at the start, as Settings or the place page appears, and at every `.active`. Found denied: every
+   switch turns off and the server's record is deleted (12.2). Found "not determined" with a switch
+   on or a registration kept: the switches turn off and the registration is forgotten on the phone
+   only. `ephemeral` maps to authorised, and so does `@unknown default`. Why, below ("Permission,
+   and the restored backup").
+9. **The token.** `registerForRemoteNotifications()` at the start, at every `.active` and after the
+   prompt is allowed, while a switch is on and the permission allows. "No token yet" is a resting
+   state, never a spinner. The token is this launch's alone: `alertSync.v1` keeps the one the last
+   PUT carried only to name the server's record, so a DELETE and a test use it without waiting for
+   a fresh one, and it is never sent as a new registration's. A fresh token that differs is simply
+   PUT, and the old record is not deleted: on a phone restored from another's backup the old token
+   is that phone's, still in use. Apple's 410, or the server's 90 days, clean it up.
+10. **The three keys.** `alerts.v1` is `{ v: 1, prefs, place? }`, the place
+    `{ follows: false, target, name }` or `{ follows: true, target }`. `alertSync.v1` is
+    `{ v: 1, fingerprint, at, token, env, units, response }`, the units from what was sent, as the
+    PUT's answer has none. `ui.alertCard` is a Bool. JSON with ISO dates (`ApiJSON`), `at` kept to
+    whole milliseconds so the record round trips equal. Another version, or anything unreadable,
+    is "off, nothing kept", and so is an `alerts.v1` whose place is approximate location, which is
+    never a notification place. Only `NotificationsModel` writes them. This supersedes 9.6's and
+    12.2's `{ fingerprint, at, response }`.
+11. **The notification place** is chosen (fixed, never following browsing, so checking a holiday
+    town never moves it) or follows the phone's 0.05° cell, which moves with a device place chosen
+    on screen and with a fix of its own each time the app is opened, only while location is already
+    allowed, never asking. First turned on, it is the place on screen, or the phone's location,
+    followed, when the screen shows the phone's place; approximate location is never a place (the
+    gate). The card's "Turn on" always takes the place on screen ("here"). "Use my location" on the
+    place page asks for location only at that tap; a second tap while it is finding the phone does
+    nothing.
+12. **"Also when snow is possible" alone.** The merged rule wins: evening and morning both off is
+    off. "Possible" shows only while one of them is on, can't be turned on alone, and goes off with
+    the second of them (client `setAlert`, the vectors), so `alerts.v1` says what the server holds.
+    It is one item in the presenter and one kept line, so the cut list's 23.3.4 is one small change.
+13. **One write a minute, and failures.** Syncs are single-flight and coalesced: a change made while
+    a request is out is sent once it is answered, all such changes together. A 429 schedules one
+    retry at `Retry-After`, 1 to 999999 seconds written as digits, or 60 seconds without
+    (`CLIENT.retryAfterMs`); a 204 to a PUT clears the registration; 400 `bad_location` shows the
+    server's own words; any other failure that leaves a change unsaved shows "Couldn't save your
+    notification choices. The app will try again when you next open it."; a failed heartbeat says
+    nothing. A PUT waits while the units aren't known yet (the first answer brings them).
+14. **The test button** shows while a switch is on, and sends one test at a time; without a
+    registration it syncs first, and still none is a failure, with no request. 202 sent: "Sent. It
+    should arrive in a few seconds."; 202 dry run: "Our server isn't sending notifications yet, so
+    nothing was sent."; 429 `test_limited`: "You can send 3 test notifications an hour. Try again
+    later." (its 3 held to `ALERTS.testPerHour`); 409 `quiet_hours`: "Nothing is sent from 9pm to
+    7am at the place. Try again after 7am there." (held to `ALERTS.quiet` and to the server's
+    words); 404 `not_registered`: the registration is forgotten, if it is still the one tested, and
+    sent again, and "Couldn't send a test notification. Try again later." shows; Netlify's own 429
+    and everything else the same failure. This supersedes the devices endpoints' "`testFailed` until
+    it has words of its own".
+15. **The Settings section's look.** A card under "Notifications", between the units and the upgrade
+    card, in Settings' own parts (`SheetSection`, `SheetCard`, `RowLabel`): each switch a SwiftUI
+    `Toggle` drawn by the app's own `ToggleStyle` (`SheetSwitchStyle`), not UIKit's switch, as
+    Settings already draws its own units control; then the place, a row with its value that pushes
+    "Notification place" on Settings' stack; the test row; the status line; the footer; and, for a
+    UK place, "Met Office warnings". At approximate location the switches are not shown (not
+    disabled, whose dimmed words the contrast audit would fail): only the line, "Use my location"
+    and "Search". Why the app's own switch, below ("The app's own switch").
+16. **"UK places".** The notification place's country: a city slug's part after its last "-"
+    ("leeds-gb", which a vitest holds for all 300 cities), a searched place's `country`, or for the
+    phone's cell the answer on screen's when the screen shows that cell; none for an empty country
+    or a slug with no "-". The link is `Constants.Outbound.metOfficeWarnings` (core
+    `MET_OFFICE_WARNINGS`), in Safari.
+17. **The Today card** (10.2 item 5), on the middle page (Today and Tomorrow alike), only with an
+    answer, above the upgrade row in the merged `cards` slot, free and paid: a chip card with ink
+    words and bordered chip buttons, every colour one the page surface's model proves. Kinds: a
+    place on screen ("Turn on", "Not now"); approximate location ("Use my location", "Search", "Not
+    now"); refused this session ("Notifications are off for this app in Settings.", "Open
+    Settings", "Not now"); turned on this session ("Done. …", no buttons). It goes for good after
+    "Not now", after the first switch turned on anywhere, and after "Turn off notifications and
+    delete my data" (which also ends this session's "Done." line); it never shows while the
+    permission is denied unless this session's "Turn on" was refused, and once they are allowed
+    in iOS Settings after that refusal, it offers "Turn on" again.
+18. **Your privacy (8.2).** While registered, "What we keep for notifications" comes first, under
+    the title, so the audit at the page's top sees it whole: "ID b8465956" (the ID's first 8
+    characters, `AppCopy.keptID`), "Leeds, Europe/London", "Snow units: cm", then each switch on in
+    its Settings words. "Turn off notifications and delete my data" deletes with the token last
+    sent, turns every switch off, forgets the place, puts the card away, and says what happened:
+    "Notifications are off. We've deleted your notification token, place, units and choices." where
+    the block was; offline, "Couldn't reach our server, so nothing is deleted yet. The app will try
+    again when you next open it." above the block, which stays as the server still holds it, and
+    the next sync deletes. No confirmation dialog: turning notifications on again undoes it. The
+    words name only what the DELETE removes: the server's notes keyed by the ID stay a few days, as
+    the privacy line on the same page says. This supersedes 10.6's order and its bare "cm".
+19. **Headers.** A request with a JSON body carries `Content-Type: application/json` beside `Accept`
+    (URLSession would otherwise label it a form); nothing else. This supersedes section 4's "Accept
+    only" for bodies.
+20. **`env`.** From the Info.plist's `IsItPushEnvironment` = `$(PUSH_ENV)`: `sandbox` for Debug and
+    `production` for Release (Snow.xcconfig), and production when absent, so `check-archive.sh`
+    can prove a Release archive says production. A Release build run from Xcode on a phone is
+    signed for the sandbox but says production, and the server deletes it at its first push
+    (README: run Debug on a phone). No change to the entitlements: `aps-environment` stays
+    `development` in the one file, and the App Store export's profile writes `production`, which
+    `check-archive.sh --ipa` already proves.
+21. **Testing the prompt and the token.** One UI test meets the real prompt, through SpringBoard
+    with `waitForExistence`, not `addUIInterruptionMonitor`; every other UI test uses Debug
+    stand-ins (`-notifications`, `-pushToken`), and no CI test needs a real APNs token. This
+    supersedes 12.4's interruption monitor.
+22. **`-route <name>`** posts a bundled payload (`Fixtures/Payloads/<name>.json`, the server's own
+    `alertPush()` output) to the inbox as a cold-start tap, through the same router. This supersedes
+    9.8's `-route <url>`; links are tested with `XCUIApplication.open`.
+23. **The banner (T3).** A CI step after the UI plan, on the same simulator, where
+    NotificationPermissionTests allowed notifications: `simctl push` of the generated `evening.apns`
+    with the app in the foreground on Durham (the app's own `willPresent`), then with the app closed
+    (the system's), each proved by a screenshot that differs from the one just before. Both shots go
+    on the contact sheet.
+24. **The card and the older UI tests.** Under `-uitest` the card is hidden unless the launch
+    passes `-alertCard shown`, so every older UI test's home screens, their audits and the plan's
+    time are as they were, as 7.1's stand-in leaves the home row out. Its audits are
+    HomeAuditTests' new cases.
+    Settings is not as it was: the older tests' taps on the rows the new section pushes down
+    (UpgradeTests' `upgrade`, twice, and AdsTests' `upgrade` and `your-privacy`) go through a
+    scroll-then-tap helper, as UpgradeTests' `tapRow` already did for Restore.
+25. **Junk registrations** (the devices endpoints' open question): not here. App Attest or
+    DeviceCheck stays Carl's decision before public launch.
+26. **Titles in sentence case**, core's as merged, against the HIG's title case: Carl's rule.
+27. **"The router logs them in Debug builds"** (12.3): a payload that routes nowhere is one
+    `Logger.debug` line in Debug builds, with none of the payload, through `DebugHooks.unrouted()`;
+    Release does nothing. The literal guard allows `debug`'s argument, a log line no one is shown.
+
+**Where the module lines fall.** IsItServices is linked by the widget extension, where
+`registerForRemoteNotifications` is unavailable, so the system's notifications live in
+IsItNotifications, which only the app links (`project.yml`; `check-archive.sh` and
+`widgetStrings.test.ts` prove the widget names none of UserNotifications or the platform). The
+rules are plain values in IsItLogic and the state is `NotificationsModel` in IsItState, so both are
+tested on Linux with fakes: the model is `@MainActor @Observable` as AppModel is, and every
+platform and store call is made from the main actor. AppModel is unchanged but for the `.place`
+half of `follow(_:)`: launch step 6 stays one hook, `syncAlerts(target:units:)`, which LiveHooks
+hands to `NotificationsModel.screenChanged(target:units:)` and which returns at once, so none of
+AppModel's order tests changes and a route held for the launch's end never waits on a request.
+
+**The delegate's shape** (decision 6). Apple's declarations give the centre's delegate no
+isolation, every completion handler is `@escaping @Sendable` in the iOS 26 SDK, and the objects
+passed in aren't `Sendable`. Apple's DTS (August 2023): the callback-based methods "were actually
+called on the main thread", while the async versions "run in a default non-actor concurrency
+context … they hop off the main thread". Forum reports (2022, 2024) show an async `didReceive` on a
+non-isolated type crashing a tap with "Call must be made on main thread", even with an empty body:
+the system's completion block, called when the async body returns, does UIKit's scene work, and
+the body ends on the global executor. A main-actor async witness ends on the main actor, but in
+Swift 6 mode its non-`Sendable` parameters can't cross into it. So: the completion-handler forms on
+a non-isolated class, each copying out only `Sendable` values (the payload as JSON `Data`, whether
+it was the default action) and calling the completion handler from one main-actor task, which
+holds whichever thread the system uses; no `@preconcurrency`, which would add a runtime isolation
+trap. One form of each requirement only: both would clash as Objective-C selectors. Checked on
+Linux in Swift 6.3.3: the kept shape compiles in Swift 6 mode, and the rejected one fails it
+("non-Sendable parameter type 'UNUserNotificationCenter' cannot be sent from caller of protocol
+requirement 'userNotificationCenter(_:didReceive:)' into main actor-isolated implementation") while
+Swift 5 minimal, the app's mode, accepts it without a word; the harness builds the real file in
+Swift 6 for that reason. If the module ever adopts default main-actor isolation (SE-0466), the
+class must be marked `nonisolated` (SE-0449). A `UNNotificationResponse` can't be made in a test,
+so the witnesses' few lines are the banner step's and Carl's phone's. If a tap with the app
+force-quit opens nothing (one unanswered forum report, January 2026, says `didReceive` never fired
+on a cold start in a SwiftUI app), the recorded fallback is
+`application(_:configurationForConnecting:options:)` posting `options.notificationResponse`'s
+payload, de-duplicated by the request's identifier (README, "Settled", 8.1).
+
+**Permission, and the restored backup** (decision 8). Permission coming back never turns a switch
+on. Denied with a switch on, every switch turns off and the sync deletes the server's record with
+the token kept. "Not determined" with switches on or a registration kept can only be a phone
+restored from another phone's backup (the keys came back, the permission didn't): its switches turn
+off and the registration is forgotten here, with no request, since the token is the other phone's
+and that phone may still be using it; Apple's 410 or the server's 90 days remove the record if that
+phone is gone. A status iOS adds later maps to authorised, which changes nothing: as "not
+determined" it would turn the switches off and forget a record the server may still be sending to,
+with no way left in the app to delete it. `ephemeral` (App Clips only) maps to authorised too.
+
+**The app's own switch** (decision 15). Settings' audits allow nothing but text the contrast proof
+proves, and Apple's check has failed Bricolage text on every screen ("Contrast by measured
+pixels"); a UIKit switch's label is Bricolage, and its track and shadowed knob are no colour of the
+content surface, so it would most likely have been flagged and could not have been allowed, and an
+exception for it would break `ScreenAudit`'s own rule (only "a system control the app can't
+change"). Settings already draws its own units control for the same kind of reason. So
+`SheetSwitchStyle` draws the Toggle: the whole row one button (pressed as a card's row is,
+`SheetRowStyle`, which never dims), and at its end a 51 by 31 capsule with a 27-point card knob:
+on, the ink; off, a hairline on the card with the wash inside it. The knob jumps with no animation,
+so an audit's screenshot never catches it between the ends. Apple: a custom `ToggleStyle`
+"inherits the accessibility features of Toggle automatically", so VoiceOver reads the label, the
+note and on or off, and XCUITest sees the Toggle with a "0" or "1" value. The proof's text elements
+gain `.switch` and `.toggle` (`MeasuredContrast.isText`, `drawsMarks`), the capsule a mark it
+draws, with the proof itself unchanged, so a switch drawn in any colour the surface hasn't still
+fails. The fallback, if Apple's check flags the on capsule and the proof can't allow it: draw the
+on capsule in `affordance`, a mark the surface already has.
+
+**Settings to the picker.** The gate's "Use my location" and "Search" close Settings and open the
+picker, two presentations that, changed in one transaction, can fail with nothing said. `HomeView`
+opens every sheet through `present(_:)`: with nothing open, or between Settings and the upgrade
+sheet (one presentation), it opens at once; otherwise the open one closes and the next opens from
+its `onDismiss`.
+
+**Checked on Linux.**
+
+- **TypeScript first.** The client's five rules (`firstAlertPlace`, `followLocation`, `setAlert`,
+  `syncReply`, `testOutcome`) at 100% coverage (317 of 317 statements, 343 of 343 branches); a
+  mutation run found four checks no test caught, which the tests and vectors now hold. The devices
+  fixtures and payloads are made by the server's own handlers and `alertPush()` and compared
+  whole; the server's contract test reads its real replies through `syncReply` and `testOutcome`.
+  `pnpm vitest run` passes 1797 tests in 80 files, with `pnpm mobile:check` (180 files),
+  `typecheck`, `lint`, `format:check` and the website's e2e test of the privacy notice.
+- **IsItCore** in Docker (`isithot-swift:6.3.3`): the whole suite, 603 tests in 96 suites, passes
+  with no warning. The tests were written first: IsItLogic's failed to build without the sources,
+  and 76 of the 80 new IsItState tests failed against stubs of the same API with no behaviour; the
+  four that passed (each checks that nothing happens) fail under a fault planted for each. 29
+  planted faults in the new IsItLogic code and 14 in IsItState (among them a sync that doesn't
+  coalesce, "not determined" treated as denied, a queued sync dropped, a second tap asking again, a
+  late fix moving a chosen place, two tests at once) each fail the tests named for them. The 80
+  new state tests passed 20 runs in 20.
+- **Against stubs** (session scratchpad: alerts-typecheck): IsItNotifications, IsItServices,
+  IsItUI's new views, the app's files and NotificationTests, Debug and Release, against the real
+  IsItCore and stub UserNotifications, `os`, UIKit and SwiftUI modules with Apple's declarations,
+  and IsItNotifications again in Swift 6 mode; under complete concurrency checking no warning in
+  the new files. The design's planted mistakes (the async `didReceive` in Swift 6, a Release stub
+  taken out, a transport without `send`, a misspelt `NotificationPlatform` method, a hook missing
+  from the archive check's lists) and 16 more each fail it. The UI tests compile against the
+  XCUITest stubs, whose checks, with the proof on a synthetic switch row and Settings' scrolling,
+  pass (alerts-uicheck, 54 tests). XcodeGen 2.46.0 generates the project with IsItNotifications
+  linked by the app and its unit tests and not the widget.
+- **The build's checks:** `check-archive.test.mjs` and `widgetStrings.test.ts`, 86 tests where
+  there were 74 (the old script fails the new ones); `ci/push.sh` run against a stand-in for
+  `xcrun` (the banners shown, none, the app gone at its terminate, a failed launch, a failed push);
+  shellcheck and actionlint clean; `swift format lint --strict` over every Swift file.
+
+**Where the build differs from its design.**
+
+- **The off switch.** The design drew it as the content surface's track with a hairline stroked
+  over it. Over the track the hairline gives ink at about 31%, a colour the content surface's
+  model doesn't have, so the proof refused the row (its other pixels 5% of its text, where 2% is
+  the limit). It is now a hairline on the card with the wash inset a point inside it, exactly what
+  the harness's passing off row draws; on is unchanged.
+- **The switch's press** is a card row's (`SheetRowStyle`), not `.plain` "as the units' buttons
+  are": those use `PressStyle`, and `.plain` can dim a pressed label, which the house never does.
+- **Your privacy, not yet deleted:** the line shows above the kept block, which stays, since the
+  server still holds the record; once done, the block has gone and the line takes its place.
+- **The place page** goes back on a tap of the choice already in use, "Use my location" included,
+  so a tap never does nothing; the kept choice's icon is the place row's; its title falls back to
+  "Place" when neither its own name nor the registration's is known; and the test row comes after
+  the place row.
+- **The model, beyond the design:** Settings closing leaves a test still being sent as it is (the
+  design reset it, which would drop the row's busy state and let a second tap send a second test);
+  the delete also ends this session's "Done." card, which `NotificationCard.card` checks before
+  "put away"; a second "Use my location" tap while finding the phone does nothing; a
+  `not_registered` test forgets the registration only if it is still the one tested; and the
+  registration's `at` is kept to whole milliseconds, so `alertSync.v1` round-trips equal.
+- **From the review:** the card's refusal shows only while the permission is still denied. The
+  design checked `cardRefused` before the permission, so a refusal then allowed through the card's
+  own Open Settings left "Notifications are off for this app in Settings." on screen, with no Turn
+  on, until the next launch. Units not known at the start (an offline first launch, whose step 6
+  had no answer) now come with Settings' or the card's place on screen, and the answer that first
+  chooses them after step 6 syncs the notifications again (`AppModel.load`); before, the first
+  switch sent nothing until the next launch, place or units change. And the place page's no-fix
+  line offers the place on screen only when the page does (`AppCopy.notifyLocationTryAgain`
+  otherwise).
+- **The records:** an `alerts.v1` whose place is approximate location reads as the defaults (the
+  "never a place" rule); `DeviceResponse` and its `Place` have public initialisers, for the tests
+  and the other modules; `AlertSync.country` is nil for an empty country or a slug with no "-".
+- **Debug hooks:** `-place` with no store stops the app; `offline` works only as `-devices`' whole
+  value; a PUT body that doesn't decode gets a 400 with no body; and neither transport tells the
+  recorder of a devices request.
+- **The archive check:** `check_push_env` has two messages: `sandbox` gets "the app registers in the
+  sandbox (IsItPushEnvironment is sandbox), not production", and a missing or empty value "the app's
+  IsItPushEnvironment is missing, not production" (or "is empty"), since the app reads a missing
+  value as production and "registers in the sandbox" would then be false. The shared commit's
+  coarse-location test's manifests now declare the device ID too, so each fails only for what it
+  tests.
+- **`ci/push.sh`** launches with `--terminate-running-process`, so an app the UI plan left running
+  relaunches with its arguments; waits 8 seconds after `terminate`, not 2, so the first banner has
+  gone before the Home Screen's "before" shot; keeps its "before" shots in a temporary folder;
+  fails if `terminate` finds the app not running (a crash would otherwise let the over-the-app shot
+  pass on the Home Screen's banner); and says so when `simctl push` itself fails.
+- **The UI tests:** each Settings audit runs before the link it taps (the Met Office link last), as
+  SettingsTests does, since a URL in the recorder squeezes the screen at the audits' largest text
+  sizes; a fourth older tap goes through the scroll-then-tap helper (UpgradeTests'
+  `testNoProductNoPrice`); absences are read from XCUITest's tree with `waitForNonExistence`, each
+  only after a change on screen that implies it (no new readout, which DebugHooks would need);
+  and the route test reads from `HomeScreens.json` that durham-tomorrow's launch opens on Now
+  rather than assuming it.
+- **Tests split by commit:** the copy tests' Your privacy assertions are an `it` of their own in
+  `copy.test.ts` and a `kept()` test in `GeneratedCopyTests`, as an 8.1 commit can't compile
+  assertions on keys only 8.2 adds. `SettingsScreenTests.icons` checks Settings' icons against
+  every icon but the eleven notification ones, which `notificationsOwnIcons` holds to the
+  section, the gate and the place page.
+- **Smaller ones:** the place row is `NotificationPlaceRow` (IsItUI already has a `PlaceRow`);
+  `HomeView` is built in a property of `WillItSnowApp`, so the scene's modifiers aren't
+  re-indented; NotificationTests reads its payload with a helper of its own; `project.yml`'s UI
+  tests comment gains two lines, not one, to stay inside 100 columns, rewrapping nothing; the
+  devices fixtures' `delete` runs after `put-leeds`, so it deletes a real record, and
+  `rate-limited` is a PUT; the fixtures hold only the sandbox's APNs settings; the privacy notice's
+  date moved to 28 October 2026; the review note's notifications paragraph (docs/SETUP.md) says
+  Settings asks for a place where the draft said "if the switches are dimmed", since no switch
+  shows at approximate location.
+
+**Known risks.**
+
+1. **The switch and the audit.** XCUITest's element type and value for a Toggle in the app's own
+   style, and the proof passing the on capsule's ink and the off capsule's wash, are the first
+   macOS run's to show. The fallback is recorded (above, "The app's own switch"). A failure there
+   names the element "type 40" or "type 41", since `ScreenAudit`'s names have none for a switch or
+   a toggle.
+2. **The SpringBoard prompt on iOS 26.5.** Its labels and process are reported, not documented.
+   The test waits 10 seconds, attaches SpringBoard's tree on a miss, and skips (never passes) when
+   already allowed; if the alert is elsewhere on 26.5, only that test and the banner step go red.
+3. **The banner in a VM.** `simctl push` delivers on the simulator, with no APNs, which should work
+   in GitHub's VMs, but the banner's timing and the screenshot comparison are unproven there. The
+   step fails red naming the cause; the phase's exit needs it, so a flaky first run is fixed (a
+   longer wait), never skipped. If simctl's PNGs carried changing metadata, the comparison would
+   pass with no banner: look at both shots on the contact sheet.
+4. **The cold-start tap in SwiftUI** (one unanswered forum report). Carl's force-quit check settles
+   it; the fallback is recorded (README, "Settled", 8.1).
+5. **No token on some devices** (iOS 26.5.2 reports, unconfirmed). "No token" rests quietly and
+   registers again at every `.active`; Carl's TestFlight check shows it.
+6. **A Release build run from Xcode on a phone** says production with a sandbox token: APNs answers
+   `BadDeviceToken` and the server deletes it at its first push. README: run Debug.
+7. **Production's dry run** until C18: the test says so in words of its own, not "Sent".
+8. **One write a minute.** Two changes within a minute wait up to a minute for the retry, and an app
+   closed meanwhile syncs at its next open: correct, but a reviewer toggling quickly sees no error.
+9. **A restored backup of another phone** leaves that phone's record on the server, never deleted
+   from here; Apple's 410 or the 90 days remove it if that phone is gone.
+10. **Settings to the picker.** Two presentations in one transaction can fail silently; the pending
+    presentation avoids it, and the gate's test proves it.
+11. **Junk registrations:** open, Carl's call before public launch.
+12. **The other track** (7.2, the widgets): both edit some shared files, each in its own lines, and
+    the docs' tables, the README's intro and "Not here yet" bullet, and the archive check's header
+    and facts line conflict whatever the order; whoever merges second keeps both sides and
+    regenerates the generated files rather than merging them by hand.
+13. **Swift without a compiler.** IsItUI's new views and the app compile only on macOS; the harness
+    type-checks the rest, and as much of IsItUI as its SwiftUI stub covers.
+14. **CI time.** About 53 of the `ios` job's 90 minutes with 8.1 alone, about 56 with 7.2's widget
+    snapshots and link test too; the UI plan goes from about 36 to about 48 minutes.
+15. **The full-screen ad after the card's Search.** The card's Search opens the pill's kind of
+    picker, which may show the free version's full-screen ad on a choice, as the pill's does:
+    Google's two actions (the tap, the choice) hold. Accepted.
+
+**For the next macOS run to show** (what nothing on Linux can):
+
+1. That everything compiles against the real SDKs with no new warning: IsItNotifications'
+   UserNotifications and UIKit calls, IsItUI's new views and their SwiftUI (only stubbed on Linux:
+   the custom `ToggleStyle`, `ViewThatFits`, `Capsule().inset(by:)`), the app's adaptor and
+   wiring, and NotificationTests.
+2. The switch rows: XCUITest's element type for a Toggle in the app's own style (`.switch` or
+   `.toggle`) and its value, which `isOn` reads as "1" or "0"; that a tap at the row's centre turns
+   it over; and that the Settings audits (the gate, on, denied) and the place page's pass, the
+   proof allowing the switch rows, on and off.
+3. The system's prompt on iOS 26.5: that `springboard.alerts.firstMatch` appears within 10 seconds
+   of the first switch, with a button labelled "Allow" (NotificationPermissionTests).
+4. The banner step: that `simctl push` shows the banner over the app (the app's `willPresent`) and
+   on the Home Screen, that each shot differs from the one before it after 12 and 8 seconds' waits,
+   and that the two reach the contact sheet from `attachments/Push`.
+5. The card's audits at Large and AX3 (`HomeAuditTests`, leeds-dry's card for a place and the first
+   launch's for approximate location), its buttons one under another at AX3.
+6. The hand-overs: Settings' "Search" and the card's opening the picker (Settings closing first,
+   through `present(_:)`), and `willitsnow://settings/notifications` opening Settings over the home
+   screen (`XCUIApplication.open`).
+7. The hosted tests: that the centre's delegate is the app's `NotificationDelegate` before the
+   launch has finished (compared by name), that `UNAuthorizationStatus(rawValue: 99)` can be made on
+   the SDK and maps to authorised, and that a Debug build's Info.plist says `sandbox`.
+8. The cold-start route: `-route durham-evening` opening Durham's middle page on Tomorrow at
+   6:05pm, and Recent's first row `recent-city:durham-gb`.
+9. Your privacy registered, audited at its top with the kept block first (8.2), and the delete's
+   line replacing the block.
+10. That the older UI tests still pass: their screens with the card hidden as before, and their
+    taps on `upgrade` and `your-privacy` reaching the rows below the new section.
+11. That the UI plan, with its 15 new tests, ends at about 48 minutes, inside the `ios` job's 90.
+12. The Release checks on the real binaries: none of the 25 hooks in either, `FakeNotifications`
+    and `DevicesStub` among them; the app's `IsItPushEnvironment` production and its manifest's
+    device ID; no notifications code in the widget (all `archive-check`'s: `release-check.sh` is
+    unchanged and still looks for `-uitest` and `-fixture` only).
+
+**What only Carl's phone shows**: a real token and its PUT; APNs' delivery (the sandbox from a
+Debug build, production from TestFlight); a tap with the app force-quit; the Lock Screen; iOS
+Settings' "Notification Settings" link (`openSettingsFor`); a denial made in iOS Settings; and the
+followed place moving (docs/SETUP.md, "The app's notifications (phases 8.1 and 8.2)").
+
+**Spec points superseded**, in one place: 3 and 9.3 (`NotificationService` in IsItServices, and the
+notification copy in SnowKit: IsItNotifications, `NotificationsModel` in IsItState, `AppCopy`); 4
+("Accept only", for requests with a body: `Content-Type` too); 6.6 rule 1 and 8.2's "every flag
+false" (evening and morning off is off, as merged); 9.4 (`AppModel.alertPrefs` and `alertPlace`:
+`NotificationsModel`'s; step 6 no longer waited on); 9.6 and 12.2 (`alertSync.v1`'s shape); 9.8
+(`-route <url>`: a bundled payload; "fake permission states": `-notifications`); 10.2 item 5 (the
+card's four kinds, its going for good after a first switch turned on, hidden while denied, hidden
+under `-uitest`); 10.4 (Settings is pages, not a native form, as merged); 10.6 (the kept block
+first, "Snow units: cm", the switch lines in Settings' words, the units from what was sent); 12.1
+(the gate hides the switches; `notifyDenied` says "this app", as merged; the place choice is a
+page; the test row's results; the Met Office link's rule; the permission options); 12.2
+(registering at every `.active`; no DELETE of a changed token; the restored-backup forget; the
+units wait); 12.3 (the delegate's shape; "unchanged" is the payload's JSON; the hold until the
+launch's end; "logs" is a Debug log line); 12.4 (SpringBoard, not an interruption monitor; the
+banner's two shots in the `ios` job); 17.2 (no AccessibilityAuditTests class: the audits are in
+NotificationsTests and HomeAuditTests); 18.2 (the banner's shot in `ios`, not a screenshots job);
+19 (phases 8.1 and 8.2 are one pull request in two commits).
 
 ## API contract
 

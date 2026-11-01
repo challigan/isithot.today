@@ -1,0 +1,14 @@
+{
+  "_fixture": {
+    "request": "POST /api/v1/devices/test",
+    "body": {
+      "app": "snow",
+      "token": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+    },
+    "now": "2026-12-01T22:00:00.000Z",
+    "note": "A test at 10pm in Leeds, after put-leeds: nothing is sent from 9pm to 7am at the place, so 409 quiet_hours, with the 9 hours to 7am in Retry-After."
+  },
+  "status": 409,
+  "retryAfter": "32400",
+  "text": "{\"error\":{\"code\":\"quiet_hours\",\"message\":\"Nothing is sent from 9pm to 7am at the place. Try again after 7am there.\"}}"
+}
