@@ -7,13 +7,16 @@
  *   node xcresult-summary.mjs build <build-results.json>
  *   node xcresult-summary.mjs tests <plan> <summary.json> <tests.json>
  *   node xcresult-summary.mjs timings <attachments folder>
+ *   node xcresult-summary.mjs attachment <attachments folder> <name>
  *
  * The JSON is `xcrun xcresulttool get build-results`, `get test-results summary` and
  * `get test-results tests` (Xcode 16 and later). A field that isn't there is left out, never
  * guessed, and a file that is missing or empty says so. `timings` reads the UI tests' audit
  * times (`…-audit-times` and `audit-<screen>-times`, one line a call: UITests/ScreenAudit.swift
  * `AuditTime`) from the attachments `xcresulttool export attachments` wrote, by their
- * manifest.json: `print` in a UI test reaches neither the log nor the result bundle.
+ * manifest.json: `print` in a UI test reaches neither the log nor the result bundle. `attachment`
+ * prints the path of the file an attachment was exported to, found by the name the test gave it
+ * (`app-upgrade`, the review screenshot), as the export names each file by a UUID.
  */
 import { readFileSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
@@ -229,6 +232,23 @@ export function timingSummary(calls) {
   return `${out.join('\n')}\n`;
 }
 
+/**
+ * The file the first attachment named `name` (as `attachmentLabel` reads it) was exported to, from
+ * an export's manifest.json; null without a manifest, or with no such attachment.
+ */
+export function attachmentFile(folder, name) {
+  const manifest = readJson(join(folder, 'manifest.json'));
+  if (!Array.isArray(manifest)) return null;
+  for (const test of manifest) {
+    for (const a of test?.attachments ?? []) {
+      if (a?.exportedFileName && attachmentLabel(a.suggestedHumanReadableName ?? '') === name) {
+        return join(folder, a.exportedFileName);
+      }
+    }
+  }
+  return null;
+}
+
 /** The JSON in `path`, or null when it is missing, empty or not JSON. */
 export function readJson(path) {
   try {
@@ -247,10 +267,17 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     process.stdout.write(testSummary(args[0], readJson(args[1]), readJson(args[2])));
   } else if (kind === 'timings' && args.length === 1) {
     process.stdout.write(timingSummary(readAuditTimes(args[0])));
+  } else if (kind === 'attachment' && args.length === 2) {
+    const file = attachmentFile(args[0], args[1]);
+    if (!file) {
+      console.error(`xcresult-summary: no attachment named ${args[1]} in ${args[0]}`);
+      process.exit(1);
+    }
+    process.stdout.write(`${file}\n`);
   } else {
     console.error(
       'usage: xcresult-summary.mjs build <json> | tests <plan> <summary> <tests> | ' +
-        'timings <attachments>',
+        'timings <attachments> | attachment <attachments> <name>',
     );
     process.exit(2);
   }

@@ -4,9 +4,10 @@ import IsItState
 
 /// What the app shares with its widgets through the App Group (iOS build spec, section 9.6): the
 /// defaults (`place.v1`, `units.v1`, `unlock.v1`) and the last good answer, a file in the group's
-/// container, `Library/Caches/today.v1.json`. It is the app's `StoredState`. UserDefaults and
-/// FileManager may be used from any thread, so it is Sendable.
-public struct SharedStore: StoredState, @unchecked Sendable {
+/// container, `Library/Caches/today.v1.json`. It is the app's `StoredState`, and its
+/// `UnlockStore`, through which phase 7.1's `PurchaseModel` alone writes `unlock.v1`. UserDefaults
+/// and FileManager may be used from any thread, so it is Sendable.
+public struct SharedStore: StoredState, UnlockStore, @unchecked Sendable {
   /// Where the store is.
   public enum Location: Equatable, Sendable {
     /// The App Group's defaults and container, which the app and its widgets share.
@@ -112,8 +113,19 @@ public struct SharedStore: StoredState, @unchecked Sendable {
   }
 
   /// `unlock.v1`'s `unlocked`: false for nothing, or anything that isn't a `StoredUnlock`. Only
-  /// the app's StoreKit code writes it (phase 7); this reads it.
+  /// phase 7.1's `PurchaseModel` writes it (`saveUnlock(_:)`); this reads it.
   public func loadUnlocked() -> Bool {
     StoredUnlock.unlocked(stored: defaults.data(forKey: Keys.AppGroup.unlock))
+  }
+
+  /// `unlock.v1` as written: nil for nothing, or anything that isn't a `StoredUnlock`.
+  public func loadUnlock() -> StoredUnlock? {
+    StoredUnlock(stored: defaults.data(forKey: Keys.AppGroup.unlock))
+  }
+
+  /// Keeps `unlock` in `unlock.v1`. Only `PurchaseModel` calls it (spec 9.6).
+  public func saveUnlock(_ unlock: StoredUnlock) {
+    guard let data = try? unlock.stored() else { return }
+    defaults.set(data, forKey: Keys.AppGroup.unlock)
   }
 }

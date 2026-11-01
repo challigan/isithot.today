@@ -114,12 +114,13 @@ describe('the Swift sources', () => {
  * Where the prose guard looks: every Swift file under apps/ios, but these. Generated folders
  * hold the copy itself (`IsItModel/Generated`, `SnowKit/Generated`), written by
  * `pnpm mobile:generate` from the TypeScript, whose tests check its words. The test targets
- * (`Apps/Snow/Tests`, `Apps/Snow/UITests` and each package's `Tests`) are never shipped: their
- * literals are the words they expect on screen and their own failure messages. Build output
- * (`.build`, `.spm`, `build`, `DerivedData`, the generated `.xcodeproj`) isn't source.
+ * (`Apps/Snow/Tests`, `Apps/Snow/UITests`, `Apps/Snow/StoreKitTests` and each package's `Tests`)
+ * are never shipped: their literals are the words they expect on screen and their own failure
+ * messages. Build output (`.build`, `.spm`, `build`, `DerivedData`, the generated `.xcodeproj`)
+ * isn't source.
  */
 const SKIPPED_FOLDER = /^(\..*|build|DerivedData|Generated|.*\.xcodeproj)$/;
-const TEST_TARGET = /^(Apps\/Snow\/(Tests|UITests)|Packages\/[^/]+\/Tests)\//;
+const TEST_TARGET = /^(Apps\/Snow\/(Tests|UITests|StoreKitTests)|Packages\/[^/]+\/Tests)\//;
 
 /** Every Swift file under apps/ios that ships, from the folders above. */
 function shippedSwift(dir = ''): string[] {
@@ -271,6 +272,16 @@ describe('the Swift sources, outside the generated copy', () => {
       ).toBe(true);
     }
     expect(files.some((f) => f.includes('/Generated/') || TEST_TARGET.test(f))).toBe(false);
+    // The test targets left out: the app's three and each package's, and nothing that ships.
+    for (const folder of [
+      'Apps/Snow/Tests',
+      'Apps/Snow/UITests',
+      'Apps/Snow/StoreKitTests',
+      'Packages/IsItCore/Tests',
+    ]) {
+      expect(TEST_TARGET.test(`${folder}/A.swift`), folder).toBe(true);
+    }
+    for (const folder of SOURCES) expect(TEST_TARGET.test(`${folder}/A.swift`), folder).toBe(false);
     expect(files.length).toBeGreaterThan(60);
     const found = files.flatMap((path) =>
       proseLines(path, readFileSync(new URL(path, root), 'utf8')),

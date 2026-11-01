@@ -119,7 +119,7 @@ test.describe('the legal pages', () => {
           'Google may collect device identifiers, advertising data, usage and diagnostics, and an approximate location from your IP address. ' +
           "See Google's privacy policy. The app keeps on your iPhone when it last showed a full-screen ad, so it shows one at most every 5 minutes. " +
           'The one-off purchase turns the ads off.',
-        'Purchases. Apple handles purchases. We never see your payment details.',
+        "Purchases. Apple handles purchases. We never see your payment details. The app keeps a note on your iPhone of whether you've made the one-off purchase.",
       ]);
       await expect(
         items.nth(1).getByRole('link', { name: "Google's privacy policy" }),

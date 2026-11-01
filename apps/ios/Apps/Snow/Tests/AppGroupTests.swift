@@ -106,11 +106,24 @@ final class AppGroupTests: XCTestCase {
     XCTAssertEqual(store.defaults.string(forKey: Keys.AppGroup.units), "f")
     XCTAssertEqual(store.loadUnits(), .f)
 
+    // `unlock.v1`, through the writer only PurchaseModel calls, and back through both readers:
+    // the purchase's own (`loadUnlock()`) and the model's and the widget's (`loadUnlocked()`).
     store.defaults.removeObject(forKey: Keys.AppGroup.unlock)
+    XCTAssertNil(store.loadUnlock())
     XCTAssertFalse(store.loadUnlocked())
-    let unlock = StoredUnlock(unlocked: true, checkedAt: Date(), productID: "unlock")
-    store.defaults.set(try unlock.stored(), forKey: Keys.AppGroup.unlock)
+    // A whole second, as `unlock.v1` keeps its date as the server writes dates.
+    let checkedAt = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down))
+    let unlock = StoredUnlock(
+      unlocked: true, checkedAt: checkedAt, productID: Constants.Purchase.productID)
+    store.saveUnlock(unlock)
+    XCTAssertEqual(store.loadUnlock(), unlock)
     XCTAssertTrue(store.loadUnlocked())
+    XCTAssertEqual(StoredUnlock(stored: store.defaults.data(forKey: Keys.AppGroup.unlock)), unlock)
+    // Written again when StoreKit says it isn't owned (a refund), so the widget locks.
+    store.saveUnlock(
+      StoredUnlock(unlocked: false, checkedAt: checkedAt, productID: Constants.Purchase.productID))
+    XCTAssertEqual(store.loadUnlock()?.unlocked, false)
+    XCTAssertFalse(store.loadUnlocked())
   }
 
   func testAnAnswerFromAnotherStoreVersionIsIgnored() throws {

@@ -3,16 +3,23 @@
 # build spec, section 18.1). Then writes what happened to the GitHub step summary: the counts,
 # and each error or failing test with its file and line (ci/xcresult-summary.mjs). A test plan's
 # attachments are exported for the contact sheet, and the UI plan's audit calls' times read from
-# them: the slowest, and every call that didn't finish in time.
+# them: the slowest, and every call that didn't finish in time; its upgrade sheet's screenshot,
+# App Review's (docs/SETUP.md), is copied to review/app-upgrade.png beside them. The StoreKit
+# plan, on the iOS 26.2 simulator (simulator.sh 26.2), runs with test timeouts on and 60 seconds
+# for each test (XCTest rounds an allowance up to whole minutes, so none is shorter), so a
+# purchase sheet that hangs (FB22836426) fails its test rather than the job (ios.yml's storekit
+# job budgets for all 18 hanging).
 #
-#   apps/ios/ci/test.sh build <UDID>   build-for-testing     -> build/Build.xcresult
-#   apps/ios/ci/test.sh Unit <UDID>    the Unit test plan    -> build/Unit.xcresult, build/attachments/Unit
-#   apps/ios/ci/test.sh UI <UDID>      the UI test plan      -> build/UI.xcresult, build/attachments/UI
+#   apps/ios/ci/test.sh build <UDID>      build-for-testing        -> build/Build.xcresult
+#   apps/ios/ci/test.sh Unit <UDID>       the Unit test plan       -> build/Unit.xcresult, build/attachments/Unit
+#   apps/ios/ci/test.sh UI <UDID>         the UI test plan         -> build/UI.xcresult, build/attachments/UI
+#                                                                     and build/attachments/review
+#   apps/ios/ci/test.sh StoreKit <UDID>   the StoreKit test plan   -> build/StoreKit.xcresult, build/attachments/StoreKit
 #
 # Exits with xcodebuild's status, whatever the summary makes of it.
 set -euo pipefail
 
-what="${1:?build, Unit or UI}"
+what="${1:?build, Unit, UI or StoreKit}"
 udid="${2:?the simulator UDID simulator.sh printed}"
 ios="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 build="$ios/build"
@@ -26,8 +33,13 @@ case "$what" in
     name="$what"
     action=(test-without-building -testPlan "$what" -parallel-testing-enabled NO)
     ;;
+  StoreKit)
+    name="$what"
+    action=(test-without-building -testPlan "$what" -parallel-testing-enabled NO
+      -test-timeouts-enabled YES -default-test-execution-time-allowance 60)
+    ;;
   *)
-    echo "test.sh: $what is not build, Unit or UI" >&2
+    echo "test.sh: $what is not build, Unit, UI or StoreKit" >&2
     exit 2
     ;;
 esac
@@ -81,6 +93,17 @@ else
   if [ "$what" = UI ]; then
     node "$ios/ci/xcresult-summary.mjs" timings "$build/attachments/$name" | report ||
       echo "test.sh: no audit times" >&2
+    # The upgrade sheet's screenshot for App Review (docs/SETUP.md, "The app's purchase"), as
+    # review/app-upgrade.png in the attachments: the export names each file by a UUID.
+    review="$build/attachments/review"
+    rm -rf "$review"
+    if shot="$(node "$ios/ci/xcresult-summary.mjs" attachment "$build/attachments/$name" \
+      app-upgrade)"; then
+      mkdir -p "$review"
+      cp "$shot" "$review/app-upgrade.png" || echo "test.sh: couldn't copy $shot" >&2
+    else
+      echo "test.sh: no app-upgrade screenshot for App Review" >&2
+    fi
   fi
 fi
 exit "$status"

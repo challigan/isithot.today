@@ -30,11 +30,11 @@ enum SheetMetrics {
 }
 
 extension View {
-  /// A content sheet (Settings, or the mail fallback, a sheet of its own): the content surface
-  /// for every part in it, and its system parts (the toolbar's buttons, the back chevron, scroll
-  /// indicators, text selection) drawn for a dark page in ink, whatever the phone's appearance.
-  /// The navigation bar's own scheme is each page's (`SheetPage`), as a bar takes it from the
-  /// page on top of its stack.
+  /// A content sheet (Settings, or a sheet of its own: the mail fallback, the upgrade sheet): the
+  /// content surface for every part in it, and its system parts (the toolbar's buttons, the back
+  /// chevron, scroll indicators, text selection) drawn for a dark page in ink, whatever the
+  /// phone's appearance. The navigation bar's own scheme is each page's (`SheetPage`), as a bar
+  /// takes it from the page on top of its stack.
   func sheetChrome() -> some View {
     environment(\.pageTheme, .content)
       .environment(\.surface, .content)
@@ -43,13 +43,13 @@ extension View {
   }
 }
 
-/// A sheet's Close as its toolbar shows it (Settings' and the mail fallback's; the picker has
-/// the website's Close pill, `SheetHeader`): the xmark, as iOS 26 draws its own close control,
-/// with the word ("Close") as the button's label, which VoiceOver reads. Not the word on screen:
-/// a toolbar draws a text item at the bar's own type size whatever the text size, and on PR #33's
-/// macOS run the audit failed all three Closes for Dynamic Type, the only buttons it failed for
-/// Dynamic Type in any sheet. An icon has no text to stay small, and Your privacy's back button,
-/// a bar button too, passed.
+/// A sheet's Close as its toolbar shows it (Settings', the mail fallback's and the upgrade
+/// sheet's; the picker has the website's Close pill, `SheetHeader`): the xmark, as iOS 26 draws
+/// its own close control, with the word ("Close") as the button's label, which VoiceOver reads.
+/// Not the word on screen: a toolbar draws a text item at the bar's own type size whatever the
+/// text size, and on PR #33's macOS run the audit failed all three Closes for Dynamic Type, the
+/// only buttons it failed for Dynamic Type in any sheet. An icon has no text to stay small, and
+/// Your privacy's back button, a bar button too, passed.
 struct CloseLabel: View {
   let title: String
 
@@ -254,7 +254,8 @@ struct SheetDivider: View {
 }
 
 /// What a row's end says it does: a page on Settings' stack (a chevron), a page or an email
-/// outside the app (an arrow out), or neither (Google's form, phase 8).
+/// outside the app (an arrow out), or neither: Google's form, Restore purchase, and a note (the
+/// thanks once the purchase is owned), which does nothing when tapped.
 enum RowEnd {
   case page
   case leaves
@@ -274,6 +275,9 @@ extension SettingsScreen.Icon {
   var symbol: String {
     switch self {
     case .units: "ruler"
+    case .upgrade: "sparkles"
+    case .thanks: "checkmark.seal"
+    case .restore: "arrow.clockwise"
     case .privacyChoices: "hand.raised"
     case .yourPrivacy: "lock.shield"
     case .policy: "doc.text"

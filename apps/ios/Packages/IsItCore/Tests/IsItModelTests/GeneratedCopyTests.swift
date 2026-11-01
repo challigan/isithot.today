@@ -125,6 +125,13 @@ struct AppCopyTests {
     #expect(AppCopy.widgetDescription == "Today's snow answer, then tomorrow's from 6pm.")
     #expect(AppCopy.notifyFooter.hasPrefix("These are forecasts, not official warnings."))
     #expect(AppCopy.privacyAccounts == "There are no accounts.")
+    // The purchase's (phase 7.1): what it is, and why it can't be bought.
+    for text in [AppCopy.upgradeDescription, AppCopy.upgradeUnavailable, AppCopy.purchasesOff] {
+      #expect(!text.isEmpty)
+    }
+    #expect(
+      AppCopy.upgradeUnavailable == "The purchase isn't available right now. Try again later.")
+    #expect(AppCopy.purchasesOff == "In-app purchases are turned off on this iPhone.")
   }
 
   @Test("strings with slots are functions that fill them, the text around kept as it is")
@@ -134,6 +141,7 @@ struct AppCopyTests {
       AppCopy.upgradeRow(price: "£1.99")
         == "No ads, plus widgets for your home and lock screen · £1.99")
     #expect(AppCopy.version(version: "1.0", build: "112") == "Version 1.0 (112)")
+    #expect(AppCopy.buy(price: "£1.99") == "Buy for £1.99")
     #expect(AppCopy.agreementShort(snowy: "5", total: "6") == "5 of 6 forecasts")
     #expect(
       AppCopy.reportAdMail(time: "9:05am GMT", place: "Aberdeen")

@@ -15,6 +15,7 @@ import { CONFIGS_GENERATED_DIR, configCopy } from '../src/exportConfigCopy';
 import { constantsSwift } from '../src/exportConstants';
 import { coreCopySwift } from '../src/exportCoreCopy';
 import { creditsSwift } from '../src/exportCredits';
+import { STOREKIT_DIR, storeKitJson } from '../src/exportStoreKit';
 import {
   BRAND_FONTS,
   BRAND_FONTS_PATH,
@@ -75,7 +76,7 @@ describe('generatedFiles', () => {
     assets = [...glyphFiles(sources.glyphs), ...iconFiles(sources.favicon)];
   }, 120_000);
 
-  it("writes IsItModel's Swift, each fixture and vector file, the UI tests' screens, the glyph catalogues and the app icon", async () => {
+  it("writes IsItModel's Swift, Snow.storekit, each fixture and vector file, the UI tests' screens, the glyph catalogues and the app icon", async () => {
     const model = 'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated';
     const resources = 'apps/ios/Packages/IsItCore/Tests/IsItTestSupport/Resources';
     const vectors = [
@@ -99,12 +100,13 @@ describe('generatedFiles', () => {
       `${model}/Palettes.swift`,
       `${model}/BrandColours.swift`,
       'apps/ios/Configs/Generated/Copy.xcconfig',
+      'apps/ios/Apps/Snow/StoreKit/Snow.storekit',
       ...resourcePaths,
       HOME_SCREENS_PATH,
       SURFACES_PATH,
       ...assets.map((f) => f.path),
     ]);
-    expect(files.slice(0, 10).map((f) => f.contents)).toEqual([
+    expect(files.slice(0, 11).map((f) => f.contents)).toEqual([
       coreCopySwift(),
       questionsSwift(),
       appCopySwift(),
@@ -115,12 +117,13 @@ describe('generatedFiles', () => {
       palettesSwift(),
       brandColoursSwift(),
       configCopy(),
+      storeKitJson(),
     ]);
-    expect(files[11]!.contents).toBe(fixtureJson(await makeFixture(FIXTURES[1]!)));
+    expect(files[12]!.contents).toBe(fixtureJson(await makeFixture(FIXTURES[1]!)));
     const search = files.find((f) => f.path.endsWith('/Fixtures/Search/search-leeds.json'))!;
     expect(search.contents).toBe(fixtureJson(await makeSearchFixture(SEARCH_FIXTURES[0]!)));
     expect(SEARCH_FIXTURES_DIR).toBe(`${FIXTURES_DIR}/Search`);
-    const first = 10 + resourcePaths.length + 2;
+    const first = 11 + resourcePaths.length + 2;
     for (const [i, f] of assets.entries()) {
       expect(sameContents(files[first + i]!.contents, f.contents)).toBe(true);
     }
@@ -134,6 +137,7 @@ describe('generatedFiles', () => {
       ASSETS_DIR,
       FONTS_DIR,
       CONFIGS_GENERATED_DIR,
+      STOREKIT_DIR,
       UI_TESTS_GENERATED_DIR,
     ]);
   });

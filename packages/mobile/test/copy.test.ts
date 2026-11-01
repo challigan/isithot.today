@@ -290,6 +290,7 @@ describe('APP_COPY', () => {
       placeUnsaved: ['place'],
       placeDeleted: ['place'],
       upgradeSettings: ['price'],
+      buy: ['price'],
       notifyPlaceOnScreen: ['place'],
       reportAdSubject: ['version'],
       reportAdMail: ['time', 'place'],
@@ -306,6 +307,37 @@ describe('APP_COPY', () => {
       agreementShort: ['snowy', 'total'],
       intentPhrase: ['app'],
     });
+  });
+
+  it('words the upgrade as section 13 and 10.5 do', () => {
+    // App Store Connect's limits on the purchase's display name and description, which
+    // Snow.storekit carries too; the description has no full stop.
+    expect(APP_COPY.upgradeTitle.length).toBeLessThanOrEqual(30);
+    expect(APP_COPY.upgradeDescription.length).toBeLessThanOrEqual(45);
+    expect(APP_COPY.upgradeDescription).not.toContain('.');
+    expect(APP_COPY.upgradeDescription).toBe('No ads, plus home and lock screen widgets');
+    expect(APP_COPY.buy).toBe('Buy for {price}');
+    // The ads are three placements, not a banner, and nothing promises another app.
+    const named = [
+      ...['buy', 'familySharing', 'thanks', 'pending', 'restore', 'restored'],
+      ...['nothingToRestore', 'purchasesOff'],
+    ];
+    const upgrade = entries.filter(([key]) => key.startsWith('upgrade') || named.includes(key));
+    expect(upgrade.map(([key]) => key)).toEqual([
+      ...['upgradeRow', 'upgradeTitle', 'upgradeSettings', 'upgradeBody', 'familySharing'],
+      ...['thanks', 'pending', 'restore', 'restored', 'nothingToRestore', 'buy'],
+      ...['upgradeDescription', 'upgradeUnavailable', 'purchasesOff'],
+    ]);
+    for (const [key, text] of upgrade) expect(text, key).not.toMatch(/soon|banner|all-in-one/i);
+  });
+
+  it('says why the upgrade page can sell nothing, blaming neither the connection nor the user', () => {
+    // Offline, or nothing for sale yet: StoreKit answers both with no product.
+    expect(APP_COPY.upgradeUnavailable).toBe(
+      "The purchase isn't available right now. Try again later.",
+    );
+    expect(APP_COPY.upgradeUnavailable).not.toMatch(/reach|connection|network/i);
+    expect(APP_COPY.purchasesOff).toBe('In-app purchases are turned off on this iPhone.');
   });
 
   it('says "notification", never "alert", "warning" or "danger", but for the footer', () => {
@@ -332,6 +364,7 @@ describe('APP_COPY', () => {
   it('is in sentence case: capitals only to start a sentence, and for names', () => {
     const names = [
       'Apple Account',
+      'App Store',
       'Family Sharing',
       'Privacy choices',
       'Settings',

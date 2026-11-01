@@ -85,8 +85,15 @@ final class OfflineTests: XCTestCase {
     }
     try everyPage(failed, in: app)
     try tap(opening, in: app)
-    app.buttons["retry"].tap()
-    XCTAssertTrue(app.buttons["retry"].waitForExistence(timeout: 20), "Retry went")
+    let retry = app.buttons["retry"]
+    // Retry's request fails again at once and leaves the page as it was, so nothing on screen
+    // says a tap took: only `debug-cancels` tells a touch the system cancelled, which the app
+    // never had as a tap, from one it had. That one is tapped once more; a tap the app completed
+    // never is.
+    if cancelled("tap on Retry", in: app, within: 2, { retry.tap() }), retry.exists {
+      _ = cancelled("second tap on Retry", in: app) { retry.tap() }
+    }
+    XCTAssertTrue(retry.waitForExistence(timeout: 20), "Retry went; \(app.cancelsReport)")
     expect(opening, in: app)
   }
 

@@ -12,13 +12,17 @@ import XCTest
 /// (`AuditKinds.passes`): the kinds that read the screen as it is, contrast and then the other
 /// four, then the Dynamic Type and clipped-text checks, which lay the app out at other text sizes
 /// and leave a page scrolled past its end at the size checked short of where it was, so the page
-/// is put back before the next scroll (`restore`).
+/// is put back before the next scroll (`restore`). The upgrade row (spec 10.2, item 6), which
+/// StoreKit's stand-in brings only with a product for sale, is audited the same way, on
+/// leeds-dry's middle page launched with one (`-purchase bought`), at Large and at AX3, where its
+/// words wrap; no other launch here has the row.
 ///
 /// The attachments are named so that the contact sheet, which tiles them in their names' order
 /// (`ci/contact-sheet.mjs`), shows them fixture by fixture, Large then AX3, each page in the
 /// switcher's order, top to bottom: `home-<fixture>-1-large-1-now-01`, `…-1-large-1-now-02`, …,
 /// `…-1-large-2-today-01` (or `-2-tomorrow-01`), …, `…-1-large-3-this-week-01`, …, then
-/// `home-<fixture>-2-ax3-1-now-01` and so on.
+/// `home-<fixture>-2-ax3-1-now-01` and so on; the row's after leeds-dry's own, as
+/// `home-leeds-dry-upgrade-1-large-2-today-01` and so on.
 ///
 /// Every issue an audit finds fails the test, but for the exceptions in `exceptions`, each with
 /// why it isn't a fault to fix in the app. An element of the page is judged on a screenful that
@@ -60,6 +64,27 @@ final class HomeAuditTests: XCTestCase {
   @MainActor
   func testLeedsDryAtAX3() throws {
     try audit("leeds-dry", at: .ax3)
+  }
+
+  @MainActor
+  func testLeedsDryWithTheUpgradeRowAtLarge() throws {
+    try auditTheUpgradeRow(at: .large)
+  }
+
+  @MainActor
+  func testLeedsDryWithTheUpgradeRowAtAX3() throws {
+    try auditTheUpgradeRow(at: .ax3)
+  }
+
+  /// leeds-dry's middle page, the one page with the upgrade row, launched with a product for sale
+  /// (`-purchase bought`, StoreKit's stand-in), so the row sits above its footer; attached as
+  /// `home-leeds-dry-upgrade-…`. The row comes once the stand-in has answered, which the audit
+  /// waits for.
+  @MainActor
+  private func auditTheUpgradeRow(at size: TextSize) throws {
+    try audit(
+      "leeds-dry", at: size, extra: ["-purchase", "bought"], pages: ["today"],
+      as: "leeds-dry-upgrade", showing: "upgrade-row")
   }
 
   /// An issue the audit raises that isn't a fault to fix in the app, and why: which kind, and
@@ -125,18 +150,40 @@ final class HomeAuditTests: XCTestCase {
   /// is safe: the next scroll is worked out from where the page is.
   static let restoringSlack: CGFloat = 24
 
-  /// Opens `name` at `size`, checks the switcher is the one for that size, and for each page in
-  /// the switcher's order shows it by its tab, checks its heading, and from its top to its end
-  /// attaches and audits each screenful. Fails, once, listing every issue found on any page
-  /// that isn't an exception.
+  /// Opens `name` at `size`, launched with `extra` arguments too, checks the switcher is the one
+  /// for that size, and for each page in the switcher's order, or only those whose views are in
+  /// `pages` ("now", "today", "week") when given, shows it by its tab, checks its heading, and
+  /// from its top to its end attaches and audits each screenful. The attachments are named for
+  /// `label`, `name` without one. With `showing`, the identifier of an element of the page the
+  /// launch opens on that comes a moment later (the upgrade row, once StoreKit's stand-in has
+  /// answered), the test waits up to 10 seconds for it before it reads anything, and stops
+  /// without it rather than audit a page without what it is for. Fails, once, listing every issue
+  /// found on any page that isn't an exception.
   @MainActor
-  private func audit(_ name: String, at size: TextSize) throws {
+  private func audit(
+    _ name: String,
+    at size: TextSize,
+    extra: [String] = [],
+    pages: Set<String>? = nil,
+    as label: String? = nil,
+    showing: String? = nil
+  ) throws {
     let screen = try HomeScreen.named(name)
-    let app = try launch(screen, size: size)
+    if let pages, let missing = pages.subtracting(screen.pages.map(\.view)).sorted().first {
+      throw HomeScreenError("\(name) has no \(missing) page to audit")
+    }
+    let label = label ?? name
+    let app = try launch(screen, size: size, extra: extra)
     let order: String
     switch size {
     case .large: order = "1-large"
     case .ax3: order = "2-ax3"
+    }
+    // What the launch brings a moment later, before the checks and audits read the screen.
+    if let showing, !app.find(showing).waitForExistence(timeout: 10) {
+      throw HomeScreenError(
+        "\(label) at \(order): no \(showing) 10 seconds after launching with \(extra); "
+          + app.homeGeometry)
     }
     // At an accessibility size the switcher's tabs wrap onto a second line, and at Large they
     // share the track's one: so the size reached the app.
@@ -145,22 +192,24 @@ final class HomeAuditTests: XCTestCase {
       "The switcher isn't the one for \(order): the text size didn't reach the app")
     // The top bar under the status bar, and every page's end below the screen, at both sizes on
     // main's first macOS run.
-    expectFits(app, "\(name) at \(order)")
+    expectFits(app, "\(label) at \(order)")
     // The window-sized element with no label, on every screenful of PR #33's two macOS runs.
-    expectNoBareElements(app, "\(name) at \(order)")
+    expectNoBareElements(app, "\(label) at \(order)")
     // Every page's colours, from brandColours.ts, once checked against TypeScript's samples.
     let surfaces = try SurfaceFile.bundled()
     let found = AuditLog()
     let times = AuditTimes()
     // Every call's time, however the test ends (ci/xcresult-summary.mjs `timings` lists them).
-    defer { attachText(times.text, as: "home-\(name)-\(order)-audit-times") }
-    for (index, page) in screen.pages.enumerated() {
+    defer { attachText(times.text, as: "home-\(label)-\(order)-audit-times") }
+    // Numbered by the switcher's order whichever are audited, so a page's attachments are named
+    // alike in every test.
+    for (index, page) in screen.pages.enumerated() where pages?.contains(page.view) ?? true {
       try tap(page, in: app)
       XCTAssertEqual(app.heading.label, page.heading, "\(page.view) page at \(order)")
       let tab = page.label.lowercased().replacingOccurrences(of: " ", with: "-")
       let colours = try surfaces.colours(.page(band: page.band), window: app.frame)
       try audit(
-        page, as: "home-\(name)-\(order)-\(index + 1)-\(tab)", in: app, at: size,
+        page, as: "home-\(label)-\(order)-\(index + 1)-\(tab)", in: app, at: size,
         colours: colours, noting: found, timing: times)
     }
     // What the exceptions allowed and which no issue needed, for the log and the result bundle:
@@ -170,10 +219,10 @@ final class HomeAuditTests: XCTestCase {
       "Not needed: \(Self.exceptions[$0].why)"
     }
     let report = found.allowed.map { "Allowed: \($0)" } + unneeded + times.report
-    attachText(report.joined(separator: "\n"), as: "home-\(name)-\(order)-allowed")
+    attachText(report.joined(separator: "\n"), as: "home-\(label)-\(order)-allowed")
     XCTAssertTrue(
       found.unexpected.isEmpty,
-      "\(found.unexpected.count) accessibility issues on \(name) at \(order), in the window at "
+      "\(found.unexpected.count) accessibility issues on \(label) at \(order), in the window at "
         + "\(app.frame):\n" + (found.unexpected + report).joined(separator: "\n"))
   }
 
@@ -190,7 +239,9 @@ final class HomeAuditTests: XCTestCase {
   /// as a screenful of its own, `<name>-<k>-moved`, what the stopped screenful's calls done found
   /// dropped so that none is counted twice, and again, a few points from every place a call
   /// stopped, should one stop there too, up to `reaudits` times (`-moved-2`, `-moved-3`;
-  /// `auditAgain`); the next scroll starts from the one whose calls all finished. Fails, with
+  /// `auditAgain`); the next scroll starts from the one whose calls all finished. A step's drag
+  /// whose touch the system cancelled (`Drag.cancelled`), the page left where it was, is played
+  /// once more before the page is judged to scroll no further. Fails, with
   /// where the page and its credits were, when the credits aren't there, the app has left the
   /// foreground, an audit can't run, a call doesn't finish in time on every moved screenful or
   /// the page can't be moved so, a call but the resizing one moves the page, the page stops
@@ -253,8 +304,15 @@ final class HomeAuditTests: XCTestCase {
       if screenful.credits.maxY <= screenful.page.maxY { return }
       drags += restore(page, to: screenful, in: app, credits: credits)
       let before = settledFrame(of: credits)
-      drags.append(scrollDown(page, by: step(page, from: screenful, in: app), in: app))
-      let after = settledFrame(of: credits)
+      let drag = scrollDown(page, by: step(page, from: screenful, in: app), in: app)
+      drags.append(drag)
+      var after = settledFrame(of: credits)
+      // A drag whose touch the system cancelled may have left the page where it was, as on PR
+      // #36's run: played once more, once a step, before the page is judged.
+      if drag.cancelled, after.minY > screenful.credits.minY - 1 {
+        drags.append(scrollDown(page, by: step(page, from: screenful, in: app), in: app))
+        after = settledFrame(of: credits)
+      }
       // Restore leaves the page at most restoringSlack short of the screenful, and the step moves
       // it at least a quarter of the page on screen less a drag's slack: a page that moves ends
       // well past the screenful.
@@ -392,7 +450,7 @@ final class HomeAuditTests: XCTestCase {
       } catch {
         failure.notRunAgain = "its screenful wasn't audited again a few points away: \(error)"
         if !stops.isEmpty { failure.elsewhere = ReauditStops(stops: stops) }
-        XCTFail("\(failure); " + Screenful.describe(seen))
+        XCTFail("\(failure); " + Screenful.describe(seen) + "; \(run.app.cancelsReport)")
         return nil
       }
       let again =
@@ -529,7 +587,8 @@ final class HomeAuditTests: XCTestCase {
 
   /// Puts the page back where `screenful` had it, after an audit moved it back up: scrolls down,
   /// at most four fifths of the page on screen a drag, until the credits are within
-  /// `restoringSlack` points short of where they were, or a drag moves the page no more. Never
+  /// `restoringSlack` points short of where they were, or a drag moves the page no more (one whose
+  /// touch the system cancelled goes round again, within `restoringDrags`). Never
   /// past it: a drag moves the page by less than its length, as the scroll view spends its first
   /// points before the page moves, and the next scroll is worked out from where the page then is
   /// (`step`), so no part of the page goes unaudited. The Dynamic Type check does move it: it
@@ -554,7 +613,8 @@ final class HomeAuditTests: XCTestCase {
       drag.restoring = true
       drags.append(drag)
       let next = settledFrame(of: credits)
-      if abs(next.minY - now.minY) < 1 { break }
+      // A drag the page didn't take stops it, but not one the system cancelled.
+      if abs(next.minY - now.minY) < 1, !drag.cancelled { break }
       now = next
     }
     return drags
@@ -590,12 +650,14 @@ final class HomeAuditTests: XCTestCase {
 
   /// What a page that stopped short of its end shows, for its failure to say, beyond where the
   /// page and its credits were on each screenful: the page's whole frame, the part off screen
-  /// too, and the window's; each drag; the page's lowest elements, by which the page's content
-  /// reaches below its frame or not; and where the credits went on a swipe up by XCUITest's own
-  /// gesture, which tells a page at the end of its scroll range from a drag the page didn't
-  /// take. Attaches the app's element tree as `<name>-tree-stopped` (`<name>-tree` is the
-  /// page's first screenful's). On main's first macOS run, every page at AX3 stopped 1,000 to
-  /// 1,600 points short of its end, and the log couldn't say why.
+  /// too, and the window's; each drag, with whether its touch was cancelled; the page's lowest
+  /// elements, by which the page's content reaches below its frame or not; where the credits went
+  /// on a swipe up by XCUITest's own gesture, which tells a page at the end of its scroll range
+  /// from a drag the page didn't take; and what `debug-cancels` reads after that swipe
+  /// (`cancelsReport`), so a drag the simulator cancelled names itself. Attaches the app's
+  /// element tree as `<name>-tree-stopped` (`<name>-tree` is the page's first screenful's). On
+  /// main's first macOS run, every page at AX3 stopped 1,000 to 1,600 points short of its end,
+  /// and the log couldn't say why.
   @MainActor
   private func stopped(
     _ page: HomeScreen.Page,
@@ -629,7 +691,7 @@ final class HomeAuditTests: XCTestCase {
     return "the page's whole frame \(frame), in the window at \(app.frame); the drags "
       + drags.map(\.description).joined(separator: ", ")
       + "; the page's lowest elements \(lowest); a swipe up by XCUITest then moved the credits "
-      + "from \(before) to \(after)"
+      + "from \(before) to \(after); \(app.cancelsReport)"
   }
 
   /// How far to scroll the page from `screenful` for the next one: so the first of the page's

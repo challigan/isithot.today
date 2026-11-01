@@ -6,16 +6,22 @@ import UIKit
 /// The Settings sheet (iOS build spec, section 10.4) in the website's look (DECISIONS, "The
 /// iPhone app in the website's look", step 6): the website's content pages' palette, fixed and
 /// the same in both appearances, with the title on the page; the snow units on a card with the
-/// website's cm | in pill; the privacy rows, Report an ad in the free version, About and Help, as
-/// rows with icons on plum cards under their headings; and the version. A page that scrolls
-/// (`SheetPage`), not a `Form`, whose cells the audit failed on PR #33's runs though they grew;
-/// section 10.4's order and contents are kept, its native form and Dark Mode are not. Pages open
-/// on the sheet's own stack (Your privacy, How it works, Credits and licences); willitsnow.today's
-/// pages open in Safari and the emails in the mail app, through `openURL`, and with no mail app
-/// the fallback sheet says where to write. Everything shown is the presenters'.
+/// website's cm | in pill; the upgrade card, with no heading: the upgrade row in the free version
+/// (its price once StoreKit has one), or the thanks once owned, then Restore purchase with its
+/// result; the privacy rows, Report an ad in the free version, About and Help, as rows with icons
+/// on plum cards under their headings; and the version. A page that scrolls (`SheetPage`), not a
+/// `Form`, whose cells the audit failed on PR #33's runs though they grew; section 10.4's order
+/// and contents are kept, its native form and Dark Mode are not. Pages open on the sheet's own
+/// stack (the upgrade page, Your privacy, How it works, Credits and licences), so the upgrade
+/// page is never a sheet over a sheet; willitsnow.today's pages open in Safari and the emails in
+/// the mail app, through `openURL`, and with no mail app the fallback sheet says where to write.
+/// Everything shown is the presenters'. Nothing is announced here: the Restore purchase row that
+/// was tapped says its result (`RestoreRow`), and the upgrade page its outcome.
 public struct SettingsView: View {
   let screen: SettingsScreen
   let privacy: YourPrivacy
+  /// The upgrade page, which the upgrade row pushes.
+  let upgrade: UpgradePage
   let actions: SettingsActions
 
   @Environment(\.dismiss) private var dismiss
@@ -23,9 +29,12 @@ public struct SettingsView: View {
   /// The mail fallback on screen, after an email no mail app could open.
   @State private var fallback: MailFallback?
 
-  public init(screen: SettingsScreen, privacy: YourPrivacy, actions: SettingsActions) {
+  public init(
+    screen: SettingsScreen, privacy: YourPrivacy, upgrade: UpgradePage, actions: SettingsActions
+  ) {
     self.screen = screen
     self.privacy = privacy
+    self.upgrade = upgrade
     self.actions = actions
   }
 
@@ -34,7 +43,8 @@ public struct SettingsView: View {
       SheetPage(title: screen.title) {
         UnitsCard(control: screen.units, setUnits: actions.setUnits)
         ForEach(screen.sections) { section in
-          // A heading only for a section with one: Report an ad's has none, and follows closer.
+          // A heading only for a section with one: the upgrade card and Report an ad have none,
+          // and follow closer.
           SheetSection(header: section.heading) {
             rows(section)
           }
@@ -81,7 +91,8 @@ public struct SettingsView: View {
 
   /// A row as its action has it, the whole row a button at least `SheetMetrics.rowHeight` tall
   /// (`SheetRowStyle`), its icon leading and its end saying what it does: a page on the stack (a
-  /// chevron), a web page or an email (an arrow out), or Google's form (neither).
+  /// chevron), a web page or an email (an arrow out), or Google's form and Restore purchase
+  /// (neither). A note (the thanks once owned) is no button: a row's words, one element.
   @ViewBuilder private func rowView(_ row: SettingsScreen.Row) -> some View {
     switch row.action {
     case .page(let page):
@@ -124,11 +135,20 @@ public struct SettingsView: View {
         .buttonStyle(SheetRowStyle())
         .accessibilityIdentifier(row.id)
       }
+    case .restore:
+      RestoreRow(row: row, restore: actions.upgrade.restore)
+    case .note:
+      RowLabel(title: row.title, icon: row.icon, end: .none)
+        .sheetRow()
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(row.id)
     }
   }
 
   @ViewBuilder private func destination(_ page: SettingsPage) -> some View {
     switch page {
+    case .upgrade:
+      UpgradeView(page: upgrade, actions: actions.upgrade)
     case .yourPrivacy:
       YourPrivacyView(page: privacy, deleteMyData: actions.deleteMyData)
     case .howItWorks:

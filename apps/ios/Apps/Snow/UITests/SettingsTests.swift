@@ -7,6 +7,9 @@ import XCTest
 /// fallback with no mail app (`-openURLs nomail`); Your privacy's lines; the version line; and
 /// no word naming another app, website or weather type. Each screen is audited for
 /// accessibility and attached for the contact sheet. Every launch starts from a clean store.
+/// Settings opens on its upgrade card, which StoreKit's stand-in fills with no product for sale
+/// (no `-purchase`): "Remove ads and add widgets" with no price, then Restore purchase. The
+/// audits and the snow-only check read them with the rest; what they do is UpgradeTests'.
 /// Each page is known by its title on the page (`page-title`, `page(titled:in:)`), the website's
 /// h1, since the navigation bar draws none (IsItUI's `SheetPage`).
 final class SettingsTests: XCTestCase {
@@ -156,7 +159,7 @@ final class SettingsTests: XCTestCase {
     XCTAssertFalse(app.staticTexts["copy-confirmation"].exists)
     app.buttons["copy-address"].tap()
     let copied = app.staticTexts["copy-confirmation"]
-    XCTAssertTrue(copied.waitForExistence(timeout: 5), "No confirmation")
+    XCTAssertTrue(copied.waitForExistence(timeout: 5), "No confirmation; \(app.cancelsReport)")
     XCTAssertEqual(copied.label, "Address copied.")
     try auditAccessibility(of: app, on: "Report an ad's fallback", surface: .content)
     attachScreen(of: app, named: "app-report-ad-fallback")
@@ -182,6 +185,13 @@ final class SettingsTests: XCTestCase {
     openSettings(app)
     tap("your-privacy", in: app)
     page(titled: "Your privacy", in: app)
+    // At its top, as How it works and the licences are, where each line on screen starts below
+    // the bar. At its end, since the purchase's line made the page longer, the second line runs
+    // up past the window's top (PR #40's first macOS run: 506 points tall, its top at -150):
+    // contrast failed on it there, and a frame not whole on screen can't be proven drawn in the
+    // content's colours (`DrawnText`).
+    try auditAccessibility(of: app, on: "Your privacy", surface: .content)
+    attachScreen(of: app, named: "app-your-privacy")
     let lines = [
       "To get the forecast, the app sends the place (a town, or your location rounded to about "
         + "5 km) and your units to our server. Until you choose a place, our server estimates a "
@@ -199,7 +209,8 @@ final class SettingsTests: XCTestCase {
         + "It holds no token or place.",
       "In the free version, Google shows the ads and may collect device and usage data. The app "
         + "keeps when it last showed a full-screen ad, so it shows one at most every 5 minutes.",
-      "Apple handles purchases. We never see your payment details.",
+      "Apple handles purchases. We never see your payment details. The app keeps a note on your "
+        + "iPhone of whether you've made the one-off purchase.",
       "There are no accounts.",
     ]
     for (index, line) in lines.enumerated() {
@@ -213,8 +224,6 @@ final class SettingsTests: XCTestCase {
     XCTAssertFalse(text("What we keep for notifications", in: app).exists)
     XCTAssertFalse(app.buttons["delete-my-data"].exists)
     assertSnowOnly(app)
-    try auditAccessibility(of: app, on: "Your privacy", surface: .content)
-    attachScreen(of: app, named: "app-your-privacy")
     let policy = app.buttons["full-policy"]
     XCTAssertGreaterThanOrEqual(policy.frame.height, 44, "The full policy's row at \(policy.frame)")
     tap("full-policy", in: app)
@@ -226,7 +235,9 @@ final class SettingsTests: XCTestCase {
   /// Launches the app with `-uitest`, `-noads 1` (no consent form or ad, as `launchApp`) and
   /// `arguments`, and waits for the answer's verdict. Still the free version (no `-unlocked`):
   /// Report an ad and the ads line show, as they follow the version, not the ads; Privacy
-  /// choices, which only Google's answer brings, never does (AdsTests show it).
+  /// choices, which only Google's answer brings, never does (AdsTests show it). `-uitest` puts
+  /// StoreKit's stand-in in StoreKit's place (DebugHooks.swift), which has no product for sale
+  /// without `-purchase`, so the upgrade row shows no price.
   @MainActor
   private func launch(_ arguments: [String]) -> XCUIApplication {
     let app = XCUIApplication()
@@ -236,15 +247,26 @@ final class SettingsTests: XCTestCase {
     return app
   }
 
-  /// Taps the gear, and waits for the sheet, with its Close and its title. With no sheet, the
-  /// failure says where the top bar was: on main's first macOS run the gear was under the status
-  /// bar, where the tap never reached it.
+  /// Taps the gear, and waits for the sheet, with its Close and its title. A tap whose touch the
+  /// system cancelled (`cancelled(_:in:within:until:_:)`) and that opened no sheet is tapped once
+  /// more; a tap the app completed never is. With no sheet, the failure says where the top bar
+  /// was (on main's first macOS run the gear was under the status bar, where the tap never
+  /// reached it) and `debug-cancels`.
   @MainActor
   private func openSettings(_ app: XCUIApplication) {
-    app.buttons["settings"].tap()
+    let gear = app.buttons["settings"]
+    let close = app.buttons["close-settings"]
+    // Opened, and not opened, as the home screen shows it (`sheetClosed`), not by Close, which
+    // XCUITest may go on finding once an earlier Settings has closed.
+    let opened = { !app.sheetClosed }
+    if cancelled("tap on the gear", in: app, within: 2, until: opened, { gear.tap() }),
+      app.sheetClosed
+    {
+      _ = cancelled("second tap on the gear", in: app) { gear.tap() }
+    }
     XCTAssertTrue(
-      app.buttons["close-settings"].waitForExistence(timeout: 5),
-      "No Settings after tapping the gear; \(app.homeGeometry)")
+      close.waitForExistence(timeout: 5),
+      "No Settings after tapping the gear; \(app.cancelsReport); \(app.homeGeometry)")
     page(titled: "Settings", in: app)
   }
 
@@ -260,7 +282,9 @@ final class SettingsTests: XCTestCase {
     if app.staticTexts.matching(titled).firstMatch.waitForExistence(timeout: 5) { return }
     let shown = app.staticTexts.matching(identifier: "page-title").allElementsBoundByIndex
       .map(\.label)
-    XCTFail("No page titled \"\(title)\"; the titles on screen: \(shown)", file: file, line: line)
+    XCTFail(
+      "No page titled \"\(title)\"; the titles on screen: \(shown); \(app.cancelsReport)",
+      file: file, line: line)
   }
 
   /// The recorder's line whose value is the last URL the app would have opened.
@@ -298,7 +322,8 @@ final class SettingsTests: XCTestCase {
     XCTAssertTrue(
       reachable(element, in: app),
       "Can't reach \(element), at \(element.exists ? "\(element.frame)" : "nowhere"), with the "
-        + "Debug recorder's lines at \(recorder.exists ? "\(recorder.frame)" : "nowhere")")
+        + "Debug recorder's lines at \(recorder.exists ? "\(recorder.frame)" : "nowhere"); "
+        + app.cancelsReport)
   }
 
   /// Whether a tap on `element` would land on it: it is there and hittable, it has stopped moving
@@ -337,21 +362,6 @@ final class SettingsTests: XCTestCase {
     let done = XCTWaiter.wait(for: [expectation], timeout: 10)
     let held = element.exists ? recorded(element) : "nothing"
     XCTAssertEqual(done, .completed, "\(element) never held \(value); it holds \"\(held)\"")
-  }
-
-  /// No text or button Settings shows names another weather type, website or app (section
-  /// 10.8). Only what can be tapped counts: the home screen under the sheet, whose answer may
-  /// well say "Rain, not snow.", is the server's, and is covered.
-  @MainActor
-  private func assertSnowOnly(_ app: XCUIApplication) {
-    let other =
-      #"(?i)\b(websites?|isithot|isitwet|isitwindy|hot|wet|wind|windy|rain|rainy|rainfall|android)\b"#
-    let shown = (app.staticTexts.allElementsBoundByIndex + app.buttons.allElementsBoundByIndex)
-      .filter { $0.isHittable }
-    XCTAssertFalse(shown.isEmpty, "Nothing on screen")
-    for element in shown {
-      XCTAssertNil(element.label.range(of: other, options: .regularExpression), element.label)
-    }
   }
 
   @MainActor

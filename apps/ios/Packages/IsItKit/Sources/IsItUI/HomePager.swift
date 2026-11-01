@@ -125,8 +125,9 @@ private struct TabChip: View {
 /// accessibility tree, so VoiceOver and the UI tests read that one: the page on screen, except
 /// while a swipe is still moving, as `selection` follows a swipe only when the pages settle (on
 /// iOS 17, when the scroll view reports the next page). VoiceOver moves between pages with the
-/// switcher. Each page ends with what `pageEnd` gives for its view, after its footer: in the free
-/// version, the ad box.
+/// switcher. Each page shows what `pageCards` gives for its view above its footer (in the free
+/// version, the upgrade row on the middle page), and ends with what `pageEnd` gives, after its
+/// footer: in the free version, the ad box.
 ///
 /// Each page is exactly the pager's size: the space the home screen leaves it under the top bar
 /// and the switcher, read as the pager is laid out. Not
@@ -143,13 +144,15 @@ private struct TabChip: View {
 /// screenful, never whole on screen, as this scroll view, then taller than the screen, was; with
 /// the identifier, the next run's log says whether it is (DECISIONS, "The iPhone app's UI tests,
 /// reviewed").
-public struct HomePager<PageEnd: View>: View {
+public struct HomePager<PageCards: View, PageEnd: View>: View {
   let pages: [PageContent]
   @Binding var selection: AppView
   /// Never drift the glyphs: a test's still screens.
   let still: Bool
   let actions: HomeActions
   let refresh: @Sendable () async -> Void
+  /// What each view's page shows above its footer (`ForecastPageView`'s `cards`).
+  let pageCards: (AppView) -> PageCards
   /// What each view's page ends with (`ForecastPageView`'s `end`).
   let pageEnd: (AppView) -> PageEnd
 
@@ -159,6 +162,7 @@ public struct HomePager<PageEnd: View>: View {
     still: Bool,
     actions: HomeActions,
     refresh: @escaping @Sendable () async -> Void,
+    @ViewBuilder pageCards: @escaping (AppView) -> PageCards,
     @ViewBuilder pageEnd: @escaping (AppView) -> PageEnd
   ) {
     self.pages = pages
@@ -166,6 +170,7 @@ public struct HomePager<PageEnd: View>: View {
     self.still = still
     self.actions = actions
     self.refresh = refresh
+    self.pageCards = pageCards
     self.pageEnd = pageEnd
   }
 
@@ -183,6 +188,7 @@ public struct HomePager<PageEnd: View>: View {
                 still: still,
                 pageWidth: space.size.width,
                 actions: actions,
+                cards: pageCards(content.page.view),
                 end: pageEnd(content.page.view)
               )
               .refreshable { [refresh] in await refresh() }

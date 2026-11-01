@@ -43,7 +43,8 @@ public enum ConsentGeography: Sendable {
 /// UMP's update is its completion-handler form, so `canRequestAds` can be read the moment it is
 /// asked for; its forms are shown over whatever is on top (`TopViewController`) as they are ready.
 /// A failed call shows nothing, and the answer after it is the one UMP kept. A banner's news comes
-/// through its delegate to `banners`. A full-screen ad shows once and is dropped.
+/// through its delegate to `banners`. A full-screen ad shows once and is dropped. Once the
+/// purchase is owned, `stop()` drops the banners and the full-screen ad on hand.
 @MainActor
 public final class GoogleAds: NSObject, AdsPlatform, BannerViewDelegate,
   FullScreenContentDelegate
@@ -250,5 +251,22 @@ public final class GoogleAds: NSObject, AdsPlatform, BannerViewDelegate,
     showing = nil
     closing?.resume(returning: shown)
     closing = nil
+  }
+
+  // MARK: - The purchase
+
+  /// The purchase is owned: the banners and the full-screen ad on hand go, so nothing more is
+  /// requested (Google's SDK itself can't be stopped). Each banner is taken off the screen, its
+  /// delegates let go, and none is kept. A full-screen ad being shown (`showing`) is left to
+  /// close, and `presentInterstitial()` returns when it does.
+  public func stop() {
+    for banner in bannerViews.values {
+      banner.delegate = nil
+      banner.adSizeDelegate = nil
+      banner.removeFromSuperview()
+    }
+    bannerViews.removeAll()
+    sizedWidths.removeAll()
+    interstitial = nil
   }
 }

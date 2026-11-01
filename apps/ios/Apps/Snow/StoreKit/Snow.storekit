@@ -1,0 +1,60 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_GB",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "5A1C3E07",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "1.99",
+      "familyShareable" : true,
+      "internalID" : "6B2D4F18",
+      "localizations" : [
+        {
+          "description" : "No ads, plus home and lock screen widgets",
+          "displayName" : "Remove ads and add widgets",
+          "locale" : "en_GB"
+        }
+      ],
+      "productID" : "today.willitsnow.app.unlock",
+      "referenceName" : "Snow unlock",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_askToBuyEnabled" : false,
+    "_billingGracePeriodEnabled" : false,
+    "_billingIssuesEnabled" : false,
+    "_disableDialogs" : false,
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_GB",
+    "_renewalBillingIssuesEnabled" : false,
+    "_storefront" : "GBR",
+    "_storeKitErrors" : [
+
+    ],
+    "_timeRate" : 0
+  },
+  "subscriptionBundleGroups" : [
+
+  ],
+  "subscriptionGroups" : [
+
+  ],
+  "subscriptionSuiteGroups" : [
+
+  ],
+  "version" : {
+    "major" : 6,
+    "minor" : 3
+  }
+}

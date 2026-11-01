@@ -62,6 +62,12 @@ struct ConstantsTests {
     #expect(Constants.Ads.retryFirstSeconds == 60)
     #expect(Constants.Ads.retryMaxSeconds == 10 * 60)
   }
+
+  @Test("the purchase: its product ID in App Store Connect, and the price a stand-in shows")
+  func purchase() {
+    #expect(Constants.Purchase.productID == "today.willitsnow.app.unlock")
+    #expect(Constants.Purchase.displayPrice == "£1.99")
+  }
 }
 
 @Suite("Keys: where the apps keep things")

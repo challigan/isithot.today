@@ -6,8 +6,9 @@ name: iOS
 # build for the iPhone 17 simulator, the Unit and UI test plans run, a Release build is checked
 # for debug hooks, and the screens and widgets the tests attach are tiled into a contact sheet;
 # beside that, an unsigned Release archive for iPhones gets the release job's archive checks
-# (scripts/check-archive.sh). No job needs a secret. Runs only when something the app is built,
-# generated or checked from changes (the same paths twice).
+# (scripts/check-archive.sh), and the StoreKit test plan runs on an iOS 26.2 simulator, where
+# StoreKit Test works (the storekit job). No job needs a secret. Runs only when something the app
+# is built, generated or checked from changes (the same paths twice).
 on:
   push:
     branches: [main]
@@ -97,7 +98,9 @@ jobs:
     runs-on: macos-26
     # The UI plan's audits take every screenful of eighteen pages, and two tests wait two
     # minutes for a running clock, on a runner whose simulator alone has taken six minutes to
-    # boot: room for a slow first run to report its results rather than be cancelled.
+    # boot: room for a slow first run to report its results rather than be cancelled. Phase
+    # 7.1's UpgradeTests, the upgrade row's two HomeAuditTests cases and AdsTests' purchase add a
+    # few minutes; the StoreKit plan has a job of its own (storekit, below).
     timeout-minutes: 90
     # The attachments' artefact ID, set only when they were uploaded. The runner evaluates job
     # outputs after the last step whatever the result, so failed tests still set it.
@@ -244,6 +247,76 @@ jobs:
           ADS_UNITS: test
       - name: Check the archive
         run: scripts/check-archive.sh apps/ios/build/WillItSnow.xcarchive test
+
+  # The SKTestSession tests (StoreKit.xctestplan) on an iPhone 17 with iOS 26.2: StoreKit Test
+  # doesn't connect to its test environment on the 26.3 to 26.5 simulators (FB22500243, which
+  # Apple lists as fixed from iOS 26.6, a runtime the image has no simulator for). A job of its
+  # own beside ios, not steps after its UI plan: ios already takes 42 minutes (run 40437897311,
+  # the UI tests 35.7 of them), so these steps would end near its 90-minute limit, be the ones a
+  # timeout cuts, and report an hour after the push. The ios job's setup, then its own simulator,
+  # build and plan.
+  storekit:
+    name: StoreKit tests on the iOS 26.2 simulator
+    needs: [generated, swift-linux]
+    runs-on: macos-26
+    # Setup and the build take about 6 minutes, the boot about 2 (6 on a slow runner), and a
+    # runtime download, if it comes to that, about 10: 22 at most. Then 18 tests (17
+    # SKTestSession tests and the file test), each allowed 60 seconds (ci/test.sh), in case every
+    # purchase sheet hangs (FB22836426): 40, before the spindump and test-runner relaunch each
+    # timed-out test adds. The 20 minutes left are for those, so a job whose every test hangs
+    # still reports them and uploads its result bundle, which a job cut off by its limit doesn't.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 26.6
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version
+      # The ios job's caches, under the same keys.
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: apps/ios/.spm
+          key: spm-${{ runner.os }}-xcode26.6-${{ hashFiles('apps/ios/Package.resolved') }}
+      - name: Cache XcodeGen
+        uses: actions/cache@v4
+        with:
+          path: ~/.xcodegen/2.46.0
+          key: xcodegen-2.46.0-4d9e34b6-${{ runner.os }}
+      - name: Generate the project
+        run: apps/ios/ci/xcodegen.sh
+      # Exactly the versions in Package.resolved, as the ios job resolves them; that job keeps
+      # what Xcode writes when the committed file can't be used.
+      - name: Resolve packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project apps/ios/WillItSnow.xcodeproj -scheme WillItSnow \
+            -clonedSourcePackagesDirPath apps/ios/.spm -onlyUsePackageVersionsFromResolvedFile
+      # Assigned first, so that a failure in simulator.sh fails this step, not the next one. A
+      # runner without the runtime downloads it; if it can't, simulator.sh says so in one error.
+      - name: Boot the iOS 26.2 simulator
+        id: simulator
+        run: |
+          udid="$(apps/ios/ci/simulator.sh 26.2)"
+          if [ -z "$udid" ]; then
+            echo "::error::simulator.sh printed no UDID"
+            exit 1
+          fi
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: Build for testing
+        run: apps/ios/ci/test.sh build "${{ steps.simulator.outputs.udid }}"
+      - name: StoreKit tests
+        run: apps/ios/ci/test.sh StoreKit "${{ steps.simulator.outputs.udid }}"
+      - name: Upload the result bundles
+        if: ${{ !cancelled() && steps.simulator.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: storekit-results
+          path: |
+            apps/ios/build/*.xcresult
+            apps/ios/build/*.json
+          if-no-files-found: warn
+          retention-days: 5
 
   contact-sheet:
     name: Contact sheet

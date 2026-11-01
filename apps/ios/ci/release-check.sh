@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Builds the app in Release for the simulator and checks what section 9.8 of the iOS build spec
-# promises of a Release build: no debug hook compiled in, no fixture bundled, and the widget
-# with no ads code. Phase 0.4's scripts/check-archive.sh makes these checks and more on the
-# signed App Store archive; this one needs no signing, so every pull request runs it.
+# promises of a Release build, no debug hook compiled in and no fixture bundled, and that each
+# target keeps to its own: no StoreKit configuration bundled in the app, no StoreKitTest linked,
+# and the widget with no ads, location or purchase code. Phase 0.4's scripts/check-archive.sh
+# makes these checks and more on the signed App Store archive; this one needs no signing, so
+# every pull request runs it.
 #
 # Usage: apps/ios/ci/release-check.sh
 set -euo pipefail
@@ -67,6 +69,15 @@ if [ -e "$app/Fixtures" ] || grep -rlF --include='*.json' '"_fixture"' "$app" | 
   fail "the Release app bundles the fixtures"
 fi
 
+# Snow.storekit is a resource of the StoreKit tests' bundle alone, and StoreKitTest links only
+# into it: the app buys from the App Store, never from a configuration of its own.
+if find "$app" -name '*.storekit' | contains /; then
+  fail "the Release app bundles a StoreKit configuration"
+fi
+if otool -L "$app/WillItSnow" | contains StoreKitTest; then
+  fail "the app links StoreKitTest"
+fi
+
 # The widget never links IsItAds, so no Google Mobile Ads, dynamic or static.
 if otool -L "$widget/WillItSnowWidgets" | contains GoogleMobileAds ||
   strings -a "$widget/WillItSnowWidgets" | contains GADMobileAds; then
@@ -78,8 +89,14 @@ if strings -a "$widget/WillItSnowWidgets" | contains CLLocationManager; then
   fail "the widget links the app's location code"
 fi
 
+# Nor IsItPurchases: a widget never sells. It may read StoreKit's entitlements (StoreKitFacts,
+# in IsItServices), so the class that buys is what is looked for.
+if strings -a "$widget/WillItSnowWidgets" | contains StoreKitPurchases; then
+  fail "the widget links the app's purchase code"
+fi
+
 if [ "$status" -eq 0 ]; then
-  line="### Release build: no debug hooks, no fixtures, no ads or location code in the widget"
+  line="### Release build: no debug hooks, fixtures, StoreKit configuration or StoreKitTest, and no ads, location or purchase code in the widget"
 else
   line="### Release build: failed its checks (see the errors above)"
 fi

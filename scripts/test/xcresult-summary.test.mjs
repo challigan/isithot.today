@@ -6,6 +6,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import {
   MAX_ROWS,
   SLOWEST,
+  attachmentFile,
   attachmentLabel,
   auditCalls,
   buildSummary,
@@ -443,6 +444,42 @@ describe('the command', () => {
     expect(run(['timings', join(dir, 'nowhere')])).toBe(
       '### Audit times: no attachments manifest (see the log)\n',
     );
+  });
+
+  it('finds the file an attachment was exported to by the name the test gave it', () => {
+    const folder = join(dir, 'review');
+    mkdirSync(folder);
+    const uuid = '6A8BF242-1F95-48C6-8C6D-C4456AB63129';
+    writeFileSync(
+      join(folder, 'manifest.json'),
+      JSON.stringify([
+        null,
+        { attachments: [{}, { exportedFileName: 'A.png' }] },
+        {
+          testIdentifier: 'UpgradeTests/testTheRowThePageAndBuying()',
+          attachments: [
+            {
+              exportedFileName: 'B.png',
+              suggestedHumanReadableName: `app-upgrade-thanks_0_${uuid}.png`,
+            },
+            { exportedFileName: 'C.png', suggestedHumanReadableName: `app-upgrade_0_${uuid}.png` },
+            { exportedFileName: 'D.png', suggestedHumanReadableName: `app-upgrade_1_${uuid}.png` },
+          ],
+        },
+      ]),
+    );
+    expect(attachmentFile(folder, 'app-upgrade')).toBe(join(folder, 'C.png'));
+    expect(attachmentFile(folder, 'app-upgrade-thanks')).toBe(join(folder, 'B.png'));
+    expect(attachmentFile(folder, 'app-upgrade-unavailable')).toBeNull();
+    expect(attachmentFile(join(dir, 'nowhere'), 'app-upgrade')).toBeNull();
+    expect(run(['attachment', folder, 'app-upgrade'])).toBe(`${join(folder, 'C.png')}\n`);
+    let status = 0;
+    try {
+      run(['attachment', folder, 'app-upgrade-unavailable']);
+    } catch (error) {
+      status = error.status;
+    }
+    expect(status).toBe(1);
   });
 
   it('explains its arguments', () => {
