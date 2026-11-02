@@ -1,0 +1,33 @@
+{
+  "_fixture": {
+    "request": "PUT /api/v1/devices",
+    "body": {
+      "v": 2,
+      "app": "snow",
+      "platform": "ios",
+      "env": "sandbox",
+      "token": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "units": "c",
+      "appVersion": "1.0 (42)",
+      "alerts": {
+        "snow": {
+          "evening": true,
+          "morning": false,
+          "possible": false
+        }
+      },
+      "here": {
+        "source": "ip"
+      },
+      "saved": []
+    },
+    "geo": {
+      "country": "GB"
+    },
+    "now": "2026-12-01T10:05:00.000Z",
+    "note": "An hour after put-here-device, with location access turned off, the app sends where you are as approximate, and Netlify places the connection in the UK but in no town: the server deletes the phone’s location, has nothing left to keep, forgets the set and answers 400 bad_location in its own words, which the app shows. The Debug builds answer this to a set no other fixture has."
+  },
+  "status": 400,
+  "retryAfter": null,
+  "text": "{\"error\":{\"code\":\"bad_location\",\"message\":\"We couldn't tell where you are from your internet connection. Try again later, or use your location.\"}}"
+}

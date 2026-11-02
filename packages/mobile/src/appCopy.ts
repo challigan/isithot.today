@@ -23,8 +23,10 @@ export const APP_COPY = {
   slugGone: 'That place is no longer available. Showing your approximate location.',
   offline: "You're offline. Showing the forecast from {time}.",
   staleApp: 'No recent forecast. Connect to the internet to refresh.',
-  cardChosen: 'Get a notification the evening before snow is likely here.',
-  cardApprox: 'Choose a place for notifications: use your location or search for a town.',
+  // The Today card's offer, shown only while the screen shows where you are (the phone's point or
+  // the approximate place, never a saved or searched place's page), with `notifyHereKept` under
+  // it, then Turn on and Not now.
+  cardOffer: 'Get a notification the evening before snow is likely where you are.',
   turnOn: 'Turn on',
   notNow: 'Not now',
   search: 'Search',
@@ -79,11 +81,13 @@ export const APP_COPY = {
   searchOffline: "You're offline. Connect to the internet to search.",
   locationUnavailable: "Couldn't find your location. Search for a place instead.",
   // The location permission's purpose string (15.2), `NSLocationWhenInUseUsageDescription`, which
-  // the app's Info.plist reads from the generated Configs/Generated/Copy.xcconfig.
+  // the app's Info.plist reads from the generated Configs/Generated/Copy.xcconfig. Notifications
+  // for where you are use the phone's location whenever it is shared, so the string says it is
+  // kept and moves while they are on (phase 8.4a).
   locationPurpose:
     'Your location shows whether it will snow where you are. It is rounded to about 5 km before ' +
-    'it leaves your phone. If you turn on notifications for your location, that rounded location ' +
-    'is kept so we can tell you when snow is likely.',
+    'it leaves your phone. If notifications are on, that rounded location is kept, and updated ' +
+    'when you open the app, so we can tell you when snow is likely where you are.',
 
   // Upgrade (10.4, 10.5). The title is also the Settings row until StoreKit gives a price, and
   // the purchase's display name in App Store Connect and Snow.storekit: 30 characters at most
@@ -121,19 +125,30 @@ export const APP_COPY = {
   morningNote: 'When snow is likely today.',
   possible: 'Also when snow is possible',
   possibleNote: 'When some forecasts expect snow, but not most.',
-  notifyPlace: 'Place',
-  notifyPlaceOnScreen: 'Use the place on screen: {place}',
+  // The free notification's place, where you are (phase 8.4a): the phone's location when it is
+  // shared, else a rough place the server finds from the connection, never a place on screen.
+  // Settings' row (`notify-here`) has the town as its value and how it was found: core's
+  // `yourLocation` for the phone's, `notifyHereApprox` for the connection's, `notifyHereUnknown`
+  // once the server found none (client `hereKind`). Under the switches, and under the Today
+  // card's offer, `notifyHereKept` says what is kept, and for how long (`notify-here-kept`).
+  notifyHere: 'Where you are',
+  notifyHereApprox: 'Approximate, from your internet connection',
+  notifyHereUnknown: 'Not found yet',
+  notifyHereKept:
+    'Uses your location if you share it, otherwise a rough place from your internet connection, ' +
+    'which we keep while notifications are on.',
+  // The page the row opens on Settings' stack, by its title, the row's own words: how where you
+  // are is found, and how often it moves (client `alertAction`, core `ALERTS.hereRefreshMinutes`);
+  // "Use my location" while location access isn't allowed, which asks at the tap; and what it
+  // says when that finds access off for the app in iPhone Settings, or a fix that found nothing.
+  notifyPlaceTitle: 'Where you are',
+  notifyHereAbout:
+    'Notifications for where you are use your location if you share it with the app, otherwise ' +
+    "a rough place from your internet connection. It's updated when you open the app, at most " +
+    'once an hour, and kept only while notifications are on.',
   notifyPlaceMyLocation: 'Use my location',
-  notifyFollows: 'Follows your location each time you open the app.',
-  needsPlace: 'Choose a place for notifications: use your location or search for a town.',
-  // The page the place row opens on Settings' stack, by its title, and what it says when "Use my
-  // location" finds location access off for the app in iPhone Settings, or a fix that found
-  // nothing: with the place on screen to choose when the page offers it (a city's page or a
-  // searched place), else without (the phone's own place, or approximate location).
-  notifyPlaceTitle: 'Notification place',
   notifyLocationDenied: 'Location access is off for this app in Settings.',
-  notifyLocationUnavailable: "Couldn't find your location. Try again, or use the place on screen.",
-  notifyLocationTryAgain: "Couldn't find your location. Try again.",
+  notifyLocationUnavailable: "Couldn't find your location. Try again.",
   sendTest: 'Send a test notification',
   testSent: 'Sent. It should arrive in a few seconds.',
   testLimited: 'You can send 3 test notifications an hour. Try again later.',
@@ -151,10 +166,14 @@ export const APP_COPY = {
   notifyDenied: 'Notifications are off for this app in Settings.',
   openSettings: 'Open Settings',
   // The Today card once its "Turn on" has turned the evening's notifications on, for the rest of
-  // the session, with no buttons.
+  // the session, with no buttons: `cardOn` until the server has answered, then `cardOnNamed` with
+  // the reply's town for where you are, so a wrong approximate place shows on the card.
   cardOn:
-    "Done. You'll get a notification the evening before snow is likely here. You can change this " +
-    'in Settings.',
+    "Done. You'll get a notification the evening before snow is likely where you are. You can " +
+    'change this in Settings.',
+  cardOnNamed:
+    "Done. You'll get a notification the evening before snow is likely near {place}. You can " +
+    'change this in Settings.',
 
   // Settings' sections (10.4): the headings of the privacy, about and help rows.
   settingsPrivacy: 'Privacy',
@@ -163,11 +182,16 @@ export const APP_COPY = {
 
   // Privacy (10.4, 10.6). Your privacy's lines say what the website's privacy notice says ("Our
   // apps", PrivacyBody.astro), as the notifications server stores and deletes it
-  // (packages/server devices.ts): a town, or a location rounded to about 5 km; until a place is
-  // chosen, a rough one from the connection; the token with an ID made from it, the place and
-  // its zone, the units, the switches, and a few details more (the app's version, when it last
-  // checked in), deleted when notifications go off in the app, when Apple says the app is gone,
-  // or about 90 days after the app was last opened (it checks in at most weekly), and after
+  // (packages/server devices.ts). The forecast: a town, or a location rounded to about 5 km;
+  // until a place is chosen, a rough one from the connection. Notifications, for where you are
+  // (phase 8.4a; saved places and the iPhone's time zone come in 8.4b): the phone's location
+  // rounded to about 5 km while it is shared, else a rough place the server finds from the
+  // connection of each registration (the place is kept, never the IP address); the token with an
+  // ID made from it, the place and its zone, the units, the switches, and a few details more (the
+  // app's version, when it last checked in), deleted when notifications go off in the app, when
+  // Apple says the app is gone, or about 90 days after the app was last opened (it checks in at
+  // most hourly while where you are is approximate, client `alertAction` with core
+  // `ALERTS.hereRefreshMinutes`, and otherwise at most weekly, `ALERTS.heartbeatDays`), and after
   // notifications go off in iPhone Settings, at the next open; the run's and the test button's
   // notes, keyed by the ID with no token or place, go a few days later, at the run's cleanup:
   // sent/ (a notification sent), test/ (a test sent) and judged/ (a registration a run judged
@@ -194,8 +218,11 @@ export const APP_COPY = {
     'saved places, your notification choices and the last forecast on your iPhone.',
   privacyNotifications:
     "Only while notifications are on, we keep your device's notification token, an ID made from " +
-    'it, the place, its time zone, your units and which notifications you chose, with a few ' +
-    "details such as the app's version and when it last checked in. We delete them when you turn " +
+    'it, the place you get notifications for and its time zone, your units and which ' +
+    "notifications you chose, with a few details such as the app's version and when it last " +
+    'checked in. The place is where you are (your location rounded to about 5 km or, if you ' +
+    "haven't shared it, a rough place our server estimates from your internet connection, " +
+    'updated when you open the app, at most once an hour). We delete them when you turn ' +
     'notifications off in the app, when Apple tells us the app is no longer installed, or about ' +
     "90 days after you last open it. If you turn notifications off in your iPhone's Settings " +
     'instead, we delete them the next time you open the app. For a few days after each ' +
@@ -210,10 +237,12 @@ export const APP_COPY = {
     "iPhone of whether you've made the one-off purchase.",
   privacyAccounts: 'There are no accounts.',
   keptForNotifications: 'What we keep for notifications',
-  // Its lines while registered, first on the page: the ID's first 8 characters, the place with
-  // its time zone as the server named them, the units ("Snow units: cm", core's label and unit),
-  // then each switch on in its Settings words.
+  // Its lines while registered, first on the page: the ID's first 8 characters; where you are
+  // with its time zone as the server named them, while the server has a place for it; a saved
+  // place with its zone (phase 8.4b); the units ("Snow units: cm", core's label and unit); then
+  // each switch on in its Settings words.
   keptID: 'ID {id}',
+  keptHere: 'Where you are: {place}, {zone}',
   keptPlace: '{place}, {zone}',
   keptUnits: '{label}: {units}',
   deleteMyData: 'Turn off notifications and delete my data',

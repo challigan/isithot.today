@@ -188,7 +188,7 @@ describe("Your privacy and the website's privacy notice", () => {
       ],
       ["your device's notification token, an ID made from it", 'an ID made from the token'],
       [
-        'the place, its time zone, your units and which notifications you chose',
+        'the place you get notifications for and its time zone, your units and which notifications you chose',
         'its time zone, your units and which notifications you asked for',
       ],
       ["the app's version and when it last checked in", "the app's version"],

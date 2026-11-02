@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -8,8 +9,22 @@ import {
   snowAlert,
   type TodayResponse,
 } from '@isithot/core';
-import { registrationBody, type RegistrationBody } from '@isithot/client';
-import { APNS_PAYLOAD_LIMIT, APNS_TOPICS, alertPush, registrationId } from '@isithot/server';
+import {
+  deviceTarget,
+  herePlace,
+  registrationBody,
+  type HerePlace,
+  type RegistrationBody,
+} from '@isithot/client';
+import {
+  APNS_PAYLOAD_LIMIT,
+  APNS_TOPICS,
+  MemoryAlertStore,
+  alertPush,
+  idsKey,
+  regKey,
+  registrationId,
+} from '@isithot/server';
 import { APP_COPY } from '../src/appCopy';
 import {
   DEVICE_FIXTURES,
@@ -63,20 +78,61 @@ const TABLE: Record<string, [number, string | null, string | null]> = {
   'test-unregistered': [404, 'not_registered', null],
   'test-down': [503, 'push_unavailable', null],
   'rate-limited': [429, 'rate_limited', '60'],
+  'put-here-ip': [200, null, null],
+  'put-here-device': [200, null, null],
+  'put-here-refresh': [200, null, null],
+  'put-unlocated': [400, 'bad_location', null],
 };
+
+/** 8.1's fixtures, which 8.4 adds to and never changes: their files' SHA-256, as 8.1 wrote them. */
+const AS_8_1_WROTE_THEM: Record<string, string> = {
+  'put-leeds': 'aa2e4d3f5a0dabbc1c54df8ce94da3eca2996d9feb09eeea72e3b6f0dd6f2e3c',
+  'put-durham': '737fb8322ce313d9f92b6f5ca126d7d45f7b91be7f90113fc915fd84d3297082',
+  'put-device': 'e364c6e25658afc3d385c2caa0423671c3ea526714f7ea9b4cf5e92402ff7f3b',
+  'put-kathmandu': '7a31fe77fc52f619a125096c70c14df3351af6eab58faafe1bd83972b8f5fffb',
+  'put-bad-place': '01f734b45658de8de20787121478ac22762d1eb9464d9c1b200938e9a823341f',
+  'put-twice': '269d541bedc0cd4c8d492bfe9420b04bf79580d974f862bfa6275daff975abb9',
+  delete: 'b8da851e943d59103506998223a65121be16ab3787e3679f2f6ae062b8499d71',
+  'test-sent': 'a557a65773ed955b17ef9027ce186e5ac99218660c993edaf328802a90d65765',
+  'test-dryrun': '3c8771208763445485eb3d504aa211f91f3bea831817a2465a812268639deade',
+  'test-limited': '20057b42bef3a042e61105bc5cf87546d492b73fe509fd533106ada7d73335e5',
+  'test-quiet': '2a6af1840141c529535e4052eeb3bcb73c8e0c21a6905f166507b21ad9e8476c',
+  'test-gone': 'e58cf86e092f1303661102ae2ca3a6b7bf9edb89c4cee409883881e49706c2ca',
+  'test-unregistered': '61b76c90b802ead210ca3b56faebdef95b647f6d40c334216a9a5dbfe564932c',
+  'test-down': '2369b6290171ff7ae075a26d565a746ccb925f3b40d9f66c6b95c4684c2f55d4',
+  'rate-limited': '1d426b244f2fd5da9eb990954385e00a9dd67bb17132e2267937873740144ed2',
+  'durham-evening.json': 'c934e62b5e0c4cbea418e23c5ae2618921ef7d5bd4784fbbdc92f3474bf3fb26',
+  'durham-old.json': '92d56006e37c828e8c28f18e41b7f316636eb86da907bc32f09bee605349db97',
+  'malformed.json': '6ab9e33c9270e572d201161f30fa5c1fb699d0c703430c9645fd7733723ad7b2',
+  'evening.apns': 'b87c65a73e17c4989506a34e986f8a270584fc50fb99f6e41e398fd4702323f7',
+};
+const sha256 = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
+
+/** 8.4's version 2 fixtures: each a whole set, where you are and no saved place. */
+const SETS = ['put-here-ip', 'put-here-device', 'put-here-refresh', 'put-unlocated'];
+const EVENING = { evening: true, morning: false, possible: false };
+/** The cell Netlify's town for a connection in Leeds is, and the phone's own there. */
+const LEEDS_CELL = 'lat=53.8&lon=-1.55&source=device';
+const NOT_LOCATED =
+  "We couldn't tell where you are from your internet connection. Try again later, or use your location.";
 
 describe('devices fixtures', () => {
   it('names each file once, in the order they are written', () => {
     expect(DEVICE_FIXTURES.map((s) => s.name)).toEqual(Object.keys(TABLE));
   });
 
-  it('each says what was asked, when, and why, beside the reply as the server sent it', () => {
+  it('each says what was asked, from where, when, and why, beside the reply as the server sent it', () => {
     for (const s of DEVICE_FIXTURES) {
       const f = fixture(s.name);
       expect(Object.keys(f), s.name).toEqual(['_fixture', 'status', 'retryAfter', 'text']);
+      // Where Netlify placed the connection only when it did, so 8.1's files stay as they were.
+      expect(Object.keys(f._fixture), s.name).toEqual(
+        s.geo ? ['request', 'body', 'geo', 'now', 'note'] : ['request', 'body', 'now', 'note'],
+      );
       expect(f._fixture, s.name).toEqual({
         request: s.request,
         body: s.body,
+        ...(s.geo ? { geo: s.geo } : {}),
         now: s.now,
         note: s.note,
       });
@@ -105,40 +161,107 @@ describe('devices fixtures', () => {
     expect(body('put-leeds').id).toBe(registrationId('snow', DEVICE_TOKEN));
   });
 
-  it('puts each place as the app sends it, from the sandbox, with the evening switched on', () => {
-    const evening = { evening: true, morning: false, possible: false };
-    const put = (name: string, place: Parameters<typeof registrationBody>[0]['place']) =>
-      expect(spec(name).body, name).toEqual(
-        registrationBody({
-          token: DEVICE_TOKEN,
-          env: 'sandbox',
-          place,
-          units: 'c',
-          prefs: evening,
-          appVersion: '1.0 (42)',
-        }),
-      );
-    put('put-leeds', { kind: 'city', slug: 'leeds-gb' });
-    put('put-durham', { kind: 'city', slug: 'durham-gb' });
-    put('put-device', { kind: 'coords', source: 'device', lat: 53.8, lon: -1.55 });
+  it("puts 8.1's one place as 8.1's builds send it, from the sandbox, with the evening on", () => {
+    // Version 1, as 8.1's client registrationBody made it: no `v`, one place.
+    const put = (name: string, place: object) =>
+      expect(spec(name).body, name).toEqual({
+        app: 'snow',
+        platform: 'ios',
+        env: 'sandbox',
+        token: DEVICE_TOKEN,
+        place,
+        units: 'c',
+        alerts: { snow: EVENING },
+        appVersion: '1.0 (42)',
+      });
+    put('put-leeds', { place: 'leeds-gb' });
+    put('put-durham', { place: 'durham-gb' });
+    put('put-device', { lat: 53.8, lon: -1.55, source: 'device' });
     put('put-kathmandu', {
-      kind: 'coords',
-      source: 'search',
       lat: 27.7,
       lon: 85.3,
+      source: 'search',
       name: 'Kathmandu',
       country: 'NP',
     });
-    expect((spec('put-bad-place').body as RegistrationBody).place).toEqual({ place: 'nowhere-xx' });
+    put('put-bad-place', { place: 'nowhere-xx' });
     for (const name of ['put-twice', 'rate-limited'])
       expect(spec(name).body).toEqual(spec('put-leeds').body);
     for (const s of DEVICE_FIXTURES.filter((d) => d.request !== 'PUT /api/v1/devices')) {
       expect(s.body, s.name).toEqual({ app: 'snow', token: DEVICE_TOKEN });
     }
+    for (const s of DEVICE_FIXTURES.filter((d) => !SETS.includes(d.name))) {
+      expect(s.geo, s.name).toBeUndefined();
+      for (const before of s.before ?? []) expect(before.geo, s.name).toBeUndefined();
+    }
     // Each reply echoes the switches it was sent.
     for (const name of ['put-leeds', 'put-durham', 'put-device', 'put-kathmandu']) {
-      expect(body(name).alerts, name).toEqual({ snow: evening });
+      expect(body(name).alerts, name).toEqual({ snow: EVENING });
     }
+  });
+
+  it("puts one set per fixture as 8.4's app sends it: where you are, and no saved place", () => {
+    const sent = (here: HerePlace): RegistrationBody =>
+      registrationBody({
+        token: DEVICE_TOKEN,
+        env: 'sandbox',
+        here,
+        units: 'c',
+        prefs: EVENING,
+        appVersion: '1.0 (42)',
+      });
+    // Without the phone's location: for the server to locate from the connection.
+    const approximate = herePlace({ access: 'denied', fix: null, kept: null });
+    expect(approximate).toEqual({ kind: 'ip' });
+    expect(spec('put-here-ip').body).toEqual(sent(approximate));
+    expect((spec('put-here-ip').body as RegistrationBody).here).toEqual({ source: 'ip' });
+    // The phone's own location in Leeds, allowed, with a fix there.
+    const leeds = herePlace({ access: 'granted', fix: deviceTarget(53.8, -1.55), kept: null });
+    expect(spec('put-here-device').body).toEqual(sent(leeds));
+    expect((spec('put-here-device').body as RegistrationBody).here).toEqual({
+      lat: 53.8,
+      lon: -1.55,
+      source: 'device',
+    });
+    // The hourly refresh, and the set the server can't place, are the same set again.
+    for (const name of ['put-here-refresh', 'put-unlocated'])
+      expect(spec(name).body, name).toEqual(spec('put-here-ip').body);
+    for (const name of SETS) {
+      const b = spec(name).body as RegistrationBody;
+      expect(b, name).toMatchObject({ v: 2, saved: [], alerts: { snow: EVENING } });
+      expect(b, name).not.toHaveProperty('deviceTz');
+    }
+    for (const name of ['put-here-ip', 'put-here-device', 'put-here-refresh']) {
+      expect(body(name).alerts, name).toEqual({ snow: EVENING });
+    }
+  });
+
+  it('places the connection as Netlify does: in Leeds as ip-first-launch, then Newcastle, then in no town', () => {
+    const ipFirst = FIXTURES.find((s) => s.name === 'ip-first-launch')!;
+    expect(spec('put-here-ip').geo).toEqual(ipFirst.geo);
+    expect(spec('put-here-ip').geo).toMatchObject({ city: 'Leeds', country: 'GB' });
+    expect(spec('put-here-refresh').geo).toMatchObject({
+      city: 'Newcastle upon Tyne',
+      country: 'GB',
+    });
+    expect(spec('put-unlocated').geo).toEqual({ country: 'GB' });
+    expect(spec('put-here-device').geo).toBeUndefined();
+    // Each `before` as it was asked: put-here-ip's from Leeds, put-here-device's with no geo.
+    expect(spec('put-here-refresh').before).toEqual([
+      {
+        request: 'PUT /api/v1/devices',
+        body: spec('put-here-ip').body,
+        geo: spec('put-here-ip').geo,
+        now: moment('ip-first-launch'),
+      },
+    ]);
+    expect(spec('put-unlocated').before).toEqual([
+      {
+        request: 'PUT /api/v1/devices',
+        body: spec('put-here-device').body,
+        now: moment('leeds-dry'),
+      },
+    ]);
   });
 
   it('names each place as the server does, at the moment of the answer the app shows', () => {
@@ -171,6 +294,91 @@ describe('devices fixtures', () => {
       expect(body(name).seenAt, name).toBe(spec(name).now);
     }
     expect(Date.parse(spec('put-twice').now) - Date.parse(moment('leeds-dry'))).toBe(10_000);
+  });
+
+  it('names where you are as the server does: the cell, its zone, its country, what it follows', () => {
+    const id = registrationId('snow', DEVICE_TOKEN);
+    const leeds = { name: 'Leeds', timezone: 'Europe/London', query: LEEDS_CELL, country: 'GB' };
+    // The whole set, as the app keeps it for Your privacy.
+    expect(body('put-here-ip')).toEqual({
+      id,
+      deviceTz: null,
+      here: { ...leeds, follows: 'ip' },
+      saved: [],
+      refused: [],
+      alerts: { snow: EVENING },
+      seenAt: moment('ip-first-launch'),
+    });
+    expect(Object.keys(body('put-here-ip'))).toEqual([
+      'id',
+      'deviceTz',
+      'here',
+      'saved',
+      'refused',
+      'alerts',
+      'seenAt',
+    ]);
+    expect(body('put-here-device')).toEqual({
+      ...body('put-here-ip'),
+      here: { ...leeds, follows: 'device' },
+      seenAt: moment('leeds-dry'),
+    });
+    // An hour later the connection is in Newcastle: the server locates it afresh, and names the
+    // cell itself, as it does the phone's.
+    expect(body('put-here-refresh')).toEqual({
+      ...body('put-here-ip'),
+      here: {
+        name: 'Newcastle',
+        timezone: 'Europe/London',
+        query: 'lat=55&lon=-1.6&source=device',
+        country: 'GB',
+        follows: 'ip',
+      },
+      seenAt: spec('put-here-refresh').now,
+    });
+    expect(spec('put-here-ip').now).toBe(moment('ip-first-launch'));
+    expect(spec('put-here-device').now).toBe(moment('leeds-dry'));
+    expect(Date.parse(spec('put-here-refresh').now) - Date.parse(moment('ip-first-launch'))).toBe(
+      ALERTS.hereRefreshMinutes * 60_000,
+    );
+    expect(Date.parse(spec('put-unlocated').now) - Date.parse(moment('leeds-dry'))).toBe(
+      60 * 60_000,
+    );
+  });
+
+  it("refuses where it can't place, in the server's words, after forgetting the whole set", async () => {
+    expect(body('put-unlocated').error).toEqual({ code: 'bad_location', message: NOT_LOCATED });
+    // put-here-device's registration is kept on its own; after put-unlocated's, nothing is,
+    // the phone's location included.
+    const kept = new MemoryAlertStore();
+    await makeDeviceFixture(spec('put-here-device'), kept);
+    const id = registrationId('snow', DEVICE_TOKEN);
+    expect(kept.keys()).toEqual([idsKey('snow', id), regKey('Europe/London', 'snow', id)]);
+    const forgotten = new MemoryAlertStore();
+    await makeDeviceFixture(spec('put-unlocated'), forgotten);
+    expect(forgotten.keys()).toEqual([]);
+    // The hourly refresh moves where you are: one record, Newcastle's.
+    const moved = new MemoryAlertStore();
+    await makeDeviceFixture(spec('put-here-refresh'), moved);
+    const records = moved.keys().filter((k) => k.startsWith('reg/'));
+    expect(records).toHaveLength(1);
+    expect(await moved.get(records[0]!)).toMatchObject({
+      query: 'lat=55&lon=-1.6&source=device',
+      follows: 'ip',
+      locatedAt: spec('put-here-refresh').now,
+    });
+  });
+
+  it("is 8.1's fixtures exactly as 8.1 wrote them, and adds 8.4's after them", () => {
+    const names = DEVICE_FIXTURES.map((s) => s.name);
+    expect(names.slice(0, 15)).toEqual(
+      Object.keys(AS_8_1_WROTE_THEM).filter((n) => !n.includes('.')),
+    );
+    expect(names.slice(15)).toEqual(SETS);
+    for (const [name, hash] of Object.entries(AS_8_1_WROTE_THEM)) {
+      const text = name.includes('.') ? payloads.get(name)! : deviceFixtureJson(fixture(name));
+      expect(sha256(text), name).toBe(hash);
+    }
   });
 
   it("refuses a place with no page, and a second write in a minute, in the server's words", () => {
