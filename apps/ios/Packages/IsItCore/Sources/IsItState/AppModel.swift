@@ -285,10 +285,10 @@ public final class AppModel {
   /// `place.v1`, loaded in place (`select(_:)`, which saves it for the widgets and reloads them),
   /// and unless it is a saved place, which stays where it is, joins the recent places under
   /// `name`, with its line (`detail`), at once (`SavedPlaces.choosing`); a place without a name
-  /// (the device's) joins them under its answer's name when the answer arrives. Then the
-  /// notifications are synced (phase 8's `syncAlerts`), as a notification place that follows the
-  /// device's location may have moved. The view on screen stays, as for a place under "Nearby:":
-  /// a place chosen from This week opens on its week. The place on screen again only asks again.
+  /// (the device's) joins them under its answer's name when the answer arrives. The
+  /// notifications hear of it as `select(_:)` tells them. The view on screen stays, as for a
+  /// place under "Nearby:": a place chosen from This week opens on its week. The place on screen
+  /// again only asks again.
   public func choose(_ target: Target, name: String?, detail: String? = nil) async {
     if let name, !name.isEmpty {
       unnamedChoice = nil
@@ -297,7 +297,6 @@ public final class AppModel {
       unnamedChoice = target
     }
     await select(target)
-    await environment.hooks.syncAlerts(target: self.target, units: units)
   }
 
   /// Takes `place` off the recent places (Delete in the picker).
@@ -377,7 +376,10 @@ public final class AppModel {
   /// it becomes the place, kept in `place.v1`, and the page shows the loading state for it
   /// until its own answer arrives, never the last place's answer under its name, on the view the
   /// user is on; a failure then shows as it would with nothing saved. The notice, about the last
-  /// place, goes. The place on screen again only asks again (`refresh()`).
+  /// place, goes. The notifications hear of the new place on screen (phase 8's `syncAlerts`)
+  /// before its answer comes, so the Today card, which shows only while the screen shows where
+  /// you are, never shows on its page, and a point of the phone's the picker found can move
+  /// where you are. The place on screen again only asks again (`refresh()`).
   public func select(_ target: Target) async {
     notice = nil
     guard !target.key.utf8.elementsEqual(self.target.key.utf8) else {
@@ -389,6 +391,7 @@ public final class AppModel {
     fetchedAt = nil
     phase = .loading
     cancelRefresh()
+    await environment.hooks.syncAlerts(target: target, units: units)
     await load(.plain)
   }
 
@@ -504,13 +507,15 @@ public final class AppModel {
 
   /// After a failed fetch: the phase it leaves, and when to ask again (`Refresh.retry`). A
   /// city page's place that is no longer there (404 `not_found`) is dropped for approximate IP
-  /// location, which is fetched at once, and the user is told (section 4).
+  /// location, which is fetched at once, and the user is told (section 4); after the launch, the
+  /// notifications hear of it as of any new place on screen (launch step 6 tells them during it).
   private func failed(_ failure: FetchError) async {
     if case .failed(404?, "not_found"?, _) = failure, case .city = target {
       keep(.ip)
       response = nil
       fetchedAt = nil
       notice = AppCopy.slugGone
+      if launchFinished { await environment.hooks.syncAlerts(target: target, units: units) }
       await load(.plain)
       return
     }

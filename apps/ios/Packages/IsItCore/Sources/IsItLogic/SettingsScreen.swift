@@ -8,8 +8,8 @@ public enum SettingsPage: String, Sendable, Hashable, CaseIterable {
   case yourPrivacy
   case howItWorks
   case credits
-  /// Where the notifications are for (`NotificationPlacePage`), pushed from Settings →
-  /// Notifications' place row.
+  /// Where you are (`NotificationPlacePage`), the free notification's place, pushed from
+  /// Settings → Notifications' "Where you are" row.
   case notificationPlace
 }
 
@@ -80,19 +80,15 @@ public struct SettingsScreen: Sendable, Equatable {
     case evening
     case morning
     case possible
-    /// The notification place's row, and the place kept on the place page.
+    /// The "Where you are" row, in Settings and on its page.
     case notificationPlace
     /// "Send a test notification".
     case test
-    /// The gate's "Use my location" and "Search".
-    case useMyLocation
-    case search
     /// "Open Settings", for the app's notifications or its location access.
     case openSettings
     /// "Met Office warnings", in Safari.
     case warnings
-    /// The place page's place on screen and the phone's location.
-    case onScreenPlace
+    /// The "Where you are" page's "Use my location".
     case myLocation
   }
 
@@ -112,24 +108,23 @@ public struct SettingsScreen: Sendable, Equatable {
     case restore
     /// Says something and does nothing when tapped: the thanks once owned.
     case note
-    /// A row of Settings → Notifications or of its place page (`NotificationsModel` acts on it).
+    /// A row of Settings → Notifications or of its "Where you are" page (`NotificationsModel`
+    /// acts on it).
     case notification(NotificationAction)
   }
 
-  /// What a row of Settings → Notifications, or of its place page, asks for (section 12.1).
+  /// What a row of Settings → Notifications, or of its "Where you are" page, asks for (design
+  /// 2.1, 2.4).
   public enum NotificationAction: Sendable, Equatable {
     /// "Send a test notification".
     case sendTest
-    /// The gate's "Use my location": the picker, finding the phone.
+    /// The "Where you are" page's "Use my location": location access, asked for at the tap when
+    /// it never was, then a fix for where you are.
     case useMyLocation
-    /// The gate's "Search": the picker.
-    case search
     /// "Open Settings" while notifications are off for the app: its notification settings.
     case openNotificationSettings
     /// "Open Settings" while location access is off for the app: its settings.
     case openLocationSettings
-    /// A choice on the place page.
-    case choose(PlaceChoice)
   }
 
   public struct Row: Sendable, Equatable, Identifiable {

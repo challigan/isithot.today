@@ -1,16 +1,16 @@
 import IsItLogic
 import SwiftUI
 
-/// Settings → Notifications (iOS build spec, section 12.1), between the units and the upgrade
-/// card, in Settings' own parts: its heading (`notifications-heading`), then one card holding,
-/// in order, the notice (the gate's line at approximate location, or that notifications are off
-/// for the app), the items (each switch, the place, which pushes the place page, and the rows
-/// that act: the gate's "Use my location" and "Search", Open Settings, and the test with its
-/// result), the status line, the footer, and for a UK place "Met Office warnings", which opens in
-/// Safari. Every line that can wrap is on the card, never the page. Everything shown is
-/// `NotificationSettings`'; the views keep no state, and hand each tap to the model
-/// (`NotificationActions`). The permission is read again as the section appears, so a change
-/// made in iOS Settings shows when Settings opens.
+/// Settings → Notifications (design 2.4), between the units and the upgrade card, in Settings'
+/// own parts: its heading (`notifications-heading`), then one card holding, in order, the notice
+/// (that notifications are off for the app), the items (Open Settings while they are; each
+/// switch; the line that says what is kept for where you are (`notify-here-kept`); "Where you
+/// are", its town and how it was found, which pushes its page (`notify-here`); and the test with
+/// its result), the status line, the footer, and while where you are is in the UK "Met Office
+/// warnings", which opens in Safari. Every line that can wrap is on the card, never the page.
+/// Everything shown is `NotificationSettings`'; the views keep no state, and hand each tap to the
+/// model (`NotificationActions`). The permission is read again as the section appears, so a
+/// change made in iOS Settings shows when Settings opens.
 struct NotificationsSection: View {
   let settings: NotificationSettings
   let actions: NotificationActions
@@ -29,7 +29,7 @@ struct NotificationsSection: View {
       }
       ForEach(Array(settings.items.enumerated()), id: \.element.id) { index, item in
         if index > 0 {
-          SheetDivider(afterIcon: true)
+          SheetDivider(afterIcon: Self.afterIcon(settings.items[index - 1], item))
         }
         itemView(item)
       }
@@ -53,21 +53,34 @@ struct NotificationsSection: View {
     .task { actions.appeared() }
   }
 
-  /// An item as its kind has it: a switch, the place's row, or a row that acts.
+  /// An item as its kind has it: a switch, the kept line, "Where you are", or a row that acts.
   @ViewBuilder private func itemView(_ item: NotificationSettings.Item) -> some View {
     switch item {
     case .toggle(let row):
       SwitchRow(row: row, set: actions.setSwitch)
-    case .place(let row):
-      NotificationPlaceRow(row: row)
+    case .line(let line):
+      CardFootnote(line: line)
+    case .here(let row):
+      HereRowView(row: row)
     case .row(let row):
       actionRow(row)
     }
   }
 
+  /// The hairline between two items: past the icons' column between two rows with icons; from
+  /// the card's inset where either is the kept line, whose words start there.
+  private static func afterIcon(
+    _ before: NotificationSettings.Item, _ item: NotificationSettings.Item
+  ) -> Bool {
+    switch (before, item) {
+    case (.line, _), (_, .line): false
+    default: true
+    }
+  }
+
   /// A row that acts: the test is Restore purchase's kind of row (`RestoreRow`), its result its
-  /// detail and value, said once when it comes, taking no tap while it sends; the gate's two have
-  /// no end, as they open the picker over Settings' place; Open Settings leaves the app.
+  /// detail and value, said once when it comes, taking no tap while it sends; Open Settings
+  /// leaves the app.
   @ViewBuilder private func actionRow(_ row: SettingsScreen.Row) -> some View {
     switch row.action {
     case .notification(.sendTest):
@@ -89,7 +102,7 @@ struct NotificationsSection: View {
   private static func end(of action: SettingsScreen.NotificationAction) -> RowEnd {
     switch action {
     case .openNotificationSettings, .openLocationSettings: .leaves
-    case .sendTest, .useMyLocation, .search, .choose: .none
+    case .sendTest, .useMyLocation: .none
     }
   }
 }
@@ -112,12 +125,13 @@ struct SwitchRow: View {
   }
 }
 
-/// The notification place's row: its title, the place's name as its value ("Leeds", or "Your
-/// location" while it follows the phone, with that note beneath), and a chevron, pushing the
-/// place page on Settings' stack. The value is its accessibility value too, which the UI tests
-/// read.
-struct NotificationPlaceRow: View {
-  let row: NotificationSettings.PlaceRow
+/// "Where you are" (`notify-here`): its title, how it was found as its note ("Your location",
+/// "Approximate, from your internet connection" or "Not found yet"), the town the server named as
+/// its value ("Leeds", none before it has), and a chevron, pushing the "Where you are" page on
+/// Settings' stack. The town is its accessibility value alone (`RowLabel` hides the drawn one),
+/// which the UI tests read, so VoiceOver says it once, after the label's title and note.
+struct HereRowView: View {
+  let row: NotificationSettings.HereRow
 
   var body: some View {
     NavigationLink(value: SettingsPage.notificationPlace) {
@@ -129,8 +143,8 @@ struct NotificationPlaceRow: View {
   }
 }
 
-/// A line under a card's rows (the status line, the footer), as the units' footnote is: `note`
-/// in `soft`, wrapping, 18 in from the card's sides.
+/// A line of words on a card (the kept line among the items, the status line, the footer), as
+/// the units' footnote is: `note` in `soft`, wrapping, 18 in from the card's sides.
 private struct CardFootnote: View {
   let line: NotificationSettings.Line
 
@@ -153,7 +167,8 @@ extension NotificationSettings.Item {
   fileprivate var id: String {
     switch self {
     case .toggle(let row): row.id
-    case .place(let row): row.id
+    case .line(let line): line.id
+    case .here(let row): row.id
     case .row(let row): row.id
     }
   }

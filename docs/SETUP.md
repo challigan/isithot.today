@@ -413,9 +413,11 @@ keys), a profile made by hand, or anything in GitHub.
    - **Off in iOS Settings:** turn the app's notifications off there, then open the app again.
      Settings says "Notifications are off for this app in Settings.", Your privacy shows nothing
      kept for notifications, and the log says `devices: deleted`.
-   - **Your location:** Settings → Notifications → **Place** → **Use my location**, then allow
-     location. The row says "Your location", and Your privacy's place line names your area.
-   - **A UK place** shows **Met Office warnings** at the foot of Notifications, which opens Safari.
+   - **Your location:** Settings → Notifications → **Where you are** → **Use my location**, then
+     allow location. The row says "Your location", and Your privacy's "Where you are" line names
+     your area. (Builds from 8.4a on; 8.1's build calls the row **Place**.)
+   - **Where you are in the UK** shows **Met Office warnings** at the foot of Notifications, which
+     opens Safari.
    - **Delete:** Your privacy → **Turn off notifications and delete my data** says "Notifications
      are off. We've deleted your notification token, place, units and choices.", and the log says
      `devices: deleted`.
@@ -430,23 +432,74 @@ keys), a profile made by hand, or anything in GitHub.
    - **Review notes:** the notifications paragraph, beside the purchase's (phase 9.2 puts the
      whole note in the listing's files):
 
-     > Notifications are optional and off by default. The app works fully without them. To try
-     > them, open Settings (the gear), then Notifications. If it asks for a place instead of
-     > showing the switches, the app is using an approximate location: tap "Use my location" or
-     > "Search" and choose a town first. Turn on "Evening before (about 6pm)", allow
-     > notifications, then tap "Send a test notification". It arrives within a minute. Tests
-     > aren't sent from 9pm to 7am at the chosen place, and at most three times an hour, so at
-     > night there choose a place where it's daytime. Real notifications are sent only when snow
-     > is likely at the chosen place: about 6pm the evening before, and about 7am on the day.
-     > Tapping one opens that place's forecast. They never carry promotions. Settings, then Your
-     > privacy, shows what we keep for notifications, and "Turn off notifications and delete my
-     > data" removes it.
+     > Notifications are optional and off by default; the app works fully without them. The free
+     > notification is for where you are: your location if you share it, otherwise an
+     > approximate place from your internet connection. To try it, tap the gear (Settings), then
+     > turn on "Evening before (about 6pm)", allow notifications, and tap "Send a test
+     > notification". It arrives within a minute. Tests aren't sent from 9pm to 7am where you
+     > are, and at most three times an hour. Real notifications are sent only when snow is likely
+     > where you are: about 6pm the evening before, and about 7am on the day. Tapping one opens
+     > that place's forecast. They never carry promotions. Settings, then Your privacy, shows
+     > what we keep for notifications, and "Turn off notifications and delete my data" removes
+     > it.
+
+     This is phase 8.4a's note, which took away the step of choosing a place. Version 1.0 waits
+     for the bells (phase 8.4b), so the note you submit with 1.0 is 8.4b's, one note for the
+     purchase and notifications together, which replaces this one. Type this one only for a
+     TestFlight build that goes to review before 8.4b is merged, if there is one.
 
 8. **C20 (Thu 12 Nov):** rollout step 3 above. Notifications are already fully on since C18
    (`ALERTS_ENABLED` = `true` and `ALERTS_DRY_RUN` = `false` in Production), so there is nothing to
    set or redeploy. Send a test from the release candidate before you submit: it must arrive, as
    App Review's will only arrive with the production push key in place.
 9. **Release day (C25):** rollout step 4 above: delete `ALERTS_FORCE_IDS`, then redeploy.
+
+### Where you are (phase 8.4a)
+
+From phase 8.4a, the app's notification is for **where you are**: your phone's location if you
+share it with the app, otherwise a rough place our server works out from your internet connection.
+There is no place to choose any more. It needs the server change merged first (rollout step 2
+above, "the server for several places", Wed 4 Nov). Nothing in Netlify or App Store Connect
+changes.
+
+The new build keeps its notification settings under new names, so it can't see or delete what the
+8.1 build registered. Done in this order, nothing is left notifying your phone from the old build.
+
+1. **Fri 6 Nov, before you merge 8.4a (2 minutes).** On your phone, in the TestFlight build you
+   have now (8.1's): Settings → **Your privacy** → **Turn off notifications and delete my data**.
+   It should say "Notifications are off. We've deleted your notification token, place, units and
+   choices." If it says it couldn't reach our server, try again with a connection. Do this before
+   you install any newer build.
+2. **Merge 8.4a** ("Notifications where you are (phase 8.4a)") once its checks are green. There is
+   nothing to set in Netlify for it.
+3. **The next TestFlight build:** GitHub → Actions → **iOS release** → **Run workflow** →
+   `testflight` → approve the `testflight` environment when asked, then wait for TestFlight to show
+   the build (Apple's processing can take an hour). **Delete the app from your phone**, then
+   install the build from TestFlight, so it starts as a first install: the card comes back, and
+   the app hasn't asked for your location.
+4. **The checks (about 15 minutes, between 7am and 9pm UK time).** If one shows something else,
+   tell me what it said, with a screenshot.
+   - **Approximate.** Open the app, and don't tap anything that uses your location yet. The card
+     on the middle page (Today, or Tomorrow after 6pm) says "Get a notification the evening
+     before snow is likely where you are.", with a line beneath about a rough place from your
+     internet connection. Tap **Turn on**, then **Allow**. The card says "Done. …" and, a moment
+     later, "…likely near" your town. No location prompt appears.
+   - Settings → Notifications → **Where you are** shows your town and "Approximate, from your
+     internet connection". Settings → **Your privacy** shows "Where you are: <your town>,
+     Europe/London".
+   - **Your ID.** Your privacy's first line is **ID** and 8 characters. A new install can have a
+     new ID: if they differ from the ones in `ALERTS_FORCE_IDS` (Netlify, **Production** context),
+     put the new ones there in their place and redeploy (rollout step 2 above). **Send a test
+     notification**: it arrives within seconds.
+   - **Your location.** Settings → Notifications → **Where you are** → **Use my location** →
+     **Allow While Using App**. The page goes back to Settings by itself, and the row says "Your
+     location" with your town.
+   - **Back to approximate.** iOS Settings → Privacy & Security → Location Services → will it
+     snow? → **Never**, then open the app again. Settings → Notifications → **Where you are** says
+     "Approximate, from your internet connection" again.
+   - **A town on another network.** If you can, open the app once on mobile data with Wi-Fi off,
+     and once on Wi-Fi, an hour or more apart: the town may change with the connection. Tell me if
+     either is far from where you are.
 
 ### The app's purchase (C2, C9, C16)
 

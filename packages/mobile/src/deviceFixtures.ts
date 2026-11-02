@@ -7,9 +7,10 @@
  * and `testOutcome`, and the app's Debug builds answer the devices calls with them. Then the
  * notification payloads, what a phone receives, from the server's own `alertPush`.
  *
- * 8.1's fixtures (version 1 bodies, one place) are kept exactly as 8.1 wrote them; 8.4a's come
- * after them, each a whole set as 8.4's app sends it (version 2): where you are, and no saved
- * place.
+ * 8.1's registration for Leeds (`put-leeds`, a version 1 body, one place), which the delete, the
+ * tests and the two 429s are made after, is kept exactly as 8.1 wrote it, and so are they; 8.1's
+ * other version 1 PUTs went in phase 8.4a, as nothing reads them. 8.4a's come after them, each a
+ * whole set as 8.4's app sends it (version 2): where you are, and no saved place.
  *
  * Nothing secret is in them. The APNs key is a throwaway one made for each run, which no reply
  * carries, and the device token is one no phone has. Nothing here touches the disk:
@@ -110,7 +111,6 @@ function answer(name: string): FixtureSpec {
 }
 
 const LEEDS_DRY = answer('leeds-dry').now;
-const KATHMANDU = answer('kathmandu-0545');
 const EVENING: AlertPrefs = { evening: true, morning: false, possible: false };
 
 /**
@@ -184,40 +184,6 @@ export const DEVICE_FIXTURES: readonly DeviceFixtureSpec[] = [
       'The first registration, for Leeds, a city page, with the evening switched on, at ' +
       'leeds-dry’s moment (9:05am on 1 December): the ID Your privacy shows, the place’s name, ' +
       'zone and query, and the switches the server holds.',
-  },
-  {
-    name: 'put-durham',
-    ...put({ place: 'durham-gb' }),
-    now: answer('durham-tomorrow').now,
-    note:
-      'Durham, at durham-tomorrow’s moment (6:05pm on 16 December), the evening before the snow ' +
-      'its notification is about (Payloads/durham-evening.json).',
-  },
-  {
-    name: 'put-device',
-    ...put({ lat: 53.8, lon: -1.55, source: 'device' }),
-    now: LEEDS_DRY,
-    note:
-      'The phone’s own location in Leeds, on the 0.05° grid as the app sends it: the server ' +
-      'names the cell itself, and the place follows the phone.',
-  },
-  {
-    name: 'put-kathmandu',
-    ...put({ lat: 27.7, lon: 85.3, source: 'search', name: 'Kathmandu', country: 'NP' }),
-    now: KATHMANDU.now,
-    zone: KATHMANDU.zone,
-    note:
-      'A searched place with no city page, Kathmandu, as choosing search-kathmandu’s result ' +
-      'sends it: its point, name and country. Its zone is the place’s own (UTC+5:45), as ' +
-      'kathmandu-0545 has it.',
-  },
-  {
-    name: 'put-bad-place',
-    ...put({ place: 'nowhere-xx' }),
-    now: LEEDS_DRY,
-    note:
-      'A city page that doesn’t exist: 400 bad_location, in the server’s own words, which the ' +
-      'app shows under the place.',
   },
   {
     name: 'put-twice',
@@ -462,8 +428,9 @@ export const PAYLOAD_FILES: readonly string[] = [
 ];
 
 /**
- * What a phone receives (the server's `alertPush`'s `payload`) for put-durham's registration and
- * the evening notification core's `snowAlert` makes from `durham`, durham-tomorrow's answer:
+ * What a phone receives (the server's `alertPush`'s `payload`) for a registration of Durham's
+ * city page, the place durham-tomorrow is about, under its query and name as the server stores
+ * them, and the evening notification core's `snowAlert` makes from `durham`, that answer:
  * - `durham-evening.json`: that payload, about the 17th;
  * - `durham-old.json`: the same about the 10th, long past, which opens on the default view;
  * - `malformed.json`: the same about 30 February, not a date, which routes nowhere;

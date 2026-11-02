@@ -1,33 +1,53 @@
 import IsItLogic
 import SwiftUI
+import UIKit
 
-/// "Notification place" (iOS build spec, section 12.1), pushed on Settings' stack from
-/// Settings → Notifications' place row: a content page with one card of the choices (the place
-/// kept, when it isn't the one on screen; the place on screen; the phone's location, followed),
-/// each a row with its icon, the one in use ticked and selected to VoiceOver. A choice of a place
-/// goes back to Settings at once; "Use my location" asks for location only at its tap, and goes
-/// back once the place follows the phone, so that why it found none can show here instead: that
-/// line on a card, with Open Settings on a card of its own beneath while location access is off.
-/// Everything shown is `NotificationPlacePage`'s; each tap goes to the model
-/// (`NotificationActions`).
+/// "Where you are" (design 2.1), pushed on Settings' stack from Settings → Notifications' "Where
+/// you are" row: a content page that says how where you are is found, how often it moves and how
+/// long it is kept, on a reading card (`notify-place-about`); then a card with where you are now,
+/// as Settings' row says it (`notify-place-here`: the town and how it was found, a line that
+/// takes no tap), and while location access was never asked, or this session's tap found no fix,
+/// "Use my location" under it (`notify-place-my-location`), which asks for location only at its
+/// tap and takes no tap while it finds the phone. Why it found none on a card of its own
+/// (`notify-place-problem`), and while location access is off for the app, Open Settings on a
+/// card beneath (`notify-place-open-settings`). No place is chosen here. Once "Use my location",
+/// tapped here, has where you are follow the phone (its row changed, with nothing left to do),
+/// the page goes back to Settings, whose row then says so, as 8.1's place page did; access
+/// allowed is not enough, as the fix comes after it. A tap that found no fix, or met access
+/// turned off, stays, its line shown here and said to VoiceOver once. Everything shown is
+/// `NotificationPlacePage`'s; each tap goes to the model (`NotificationActions`).
 struct NotificationPlaceView: View {
   let page: NotificationPlacePage
   let actions: NotificationActions
 
   @Environment(\.dismiss) private var dismiss
-  /// "Use my location" was tapped here, and the place doesn't follow the phone yet.
-  @State private var locating = false
+  /// Where you are as this page showed it when "Use my location" was tapped here, until what the
+  /// tap came to shows.
+  @State private var tapped: NotificationSettings.HereRow?
 
   var body: some View {
     SheetPage(title: page.title) {
+      ReadingCard {
+        Text(verbatim: page.about.text)
+          .paragraph()
+          .accessibilityIdentifier(page.about.id)
+      }
       SheetCard {
-        ForEach(Array(page.choices.enumerated()), id: \.element.id) { index, choice in
-          if index > 0 {
-            SheetDivider(afterIcon: true)
+        HereLine(row: page.place)
+        if let row = page.useMyLocation, case .notification(let action) = row.action {
+          SheetDivider(afterIcon: true)
+          Button {
+            tapped = page.place
+            actions.perform(action)
+          } label: {
+            RowLabel(title: row.title, icon: row.icon, end: .none)
           }
-          ChoiceRow(choice: choice) { choose(choice) }
+          .buttonStyle(SheetRowStyle())
+          .disabled(row.busy)
+          .accessibilityIdentifier(row.id)
         }
       }
+      .padding(.top, 16)
       if let problem = page.problem {
         ReadingCard {
           Text(verbatim: problem.text)
@@ -49,55 +69,31 @@ struct NotificationPlaceView: View {
         .padding(.top, 16)
       }
     }
-    .onChange(of: following) { _, follows in
-      guard locating, follows else { return }
-      locating = false
+    .onChange(of: page) { before, now in
+      guard let tapped else { return }
+      if let problem = now.problem, problem != before.problem {
+        UIAccessibility.post(notification: .announcement, argument: problem.text)
+      }
+      guard now.useMyLocation == nil, now.problem == nil, now.place != tapped else { return }
+      self.tapped = nil
       dismiss()
     }
     .task { actions.appeared() }
   }
-
-  /// Whether the phone's location is the choice in use.
-  private var following: Bool {
-    page.choices.contains { $0.choice == .myLocation && $0.selected }
-  }
-
-  /// Hands the choice to the model. A place, or the one already in use, goes back to Settings at
-  /// once; "Use my location" waits for the place to follow the phone.
-  private func choose(_ choice: NotificationPlacePage.Choice) {
-    actions.perform(.choose(choice.choice))
-    if choice.choice == .myLocation, !choice.selected {
-      locating = true
-    } else {
-      dismiss()
-    }
-  }
 }
 
-/// A choice of the place page: the whole row its button (`SheetRowStyle`), its icon, title and
-/// note, and when it is the one in use a tick in `affordance`, which VoiceOver doesn't read, as
-/// the row is selected to it instead. It takes no tap while it finds the phone.
-private struct ChoiceRow: View {
-  let choice: NotificationPlacePage.Choice
-  let action: () -> Void
-
-  @SurfaceTokens private var tokens
+/// Where you are on its page, as Settings' row says it but taking no tap: its icon, its title,
+/// how it was found as its note, and the town as its value. One element to VoiceOver: its title
+/// and note together as its label, and the town as its value alone (`RowLabel` hides the drawn
+/// one), as the row's is, so it is said once.
+private struct HereLine: View {
+  let row: NotificationSettings.HereRow
 
   var body: some View {
-    Button(action: action) {
-      HStack(spacing: SheetMetrics.iconGap) {
-        RowLabel(title: choice.title, detail: choice.note, icon: choice.icon, end: .none)
-        if choice.selected {
-          Image(systemName: "checkmark")
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(tokens.affordance)
-            .accessibilityHidden(true)
-        }
-      }
-    }
-    .buttonStyle(SheetRowStyle())
-    .disabled(choice.busy)
-    .accessibilityAddTraits(choice.selected ? .isSelected : [])
-    .accessibilityIdentifier(choice.id)
+    RowLabel(title: row.title, detail: row.note, icon: row.icon, end: .none, value: row.value)
+      .sheetRow()
+      .accessibilityElement(children: .combine)
+      .accessibilityValue(Text(verbatim: row.value ?? ""))
+      .accessibilityIdentifier(row.id)
   }
 }

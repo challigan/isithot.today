@@ -135,13 +135,10 @@ struct AppCopyTests {
     #expect(AppCopy.purchasesOff == "In-app purchases are turned off on this iPhone.")
   }
 
-  @Test("the notifications' words (phase 8.1)")
+  @Test("the notifications' words (phases 8.1 and 8.4a)")
   func notifications() {
-    #expect(AppCopy.notifyPlaceTitle == "Notification place")
     #expect(AppCopy.notifyLocationDenied == "Location access is off for this app in Settings.")
-    #expect(
-      AppCopy.notifyLocationUnavailable
-        == "Couldn't find your location. Try again, or use the place on screen.")
+    #expect(AppCopy.notifyLocationUnavailable == "Couldn't find your location. Try again.")
     #expect(
       AppCopy.testDryRun == "Our server isn't sending notifications yet, so nothing was sent.")
     #expect(
@@ -153,9 +150,36 @@ struct AppCopyTests {
     #expect(AppCopy.cardOn.hasPrefix("Done. You'll get a notification the evening before snow"))
   }
 
-  @Test("what Your privacy shows is kept, the slots filled, and what its button did (phase 8.2)")
+  @Test("where you are: Settings' row, its page and the card (phase 8.4a)")
+  func whereYouAre() {
+    #expect(AppCopy.notifyHere == "Where you are")
+    #expect(AppCopy.notifyPlaceTitle == "Where you are")
+    #expect(AppCopy.notifyHereApprox == "Approximate, from your internet connection")
+    #expect(AppCopy.notifyHereUnknown == "Not found yet")
+    #expect(
+      AppCopy.notifyHereKept
+        == "Uses your location if you share it, otherwise a rough place from your internet "
+        + "connection, which we keep while notifications are on.")
+    #expect(AppCopy.notifyHereAbout.hasPrefix("Notifications for where you are use your location"))
+    #expect(AppCopy.notifyHereAbout.contains("when you open the app, at most once an hour"))
+    #expect(
+      AppCopy.cardOffer == "Get a notification the evening before snow is likely where you are.")
+    #expect(
+      AppCopy.cardOn
+        == "Done. You'll get a notification the evening before snow is likely where you are. You "
+        + "can change this in Settings.")
+    #expect(
+      AppCopy.cardOnNamed(place: "Leeds")
+        == "Done. You'll get a notification the evening before snow is likely near Leeds. You can "
+        + "change this in Settings.")
+  }
+
+  @Test("what Your privacy shows is kept, the slots filled, and what its button did (8.2, 8.4a)")
   func kept() {
     #expect(AppCopy.keptID(id: "b8465956") == "ID b8465956")
+    #expect(
+      AppCopy.keptHere(place: "Leeds", zone: "Europe/London")
+        == "Where you are: Leeds, Europe/London")
     #expect(
       AppCopy.keptPlace(place: "Leeds", zone: "Europe/London") == "Leeds, Europe/London")
     #expect(

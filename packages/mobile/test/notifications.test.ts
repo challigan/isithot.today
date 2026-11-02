@@ -32,7 +32,7 @@ describe('what the app reads for its notifications', () => {
     }
   });
 
-  it("types no device token into DebugHooks.swift: the stand-in's is put-leeds's", () => {
+  it("types no device token into DebugHooks.swift: the stand-in's is put-here-ip's", () => {
     const hooks = read('apps/ios/Apps/Snow/App/DebugHooks.swift');
     expect(hooks).not.toMatch(/[0-9a-f]{64}/i);
   });
@@ -53,12 +53,8 @@ describe('what the app reads for its notifications', () => {
     const failed: SyncReply = { kind: 'failed' };
     const sent: TestOutcome = { kind: 'sent', count: 1 };
     const outcomes: Record<string, SyncReply | TestOutcome> = {
-      // 8.1's answers to its version 1 body, which 8.4's app never sends, and couldn't read.
+      // 8.1's answer to its version 1 body, which 8.4's app never sends, and couldn't read.
       'put-leeds': failed,
-      'put-durham': failed,
-      'put-device': failed,
-      'put-kathmandu': failed,
-      'put-bad-place': { kind: 'placeRefused', message: 'There is no page for that place.' },
       'put-twice': { kind: 'retry', afterSeconds: 50 },
       delete: { kind: 'forgotten' },
       'test-sent': sent,

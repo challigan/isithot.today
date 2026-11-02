@@ -4,16 +4,6 @@ import IsItModel
 import IsItTestSupport
 import Testing
 
-/// Leeds, a city page, as the screen names it.
-private let leeds = Target.city(slug: "leeds-gb", name: "Leeds")
-
-/// The phone's own point in Leeds, on the forecast grid.
-private let leedsCell = Target.device(lat: 53.8, lon: -1.55)
-
-/// Kathmandu as the search found it.
-private let kathmandu = Target.coords(
-  Target.Coordinates(source: .search, lat: 27.7, lon: 85.3, name: "Kathmandu", country: "NP"))
-
 /// The JSON object `data` holds.
 private func object(_ data: Data) throws -> [String: Any] {
   try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -25,7 +15,7 @@ func storedResponse(_ reply: AlertSync.SyncReply) -> DeviceResponse? {
   return response
 }
 
-/// The record the devices fixture `name` (a 200) holds.
+/// The set the devices fixture `name` (a 200) holds.
 func deviceResponse(_ name: String) throws -> DeviceResponse {
   let info = try Fixtures.deviceInfo(name)
   return try #require(
@@ -33,8 +23,8 @@ func deviceResponse(_ name: String) throws -> DeviceResponse {
     "\(name)")
 }
 
-/// The registration the devices fixture `name` (a PUT's 200) answered, sent in `units`, as
-/// `alertSync.v1` keeps it.
+/// The registration the devices fixture `name` (a version 2 PUT's 200) answered, sent in
+/// `units`, as `alertSync.v2` keeps it.
 func registration(_ name: String, units: Units = .c) throws -> AlertRegistration {
   let info = try Fixtures.deviceInfo(name)
   return AlertRegistration(
@@ -43,45 +33,46 @@ func registration(_ name: String, units: Units = .c) throws -> AlertRegistration
     response: try deviceResponse(name))
 }
 
-/// What the app keeps for its notifications (`alerts.v1` and `alertSync.v1`), what the server's
-/// replies mean, and the small rules beside them: the token's hex, the place's country, the
-/// version a registration sends.
+/// What the app keeps for its notifications (`alerts.v2` and `alertSync.v2`), what the server's
+/// replies mean, and the small rules beside them: the token's hex, the version a registration
+/// sends.
 @Suite("Notification records and replies")
 struct AlertRecordsTests {
   @Test(
-    "alerts.v1 reads back as itself: a chosen city, a followed cell, a searched place",
+    "alerts.v2 reads back as itself: the switches, the phone's last cell, the bells",
     arguments: [
-      AlertPlace.chosen(leeds, name: "Leeds"), .follows(leedsCell), .chosen(kathmandu, name: ""),
+      AlertSettings(prefs: AlertPrefs(evening: true, possible: true)),
+      AlertSettings(prefs: AlertPrefs(morning: true), here: KeptCell(lat: 53.8, lon: -1.55)),
+      AlertSettings(
+        prefs: AlertPrefs(evening: true), here: KeptCell(lat: -33.85, lon: 151.2),
+        bells: ["city:durham-gb", "search:27.7,85.3"]),
     ])
-  func alertsV1RoundTrips(_ place: AlertPlace) throws {
-    let settings = AlertSettings(prefs: AlertPrefs(evening: true, possible: true), place: place)
-    #expect(settings.v == 1)
-    #expect(AlertSettings.version == 1)
+  func alertsV2RoundTrips(_ settings: AlertSettings) throws {
+    #expect(settings.v == 2)
+    #expect(AlertSettings.version == 2)
     let stored = try settings.stored()
     #expect(AlertSettings(stored: stored) == settings)
     let json = try object(stored)
-    #expect(Set(json.keys) == ["v", "prefs", "place"])
-    #expect(json["v"] as? Int == 1)
-    let kept = try #require(json["place"] as? [String: Any])
-    switch place {
-    case .chosen(_, let name):
-      #expect(Set(kept.keys) == ["follows", "target", "name"])
-      #expect(kept["follows"] as? Bool == false)
-      #expect(kept["name"] as? String == name)
-    case .follows:
-      #expect(Set(kept.keys) == ["follows", "target"])
-      #expect(kept["follows"] as? Bool == true)
+    #expect(json["v"] as? Int == 2)
+    #expect((json["bells"] as? [String]) == settings.bells)
+    if let here = settings.here {
+      #expect(Set(json.keys) == ["v", "prefs", "here", "bells"])
+      let kept = try #require(json["here"] as? [String: Any])
+      #expect(Set(kept.keys) == ["lat", "lon"])
+      #expect(kept["lat"] as? Double == here.lat)
+      #expect(kept["lon"] as? Double == here.lon)
+    } else {
+      // Nothing kept while approximate: the key is left out.
+      #expect(Set(json.keys) == ["v", "prefs", "bells"])
     }
-    let target = try JSONSerialization.data(withJSONObject: try #require(kept["target"]))
-    #expect(try JSONDecoder().decode(Target.self, from: target) == place.target)
   }
 
-  @Test("alerts.v1 with no place leaves it out, and the switches on are evening or morning")
-  func alertsV1WithoutAPlace() throws {
+  @Test("alerts.v2 with nothing on keeps nothing, and the switches on are evening or morning")
+  func alertsV2Off() throws {
     let off = AlertSettings()
     #expect(off.prefs == AlertPrefs())
-    #expect(off.place == nil)
-    #expect(Set(try object(try off.stored()).keys) == ["v", "prefs"])
+    #expect(off.here == nil)
+    #expect(off.bells.isEmpty)
     #expect(!off.anyOn)
     #expect(!AlertSettings(prefs: AlertPrefs(possible: true)).anyOn)
     #expect(AlertSettings(prefs: AlertPrefs(evening: true)).anyOn)
@@ -89,86 +80,180 @@ struct AlertRecordsTests {
   }
 
   @Test(
-    "alerts.v1: nothing, another version or anything unreadable is every switch off, no place",
+    "alerts.v2: a here that isn't a cell on Earth is dropped, and the rest kept",
     arguments: [
-      nil, "{}", #"{"v":2,"prefs":{"evening":true,"morning":false,"possible":false}}"#, "[]",
-      #""x""#, #"{"v":1,"prefs":{"evening":true}}"#,
-      // Approximate IP location is never a notification place.
-      #"{"v":1,"prefs":{"evening":true,"morning":false,"possible":false},"#
-        + #""place":{"follows":false,"target":{"kind":"ip"},"name":""}}"#,
+      #""here":null"#, #""here":"Leeds""#, #""here":{"lat":53.8}"#,
+      #""here":{"lat":"53.8","lon":-1.55}"#, #""here":{"lat":91,"lon":0}"#,
+      #""here":{"lat":0,"lon":-181}"#, #""here":[53.8,-1.55]"#,
     ])
-  func alertsV1DefaultsForAnythingElse(_ text: String?) {
+  func alertsV2DropsABadCell(_ here: String) {
+    let text =
+      #"{"v":2,"prefs":{"evening":true,"morning":false,"possible":false},"# + here
+      + #","bells":["city:durham-gb"]}"#
+    #expect(
+      AlertSettings(stored: Data(text.utf8))
+        == AlertSettings(prefs: AlertPrefs(evening: true), bells: ["city:durham-gb"]))
+  }
+
+  @Test("alerts.v2: a bell that isn't text is dropped, and no list is none")
+  func alertsV2DropsABadBell() {
+    let prefs = #""prefs":{"evening":false,"morning":true,"possible":true}"#
+    let cell = #""here":{"lat":53.8,"lon":-1.55}"#
+    func read(_ bells: String) -> AlertSettings {
+      AlertSettings(stored: Data((#"{"v":2,"# + prefs + "," + cell + bells + "}").utf8))
+    }
+    let kept = AlertSettings(
+      prefs: AlertPrefs(morning: true, possible: true), here: KeptCell(lat: 53.8, lon: -1.55))
+    #expect(read("") == kept)
+    #expect(read(#","bells":null"#) == kept)
+    #expect(read(#","bells":"city:durham-gb""#) == kept)
+    #expect(read(#","bells":{"0":"city:durham-gb"}"#) == kept)
+    var bells = kept
+    bells.bells = ["city:durham-gb", "search:27.7,85.3"]
+    #expect(read(#","bells":["city:durham-gb",7,null,{},"search:27.7,85.3",true]"#) == bells)
+  }
+
+  @Test(
+    "alerts.v2: nothing, another version, 8.1's alerts.v1 or switches unread are all off, none kept",
+    arguments: [
+      nil, "{}", "[]", #""x""#, "<html>",
+      // 8.1's alerts.v1, as its builds wrote it: never read, so an updated 8.1 install starts off.
+      #"{"v":1,"prefs":{"evening":true,"morning":false,"possible":false},"#
+        + #""place":{"follows":true,"target":{"kind":"coords","source":"device","lat":53.8,"#
+        + #""lon":-1.55}}}"#,
+      #"{"v":3,"prefs":{"evening":true,"morning":false,"possible":false},"bells":[]}"#,
+      #"{"prefs":{"evening":true,"morning":false,"possible":false},"bells":[]}"#,
+      #"{"v":"2","prefs":{"evening":true,"morning":false,"possible":false},"bells":[]}"#,
+      #"{"v":2,"bells":[],"here":{"lat":53.8,"lon":-1.55}}"#,
+      #"{"v":2,"prefs":{"evening":true},"here":{"lat":53.8,"lon":-1.55}}"#,
+      #"{"v":2,"prefs":{"evening":1,"morning":false,"possible":false}}"#,
+      #"{"v":2,"prefs":null,"here":{"lat":53.8,"lon":-1.55}}"#,
+    ])
+  func alertsV2DefaultsForAnythingElse(_ text: String?) {
     let settings = AlertSettings(stored: text.map { Data($0.utf8) })
     #expect(settings == AlertSettings())
     #expect(settings.prefs == AlertPrefs(evening: false, morning: false, possible: false))
-    #expect(settings.place == nil)
+    #expect(settings.here == nil)
+    #expect(settings.bells.isEmpty)
   }
 
-  @Test("alertSync.v1 reads back as itself, `at` written to the millisecond")
-  func alertSyncV1RoundTrips() throws {
-    let kept = try registration("put-leeds")
-    #expect(kept.v == 1)
-    #expect(AlertRegistration.version == 1)
-    let stored = try kept.stored()
-    #expect(AlertRegistration(stored: stored) == kept)
-    let json = try object(stored)
-    #expect(
-      Set(json.keys) == ["v", "fingerprint", "at", "token", "env", "units", "response"])
-    #expect(json["at"] as? String == "2026-12-01T09:05:00.000Z")
-    #expect(json["env"] as? String == "sandbox")
-    #expect(json["units"] as? String == "c")
+  @Test("alertSync.v2 reads back as itself, `at` written to the millisecond, nulls kept")
+  func alertSyncV2RoundTrips() throws {
+    for name in ["put-here-ip", "put-here-device", "put-here-refresh"] {
+      let kept = try registration(name)
+      #expect(kept.v == 2)
+      let stored = try kept.stored()
+      #expect(AlertRegistration(stored: stored) == kept, "\(name)")
+      let json = try object(stored)
+      #expect(
+        Set(json.keys) == ["v", "fingerprint", "at", "token", "env", "units", "response"])
+      #expect(json["v"] as? Int == 2)
+      #expect(json["env"] as? String == "sandbox")
+      #expect(json["units"] as? String == "c")
+      // The answer as the server gave it, its nulls written as nulls.
+      let response = try #require(json["response"] as? [String: Any])
+      #expect(response["deviceTz"] is NSNull, "\(name)")
+      #expect((response["saved"] as? [Any])?.isEmpty == true)
+      #expect((response["refused"] as? [Any])?.isEmpty == true)
+    }
+    #expect(AlertRegistration.version == 2)
+    let kept = try registration("put-here-ip")
+    #expect(try object(try kept.stored())["at"] as? String == "2026-12-01T12:05:00.000Z")
     #expect(
       kept.sent
-        == AlertSync.Sent(fingerprint: "{\"alerts\":{}}", at: Date(epochMs: 1_796_115_900_000)))
+        == AlertSync.Sent(fingerprint: "{\"alerts\":{}}", at: Date(epochMs: 1_796_126_700_000)))
+    // A set with no free place keeps its null, and a place with no country its own.
+    let nowhere = DeviceResponse(
+      id: kept.response.id, here: nil,
+      saved: [
+        DeviceResponse.Saved(
+          pid: "0f1e2d3c4b5a", name: "Kathmandu", timezone: "Asia/Kathmandu",
+          query: "lat=27.7&lon=85.3&name=Kathmandu&country=NP&source=search", country: nil)
+      ],
+      refused: [DeviceResponse.Refused(index: 1, code: "not_found")],
+      alerts: kept.response.alerts, seenAt: kept.response.seenAt)
+    var other = kept
+    other.response = nowhere
+    let stored = try other.stored()
+    #expect(AlertRegistration(stored: stored) == other)
+    let response = try #require(try object(stored)["response"] as? [String: Any])
+    #expect(response["here"] is NSNull)
+    let saved = try #require((response["saved"] as? [[String: Any]])?.first)
+    #expect(saved["country"] is NSNull)
   }
 
-  @Test("alertSync.v1: nothing, another version or a missing response is no registration")
-  func alertSyncV1NilForAnythingElse() throws {
+  @Test("alertSync.v2: nothing, another version, 8.1's answer or no response is no registration")
+  func alertSyncV2NilForAnythingElse() throws {
     #expect(AlertRegistration(stored: nil) == nil)
-    var json = try object(try registration("put-leeds").stored())
-    json["v"] = 2
-    #expect(AlertRegistration(stored: try JSONSerialization.data(withJSONObject: json)) == nil)
+    var json = try object(try registration("put-here-ip").stored())
     json["v"] = 1
+    #expect(AlertRegistration(stored: try JSONSerialization.data(withJSONObject: json)) == nil)
+    json["v"] = 2
     #expect(AlertRegistration(stored: try JSONSerialization.data(withJSONObject: json)) != nil)
+    // 8.1's answer, one place, as alertSync.v1 kept it.
+    json["response"] = try JSONSerialization.jsonObject(
+      with: Data(try Fixtures.deviceInfo("put-leeds").text.utf8))
+    #expect(AlertRegistration(stored: try JSONSerialization.data(withJSONObject: json)) == nil)
     json["response"] = nil
     #expect(AlertRegistration(stored: try JSONSerialization.data(withJSONObject: json)) == nil)
     #expect(AlertRegistration(stored: Data("[]".utf8)) == nil)
   }
 
-  @Test("the server's reply to put-leeds is stored: the ID, the place, its zone and query")
+  @Test("the server's answer to put-here-ip is stored: the ID, where you are and what it follows")
   func theServersReplyDecodes() throws {
-    let info = try Fixtures.deviceInfo("put-leeds")
+    let info = try Fixtures.deviceInfo("put-here-ip")
     #expect(info.request == "PUT /api/v1/devices")
     let reply = AlertSync.syncReply(status: info.status, body: info.reply, retryAfter: nil)
     let response = try #require(storedResponse(reply))
-    #expect(response.id.count == 32)
-    #expect(response.place.name == "Leeds")
-    #expect(response.place.timezone == "Europe/London")
-    #expect(response.place.query == "place=leeds-gb")
-    #expect(Target(query: response.place.query) == .city(slug: "leeds-gb"))
+    #expect(response.id == "b8465956ef925aabc7c87a9e561f462d")
+    #expect(response.deviceTz == nil)
+    let here = try #require(response.here)
+    #expect(here.name == "Leeds")
+    #expect(here.timezone == "Europe/London")
+    #expect(here.query == "lat=53.8&lon=-1.55&source=device")
+    #expect(here.country == "GB")
+    #expect(here.follows == .ip)
+    #expect(Target(query: here.query) == .device(lat: 53.8, lon: -1.55))
+    #expect(response.saved.isEmpty)
+    #expect(response.refused.isEmpty)
     #expect(response.alerts.snow == AlertPrefs(evening: true))
-    #expect(response.seenAt == "2026-12-01T09:05:00.000Z")
+    #expect(response.seenAt == "2026-12-01T12:05:00.000Z")
     // As the client's JSON, `{ kind, reply }`, and back.
     let json = try JSONEncoder().encode(reply)
     #expect(try Set(object(json).keys) == ["kind", "reply"])
     #expect(try JSONDecoder().decode(AlertSync.SyncReply.self, from: json) == reply)
+    // The phone's location, and the connection again an hour later, now in Newcastle.
+    #expect(try deviceResponse("put-here-device").here?.follows == .device)
+    #expect(try deviceResponse("put-here-device").here?.name == "Leeds")
+    let moved = try #require(try deviceResponse("put-here-refresh").here)
+    #expect(moved.name == "Newcastle")
+    #expect(moved.query == "lat=55&lon=-1.6&source=device")
+    #expect(moved.follows == .ip)
   }
 
   @Test("every devices fixture means what the client says it means")
   func everyDevicesFixtureMapsAsTheClientSays() throws {
     let syncs: [String: AlertSync.SyncReply] = [
-      "delete": .forgotten,
-      "put-bad-place": .placeRefused(message: "There is no page for that place."),
+      // 8.1's answer to its version 1 body, which this app never sends, and couldn't read.
+      "put-leeds": .failed,
       "put-twice": .retry(afterSeconds: 50),
+      "delete": .forgotten,
       "rate-limited": .retry(afterSeconds: 60),
+      // 8.4's sets.
+      "put-here-ip": .stored(try deviceResponse("put-here-ip")),
+      "put-here-device": .stored(try deviceResponse("put-here-device")),
+      "put-here-refresh": .stored(try deviceResponse("put-here-refresh")),
+      "put-unlocated": .placeRefused(
+        message: "We couldn't tell where you are from your internet connection. Try again "
+          + "later, or use your location."),
     ]
     let tests: [String: AlertSync.TestOutcome] = [
-      "test-sent": .sent, "test-dryrun": .dryRun, "test-limited": .limited, "test-quiet": .quiet,
-      "test-gone": .notRegistered, "test-unregistered": .notRegistered, "test-down": .failed,
+      "test-sent": .sent(count: 1), "test-dryrun": .dryRun, "test-limited": .limited,
+      "test-quiet": .quiet, "test-gone": .notRegistered, "test-unregistered": .notRegistered,
+      "test-down": .failed,
     ]
-    let stored = ["put-device", "put-durham", "put-kathmandu", "put-leeds"]
     let names = try Fixtures.deviceNames()
-    #expect(names.sorted() == (Array(syncs.keys) + Array(tests.keys) + stored).sorted())
+    #expect(names.sorted() == (Array(syncs.keys) + Array(tests.keys)).sorted())
     for name in names {
       let info = try Fixtures.deviceInfo(name)
       if info.request == "POST /api/v1/devices/test" {
@@ -178,54 +263,47 @@ struct AlertRecordsTests {
       }
       let reply = AlertSync.syncReply(
         status: info.status, body: info.reply, retryAfter: info.retryAfter)
-      if let expected = syncs[name] {
-        #expect(reply == expected, "\(name)")
-      } else {
-        let response = try #require(storedResponse(reply), "\(name)")
-        #expect(stored.contains(name), "\(name)")
-        #expect(Target(query: response.place.query) != nil, "\(name)")
-      }
+      #expect(reply == syncs[name], "\(name)")
     }
     // Netlify's own 429 is a retry for a sync and a failure for a test.
     let limited = try Fixtures.deviceInfo("rate-limited")
     #expect(AlertSync.testOutcome(status: limited.status, body: limited.reply) == .failed)
-    #expect(try deviceResponse("put-kathmandu").place.timezone == "Asia/Kathmandu")
-    #expect(try deviceResponse("put-durham").place.name == "Durham")
-    // The server names the phone's cell itself.
-    #expect(try deviceResponse("put-device").place.name == "Leeds")
+    // Each set the app keeps is the server's reply, whole: written back, it reads the same.
+    for name in ["put-here-ip", "put-here-device", "put-here-refresh"] {
+      let response = try deviceResponse(name)
+      let written = try JSONEncoder().encode(response)
+      #expect(try JSONDecoder().decode(DeviceResponse.self, from: written) == response)
+      let sorted = { (data: Data) throws -> Data in
+        try JSONSerialization.data(
+          withJSONObject: try JSONSerialization.jsonObject(with: data), options: [.sortedKeys])
+      }
+      #expect(try sorted(written) == sorted(Data(try Fixtures.deviceInfo(name).text.utf8)))
+    }
   }
 
-  @Test("a test's outcome reads back as itself from the client's JSON, a string")
+  @Test("a test's outcome and a sync's reply read back as themselves from the client's JSON")
   func outcomesAsJSON() throws {
-    for outcome in AlertSync.TestOutcome.allCases {
-      let json = try JSONEncoder().encode([outcome])
-      #expect(try JSONDecoder().decode([AlertSync.TestOutcome].self, from: json) == [outcome])
-    }
+    let outcomes: [AlertSync.TestOutcome] = [
+      .sent(count: 1), .sent(count: 2), .dryRun, .limited, .quiet, .notRegistered, .failed,
+    ]
+    let json = try JSONEncoder().encode(outcomes)
+    #expect(try JSONDecoder().decode([AlertSync.TestOutcome].self, from: json) == outcomes)
+    let written = try #require(try JSONSerialization.jsonObject(with: json) as? [[String: Any]])
     #expect(
-      AlertSync.TestOutcome.allCases.map(\.rawValue) == [
-        "sent", "dryRun", "limited", "quiet", "notRegistered", "failed",
+      written.map { $0["kind"] as? String } == [
+        "sent", "sent", "dryRun", "limited", "quiet", "notRegistered", "failed",
       ])
+    #expect(written.map { $0["count"] as? Int } == [1, 2, nil, nil, nil, nil, nil])
     let replies: [AlertSync.SyncReply] = [
       .forgotten, .retry(afterSeconds: 50), .placeRefused(message: "There is no page."), .failed,
     ]
-    let json = try JSONEncoder().encode(replies)
-    #expect(try JSONDecoder().decode([AlertSync.SyncReply].self, from: json) == replies)
-    let written = try #require(try JSONSerialization.jsonObject(with: json) as? [[String: Any]])
+    let sync = try JSONEncoder().encode(replies)
+    #expect(try JSONDecoder().decode([AlertSync.SyncReply].self, from: sync) == replies)
+    let synced = try #require(try JSONSerialization.jsonObject(with: sync) as? [[String: Any]])
     #expect(
-      written.map { $0["kind"] as? String } == ["forgotten", "retry", "placeRefused", "failed"])
-    #expect(written[1]["afterSeconds"] as? Int == 50)
-    #expect(written[2]["message"] as? String == "There is no page.")
-  }
-
-  @Test("a followed place moves only to the phone's fix in another cell, and nil means no move")
-  func following() {
-    let next = Target.device(lat: 53.85, lon: -1.55)
-    #expect(AlertSync.following(.follows(leedsCell), fix: next) == .follows(next))
-    #expect(AlertSync.following(.follows(leedsCell), fix: leedsCell) == nil)
-    #expect(AlertSync.following(.chosen(leeds, name: "Leeds"), fix: next) == nil)
-    #expect(AlertSync.following(.follows(leedsCell), fix: kathmandu) == nil)
-    #expect(AlertSync.following(.follows(leedsCell), fix: .ip) == nil)
-    #expect(AlertSync.following(nil, fix: next) == nil)
+      synced.map { $0["kind"] as? String } == ["forgotten", "retry", "placeRefused", "failed"])
+    #expect(synced[1]["afterSeconds"] as? Int == 50)
+    #expect(synced[2]["message"] as? String == "There is no page.")
   }
 
   @Test("the push token is each byte as two lowercase hex digits")
@@ -237,27 +315,6 @@ struct AlertRecordsTests {
     #expect(token.hasPrefix("0008101820"))
     #expect(token.allSatisfy { "0123456789abcdef".contains($0) })
     #expect(PushToken.hex(Data(repeating: 0x0f, count: 32)) == String(repeating: "0f", count: 32))
-  }
-
-  @Test("the notification place's country, for the Met Office's warnings")
-  func countryOfThePlace() {
-    let leedsOnScreen = OnScreen(target: leeds, name: "Leeds", country: "GB", units: .c)
-    let cellOnScreen = OnScreen(target: leedsCell, name: "Leeds", country: "GB", units: .c)
-    #expect(AlertSync.country(of: .chosen(leeds, name: "Leeds"), onScreen: cellOnScreen) == "GB")
-    let newYork = Target.city(slug: "new-york-city-us")
-    #expect(AlertSync.country(of: .chosen(newYork, name: ""), onScreen: leedsOnScreen) == "US")
-    #expect(
-      AlertSync.country(of: .chosen(kathmandu, name: "Kathmandu"), onScreen: leedsOnScreen)
-        == "NP")
-    let nowhere = Target.coords(Target.Coordinates(source: .search, lat: 60.1, lon: 24.95))
-    #expect(AlertSync.country(of: .chosen(nowhere, name: ""), onScreen: leedsOnScreen) == nil)
-    // The phone's cell has no country of its own: the answer on screen's, while it shows it.
-    #expect(AlertSync.country(of: .follows(leedsCell), onScreen: cellOnScreen) == "GB")
-    #expect(AlertSync.country(of: .follows(leedsCell), onScreen: leedsOnScreen) == nil)
-    let elsewhere = OnScreen(
-      target: .device(lat: 51.5, lon: -0.1), name: "London", country: "GB", units: .c)
-    #expect(AlertSync.country(of: .follows(leedsCell), onScreen: elsewhere) == nil)
-    #expect(AlertSync.country(of: nil, onScreen: leedsOnScreen) == nil)
   }
 
   @Test("the version a registration sends: \"1.0 (112)\", or none without both parts")

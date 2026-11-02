@@ -9,18 +9,37 @@ import Testing
   import FoundationNetworking
 #endif
 
-/// The devices calls (iOS build spec, section 8.2): each request as the server takes it, and
-/// each reply the real server gave (`Fixtures/Devices`) as the client rules read it.
+/// The set the devices fixture `name` (a version 2 PUT's 200) holds, as the client reads it.
+private func storedSet(_ name: String) throws -> DeviceResponse {
+  try JSONDecoder().decode(DeviceResponse.self, from: Fixtures.deviceInfo(name).reply)
+}
+
+/// The token every devices fixture registers with: the tests type none.
+private func token() throws -> String {
+  try sentBody("put-here-ip").token
+}
+
+/// The devices calls (iOS build spec, section 8.2; version 2, phase 8.4a): each request as the
+/// server takes it, and each reply the real server gave (`Fixtures/Devices`) as the client rules
+/// read it.
 @Suite("The devices calls")
 struct DevicesAPITests {
-  /// Every devices fixture, by the call it answers, with what the app makes of its reply.
+  /// Every devices fixture but the version 2 sets, by the call it answers, with what the app
+  /// makes of its reply.
   static let replies: [(name: String, sync: AlertSync.SyncReply?, test: AlertSync.TestOutcome?)] =
     [
       ("put-twice", .retry(afterSeconds: 50), nil),
       ("rate-limited", .retry(afterSeconds: 60), .failed),
-      ("put-bad-place", .placeRefused(message: "There is no page for that place."), nil),
+      (
+        "put-unlocated",
+        .placeRefused(
+          message: "We couldn't tell where you are from your internet connection. Try again "
+            + "later, or use your location."), nil
+      ),
+      // 8.1's answer to its version 1 body: this app couldn't read one.
+      ("put-leeds", .failed, nil),
       ("delete", .forgotten, nil),
-      ("test-sent", nil, .sent),
+      ("test-sent", nil, .sent(count: 1)),
       ("test-dryrun", nil, .dryRun),
       ("test-limited", nil, .limited),
       ("test-quiet", nil, .quiet),
@@ -29,10 +48,11 @@ struct DevicesAPITests {
       ("test-down", nil, .failed),
     ]
 
-  @Test("a registration is a PUT of its body as JSON, with Accept and Content-Type, in 12 s")
+  @Test(
+    "a registration is a PUT of version 2's body as JSON, with Accept and Content-Type, in 12 s")
   func theRegistration() async throws {
-    let transport = FakeTransport([try deviceReply("put-leeds")])
-    let reply = await APIClient(transport: transport).registerDevice(try sentBody("put-leeds"))
+    let transport = FakeTransport([try deviceReply("put-here-ip")])
+    let reply = await APIClient(transport: transport).registerDevice(try sentBody("put-here-ip"))
     let request = try #require(transport.requests.first)
     #expect(transport.requests.count == 1)
     #expect(request.method == .put)
@@ -40,34 +60,40 @@ struct DevicesAPITests {
     #expect(
       request.headers == ["Accept": "application/json", "Content-Type": "application/json"])
     #expect(request.timeout == 12)
-    #expect(try sortedJSON(request.body) == deviceSentJSON("put-leeds"))
-    // Its keys sorted, so the same registration is always the same bytes.
-    let token = try fixtureToken()
+    #expect(try sortedJSON(request.body) == deviceSentJSON("put-here-ip"))
+    // Its keys sorted, so the same registration is always the same bytes: where you are for the
+    // server to locate, and no saved place.
     #expect(
       request.body.flatMap { String(data: $0, encoding: .utf8) }
         == #"{"alerts":{"snow":{"evening":true,"morning":false,"possible":false}},"#
-        + #""app":"snow","appVersion":"1.0 (42)","env":"sandbox","place":{"place":"leeds-gb"},"#
-        + #""platform":"ios","token":""# + token + #"","units":"c"}"#)
-    #expect(reply == .stored(try deviceResponse("put-leeds")))
+        + #""app":"snow","appVersion":"1.0 (42)","env":"sandbox","here":{"source":"ip"},"#
+        + #""platform":"ios","saved":[],"token":""# + (try token()) + #"","units":"c","v":2}"#)
+    #expect(reply == .stored(try storedSet("put-here-ip")))
   }
 
-  @Test("a searched place and the phone's cell are sent as the server took them")
-  func thePlaces() async throws {
-    for name in ["put-kathmandu", "put-device", "put-durham"] {
+  @Test("the phone's cell is sent as its point alone, and the connection's place each time")
+  func theSets() async throws {
+    for name in ["put-here-device", "put-here-refresh"] {
       let transport = FakeTransport([try deviceReply(name)])
       let reply = await APIClient(transport: transport).registerDevice(try sentBody(name))
       #expect(try sortedJSON(transport.requests.first?.body) == deviceSentJSON(name), "\(name)")
-      #expect(reply == .stored(try deviceResponse(name)), "\(name)")
+      #expect(reply == .stored(try storedSet(name)), "\(name)")
     }
+    let device = try sentBody("put-here-device")
+    #expect(device.here == .device(lat: 53.8, lon: -1.55))
+    #expect(device.saved.isEmpty)
+    let sent = try #require(try Fixtures.deviceInfo("put-here-device").body)
+    let body = String(decoding: sent, as: UTF8.self)
+    #expect(body.contains(#""here":{"lat":53.8,"lon":-1.55,"source":"device"}"#))
   }
 
   @Test("forgetting is a DELETE, and a test a POST, each of the app and the token alone")
   func forgetAndTest() async throws {
-    let token = try fixtureToken()
+    let token = try token()
     let transport = FakeTransport([try deviceReply("delete"), try deviceReply("test-sent")])
     let client = APIClient(transport: transport)
     #expect(await client.forgetDevice(token: token) == .forgotten)
-    #expect(await client.testDevice(token: token) == .sent)
+    #expect(await client.testDevice(token: token) == .sent(count: 1))
     let identity = #"{"app":"snow","token":""# + token + #""}"#
     let calls: [(HTTPMethod, String)] = [
       (.delete, "/api/v1/devices"), (.post, "/api/v1/devices/test"),
@@ -86,7 +112,7 @@ struct DevicesAPITests {
 
   @Test("every reply the server gave means what the client rules say, Retry-After and all")
   func everyReply() async throws {
-    let token = try fixtureToken()
+    let token = try token()
     for (name, sync, test) in Self.replies {
       let info = try Fixtures.deviceInfo(name)
       let client = APIClient(transport: FakeTransport([try deviceReply(name)]))
@@ -97,7 +123,7 @@ struct DevicesAPITests {
         if name == "delete" {
           #expect(await client.forgetDevice(token: token) == sync)
         } else {
-          #expect(await client.registerDevice(try sentBody("put-leeds")) == sync, "\(name)")
+          #expect(await client.registerDevice(try sentBody("put-here-ip")) == sync, "\(name)")
         }
       }
       if let test {
@@ -109,10 +135,10 @@ struct DevicesAPITests {
 
   @Test("no answer at all is a failure, never a throw")
   func noAnswer() async throws {
-    let token = try fixtureToken()
+    let token = try token()
     for code in [URLError.Code.notConnectedToInternet, .timedOut, .cancelled] {
       let client = APIClient(transport: FakeTransport([.failure(code)]))
-      #expect(await client.registerDevice(try sentBody("put-leeds")) == .failed)
+      #expect(await client.registerDevice(try sentBody("put-here-ip")) == .failed)
       #expect(await client.forgetDevice(token: token) == .failed)
       #expect(await client.testDevice(token: token) == .failed)
     }

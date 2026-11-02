@@ -2,7 +2,7 @@ import Foundation
 import IsItModel
 
 /// The notification switches (client `AlertPrefs`): the evening before, on the day, and also
-/// when snow is possible. The app keeps them in `alerts.v1`.
+/// when snow is possible. The app keeps them in `alerts.v2`.
 public struct AlertPrefs: Codable, Sendable, Equatable {
   /// "Evening before (about 6pm)": when snow is likely tomorrow.
   public var evening: Bool
@@ -18,8 +18,13 @@ public struct AlertPrefs: Codable, Sendable, Equatable {
   }
 }
 
-/// The body of `PUT /api/v1/devices` (client `RegistrationBody`, iOS build spec section 8.2).
+/// The body of `PUT /api/v1/devices`, version 2 (client `RegistrationBody`): the device's whole
+/// set, which the server keeps. Where you are, the free place, as the phone's cell or for the
+/// server to locate from the connection; and the saved places, none before phase 8.4b.
 public struct RegistrationBody: Codable, Sendable, Equatable {
+  /// The version this app sends.
+  public static let version = 2
+
   /// The app registering: the snow app.
   public enum App: String, Codable, Sendable, CaseIterable {
     case snow
@@ -35,35 +40,52 @@ public struct RegistrationBody: Codable, Sendable, Equatable {
     case sandbox, production
   }
 
-  /// The registration's place, in a form `/api/v1/today` takes too (client
-  /// `RegistrationPlace`): a city page's slug, `{ "place": "durham-gb" }`, or coordinates, a
-  /// searched place's with what the search said about it, the device's with only `lat`, `lon`
-  /// and `source`.
-  public enum Place: Codable, Sendable, Equatable {
-    case city(slug: String)
-    case coords(Target.Coordinates)
+  /// Where you are as a registration names it (client `HereBody`): `{ "source": "ip" }` for the
+  /// server to locate from the request's connection, or the phone's cell, `{ "lat", "lon",
+  /// "source": "device" }`, its point alone.
+  public enum Here: Codable, Sendable, Equatable {
+    case ip
+    case device(lat: Double, lon: Double)
 
-    /// The place as the today query names it (`TodayQuery.build`), with the same fields: nil
-    /// for approximate IP location, which is never registered.
-    public init?(_ target: Target) {
-      switch target {
+    private enum CodingKeys: String, CodingKey {
+      case lat, lon, source
+    }
+
+    private enum Source: String, Codable {
+      case ip, device
+    }
+
+    public init(from decoder: any Decoder) throws {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      switch try container.decode(Source.self, forKey: .source) {
       case .ip:
-        return nil
-      case .city(let slug, _):
-        self = .city(slug: slug)
-      case .coords(let place) where place.source == .device:
-        self = .coords(Target.Coordinates(source: .device, lat: place.lat, lon: place.lon))
-      case .coords(let place):
-        var searched = Target.Coordinates(source: .search, lat: place.lat, lon: place.lon)
-        // As the query: an empty name, region or country and a zero geonameId are left out.
-        if let name = place.name, !name.isEmpty { searched.name = name }
-        if let region = place.region, !region.isEmpty { searched.region = region }
-        if let country = place.country, !country.isEmpty { searched.country = country }
-        if let geonameId = place.geonameId, geonameId != 0 { searched.geonameId = geonameId }
-        searched.elevation = place.elevation
-        self = .coords(searched)
+        self = .ip
+      case .device:
+        self = .device(
+          lat: try container.decode(Double.self, forKey: .lat),
+          lon: try container.decode(Double.self, forKey: .lon))
       }
     }
+
+    public func encode(to encoder: any Encoder) throws {
+      var container = encoder.container(keyedBy: CodingKeys.self)
+      switch self {
+      case .ip:
+        try container.encode(Source.ip, forKey: .source)
+      case .device(let lat, let lon):
+        try container.encode(lat, forKey: .lat)
+        try container.encode(lon, forKey: .lon)
+        try container.encode(Source.device, forKey: .source)
+      }
+    }
+  }
+
+  /// A saved place as a registration names it (client `SavedBody`), in a form `/api/v1/today`
+  /// takes too: a city page's slug, `{ "place": "durham-gb" }`, or a searched place's
+  /// coordinates with what the search said about it. Phase 8.4b sends them; 8.4a's set has none.
+  public enum Saved: Codable, Sendable, Equatable {
+    case city(slug: String)
+    case search(Target.Coordinates)
 
     private enum CodingKeys: String, CodingKey {
       case place
@@ -74,7 +96,7 @@ public struct RegistrationBody: Codable, Sendable, Equatable {
       if let slug = try container.decodeIfPresent(String.self, forKey: .place) {
         self = .city(slug: slug)
       } else {
-        self = .coords(try Target.Coordinates(from: decoder))
+        self = .search(try Target.Coordinates(from: decoder))
       }
     }
 
@@ -83,7 +105,7 @@ public struct RegistrationBody: Codable, Sendable, Equatable {
       case .city(let slug):
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(slug, forKey: .place)
-      case .coords(let place):
+      case .search(let place):
         try place.encode(to: encoder)
       }
     }
@@ -98,45 +120,58 @@ public struct RegistrationBody: Codable, Sendable, Equatable {
     }
   }
 
+  /// `RegistrationBody.version`.
+  public var v: Int
   public var app: App
   public var platform: Platform
   public var env: Env
   /// The APNs device token, in hex.
   public var token: String
-  public var place: Place
   public var units: Units
-  public var alerts: Alerts
   /// "1.0 (42)": the version and build.
   public var appVersion: String
+  public var alerts: Alerts
+  public var here: Here
+  public var saved: [Saved]
 
   public init(
     app: App = .snow,
     platform: Platform = .ios,
     env: Env,
     token: String,
-    place: Place,
     units: Units,
+    appVersion: String,
     alerts: Alerts,
-    appVersion: String
+    here: Here,
+    saved: [Saved] = []
   ) {
+    v = Self.version
     self.app = app
     self.platform = platform
     self.env = env
     self.token = token
-    self.place = place
     self.units = units
-    self.alerts = alerts
     self.appVersion = appVersion
+    self.alerts = alerts
+    self.here = here
+    self.saved = saved
   }
 }
 
 /// Keeping the server's record of the app's notifications in step with the app (`PUT` and
-/// `DELETE` on `/api/v1/devices`): what to send, and whether anything needs sending at all. The
-/// port of client `alerts.ts`, checked against `alerts.json`.
+/// `DELETE` on `/api/v1/devices`, version 2): where you are, and what to send for it; whether
+/// anything needs sending at all; and what the server's replies mean. The port of client
+/// `alerts.ts`, checked against `alerts.json`.
 public enum AlertSync {
   /// The app's notification permission, as the system reports it (client `Permission`).
   public enum Permission: String, Codable, Sendable, CaseIterable {
     case authorized, provisional, denied, notDetermined
+  }
+
+  /// The app's location access, as the system reports it (client `LocationAccess`), restricted
+  /// reading as denied: IsItState's `LocationAccess`, as the notifications' rules take it.
+  public enum LocationAccess: String, Codable, Sendable, CaseIterable {
+    case granted, denied, notDetermined
   }
 
   /// What to do about the server's record (client `AlertAction`).
@@ -147,14 +182,12 @@ public enum AlertSync {
     case delete
     /// Nothing to send.
     case none
-    /// Ask for a place: notifications are never for approximate IP location.
-    case needsPlace
     /// Wait for the push token.
     case needsToken
   }
 
-  /// The registration last sent, as `alertSync.v1` keeps it: what it said (`fingerprint`), and
-  /// when it was sent.
+  /// A registration sent, as `alertSync.v2` keeps the last the server took, and the model the
+  /// last it refused: what it said (`fingerprint`), and when it was sent.
   public struct Sent: Codable, Sendable, Equatable {
     public var fingerprint: String
     public var at: Date
@@ -165,64 +198,67 @@ public enum AlertSync {
     }
   }
 
-  /// Whether notifications can be for `target` (client `alertPlaceAllowed`): a place someone
-  /// chose, never the approximate IP one, nor none.
-  public static func placeAllowed(_ target: Target?) -> Bool {
-    switch target {
-    case nil, .ip: false
-    case .city, .coords: true
-    }
-  }
-
-  /// The registration for these settings (client `registrationBody`). Nil for approximate IP
-  /// location, which is never registered (`placeAllowed`).
+  /// The registration: the switches for where you are, and no saved place (client
+  /// `registrationBody`). The phone's cell goes as its point alone, nothing else it carries.
   public static func body(
     token: String,
     env: RegistrationBody.Env,
-    place: Target,
+    here: HerePlace,
     units: Units,
     prefs: AlertPrefs,
     appVersion: String
-  ) -> RegistrationBody? {
-    guard let place = RegistrationBody.Place(place) else { return nil }
+  ) -> RegistrationBody {
+    let sent: RegistrationBody.Here =
+      switch here {
+      case .device(let point): .device(lat: point.lat, lon: point.lon)
+      case .ip: .ip
+      }
     return RegistrationBody(
       env: env,
       token: token,
-      place: place,
       units: units,
+      appVersion: appVersion,
       alerts: RegistrationBody.Alerts(snow: prefs),
-      appVersion: appVersion
+      here: sent
     )
   }
 
   /// What a registration says (client `fingerprint`), as JSON with its keys sorted at every
-  /// level, written as JavaScript's `JSON.stringify` writes it, and leaving out `appVersion`:
-  /// an app update alone is no reason to register again.
+  /// level (a list keeps its order), written as JavaScript's `JSON.stringify` writes it, and
+  /// leaving out `appVersion`: an app update alone is no reason to register again.
   public static func fingerprint(_ body: RegistrationBody) -> String {
     let said: [String: JSONValue] = [
+      "v": .number(Double(body.v)),
       "app": .string(body.app.rawValue),
       "platform": .string(body.platform.rawValue),
       "env": .string(body.env.rawValue),
       "token": .string(body.token),
-      "place": json(body.place),
       "units": .string(body.units.rawValue),
       "alerts": .object(["snow": json(body.alerts.snow)]),
+      "here": json(body.here),
+      "saved": .array(body.saved.map(json)),
     ]
     return JSONValue.object(said).written
   }
 
   /// What to do about the server's record (client `alertAction`), in order: delete it (if
   /// there is one) when no notification is switched on or the permission is denied ("also when
-  /// snow is possible" only widens the other two, so alone it switches nothing on); ask for a
-  /// place when there is none chosen; wait for the push token; otherwise send it again when it
-  /// has changed, or when `Constants.Alerts.heartbeatDays` have passed since it was last sent.
+  /// snow is possible" only widens the other two, so alone it switches nothing on); wait for the
+  /// push token; nothing while the server has refused this very registration (`refused`, a 400:
+  /// it couldn't tell where you are) and the app hasn't become active since; otherwise send it
+  /// when it has changed since `last` was sent, when `Constants.Alerts.heartbeatDays` have passed
+  /// since, or, while where you are is approximate, when the app became active (`activeAt`)
+  /// `Constants.Alerts.hereRefreshMinutes` or more after it: the server locates the connection
+  /// afresh at each registration.
   public static func action(
     prefs: AlertPrefs,
     permission: Permission,
     token: String?,
-    place: Target?,
+    here: HerePlace,
     units: Units,
     last: Sent?,
+    refused: Sent?,
+    activeAt: Date,
     now: Date,
     env: RegistrationBody.Env,
     appVersion: String
@@ -230,36 +266,54 @@ public enum AlertSync {
     if (!prefs.evening && !prefs.morning) || permission == .denied {
       return last == nil ? .none : .delete
     }
-    guard let place, placeAllowed(place) else { return .needsPlace }
     guard let token, !token.isEmpty else { return .needsToken }
-    guard
-      let registration = body(
-        token: token,
-        env: env,
-        place: place,
-        units: units,
-        prefs: prefs,
-        appVersion: appVersion
-      )
-    else { return .needsPlace }
+    let said = fingerprint(
+      body(
+        token: token, env: env, here: here, units: units, prefs: prefs, appVersion: appVersion))
     // Compared byte for byte, as JavaScript compares strings, where Swift's `==` would take
     // canonically equivalent text as the same.
-    guard let last, fingerprint(registration).utf8.elementsEqual(last.fingerprint.utf8) else {
-      return .put
+    if let refused, same(refused.fingerprint, said), refused.at.epochMs >= activeAt.epochMs {
+      return .none
     }
-    let heartbeat = Constants.Alerts.heartbeatDays * dayMs
-    return now.epochMs - last.at.epochMs >= heartbeat ? .put : .none
+    guard let last, same(last.fingerprint, said) else { return .put }
+    if now.epochMs - last.at.epochMs >= Constants.Alerts.heartbeatDays * dayMs { return .put }
+    let refresh =
+      activeAt.epochMs - last.at.epochMs >= Constants.Alerts.hereRefreshMinutes * minuteMs
+    return here == .ip && refresh ? .put : .none
   }
 
   // MARK: - Private
 
-  private static let dayMs = 24 * 60 * 60 * 1000
+  private static let minuteMs = 60 * 1000
+  private static let dayMs = 24 * 60 * minuteMs
 
-  private static func json(_ place: RegistrationBody.Place) -> JSONValue {
-    switch place {
+  /// Whether `a` and `b` are the same text code unit for code unit, as JavaScript's `===`.
+  private static func same(_ a: String, _ b: String) -> Bool {
+    a.utf8.elementsEqual(b.utf8)
+  }
+
+  private static func json(_ prefs: AlertPrefs) -> JSONValue {
+    .object([
+      "evening": .bool(prefs.evening),
+      "morning": .bool(prefs.morning),
+      "possible": .bool(prefs.possible),
+    ])
+  }
+
+  private static func json(_ here: RegistrationBody.Here) -> JSONValue {
+    switch here {
+    case .ip:
+      .object(["source": .string("ip")])
+    case .device(let lat, let lon):
+      .object(["lat": .number(lat), "lon": .number(lon), "source": .string("device")])
+    }
+  }
+
+  private static func json(_ saved: RegistrationBody.Saved) -> JSONValue {
+    switch saved {
     case .city(let slug):
       return .object(["place": .string(slug)])
-    case .coords(let place):
+    case .search(let place):
       var fields: [String: JSONValue] = [
         "lat": .number(place.lat),
         "lon": .number(place.lon),
@@ -273,22 +327,16 @@ public enum AlertSync {
       return .object(fields)
     }
   }
-
-  private static func json(_ prefs: AlertPrefs) -> JSONValue {
-    .object([
-      "evening": .bool(prefs.evening),
-      "morning": .bool(prefs.morning),
-      "possible": .bool(prefs.possible),
-    ])
-  }
 }
 
 /// The JSON a fingerprint is made of, written as `JSON.stringify` writes it, with every
-/// object's keys sorted as JavaScript's `sort` sorts them (by UTF-16 code unit).
+/// object's keys sorted as JavaScript's `sort` sorts them (by UTF-16 code unit), and a list's
+/// items in their order.
 private enum JSONValue {
   case bool(Bool)
   case number(Double)
   case string(String)
+  case array([JSONValue])
   case object([String: JSONValue])
 
   var written: String {
@@ -299,6 +347,8 @@ private enum JSONValue {
       return JavaScriptNumber.string(value)
     case .string(let value):
       return Self.quoted(value)
+    case .array(let items):
+      return "[" + items.map(\.written).joined(separator: ",") + "]"
     case .object(let fields):
       let keys = fields.keys.sorted { $0.utf16.lexicographicallyPrecedes($1.utf16) }
       let members = keys.map { key in Self.quoted(key) + ":" + (fields[key]?.written ?? "null") }

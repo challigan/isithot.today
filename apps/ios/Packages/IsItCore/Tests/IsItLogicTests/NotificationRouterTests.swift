@@ -60,6 +60,47 @@ struct NotificationRouterTests {
         == .place(durham, view: nil))
   }
 
+  @Test("a version 2 answer's zones: each place in the set tells its day by its own zone")
+  func zonesFromTheAnswer() throws {
+    // Noon on 17 December: the 17th in Durham and Leeds, the 18th at UTC+14.
+    let noon = Date(epochMs: 1_797_508_800_000)
+    /// The set with where you are, approximate, in Leeds's cell, and Durham saved, each in the
+    /// zone given, as the router gets it (`NotificationsModel.zones`).
+    func zones(here hereZone: String, durham durhamZone: String) -> [String: String] {
+      AlertSync.replyZones(
+        DeviceResponse(
+          id: String(repeating: "0", count: 32),
+          here: DeviceResponse.Here(
+            name: "Leeds", timezone: hereZone, query: "lat=53.8&lon=-1.55&source=device",
+            country: "GB", follows: .ip),
+          saved: [
+            DeviceResponse.Saved(
+              pid: "0123456789ab", name: "Durham", timezone: durhamZone,
+              query: "place=durham-gb", country: "GB")
+          ],
+          alerts: RegistrationBody.Alerts(snow: AlertPrefs(evening: true)),
+          seenAt: "2026-12-01T12:05:00.000Z"))
+    }
+    let london = zones(here: "Europe/London", durham: "Europe/London")
+    let far = zones(here: "Pacific/Kiritimati", durham: "Pacific/Kiritimati")
+    // A saved place's notification.
+    let saved = try Fixtures.payload("durham-evening")
+    #expect(
+      NotificationRouter.route(json: saved, now: noon, zones: london)
+        == .place(durham, view: .today))
+    #expect(
+      NotificationRouter.route(json: saved, now: noon, zones: far) == .place(durham, view: nil))
+    // Where you are's, which names its cell, approximate or not (design 4.8).
+    var fields = try #require(try JSONSerialization.jsonObject(with: saved) as? [String: Any])
+    fields["place"] = "lat=53.8&lon=-1.55&source=device"
+    fields["name"] = "Leeds"
+    let here = try JSONSerialization.data(withJSONObject: fields)
+    let cell = Target.device(lat: 53.8, lon: -1.55)
+    #expect(
+      NotificationRouter.route(json: here, now: noon, zones: london) == .place(cell, view: .today))
+    #expect(NotificationRouter.route(json: here, now: noon, zones: far) == .place(cell, view: nil))
+  }
+
   @Test("an old payload opens on the place's view for the time of day")
   func anOldPayloadOpensOnTheDefault() throws {
     let json = try Fixtures.payload("durham-old")

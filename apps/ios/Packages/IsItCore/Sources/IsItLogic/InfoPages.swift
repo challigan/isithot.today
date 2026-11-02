@@ -116,7 +116,8 @@ public struct YourPrivacy: Sendable, Equatable {
   public struct Kept: Sendable, Equatable {
     /// "What we keep for notifications"
     public let heading: String
-    /// "ID b8465956", "Leeds, Europe/London", "Snow units: cm", "Evening before (about 6pm)"
+    /// "ID b8465956", "Where you are: Leeds, Europe/London", "Snow units: cm", "Evening before
+    /// (about 6pm)"
     public let lines: [String]
     /// "Turn off notifications and delete my data"
     public let delete: String
@@ -158,19 +159,20 @@ public struct YourPrivacy: Sendable, Equatable {
     }
   }
 
-  /// What the server keeps for notifications, as the last PUT it answered (`alertSync.v1`) says:
-  /// the ID's first 8 digits, the place's name and time zone, the snow units it was sent in
-  /// ("Snow units: cm"), then each switch it holds on, in Settings' words and order. Nil while
-  /// not registered.
+  /// What the server keeps for notifications, as the last PUT it answered (`alertSync.v2`) says
+  /// (design 2.8): the ID's first 8 digits; where you are, its name and time zone, while the
+  /// server has a place for it; the snow units it was sent in ("Snow units: cm"); then each switch
+  /// it holds on, in Settings' words and order. Nil while not registered.
   public static func keptLines(_ registration: AlertRegistration?) -> [String]? {
     guard let registration else { return nil }
     let response = registration.response
-    var lines = [
-      AppCopy.keptID(id: String(response.id.prefix(8))),
-      AppCopy.keptPlace(place: response.place.name, zone: response.place.timezone),
+    var lines = [AppCopy.keptID(id: String(response.id.prefix(8)))]
+    if let here = response.here {
+      lines.append(AppCopy.keptHere(place: here.name, zone: here.timezone))
+    }
+    lines.append(
       AppCopy.keptUnits(
-        label: CoreCopy.snowUnitsLabel, units: CoreCopy.snowUnitName(registration.units)),
-    ]
+        label: CoreCopy.snowUnitsLabel, units: CoreCopy.snowUnitName(registration.units)))
     let snow = response.alerts.snow
     if snow.evening { lines.append(AppCopy.evening) }
     if snow.morning { lines.append(AppCopy.morning) }

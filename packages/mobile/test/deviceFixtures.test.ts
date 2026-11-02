@@ -62,10 +62,6 @@ const body = (name: string): any => JSON.parse(fixture(name).text);
 /** Each reply's status, the server's error code and its `Retry-After`. */
 const TABLE: Record<string, [number, string | null, string | null]> = {
   'put-leeds': [200, null, null],
-  'put-durham': [200, null, null],
-  'put-device': [200, null, null],
-  'put-kathmandu': [200, null, null],
-  'put-bad-place': [400, 'bad_location', null],
   'put-twice': [429, 'rate_limited', '50'],
   delete: [204, null, null],
   'test-sent': [202, null, null],
@@ -84,13 +80,12 @@ const TABLE: Record<string, [number, string | null, string | null]> = {
   'put-unlocated': [400, 'bad_location', null],
 };
 
-/** 8.1's fixtures, which 8.4 adds to and never changes: their files' SHA-256, as 8.1 wrote them. */
+/**
+ * 8.1's fixtures that 8.4 keeps, and never changes: their files' SHA-256, as 8.1 wrote them. Its
+ * other version 1 PUTs (put-durham, put-device, put-kathmandu and put-bad-place) went in 8.4a.
+ */
 const AS_8_1_WROTE_THEM: Record<string, string> = {
   'put-leeds': 'aa2e4d3f5a0dabbc1c54df8ce94da3eca2996d9feb09eeea72e3b6f0dd6f2e3c',
-  'put-durham': '737fb8322ce313d9f92b6f5ca126d7d45f7b91be7f90113fc915fd84d3297082',
-  'put-device': 'e364c6e25658afc3d385c2caa0423671c3ea526714f7ea9b4cf5e92402ff7f3b',
-  'put-kathmandu': '7a31fe77fc52f619a125096c70c14df3351af6eab58faafe1bd83972b8f5fffb',
-  'put-bad-place': '01f734b45658de8de20787121478ac22762d1eb9464d9c1b200938e9a823341f',
   'put-twice': '269d541bedc0cd4c8d492bfe9420b04bf79580d974f862bfa6275daff975abb9',
   delete: 'b8da851e943d59103506998223a65121be16ab3787e3679f2f6ae062b8499d71',
   'test-sent': 'a557a65773ed955b17ef9027ce186e5ac99218660c993edaf328802a90d65765',
@@ -154,53 +149,42 @@ describe('devices fixtures', () => {
     }
   });
 
-  it('registers one device, by a token no phone has', () => {
+  it("one device, one set per fixture: where you are as 8.4's app sends it, and no saved place", () => {
+    // One device, by a token no phone has.
     expect(DEVICE_TOKEN).toBe('0f'.repeat(32));
     for (const s of DEVICE_FIXTURES)
       expect((s.body as { token: string }).token, s.name).toBe(DEVICE_TOKEN);
     expect(body('put-leeds').id).toBe(registrationId('snow', DEVICE_TOKEN));
-  });
-
-  it("puts 8.1's one place as 8.1's builds send it, from the sandbox, with the evening on", () => {
-    // Version 1, as 8.1's client registrationBody made it: no `v`, one place.
-    const put = (name: string, place: object) =>
-      expect(spec(name).body, name).toEqual({
-        app: 'snow',
-        platform: 'ios',
-        env: 'sandbox',
-        token: DEVICE_TOKEN,
-        place,
-        units: 'c',
-        alerts: { snow: EVENING },
-        appVersion: '1.0 (42)',
-      });
-    put('put-leeds', { place: 'leeds-gb' });
-    put('put-durham', { place: 'durham-gb' });
-    put('put-device', { lat: 53.8, lon: -1.55, source: 'device' });
-    put('put-kathmandu', {
-      lat: 27.7,
-      lon: 85.3,
-      source: 'search',
-      name: 'Kathmandu',
-      country: 'NP',
-    });
-    put('put-bad-place', { place: 'nowhere-xx' });
-    for (const name of ['put-twice', 'rate-limited'])
-      expect(spec(name).body).toEqual(spec('put-leeds').body);
+    expect(body('put-here-ip').id).toBe(registrationId('snow', DEVICE_TOKEN));
     for (const s of DEVICE_FIXTURES.filter((d) => d.request !== 'PUT /api/v1/devices')) {
       expect(s.body, s.name).toEqual({ app: 'snow', token: DEVICE_TOKEN });
     }
+    // 8.1's one PUT left, version 1 as 8.1's builds send it (no `v`, one place), from the
+    // sandbox, with the evening on: the registration the delete, the tests and the two 429s are
+    // made after. No other version 1 body is left.
+    expect(spec('put-leeds').body).toEqual({
+      app: 'snow',
+      platform: 'ios',
+      env: 'sandbox',
+      token: DEVICE_TOKEN,
+      place: { place: 'leeds-gb' },
+      units: 'c',
+      alerts: { snow: EVENING },
+      appVersion: '1.0 (42)',
+    });
+    for (const name of ['put-twice', 'rate-limited'])
+      expect(spec(name).body, name).toEqual(spec('put-leeds').body);
+    expect(
+      DEVICE_FIXTURES.filter(
+        (d) => d.request === 'PUT /api/v1/devices' && !SETS.includes(d.name),
+      ).map((d) => d.name),
+    ).toEqual(['put-leeds', 'put-twice', 'rate-limited']);
+    expect(body('put-leeds').alerts).toEqual({ snow: EVENING });
     for (const s of DEVICE_FIXTURES.filter((d) => !SETS.includes(d.name))) {
       expect(s.geo, s.name).toBeUndefined();
       for (const before of s.before ?? []) expect(before.geo, s.name).toBeUndefined();
     }
-    // Each reply echoes the switches it was sent.
-    for (const name of ['put-leeds', 'put-durham', 'put-device', 'put-kathmandu']) {
-      expect(body(name).alerts, name).toEqual({ snow: EVENING });
-    }
-  });
-
-  it("puts one set per fixture as 8.4's app sends it: where you are, and no saved place", () => {
+    // 8.4's: each PUT one whole set.
     const sent = (here: HerePlace): RegistrationBody =>
       registrationBody({
         token: DEVICE_TOKEN,
@@ -264,35 +248,14 @@ describe('devices fixtures', () => {
     ]);
   });
 
-  it('names each place as the server does, at the moment of the answer the app shows', () => {
-    const place = (name: string) => body(name).place;
-    expect(place('put-leeds')).toEqual({
+  it("names 8.1's place as the server does, at the moment of the answer the app shows", () => {
+    expect(body('put-leeds').place).toEqual({
       name: 'Leeds',
       timezone: 'Europe/London',
       query: 'place=leeds-gb',
     });
-    expect(place('put-durham')).toEqual({
-      name: 'Durham',
-      timezone: 'Europe/London',
-      query: 'place=durham-gb',
-    });
-    expect(place('put-device')).toMatchObject({
-      timezone: 'Europe/London',
-      query: 'lat=53.8&lon=-1.55&source=device',
-    });
-    // The place's own zone, as kathmandu-0545 has it.
-    expect(place('put-kathmandu')).toEqual({
-      name: 'Kathmandu',
-      timezone: 'Asia/Kathmandu',
-      query: 'lat=27.7&lon=85.3&name=Kathmandu&country=NP&source=search',
-    });
     expect(spec('put-leeds').now).toBe(moment('leeds-dry'));
-    expect(spec('put-durham').now).toBe(moment('durham-tomorrow'));
-    expect(spec('put-device').now).toBe(moment('leeds-dry'));
-    expect(spec('put-kathmandu').now).toBe(moment('kathmandu-0545'));
-    for (const name of ['put-leeds', 'put-durham', 'put-device', 'put-kathmandu']) {
-      expect(body(name).seenAt, name).toBe(spec(name).now);
-    }
+    expect(body('put-leeds').seenAt).toBe(spec('put-leeds').now);
     expect(Date.parse(spec('put-twice').now) - Date.parse(moment('leeds-dry'))).toBe(10_000);
   });
 
@@ -369,20 +332,18 @@ describe('devices fixtures', () => {
     });
   });
 
-  it("is 8.1's fixtures exactly as 8.1 wrote them, and adds 8.4's after them", () => {
+  it("is 8.1's fixtures it keeps exactly as 8.1 wrote them, and adds 8.4's after them", () => {
     const names = DEVICE_FIXTURES.map((s) => s.name);
-    expect(names.slice(0, 15)).toEqual(
-      Object.keys(AS_8_1_WROTE_THEM).filter((n) => !n.includes('.')),
-    );
-    expect(names.slice(15)).toEqual(SETS);
+    const kept = Object.keys(AS_8_1_WROTE_THEM).filter((n) => !n.includes('.'));
+    expect(names.slice(0, kept.length)).toEqual(kept);
+    expect(names.slice(kept.length)).toEqual(SETS);
     for (const [name, hash] of Object.entries(AS_8_1_WROTE_THEM)) {
       const text = name.includes('.') ? payloads.get(name)! : deviceFixtureJson(fixture(name));
       expect(sha256(text), name).toBe(hash);
     }
   });
 
-  it("refuses a place with no page, and a second write in a minute, in the server's words", () => {
-    expect(body('put-bad-place').error.message).toBe(ERROR_MESSAGES.not_found);
+  it("refuses a second write in a minute, in the server's words", () => {
     expect(body('put-twice').error.message).toBe(
       'One change a minute for each device. Try again shortly.',
     );
@@ -440,7 +401,7 @@ describe('devices fixtures', () => {
   });
 
   it('fails loudly when a request before the one it is for does not succeed', async () => {
-    const bad = { ...spec('put-bad-place') };
+    const bad = { ...spec('put-unlocated') };
     await expect(makeDeviceFixture({ ...spec('test-sent'), before: [bad] })).rejects.toThrow(
       /^test-sent: PUT \/api\/v1\/devices was answered 400: .*bad_location/,
     );
@@ -490,9 +451,14 @@ describe('notification payloads', () => {
     // The day the answer is about, tomorrow at 6:05pm on the 16th.
     expect(pushed.date).toBe('2026-12-17');
     expect(pushed.date).toBe(durham.snow!.days[1]!.date);
-    // A tap opens the place put-durham registered, under its name.
-    const durhamPlace = body('put-durham').place;
-    expect(pushed).toMatchObject({ place: durhamPlace.query, name: durhamPlace.name });
+    // A tap opens the place durham-tomorrow is about, Durham's city page, under its name: the
+    // query and name the server stores for a city page, as put-leeds's reply has Leeds's.
+    expect(durham.location).toMatchObject({ slug: 'durham-gb', name: 'Durham' });
+    expect(pushed).toMatchObject({
+      place: `place=${durham.location.slug}`,
+      name: durham.location.name,
+    });
+    expect(body('put-leeds').place).toMatchObject({ query: 'place=leeds-gb', name: 'Leeds' });
   });
 
   it('has one long past and one not a date, each otherwise the same', () => {
