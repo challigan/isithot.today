@@ -52,6 +52,8 @@ import {
   dayUntil,
   deviceTarget,
   fingerprint,
+  firstAlertPlace,
+  followLocation,
   freshQuery,
   hold,
   hourUntil,
@@ -70,9 +72,12 @@ import {
   searchInput,
   searchQuery,
   searchTarget,
+  setAlert,
   shownRecent,
+  syncReply,
   targetFromQuery,
   targetKey,
+  testOutcome,
   todayQuery,
   unsavePlace,
   updatedLine,
@@ -80,7 +85,9 @@ import {
   widgetEntries,
   widgetFallsBack,
   widgetReuses,
+  type AlertPlace,
   type AlertPrefs,
+  type AlertSwitch,
   type Holds,
   type Permission,
   type PlaceLists,
@@ -1606,12 +1613,124 @@ function alertVectors(): VectorFile {
     action({ permission, last: recent });
     action({ permission, last: null });
   }
+
+  // The notification place: the place on screen when notifications are first turned on, and a
+  // followed one moved by the phone's own fix only.
+  for (const onScreen of [{ kind: 'ip' } as const, ...PLACES]) {
+    for (const name of [null, 'Leeds']) {
+      add('firstAlertPlace', { onScreen, name }, firstAlertPlace(onScreen, name));
+    }
+  }
+  const alertPlaces: (AlertPlace | null)[] = [
+    null,
+    { follows: false, target: PLACES[0]!, name: 'Durham' },
+    { follows: true, target: PLACES[2]! },
+  ];
+  const fixes: Target[] = [
+    PLACES[2]!,
+    { kind: 'coords', source: 'device', lat: 53.85, lon: -1.55 },
+    PLACES[3]!,
+    { kind: 'ip' },
+  ];
+  for (const place of alertPlaces) {
+    for (const fix of fixes) add('followLocation', { place, fix }, followLocation(place, fix));
+  }
+  for (const prefs of Object.values(PREFS)) {
+    for (const which of ['evening', 'morning', 'possible'] satisfies AlertSwitch[]) {
+      for (const on of [true, false]) {
+        add('setAlert', { prefs, which, on }, setAlert(prefs, which, on));
+      }
+    }
+  }
+
+  // What the devices replies mean: every case of the client's tests. The fixtures the real
+  // handlers made (Fixtures/Devices) are checked against the same functions on their own.
+  const reply = {
+    id: '3f9c1a2b4d5e6f708192a3b4c5d6e7f8',
+    place: { name: 'Leeds', timezone: 'Europe/London', query: 'place=leeds-gb' },
+    alerts: { snow: PREFS.evening },
+    seenAt: '2026-12-01T09:05:00.000Z',
+  };
+  const json = (o: unknown) => JSON.stringify(o);
+  const error = (code: unknown, message?: unknown) => json({ error: { code, message } });
+  const sync = (status: number, text: string, retryAfter: string | null = null) =>
+    add('syncReply', { status, text, retryAfter }, syncReply(status, text, retryAfter));
+  sync(200, json(reply));
+  sync(200, json({ ...reply, tz: 'Europe/London' }));
+  for (const wrong of [
+    { ...reply, id: reply.id.slice(1) },
+    { ...reply, id: reply.id.toUpperCase() },
+    { ...reply, id: 42 },
+    { ...reply, place: { name: 'Leeds', timezone: 'Europe/London' } },
+    { ...reply, place: null },
+    { ...reply, place: { ...reply.place, name: 1 } },
+    { ...reply, place: { ...reply.place, timezone: null } },
+    { ...reply, place: { ...reply.place, query: 7 } },
+    { ...reply, alerts: { snow: { ...reply.alerts.snow, evening: 'true' } } },
+    { ...reply, alerts: { snow: { ...reply.alerts.snow, morning: 0 } } },
+    { ...reply, alerts: { snow: { ...reply.alerts.snow, possible: null } } },
+    { ...reply, alerts: { snow: null } },
+    { ...reply, alerts: null },
+    { ...reply, seenAt: 0 },
+  ]) {
+    sync(200, json(wrong));
+  }
+  for (const text of ['[]', 'null', '', '<html>', '"x"', '{"id":']) sync(200, text);
+  sync(204, '');
+  for (const after of ['42', '999999', '007', '0', '-3', '4.5', '1000000', ' 7', '']) {
+    sync(429, '', after);
+  }
+  sync(429, '', 'Wed, 21 Oct 2026 07:28:00 GMT');
+  sync(429, '', null);
+  sync(429, error('rate_limited', 'One change a minute for each device. Try again shortly.'), '50');
+  sync(400, error('bad_location', "We couldn't find that place."));
+  sync(400, json({ error: { code: 'bad_location' } }));
+  sync(400, error('bad_location', ''));
+  sync(400, error('bad_location', 42));
+  sync(400, error('bad_request', 'token must be 64 to 200 hex characters.'));
+  sync(400, error(1, 'There is no page for that place.'));
+  sync(400, json({ error: null }));
+  sync(400, '<html>');
+  sync(404, error('bad_location', 'There is no page for that place.'));
+  for (const status of [413, 404, 405, 500, 502, 503, 0]) sync(status, '');
+  sync(201, json(reply));
+  const test = (status: number, text: string) =>
+    add('testOutcome', { status, text }, testOutcome(status, text));
+  for (const text of [
+    '{"sent":true}',
+    '{"sent":true,"dryRun":"x"}',
+    '{"sent":false,"dryRun":true}',
+  ]) {
+    test(202, text);
+  }
+  for (const text of ['{"sent":false}', '{"sent":false,"dryRun":1}', '{"dryRun":true}']) {
+    test(202, text);
+  }
+  for (const text of ['{"sent":"true"}', '{}', '[]', '', 'null', '<html>']) test(202, text);
+  test(429, error('test_limited', "That's 3 test notifications this hour. Try again later."));
+  test(409, error('quiet_hours', 'Nothing is sent from 9pm to 7am at the place.'));
+  test(404, error('not_registered', "This device isn't registered for notifications."));
+  test(429, error('rate_limited', 'Too many requests. Try again in a minute.'));
+  test(429, '');
+  test(409, error('bad_request', 'Words.'));
+  test(404, error('bad_request', 'Words.'));
+  test(404, error(404, 'Words.'));
+  test(400, error('not_registered', 'Words.'));
+  test(404, json({ error: 'not_registered' }));
+  for (const status of [200, 400, 413, 500, 502, 503, 0]) test(status, '{"sent":true}');
+  test(503, error('push_unavailable', "Test notifications can't be sent just now."));
+  test(502, error('push_refused', 'Apple refused the test notification.'));
   return vectorFile(
     [
       ['client', 'alertPlaceAllowed'],
       ['client', 'registrationBody'],
       ['client', 'fingerprint'],
       ['client', 'alertAction'],
+      ['client', 'firstAlertPlace'],
+      ['client', 'followLocation'],
+      ['client', 'setAlert'],
+      ['client', 'syncReply'],
+      ['client', 'testOutcome'],
     ],
     cases,
   );

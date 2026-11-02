@@ -218,6 +218,9 @@ const NEVER_SHOWN_IN: Record<string, string> = {
   assert: "a crash's message",
   // A folder in the app's container or bundle ("Library", "Caches", "Search").
   appendingPathComponent: 'a folder',
+  // `Logger.debug`'s message: DebugHooks.swift's line for a notification's payload that routes
+  // nowhere, in Debug builds only, read in Console by whoever debugs the app.
+  debug: "a Debug build's log line, read in Console, never shown",
 };
 
 /** By its argument label, whatever the call: */
@@ -381,6 +384,12 @@ describe('the Swift sources, outside the generated copy', () => {
     ).toEqual([]);
     expect(found('Bundle.main.url(forResource: "Fixtures", withExtension: nil)')).toEqual([]);
     expect(found('folder.appendingPathComponent("Search", isDirectory: true)')).toEqual([]);
+    // A Debug build's log line, read in Console: allowed, where the same words on screen are not.
+    const unrouted = `"A notification's payload routes nowhere."`;
+    expect(
+      found(`Logger(subsystem: id ?? "", category: "notifications").debug(${unrouted})`),
+    ).toEqual([]);
+    expect(found(`Text(${unrouted})`)).toEqual([`x.swift:1: ${unrouted}`]);
     expect(found('request.setValue("application/json", forHTTPHeaderField: "Accept")')).toEqual([]);
     // The call is the literal's own: a closure inside an allowed call is not allowed.
     expect(found('fatalError(describe { "Two words" })')).toEqual(['x.swift:1: "Two words"']);

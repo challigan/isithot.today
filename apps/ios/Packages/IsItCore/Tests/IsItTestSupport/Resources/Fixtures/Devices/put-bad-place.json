@@ -1,0 +1,28 @@
+{
+  "_fixture": {
+    "request": "PUT /api/v1/devices",
+    "body": {
+      "app": "snow",
+      "platform": "ios",
+      "env": "sandbox",
+      "token": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "place": {
+        "place": "nowhere-xx"
+      },
+      "units": "c",
+      "alerts": {
+        "snow": {
+          "evening": true,
+          "morning": false,
+          "possible": false
+        }
+      },
+      "appVersion": "1.0 (42)"
+    },
+    "now": "2026-12-01T09:05:00.000Z",
+    "note": "A city page that doesn’t exist: 400 bad_location, in the server’s own words, which the app shows under the place."
+  },
+  "status": 400,
+  "retryAfter": null,
+  "text": "{\"error\":{\"code\":\"bad_location\",\"message\":\"There is no page for that place.\"}}"
+}

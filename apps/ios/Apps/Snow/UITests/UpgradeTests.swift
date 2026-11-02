@@ -122,9 +122,8 @@ final class UpgradeTests: XCTestCase {
   func testSettingsBuysOnItsOwnStack() throws {
     let app = try launch(["-purchase", "bought"])
     try openSettings(app)
-    let upgrade = app.buttons["upgrade"]
     try waitFor("upgrade", .button, in: app, label: Copy.settingsRow)
-    upgrade.tap()
+    tapRow("upgrade", in: app)
     try page(titled: Copy.title, in: app)
     XCTAssertFalse(app.buttons["close-upgrade"].exists, "The page is a sheet over Settings")
     try buy(in: app)
@@ -209,7 +208,7 @@ final class UpgradeTests: XCTestCase {
     XCTAssertLessThanOrEqual(
       upgrade.frame.maxY, restore.frame.minY + 0.5,
       "Restore purchase at \(restore.frame) isn't below the upgrade row at \(upgrade.frame)")
-    upgrade.tap()
+    tapRow("upgrade", in: app)
     try page(titled: Copy.title, in: app)
     try expectNothingToSell(in: app)
     assertSnowOnly(app)

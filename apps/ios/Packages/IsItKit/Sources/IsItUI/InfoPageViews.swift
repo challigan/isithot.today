@@ -1,6 +1,7 @@
 import IsItLogic
 import IsItModel
 import SwiftUI
+import UIKit
 
 /// "How it works" (section 10.6), the website's About page as a content page (`SheetPage`): the
 /// title, the introduction on a reading card, then each section's heading on the page (a heading
@@ -152,32 +153,37 @@ struct NoticeView: View {
   }
 }
 
-/// "Your privacy" (section 10.6): the plain lines on a reading card, each its own text
-/// (`privacy-line-<n>`); then, while registered for notifications (phase 8), what is kept for them
-/// under its heading, a line to a row on a card, with the button that deletes it; then the full
-/// policy in Safari, a page button. A page that scrolls (`SheetPage`), not a `Form`: as a
-/// `Form`'s row, the full policy's was failed for Dynamic Type and as clipped on PR #33's first
-/// two macOS runs, and as a scroll view's it passed on the third, though the page went back to
-/// its top as the audit's text-size check began: what failed it was the `Form`'s cells, made only
-/// while on screen, not where the page was.
+/// "Your privacy" (section 10.6). While registered for notifications, what the server keeps for
+/// them comes first, under the title (decision 18): its heading (`kept-heading`), the kept lines
+/// on a card, a line to a row (`kept-line-<n>`), and the button that deletes it
+/// (`delete-my-data`), so the page's audit at its top sees the block whole. Once that button is
+/// tapped, what it did shows where the block was, on a reading card (`delete-status`), and is
+/// said to VoiceOver once when it comes. Then the plain lines on a reading card, each its own
+/// text (`privacy-line-<n>`), and the full policy in Safari, a page button. A page that scrolls
+/// (`SheetPage`), not a `Form`: as a `Form`'s row, the full policy's was failed for Dynamic Type
+/// and as clipped on PR #33's first two macOS runs, and as a scroll view's it passed on the
+/// third, though the page went back to its top as the audit's text-size check began: what failed
+/// it was the `Form`'s cells, made only while on screen, not where the page was.
 struct YourPrivacyView: View {
   let page: YourPrivacy
-  /// Turn off notifications and delete my data; nil until phase 8.
+  /// Turn off notifications and delete my data; nil while not registered.
   let deleteMyData: (() -> Void)?
 
   @Environment(\.openURL) private var openURL
 
   var body: some View {
     SheetPage(title: page.title) {
-      ReadingCard {
-        ForEach(Array(page.lines.enumerated()), id: \.offset) { index, line in
-          Text(verbatim: line)
+      if let status = page.deleteStatus {
+        ReadingCard {
+          Text(verbatim: status)
             .paragraph()
-            .accessibilityIdentifier("privacy-line-\(index)")
+            .accessibilityIdentifier("delete-status")
         }
+        .padding(.bottom, SheetMetrics.sectionGap)
       }
       if let kept = page.kept {
-        PageHeading(text: kept.heading)
+        PageHeading(text: kept.heading, first: true)
+          .accessibilityIdentifier("kept-heading")
         SheetCard {
           ForEach(Array(kept.lines.enumerated()), id: \.offset) { index, line in
             if index > 0 {
@@ -188,6 +194,7 @@ struct YourPrivacyView: View {
               .brandFont(.row)
               .fixedSize(horizontal: false, vertical: true)
               .sheetRow()
+              .accessibilityIdentifier("kept-line-\(index)")
           }
         }
         if let deleteMyData {
@@ -204,6 +211,14 @@ struct YourPrivacyView: View {
           .padding(.top, 16)
         }
       }
+      ReadingCard {
+        ForEach(Array(page.lines.enumerated()), id: \.offset) { index, line in
+          Text(verbatim: line)
+            .paragraph()
+            .accessibilityIdentifier("privacy-line-\(index)")
+        }
+      }
+      .padding(.top, page.kept == nil ? 0 : SheetMetrics.sectionGap)
       if let policy = page.policy, let url = policyURL {
         PillButton(.wide) {
           openURL(url)
@@ -212,6 +227,11 @@ struct YourPrivacyView: View {
         }
         .accessibilityIdentifier(policy.id)
         .padding(.top, 16)
+      }
+    }
+    .onChange(of: page.deleteStatus) { _, status in
+      if let status {
+        UIAccessibility.post(notification: .announcement, argument: status)
       }
     }
   }

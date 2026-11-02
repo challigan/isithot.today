@@ -46,6 +46,13 @@ struct ConstantsTests {
     #expect(Constants.models.last?.agency == "Environment and Climate Change Canada")
   }
 
+  @Test("the pages of others the app links to: the Met Office's warnings")
+  func outbound() {
+    #expect(
+      Constants.Outbound.metOfficeWarnings
+        == "https://weather.metoffice.gov.uk/warnings-and-advice/uk-warnings")
+  }
+
   @Test("the client's timings, ms")
   func client() {
     #expect(Constants.Client.refreshAfterMs == 30 * 60 * 1000)
