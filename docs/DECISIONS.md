@@ -7680,6 +7680,16 @@ in Leeds today"), with pages that are plainly original, easy to browse and hones
   Nothing in it changes from minute to minute (Now's minute update is outside it; an e2e test
   watches it for three minutes), and a Hot | Wet | Snow switch is still announced once.
   `CACHE.snapshotVersion` went from 7 to 8 for the new markup.
+- **The same answer, asked for again, is not read out again** (after PR #46's Playwright run
+  41423406938). Once the hour an answer holds for has passed, the minute tick asks again past the
+  caches, and `setText` wrote Today's question, answer and verdict back in with the same words:
+  the server's markup holds them with the template's spacing around them, which never equalled
+  the words alone. A live region written to is read out, so the first answer asked for again
+  after the page loaded read the same answer out again. `setText` now leaves words that are
+  there already, spacing aside. The three-minute test had started the page at the real time, so
+  one run at 09:58 UTC crossed 10:00 (Istanbul's noon in the synthetic data) and counted those
+  3 writes; it now stays inside the hour, and a test of its own crosses it, with the server's
+  answer again, and finds the region untouched (3 writes before the fix, none after).
 - **Titles never carry the answer**, which went out of date in search results and contradicted
   the page after 6pm. City pages give the question and what the page offers: "Is it wet in
   Leeds today? Rain hour by hour from 8 forecasts | isitwet.today" (8 is `MODELS.length`).

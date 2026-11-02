@@ -22,7 +22,10 @@ import {
 } from '../packages/core/src/copy';
 import { listed, snowless } from '../packages/core/src/places';
 import type { TodayResponse } from '../packages/core/src/types';
-import { CITIES, cityAt, expect, keepToday, startClock, test } from './helpers';
+import { hourUntil } from '../packages/client/src/freshness';
+import { CITIES, cityAt, expect, keepToday, serverNow, startClock, test } from './helpers';
+
+const MINUTE = 60 * 1000;
 
 const prefix = (topic: Topic) => SITES[topic].prefix;
 const home = (topic: Topic) => prefix(topic) || '/';
@@ -424,7 +427,9 @@ test.describe('city pages', () => {
     request,
   }) => {
     const city = await cityAt(request, '10:00', '15:00');
-    await startClock(page);
+    // Its three minutes stay inside the hour the answer holds for: past it the page asks again,
+    // which has a test of its own (below). Started at the real time, a run at 09:58 crossed it.
+    await startClock(page, Math.min(serverNow(), hourUntil(city.data)! - 5 * MINUTE));
     await page.goto(`/in/${city.slug}`);
     await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
     await page.evaluate(() => {
@@ -444,6 +449,52 @@ test.describe('city pages', () => {
     );
     // Now was worked out again each minute; Today's question and answer stayed as they were.
     expect(counts.now).toBeGreaterThan(0);
+    expect(counts.live).toBe(0);
+  });
+
+  test('asking again at the hour, with the same answer, never touches the announced heading', async ({
+    page,
+    request,
+  }) => {
+    const city = await cityAt(request, '10:00', '15:00');
+    // A minute and a half before the hour the answer holds for, so the minute tick passes it and
+    // the page asks again, past the caches (`t=`).
+    await startClock(page, hourUntil(city.data)! - 90 * 1000);
+    // The server's answer again, marked so the test knows when it has been shown: only its
+    // Updated time is new, and that is outside the live region.
+    let marker = '';
+    await page.route(/\/api\/v1\/today\?.*\bt=\d+/, async (route) => {
+      const response = await route.fetch();
+      const body = (await response.json()) as TodayResponse;
+      await route.fulfill({ response, json: { ...body, updatedAt: marker } });
+    });
+    await page.goto(`/in/${city.slug}`);
+    await expect(page.locator('#app')).toHaveAttribute('data-state', 'ready');
+    // The hour of the page's own answer, made a moment after the test's: should the server's
+    // clock have passed the hour between the two, it holds for the next one, and the page's
+    // clock moves to just before that.
+    const hour = hourUntil(await initial(page))!;
+    if (hour !== hourUntil(city.data)) await page.clock.setSystemTime(hour - 90 * 1000);
+    marker = new Date(hour).toISOString();
+    const words = await page.locator('#live').innerText();
+    await page.evaluate(() => {
+      const counts = { live: 0 };
+      (window as unknown as { __counts: typeof counts }).__counts = counts;
+      new MutationObserver((list) => (counts.live += list.length)).observe(
+        document.getElementById('live')!,
+        { subtree: true, childList: true, characterData: true },
+      );
+    });
+    await page.clock.runFor('03:00');
+    // The answer asked for again has been shown (its Updated time, set after Today's), so the
+    // heading has had its chance to change.
+    await expect(page.locator('#updated-at')).toHaveAttribute('datetime', marker);
+    const counts = await page.evaluate(
+      () => (window as unknown as { __counts: { live: number } }).__counts,
+    );
+    // The same words, untouched: a live region written again, even with the same words, is read
+    // out again.
+    await expect(page.locator('#live')).toHaveText(words);
     expect(counts.live).toBe(0);
   });
 });
