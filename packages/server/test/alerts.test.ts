@@ -877,6 +877,25 @@ describe('runAlerts: several places on one phone', () => {
     expect(devices(seen)).toEqual([token('53'), token('53'), device]);
   });
 
+  it('notifies a free place whose saved place has gone, whatever its shadowedBy still says', async () => {
+    const { origin, seen } = await fakeApns(apple());
+    const store = new MemoryAlertStore();
+    const device = token('a0');
+    // Durham was unstarred and deleted, and the free record not yet rewritten without
+    // `shadowedBy` (a store failure after the removal, or the minute's 429 after it).
+    const here = registration(device, { shadowedBy: PIDS[0] });
+    await seedPhone(store, here);
+    // Another phone's saved place with the same pid is no twin of this one.
+    await seedPhone(store, registration(token('a0', 1), { ...place('leeds-gb'), slot: PIDS[0] }));
+    const result = await runAt(EVENING, { store, origin });
+    expect(result).toMatchObject({ records: 2, groups: 2, sent: 1, done: 1, errors: 0 });
+    expect(devices(seen)).toEqual([device]);
+    expect(JSON.parse(seen[0]!.body)).toMatchObject({
+      aps: { 'thread-id': 'snow' },
+      name: 'Durham',
+    });
+  });
+
   it('forces every place of a forced phone', async () => {
     const { origin, seen } = await fakeApns(apple());
     const store = new MemoryAlertStore();
@@ -1288,42 +1307,94 @@ describe('runAlerts: the cleanup', () => {
     expect(await store.get(cleanupKey('2026-12-01'))).not.toBeNull();
   });
 
-  it('counts once a day, in the run that finishes the cleanup, with one listing', async () => {
-    const { origin } = await fakeApns(apple());
-    /** Each listing of every registration (the count's), and whether it fails. */
-    let counts = 0;
-    let failing = false;
-    const store = new (class extends MemoryAlertStore {
-      override async list(prefix: string, options?: { directories?: boolean }) {
-        if (prefix === 'reg/v1/' && !options?.directories) {
-          counts++;
-          if (failing) throw new Error('list failed');
-        }
-        return super.list(prefix, options);
+  /**
+   * A store that notes each listing of registrations: of every one at once (never made), and of
+   * each zone; `failing` fails a zone's, and `onZone` hears of each as it starts.
+   */
+  class Listings extends MemoryAlertStore {
+    whole = 0;
+    zones: string[] = [];
+    failing: string | null = null;
+    onZone: (prefix: string) => void = () => {};
+
+    override async list(prefix: string, options?: { directories?: boolean }) {
+      if (prefix === 'reg/v1/' && !options?.directories) this.whole++;
+      if (/^reg\/v1\/[^/]+\/$/.test(prefix)) {
+        this.zones.push(prefix);
+        this.onZone(prefix);
+        if (prefix === this.failing) throw new Error('list failed');
       }
-    })();
+      return super.list(prefix, options);
+    }
+  }
+
+  it('counts once a day, in the run that finishes the cleanup, zone by zone', async () => {
+    const { origin } = await fakeApns(apple());
+    const store = new Listings();
     await oldKeys(store);
     const both = token('a0', 2);
     await seedPhone(
       store,
       registration(both),
       registration(both, { ...place('leeds-gb'), slot: PIDS[0] }),
+      registration(both, { ...place('new-york-city-us'), tz: 'America/New_York', slot: PIDS[1] }),
     );
     const lines: string[] = [];
     const counted = () => lines.filter((line) => line.startsWith('alerts-run: cleanup:'));
     // Cut short: no count.
     await runAt('2026-12-01T03:00:00Z', { store, origin, lines, budgetMs: -PUSH_GRACE_MS });
-    expect([counted(), counts]).toEqual([[], 0]);
-    // Finished, but its count's listing fails: the next run in the hour counts.
-    failing = true;
+    expect([counted(), store.zones]).toEqual([[], []]);
+    // Finished: each zone listed once, no listing of every registration at once.
     expect((await runAt('2026-12-01T03:15:00Z', { store, origin, lines })).cleaned).toBe(14);
-    expect([counted(), counts]).toEqual([[], 1]);
-    expect(await store.get(cleanupKey('2026-12-01'))).toBeNull();
-    failing = false;
+    expect(counted()).toEqual(['alerts-run: cleanup: 1 device with saved places']);
+    expect(store.zones.sort()).toEqual(['reg/v1/America%2FNew_York/', 'reg/v1/Europe%2FLondon/']);
     await runAt('2026-12-01T03:30:00Z', { store, origin, lines });
-    expect([counted(), counts]).toEqual([['alerts-run: cleanup: 1 device with saved places'], 2]);
-    await runAt('2026-12-01T03:45:00Z', { store, origin, lines });
-    expect([counted(), counts]).toEqual([['alerts-run: cleanup: 1 device with saved places'], 2]);
+    expect(counted()).toHaveLength(1);
+    expect([store.zones.length, store.whole]).toEqual([2, 0]);
+  });
+
+  it('says so when the count cannot finish, and keeps the cleanup finished', async () => {
+    const { origin } = await fakeApns(apple());
+    const store = new Listings();
+    const both = token('a0', 2);
+    await seedPhone(
+      store,
+      registration(both),
+      registration(both, { ...place('new-york-city-us'), tz: 'America/New_York', slot: PIDS[0] }),
+    );
+    const lines: string[] = [];
+    // A zone's listing fails (Blobs' 1.5 s, say): the count is unknown, the old keys are gone, and
+    // the marker stays, so the hour's next runs don't clean again.
+    await oldKeys(store);
+    store.failing = 'reg/v1/America%2FNew_York/';
+    expect((await runAt('2026-12-01T03:00:00Z', { store, origin, lines })).cleaned).toBe(14);
+    expect(lines).toEqual([
+      'alerts-run: error: list failed',
+      'alerts-run: cleanup: count unavailable',
+    ]);
+    expect(await store.get(cleanupKey('2026-12-01'))).not.toBeNull();
+    for (const iso of ['2026-12-01T03:15:00Z', '2026-12-01T03:30:00Z', '2026-12-01T03:45:00Z']) {
+      expect((await runAt(iso, { store, origin, lines })).cleaned).toBeNull();
+    }
+    expect(lines).toHaveLength(2);
+    // The next day, out of time once the first zone is listed: no more zones, and no count.
+    store.failing = null;
+    store.zones = [];
+    let late = false;
+    store.onZone = () => {
+      late = true;
+    };
+    const next = await runAt('2026-12-02T03:00:00Z', {
+      store,
+      origin,
+      lines,
+      clock: () => (late ? 60_000 : 0),
+    });
+    // 29 November's keys, due that day.
+    expect(next.cleaned).toBe(7);
+    expect(store.zones).toHaveLength(1);
+    expect(lines.slice(2)).toEqual(['alerts-run: cleanup: count unavailable']);
+    expect(store.whole).toBe(0);
   });
 });
 
@@ -1481,6 +1552,42 @@ describe('runAlerts: failures', () => {
       ].sort(),
     );
     for (const line of lines) expect(line).not.toMatch(/New_York|New%20York/);
+  });
+
+  it("leaves the forecast's own words, which name its zone, out of a saved place's no-forecast line", async () => {
+    const { origin } = await fakeApns(apple());
+    // 18:05 in Tokyo; synthetic forecasts give Japan a fixed offset (Open-Meteo's own: Asia/Tokyo).
+    const iso = '2026-10-18T09:05:00Z';
+    const japan = { tz: 'Etc/GMT-9' };
+    const tokyo = registration(token('a0', 1), { ...place('tokyo-jp'), ...japan, slot: PIDS[0] });
+    const osaka = registration(token('a0', 2), { ...place('osaka-jp'), ...japan });
+    const store = new MemoryAlertStore();
+    await seedPhone(store, tokyo);
+    await seedPhone(store, osaka);
+    // An answer with no temperatures for today: no day the run can use (503, its words saying so).
+    const synthetic = createSyntheticFetch(CITIES, () => new Date(Date.parse(iso)));
+    const fetch: FetchLike = async (url, init) => {
+      const res = await synthetic(url, init);
+      if (!new URL(url).pathname.endsWith('/forecast')) return res;
+      const json = (await res.json()) as { hourly: Record<string, unknown[]> };
+      const times = json.hourly.time as string[];
+      for (const [key, series] of Object.entries(json.hourly)) {
+        if (!key.startsWith('temperature_2m')) continue;
+        times.forEach((t, i) => {
+          if (t.startsWith(times[0]!.slice(0, 10))) series[i] = null;
+        });
+      }
+      return new Response(JSON.stringify(json), { status: 200, headers: res.headers });
+    };
+    const lines: string[] = [];
+    const result = await runAt(iso, { store, origin, fetch, lines });
+    expect(result).toMatchObject({ groups: 2, sent: 0, errors: 2 });
+    expect(lines.sort()).toEqual(
+      [
+        `alerts-run: error: no forecast for ${who(osaka)}: 503 upstream_unavailable (open-meteo: the forecast has no data for 2026-10-18 (Etc/GMT-9))`,
+        `alerts-run: error: no forecast for ${who(tokyo)}: 503 upstream_unavailable`,
+      ].sort(),
+    );
   });
 });
 

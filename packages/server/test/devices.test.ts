@@ -1752,6 +1752,47 @@ describe('PUT /api/v1/devices, version 2: removals first', () => {
     ]);
   });
 
+  it("removes within the minute too: a bell turned off, or the phone's location withdrawn, lands before the 429", async () => {
+    const w = world();
+    const leeds = { lat: 53.8, lon: -1.55, source: 'device' };
+    const t = token('a5', 7);
+    const id = idOf(t);
+    // A bell turned on, and off again 20 s later (a mis-tap corrected, an unstar, a refund).
+    expect((await put2(w, body2({ token: t, here: leeds, saved: [DURHAM] }))).status).toBe(200);
+    w.at(SNOWY + 20_000);
+    const off = await put2(w, body2({ token: t, here: leeds, saved: [] }));
+    expect(off.status).toBe(429);
+    expect(off.headers.get('retry-after')).toBe('40');
+    expect(keysFor(w, t)).toEqual([idsKey('snow', id), regKey('Europe/London', 'snow', id)]);
+    // The retry at Retry-After finds nothing more to remove.
+    w.at(SNOWY + MINUTE);
+    expect((await put2(w, body2({ token: t, here: leeds, saved: [] }))).status).toBe(200);
+    expect(keysFor(w, t)).toEqual([idsKey('snow', id), regKey('Europe/London', 'snow', id)]);
+
+    // The phone's location withdrawn 30 s after it was sent, with no geo: the point goes at once
+    // (decision 4), the saved place stays, and the rest waits for the minute.
+    const n = token('a5', 8);
+    const nid = idOf(n);
+    await put2(w, body2({ token: n, here: leeds, saved: [HELSINKI] }));
+    const salt = (await idsOf(w, n))!.salt;
+    w.at(SNOWY + MINUTE + 30_000);
+    const withdrawn = await put2(w, body2({ token: n, here: IP, saved: [HELSINKI] }));
+    expect(withdrawn.status).toBe(429);
+    expect(keysFor(w, n)).toEqual([
+      idsKey('snow', nid),
+      regKey('Etc/GMT-2', 'snow', nid, placeId(salt, 'place=helsinki-fi')),
+    ]);
+
+    // And with nothing left to keep, the set is forgotten (decision 5), not refused.
+    const o = token('a5', 9);
+    await put2(w, body2({ token: o, here: leeds }));
+    w.at(SNOWY + MINUTE + 50_000);
+    const gone = await put2(w, body2({ token: o, here: IP }));
+    expect(gone.status).toBe(400);
+    expect((await errorOf(gone)).code).toBe('bad_location');
+    expect(keysFor(w, o)).toEqual([]);
+  });
+
   it('an unstar plus a failing new free cell still removes the place, and answers 503', async () => {
     let down = false;
     const w = world({
@@ -1944,6 +1985,107 @@ describe('PUT /api/v1/devices, version 2: overlaps, and lookups that fail', () =
     }
   });
 
+  it("leaves every record of two overlapping first registrations named, though one's lookups fail, so a DELETE removes them all", async () => {
+    /** Holds the calls `when` picks until `until` resolves, then passes them to `inner`. */
+    const held = (
+      inner: AlertStore,
+      until: Promise<unknown>,
+      when: (key: string, options?: { onlyIfNew?: boolean }) => boolean,
+    ): AlertStore => ({
+      get: (key) => inner.get(key),
+      list: (prefix, options) => inner.list(prefix, options),
+      delete: (key) => inner.delete(key),
+      set: async (key, value, options) => {
+        if (when(key, options)) await until;
+        return inner.set(key, value, options);
+      },
+    });
+    const failing =
+      (fails: (u: URL) => boolean) =>
+      (synthetic: FetchLike) =>
+      async (url: string, init?: RequestInit) => {
+        const u = new URL(url);
+        return u.pathname.endsWith('/forecast') && fails(u)
+          ? new Response('down', { status: 500 })
+          : synthetic(url, init);
+      };
+    const durhamKeys = (store: MemoryAlertStore, t: string) =>
+      store.keys().filter((k) => k.startsWith('reg/') && k.includes(idOf(t)) && pidKey(k));
+    const pidKey = (key: string) => /\.[0-9a-f]{12}$/.test(key);
+    const body = (t: string) => body2({ token: t, here: leeds, saved: [DURHAM] });
+
+    // 1. Two bodies (a duplicate and a newer one, say): one with the phone's point and Durham,
+    // answered 200; one with no place it can locate and Tokyo, whose lookup fails once the other
+    // has answered.
+    let release: () => void = () => {};
+    const answered = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const w = world({
+      fetch: (synthetic) => async (url, init) => {
+        if (new URL(url).searchParams.get('longitude')?.startsWith('139')) {
+          await answered;
+          return new Response('down', { status: 500 });
+        }
+        return synthetic(url, init);
+      },
+    });
+    const t = token('a6', 11);
+    const id = idOf(t);
+    const a = put2(w, body(t)).then((r) => {
+      release();
+      return r;
+    });
+    const b = put2(w, body2({ token: t, here: IP, saved: [TOKYO] }));
+    const [ra, rb] = await Promise.all([a, b]);
+    expect([ra.status, rb.status]).toEqual([200, 503]);
+    const { pid } = (await reply2(ra)).saved[0]!;
+    expect(await idsOf(w, t)).toMatchObject({
+      tz: 'Europe/London',
+      saved: [regKey('Europe/London', 'snow', id, pid)],
+    });
+    // The next registration keeps the one salt, so Durham has one record still.
+    w.at(SNOWY + 2 * MINUTE);
+    expect((await reply2(await put2(w, body(t)))).saved[0]!.pid).toBe(pid);
+    expect(durhamKeys(w.store, t)).toHaveLength(1);
+    expect((await del(w, { app: 'snow', token: t })).status).toBe(204);
+    expect(keysFor(w, t)).toEqual([]);
+
+    // 2 and 3. One body sent twice, reaching two function instances (each with its own forecast
+    // cache): the second's salt write lands once the first has answered, and its lookups then
+    // fail, all of them or only Durham's.
+    for (const [n, fails] of [
+      [12, () => true],
+      [13, (u: URL) => u.searchParams.get('latitude')!.startsWith('54.')],
+    ] as const) {
+      let done: () => void = () => {};
+      const first = new Promise<void>((resolve) => {
+        done = resolve;
+      });
+      const one = world();
+      const two = world({
+        store: held(one.store, first, (_key, options) => options?.onlyIfNew === true),
+        fetch: failing(fails),
+      });
+      const u = token('a6', n);
+      const replies = await Promise.all([
+        put2(one, body(u)).then((r) => {
+          done();
+          return r;
+        }),
+        put2(two, body(u)),
+      ]);
+      expect(replies.map((r) => r.status)).toEqual([200, 503]);
+      const { pid: durham } = (await reply2(replies[0]!)).saved[0]!;
+      expect(await idsOf(one, u)).toMatchObject({
+        tz: 'Europe/London',
+        saved: [regKey('Europe/London', 'snow', idOf(u), durham)],
+      });
+      expect((await del(one, { app: 'snow', token: u })).status).toBe(204);
+      expect(keysFor(one, u)).toEqual([]);
+    }
+  });
+
   it('clears shadowedBy from a free place kept through a failed lookup once its saved place has gone', async () => {
     let down = false;
     const w = downWorld(() => down);
@@ -1954,12 +2096,14 @@ describe('PUT /api/v1/devices, version 2: overlaps, and lookups that fail', () =
     const twin = placeId(salt, 'place=leeds-gb');
     expect(await record(w, 'Europe/London', t)).toMatchObject({ shadowedBy: twin });
     down = true;
-    // It moves, and its new cell can't be looked up: kept as it was while Leeds is still saved.
+    // It moves, and its new cell can't be looked up: kept as it was while Leeds is still saved,
+    // with the set's stamp.
     w.at(SNOWY + MINUTE);
     expect((await put2(w, body2({ token: t, here: durhamCell, saved: [LEEDS] }))).status).toBe(503);
     expect(await record(w, 'Europe/London', t)).toMatchObject({
       query: LEEDS_CELL,
       shadowedBy: twin,
+      updatedAt: iso(SNOWY + MINUTE),
     });
     // Leeds unstarred as well: its notification no longer goes, so where you are notifies again.
     w.at(SNOWY + 2 * MINUTE);
@@ -1970,6 +2114,44 @@ describe('PUT /api/v1/devices, version 2: overlaps, and lookups that fail', () =
     expect(keysFor(w, t)).toEqual(
       [idsKey('snow', idOf(t)), regKey('Europe/London', 'snow', idOf(t))].sort(),
     );
+  });
+
+  it('re-stamps a free place kept through a failed lookup with the set, so Apple refusing either place forgets the phone', async () => {
+    const newcastle = { lat: 54.98, lon: -1.62, source: 'device' };
+    for (const refused of ['free', 'saved'] as const) {
+      let down = false;
+      const w = downWorld(() => down);
+      const t = token('a6', refused === 'free' ? 9 : 10);
+      const id = idOf(t);
+      await put2(w, body2({ token: t, here: leeds, saved: [TOKYO] }));
+      const salt = (await idsOf(w, t))!.salt;
+      const tokyo = regKey('Etc/GMT-9', 'snow', id, placeId(salt, 'place=tokyo-jp'));
+      // It moves, and its new cell can't be looked up: Leeds is kept, with the set's stamp.
+      w.at(SNOWY + 2 * MINUTE);
+      down = true;
+      expect((await put2(w, body2({ token: t, here: newcastle, saved: [TOKYO] }))).status).toBe(
+        503,
+      );
+      const free = (await record(w, 'Europe/London', t))!;
+      expect(free).toMatchObject({
+        query: LEEDS_CELL,
+        createdAt: iso(SNOWY),
+        updatedAt: iso(SNOWY + 2 * MINUTE),
+        seenAt: iso(SNOWY + 2 * MINUTE),
+      });
+      expect(await w.store.get(tokyo)).toMatchObject({ updatedAt: iso(SNOWY + 2 * MINUTE) });
+      // The app is deleted, and Apple refuses one place's push: every place goes, and the salt.
+      const trigger = refused === 'free' ? free : (await w.store.get<DeviceRecord>(tokyo))!;
+      expect(
+        await forgetDevice(w.store, 'snow', id, {
+          tz: trigger.tz,
+          ...(refused === 'saved' ? { slot: placeId(salt, 'place=tokyo-jp') } : {}),
+          updatedAt: trigger.updatedAt,
+          seenAt: trigger.seenAt,
+        }),
+      ).toBe('deleted');
+      expect(keysFor(w, t)).toEqual([]);
+    }
   });
 
   it('keeps nothing, not even an ids key, when a registration has no place it could look up', async () => {

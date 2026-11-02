@@ -67,6 +67,7 @@ import {
   judgedPrefix,
   parseRegKey,
   redact,
+  regKey,
   regZonePrefix,
   sentKey,
   sentPrefix,
@@ -311,6 +312,8 @@ interface Zone {
   date: string;
   /** Registrations listed in the zone. */
   count: number;
+  /** Every key listed in the zone, so a free place's saved twin (`shadowedBy`) is known to be there. */
+  listed: ReadonlySet<string>;
   unfinished: boolean;
   /**
    * Registrations (`nameOf`) counted as finished on another run's claim: claimed in the listing,
@@ -460,6 +463,7 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
           kind,
           date,
           count: 0,
+          listed: new Set(),
           unfinished: false,
           relied: new Set(),
           released: false,
@@ -527,6 +531,7 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
           return;
         }
         zone.count = keys.length;
+        zone.listed = new Set(keys);
         for (const key of keys) {
           const reg = registrationAt(key);
           if (!reg) continue;
@@ -580,8 +585,14 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
       if (prefs?.[zone.kind] !== true) return;
       const entry = { zone, record, prefs, forced: forceIds.some((p) => record.id.startsWith(p)) };
       // Where the phone is, in a saved place's cell: that place's notification goes instead, under
-      // the name the person chose, so this one has nothing to send and needs no forecast.
-      if (typeof record.shadowedBy === 'string' && !record.slot) unclaimed.push(entry);
+      // the name the person chose, so this one has nothing to send and needs no forecast. Only
+      // while that place is there: in the same cell, it is in this zone's listing. One deleted
+      // before the free record was rewritten (a registration cut short) silences nothing.
+      const twin =
+        typeof record.shadowedBy === 'string' && !record.slot
+          ? regKey(zone.tz, record.app, record.id, record.shadowedBy)
+          : null;
+      if (twin && zone.listed.has(twin)) unclaimed.push(entry);
       else entries.push(entry);
     });
   };
@@ -680,9 +691,12 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
         const { error } = answer.body as ApiError & { error: { detail?: string } };
         // A place that no longer exists stays that way; a forecast that failed may not.
         const retry = answer.status >= 500;
+        // The forecast's own words can name its zone, which beside a saved place's name would
+        // trace a trip (decision 36), so a line naming one leaves them out.
+        const detail = error.detail && !first.slot ? ` (${error.detail})` : '';
         say(
           `alerts-run: error: no forecast for ${named}: ${answer.status} ${error.code}` +
-            `${error.detail ? ` (${error.detail})` : ''}${retry ? '' : ', so none today'}`,
+            `${detail}${retry ? '' : ', so none today'}`,
         );
         if (retry) leave(group);
         return;
@@ -827,7 +841,8 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
    * Step 8: once a day, in the 03:00 UTC hour, the `sent/`, `judged/`, `done/` and `test/` keys
    * more than 2 days old, then a count of the devices with saved places. Its marker is claimed
    * first, so one run cleans; a cleanup cut short or failed releases it, so the next run in the
-   * hour carries on, and only the run that finishes it counts.
+   * hour carries on, and only the run that finishes it counts. A count that can't finish is
+   * logged as unavailable, and keeps the marker: the deletes are done.
    */
   const clean = async (): Promise<void> => {
     if (at.getUTCHours() !== CLEANUP_HOUR) return;
@@ -871,29 +886,56 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
       }
     });
     result.cleaned = deleted;
-    // The day's count of devices with a saved place (a key with a pid), in one listing, which
-    // Carl compares each month with the purchases (DECISIONS).
     if (complete) {
+      const count = await countSaved();
+      say(
+        `alerts-run: cleanup: ${
+          count === null
+            ? 'count unavailable'
+            : `${count} ${count === 1 ? 'device' : 'devices'} with saved places`
+        }`,
+      );
+      return;
+    }
+    try {
+      await store.delete(marker);
+    } catch {
+      // Tomorrow's cleanup takes what is left.
+    }
+  };
+
+  /**
+   * The day's count of devices with a saved place (a key with a pid), which Carl compares each
+   * month with the purchases (DECISIONS): zone by zone, so no one listing grows with every
+   * registration, and none started once the pushes' grace is over. Null when a listing failed or
+   * time ran out; the cleanup stays finished all the same, its deletes done.
+   */
+  const countSaved = async (): Promise<number | null> => {
+    let zoneList: string[];
+    try {
+      const { directories } = await store.list(REG_PREFIX, { directories: true });
+      zoneList = directories.map(zoneOfDirectory).filter((tz): tz is string => tz !== null);
+    } catch {
+      return null;
+    }
+    const saved = new Set<string>();
+    let counted = true;
+    await pool(zoneList, READ_CONCURRENCY, async (tz) => {
+      if (!counted) return;
+      if (clock() >= pushDeadline) {
+        counted = false;
+        return;
+      }
       try {
-        const saved = new Set<string>();
-        for (const key of (await store.list(REG_PREFIX)).keys) {
+        for (const key of (await store.list(regZonePrefix(tz))).keys) {
           const reg = parseRegKey(key);
           if (reg?.pid) saved.add(`${reg.app}.${reg.id}`);
         }
-        say(
-          `alerts-run: cleanup: ${saved.size} ${saved.size === 1 ? 'device' : 'devices'} with saved places`,
-        );
       } catch {
-        complete = false;
+        counted = false;
       }
-    }
-    if (!complete) {
-      try {
-        await store.delete(marker);
-      } catch {
-        // Tomorrow's cleanup takes what is left.
-      }
-    }
+    });
+    return counted ? saved.size : null;
   };
 
   await gather();

@@ -441,6 +441,33 @@ describe('a phone with saved places, from PUT to the pushes', () => {
   });
 });
 
+describe('a saved place unstarred within the minute, from PUT to the pushes', () => {
+  it('goes at once, and where the phone is, in its cell, is notified in its place', async () => {
+    const w = await world();
+    const t = token(41);
+    const durhamCell = { lat: 54.8, lon: -1.6, source: 'device' };
+    // In Durham with Durham saved: only the saved place's notification would go (decision 23).
+    w.at(SNOWY - 60_000);
+    const on = await w.putSet(t, { here: durhamCell, saved: [{ place: 'durham-gb' }] });
+    expect(on.status).toBe(200);
+    // Its bell turned off 20 s later: the minute's 429, but Durham's record has gone.
+    w.at(SNOWY - 40_000);
+    const off = await w.putSet(t, { here: durhamCell, saved: [] });
+    expect(off.status).toBe(429);
+    const { id } = (await on.json()) as SetReply;
+    expect(registrations(w.store)).toEqual([
+      idsKey('snow', id),
+      regKey('Europe/London', 'snow', id),
+    ]);
+    // 18:05: the free record still names Durham as its twin, but that has gone, so it notifies.
+    const run = await w.run(SNOWY);
+    expect(run).toMatchObject({ records: 1, sent: 1, errors: 0 });
+    expect(w.payloads()).toMatchObject([
+      { aps: { 'thread-id': 'snow' }, place: 'lat=54.8&lon=-1.6&source=device', name: 'Durham' },
+    ]);
+  });
+});
+
 describe('the test endpoint and the run', () => {
   it("share Apple's provider token through the store, whichever makes it first", async () => {
     const w = await world();

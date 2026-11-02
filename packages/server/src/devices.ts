@@ -15,12 +15,14 @@
  * (`DeviceIdsEntry`). Only these handlers write either kind of key, and each write replaces the
  * value whole. The ids key names a record before it is written, and until it is deleted. So a
  * DELETE that follows a registration cut short by a failure still finds every copy:
- * 1. delete the places the set no longer has (the ids key names them); a new salt is stored then,
- *    in an ids key naming what is left, and read back after the lookups;
+ * 1. delete the places the set no longer has (the ids key names them), before the minute's rule
+ *    can refuse the rest; a new salt is stored then, in an ids key naming what is left, and read
+ *    back after the lookups, taking the salt and keys of an overlapping registration's entry;
  * 2. the ids key, naming the places about to be written and the zones the free place is leaving;
  * 3. the records;
  * 4. delete the free place's copy in a zone it left;
- * 5. the ids key again, naming what is there; with nothing there, it is deleted.
+ * 5. the ids key again, naming what is there; with nothing there, it is deleted if it still holds
+ *    what this registration left.
  * A v1 body (8.1's builds) is one place: its saved places are deleted first, then 2 to 5.
  *
  * **Failures.** The store either confirms a call or fails it (alertStore.ts). Any failure is a
@@ -1067,9 +1069,10 @@ const placedAt = (location: ApiLocation): Placed => ({
 
 /**
  * A version 2 body (8.4's builds): the device's set, which replaces what is stored (section
- * 3.3). The places it no longer has are deleted first, before any lookup can fail (decision 32);
- * only places new to the set are looked up, at most `ALERTS.newPlacesPerPut` saved ones (429 for
- * the rest), under one budget (503 for a failure, with the rest written).
+ * 3.3). The places it no longer has are deleted first, before the minute's rule can refuse it and
+ * before any lookup can fail (decision 32); only places new to the set are looked up, at most
+ * `ALERTS.newPlacesPerPut` saved ones (429 for the rest), under one budget (503 for a failure,
+ * with the rest written).
  */
 async function putSet(
   r: Job,
@@ -1081,7 +1084,6 @@ async function putSet(
   const store = r.store();
   const at = new Date(r.now).toISOString();
   const stored = await readStored(store, app, id);
-  holdBack(r, app, id, stored);
   const kept = isSet(stored.entry) ? stored.entry : null;
   const keptSalt = saltOf(stored.entry);
   let salt = keptSalt ?? newSalt();
@@ -1095,7 +1097,9 @@ async function putSet(
 
   // 1. The places the set no longer has; and the free place when there is none, or when it was the
   // phone's location (or 8.1's) and the phone's location isn't shared now. A free place that
-  // moves is deleted only once its successor is written.
+  // moves is deleted only once its successor is written. A removal is never refused, so the
+  // minute's rule is checked only after it (decision 32): the ids entry may still name a key
+  // deleted here, which every reader takes as gone.
   const pids = new Set(slots.map((slot) => slot.pid));
   const dropFree = !here || (here.follows === 'ip' && stored.free?.follows !== 'ip');
   const gone = stored.held.filter((key) => {
@@ -1103,18 +1107,23 @@ async function putSet(
     return pid ? !pids.has(pid) || stored.saved.get(pid)?.key !== key : dropFree;
   });
   await eachAtOnce(gone, DEVICE_LIMITS.writesAtOnce, (key) => store.delete(key));
+  holdBack(r, app, id, stored);
   const removed = new Set(gone);
   const freeLeft = stored.held.filter((key) => !removed.has(key) && pidOf(key) === undefined);
   const previous = typeof kept?.updatedAt === 'string' ? kept.updatedAt : undefined;
   /** What the ids key holds, as far as this registration knows. */
   let current: unknown = stored.entry;
+  /** What this registration last left in the ids key: what it read, or what it wrote since. */
+  let mine: unknown = stored.entry;
+  /** The keys an overlapping registration's ids entry names, kept named alongside this set's. */
+  let theirs: string[] = [];
   // A new salt is stored before the lookups, so another registration of this device overlapping
   // this one (an app's retry, say) finds it below; a new device's only if no other is there yet.
   const salting = !keptSalt && slots.length > 0;
   if (salting) {
     const first = naming(freeLeft, salt, previous);
     const onlyIfNew = stored.entry === null;
-    if (await store.set(idsKey(app, id), first, { onlyIfNew })) current = first;
+    if (await store.set(idsKey(app, id), first, { onlyIfNew })) current = mine = first;
   }
 
   // Lookups only for places new to the set: one whose query is its stored record's keeps that
@@ -1137,14 +1146,18 @@ async function putSet(
   const foundFree = askFree ? (found[0] ?? null) : null;
   const foundSaved = askFree ? found.slice(1) : found;
   const failed = found.filter((location) => location === null).length;
-  // The salt as stored now: one an overlapping registration stored first is taken, so each saved
-  // place still has one pid, and one record.
+  // The ids key as stored now. Changed by an overlapping registration, its salt is taken, so each
+  // saved place still has one pid, and one record; and every key it names stays named, so none of
+  // its records is left where a DELETE can't find it.
   if (salting) {
     current = await store.get<unknown>(idsKey(app, id));
-    const theirs = saltOf(current);
-    if (theirs && theirs !== salt) {
-      salt = theirs;
-      pidsFrom(slots, salt);
+    if (JSON.stringify(current) !== JSON.stringify(mine)) {
+      theirs = keysOf(current, app, id);
+      const salted = saltOf(current);
+      if (salted && salted !== salt) {
+        salt = salted;
+        pidsFrom(slots, salt);
+      }
     }
   }
 
@@ -1203,21 +1216,21 @@ async function putSet(
   const keyOf = (record: DeviceRecord): string => regKey(record.tz, app, id, record.slot);
   const freeKey = freeWritten ? [keyOf(freeWritten)] : [];
   const savedKeys = savedWritten.map(keyOf);
-  // The free place kept as it was (its successor not looked up) and shadowed by a saved place
-  // that has gone: re-stamped without `shadowedBy`, so it notifies again (decision 23).
-  const shadow = stored.free?.shadowedBy;
-  const unshadowed =
-    !freeWritten &&
-    stored.free &&
-    typeof shadow === 'string' &&
-    freeLeft.includes(regKey(stored.free.tz, app, id)) &&
-    !savedWritten.some((saved) => saved.slot === shadow)
+  // The free place kept as it was (its successor not looked up): re-stamped with the set, so
+  // every record the ids entry names carries one stamp and Apple refusing any of them forgets them
+  // all (decision 33); without `shadowedBy` once that saved place has gone, so it notifies again
+  // (decision 23).
+  const keptFree =
+    !freeWritten && stored.free && freeLeft.includes(regKey(stored.free.tz, app, id))
       ? { ...stored.free, updatedAt: at, seenAt: at }
       : null;
-  if (unshadowed) delete unshadowed.shadowedBy;
+  const shadow = keptFree?.shadowedBy;
+  if (keptFree && typeof shadow === 'string' && !savedWritten.some((s) => s.slot === shadow)) {
+    delete keptFree.shadowedBy;
+  }
   const records = [
     ...(freeWritten ? [freeWritten] : []),
-    ...(unshadowed ? [unshadowed] : []),
+    ...(keptFree ? [keptFree] : []),
     ...savedWritten,
   ];
   // 2. The ids key names every record before it is written, and the salt before any pid is used.
@@ -1226,8 +1239,13 @@ async function putSet(
     records.length &&
     (salt !== kept?.salt || [...freeKey, ...savedKeys].some((key) => !named.has(key)))
   ) {
-    const entry = naming(unique([...freeKey, ...freeLeft, ...savedKeys]), salt, previous);
+    const entry = naming(
+      unique([...freeKey, ...freeLeft, ...savedKeys, ...theirs]),
+      salt,
+      previous,
+    );
     if (JSON.stringify(entry) !== JSON.stringify(current)) await store.set(idsKey(app, id), entry);
+    mine = entry;
   }
   // 3. Every record, with one stamp.
   await eachAtOnce(records, DEVICE_LIMITS.writesAtOnce, (record) =>
@@ -1238,15 +1256,15 @@ async function putSet(
   await eachAtOnce(moved, DEVICE_LIMITS.writesAtOnce, (key) => store.delete(key));
   // 5. The ids key naming what is there, timed for the minute's rule only once all of it is.
   // Always written, as the run may have forgotten the device meanwhile (`forgetDevice`); with
-  // nothing there, deleted, if as this registration left it, so a device with no place keeps
-  // nothing.
+  // nothing there, deleted, if as this registration left it (never an entry another wrote), so
+  // a device with no place keeps nothing.
   const complete = failed === 0 && heldBack === 0;
-  const there = unique([...(freeWritten ? freeKey : freeLeft), ...savedKeys]);
+  const there = unique([...(freeWritten ? freeKey : freeLeft), ...savedKeys, ...theirs]);
   if (there.length) {
     await store.set(idsKey(app, id), naming(there, salt, complete ? at : previous));
-  } else if (current !== null) {
+  } else if (mine !== null) {
     const now = await store.get<unknown>(idsKey(app, id));
-    if (JSON.stringify(now) === JSON.stringify(current)) await store.delete(idsKey(app, id));
+    if (JSON.stringify(now) === JSON.stringify(mine)) await store.delete(idsKey(app, id));
   }
 
   const zones = new Set(savedWritten.map((record) => record.tz)).size;

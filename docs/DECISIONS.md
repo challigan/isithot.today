@@ -1181,17 +1181,22 @@ How the apps register for notifications (iOS build spec, sections 8.2 and 8.3): 
   test send on the functions' own dependencies with a slow Blobs edge.
 - **Junk registrations. Carl decides by Fri 13 Nov.** 1.0 (Mon 23 Nov) is the public launch this
   waited for. A made-up token is a new id, so the one-write-a-minute rule never applies to it, and
-  only Netlify's 10 a minute per IP on each domain bounds them: 10 records a minute from bodies
-  without `v`, and since "Notifications: several places on one phone", up to 40 from bodies with
-  `v: 2` (the free place and 3 new saved places each), with up to 40 forecast lookups, each of
-  which may start a request for a new cell's climate normals in the background. That is within
-  `/api/v1/today`'s own 60 a minute per IP, so nothing new is exposed upstream; the stored junk is
-  the problem. Junk at a place with no snow is never pushed, so Apple never refuses it, and it
-  stays for 90 days. Since the run judges each registration once a window, each costs at most one
-  forecast a window (and none where it shares a place), the run's cap still bounds a run (60
-  forecasts free, 300 with the key), and a zone gets through 480 or 2,400 places a window. One IP
-  can fill that in about 12 or 60 minutes (48 minutes or 4 hours with bodies without `v`), and past
-  it junk padding one zone would push real registrations out. The run's tie-break, the group with
+  only Netlify's 10 a minute per IP on each domain bounds them. Netlify counts per IP per hostname
+  (`aggregateBy: ['ip', 'domain']`), and every hostname of the site answers `/api/v1/devices`:
+  willitsnow.today, isithot.today, isitwet.today and isitwindy.today, their www aliases (the edge
+  function leaves `/api/*` alone, so they aren't sent to the apex) and isithotapp.netlify.app. So
+  one IP gets at least 4 × 10 = 40 registrations a minute: 40 records a minute from bodies without
+  `v`, and since "Notifications: several places on one phone", at least 160 from bodies with
+  `v: 2` (the free place and 3 new saved places each), with as many forecast lookups, each of
+  which may start a request for a new cell's climate normals in the background. `/api/v1/today`'s
+  own 60 a minute per IP is counted per hostname the same way, so nothing new is exposed upstream;
+  the stored junk is the problem. Junk at a place with no snow is never pushed, so Apple never
+  refuses it, and it stays for 90 days. Since the run judges each registration once a window, each
+  costs at most one forecast a window (and none where it shares a place), the run's cap still
+  bounds a run (60 forecasts free, 300 with the key), and a zone gets through 480 or 2,400 places a
+  window. One IP can fill that in about 3 or 15 minutes (12 minutes or 1 hour with bodies without
+  `v`), sooner through the www and netlify.app hostnames too, and past it junk padding one zone
+  would push real registrations out. The run's tie-break, the group with
   the oldest registration first among groups of one size, slows that; it doesn't stop it. Two ways
   to close it, both Carl's call: App Attest or DeviceCheck (an app change, the real fix), or a
   daily limit of new registrations per IP, which means keeping a keyed hash of the IP for a day
@@ -1410,8 +1415,14 @@ The shape:
     searched places with 80-character names and regions in 3-byte characters are about 6.6 KB. One
     write a minute for each device, timed from a version 2 entry's `updatedAt` (from the free
     record's, as before, under a version 1 entry), which moves only when a registration fully
-    succeeds, so a retry after a 503 or a 429 isn't refused. At most `ALERTS.newPlacesPerPut` (3)
-    saved places new to the set in one request: the first three in the body's order are stored, and
+    succeeds, so a retry after a 503 or a 429 isn't refused. It is checked only after the
+    removals (decision 32), so, as main's rule has it, a delete is never refused: a bell turned
+    off again within the minute (a mis-tap corrected), an unstar, a refund or the phone's
+    location withdrawn lands at once, and only the rest waits for the 429's `Retry-After`. 8.1's
+    sync retries a 429 only while the app runs, so a removal refused outright could have waited
+    for the next launch, days of notifications for a bell turned off. At most
+    `ALERTS.newPlacesPerPut` (3) saved places new to the set in one request: the first three in
+    the body's order are stored, and
     the answer is 429 `rate_limited` with `Retry-After: 60`, "Up to 3 new places are added at a
     time. Try again in a minute.", which 8.1's sync already honours, so restoring 10 bells takes
     about 3 minutes. A place's zone, name and country are looked up only when it is new to the set
@@ -1447,10 +1458,15 @@ The shape:
     saved place's (both on the 0.05° grid), the free record is written with `shadowedBy: <pid>`.
     Only saved places actually written count, so one held back by the cap, or whose lookup failed,
     never silences the free place; and a free place kept as it was, because its new cell's lookup
-    failed, is re-stamped without `shadowedBy` once its saved place has gone. The run sets a
-    shadowed free record aside before grouping: it needs no forecast, sends nothing and is finished
-    with, judged where its zone is left unfinished, so later runs skip it unread. Only the saved
-    place's notification goes, under the name the person chose.
+    failed, is re-stamped with the set, without `shadowedBy` once its saved place has gone. The run
+    sets a shadowed free record aside before grouping: it needs no forecast, sends nothing and is
+    finished with, judged where its zone is left unfinished, so later runs skip it unread. Only the
+    saved place's notification goes, under the name the person chose. That holds only while the
+    saved place is there, in the zone's listing (one cell is one zone): a registration deletes a
+    place before it rewrites the free record, so one cut short between the two (a store failure,
+    or the minute's 429 after its removals) leaves a `shadowedBy` naming a record that has gone,
+    and that silences nothing. Where a zone border split a cell, both places would notify, rather
+    than neither.
 24. **The payload's route** is unchanged: every record carries its own `query` and `name`, so a tap
     opens that place. An approximate free place is stored as its point on the grid, canonicalised as
     a device point is (`lat=…&lon=…&source=device`), so a tap opens that cell under the forecast's
@@ -1482,12 +1498,17 @@ The shape:
     and App Review buy, and refuse Xcode's and local testing's, and it adds Purchase History to App
     Privacy) is the follow-up if the numbers show abuse, and the numbers now exist: the run's 03:00
     UTC cleanup logs `alerts-run: cleanup: 12 devices with saved places` (distinct ids with a pid
-    key, from one listing of `reg/v1/`), once a day: only the run that finishes the cleanup lists
-    and counts, after the old keys have gone, so a cleanup cut short, carried on by the next run in
-    the hour, never logs it twice; a listing that fails leaves the cleanup unfinished, so the next
-    run in the hour counts. Each month Carl compares it with Snow unlock units in App
-    Store Connect: more devices than 6 × units + 10 (with Family Sharing a purchase reaches up to 6)
-    means verifying in the next update. The version 2 body ignores fields it doesn't know, so a
+    key), once a day: only the run that finishes the cleanup lists and counts, after the old keys
+    have gone, so a cleanup cut short, carried on by the next run in the hour, never logs it twice.
+    It lists zone by zone (`reg/v1/<tz>/`, 25 at once, none started once the pushes' grace is
+    over), not every registration in one call: Blobs pages one listing through one 1.5 s timeout,
+    so a single listing would fail once the store held about 5,000 to 15,000 keys (sooner in a
+    junk flood, just when the count matters), and every run in the hour would then repeat the
+    cleanup. A count that can't finish (a listing fails, or time runs out) logs
+    `alerts-run: cleanup: count unavailable`, and the cleanup stays finished, its deletes done.
+    Each month Carl compares it with Snow unlock units in App Store Connect: more devices than
+    6 × units + 10 (with Family Sharing a purchase reaches up to 6) means verifying in the next
+    update. The version 2 body ignores fields it doesn't know, so a
     `transaction` can be added without a new version.
 27. **8.1 records and builds.** No data migration: an 8.1 record is the device's free-place record
     as it stands, replaced by the first version 2 registration that locates the phone, and deleted
@@ -1509,24 +1530,41 @@ What the design's three reviews added:
 
 32. **Removals land first.** A registration works out its set's keys with no forecast
     (canonicalising needs none) and deletes every stored place the set no longer has, and the free
-    place when there is none (or by decision 4), before any lookup can fail; the old ids entry
-    still names them, so a DELETE after a failure finds what is left. A device's first set with a
-    saved place stores its new salt next, in an entry naming what is left (for a new device only
-    if no entry is there yet), and reads it back after the lookups, taking the salt another
-    registration overlapping this one stored first (an app's retry, say), so each saved place gets
-    one pid and one record. Then the new places are looked up, and the rest goes in this order:
-    the ids entry naming everything about to be written and the zones the free place is leaving
-    (skipped when it already names them, with the same salt); the records, every one with the one
-    `updatedAt` and `seenAt`; the free place's copy in a zone it left; the ids entry naming what is
-    there, always written, since the run may have forgotten the device meanwhile, or, with nothing
-    there, deleted if as the registration left it, so a device that ends with no place, an
-    ordinary forecast outage on a first registration say, keeps no ids key or salt. So a failed
-    lookup costs only the additions (503,
-    the rest written), never an unstar, a refund or a bell turned off, and a free place that moves
-    is deleted only once its successor is written, so a failing lookup never leaves a phone
-    without one (decision 4 apart). A test fails the store at each of the writes in turn and
-    checks that a DELETE then removes every copy; others forget the device during a
-    registration's lookups, and send two first registrations at once, and check the same.
+    place when there is none (or by decision 4), before the minute's rule can refuse it
+    (decision 20) and before any lookup can fail; the old ids entry still names them, so a DELETE
+    after a failure finds what is left, and a 429 after them leaves an entry naming keys that have
+    gone, which every reader takes as gone. A device's first set with a saved place stores its
+    new salt next, in an entry naming what is left (for a new device only if no entry is there
+    yet), and reads it back after the lookups. Changed by another registration overlapping this
+    one (an app's retry, a request duplicated on its way), the entry's salt is taken, so each saved
+    place gets one pid and one record, and every key it names is named alongside this set's from
+    then on, so neither registration's records are left where a DELETE can't find them, whichever
+    answers last; the next registration tidies whatever the set no longer has. Then the new places
+    are looked up, and the rest goes in this order: the ids entry naming everything about to be
+    written and the zones the free place is leaving (skipped when it already names them, with the
+    same salt); the records, every one with the one `updatedAt` and `seenAt` (a free place kept
+    as it was through a failed lookup too, re-stamped, so decision 33's rule holds for the whole
+    set); the free place's copy in a zone it left; the ids entry naming what is there, always
+    written, since the run may have forgotten the device meanwhile, or, with nothing there,
+    deleted only if it still holds what this registration itself left, never an entry another
+    registration wrote, so a device that ends with no place, an ordinary forecast outage on a
+    first registration say, keeps no ids key or salt. So a failed lookup costs only the additions
+    (503, the rest written), and the minute's rule only them (429), never an unstar, a refund or a
+    bell turned off, and a free place that moves is deleted only once its successor is written, so
+    a failing lookup never leaves a phone without one (decision 4 apart). A test fails the store at
+    each of the writes in turn and checks that a DELETE then removes every copy; others forget the
+    device during a registration's lookups, and send two first registrations at once, one of them
+    with every lookup or only one failing, and check the same. **What it can't close**, with no
+    conditional write but `onlyIfNew`: an 8.1 device's entry has no salt, so its first set with a
+    saved place stores the salt with a plain write, and one that lands only after an overlapping
+    registration of the device has finished (Blobs retrying a write the 1.5 s timeout gave up on,
+    say) replaces that registration's entry, leaving its saved records unnamed. The same holds for
+    any ids write landing after a later registration has finished, as it did on main. Such a
+    record outlives a DELETE until it is 90 days stale or Apple refuses it, each of which forgets
+    it alone, by its own stamp (decision 33); with the salt replaced, the next registration stores
+    its place again under a new pid, so until then that place is notified twice. Closing it would
+    take a salt claimed under a key of its own with `onlyIfNew`, which every path that deletes an
+    ids key would have to delete too; only 8.1's TestFlight devices can reach the first case, once.
 33. **Forgetting is per record.** `forgetDevice` (alertStore.ts) replaces `forgetRegistration`
     (removed) for the run and the sender, starting from the record that set it off: one the run
     found stale, or whose push Apple refused (the token, not the place, so every place goes). A
@@ -1542,7 +1580,11 @@ What the design's three reviews added:
     has gone, so its zone can finish; `changed` or `failed` leaves a stale record's zone unfinished,
     as before. Once a phone is forgotten, the sender starts none of its other pushes in that call
     (`deferred`): a test stops at the first refusal, and the run's other places of that phone find
-    their records gone next time.
+    their records gone next time. One stamp for the set includes a free place a 503 kept as it was
+    (decision 32): kept with its old stamp, it once outlived Apple's refusal of a saved place's
+    push, with the ids entry and its salt, against the privacy notice's "when Apple tells us the
+    app is no longer installed". A registration cut short by the store among its record writes can
+    still leave two stamps until the next one.
 34. **One bad saved place** doesn't refuse the set: a city slug that has gone from
     `data/cities.json` is dropped, the rest are stored, and the reply lists it in `refused` as
     `{ index, code: 'not_found' }`. Two that canonicalise to one query count once. A malformed
@@ -1559,8 +1601,10 @@ What the design's three reviews added:
     `; 1 refused`). A saved
     place is named `snow.3f9c1a2b….1a2b3c4d5e6f` (`redact` shortens only runs of 32 hex or more).
     Where a line would carry a saved place's zone it doesn't: the run's unreadable-record error,
-    the sender's quiet-hours refusal, the test's (`quiet hours on the phone`), and `scrub` blanks
-    the zone of a saved key a store's error quotes (`reg/v1/…/`). A dry run's line for a saved
+    the sender's quiet-hours refusal, the test's (`quiet hours on the phone`), the run's
+    no-forecast error, which leaves out the forecast's own words ("the forecast has no data for
+    2026-12-02 (Asia/Tokyo)") when it names a saved place, and `scrub` blanks the zone of a saved
+    key a store's error quotes (`reg/v1/…/`). A dry run's line for a saved
     place has no words, which name the place, and ends ` (silent)` when it would be. The log
     tests run the version 2 registration, the test send and the run's new lines, and check that no
     saved place's zone appears.
@@ -1587,12 +1631,18 @@ What the design's three reviews added:
   between would have left a record no DELETE could find. Deleting first, while the old entry still
   names what goes, keeps the design's guarantee, with the same two ids writes at most (three for
   a device's first set with a saved place, below).
+- **The minute's rule comes after the removals** (decisions 20 and 32). Section 3.3 checked it
+  third, before step 7's deletes, so a bell turned off, an unstar, a refund or a withdrawn location
+  within a minute of the last change was refused whole and kept notifying, or kept the phone's
+  point, until a retry 8.1's app makes only while it runs.
 - **Decision 4 reaches a failed lookup.** The design replaced a free place only once its successor
   was written; for the phone's own point, after location is withdrawn, it is deleted first, so the
   point can't outlive the withdrawal through a 503.
 - **`shadowedBy`** looks at the saved places written, not every saved place of the body
   (decision 23); a shadowed record is set aside before grouping, not in `decide`, so no forecast is
-  asked for it.
+  asked for it, and only while its saved place is in the zone's listing.
+- **A free place kept through a failed lookup is re-stamped** with the set, shadowed or not
+  (decisions 23 and 33).
 - **Refusals** in version 2 bodies are `bad_request`, and `refused`'s code is `not_found`
   (decision 34); a `v` other than 2 is refused rather than ignored.
 - **One body limit** for all three endpoints, 8,192 (decision 20).
@@ -1603,7 +1653,9 @@ What the design's three reviews added:
   of lookups the app would give up before the 503 came (decision 20).
 - **A new salt is stored before the lookups**, as the design's entry was, but alone with what is
   left, not naming new places whose zones aren't known yet; and a set that ends with no place
-  keeps no ids key, which the design didn't say (decision 32).
+  keeps no ids key, which the design didn't say (decision 32). An overlapping registration's entry
+  found after the lookups lends its salt and its keys, and only an entry this registration left
+  is ever deleted.
 - **The pid's key** is the salt's 32 hex characters as stored, not the 16 bytes they spell: the
   same entropy. A test pins three pids worked out separately, so it can't drift.
 - **`who`** keeps `idPrefix`'s ellipsis, `snow.3f9c1a2b….1a2b3c4d5e6f`.
@@ -1616,19 +1668,25 @@ record written back before the ids key goes, a failing store). `devices.test.ts`
 refusal, each free-place case (the connection with and without a town, a place from a connection
 kept for 7 days and no longer, a withdrawn location, an 8.1 record, nothing at all), the cap and its
 retry, the lookup budget, a heartbeat with no forecast, `shadowedBy` set and cleared (on a free
-place kept through a failed lookup too), a refund, a failure at each write followed by a DELETE, a
+place kept through a failed lookup too), a refund, removals within the minute (a bell turned off
+again, a withdrawn location, nothing left to keep), a failure at each write followed by a DELETE, a
 lookup that throws after the removals, the run forgetting the device during the lookups, two first
-registrations at once, nothing kept when nothing could be looked up, a body without `v` after a set,
+registrations at once (also with one's lookups failing, all or one, its salt write landing late),
+a free place kept through a failed lookup and re-stamped so Apple refusing either place forgets
+the phone, nothing kept when nothing could be looked up, a body without `v` after a set,
 the DELETE of a set and its salt, the test send's cases, and the logs. `today.test.ts`:
 `locateFromIpOnly`. `alerts.test.ts`: two places in one zone and window, two zones, a London phone's
 Whistler evening either side of the clocks changing, a Fernando de Noronha evening whose sound the
-change turns on, a shadowed free place, forcing, a stale phone, claims by place, the tie-break, the
-daily count (once, after a cleanup cut short), an 8.1 record byte for byte, and no saved zone in any
-line. `push.test.ts`: a refused saved place forgets the phone, the quiet payload, the thread, the
-order, `quietTz`. `notifications.test.ts`, end to end: an 8.1 registration, then a version 2 body on
-the same token, then the run at 18:05 (one notification per place), then a DELETE that leaves
-nothing. Core: both ids, and decision 30's test that no notification's words name the purchase, a
-bell, a price or an upgrade. The dry-run script adds two saved places on a phone in Tokyo;
+change turns on, a shadowed free place, one whose saved place has gone, forcing, a stale phone,
+claims by place, the tie-break, the daily count (once, after a cleanup cut short; zone by zone; a
+count that can't finish), an 8.1 record byte for byte, and no saved zone in any line, a saved
+place's no-forecast error included. `push.test.ts`: a refused saved place forgets the phone, the
+quiet payload, the thread, the order, `quietTz`. `notifications.test.ts`, end to end: an 8.1
+registration, then a version 2 body on the same token, then the run at 18:05 (one notification per
+place), then a DELETE that leaves nothing; and a saved place unstarred within the minute, after
+which the free place in its cell is notified. Core: both ids, and decision 30's test that no
+notification's words name the purchase, a bell, a price or an upgrade. The dry-run script adds two
+saved places on a phone in Tokyo;
 `--now 2026-12-02T18:05:00Z` prints a line for each, silent, and `2 silent` in the run's line.
 
 **Superseded**, in one place, each with a note where it stands: in "Notifications: the devices
