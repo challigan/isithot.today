@@ -1,0 +1,28 @@
+{
+  "_fixture": {
+    "request": "PUT /api/v1/devices",
+    "body": {
+      "app": "snow",
+      "platform": "ios",
+      "env": "sandbox",
+      "token": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "place": {
+        "place": "leeds-gb"
+      },
+      "units": "c",
+      "alerts": {
+        "snow": {
+          "evening": true,
+          "morning": false,
+          "possible": false
+        }
+      },
+      "appVersion": "1.0 (42)"
+    },
+    "now": "2026-12-01T09:05:10.000Z",
+    "note": "put-leeds’s PUT again 10 seconds later: one write a minute for each device, so 429 rate_limited, with the 50 seconds left of the minute in Retry-After."
+  },
+  "status": 429,
+  "retryAfter": "50",
+  "text": "{\"error\":{\"code\":\"rate_limited\",\"message\":\"One change a minute for each device. Try again shortly.\"}}"
+}

@@ -22,8 +22,11 @@ away and turns the widgets on: a row at the end of the middle page, Settings' up
 Restore purchase, the upgrade page, StoreKit 2 behind a model tested on Linux, and the StoreKit
 tests (below, "Phase 7.1: the purchase"); phase 7.2, the widgets: the small and medium Home Screen
 widgets and three for the Lock Screen, locked until the purchase, each planned from the answer the
-app saved or one it asks for itself (below, "Phase 7.2: the widgets"); and phase 8.3, the free
-version's ads:
+app saved or one it asks for itself (below, "Phase 7.2: the widgets"); phases 8.1 and 8.2,
+notifications: Settings → Notifications and the Today card turn on a notification the evening
+before (and on the day) snow is likely at a place, which the server sends, and Your privacy shows
+what it keeps for them, and deletes it (below, "Phases 8.1 and 8.2: notifications"); and phase
+8.3, the free version's ads:
 Google's consent form, a banner under the pages and one at the end of each, and a full-screen ad
 when a place is chosen, with Google's demo units until the release candidate (below, "Phase 8.3:
 the ads"). The home screen is drawn in the website's look: its type, pills, tabs, grids and week
@@ -45,7 +48,10 @@ Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API
                          Questions, AppCopy, AppCredits, Constants, Keys, BrandFonts (every font's name),
                          Palettes (with Palettes.content, the app's own pages') and BrandColours (the
                          surfaces' shares and the content card); the ports, the
-                         home screen's, the picker's and Settings' presenters, the saved places'
+                         home screen's, the picker's and Settings' presenters, the notifications'
+                         switches, place, server replies and registration, their Settings section,
+                         place page and card, and where a tap opens (AlertSettings, DeviceReplies,
+                         NotificationSettings, NotificationCard, NotificationRouter), the saved places'
                          rules (SavedPlaces), the glyph's drift, which
                          pages are light ink on dark, when an ad may show (AdRules), the purchase's
                          rule, state and pages (PurchaseRules, PurchaseState, UpgradePage), the
@@ -53,7 +59,10 @@ Packages/IsItCore/       Foundation only, Swift 6 mode, tested on Linux: the API
                          WidgetSource, BrandFace)
                          (IsItLogic); AppModel, its
                          API client, the launch and refresh rules, what VoiceOver is told, the clocks
-                         and the minute tick, the picker's search and the location rules, the ads
+                         and the minute tick, the picker's search and the location rules, the
+                         notifications (NotificationsModel, with UserNotifications behind
+                         NotificationPlatform and their three keys behind NotificationStore; the
+                         devices calls; NotificationInbox and NotificationDispatch), the ads
                          (AdsModel, with Google's SDKs behind AdsPlatform), the purchase
                          (PurchaseModel, with StoreKit behind PurchasePlatform and unlock.v1 behind
                          UnlockStore), the widget's timeline (WidgetTimeline, with Deadline and
@@ -71,13 +80,19 @@ Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore, UR
                          (CoreLocationService, the app's only), IsItAds (Google's SDKs: GoogleAds,
                          BannerSlot, TopViewController; the app's only), IsItPurchases (StoreKit 2:
                          StoreKitPurchases; the app's only),
+                         IsItNotifications (UserNotificationsPlatform, NotificationDelegate,
+                         NotificationDefaults: UserNotifications and the push token; the app's only),
                          IsItUI (the home screen: HomeShell, ViewSwitcher, HomePager and ForecastPageView
                          with its bodies and GlyphView, drawing IsItLogic's HomePage and HomeTopBar, with
                          HomeActions; the picker: PlacePickerView, drawing PlacePicker, with
                          PlacePickerActions and PickerChrome (SheetHeader, SearchBox, BoxTextField,
                          PlaceRow, StarButton); Settings: SettingsView and its pages, with SettingsActions,
+                         the notifications' section and place page (NotificationsSection,
+                         NotificationPlaceView, with NotificationActions) and the middle page's card
+                         (NotificationCardView),
                          and SheetStyle, their parts (SheetPage, PageTitle, SheetSection, SheetCard,
-                         RowLabel, ReadingCard, sheetChrome, SheetCloseButton); the upgrade: UpgradeView
+                         RowLabel, ReadingCard, sheetChrome, SheetCloseButton, and SheetSwitchStyle, the
+                         notifications' switch); the upgrade: UpgradeView
                          with RestoreRow, UpgradeSheetView, UpgradeRow (the home row) and
                          UpgradeActions; the parts every screen
                          shares, in the website's look: BrandType (TextRole,
@@ -92,13 +107,15 @@ Packages/IsItKit/        Apple only, Swift 5 mode: IsItServices (SharedStore, UR
                          PaletteBackground: topic-free, drawn with the glyphs and palettes the
                          extension gives, WidgetArt), SnowKit (Glyphs, Color(rgb:)
                          for the palettes, and the glyph catalogues, generated)
-Apps/Snow/App/           WillItSnowApp (the services, the purchase, the ads, the scene's phases and
-                         the links), LiveHooks (the launch's later steps: the purchase and the ads),
-                         HomeView (the home screen, from the model, with the upgrade row, the ads'
-                         band and boxes, and its three sheets), PickerSheet (the place picker, from
-                         its model), SettingsSheet (Settings, from the model), UpgradeSheet (the
-                         upgrade sheet), DebugHooks (every test and debug hook, StoreKit's stand-in
-                         among them)
+Apps/Snow/App/           WillItSnowApp (the services, the purchase, the ads, the notifications and their
+                         inbox's handler, the scene's phases and the links), AppDelegate (the
+                         notification centre's delegate and the push token's callbacks), LiveHooks
+                         (the launch's later steps: the purchase, the ads and the notifications),
+                         HomeView (the home screen, from the model, with the notifications card, the
+                         upgrade row, the ads' band and boxes, and its three sheets), PickerSheet (the
+                         place picker, from its model), SettingsSheet (Settings, from the model, with
+                         Notifications), UpgradeSheet (the upgrade sheet), DebugHooks (every test and
+                         debug hook, StoreKit's and the notifications' stand-ins among them)
 Apps/Snow/Resources/     the app's Info.plist, entitlements and privacy manifest; Licences/ (the notices
                          Credits and licences shows in full, copied whole); generated: Assets.xcassets
                          (the app icon) and Fonts/ (the app's and the widget's: BricolageAnswer.ttf and
@@ -112,7 +129,10 @@ Apps/Snow/Tests/         app-hosted unit tests: the App Group round trip through
                          (V1), widget and glyph snapshots, the embedded widget's plist, fonts, glyphs and
                          manifest (WidgetBundleTests), what WidgetKit is given (WidgetProviderTests),
                          palette contrast, the brand fonts, the built Info.plist's purpose string, and
-                         no StoreKit configuration in the app
+                         no StoreKit configuration in the app; the notifications' centre delegate, the
+                         payload's way to the router, the permission's mapping and the push
+                         environment (NotificationTests), no background modes and the privacy
+                         manifest's device ID (InfoPlistTests)
 Apps/Snow/StoreKitTests/ app-hosted SKTestSession tests of the purchase (PurchaseServiceTests), and
                          Snow.storekit against the copy (SnowStoreKitFileTests): the StoreKit plan
 Apps/Snow/UITests/       FixtureLaunchTests (fixtures at their own moments, and a place nearby),
@@ -123,30 +143,33 @@ Apps/Snow/UITests/       FixtureLaunchTests (fixtures at their own moments, and 
                          SettingsTests (every row, the units, Report an ad's fallback, Your privacy),
                          with ScreenAudit.swift's audit; AdsTests (the ads, with Google's demo
                          units: the only tests launched without -noads 1); UpgradeTests (the
-                         purchase, over StoreKit's stand-in); each attaches its screens. DrawnText.swift
+                         purchase, over StoreKit's stand-in); NotificationsTests (the notifications,
+                         over their stand-in) and NotificationPermissionTests (the system's prompt, the
+                         one test that meets it); each attaches its screens. DrawnText.swift
                          is every audit's contrast proof, on Generated/Surfaces.json (from
                          packages/mobile brandColours.ts). WidgetLinkTests opens each view a link
                          can name (view/week, view/today, view/now) and checks the page it lands on;
                          a locked widget's link, upgrade, is UpgradeTests'
 TestPlans/               Unit, UI and StoreKit (the SKTestSession tests, on iOS 26.2)
-ci/                      xcodegen.sh, simulator.sh, test.sh, release-check.sh, xcresult-summary.mjs, contact-sheet.mjs;
+ci/                      xcodegen.sh, simulator.sh, test.sh, push.sh, release-check.sh, xcresult-summary.mjs, contact-sheet.mjs;
                          for releases archive.sh, upload.sh and ExportOptions.plist
 ```
 
 The release checks are in the repo's `scripts/`: `check-archive.sh`, with `swift-small-strings.mjs`
 (below), and `asc-key.mjs` and `asc-notes.mjs` for the App Store Connect key and What to Test.
 
-| Target                    | Bundle ID                      | Links                                                                                                |
-| ------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| `WillItSnow` (app)        | `today.willitsnow.app`         | IsItModel, IsItLogic, IsItState, IsItServices, IsItLocation, IsItUI, IsItAds, IsItPurchases, SnowKit |
-| `WillItSnowWidgets`       | `today.willitsnow.app.widgets` | IsItModel, IsItLogic, IsItState, IsItServices, IsItWidgetUI, SnowKit                                 |
-| `WillItSnowTests`         | hosted by the app              | IsItModel, IsItLogic, IsItState, IsItServices, IsItUI, IsItWidgetUI, SnowKit                         |
-| `WillItSnowStoreKitTests` | hosted by the app              | IsItModel, IsItLogic, IsItState, IsItServices, IsItPurchases                                         |
-| `WillItSnowUITests`       | drives the app                 |                                                                                                      |
+| Target                    | Bundle ID                      | Links                                                                                                                   |
+| ------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `WillItSnow` (app)        | `today.willitsnow.app`         | IsItModel, IsItLogic, IsItState, IsItServices, IsItLocation, IsItUI, IsItAds, IsItPurchases, IsItNotifications, SnowKit |
+| `WillItSnowWidgets`       | `today.willitsnow.app.widgets` | IsItModel, IsItLogic, IsItState, IsItServices, IsItWidgetUI, SnowKit                                                    |
+| `WillItSnowTests`         | hosted by the app              | IsItModel, IsItLogic, IsItState, IsItServices, IsItUI, IsItWidgetUI, IsItNotifications, SnowKit                         |
+| `WillItSnowStoreKitTests` | hosted by the app              | IsItModel, IsItLogic, IsItState, IsItServices, IsItPurchases                                                            |
+| `WillItSnowUITests`       | drives the app                 |                                                                                                                         |
 
-The widget never links IsItAds, IsItLocation or IsItPurchases (it reads the purchase through
-IsItServices' `StoreKitFacts`, but never sells it). Both the app and the widget have the App Group
-`group.today.willitsnow.app`; only the app has `aps-environment`. The name
+The widget never links IsItAds, IsItLocation, IsItPurchases or IsItNotifications (it reads the
+purchase through IsItServices' `StoreKitFacts`, but never sells it). Both the app and the widget
+have the App Group `group.today.willitsnow.app`; only the app has `aps-environment` and links
+IsItNotifications. The name
 under the icon is "will it snow?" (`CFBundleDisplayName`). Both bundle the fonts and list each in
 `UIAppFonts`, since an extension can't load the app's fonts; only the app has an icon.
 
@@ -183,6 +206,8 @@ CI builds and tests everything, so this is only for trying the app by hand.
    the App IDs `today.willitsnow.app` and `today.willitsnow.app.widgets` need the App Group and,
    for the app, Push Notifications (section 24). Signing is automatic with team `MZPGUCY33H`.
    Uploads to TestFlight come from CI (next section); Xcode is only the last way, if CI's fail.
+   To try notifications on the iPhone, run Debug, never Release: a Release build run from Xcode
+   names the wrong push environment (below, "Phases 8.1 and 8.2: notifications", "Trying it").
 
 ## Releasing to TestFlight (Carl)
 
@@ -221,7 +246,9 @@ reach the key.
 - **Archive checks**: both bundles have privacy manifests, each declaring coarse location, and the
   four fonts, each named in `UIAppFonts`; the widget has SnowKit's glyphs and the app's https API
   origin; the app has its icon; the widget links no Google Mobile Ads, no location code and
-  no purchase code; neither binary names any of the 19 debug hooks; the three ad units are Google's
+  no purchase code, nor notifications code; neither binary names any of the 26 debug hooks; the
+  app's manifest declares the device ID (the push token) and its Info.plist registers for
+  notifications in production; the three ad units are Google's
   demo ones (test) or yours (real); the app's `SKAdNetworkItems` hold Google's; the app and widget
   have the same version and build; `ITSAppUsesNonExemptEncryption` is false; no fixture and no
   StoreKit configuration is bundled, and the app doesn't link StoreKitTest. Each failure is named;
@@ -255,6 +282,7 @@ There is no Xcode here, so iOS code is only compiled on GitHub's macOS runners. 
 ```sh
 pnpm mobile:check                     # the Swift, fixtures, vectors, glyphs, icon and font are as generated
 pnpm vitest run packages/mobile/test/swiftLiterals.test.ts   # no words typed in the Swift (phase 6, below)
+pnpm vitest run packages/mobile/test/swiftLayouts.test.ts    # no ViewThatFits where the audits look (8.1)
 docker run --rm -v "$PWD/apps/ios":/w -w /w swift:6.3.3-noble \
   swift format lint --strict --recursive Packages Apps          # every Swift file, as CI lints it
 docker run --rm -v "$PWD/apps/ios/Packages/IsItCore":/w -w /w swift:6.3.3-noble \
@@ -354,6 +382,42 @@ here, generates the project with only the widget's and the unit tests' new IsItC
 changed, and `ci/xcodegen.sh`'s plan check passes on it. DECISIONS ("The widgets in the iPhone app
 (phase 7.2)") says what was checked and what only macOS can show.
 
+Phases 8.1 and 8.2 did the same for the notifications (session scratchpad: alerts-typecheck and
+alerts-uicheck), Debug and Release: IsItNotifications, IsItServices' `send`, IsItUI's new views
+and Settings' new parts, the app's files (AppDelegate, LiveHooks, HomeView, SettingsSheet and
+DebugHooks with its Release stubs) and NotificationTests, against the real IsItCore and a stub
+`UserNotifications` module declaring what the code uses with Apple's signatures (the centre's
+weak `delegate`, the `@Sendable` completion handlers, five authorisation statuses), an `os` stub,
+and wider UIKit and SwiftUI stubs (the push registration, `Toggle` and `ToggleStyle`,
+`ViewThatFits`, `inset(by:)`, the delegate adaptor). A second target builds IsItNotifications'
+real files again in Swift 6 mode, where the delegate's shape is checked: Swift 5 minimal, the
+app's mode, accepts a main-actor async `didReceive` without a word, and Swift 6 refuses it. Greps
+check that every `-word` DebugHooks reads is in `check-archive.sh`'s lists, that the delegate has
+no async method and no `@preconcurrency`, that no Linux test reads `NotificationInbox.shared`, that
+no shipped Swift names a file-timestamp or boot-time API, and that every IsItUI file using
+`.bolder` imports IsItLogic. Planted mistakes each fail it: the async `didReceive` under Swift 6, a
+Release stub taken out, a transport without `send`, a misspelt `NotificationPlatform` method, a
+hook missing from the archive check's lists, and in IsItCore's `swift test` a sync that doesn't
+coalesce (`syncsCoalesce`) and a permission rule that deletes on "not determined"
+(`notDeterminedForgetsOnThePhoneOnly`). The UI tests type-check against the XCUITest stubs with
+`XCUIApplication(bundleIdentifier:)`, `alerts`, `waitForNonExistence(timeout:)` and the `.switch`
+and `.toggle` element types added (alerts-uicheck), with two new checks there: the contrast proof
+on a synthetic switch row, on and off in the content colours, refusing UIKit's green and grey
+tracks, a grey knob, the hairline stroked over the track, the track's ink in the wrong share and
+the row dimmed (SwitchCheck); and NotificationsTests' scrolling of Settings against a fake sheet,
+with, since PR #43's first macOS run, its check that Settings is still at its top for an audit,
+refusing a page scrolled more than half a point and never dragging (SheetScrollCheck). XcodeGen,
+built on Linux as above, generates the project with IsItNotifications linked by the app and its
+unit tests and not by the widget. DECISIONS ("The iPhone app's notifications (phases 8.1 and
+8.2)") says what was checked and what only macOS can show.
+
+Merged, the two phases' harnesses are one type-check and one UI check (session scratchpad:
+merge-81's p78-typecheck and p78-uicheck), the notifications' with the widgets' and the tab-tap
+fix's stubs added once each, which build the app, the widget, IsItNotifications in both language
+modes, the StoreKit tests and the unit tests in Debug and Release, and all 15 UI test files, with
+NotificationsTests' gear and place button run against fake apps whose touches the system cancels
+(NotificationsCancelCheck).
+
 ## Porting against the golden vectors (phase 3)
 
 Every rule the app shares with the website is ported from the TypeScript and checked against its
@@ -408,26 +472,26 @@ To port a file:
 included. Until the last port landed it failed, with one issue for each file not yet ported; on
 23 October 2026 that was all 13, each marked done here as its port landed:
 
-| Vector file         | Ported by    | Swift                                                  |
-| ------------------- | ------------ | ------------------------------------------------------ |
-| `grid.json`         | 3.2, done    | `GridRounding.round`                                   |
-| `target.json`       | 3.2, done    | `Target.key`, `Target(query:)`, `Target(search:)`      |
-| `query.json`        | 3.2, done    | `TodayQuery.build`                                     |
-| `placeTime.json`    | 3.3, done    | `PlaceTime.local(_:in:)`                               |
-| `tomorrow.json`     | 3.3, done    | `MiddleDay.showsTomorrow`, `.defaultView`, `.label`    |
-| `freshness.json`    | 3.3, done    | `Freshness`                                            |
-| `hours.json`        | 3.3, done    | `HourPicker.pick`, `UpdatedLine.text`                  |
-| `questions.json`    | 3.3, done    | `Questions.snow`                                       |
-| `strip.json`        | 3.3, done    | `StripGeometry`                                        |
-| `widget.json`       | 3.4, done    | `WidgetPlanner.entries`                                |
-| `alerts.json`       | 3.4, done    | `AlertSync.action`, `.body`, `.fingerprint`            |
-| `links.json`        | 3.4, 7.2     | `DeepLink.parse`, `.route(payload:placeNow:)`, `.link` |
-| `recent.json`       | 3.4, done    | `RecentPlaces`                                         |
-| `page.json`         | 5.1, done    | `HomePage`, `Credits.parts`                            |
-| `search.json`       | 6.1, done    | `PlaceSearch.input`, `.detail`                         |
-| `saved.json`        | look 4, done | `SavedPlaces`                                          |
-| `widgetSource.json` | 7.2          | `WidgetSource.reuses`, `.fallsBack`                    |
-| `widgetFace.json`   | 7.2          | `WidgetFace`                                           |
+| Vector file         | Ported by    | Swift                                                                                                              |
+| ------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `grid.json`         | 3.2, done    | `GridRounding.round`                                                                                               |
+| `target.json`       | 3.2, done    | `Target.key`, `Target(query:)`, `Target(search:)`                                                                  |
+| `query.json`        | 3.2, done    | `TodayQuery.build`                                                                                                 |
+| `placeTime.json`    | 3.3, done    | `PlaceTime.local(_:in:)`                                                                                           |
+| `tomorrow.json`     | 3.3, done    | `MiddleDay.showsTomorrow`, `.defaultView`, `.label`                                                                |
+| `freshness.json`    | 3.3, done    | `Freshness`                                                                                                        |
+| `hours.json`        | 3.3, done    | `HourPicker.pick`, `UpdatedLine.text`                                                                              |
+| `questions.json`    | 3.3, done    | `Questions.snow`                                                                                                   |
+| `strip.json`        | 3.3, done    | `StripGeometry`                                                                                                    |
+| `widget.json`       | 3.4, done    | `WidgetPlanner.entries`                                                                                            |
+| `alerts.json`       | 3.4, 8.1     | `AlertSync.action`, `.body`, `.fingerprint`, `.firstPlace`, `.following`, `.setting`, `.syncReply`, `.testOutcome` |
+| `links.json`        | 3.4, 7.2     | `DeepLink.parse`, `.route(payload:placeNow:)`, `.link`                                                             |
+| `recent.json`       | 3.4, done    | `RecentPlaces`                                                                                                     |
+| `page.json`         | 5.1, done    | `HomePage`, `Credits.parts`                                                                                        |
+| `search.json`       | 6.1, done    | `PlaceSearch.input`, `.detail`                                                                                     |
+| `saved.json`        | look 4, done | `SavedPlaces`                                                                                                      |
+| `widgetSource.json` | 7.2          | `WidgetSource.reuses`, `.fallsBack`                                                                                |
+| `widgetFace.json`   | 7.2          | `WidgetFace`                                                                                                       |
 
 While a file was still to port, `ios.yml`'s `swift-linux` job failed at its Test step, and the
 jobs that need it (`ios`, `archive-check`, and so `contact-sheet`) didn't run. A new vector file
@@ -871,9 +935,10 @@ no readout, and attaching `gesture-cancelled` when it rose. A tab tap (`tap(_:in
 `FixtureLaunchTests`' `show`, each reading for up to 2 seconds or until the heading comes) whose
 count rose and whose heading hasn't come is tapped once more; so are Retry (`OfflineTests`, whose
 request fails again at once, so the count alone tells), the place button (`PickerTests`'
-`openPicker`, `AdsTests`' `choose`: no picker open, as the readout says, its search box ending the
-wait only while the readout can't be read) and the gear (`openSettings` in `AdsTests`,
-`SettingsTests` and `UpgradeTests`: the gear still there and taking a tap, `sheetClosed`, not
+`openPicker`, `AdsTests`' `choose`, `NotificationsTests`' `openThePicker`: no picker open, as the
+readout says, its search box ending the wait only while the readout can't be read) and the gear
+(`openSettings` in `AdsTests`, `NotificationsTests`, `SettingsTests` and `UpgradeTests`, and
+`NotificationPermissionTests`' own: the gear still there and taking a tap, `sheetClosed`, not
 Close, which XCUITest may go on finding once an earlier Settings has closed). A tap the app
 completed is never tapped again; a cancelled touch never made one. Each is tapped again once at
 most, the second tap watched too. `scrollDown`'s drag goes through the same helper and its `Drag`
@@ -882,9 +947,10 @@ plays a step's cancelled drag once more before judging the page to scroll no fur
 `restore` goes round again after one, within its 12 drags. Their failures say what `debug-cancels`
 reads (`cancelsReport`): a heading, a picker or Settings that never came, a page that scrolls no
 further or an element never brought on screen; so do some failures after other gestures. The rest,
-about 70 direct taps, swipes and presses (on the picker's rows, stars and menus, Settings' rows,
-Buy and the like), are not watched: a cancel among them is never played again, and shows only in
-a failure that names the count, risen with no `gesture-cancelled` attachment for it.
+about 80 direct taps, swipes and presses (on the picker's rows, stars and menus, Settings' rows and
+switches, the notification card's buttons, Buy and the like), are not watched: a cancel among them
+is never played again, and shows only in a failure that names the count, risen with no
+`gesture-cancelled` attachment for it.
 
 **The contact sheet** tiles every attachment in its names' order (`ci/contact-sheet.mjs`, five
 screens to a row). `HomeAuditTests` attaches every screenful it audits as
@@ -1081,10 +1147,10 @@ and its look in "The iPhone app in the website's look", step 6).
   "Terms"); Help ("Contact us", "Support"); and "Version 1.0 (112)" from the bundle.
   willitsnow.today's pages open in Safari and the emails in the mail app, through `openURL`; every
   address is `Constants.Site` (core `SITES.snow` and `CONTACT_EMAIL`).
-- **Not yet, by design:** the Notifications section (phase 8 puts it after the units, before the
-  upgrade card) and, in Your privacy, what is kept for notifications with "Turn off notifications
-  and delete my data" (phase 8). None shows as a row that does nothing; `YourPrivacy` already takes
-  the lines it needs, and `SettingsActions` the delete action, nil until then.
+- **Notifications** (phases 8.1 and 8.2) sit after the units, before the upgrade card, and Your
+  privacy shows what the server keeps for them first, while registered, with "Turn off
+  notifications and delete my data" (below, "Phases 8.1 and 8.2: notifications"). Nothing shows as
+  a row that does nothing.
 - **Privacy choices** (phase 8.3) is real: `SettingsSheet` passes
   `!model.unlocked && ads.privacyChoices` (`AdsModel`, from UMP's last answer) to
   `SettingsScreen` and to `YourPrivacy`, whose "See Privacy choices." follows the ads line while
@@ -1097,10 +1163,12 @@ and its look in "The iPhone app in the website's look", step 6).
   each row's icon (`SettingsScreen.Icon`, one a row, the units' too), `AppVersion`, `MailDraft`
   (`contactUs()`, `reportAd(version:place:at:zone:)`, its `mailto:` URL
   encoded as `encodeURIComponent` encodes, and the `MailFallback` to show without a mail app),
-  `HowItWorks()`, `CreditsPage()` and `YourPrivacy(adsOn:privacyChoices:kept:)`.
-- **IsItUI:** `SettingsView(screen:privacy:upgrade:actions:)`, with the pages on its own stack
-  (`YourPrivacyView`, `HowItWorksView`, `CreditsView`, `NoticeView`, and since phase 7.1
-  `UpgradeView`) and `MailFallbackView`,
+  `HowItWorks()`, `CreditsPage()` and `YourPrivacy(adsOn:privacyChoices:kept:deleteStatus:)`
+  (`kept` filled, and `deleteStatus` added, in phase 8.2).
+- **IsItUI:** `SettingsView(screen:notifications:notificationPlace:privacy:upgrade:actions:)`
+  (the notifications since phase 8.1), with the pages on its own stack
+  (`YourPrivacyView`, `HowItWorksView`, `CreditsView`, `NoticeView`, since phase 7.1
+  `UpgradeView`, and since phase 8.1 `NotificationPlaceView`) and `MailFallbackView`,
   built from SheetStyle.swift's parts. `sheetChrome()` puts a sheet on the content surface, its
   system parts in the dark scheme and ink. `SheetPage(title:)` scrolls over `PageBackground`
   with the content palette, under its `PageTitle` (the answer's face at 35, a heading,
@@ -1207,7 +1275,11 @@ content: the content palette's gradient and glow, the plum cards and the units t
 with every band's palette and the background models' numbers into `Generated/Surfaces.json`
 (`surfacesJson`), whose sample colours the Swift reproduces before judging a pixel
 (`SurfaceFile.bundled`), so the proof and the tokens can't part; `brandColours.test.ts` holds every
-text pair the proof can allow to 4.5:1 on every band.
+text pair the proof can allow to 4.5:1 on every band. Since phase 8.1 a switch or toggle with a
+label is text to it too, its capsule one of the lines it draws: Settings' notification switches,
+which the app draws itself in the content surface's own colours (`SheetSwitchStyle`), so the proof
+can judge them as it judges a row, where UIKit's switch, its track and shadowed knob in colours no
+surface has, could only have been refused.
 
 ### How they meet
 
@@ -1273,9 +1345,11 @@ guards:
   pieces (`"/api/v1/search?"`, `"mailto:"`) and format specifiers have no words in that sense.
 - **The allowlist** is in the test, each entry with why it is never shown: accessibility
   identifiers, a crash's message (`fatalError` and its kin: DebugHooks' bad launch arguments), a
-  decoding error's description, a bundle's file and folder names, Info.plist keys, SF Symbols'
-  names, and three names: the `Accept` header, JavaScript's `Infinity` and the `Fallback` glyph
-  folder. A test fails when one of those names is no longer used.
+  decoding error's description, a Debug build's log line (`Logger`'s `debug`, read in Console,
+  never shown: since phase 8.1, a notification whose payload routes nowhere), a bundle's file and
+  folder names, Info.plist keys, SF Symbols' names, and three names: the `Accept` header,
+  JavaScript's `Infinity` and the `Fallback` glyph folder. A test fails when one of those names is
+  no longer used.
 
 A word it finds belongs in packages/mobile `appCopy.ts` (then `pnpm mobile:generate`), not the
 allowlist. What still passes is one lowercase word or a symbol alone outside any view (`let unit
@@ -1682,6 +1756,266 @@ search `subsystem:today.willitsnow.app.widgets`, and remove and add a widget, or
 the app, for a new timeline), and on the simulator in
 `xcrun simctl spawn booted log stream --predicate 'subsystem == "today.willitsnow.app.widgets"'`.
 
+## Phases 8.1 and 8.2: notifications
+
+Notifications in the app (spec sections 12.1 to 12.4, 10.2 item 5 and 10.6), on the server merged
+before them (packages/server `devices.ts` and `alerts.ts`; DECISIONS, the "Notifications"
+sections): a notification the evening before snow is likely at a place, and on the day, which
+the server sends, free for everyone. One pull request in two commits: 8.1, everything but Your
+privacy's live data; 8.2, what Your privacy shows is kept, and "Turn off notifications and delete
+my data". Carl left the open points to the agents ("Whatever you think is best boss"); DECISIONS
+has each answer and why ("The iPhone app's notifications (phases 8.1 and 8.2)").
+
+- **What shows: Settings → Notifications.** A card under "Notifications" (`notifications-heading`),
+  between the units and the upgrade card, in Settings' own parts:
+  - **The gate.** With nothing kept and the screen on approximate location, which is never a
+    notification place: "Choose a place for notifications: use your location or search for a
+    town." (`notify-notice`), then "Use my location" and "Search" (`notify-use-my-location`,
+    `notify-search`), each closing Settings and then opening the picker. No switch shows, not even
+    a dimmed one, whose words the contrast audit would fail.
+  - **The switches:** "Evening before (about 6pm)" and "On the day (about 7am)", each with its
+    note, then "Also when snow is possible" only while one of them is on (`notify-evening`,
+    `notify-morning`, `notify-possible`; value "0" or "1"). "Possible" can't be turned on alone
+    and goes off with the second of the others, so `alerts.v1` says what the server holds. Each
+    is a SwiftUI `Toggle` the app draws itself (`SheetSwitchStyle`): the whole row is one button,
+    and the switch a capsule in the content surface's own colours, ink with a card knob when on,
+    a hairline edge round the wash with a card knob when off. Not UIKit's switch: VoiceOver still
+    reads the label, the note and on or off, and every pixel is one the contrast proof knows.
+  - **Permission denied:** "Notifications are off for this app in Settings." (`notify-notice`),
+    "Open Settings" first (`notify-open-settings`, iOS Settings' page for the app's
+    notifications), and every switch off.
+  - **The place row** ("Place", `notify-place`), its value the place's name, or "Your location"
+    with "Follows your location each time you open the app." while it follows the phone. It
+    pushes "Notification place" on Settings' stack: the place kept, when it isn't the one on
+    screen (`notify-place-kept`); "Use the place on screen: Leeds" (`notify-place-on-screen`); and
+    "Use my location" (`notify-place-my-location`), which asks for location only at that tap and
+    says why when none comes (`notify-place-problem`: "Location access is off for this app in
+    Settings.", with Open Settings, `notify-place-open-settings`; or "Couldn't find your location.
+    Try again, or use the place on screen.", just "Couldn't find your location. Try again." when
+    the page offers no place on screen). A tap on the choice already in use goes back too.
+  - **The test row**, while evening or morning is on: "Send a test notification" (`notify-test`),
+    its result its detail and value: "Sent. It should arrive in a few seconds."; "Our server
+    isn't sending notifications yet, so nothing was sent." (production's dry run); "You can send
+    3 test notifications an hour. Try again later."; "Nothing is sent from 9pm to 7am at the
+    place. Try again after 7am there."; and "Couldn't send a test notification. Try again later."
+    for anything else. One at a time; without a registration it syncs first.
+  - **The status line** (`notify-status`): the server's own words for a place it refuses (400
+    `bad_location`), or "Couldn't save your notification choices. The app will try again when
+    you next open it." for a change that didn't reach it. A failed heartbeat says nothing.
+  - **The footer** ("These are forecasts, not official warnings. …", `notify-footer`), then, for
+    a UK place, "Met Office warnings" (`notify-warnings`), which opens the Met Office's warnings
+    page in Safari (`Constants.Outbound.metOfficeWarnings`). A place is in the UK when its country
+    is GB: a city slug's last part (`leeds-gb`), a searched place's country, or, for the phone's
+    cell, the answer on screen's when the screen shows that cell.
+- **What shows: the Today card** (`notification-card`), on the middle page (Today and Tomorrow
+  alike), only with an answer, above the upgrade row, in the free and paid versions alike: a chip
+  card with its line (`card-line`) and bordered chip buttons, side by side, wrapping onto the
+  next line when one doesn't fit, as the footer's links do (`FlowLayout`: each button laid out
+  once, never a `ViewThatFits` of copies, which failed the audits on PR #43's first macOS run).
+  Four kinds: a place on screen ("Get a notification the evening before snow is likely here.",
+  "Turn on" and "Not now"); approximate location ("Choose a place for
+  notifications: use your location or search for a town.", "Use my location", "Search" and "Not
+  now"); refused this session ("Notifications are off for this app in Settings.", "Open Settings"
+  and "Not now"); and turned on this session ("Done. You'll get a notification the evening before
+  snow is likely here. You can change this in Settings.", with no buttons). "Turn on" always
+  takes the place on screen. The card goes for good after "Not now", after the first switch
+  turned on anywhere, and after "Turn off notifications and delete my data"; it never shows while
+  permission is denied unless this session's "Turn on" was refused, and once they are allowed in
+  iOS Settings after that refusal it offers "Turn on" again. A line that comes after a tap is said
+  to VoiceOver once.
+- **What shows: Your privacy (8.2).** While registered, "What we keep for notifications" comes
+  first, under the title (`kept-heading`), so the page's audit at its top sees it whole: "ID
+  b8465956" (the registration ID's first 8 characters, enough for the server's
+  `ALERTS_FORCE_IDS`), "Leeds, Europe/London", "Snow units: cm", then each switch on in its
+  Settings words (`kept-line-<n>`), all from `alertSync.v1`. "Turn off notifications and delete
+  my data" (`delete-my-data`) deletes the server's record with the token last sent, turns every
+  switch off, forgets the place and puts the card away, then says "Notifications are off. We've
+  deleted your notification token, place, units and choices." where the block was
+  (`delete-status`, said to VoiceOver once). Offline it says "Couldn't reach our server, so
+  nothing is deleted yet. The app will try again when you next open it." above the block, which
+  stays, since the server still holds the record; the next sync deletes it, and the line then
+  says it is done. No confirmation: turning notifications on again undoes it. The privacy line,
+  and the website's notice, now name "your notification choices" among what the app keeps on the
+  phone.
+- **When it syncs** (`NotificationsModel`, IsItState), at spec 12.2's moments: launch step 6
+  (`syncAlerts`, which hands the place on screen and its units to the model and returns at once,
+  so a pending route never waits on a PUT), a place chosen in the picker and a change of units
+  (the same hook), every `.active`, a token arriving, Settings or the place page appearing, and
+  each change in Settings, the card or Your privacy. Each sync runs `AlertSync.action` against
+  what `alertSync.v1` says the server holds: a PUT when the fingerprint differs or the last is 7
+  days old (the heartbeat); a DELETE when evening and morning are both off or the permission is
+  denied; nothing while there is no place, no token or no units yet. Syncs are single-flight: a
+  change made while a request is out is sent once it is answered, all such changes together. A
+  429 (the server's one write a minute) is tried once more at its `Retry-After`, or after 60
+  seconds without a usable one; a 204 to a PUT forgets the registration. After an offline first
+  launch, whose step 6 had no units, they come with Settings' or the card's place on screen, and
+  the first answer that chooses them (`AppModel.load`) syncs again.
+- **What is kept**, in the app's own defaults (not the App Group), written only by
+  `NotificationsModel`: `alerts.v1`, `{ v: 1, prefs, place? }`, the switches and the place
+  (`{ follows: false, target, name }`, chosen and fixed, or `{ follows: true, target }`, the
+  phone's 0.05° cell); `alertSync.v1`, `{ v: 1, fingerprint, at, token, env, units, response }`,
+  the registration the server holds as the last PUT it answered made it (the units from what was
+  sent, as the answer has none); and `ui.alertCard`, whether the card was put away. Another
+  version, or anything unreadable, is "off, nothing kept". The token kept is only to name the
+  server's record, for a DELETE or a test: a fresh token that differs is simply sent, and the old
+  record isn't deleted, since on a phone restored from another's backup the old token is that
+  phone's, still in use; Apple's 410 or the server's 90 days clean it up.
+- **The place.** First turned on, it is the place on screen, chosen and fixed, or the phone's
+  location, followed, when the screen shows the phone's own place; approximate location is never
+  a place (the gate). A chosen place never follows browsing. A followed place moves with a device
+  place chosen on screen, and with a fix of its own each time the app is opened, only while
+  location is already allowed, never asking.
+- **Permission and the token.** Asked only at the first switch turned on, in Settings or by the
+  card's "Turn on", with `[.alert, .sound, .providesAppNotificationSettings]` (the third adds the
+  "Notification Settings" link to iOS Settings' page for the app, which opens Settings →
+  Notifications). Read again at the start, as Settings or the place page appears, and at every
+  `.active`. Found denied: every switch off, and the server's record deleted. Found "not
+  determined" with a switch on or a registration kept (only a backup restored from another phone
+  can do that): the switches off and the registration forgotten on the phone only, with no
+  request, since its token isn't this phone's. A status iOS adds later counts as allowed, which
+  changes nothing. `registerForRemoteNotifications()` runs at the start, at every `.active` and
+  after the prompt is allowed, while a switch is on and the permission allows; no token yet is a
+  resting state, never a spinner.
+- **The centre's delegate** (`NotificationDelegate`, IsItNotifications) is a plain `NSObject`, not
+  main-actor, with the completion-handler forms of `willPresent`, `didReceive` and
+  `openSettingsFor`, never the async ones: an async `didReceive` on a type that isn't main-actor
+  ends off the main thread and crashes a tap ("Call must be made on main thread"), and a
+  main-actor one doesn't compile in Swift 6. Each copies the payload out as JSON `Data`, then in
+  one main-actor task posts it and calls the system's completion handler there. In the
+  foreground it shows the banner, the list and the sound, and the app refetches quietly.
+  `AppDelegate`, through `@UIApplicationDelegateAdaptor`, sets it in
+  `application(_:willFinishLaunchingWithOptions:)`, so a cold-start tap is never missed, and owns
+  it, as the centre holds it weakly. It and the token's two callbacks post to
+  `NotificationInbox.shared` (IsItState), which keeps every event, in order, until
+  `WillItSnowApp.init` attaches the handler (`NotificationDispatch.handle`), so the order of
+  `App.init` and the adaptor never matters.
+- **The push environment.** A registration names its APNs environment from the Info.plist's
+  `IsItPushEnvironment` = `$(PUSH_ENV)`: `sandbox` in Debug and `production` in Release
+  (Snow.xcconfig), production when absent. `check-archive.sh` fails a Release archive that says
+  anything else. The entitlements are unchanged: the App Store export's profile writes
+  `aps-environment` production. **Run Debug, not Release, on a phone to test notifications**: a
+  Release build run from Xcode is signed for the sandbox but says production, and the server
+  deletes it at its first push (APNs answers `BadDeviceToken`).
+- **Taps.** `NotificationRouter.route(json:now:zones:)` (IsItLogic) reads the payload's JSON with
+  `DeepLink.route(payload:placeNow:)`, taking each known place's time zone by its `Target.key`:
+  the registration's, then the answer on screen's. A place in neither is taken as current, as the
+  client rule says. A payload that routes nowhere opens the app as usual, with one `Logger.debug`
+  line in Debug builds, which holds none of the payload. A route goes through `AppModel.open(_:)`,
+  which holds a cold-start tap until the launch has finished, then puts a `.place` route on
+  screen itself: another place is chosen as the picker chooses one (`place.v1`, the recents, a
+  fetch, the notifications' sync); the place on screen only gets its view; and a route with no
+  view opens on the place's view for the time of day. A route that comes while the app is still
+  away keeps its view over the return's reset (`routedWhileAway`: the shared commit's guard for
+  `.view` routes, extended to `.place`). `willitsnow://settings/notifications` and iOS Settings'
+  link open Settings.
+- **IsItCore, tested on Linux:** IsItLogic's `AlertSwitch`, `AlertPlace`, `AlertSettings`
+  (`alerts.v1`), `OnScreen` and `AlertSync.firstPlace`, `.following`, `.setting` and
+  `.country(of:onScreen:)`; `DeviceResponse`, `DeviceIdentity`, `AlertRegistration`
+  (`alertSync.v1`), `AlertSync.SyncReply` and `.TestOutcome` with `syncReply` and `testOutcome`,
+  and `PushToken.hex`; the presenters `NotificationSettings` (from `NotificationsState`),
+  `NotificationPlacePage` with `PlaceChoice`, `NotificationCard`, and Your privacy's
+  `YourPrivacy.keptLines` and `.deleteStatus` (8.2); `NotificationRouter`; `SettingsScreen`'s
+  eleven new icons, `SettingsPage.notificationPlace` and `Action.notification`; and
+  `AppVersion.wire`. IsItState's `NotificationsModel`, behind `NotificationPlatform` (the system)
+  and `NotificationStore` (`MemoryNotificationStore` in the tests); `NotificationInbox` and
+  `NotificationDispatch`; `APIClient.registerDevice`, `forgetDevice(token:)` and
+  `testDevice(token:)` (`Accept` and `Content-Type: application/json`, 12 seconds, and a thrown
+  error is a failure, logged nowhere); `HTTPTransport.send`, with `HTTPMethod`, a request's body
+  and a response's `Retry-After`; and AppModel's `.place` routes.
+- **IsItNotifications** (IsItKit, the app's alone: the widget links IsItServices, and
+  `registerForRemoteNotifications` is unavailable in an extension): `UserNotificationsPlatform`
+  (the permission, asked only by `requestPermission()`, and the registration),
+  `NotificationDelegate`, and `NotificationDefaults` (the three keys).
+- **IsItUI and IsItServices:** `NotificationsSection`, `NotificationPlaceView` (its row is
+  `NotificationPlaceRow`), `NotificationCardView` and `NotificationActions`; `SheetSwitchStyle`,
+  `RowLabel`'s `value` and `SheetSection`'s `headerID`; `SettingsView` and `SettingsActions`
+  taking the notifications; and `YourPrivacyView`'s kept block and delete line (8.2).
+  `URLSessionTransport.send` sends a request's method and body and reads its `Retry-After`;
+  `configuration()`, `session()` and `init(session:)` are unchanged.
+- **The app:** `WillItSnowApp` makes `NotificationsModel` over `UserNotificationsPlatform` (or a
+  Debug build's stand-in) and `NotificationDefaults`, attaches the inbox's handler, and calls
+  `becameActive()` at every `.active`; `AppDelegate` is the only adaptor; `LiveHooks` fills step 6
+  and the settings route; `HomeView` draws the card and opens every sheet through `present(_:)`,
+  which, from one presentation to another, closes the first and opens the next once it has gone
+  (`onDismiss`), so Settings' "Search" closes Settings and then opens the picker, never two
+  presentations changing in one transaction; `SettingsSheet` builds the section, the place page
+  and Your privacy from the model.
+- **The words** are `AppCopy`'s, from packages/mobile `appCopy.ts`: new in 8.1
+  `notifyPlaceTitle`, `notifyLocationDenied`, `notifyLocationUnavailable`, `testDryRun`,
+  `testQuiet`, `notifyNotSaved` and `cardOn`; in 8.2 `keptID`, `keptPlace`, `keptUnits`,
+  `deleteDone` and `deleteNotYet`, and `privacyForecast` changed; core's `yourLocation`
+  (`CoreCopy`) and `MET_OFFICE_WARNINGS` (`Constants.Outbound.metOfficeWarnings`). `copy.test.ts`
+  holds `testLimited` to the server's 3 tests an hour and `testQuiet` to its 409's words. Nothing
+  a user reads says "alert", "warning" or "danger", the footer's "not official warnings" and the
+  Met Office link apart.
+- **The fixtures**, written by the server's own code (packages/mobile `deviceFixtures.ts`): the
+  devices replies in `Fixtures/Devices` (`put-leeds`, `put-durham`, `put-device`,
+  `put-kathmandu`, `put-bad-place`, `put-twice`, `delete`, the seven `test-*` answers and
+  `rate-limited`) and the server's notification payloads in `Fixtures/Payloads` (`durham-evening`,
+  `durham-old`, `malformed`, and `evening.apns` for `simctl push`). Their token is a fixture's,
+  never a real one.
+
+**Its tests.** On Linux (`swift test` in IsItCore): the five new ports of `alerts.json`;
+`AlertRecordsTests` (the keys' round trips and defaults, every devices fixture mapped as the client
+maps it, the token's hex, the country, the wire version); `NotificationSettingsTests`,
+`NotificationCardTests` and `NotificationRouterTests`; `InfoPagesTests` (the kept lines and the
+delete's words, 8.2); `NotificationsModelTests` (the launch, the switches, the place, the sync, the
+test, the card and Your privacy, with a gate for each call in every race: a token during the
+start, two taps asking once, a late fix, a delete while a PUT is out, one test at a time),
+`NotificationInboxTests`, `NotificationDispatchTests`, `DevicesAPITests` and `AppModelTests`'
+`.place` routes. In packages/mobile: the copy, the constants, the devices fixtures made again and
+compared whole, every city slug ending in its country (the "UK places" rule), no 64-digit hex
+literal in DebugHooks.swift, and the privacy line paired with the website's notice; packages/client
+`alerts.test.ts` at 100% coverage; and the server's contract test, which reads its real replies
+through `syncReply` and `testOutcome`. On the macOS CI:
+
+- **The Unit plan:** `NotificationTests` (the centre's delegate set before the launch finishes,
+  compared by name, since the test bundle holds its own copy of IsItNotifications' classes; the
+  delegate's JSON reaching the router as the dictionary itself would; a payload JSON can't hold
+  routing nowhere; every authorisation status, and one to come; the options; a Debug build in the
+  sandbox) and `InfoPlistTests` (no background modes; the privacy manifest's Coarse Location and
+  Device ID).
+- **The UI plan:** `NotificationsTests`, ten tests over the stand-in: the gate; turning on, the Met
+  Office link, the test and, 8.2's, Your privacy's kept block and its delete; a refused
+  permission; denied later, so deleted at the next launch; every test result; a change offline;
+  the place page and "Use my location"; the card's "Turn on"; the card at approximate location,
+  and "Not now" kept over a relaunch; and a cold-start tap's route to Durham, a malformed one and
+  the settings link. They audit Settings at approximate location, on and denied, the place page
+  and Your privacy registered, each at its top: Settings is checked to be where it opened
+  (`expectSettingsAtItsTop`), as a scrolled sheet's faded, covered text fails the contrast check
+  (PR #43's first macOS run, in DECISIONS). So no audit checks the contrast of the Met Office
+  warnings row, under the Debug recorder at the top, or of the "on" state's footer, cut by the
+  content's foot; that run's scrolled audits checked them whole and they passed.
+  `NotificationPermissionTests.testTheSystemPromptAllows` is the one test that meets the system's
+  prompt, through SpringBoard; it skips, never passes, when the simulator has already allowed
+  them. `HomeAuditTests` gains four card cases (leeds-dry's card for
+  a place and the first launch's for approximate location, each at Large and AX3). Every older UI
+  test launches with the card hidden (`-uitest`), so their home screens and audits are as they
+  were; their taps on Settings rows under the new card scroll first. The new tests' gear, place
+  button and tabs go through the gesture helper as the older tests' do (above, "A gesture the
+  simulator cancelled"), and a failure after a gesture names `debug-cancels`.
+- **The banner** (`ci/push.sh`, after the UI plan, on its simulator, where
+  NotificationPermissionTests allowed notifications): `simctl push` of `evening.apns` with the app
+  open on Durham, then with it closed, each proved by a screenshot that differs from the one taken
+  just before (`notification-banner-app`, `notification-banner-home`, in the attachments' `Push`
+  folder).
+- **Only Carl's phone shows** a real token and its PUT, APNs' delivery, a tap with the app
+  force-quit, the Lock Screen, iOS Settings' "Notification Settings" link, a denial made in iOS
+  Settings and a followed place moving (docs/SETUP.md, "The app's notifications (phases 8.1 and
+  8.2)").
+
+**Trying it.** On the simulator, a Debug build stands in for the system under `-uitest`,
+`-notifications` or `-pushToken` (below, "Debug hooks"): `-notifications allow` (the prompt allows;
+`deny` refuses), `-devices limited,quiet,dryrun,gone` for the test's answers in turn, `-route
+durham-evening` for a cold-start tap, `-alertCard shown` for the card under `-uitest`, and `-place
+place=leeds-gb` to launch on a city. Without them, a Debug build run on the iPhone registers a
+real token in the sandbox with willitsnow.today: Settings → Notifications → "Evening before (about
+6pm)" → Allow → "Send a test notification" answers with the dry run's line while production
+sends nothing. For a real sandbox delivery the agents can give you a deploy preview that sends;
+point the Debug build at it with `-apiOrigin` and the preview's URL (below, "Debug hooks"), and
+the Push Notifications Console's delivery log (developer.apple.com) shows it. Run Debug, never
+Release, on a phone (above, "The push environment").
+
 ## Phase 8.3: the ads
 
 The free version's ads (spec section 14), as Carl widened phase 8.3: three placements, after
@@ -1755,19 +2089,20 @@ full-screen ad: choose places on a later launch.
 
 ## CI (`.github/workflows/ios.yml`)
 
-| Job             | Runs on                     | What it proves                                                                                                                                                                                                                                                                                                                                                                          |
-| --------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `generated`     | ubuntu                      | `pnpm mobile:check`                                                                                                                                                                                                                                                                                                                                                                     |
-| `swift-linux`   | ubuntu, `swift:6.3.3-noble` | every Swift file lints; IsItCore's tests pass (with `tzdata`), the vector guard included: every vector file checked by its port (above)                                                                                                                                                                                                                                                 |
-| `ios`           | `macos-26`, Xcode 26.6      | the project generates; packages resolve to the pins; the app, widget and tests build for the iPhone 17 simulator (iOS 26.5), with the icon and glyph catalogues; the Unit and UI plans pass, with the Unit plan's widget snapshots; a Release build has no debug hooks, no fixtures, no StoreKit configuration and no StoreKitTest, and no ads, location or purchase code in the widget |
-| `archive-check` | `macos-26`, Xcode 26.6      | an unsigned Release archive for iPhones builds and passes `scripts/check-archive.sh` with ads test: the release job's archive checks, on every pull request, with no key                                                                                                                                                                                                                |
-| `storekit`      | `macos-26`, Xcode 26.6      | the StoreKit plan passes on an iPhone 17 simulator with iOS 26.2 (downloaded if the runner lacks it), each test allowed 60 seconds, within 60 minutes; beside `ios`, not after its UI plan, which already takes most of that job's 90                                                                                                                                                   |
-| `contact-sheet` | ubuntu                      | tiles every attached screen and widget into one PNG, whenever `ios` uploaded attachments (failed tests included); skipped when `ios` failed before its tests ran                                                                                                                                                                                                                        |
+| Job             | Runs on                     | What it proves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| --------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generated`     | ubuntu                      | `pnpm mobile:check`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `swift-linux`   | ubuntu, `swift:6.3.3-noble` | every Swift file lints; IsItCore's tests pass (with `tzdata`), the vector guard included: every vector file checked by its port (above)                                                                                                                                                                                                                                                                                                                                                                    |
+| `ios`           | `macos-26`, Xcode 26.6      | the project generates; packages resolve to the pins; the app, widget and tests build for the iPhone 17 simulator (iOS 26.5), with the icon and glyph catalogues; the Unit and UI plans pass, with the Unit plan's widget snapshots; after the UI plan, `ci/push.sh` shows the notification banner over the app and on the Home Screen (`simctl push`); a Release build has no debug hooks, no fixtures, no StoreKit configuration and no StoreKitTest, and no ads, location or purchase code in the widget |
+| `archive-check` | `macos-26`, Xcode 26.6      | an unsigned Release archive for iPhones builds and passes `scripts/check-archive.sh` with ads test: the release job's archive checks, on every pull request, with no key                                                                                                                                                                                                                                                                                                                                   |
+| `storekit`      | `macos-26`, Xcode 26.6      | the StoreKit plan passes on an iPhone 17 simulator with iOS 26.2 (downloaded if the runner lacks it), each test allowed 60 seconds, within 60 minutes; beside `ios`, not after its UI plan, which already takes most of that job's 120                                                                                                                                                                                                                                                                     |
+| `contact-sheet` | ubuntu                      | tiles every attached screen and widget, and push.sh's two banner screenshots, into one PNG, whenever `ios` uploaded attachments (failed tests included); skipped when `ios` failed before its tests ran                                                                                                                                                                                                                                                                                                    |
 
 No job needs a secret. The `ios` job pins `macos-26` (never `macos-latest`, never `-xlarge`) and
-selects Xcode 26.6 explicitly. It caches `apps/ios/.spm` (the package checkouts and Google's
-binary SDKs) on the hash of `Package.resolved`, and the XcodeGen zip, whose SHA-256 is checked
-on every run. It uploads, for five days:
+selects Xcode 26.6 explicitly. It may run for 120 minutes: PR #43's first run, with the widgets
+and the notifications, took 85 of the 90 it had. It caches `apps/ios/.spm` (the package
+checkouts and Google's binary SDKs) on the hash of `Package.resolved`, and the XcodeGen zip,
+whose SHA-256 is checked on every run. It uploads, for five days:
 
 - `ios-results`: `Build.xcresult`, `Unit.xcresult`, `UI.xcresult`, and the JSON xcresulttool
   read from them;
@@ -1776,7 +2111,9 @@ on every run. It uploads, for five days:
 - `ios-attachments`: the PNGs the tests attached, as `xcresulttool export attachments` writes
   them (each named by a UUID, its test's name for it in the folder's `manifest.json`), by test
   plan, and `review/app-upgrade.png`, the upgrade sheet's screenshot for App Review, copied there
-  under that name (`ci/test.sh UI`; docs/SETUP.md, "The app's purchase");
+  under that name (`ci/test.sh UI`; docs/SETUP.md, "The app's purchase"), and since phase 8.1
+  `Push/`, the notification banner over the app and on the Home Screen (`ci/push.sh`,
+  `notification-banner-app.png` and `notification-banner-home.png`);
 - `contact-sheet`: `contact-sheet.png`, every attachment at true size (a third of the 3x pixels),
   named underneath;
 - `package-resolved`: only when the committed file can't be used (below).
@@ -1785,7 +2122,9 @@ Each step's outcome goes to the run's summary page and to the job log: the build
 warnings with file and line, each test plan's counts and every failure with its file and line,
 the UI plan's audit calls' times, read from its attachments (the ten slowest and every call that
 timed out, with the time a timeout took, which says roughly how long XCTest's deadline is)
-(`ci/test.sh`, using `ci/xcresult-summary.mjs`), and the Release checks. xcbeautify also turns
+(`ci/test.sh`, using `ci/xcresult-summary.mjs`), the notification banner (`ci/push.sh`: shown,
+or failed, with an error naming the shot that didn't change and the likely cause), and the
+Release checks. xcbeautify also turns
 compiler errors into annotations.
 
 ## How agents read CI results
@@ -1800,7 +2139,8 @@ minutes, the macOS job in about 15.
    jobs and their steps' conclusions (`actions_get`).
 2. `get_job_logs` for a failed job (or only its failed steps). The step summaries are in the log
    as well: search for `### Build:`, `### Unit:`, `### UI:`, `### StoreKit:` (in the `storekit`
-   job's log), `### Audit times:`, `### Release build:`, `### Archive, unsigned` and
+   job's log), `### Audit times:`, `### Notification banner:`, `### Release build:`,
+   `### Archive, unsigned` and
    `### Archive checks:`. Each failure is a
    table row with the test, `File.swift:line` and the message, or for the archive checks a line
    naming the check.
@@ -1903,7 +2243,9 @@ launch argument. So far there are these:
   StoreKit's place (below); and since PR #40 it counts the touches the system cancels, for
   `debug-cancels` (below);
 - `-resetStore` forgets the place, the units, the saved answer, the recent and saved places and
-  when the last full-screen ad showed before the model reads them, for a first launch (not
+  when the last full-screen ad showed, and since phase 8.1 the notifications' switches and place,
+  their registration and the card's being put away (`alerts.v1`, `alertSync.v1`, `ui.alertCard`),
+  before the model reads them, for a first launch (not
   `unlock.v1`, which only `PurchaseModel` writes, and which nothing reads under the stand-in);
   every UI test's first launch passes it;
 - `-fixture <name>` answers every request for an answer with that fixture (a transport of its
@@ -1979,6 +2321,39 @@ launch argument. So far there are these:
   none, so on an iPhone UMP still goes by where the phone is. Either way UMP forgets the answer it
   kept at each such launch, so the form comes again. `-resetStore` leaves UMP's own answer alone.
   Any other value stops the app;
+- the notifications' stand-in (`FakeNotifications`, phase 8.1): under `-uitest`, `-notifications`
+  or `-pushToken` (`standsInForNotifications`) the app never asks the system's notification
+  centre, nor gives it its delegate, unless `-notifications system`, so no UI test leaves a
+  permission behind but the one that means to. The permission is as `-notifications` says, and
+  registering posts the token `-pushToken` names to the inbox a moment later, as UIKit would;
+- `-notifications allow|deny|authorized|denied|provisional|system`: not yet asked, with the prompt
+  allowing (`allow`, the default) or refusing (`deny`), its answer then kept; that state from the
+  start; or the real centre's permission and delegate (`system`, for NotificationPermissionTests
+  and `ci/push.sh` only; the token is still the stand-in's). Any other value stops the app;
+- `-pushToken <hex>|none|fail`: what registering gives: that token (lowercase hex, 64 to 200
+  digits), none, as some devices give, or the failure; without it, the token of
+  `Fixtures/Devices/put-leeds.json`, so no real token is in the app or a test, and the devices
+  stub knows it. Any other value stops the app;
+- `-devices sent|dryrun|limited|quiet|gone|down[,…]|offline`: the devices calls' answers under
+  `-fixture` and `-network` (`DevicesStub`, from `Fixtures/Devices`, which the server's own code
+  wrote). A PUT with evening and morning off gets 204, as the server forgets the device; any
+  other PUT the reply of the `put-*` fixture registered for the same place, with the switches it
+  sent, 200, or `put-bad-place`'s 400 for a place no fixture has (a body that doesn't decode, a
+  400 with none); a DELETE 204; and each test send the `test-*` fixture of the next name in turn,
+  the last repeating (`sent` by default), with its `Retry-After`. `offline`, given alone, fails
+  every devices call with no connection. Neither transport tells the recorder of a devices
+  request, which asks in no units. A name with no fixture stops the app;
+- `-alertCard shown`: under `-uitest` the Today card reads as put away and putting it away writes
+  nothing (`CardHidden`), so every older UI test's home screens, and so their audits, are as they
+  were; `-alertCard shown` shows it. Any other value stops the app;
+- `-place <query>`: after `-resetStore`, keeps that place (`Target(query:)`, a city's or a
+  searched place's) as `place.v1`, so a test launches on it. A query that is no place, or
+  approximate location's, stops the app;
+- `-route <name>` posts `Fixtures/Payloads/<name>.json`, the server's own payload, to the inbox as
+  the tap that launched the app (`DebugHooks.route()`), through the same router and the same hold
+  until the launch has finished. A name with no payload stops the app. A tap whose payload routes
+  nowhere writes one `Logger.debug` line in Debug builds, with none of the payload
+  (`DebugHooks.unrouted()`); Release's stub does nothing;
 - the ads readout, which `AdsTests` reads: unless `-noads 1`, three clear one-point elements in the
   home screen's corner, `debug-ads` (the ads model's phase: `idle`, `asking`, `withheld`, `on`, or
   `off` once a purchase has stopped them), `debug-interstitial` (`ready` or `none`) and
@@ -2019,7 +2394,8 @@ launch argument. So far there are these:
   `XCTestConfigurationFilePath` in its environment), it doesn't launch (`AppModel.launch()`), so
   the hosted tests have the App Group to themselves, and its `PurchaseModel` never starts (its
   `becameActive()` does nothing before launch step 2), so the StoreKit tests' transactions are
-  theirs alone; a launch with `-fixture` or `-network` always launches.
+  theirs alone, and its `NotificationsModel` never starts (nothing before step 6), so the host
+  never asks the notification centre; a launch with `-fixture` or `-network` always launches.
 
 A fixture name that doesn't exist or doesn't decode, a `-now` that isn't a moment, a `-clock`
 that is neither `fixed` nor `run`, a `-location` that is none of its forms, or a saved answer
@@ -2028,7 +2404,9 @@ that is neither `fixed` nor `run`, a `-location` that is none of its forms, or a
 The fixtures are the ones `pnpm mobile:generate` writes for IsItCore's tests: 21 answers from
 the real server (two with a block deleted), each with a `_fixture` note saying what it shows
 (`durham-tomorrow`, `kathmandu-0545`, `london-dst-autumn-night`, `stale`, `old-forecast` and the
-rest; the list is in `packages/mobile/src/fixtures.ts`). The app's Debug builds bundle that
+rest; the list is in `packages/mobile/src/fixtures.ts`), and since phase 8.1 the devices replies
+(`Fixtures/Devices`) and the notification payloads (`Fixtures/Payloads`) the server's code made
+(`packages/mobile/src/deviceFixtures.ts`). The app's Debug builds bundle that
 folder; `EXCLUDED_SOURCE_FILE_NAMES = Fixtures` leaves it out of Release. The golden vectors
 beside them (`Resources/Vectors`, the files section 7.4 lists, one case to a line) are for
 IsItCore's tests only.
@@ -2038,9 +2416,11 @@ every run and fails if a binary names a hook, a fixture or a StoreKit configurat
 the app links StoreKitTest, or the widget links Google Mobile Ads, the app's location code or its
 purchase code (`StoreKitPurchases`; the widget links StoreKit itself, to read the purchase, from
 7.2). `scripts/check-archive.sh` checks the unsigned Release archive on every run
-(`archive-check`) and the signed one before each upload, for the 18 hooks of section 9.8
-(`-network`, `-location`, `-purchase` and `-restore` among them, as short literals, and
-`FakePurchases`), the same three purchase checks, location code in the widget, and the rest of
+(`archive-check`) and the signed one before each upload, for the 25 hooks of section 9.8 and
+phase 8.1 (`-network`, `-location`, `-purchase`, `-restore`, `-notifications`, `-devices` and
+`-place` among them, as short literals, and `FakePurchases`, `FakeNotifications` and
+`DevicesStub`), the same three purchase checks, location code and notifications code in the
+widget, the app's push environment (production) and its manifest's device ID, and the rest of
 section 18.3's list. It looks for `-route` only where no letter follows
 it, since Google's SDK, linked into the app, holds OpenSSL's name `sbgp-routerIdentifier`
 (DECISIONS, "Ads in the iPhone app: three placements").
@@ -2058,18 +2438,21 @@ found by strings.
 ## Settled
 
 The early questions of spec section 26 that phases 0, 2, 7.1 and 7.2 settle, and one phase 7.1
-adds.
+adds. Phase 8.1 adds two of its own: the cold-start tap (`8.1`) and the banner from `simctl push`
+(`8.1 banner`).
 
-| #   | Question                                                                                                                                           | Status                                                                                                                                                                        | What settles it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Evidence so far                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| V1  | Do App Group defaults and the group container work in CI's simulator builds, signed to run locally?                                                | Pending CI                                                                                                                                                                    | `AppGroupTests` in the Unit plan (`ios` job): the group's container opens, its defaults round-trip, and the widget's timeline (`WidgetTimeline`, over the real group, as the extension opens it) reads the answer the app saved. If not, the Debug fallback is already there, and the test then also runs on Carl's device build.                                                                                                                                                                                                                                                                                                                                                     | None yet: needs the first `ios` run.                                                                                                                                                                                                                                                                                                                                                                                                              |
-| V2  | Do UI tests on the runner use the scheme's StoreKit configuration (can `UpgradeTests` buy against Snow.storekit)?                                  | No, on the runner's iOS 26.5, from Apple's notes and developers' reports rather than a run of ours                                                                            | StoreKit Test doesn't connect to the simulator's test environment on iOS 26.3 to 26.5 (FB22500243, which Apple's iOS 26.6 notes list as fixed, and the image has no 26.6 simulator runtime), FB22237318 was still reported on 26.5 though its notes list it fixed, and the confirmation sheet is the system's either way. So the UI tests buy through StoreKit's stand-in (`FakePurchases`, `-purchase`, `-restore`), and the `SKTestSession` tests run hosted by the app, in the StoreKit plan, on iOS 26.2 (next row). Once the image has a simulator runtime with the fix, move the StoreKit plan to it, and try a UI test against Snow.storekit there.                            | Apple's iOS 26.5 and 26.6 release notes and an Apple engineer's forum answer (June 2026: "fixed for simulators starting with iOS 26.6"); forum reports that 26.3 to 26.5 simulators fail (purchases answer `.userCancelled` at once, the configuration isn't saved) and that 26.0 to 26.2 work; the runner image 20261013 has iOS 26.2, 26.4 and 26.5 simulators. Read 27 October 2026 (DECISIONS, "The purchase in the iPhone app (phase 7.1)"). |
-| 7.1 | Do the `SKTestSession` tests pass on the runner's iOS 26.2 simulator?                                                                              | Pending CI                                                                                                                                                                    | The `storekit` job: `ci/simulator.sh 26.2` boots an iPhone 17 on iOS 26.2 (downloading the runtime once if the runner lacks it), and the StoreKit plan runs there, each test logging the iOS version, every buy and restore test first requiring the product loaded, and the cancel test buying again once its cancel is cleared, so a broken test environment fails rather than passes. If the image drops 26.2 (simulator.sh then stops with one error naming it) or 26.2 fails as 26.3 to 26.5 do: keep the suite and its plan, and run it on a Mac with iOS 26.2 (Carl's), or move it to a newer runtime with StoreKit Test fixed once the image has one; never skip it silently. | None yet: needs the first `storekit` run. The suite type-checks on Linux against stub StoreKit and StoreKitTest modules.                                                                                                                                                                                                                                                                                                                          |
-| V3  | Does `Transaction.currentEntitlements` answer inside the widget extension?                                                                         | Open: only a device answers it (the Xcode StoreKit environment is the app's bundle ID's)                                                                                      | The timeline's log line, `storekit=answered:N` or `late`, asked on every timeline, so `answered:1` on a phone that has bought means the extension sees the purchase, in Console.app on a Mac with Carl's iPhone attached (docs/SETUP.md, "The app's widgets")                                                                                                                                                                                                                                                                                                                                                                                                                         | None yet. Either answer is safe: the widget trusts a verified entitlement it can see, never locks on an empty or late one, and waits at most 2 s.                                                                                                                                                                                                                                                                                                 |
-| V4  | Do Foundation's time zones on Linux match core's `localDateTime` for every zone in the vectors?                                                    | Pending CI                                                                                                                                                                    | `placeTime.json` in `swift-linux` (phase 3.3). PR 0.1's Linux run decodes fixtures only, so it doesn't cover time zones.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | PR 3.3 in Docker (`swift:6.3.3` with `tzdata`), 23 October 2026: `PlaceTime.local(_:in:)`, a Gregorian calendar read at `secondsFromGMT(for:)`, falling back to UTC, passes all 75 `placeTime.json` cases: London across both clock changes, Kolkata (+5:30), Kathmandu (+5:45), Adelaide, Kiritimati (+14), Denver, `Etc/GMT+1`, `Etc/GMT+7`, UTC and two unknown zones. The earlier probe agreed.                                               |
-| V7  | Do the generated SVG template glyphs render correctly?                                                                                             | Pending CI                                                                                                                                                                    | The contact sheet: `GlyphSnapshotTests` (Unit plan) draws each glyph from SnowKit's catalogue, whole and as its still and drift layers, in its band's ink on its gradient, without forcing template rendering. If they don't render as the website draws them, or show black, SnowKit switches to `Fallback/Glyphs.xcassets`, the same sets as PNGs: two lines in IsItKit's `Package.swift`.                                                                                                                                                                                                                                                                                          | resvg renders all 16 SVGs as the website draws them (the PNG fallback is its output). Core SVG is unproven until the first `ios` run.                                                                                                                                                                                                                                                                                                             |
-| V11 | Do Google Mobile Ads 13.11.0 and UMP 3.1.0 resolve and cache through SPM on the runner? Is the demo app ID right? Does UMP's debug geography work? | Resolve and cache: pending CI. App ID and geography: settled on the simulator by 3f91596's run (the demo banner in the band under `other`, Google's consent form under `eea`) | The `ios` job's `Resolve packages` step (only the committed versions) and the `.spm` cache, whose hit or miss the run summary shows; the build then compiles IsItAds against both SDKs. Settled by the first green `ios` run and the cache hit on the run after it. The demo app ID and the debug geography: `AdsTests` (UI plan), whose band under `-umpGeography other` shows Mobile Ads started with the demo app ID, and whose consent form under `eea` shows the geography works on the simulator; each skips when Google doesn't answer, which settles nothing.                                                                                                                 | Only the pins so far: `swift package resolve` on Linux resolved both at their tags' revisions, which match `git ls-remote`, but stopped before the binary zips (dl.google.com is blocked here). The runner is the first to download, check and cache them. App ID and geography: none yet, as no run has started the ads; the Info.plist's app ID is Google's demo one (`check-archive.sh` checks it).                                            |
-| V13 | Will `xcodebuild` run the iPhone-only app on an iPad simulator, in compatibility mode?                                                             | Pending CI                                                                                                                                                                    | `ipad-compat` in `ios-nightly.yml` (spec section 18.2), which is still to be written. If not: `simctl install`, then `simctl io` screenshots for an agent to review.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | None yet.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| #          | Question                                                                                                                                           | Status                                                                                                                                                                        | What settles it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Evidence so far                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V1         | Do App Group defaults and the group container work in CI's simulator builds, signed to run locally?                                                | Pending CI                                                                                                                                                                    | `AppGroupTests` in the Unit plan (`ios` job): the group's container opens, its defaults round-trip, and the widget's timeline (`WidgetTimeline`, over the real group, as the extension opens it) reads the answer the app saved. If not, the Debug fallback is already there, and the test then also runs on Carl's device build.                                                                                                                                                                                                                                                                                                                                                     | None yet: needs the first `ios` run.                                                                                                                                                                                                                                                                                                                                                                                                              |
+| V2         | Do UI tests on the runner use the scheme's StoreKit configuration (can `UpgradeTests` buy against Snow.storekit)?                                  | No, on the runner's iOS 26.5, from Apple's notes and developers' reports rather than a run of ours                                                                            | StoreKit Test doesn't connect to the simulator's test environment on iOS 26.3 to 26.5 (FB22500243, which Apple's iOS 26.6 notes list as fixed, and the image has no 26.6 simulator runtime), FB22237318 was still reported on 26.5 though its notes list it fixed, and the confirmation sheet is the system's either way. So the UI tests buy through StoreKit's stand-in (`FakePurchases`, `-purchase`, `-restore`), and the `SKTestSession` tests run hosted by the app, in the StoreKit plan, on iOS 26.2 (next row). Once the image has a simulator runtime with the fix, move the StoreKit plan to it, and try a UI test against Snow.storekit there.                            | Apple's iOS 26.5 and 26.6 release notes and an Apple engineer's forum answer (June 2026: "fixed for simulators starting with iOS 26.6"); forum reports that 26.3 to 26.5 simulators fail (purchases answer `.userCancelled` at once, the configuration isn't saved) and that 26.0 to 26.2 work; the runner image 20261013 has iOS 26.2, 26.4 and 26.5 simulators. Read 27 October 2026 (DECISIONS, "The purchase in the iPhone app (phase 7.1)"). |
+| 7.1        | Do the `SKTestSession` tests pass on the runner's iOS 26.2 simulator?                                                                              | Pending CI                                                                                                                                                                    | The `storekit` job: `ci/simulator.sh 26.2` boots an iPhone 17 on iOS 26.2 (downloading the runtime once if the runner lacks it), and the StoreKit plan runs there, each test logging the iOS version, every buy and restore test first requiring the product loaded, and the cancel test buying again once its cancel is cleared, so a broken test environment fails rather than passes. If the image drops 26.2 (simulator.sh then stops with one error naming it) or 26.2 fails as 26.3 to 26.5 do: keep the suite and its plan, and run it on a Mac with iOS 26.2 (Carl's), or move it to a newer runtime with StoreKit Test fixed once the image has one; never skip it silently. | None yet: needs the first `storekit` run. The suite type-checks on Linux against stub StoreKit and StoreKitTest modules.                                                                                                                                                                                                                                                                                                                          |
+| V3         | Does `Transaction.currentEntitlements` answer inside the widget extension?                                                                         | Open: only a device answers it (the Xcode StoreKit environment is the app's bundle ID's)                                                                                      | The timeline's log line, `storekit=answered:N` or `late`, asked on every timeline, so `answered:1` on a phone that has bought means the extension sees the purchase, in Console.app on a Mac with Carl's iPhone attached (docs/SETUP.md, "The app's widgets")                                                                                                                                                                                                                                                                                                                                                                                                                         | None yet. Either answer is safe: the widget trusts a verified entitlement it can see, never locks on an empty or late one, and waits at most 2 s.                                                                                                                                                                                                                                                                                                 |
+| V4         | Do Foundation's time zones on Linux match core's `localDateTime` for every zone in the vectors?                                                    | Pending CI                                                                                                                                                                    | `placeTime.json` in `swift-linux` (phase 3.3). PR 0.1's Linux run decodes fixtures only, so it doesn't cover time zones.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | PR 3.3 in Docker (`swift:6.3.3` with `tzdata`), 23 October 2026: `PlaceTime.local(_:in:)`, a Gregorian calendar read at `secondsFromGMT(for:)`, falling back to UTC, passes all 75 `placeTime.json` cases: London across both clock changes, Kolkata (+5:30), Kathmandu (+5:45), Adelaide, Kiritimati (+14), Denver, `Etc/GMT+1`, `Etc/GMT+7`, UTC and two unknown zones. The earlier probe agreed.                                               |
+| V7         | Do the generated SVG template glyphs render correctly?                                                                                             | Pending CI                                                                                                                                                                    | The contact sheet: `GlyphSnapshotTests` (Unit plan) draws each glyph from SnowKit's catalogue, whole and as its still and drift layers, in its band's ink on its gradient, without forcing template rendering. If they don't render as the website draws them, or show black, SnowKit switches to `Fallback/Glyphs.xcassets`, the same sets as PNGs: two lines in IsItKit's `Package.swift`.                                                                                                                                                                                                                                                                                          | resvg renders all 16 SVGs as the website draws them (the PNG fallback is its output). Core SVG is unproven until the first `ios` run.                                                                                                                                                                                                                                                                                                             |
+| V11        | Do Google Mobile Ads 13.11.0 and UMP 3.1.0 resolve and cache through SPM on the runner? Is the demo app ID right? Does UMP's debug geography work? | Resolve and cache: pending CI. App ID and geography: settled on the simulator by 3f91596's run (the demo banner in the band under `other`, Google's consent form under `eea`) | The `ios` job's `Resolve packages` step (only the committed versions) and the `.spm` cache, whose hit or miss the run summary shows; the build then compiles IsItAds against both SDKs. Settled by the first green `ios` run and the cache hit on the run after it. The demo app ID and the debug geography: `AdsTests` (UI plan), whose band under `-umpGeography other` shows Mobile Ads started with the demo app ID, and whose consent form under `eea` shows the geography works on the simulator; each skips when Google doesn't answer, which settles nothing.                                                                                                                 | Only the pins so far: `swift package resolve` on Linux resolved both at their tags' revisions, which match `git ls-remote`, but stopped before the binary zips (dl.google.com is blocked here). The runner is the first to download, check and cache them. App ID and geography: none yet, as no run has started the ads; the Info.plist's app ID is Google's demo one (`check-archive.sh` checks it).                                            |
+| V13        | Will `xcodebuild` run the iPhone-only app on an iPad simulator, in compatibility mode?                                                             | Pending CI                                                                                                                                                                    | `ipad-compat` in `ios-nightly.yml` (spec section 18.2), which is still to be written. If not: `simctl install`, then `simctl io` screenshots for an agent to review.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | None yet.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| 8.1        | Does a tap on a notification with the app force-quit open its place (`didReceive` on a cold start in a SwiftUI app)?                               | Open: only a device shows it                                                                                                                                                  | Carl's check in docs/SETUP.md ("The app's notifications (phases 8.1 and 8.2)", the cold start): send a test, swipe the app away at once, then tap the banner. If the app opens on the home screen only, `AppDelegate` gains `application(_:configurationForConnecting:options:)`, posting `options.notificationResponse`'s payload, de-duplicated by the request's identifier (DECISIONS, "The iPhone app's notifications (phases 8.1 and 8.2)")                                                                                                                                                                                                                                      | None yet. The delegate is set in `application(_:willFinishLaunchingWithOptions:)`, as Apple asks; one unanswered forum report (January 2026) says `didReceive` never fired on a cold start in a SwiftUI app.                                                                                                                                                                                                                                      |
+| 8.1 banner | Does `simctl push` show the banner on the runner's iOS 26.5 simulator?                                                                             | Pending CI                                                                                                                                                                    | `ci/push.sh` in the `ios` job, after the UI plan on its simulator, where NotificationPermissionTests allowed notifications: the banner over the app and on the Home Screen, each screenshot compared with the one taken just before it. A flaky first run is fixed (a longer wait), never skipped                                                                                                                                                                                                                                                                                                                                                                                     | None yet. `simctl push` delivers on the simulator, with no APNs, so it should work in GitHub's VMs; the banner's timing there is unproven. Look at both shots on the contact sheet too: a PNG whose bytes change for another reason would pass the comparison.                                                                                                                                                                                    |
 
 ## Not here yet
 
@@ -2083,14 +2466,14 @@ Each comes with the phase that needs it, so nothing in the skeleton is dormant:
   sections 16 and 17.2, Large, XXXL and AX3): the pages scroll, and `ImageRenderer` doesn't draw
   a scroll view, so they wait for the page's content to be drawn apart from its scroll view;
   until then the UI tests' screens at Large and AX3 are the contact sheet's (phase 5.4);
-- in Settings, the notifications section (phase 8) and the data kept for notifications with its
-  delete button (phase 8);
-- the rest of `SnowKit`, notifications (the picker and the units call phase 8's `syncAlerts`
-  hook) and the push token in the app's privacy manifest;
+- the rest of `SnowKit`;
 - `FEATURE_UNLOCK` and `FEATURE_ADS` (spec section 9.8): the purchase (phase 7.1) and the ads
   (phase 8.3) are in, and no build leaves either out. `FEATURE_UNLOCK` is built, as a pull
   request of its own, only if the Paid Apps Agreement isn't Active by Mon 2 Nov, for spec 23.5's
   fallback (DECISIONS, "The purchase in the iPhone app (phase 7.1)");
 - the Screenshots test plan and `ios-nightly.yml`, which is to keep `SKAdNetworkItems` current
   (copied by hand until then, phase 8.3);
-- the release job's `rc-archive` artefact (spec section 21.2), with the release candidate.
+- the release job's `rc-archive` artefact (spec section 21.2), with the release candidate;
+- App Attest or DeviceCheck against junk registrations: Carl's decision before public launch
+  (DECISIONS, "Notifications: the devices endpoints" and "The iPhone app's notifications (phases
+  8.1 and 8.2)").

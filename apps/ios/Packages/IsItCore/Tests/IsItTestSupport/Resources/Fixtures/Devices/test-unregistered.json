@@ -1,0 +1,14 @@
+{
+  "_fixture": {
+    "request": "POST /api/v1/devices/test",
+    "body": {
+      "app": "snow",
+      "token": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+    },
+    "now": "2026-12-01T09:05:00.000Z",
+    "note": "A test for a device with no registration: 404 not_registered."
+  },
+  "status": 404,
+  "retryAfter": null,
+  "text": "{\"error\":{\"code\":\"not_registered\",\"message\":\"This device isn't registered for notifications.\"}}"
+}

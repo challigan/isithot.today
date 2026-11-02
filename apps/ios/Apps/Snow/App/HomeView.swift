@@ -20,9 +20,12 @@ import UIKit
 /// "Use my exact location" chip, the place picker, full screen (section 10.3, `PickerSheet`);
 /// the gear, Settings (section 10.4, `SettingsSheet`). The third, the upgrade sheet (section
 /// 10.5, `UpgradeSheet`), opens from the middle page's upgrade row in the free version, and from
-/// `willitsnow://upgrade`. In the free version, once the ads are on, the home banner's band sits
-/// under the pager and each page ends with its ad box, and a place chosen in the picker the place
-/// pill opened may show the full-screen ad (`AdsModel`).
+/// `willitsnow://upgrade`. Settings also opens from `willitsnow://settings/notifications` and iOS
+/// Settings' link to the app's notification settings, and the picker from Settings →
+/// Notifications' "Use my location" and "Search" and the notifications card's two. In the free
+/// version, once the ads are on, the home banner's band sits under the pager and each page ends
+/// with its ad box, and a place chosen in the picker the place pill opened may show the
+/// full-screen ad (`AdsModel`).
 struct HomeView: View {
   let model: AppModel
   /// The free version's ads.
@@ -31,16 +34,20 @@ struct HomeView: View {
   let google: GoogleAds
   /// The purchase: the home row, Settings' card and the upgrade sheet.
   let purchases: PurchaseModel
+  /// The notifications: the middle page's card, Settings → Notifications and Your privacy.
+  let notifications: NotificationsModel
   /// The sheet open over the home screen, if any.
   @State private var sheet: HomeSheet?
+  /// The sheet to open once the one open has closed (`present(_:)`).
+  @State private var pending: HomeSheet?
 
   var body: some View {
     let ticks = MinuteTick.anchor(model: model.now, system: Date())
     TimelineView(.periodic(from: ticks, by: 60)) { context in
       HomeContent(
-        model: model, ads: ads, google: google, purchases: purchases, tick: context.date,
-        covered: sheet != nil
-      ) { sheet = $0 }
+        model: model, ads: ads, google: google, purchases: purchases,
+        notifications: notifications, tick: context.date, covered: sheet != nil
+      ) { present($0) }
       // Under a sheet, the pages are out of the accessibility tree, as VoiceOver already
       // treats what is under a modal sheet: the sheets' audits read the sheet alone, and the
       // pages' own audits are HomeAuditTests'. Nor are their changes announced (`covered`).
@@ -62,25 +69,56 @@ struct HomeView: View {
     // the picker's Open Settings as well as Settings' rows. A Release build draws them as they
     // are. The upgrade sheet wears Settings' look and opens no URL. Settings and the upgrade
     // sheet are one presentation (`card`), so a link while Settings is open swaps one for the
-    // other, which two `.sheet` modifiers can't; a link while the picker is open closes it as the
-    // upgrade sheet opens.
-    .fullScreenCover(item: $sheet.picker) { request in
+    // other, which two `.sheet` modifiers can't; from one presentation to the other (Settings'
+    // "Search" to the picker, a link while the picker is open), the first closes and the second
+    // opens once it has gone (`present(_:)`).
+    .fullScreenCover(item: $sheet.picker, onDismiss: presentPending) { request in
       PickerSheet(model: model, ads: ads, request: request)
         .debugRecorder()
     }
-    .sheet(item: $sheet.card) { card in
+    .sheet(item: $sheet.card, onDismiss: presentPending) { card in
       switch card {
       case .settings:
-        SettingsSheet(model: model, ads: ads, purchases: purchases)
-          .debugRecorder()
+        SettingsSheet(
+          model: model, ads: ads, purchases: purchases, notifications: notifications
+        )
+        .debugRecorder()
       case .upgrade:
         UpgradeSheet(model: model, purchases: purchases)
       }
     }
     // `willitsnow://upgrade` (`LiveHooks.handle`), each time it comes.
     .onChange(of: purchases.sheetRequests) { _, _ in
-      sheet = .upgrade
+      present(.upgrade)
     }
+    // `willitsnow://settings/notifications` and iOS Settings' link, each time one comes.
+    .onChange(of: notifications.settingsRequests) { _, _ in
+      present(.settings)
+    }
+    // Settings → Notifications' "Use my location" or "Search".
+    .onChange(of: notifications.pickerRequests) { _, _ in
+      present(.picker(PickerRequest(locating: notifications.pickerLocating)))
+    }
+  }
+
+  /// Opens `next`, which every request goes through: at once with nothing open, or between
+  /// Settings and the upgrade sheet, which are one presentation; otherwise the one open closes
+  /// first and `next` opens once it has gone (its `onDismiss`), as two presentations that change
+  /// in one transaction can fail with nothing said.
+  private func present(_ next: HomeSheet) {
+    guard let open = sheet, !(open.isCard && next.isCard) else {
+      sheet = next
+      return
+    }
+    pending = next
+    sheet = nil
+  }
+
+  /// The sheet waiting for the one open to close, now that it has.
+  private func presentPending() {
+    guard let next = pending else { return }
+    pending = nil
+    sheet = next
   }
 }
 
@@ -97,6 +135,14 @@ enum HomeSheet: Equatable {
     case upgrade
 
     var id: String { rawValue }
+  }
+
+  /// Whether it is Settings or the upgrade sheet, which share one presentation.
+  var isCard: Bool {
+    switch self {
+    case .picker: false
+    case .settings, .upgrade: true
+    }
   }
 }
 
@@ -146,10 +192,12 @@ extension Optional where Wrapped == HomeSheet {
 /// covers the pages: then nothing is said, then or once it closes, as the pages are out of the
 /// accessibility tree under it (the 6pm flip, or a quiet refresh's new answer, behind Settings).
 ///
-/// The upgrade row (section 10.2, item 6) is on the middle page alone, under Today and Tomorrow
-/// alike, only on a page with an answer, as the box is, and only in the free version once StoreKit
-/// has given the price it names (`UpgradePage.homeRow`). It sits between the page's body and its
-/// footer, and the box after the footer's links, so the row is never beside or over an ad.
+/// The notifications card (section 10.2, item 5) and the upgrade row (item 6) are on the middle
+/// page alone, under Today and Tomorrow alike, only on a page with an answer, as the box is, the
+/// card above the row: the card while `NotificationCard` offers one (never once put away or a
+/// notification is on), the row only in the free version once StoreKit has given the price it
+/// names (`UpgradePage.homeRow`). They sit between the page's body and its footer, and the box
+/// after the footer's links, so neither is ever beside or over an ad.
 ///
 /// The ads take their spaces only in the free version and once they are on: the home banner's
 /// band, as tall as Google says the banner is at the screen's width, under the pager in the
@@ -161,6 +209,7 @@ private struct HomeContent: View {
   let ads: AdsModel
   let google: GoogleAds
   let purchases: PurchaseModel
+  let notifications: NotificationsModel
   /// The minute tick's date: a new one each minute, which draws the screen again.
   let tick: Date
   /// Whether a sheet is open over the pages.
@@ -179,6 +228,7 @@ private struct HomeContent: View {
     let theme = PageTheme(shown.palette)
     let adsShown = !model.unlocked && ads.phase == .on
     let upgrade = UpgradePage.homeRow(unlocked: model.unlocked, purchase: purchases.state)
+    let card = NotificationCard.card(notifications.state, onScreen: model.onScreen)
     HomeShell(
       topBar: model.topBar, theme: theme, actions: actions, fades: DebugHooks.themeFades()
     ) {
@@ -200,11 +250,15 @@ private struct HomeContent: View {
           // Pull to refresh (section 10.2), on every page, keeping what is on screen.
           refresh: { [model] in await model.refresh() },
           pageCards: { view in
-            // The middle page, under Today and Tomorrow alike, only with an answer, as the box.
-            if view == .today, let upgrade,
-              pages.first(where: { $0.view == view })?.footer != nil
-            {
-              UpgradeRow(title: upgrade) { open(.upgrade) }
+            // The middle page, under Today and Tomorrow alike, only with an answer, as the box:
+            // the card, then the row.
+            if view == .today, pages.first(where: { $0.view == view })?.footer != nil {
+              if let card {
+                NotificationCardView(card: card) { act($0) }
+              }
+              if let upgrade {
+                UpgradeRow(title: upgrade) { open(.upgrade) }
+              }
             }
           },
           pageEnd: { view in
@@ -257,6 +311,28 @@ private struct HomeContent: View {
     }
   }
 
+  /// What the notifications card's buttons do: "Turn on" turns the evening notification on for
+  /// the place on screen (asking for permission); "Not now" puts the card away for good; "Use my
+  /// location" and "Search" open the picker, as the top bar's do; "Open Settings" opens the
+  /// app's notification settings in iOS Settings.
+  private func act(_ action: NotificationCard.Action) {
+    switch action {
+    case .turnOn:
+      let onScreen = model.onScreen
+      Task { await notifications.turnOnFromCard(onScreen: onScreen) }
+    case .notNow:
+      notifications.dismissCard()
+    case .useMyLocation:
+      open(.picker(PickerRequest(locating: true)))
+    case .search:
+      open(.picker(PickerRequest(locating: false)))
+    case .openSettings:
+      if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+        openURL(url)
+      }
+    }
+  }
+
   /// What the screen's taps do: Retry asks again; the place pill opens the picker, and "Use my
   /// exact location" opens it finding the phone's place; the gear opens Settings; a place under
   /// "Nearby:" loads in place; links open in Safari. A place under "Nearby:" never brings the
@@ -276,5 +352,12 @@ private struct HomeContent: View {
         Task { await model.select(.city(slug: city.slug, name: city.name)) }
       }
     )
+  }
+}
+
+extension AppModel {
+  /// The place on screen as the notifications take it: its target, name, country and units.
+  var onScreen: OnScreen {
+    OnScreen(target: target, name: placeName, country: response?.location.country, units: units)
   }
 }

@@ -7,12 +7,16 @@ import IsItState
 /// waits for. Step 5 then starts the free version's ads (`AdsModel`), which AppModel asks for
 /// only when the purchase isn't owned, and which returns at once: alert sync and a pending route
 /// never wait on Google's consent form. A purchase made while the app runs stops them for good
-/// (`stopAds()`). Phase 7.1 fills steps 2 and 5's check and the upgrade route; the steps phase
-/// 8.1 fills do nothing yet, as `NoHooks`' do.
+/// (`stopAds()`). Phase 7.1 fills steps 2 and 5's check and the upgrade route. Phase 8.1 fills
+/// step 6, the notifications (`NotificationsModel`), whose sync also follows a place chosen in
+/// the picker and a change of units, and returns at once too; and the route to Settings →
+/// Notifications.
 struct LiveHooks: AppHooks {
   let ads: AdsModel
   /// The purchase, whose listener and check start at step 2.
   let purchases: PurchaseModel
+  /// The notifications, which start at step 6.
+  let notifications: NotificationsModel
   /// Whether this is the app's first run (`Launch.firstRun`), which shows no full-screen ad.
   let firstRun: Bool
   /// A Debug build's `-noads 1`: the ads never start (`DebugHooks.noAds()`).
@@ -40,12 +44,23 @@ struct LiveHooks: AppHooks {
     await ads.stop()
   }
 
-  /// Phase 8.1 syncs the notifications.
-  func syncAlerts(target: Target, units: Units?) async {}
+  /// The place on screen and its units, to the notifications, which start at the first and sync
+  /// in a task: this returns at once.
+  func syncAlerts(target: Target, units: Units?) async {
+    await notifications.screenChanged(target: target, units: units)
+  }
 
-  /// `willitsnow://upgrade` (a locked widget, phase 7.2) opens the upgrade sheet; the rest is
-  /// phase 8.1's.
+  /// `willitsnow://upgrade` (a locked widget, phase 7.2) opens the upgrade sheet;
+  /// `willitsnow://settings/notifications` and iOS Settings' link open Settings. A widget's view
+  /// and a notification's place are AppModel's own, on screen already.
   func handle(_ route: DeepLink.Route) async {
-    if case .upgrade = route { await purchases.requestSheet() }
+    switch route {
+    case .upgrade:
+      await purchases.requestSheet()
+    case .settings(.notifications):
+      await notifications.requestSettings()
+    case .view, .place:
+      break
+    }
   }
 }

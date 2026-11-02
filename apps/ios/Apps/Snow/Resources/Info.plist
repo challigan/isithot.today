@@ -45,6 +45,8 @@
 	<string>$(GAD_INTERSTITIAL)</string>
 	<key>IsItPageBannerUnitID</key>
 	<string>$(GAD_PAGE_BANNER)</string>
+	<key>IsItPushEnvironment</key>
+	<string>$(PUSH_ENV)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>

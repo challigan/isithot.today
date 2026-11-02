@@ -1,0 +1,14 @@
+{
+  "_fixture": {
+    "request": "POST /api/v1/devices/test",
+    "body": {
+      "app": "snow",
+      "token": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+    },
+    "now": "2026-12-01T09:05:00.000Z",
+    "note": "A test after put-leeds while Apple can’t take it: 503 push_unavailable, and the app says it couldn’t send one."
+  },
+  "status": 503,
+  "retryAfter": null,
+  "text": "{\"error\":{\"code\":\"push_unavailable\",\"message\":\"Test notifications can't be sent just now. Try again later.\"}}"
+}

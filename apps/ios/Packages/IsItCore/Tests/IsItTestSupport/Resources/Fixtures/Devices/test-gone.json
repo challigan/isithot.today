@@ -1,0 +1,14 @@
+{
+  "_fixture": {
+    "request": "POST /api/v1/devices/test",
+    "body": {
+      "app": "snow",
+      "token": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+    },
+    "now": "2026-12-01T09:05:00.000Z",
+    "note": "A test after put-leeds that Apple refuses as a token it doesn’t know: the server deletes the registration and answers 404 not_registered, so the app registers again."
+  },
+  "status": 404,
+  "retryAfter": null,
+  "text": "{\"error\":{\"code\":\"not_registered\",\"message\":\"Apple refused this device, so it is no longer registered.\"}}"
+}

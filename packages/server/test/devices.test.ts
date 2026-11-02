@@ -16,7 +16,9 @@ import {
   notificationRoute,
   registrationBody,
   searchTarget,
+  syncReply,
   targetKey,
+  testOutcome,
   type AlertPrefs,
   type PlaceTarget,
   type RegistrationBody,
@@ -31,6 +33,7 @@ import {
   handleDevicePut,
   handleDeviceTest,
   handleDevices,
+  handleRateLimited,
   idsKey,
   jwtKey,
   regKey,
@@ -948,9 +951,15 @@ describe("the contract with packages/client's registrationBody", () => {
         expect(Buffer.byteLength(JSON.stringify(sent))).toBeLessThan(DEVICE_LIMITS.bodyBytes / 2);
         const r = await put(w, sent);
         expect(r.status).toBe(200);
-        const reply = (await r.json()) as {
+        const text = await r.text();
+        const reply = JSON.parse(text) as {
           place: { query: string; timezone: string; name: string };
         };
+        // What the app keeps of it: the whole reply.
+        expect(syncReply(r.status, text, r.headers.get('retry-after'))).toEqual({
+          kind: 'stored',
+          reply,
+        });
         const stored = await record(w, reply.place.timezone, t);
         expect(stored).toMatchObject({ env, units, alerts: { snow: prefs }, token: t });
         // A tap on its notification opens the app's own place.
@@ -969,6 +978,90 @@ describe("the contract with packages/client's registrationBody", () => {
         expect(targetKey((route as { target: PlaceTarget }).target)).toBe(targetKey(target));
       }
     }
+  });
+});
+
+describe("the contract with packages/client's syncReply and testOutcome", () => {
+  /** What the client makes of a reply to a PUT or DELETE, from what the app reads of it. */
+  const synced = async (r: Response) =>
+    syncReply(r.status, await r.text(), r.headers.get('retry-after'));
+  const tested = async (r: Response) => testOutcome(r.status, await r.text());
+
+  it('forgets the registration with the evening and the morning off, and on a DELETE', async () => {
+    const w = world();
+    const t = token('aa', 900);
+    expect(await synced(await put(w, body({ token: t })))).toMatchObject({ kind: 'stored' });
+    w.at(SNOWY + 2 * MINUTE);
+    const off = { evening: false, morning: false, possible: true };
+    expect(await synced(await put(w, body({ token: t, alerts: { snow: off } })))).toEqual({
+      kind: 'forgotten',
+    });
+    expect(await synced(await del(w, { app: 'snow', token: t }))).toEqual({ kind: 'forgotten' });
+  });
+
+  it("retries a second PUT within a minute after the server's Retry-After", async () => {
+    const w = world();
+    const t = token('aa', 901);
+    await put(w, body({ token: t }));
+    w.at(SNOWY + 10_000);
+    const r = await put(w, body({ token: t, units: 'f' }));
+    expect(r.headers.get('retry-after')).toBe('50');
+    expect(await synced(r)).toEqual({ kind: 'retry', afterSeconds: 50 });
+  });
+
+  it("shows the server's words for a place it can't find, and fails other refusals", async () => {
+    const w = world();
+    const r = await put(w, body({ token: token('aa', 902), place: { place: 'nowhere-xx' } }));
+    expect(r.status).toBe(400);
+    expect(await synced(r)).toEqual({
+      kind: 'placeRefused',
+      message: 'There is no page for that place.',
+    });
+    expect(await synced(await put(w, body({ token: 'zz' })))).toEqual({ kind: 'failed' });
+    expect(await synced(await put(w, '{"app":'))).toEqual({ kind: 'failed' });
+  });
+
+  it("takes Netlify's limiter's 429 as a minute's wait for a sync, and a failed test", async () => {
+    expect(await synced(handleRateLimited())).toEqual({ kind: 'retry', afterSeconds: 60 });
+    expect(await tested(handleRateLimited())).toBe('failed');
+  });
+
+  it("names every answer of the test's", async () => {
+    const { w, fake } = await withApple({
+      b7: { status: 400, body: { reason: 'BadDeviceToken' } },
+      b8: { status: 400, body: { reason: 'BadExpirationDate' } },
+      b9: { status: 503, body: { reason: 'ServiceUnavailable' } },
+    });
+    const test = async (t: string) => tested(await sendTest(w, { app: 'snow', token: t }));
+    const sent = token('aa', 910);
+    await put(w, body({ token: sent }));
+    expect(await test(sent)).toBe('sent');
+    expect(await test(sent)).toBe('sent');
+    expect(await test(sent)).toBe('sent');
+    expect(await test(sent)).toBe('limited');
+    expect(await test(token('aa', 911))).toBe('notRegistered');
+    // Apple refusing the device, refusing the push (502), and unable to take it (503).
+    for (const [script, status, outcome] of [
+      ['b7', 404, 'notRegistered'],
+      ['b8', 502, 'failed'],
+      ['b9', 503, 'failed'],
+    ] as const) {
+      const t = token(script, 912);
+      await put(w, body({ token: t }));
+      const r = await sendTest(w, { app: 'snow', token: t });
+      expect(r.status, script).toBe(status);
+      expect(await tested(r), script).toBe(outcome);
+    }
+    expect(fake.seen).toHaveLength(6);
+    w.at(Date.UTC(2026, 10, 11, 23, 30));
+    const late = token('aa', 913);
+    await put(w, body({ token: late }));
+    expect(await test(late)).toBe('quiet');
+
+    const dry = await withApple({}, { settings: { ALERTS_DRY_RUN: undefined } });
+    const t = token('aa', 914);
+    await put(dry.w, body({ token: t }));
+    expect(await tested(await sendTest(dry.w, { app: 'snow', token: t }))).toBe('dryRun');
   });
 });
 

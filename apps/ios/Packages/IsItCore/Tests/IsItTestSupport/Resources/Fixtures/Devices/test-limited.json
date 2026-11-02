@@ -1,0 +1,14 @@
+{
+  "_fixture": {
+    "request": "POST /api/v1/devices/test",
+    "body": {
+      "app": "snow",
+      "token": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+    },
+    "now": "2026-12-01T09:05:00.000Z",
+    "note": "A test after put-leeds and the hour’s 3: 429 test_limited, with the 55 minutes to the next hour in Retry-After."
+  },
+  "status": 429,
+  "retryAfter": "3300",
+  "text": "{\"error\":{\"code\":\"test_limited\",\"message\":\"That's 3 test notifications this hour. Try again later.\"}}"
+}

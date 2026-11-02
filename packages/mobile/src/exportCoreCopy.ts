@@ -36,6 +36,8 @@ export const CORE_COPY_SOURCE = 'packages/core/src/copy.ts';
  * The `COPY` keys the app shows: section 10.9's list, and the picker's title, close button and
  * locating line, the switcher's label, the credits, and the website's top bar and week: the chip
  * on approximate location ("Use my exact location") and the week's heading ("The week ahead").
+ * Settings → Notifications names a place that follows the phone "Your location", as the server
+ * names a device's place it has no name for, so the row and Your privacy agree.
  * `UNITS_LABELS.snow` is written as `snowUnitsLabel`, so `COPY.snowUnitsLabel` (the same string)
  * isn't listed.
  */
@@ -55,6 +57,7 @@ export const CORE_COPY_KEYS = [
   'searchNoResults',
   'searchTooShort',
   'close',
+  'yourLocation',
   'outboundIntro',
   'nearby',
   'forecastCredit',
