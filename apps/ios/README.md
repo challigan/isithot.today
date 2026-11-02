@@ -151,8 +151,8 @@ Apps/Snow/UITests/       FixtureLaunchTests (fixtures at their own moments, and 
                          can name (view/week, view/today, view/now) and checks the page it lands on;
                          a locked widget's link, upgrade, is UpgradeTests'
 TestPlans/               Unit, UI and StoreKit (the SKTestSession tests, on iOS 26.2)
-ci/                      xcodegen.sh, simulator.sh, test.sh, push.sh, release-check.sh, xcresult-summary.mjs, contact-sheet.mjs;
-                         for releases archive.sh, upload.sh and ExportOptions.plist
+ci/                      xcodegen.sh, simulator.sh, test.sh, push.sh (with banner.mjs, its waits), release-check.sh,
+                         xcresult-summary.mjs, contact-sheet.mjs; for releases archive.sh, upload.sh and ExportOptions.plist
 ```
 
 The release checks are in the repo's `scripts/`: `check-archive.sh`, with `swift-small-strings.mjs`
@@ -246,7 +246,7 @@ reach the key.
 - **Archive checks**: both bundles have privacy manifests, each declaring coarse location, and the
   four fonts, each named in `UIAppFonts`; the widget has SnowKit's glyphs and the app's https API
   origin; the app has its icon; the widget links no Google Mobile Ads, no location code and
-  no purchase code, nor notifications code; neither binary names any of the 26 debug hooks; the
+  no purchase code, nor notifications code; neither binary names any of the 27 debug hooks; the
   app's manifest declares the device ID (the push token) and its Info.plist registers for
   notifications in production; the three ad units are Google's
   demo ones (test) or yours (real); the app's `SKAdNetworkItems` hold Google's; the app and widget
@@ -926,31 +926,53 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
 **A gesture the simulator cancelled.** On the CI simulator backboardd sometimes registers the
 virtual touchscreen XCUITest plays a gesture through twice, drops the touch's lift and cancels the
 touch as the touchscreen goes; the app, rightly, takes no action on a cancelled touch, and XCUITest
-still calls the gesture delivered (DECISIONS, "What the simulator's log showed"). So the switcher's
-tab taps, Retry, the place button, the gear and `scrollDown`'s drags go through one helper,
-`cancelled(_:in:within:until:_:)` (HomeScreens.swift), which plays the gesture and says whether
-`debug-cancels`, the Debug count of touches the system cancelled (below, "Debug hooks"), rose
-meanwhile: read after the gesture, until what it opens has opened or up to its timeout, false with
-no readout, and attaching `gesture-cancelled` when it rose. A tab tap (`tap(_:in:)`, and
-`FixtureLaunchTests`' `show`, each reading for up to 2 seconds or until the heading comes) whose
-count rose and whose heading hasn't come is tapped once more; so are Retry (`OfflineTests`, whose
-request fails again at once, so the count alone tells), the place button (`PickerTests`'
-`openPicker`, `AdsTests`' `choose`, `NotificationsTests`' `openThePicker`: no picker open, as the
-readout says, its search box ending the wait only while the readout can't be read) and the gear
-(`openSettings` in `AdsTests`, `NotificationsTests`, `SettingsTests` and `UpgradeTests`, and
-`NotificationPermissionTests`' own: the gear still there and taking a tap, `sheetClosed`, not
-Close, which XCUITest may go on finding once an earlier Settings has closed). A tap the app
-completed is never tapped again; a cancelled touch never made one. Each is tapped again once at
-most, the second tap watched too. `scrollDown`'s drag goes through the same helper and its `Drag`
-says whether its touch was cancelled, which every drag list in a failure prints; `HomeAuditTests`
-plays a step's cancelled drag once more before judging the page to scroll no further, and
+still calls the gesture delivered (DECISIONS, "What the simulator's log showed"). So the gestures
+go through one helper, `cancelled(_:in:within:until:_:)` (HomeScreens.swift), which plays the
+gesture and says whether `debug-cancels`, the Debug count of touches the system cancelled (below,
+"Debug hooks"), rose meanwhile: read after the gesture, until what it brings has come or up to its
+timeout, false with no readout, and attaching `gesture-cancelled` when it rose. Taps go through
+`watchedTap`, built on it: it reads for up to 2 seconds or until `done`, what the tap brings, holds,
+and plays the tap once more, itself watched, only when the count rose and `done` still doesn't
+hold (for the place button and the card's Search, `again`: no picker open, as the readout says,
+its search box ending the wait only while the readout can't be read). Each `done` is read from
+snapshots and is meant never to be met by what was in the tree before the tap: a tab's or a place's
+heading (`tap(_:in:)`, `FixtureLaunchTests`' `show`, the Nearby rows); Settings opened, as the gear
+still there and taking a tap shows (`sheetClosed`), not by Close, which XCUITest may go on finding
+once an earlier Settings has closed; a page's own title (`showsPage`), or for Back and Close the
+page gone (`lacksPage`), never the page under a sheet, whose title stays in the tree; the Debug
+recorder holding the URL a row opens; a licence's text holding that licence's own words; a row's
+or a line's new words (a test notification's result, the notice, the card's line); a switch on;
+Restore purchase's result; the outcome's line after Buy; the picker's readout no longer open after
+a place is chosen or Close; a star's label turned; the keyboard after a tap on the search box, which
+the picker opens with nothing focused. Since main's run on 1d643d3, where Report an ad's touch lost
+its lift (DECISIONS, "What main's run on 1d643d3 showed"), every direct tap whose result can be read
+goes this way: in `SettingsTests`, `UpgradeTests`, `PickerTests`, `AdsTests` and
+`NotificationsTests`, `NotificationPermissionTests`' gear, switch and Your privacy, and the Nearby
+rows in `HomeTests` and `FixtureLaunchTests`. Retry (`OfflineTests`, whose request fails again at
+once, so the count alone tells) keeps its own call to the helper. A tap the app completed is never
+tapped again; a cancelled touch never made one. Each is tapped again once at most, the second tap
+watched too. `scrollDown`'s drag goes through the same helper and its `Drag` says whether its touch
+was cancelled, which every drag list in a failure prints; `HomeAuditTests`, whose only tap is a
+tab's, plays a step's cancelled drag once more before judging the page to scroll no further, and
 `restore` goes round again after one, within its 12 drags. Their failures say what `debug-cancels`
-reads (`cancelsReport`): a heading, a picker or Settings that never came, a page that scrolls no
-further or an element never brought on screen; so do some failures after other gestures. The rest,
-about 80 direct taps, swipes and presses (on the picker's rows, stars and menus, Settings' rows and
-switches, the notification card's buttons, Buy and the like), are not watched: a cancel among them
+reads (`cancelsReport`): a heading, a picker, a page or Settings that never came, a page that
+scrolls no further or an element never brought on screen; so do some failures after other
+gestures. Every `gesture-cancelled` of the UI plan is listed in the run's summary, with its test
+and the counts (`xcresult-summary.mjs cancels`), so a tap played again shows in a passing run too,
+and a control whose first touch is cancelled run after run shows as the fault it would be.
+
+Not watched: the taps whose result can't be read (Buy in a cancelled purchase; Google's consent
+form and full-screen ad, which have loops of their own; `AdsTests`' tap on a result, which may bring
+a full-screen ad first; `PickerTests`' "Use my location" in `testUseMyLocationDenied`, whose line
+the chip's tap has already brought), Allow in the system's notification prompt, which is
+SpringBoard's and which the app's count can't see, and every swipe and press. A cancel among them
 is never played again, and shows only in a failure that names the count, risen with no
-`gesture-cancelled` attachment for it.
+`gesture-cancelled` attachment for it. Nor does the watch hold everywhere it is used: under the
+picker's full-screen cover `debug-cancels` may not be read, and then a tap is not watched;
+Delete's `done`, its row gone, depends on how XCUITest's tree shows a row under its menu. Each
+fails as it did before the watch, naming the count. Only `SettingsTests`' own test methods were run
+against a fake (on Linux, DECISIONS); the other suites' `done` conditions are type-checked only, and
+the next macOS run is their first.
 
 **The contact sheet** tiles every attachment in its names' order (`ci/contact-sheet.mjs`, five
 screens to a row). `HomeAuditTests` attaches every screenful it audits as
@@ -2003,9 +2025,22 @@ through `syncReply` and `testOutcome`. On the macOS CI:
   simulator cancelled"), and a failure after a gesture names `debug-cancels`.
 - **The banner** (`ci/push.sh`, after the UI plan, on its simulator, where
   NotificationPermissionTests allowed notifications): `simctl push` of `evening.apns` with the app
-  open on Durham, then with it closed, each proved by a screenshot that differs from the one taken
-  just before (`notification-banner-app`, `notification-banner-home`, in the attachments' `Push`
-  folder).
+  open on Durham, then with it closed (`notification-banner-app`, `notification-banner-home`, in the
+  attachments' `Push` folder). Nothing waits a guessed time (`ci/banner.mjs`): the step waits for
+  the app's own line once its answer is on screen, which also gives the notification permission
+  the app reads, and fails naming it when notifications aren't allowed (and, when the line never
+  comes, says so and still makes both pushes); takes the screen at rest as its baseline once two
+  screenshots in a row are the same; after each push takes screenshots one after another until one
+  shows a banner, each printed with its time since the push; and, over the app, then until the
+  banner's band is the baseline's again, before the app is closed. A banner, over the app or on the
+  Home Screen alike, is a block of rows in the top quarter of the screen each changed across most of
+  its width, at least 5% of the screen tall and ending above the quarter's foot: the app's redraw
+  below never counts nor hides one, and a status bar's change, a row of icons or a screen dimmed
+  all over never passes. Once the step ends, however it ends, the simulator's log of it is read
+  (`log show` from the step's start, a warning if it can't be) into `Push/simulator.log`, and the
+  app's standard output is kept as `Push/app-stdout.txt`. The step has its own 10-minute limit, so
+  a hang in it fails it and leaves the uploads to run. This makes a miss name itself; it doesn't
+  explain main's (DECISIONS, "What main's run on 1d643d3 showed").
 - **Only Carl's phone shows** a real token and its PUT, APNs' delivery, a tap with the app
   force-quit, the Lock Screen, iOS Settings' "Notification Settings" link, a denial made in iOS
   Settings and a followed place moving (docs/SETUP.md, "The app's notifications (phases 8.1 and
@@ -2120,7 +2155,8 @@ whose SHA-256 is checked on every run. It uploads, for five days:
   plan, and `review/app-upgrade.png`, the upgrade sheet's screenshot for App Review, copied there
   under that name (`ci/test.sh UI`; docs/SETUP.md, "The app's purchase"), and since phase 8.1
   `Push/`, the notification banner over the app and on the Home Screen (`ci/push.sh`,
-  `notification-banner-app.png` and `notification-banner-home.png`);
+  `notification-banner-app.png` and `notification-banner-home.png`), with the simulator's log of
+  the step (`simulator.log`) and the app's standard output (`app-stdout.txt`);
 - `contact-sheet`: `contact-sheet.png`, every attachment at true size (a third of the 3x pixels),
   named underneath;
 - `package-resolved`: only when the committed file can't be used (below).
@@ -2128,10 +2164,11 @@ whose SHA-256 is checked on every run. It uploads, for five days:
 Each step's outcome goes to the run's summary page and to the job log: the build's errors and
 warnings with file and line, each test plan's counts and every failure with its file and line,
 the UI plan's audit calls' times, read from its attachments (the ten slowest and every call that
-timed out, with the time a timeout took, which says roughly how long XCTest's deadline is)
+timed out, with the time a timeout took, which says roughly how long XCTest's deadline is), and
+every touch the system cancelled in the app, with its test and what was played again
 (`ci/test.sh`, using `ci/xcresult-summary.mjs`), the notification banner (`ci/push.sh`: shown,
-or failed, with an error naming the shot that didn't change and the likely cause), and the
-Release checks. xcbeautify also turns
+or failed, with an error naming what wasn't seen, each screenshot's time since the push above it,
+and the permission the app read), and the Release checks. xcbeautify also turns
 compiler errors into annotations.
 
 ## How agents read CI results
@@ -2397,6 +2434,12 @@ launch argument. So far there are these:
   update that changes the theme; a band that changes without changing the theme (a loading page,
   drawn as no snow, giving way to a dry answer) reads at once. `check-archive.sh` looks for its
   name in both binaries;
+- the banner step's line (`answerShown`): under `-uitest -notifications system` only, once
+  `debug-theme` reads the answer's band, one line on the app's standard output:
+  `debug-notifications shown`, then the real centre's settings as the app reads them
+  (`authorizationStatus`, `alertSetting` and `alertStyle`, each a word), written straight to the
+  file `simctl launch --stdout` names, which `ci/push.sh` waits on. `check-archive.sh` looks for
+  its name in both binaries;
 - the unit tests' host: when the app only hosts the unit tests (XCTest's
   `XCTestConfigurationFilePath` in its environment), it doesn't launch (`AppModel.launch()`), so
   the hosted tests have the App Group to themselves, and its `PurchaseModel` never starts (its
@@ -2459,7 +2502,7 @@ adds. Phase 8.1 adds two of its own: the cold-start tap (`8.1`) and the banner f
 | V11        | Do Google Mobile Ads 13.11.0 and UMP 3.1.0 resolve and cache through SPM on the runner? Is the demo app ID right? Does UMP's debug geography work? | Resolve and cache: pending CI. App ID and geography: settled on the simulator by 3f91596's run (the demo banner in the band under `other`, Google's consent form under `eea`) | The `ios` job's `Resolve packages` step (only the committed versions) and the `.spm` cache, whose hit or miss the run summary shows; the build then compiles IsItAds against both SDKs. Settled by the first green `ios` run and the cache hit on the run after it. The demo app ID and the debug geography: `AdsTests` (UI plan), whose band under `-umpGeography other` shows Mobile Ads started with the demo app ID, and whose consent form under `eea` shows the geography works on the simulator; each skips when Google doesn't answer, which settles nothing.                                                                                                                 | Only the pins so far: `swift package resolve` on Linux resolved both at their tags' revisions, which match `git ls-remote`, but stopped before the binary zips (dl.google.com is blocked here). The runner is the first to download, check and cache them. App ID and geography: none yet, as no run has started the ads; the Info.plist's app ID is Google's demo one (`check-archive.sh` checks it).                                            |
 | V13        | Will `xcodebuild` run the iPhone-only app on an iPad simulator, in compatibility mode?                                                             | Pending CI                                                                                                                                                                    | `ipad-compat` in `ios-nightly.yml` (spec section 18.2), which is still to be written. If not: `simctl install`, then `simctl io` screenshots for an agent to review.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | None yet.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | 8.1        | Does a tap on a notification with the app force-quit open its place (`didReceive` on a cold start in a SwiftUI app)?                               | Open: only a device shows it                                                                                                                                                  | Carl's check in docs/SETUP.md ("The app's notifications (phases 8.1 and 8.2)", the cold start): send a test, swipe the app away at once, then tap the banner. If the app opens on the home screen only, `AppDelegate` gains `application(_:configurationForConnecting:options:)`, posting `options.notificationResponse`'s payload, de-duplicated by the request's identifier (DECISIONS, "The iPhone app's notifications (phases 8.1 and 8.2)")                                                                                                                                                                                                                                      | None yet. The delegate is set in `application(_:willFinishLaunchingWithOptions:)`, as Apple asks; one unanswered forum report (January 2026) says `didReceive` never fired on a cold start in a SwiftUI app.                                                                                                                                                                                                                                      |
-| 8.1 banner | Does `simctl push` show the banner on the runner's iOS 26.5 simulator?                                                                             | Pending CI                                                                                                                                                                    | `ci/push.sh` in the `ios` job, after the UI plan on its simulator, where NotificationPermissionTests allowed notifications: the banner over the app and on the Home Screen, each screenshot compared with the one taken just before it. A flaky first run is fixed (a longer wait), never skipped                                                                                                                                                                                                                                                                                                                                                                                     | None yet. `simctl push` delivers on the simulator, with no APNs, so it should work in GitHub's VMs; the banner's timing there is unproven. Look at both shots on the contact sheet too: a PNG whose bytes change for another reason would pass the comparison.                                                                                                                                                                                    |
+| 8.1 banner | Does `simctl push` show the banner on the runner's iOS 26.5 simulator?                                                                             | Shown on PR #43 (twice), #44, #45 and #46; missed on main's run on 1d643d3, why not yet known                                                                                 | `ci/push.sh` in the `ios` job, after the UI plan on its simulator, where NotificationPermissionTests allowed notifications: the banner over the app and on the Home Screen, each looked for in screenshots taken one after another against the screen at rest, every read timed from the push, with the permission the app reads and the simulator's log of the step kept. A miss is read from that log, never met with a longer wait or a skip                                                                                                                                                                                                                                       | Main's run on 1d643d3 saw no banner after either push, with the permission granted in the simulator's log, which ended before the step (DECISIONS, "What main's run on 1d643d3 showed"). Look at both shots on the contact sheet too                                                                                                                                                                                                              |
 
 ## Not here yet
 

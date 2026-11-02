@@ -7,6 +7,7 @@
  *   node xcresult-summary.mjs build <build-results.json>
  *   node xcresult-summary.mjs tests <plan> <summary.json> <tests.json>
  *   node xcresult-summary.mjs timings <attachments folder>
+ *   node xcresult-summary.mjs cancels <attachments folder>
  *   node xcresult-summary.mjs attachment <attachments folder> <name>
  *
  * The JSON is `xcrun xcresulttool get build-results`, `get test-results summary` and
@@ -14,7 +15,10 @@
  * guessed, and a file that is missing or empty says so. `timings` reads the UI tests' audit
  * times (`…-audit-times` and `audit-<screen>-times`, one line a call: UITests/ScreenAudit.swift
  * `AuditTime`) from the attachments `xcresulttool export attachments` wrote, by their
- * manifest.json: `print` in a UI test reaches neither the log nor the result bundle. `attachment`
+ * manifest.json: `print` in a UI test reaches neither the log nor the result bundle. `cancels`
+ * lists every `gesture-cancelled` attachment (HomeScreens.swift's `cancelled`, one for each
+ * gesture after which the app's count of touches the system cancelled rose), so a tap played
+ * again shows in a passing run too. `attachment`
  * prints the path of the file an attachment was exported to, found by the name the test gave it
  * (`app-upgrade`, the review screenshot), as the export names each file by a UUID.
  */
@@ -233,6 +237,61 @@ export function timingSummary(calls) {
 }
 
 /**
+ * Every `gesture-cancelled` attachment the tests made, from an export's manifest.json, with its
+ * test and its text (what was played, and `debug-cancels` before and after); null without a
+ * manifest.
+ */
+export function readCancels(folder) {
+  const manifest = readJson(join(folder, 'manifest.json'));
+  if (!Array.isArray(manifest)) return null;
+  const cancels = [];
+  for (const test of manifest) {
+    for (const a of test?.attachments ?? []) {
+      if (
+        !a?.exportedFileName ||
+        attachmentLabel(a.suggestedHumanReadableName ?? '') !== 'gesture-cancelled'
+      ) {
+        continue;
+      }
+      try {
+        const text = readFileSync(join(folder, a.exportedFileName), 'utf8').trim();
+        cancels.push({ test: test.testIdentifier ?? '', text });
+      } catch {
+        continue;
+      }
+    }
+  }
+  return cancels;
+}
+
+/**
+ * The touches the system cancelled, one row each: its test, and what was played with the counts
+ * before and after. A tap that `watchedTap` played again passes its test, so only this says it
+ * happened.
+ */
+export function cancelSummary(cancels) {
+  const heading = '### Touches the system cancelled';
+  if (!cancels) return `${heading}: no attachments manifest (see the log)\n`;
+  if (!cancels.length) return `${heading}: none\n`;
+  const tests = new Set(cancels.map((c) => c.test)).size;
+  const out = [
+    `${heading}: ${cancels.length} in ${tests} test${tests === 1 ? '' : 's'}`,
+    '',
+    "Each a gesture after which the app's `debug-cancels` rose (`gesture-cancelled`); a tap " +
+      'or drag among them was played once more, and one cancelled twice fails its test. ' +
+      "HomeTests' testASystemGestureCountsACancelledTouch cancels one on purpose; a control " +
+      'cancelled run after run is a fault in the app, not the simulator.',
+    '',
+    '| Test | Played, and `debug-cancels` |',
+    '|---|---|',
+  ];
+  const shown = cancels.slice(0, MAX_ROWS).map((c) => `| ${cell(c.test)} | ${cell(c.text)} |`);
+  if (cancels.length > MAX_ROWS) shown.push(`| | …and ${cancels.length - MAX_ROWS} more |`);
+  out.push(...shown);
+  return `${out.join('\n')}\n`;
+}
+
+/**
  * The file the first attachment named `name` (as `attachmentLabel` reads it) was exported to, from
  * an export's manifest.json; null without a manifest, or with no such attachment.
  */
@@ -267,6 +326,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     process.stdout.write(testSummary(args[0], readJson(args[1]), readJson(args[2])));
   } else if (kind === 'timings' && args.length === 1) {
     process.stdout.write(timingSummary(readAuditTimes(args[0])));
+  } else if (kind === 'cancels' && args.length === 1) {
+    process.stdout.write(cancelSummary(readCancels(args[0])));
   } else if (kind === 'attachment' && args.length === 2) {
     const file = attachmentFile(args[0], args[1]);
     if (!file) {
@@ -277,7 +338,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   } else {
     console.error(
       'usage: xcresult-summary.mjs build <json> | tests <plan> <summary> <tests> | ' +
-        'timings <attachments> | attachment <attachments> <name>',
+        'timings <attachments> | cancels <attachments> | attachment <attachments> <name>',
     );
     process.exit(2);
   }

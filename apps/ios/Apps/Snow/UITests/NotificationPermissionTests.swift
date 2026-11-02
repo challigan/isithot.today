@@ -28,24 +28,23 @@ final class NotificationPermissionTests: XCTestCase {
     app.launch()
     XCTAssertTrue(app.staticTexts["verdict"].waitForExistence(timeout: 15), "No answer on screen")
     // The gear as every UI test taps it: once more only when the system cancelled the touch
-    // (`cancelled(_:in:within:until:_:)`) and no Settings opened (SettingsTests' `openSettings`).
+    // (`watchedTap`) and no Settings opened (SettingsTests' `openSettings`).
     let gear = app.buttons["settings"]
-    let opened = { !app.sheetClosed }
-    if cancelled("tap on the gear", in: app, within: 2, until: opened, { gear.tap() }),
-      app.sheetClosed
-    {
-      _ = cancelled("second tap on the gear", in: app) { gear.tap() }
-    }
+    watchedTap("the gear", in: app, until: { !app.sheetClosed }, { gear.tap() })
     XCTAssertTrue(
       app.buttons["close-settings"].waitForExistence(timeout: 5),
       "No Settings after tapping the gear; \(app.cancelsReport); \(app.homeGeometry)")
     let evening = app.find("notify-evening")
     try reveal(evening, in: app)
     XCTAssertEqual(isOn(evening), false, "The evening switch is on at a first launch")
-    evening.tap()
-
     let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
     let prompt = springboard.alerts.firstMatch
+    // What the switch's tap brings: the system's prompt, or, where an earlier run allowed
+    // notifications, the switch on. Allow, in SpringBoard's alert, can't be watched: the app's
+    // count sees only its own touches.
+    watchedTap(
+      "notify-evening", in: app, until: { prompt.exists || isOn(evening) == true },
+      { evening.tap() })
     if prompt.waitForExistence(timeout: 10) {
       attach(springboard, as: "system-notification-prompt")
       // As an English simulator words it ("Don’t Allow", beside it, has U+2019).
@@ -70,8 +69,10 @@ final class NotificationPermissionTests: XCTestCase {
     }
 
     try expectOn(evening, in: app)
-    try reveal(app.buttons["your-privacy"], in: app)
-    app.buttons["your-privacy"].tap()
+    let privacy = app.buttons["your-privacy"]
+    try reveal(privacy, in: app)
+    watchedTap(
+      "your-privacy", in: app, until: { app.showsPage(titled: "Your privacy") }, { privacy.tap() })
     XCTAssertTrue(
       app.find("kept-line-0").waitForExistence(timeout: 10),
       "Your privacy keeps nothing; \(app.cancelsReport)")

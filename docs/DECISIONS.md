@@ -5714,6 +5714,237 @@ read that runs to its end. Linux's XCUITest stub gains what the notification tes
 (`UIApplication`'s settings URLs, the switch and toggle types, SpringBoard's alerts), so the
 harness type-checks them; the element waits' 53 checks still pass.
 
+**What main's run on 1d643d3 showed** (the merge of PR #46: push run 41449348833, job
+125291494567, macos-26, Xcode 26.6, the iPhone 17 simulator; the same tests passed on PR #44's
+run 41447736874 on d14e5f7, PR #46's 41448310392 on fc8d58f and PR #45's 41447488648 on
+ccd4a6f). 79 of the 80 UI tests passed, and the banner step failed both its checks. The two
+failures are separate. The first is explained and fixed; the second isn't explained, and what
+changes for it only makes its next miss name itself.
+
+- **Report an ad's tap lost its lift.** `SettingsTests.testReportAnAdWithoutAMailApp` failed at
+  its wait for the mail fallback: "No page titled "Report an ad"; the titles on screen:
+  ["Settings"]; debug-cancels reads 1". It was the simulator's fault already on record ("What the
+  simulator's log showed", above), on a tap nothing watched:
+  - backboardd registered the tap's touchscreen twice (14:12:22.517, `*** unknown digitizer`).
+    The touch's down went to one record (0x1093788c0); the seven events after it went to the
+    other, which dropped them ("didn't see a previous touch down or range-in event for
+    pathIndex:2; skipping event").
+  - The app's own log shows two events sent to its window for the tap: the down at 22.521028 and
+    the cancel at 22.695531. Between them there was only a `systemGestureStateChange` evaluation
+    (22.603698), sent nowhere. No lift reached the app.
+  - At 22.694144, as XCUITest removed the touchscreen, backboardd cancelled touch 413, still down
+    in the app's scene (`cancel -- digitizer did disappear`, `canceling paths`; its touch stats:
+    one soft cancel, for WillItSnow). SpringBoard's `TouchEventsCompleted` came only after the
+    cancel, at 22.697, and XCUITest called the tap confirmed.
+  - `debug-cancels` rose from 0 to 1. The Debug recorder still read `none`: under
+    `-openURLs nomail` it notes the email before refusing it, so the row's action never ran.
+    The tree and the screen recording show Settings at its foot, the row drawn pressed and let
+    go, and nothing else.
+  - The swipe before the tap kept its lift. Of the 494 gestures in the run's log, backboardd
+    registered the touchscreen twice three times, and only this one lost its touch. The code was
+    the same on the passing PR heads: the fault strikes single gestures, and here it struck one
+    of the direct taps nothing watched.
+- **So every direct tap whose result can be read is watched now.** `watchedTap`
+  (HomeScreens.swift) plays a tap through `cancelled(_:in:within:until:_:)`, reading until
+  `done` holds or for 2 seconds, and plays it once more, itself watched, only when
+  `debug-cancels` rose and `done` still doesn't hold (or, for the place button and the card's
+  Search, `again`: the picker's readout read and not open). The gear, the place button and the
+  tabs, which repeated that pattern, go through it unchanged, `FixtureLaunchTests`' `show` with
+  them. Each `done` is what the tap brings, read from snapshots, and meant never to be met by what
+  was in the tree before it:
+  - SettingsTests: a row that opens a URL, the recorder's line holding it (`debug-opened`; the
+    units' "in", `debug-units` holding f); a row that opens a page, that page's title
+    (`showsPage`, from every `page-title` in one snapshot); each licence's row, the licence's
+    text holding that licence's own words, as the text of the licence just left may linger;
+    Back, the page left gone (`lacksPage`), or no licence text; Copy address, the confirmation;
+    the mail fallback's Close, the fallback's title gone, not Settings' title, which is there
+    under the fallback all along.
+  - UpgradeTests: the home row and Settings' upgrade row, the upgrade page's title; Buy, the
+    page's line (`upgrade-outcome`); each Close, the home screen back (`sheetClosed`); Restore
+    purchase, its row holding a result; Your privacy, its title; Back, the upgrade page gone.
+  - PickerTests: a result, a recent or saved place, and Close, the picker's readout no longer
+    open; a star, its own label turned; the clear button, itself gone; Delete and Remove in a
+    place's menu, the place gone; "Use my location" with location access off, Open Settings;
+    Open Settings, the recorder holding the app's settings URL; the top bar's "Use my exact
+    location", the picker's line for location access off; the search box, the keyboard, which is
+    down until then, as the picker opens with nothing focused (`focusRequests` changes only on a
+    request).
+  - AdsTests: the gear, the place button and the search box, as above; Settings' upgrade row,
+    Buy; Buy, the page's line; Back, the line gone; Close, the home screen back; Your privacy,
+    its title.
+  - NotificationsTests (since the review of this change): Search at approximate location,
+    Settings gone or the picker open; "Send a test notification", the row holding this tap's
+    result, each unlike the one before; "Turn off notifications and delete my data", its status
+    line's words; the evening switch, on, or with permission refused the notice saying so; the
+    Met Office row and each Open Settings, the recorder holding its URL; the place row, its page's
+    title; "Use my location", the place row reading Your location, or the line saying location
+    access is off; Your privacy, its title; Back, Your privacy gone; the card's Turn on, its line's
+    new words; the card's Search, as the place button; Not now, the card gone; the picker's Close,
+    its readout no longer open. The gear and the place button go through `watchedTap` too.
+    Phase 8.4a's branch rewrites this suite, so its next merge of main meets these lines and
+    keeps the watch on each tap it keeps.
+  - NotificationPermissionTests: the gear; the evening switch, the system's prompt up or the
+    switch on; Your privacy, its title.
+  - HomeTests' and FixtureLaunchTests' Nearby rows (Dundee on Today, and on This week outside its
+    words), the place's heading on screen.
+  - WidgetLinkTests has no taps: its links open through `XCUIApplication.open(_:)`. Nor has
+    HomeAuditTests, but for its tab taps, which were watched already.
+  - `ElementRead` keeps every match's label (`labels`), for the titles in the tree and the
+    licence's words.
+- **What stays as it was.** Every wait and check after a tap; a tap played again once at most,
+  and only on the app's own count; a second cancel fails as before, naming `debug-cancels`. No
+  timeout changed, and nothing pauses. A tap the app completed is never played again. A `done`
+  left unmet by an element that lingers can play again only a tap whose touch the count says was
+  cancelled.
+- **A tap played again leaves a trace in a passing run.** The run summary lists every
+  `gesture-cancelled` of the UI plan, with its test, what was played and the counts
+  (`xcresult-summary.mjs cancels`, after the audit times): a control whose first touch the
+  system cancels run after run, which would be a fault in the app, not the simulator, shows
+  there although its test passes. `testASystemGestureCountsACancelledTouch` cancels one on
+  purpose, so one row is expected in every run.
+- **Still not watched**: the taps whose result can't be read (Buy in `testACancelledPurchase`,
+  whose cancelled purchase brings nothing to read; PickerTests' "Use my location" in
+  `testUseMyLocationDenied`, whose line the chip's tap has already brought; AdsTests' tap on a
+  result, whose full-screen ad, or the picker closing, can take longer than the watch reads for;
+  the buttons of Google's consent form and full-screen ad, which have loops of their own,
+  `tapUntilOn` and `closeTheAd`); Allow in the system's notification prompt, which is
+  SpringBoard's, where the app's count sees no touch; and every swipe and press (a place's press
+  for its menu, the drags that put the keyboard away, and `reveal`'s and `tapRow`'s swipes, which
+  go round again on their own).
+- **Where the watch is weaker than it looks.** Under the picker's full-screen cover XCUITest may
+  not find the readouts, `debug-cancels` among them (`pickerOpens`); a tap there, a picker's row,
+  star, Close or "Use my location", then isn't watched, as `cancelled` returns at once without a
+  count. Delete's and Remove's `done`, the place's row gone, depends on how XCUITest's tree shows
+  the row under its menu; should it hide it, `done` holds at once and nothing is played again.
+  Each of these fails as it did before the watch, naming the count. And only SettingsTests' own
+  test methods were run against a fake: the `done` conditions of the other suites are
+  type-checked only, and the next macOS run is their first.
+- **Checked on Linux, against stubs** (session scratchpad: main-1d643d3/uicheck, the latest
+  harness with PR #40's cancel checks merged back in; its stub's queries now read labels and
+  predicates for a fake that lists its elements). SettingsTests' own four test methods, run
+  against a fake Settings sheet (`SettingsApp`, `launch` handing it to them), failed on main's
+  code with the run's own words: the first tap on Report an ad cancelled gave
+  "SettingsTests.swift:160: failed - No page titled "Report an ad"; the titles on screen:
+  ["Settings"]; debug-cancels reads 1"; with every first tap of every control cancelled (with the
+  first licence's text lingering, and Settings' title under the fallback) all four failed. With
+  the fix both pass, each cancelled control played exactly twice; Report an ad cancelled twice
+  is played twice and fails "debug-cancels reads 2" (main's code: once, reads 1); a cancel
+  counted with each tap's work done, read at once or three reads late, plays nothing again; with
+  no readout nothing is played again, and the test fails as on main, "debug-cancels reads
+  nothing". Six checks of `watchedTap` itself (a first cancel played again and named, a completed
+  tap once and at once, a double cancel once more only, a late rise after `done`, no readout,
+  `again` deciding when given) pass too, and so do PR #40's checks of the cancel helper, the
+  gear, the place button and the drags, and #45's of the tab tap, unchanged: 129 checks in all.
+  All 15 UI test files compile against the stubs, and `swift format lint --strict` passes.
+  `scripts/test/xcresult-summary.test.mjs` checks the list of cancelled touches, from an export's
+  manifest as the audit times are.
+- **The banner: not explained.** The step failed both checks: over the app the screenshot after
+  the push was byte for byte the one before it, and on the Home Screen too. In the five other runs
+  that had the step (PR #43 twice, #44, #45, #46) both shots show the banner. From each job log:
+
+  | Run (job log)  | Launch | Push over the app | Its shot begun | Written | Push on the Home Screen | Its shot begun | Written |
+  | -------------- | -----: | ----------------: | -------------: | ------: | ----------------------: | -------------: | ------: |
+  | PR #43, first  |   1.63 |              0.46 |           3.68 |    4.08 |                    0.36 |           2.49 |    2.82 |
+  | PR #43, second |   4.40 |              0.34 |           4.48 |    4.82 |                    0.28 |           2.30 |    2.51 |
+  | PR #45         |   2.63 |              0.57 |           5.30 |    5.65 |                    0.40 |           2.40 |    2.61 |
+  | PR #44         |   5.87 |              0.63 |           6.59 |    9.98 |                    0.60 |           2.74 |    3.11 |
+  | PR #46         |   2.83 |              0.52 |           3.55 |    3.84 |                    0.53 |           2.64 |    2.99 |
+  | main, 1d643d3  |   7.07 |              0.79 |           2.61 |    3.27 |                    2.68 |           5.04 |    5.91 |
+
+  Seconds: the launch and each `simctl push` call as they took, each shot from simctl's
+  "Notification sent". The simulator's log in the result bundle shows the permission granted at
+  13:51:59 (`Approved by user`, "Authorization granted: 1", authorizationStatus Authorized, alert
+  style Banner) and no change to it up to 14:19:35, where the archive ends; nothing in the log
+  covers the step, at 14:21.
+
+- **A first diagnosis was refuted.** It put both misses down to one screenshot taken a fixed
+  2 seconds after each push, landing outside a banner's few seconds on screen. Checking it showed
+  the opposite over the app: in all five passing runs the screenshot after the push began 1.55 to
+  4.59 s after its sleep, 1.0 to 3.2 s slower than the same run's idle shot before the push (0.38
+  to 1.37 s), the simulator busy, most likely with `willPresent`, the app's refresh and the banner
+  drawn over the app. On main it began in 0.61 s, faster than main's own idle shot (1.41 s): from
+  about 2.0 to 3.3 seconds after the first push the simulator did no notification work that shows.
+  The second push call took 2.68 s (0.28 to 0.60 elsewhere) and the shot after it 3.04 s to begin
+  (0.30 to 0.74), so something ran then, but no banner was on screen 5.0 to 5.9 s after the push.
+  The 8 s wait after closing the app was in `push.sh` from its first commit, not a fix after a
+  run, so nothing on record bounds how long a banner stays. Two differences from the passing runs
+  weren't examined: 138 seconds idle before the step (36 to 88 elsewhere), with SpringBoard's idle
+  timer running, and a SIGKILL of about a dozen daemons at 13:58. So no cause is recorded.
+- **What the next failure will show.** None of this fixes the miss; it makes the next one name
+  itself. `ci/push.sh` guesses no times now and keeps the simulator's own record:
+  - the simulator's log of the step, read once it has ended, however it ends (`log show` from the
+    step's start, with the info and debug lines the simulator kept) into `Push/simulator.log`:
+    UserNotifications and BulletinBoard in every process, SpringBoard, usernotificationsd,
+    CoreSimulatorBridge, the app, and apsd's lines that name the app or are errors (apsd's
+    reconnect loop writes 100,000 to 330,000 lines a minute in every run). It should show
+    whether `simctl push` was delivered, whether the app's `willPresent` ran, and whether
+    SpringBoard presented a banner. A read after the step, not a stream through it: a background
+    `log stream` would have had to be stopped, and a `wait` on one that ignored the signal would
+    have held the step until the job's limit cancelled the job, uploads and all; and streaming at
+    debug level turns on every process's debug lines, loading the simulator whose timing was the
+    evidence. A log that can't be read is a warning in the step log, with its first line, and the
+    step says how many lines it kept and from when, so a log read from the wrong time shows;
+  - the app's own line, once its answer is on screen in its colours (`DebugHooks.answerShown`,
+    from `ThemeReadout` under `-uitest -notifications system`), with the permission it reads from
+    the real centre: `debug-notifications shown`, then `authorizationStatus`, `alertSetting` and
+    `alertStyle`, each a word, written to the file `simctl launch --stdout` names
+    (`Push/app-stdout.txt`). The step waits for it in place of `sleep 12`, and fails naming the
+    permission when notifications aren't allowed, rather than guessing. When the line never comes
+    (say `--stdout` doesn't deliver it on macOS), the step says so, and that the permission isn't
+    known, and still makes both pushes, so the banners' evidence is kept. A Debug build only:
+    `check-archive.sh` proves a Release archive names no `debug-notifications`;
+  - condition waits (`ci/banner.mjs`), each with a deadline that is only a reporting limit: a
+    baseline once two screenshots in a row are the same; after each push, screenshots one after
+    another until one shows a banner; over the app, then until the banner's band is the
+    baseline's again, which replaces the 8 s wait before the Home Screen's baseline. Nothing
+    follows the Home Screen's banner, so its going isn't waited for. Every read is printed with
+    its time since the push, and a failure lists when each began;
+  - one banner rule for both screens: a block of rows within the top quarter of the screen, each
+    changed in at least 80% of its width, at least 5% of the screen tall (132 rows of 2,622), and
+    ending above the quarter's foot. Against main's shots (the screen before each push, byte for
+    byte) the passing runs' banners are such a block in all six shots: rows 152 to 499 over the
+    app and 152 to 529 on the Home Screen, against a band of rows 0 to 654 (session scratchpad:
+    main-1d643d3/fix2/real-rule.mjs). The same shots with every row below 700 changed, or one row
+    at 2,400, still pass; the whole screen dimmed, the status bar's left and right changed and
+    every icon in the first row changed each fail, as no banner. So the app's refresh below the
+    band never counts nor hides a banner, and a SpringBoard alert's dimming, which an earlier
+    rule (any change reaching into the band) would have taken for one on the Home Screen, never
+    passes;
+  - the step has its own 10-minute limit, over twice its reads' deadlines and the log's read:
+    should anything in it hang, the step fails and the uploads after it still run;
+  - its timings aren't the table's. Screenshots one after another load the simulator more than
+    the old script's one, so how soon a read begins after a push in new runs can't be compared
+    with the six runs above.
+- **Checked on Linux.** `scripts/test/push.test.mjs` runs `push.sh` against stand-ins for xcrun
+  and sleep on a clock of their own. On main's script a banner 4 to 9 s after each push was missed
+  by the one screenshot at +2.55 s and blamed on the permission; a banner shown from 0.4 to 5 s
+  after a push call that took 2.68 s, as main's second did, was missed (those banner times are
+  made up: nothing on record shows main's banner was ever drawn, or how long one stays); and the
+  app redrawing below the band passed as a banner. The new script sees the first two and refuses
+  the third. In the review of this change seven more failed on the script as it was then and pass
+  now: a banner over the app while the page redraws below it, seen and then gone from the band; a
+  Home Screen dimmed all over, refused; a banner on the Home Screen that stays, which no longer
+  fails the step; the app's line missing, said and both pushes still made; the simulator's log
+  read once, after both pushes, from the step's start, never streamed; one that can't be read, a
+  warning; and the log read when the step stops early on a failed `simctl push`. It fails,
+  listing every read's time, when no banner comes and when one over the app hasn't gone, and
+  names the permission when it isn't granted. `scripts/test/banner.test.mjs`: the PNG reader
+  agrees with pngjs (RGB and RGBA, every row filter), as it does on the banner shots the runs
+  uploaded (session scratchpad: main-1d643d3/fix-scripts); the banner rule holds for a block in
+  the band and through a redraw below it, and refuses a dimmed screen, a screen of another size,
+  a status bar's change, a row of icons and a strip too thin. The app's Debug and Release code
+  type-check against stubs (main-1d643d3/typecheck).
+
+**For the next macOS run to show.** That the UI tests pass, with any tap played again in the
+summary's list of cancelled touches; that `Push/app-stdout.txt` holds the line with
+`authorizationStatus=authorized alertSetting=enabled`; that each banner is seen at a read with its
+time since the push, and the one over the app gone at a later one; and that `Push/simulator.log`
+holds both pushes' way through CoreSimulatorBridge, usernotificationsd and SpringBoard. If a banner
+is missed again, which of those lines the log lacks says where it stopped. Two things here are
+unchecked on macOS: that `simctl launch --stdout` delivers the app's line (the step goes on
+without it), and that `log show --start` reads the simulator's log at the host's time (the step
+says how many lines it read).
+
 ## After #34's fourth full run
 
 PR #34's fourth full macOS run, on c74aa22 (run 40189947895, job 121158965836), passed 43 of the 44

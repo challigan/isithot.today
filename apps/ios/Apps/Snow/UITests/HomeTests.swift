@@ -103,8 +103,8 @@ final class HomeTests: XCTestCase {
     guard button.isHittable else {
       throw HomeScreenError("No \(place) under Nearby; \(app.cancelsReport)")
     }
-    button.tap()
     let shown = try nearby.page(aberdeen.defaultView)
+    watchedTap(place, in: app, until: { HeadingRead(app).shows(shown.heading) }, { button.tap() })
     try awaitHeading(shown.heading, in: app)
     expect(shown, in: app)
     expect(nearby.topBar, in: app)
@@ -138,8 +138,10 @@ final class HomeTests: XCTestCase {
     }
     let element = button.frame
     XCTAssertLessThan(element.height, 44, "\(place)'s element at \(element) isn't its words")
-    tapOutsideItsWords(button)
     let shown = try nearby.page("week")
+    watchedTap(
+      place, in: app, until: { HeadingRead(app).shows(shown.heading) },
+      { tapOutsideItsWords(button) })
     try awaitHeading(shown.heading, in: app)
     expect(shown, in: app)
     expect(nearby.topBar, in: app)

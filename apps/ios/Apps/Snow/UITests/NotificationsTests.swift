@@ -62,9 +62,11 @@ final class NotificationsTests: XCTestCase {
       of: app, on: "Settings, notifications at approximate location", surface: .content)
     attach(app, as: "app-notifications-gate")
     let shown = app.pickersShown ?? 0
-    try tap("notify-search", in: app)
     // The picker opens only once Settings has gone (HomeView's `present(_:)`), so a new picker
-    // on the readout says both.
+    // on the readout says both; the tap has done its work once Settings has gone.
+    try tap("notify-search", in: app) {
+      app.sheetClosed || pickerOpen(in: app, after: shown) == true
+    }
     try expectThePicker(in: app, after: shown, "after Settings' Search")
   }
 
@@ -82,7 +84,7 @@ final class NotificationsTests: XCTestCase {
       app.find("notify-possible").waitForExistence(timeout: 10),
       "No possible switch; \(app.cancelsReport)")
     try waitFor("notify-place", in: app, value: "Leeds")
-    try tap("notify-test", in: app)
+    try tap("notify-test", in: app) { holds("notify-test", Copy.testSent, in: app) }
     try waitFor("notify-test", in: app, value: Copy.testSent)
     try expectSettingsAtItsTop(in: app)
     try auditAccessibility(of: app, on: "Settings, notifications on", surface: .content)
@@ -99,12 +101,12 @@ final class NotificationsTests: XCTestCase {
     // At its top, where the kept block is, every line on screen below the bar.
     try auditAccessibility(of: app, on: "Your privacy, registered", surface: .content)
     attach(app, as: "app-your-privacy-registered")
-    try tap("delete-my-data", in: app)
+    try tap("delete-my-data", in: app) { says("delete-status", Copy.deleteDone, in: app) }
     try waitFor("delete-status", in: app, label: Copy.deleteDone)
     if let still = gone("kept-line-0", in: app) {
       XCTFail("The kept block is still there once deleted: \(still)")
     }
-    back(in: app)
+    back(in: app) { app.lacksPage(titled: "Your privacy") }
     try page(titled: "Settings", in: app)
     try expectSwitch(app.find("notify-evening"), on: false)
     if let still = gone("notify-test", in: app) {
@@ -114,7 +116,9 @@ final class NotificationsTests: XCTestCase {
     // Last, once every audit is done: the recorder's lines at the sheet's foot wrap the whole
     // URL, which at the audits' largest text sizes would squeeze the screen above them
     // (SettingsTests).
-    try tap("notify-warnings", in: app)
+    try tap("notify-warnings", in: app) {
+      holds("debug-opened", Copy.metOfficeWarnings, .staticText, in: app)
+    }
     try waitFor("debug-opened", .staticText, in: app, value: Copy.metOfficeWarnings)
   }
 
@@ -126,15 +130,17 @@ final class NotificationsTests: XCTestCase {
     try openSettings(app)
     let evening = app.find("notify-evening")
     try expectSwitch(evening, on: false)
-    try tap("notify-evening", in: app)
+    try tap("notify-evening", in: app) { says("notify-notice", Copy.notifyDenied, in: app) }
     try waitFor("notify-notice", in: app, label: Copy.notifyDenied)
     try expectSwitch(evening, on: false)
     try expectSettingsAtItsTop(in: app)
     try auditAccessibility(of: app, on: "Settings, notifications denied", surface: .content)
     attach(app, as: "app-notifications-denied")
-    try tap("notify-open-settings", in: app)
-    try waitFor(
-      "debug-opened", .staticText, in: app, value: UIApplication.openNotificationSettingsURLString)
+    let notificationSettings = UIApplication.openNotificationSettingsURLString
+    try tap("notify-open-settings", in: app) {
+      holds("debug-opened", notificationSettings, .staticText, in: app)
+    }
+    try waitFor("debug-opened", .staticText, in: app, value: notificationSettings)
   }
 
   /// Notifications turned off in iOS Settings while the app was away: at the next launch the
@@ -171,8 +177,9 @@ final class NotificationsTests: XCTestCase {
       Self.leeds + ["-notifications", "authorized", "-devices", "limited,quiet,dryrun,gone"])
     try openSettings(app)
     try turnOnTheEvening(in: app)
+    // Each result unlike the one before, so the row holding it is what this tap brought.
     for result in [Copy.testLimited, Copy.testQuiet, Copy.testDryRun, Copy.testFailed] {
-      try tap("notify-test", in: app)
+      try tap("notify-test", in: app) { holds("notify-test", result, in: app) }
       try waitFor("notify-test", in: app, value: result)
     }
     try openYourPrivacy(in: app)
@@ -197,7 +204,7 @@ final class NotificationsTests: XCTestCase {
   func testThePlaceChoice() throws {
     let app = launch(Self.leeds + ["-notifications", "authorized", "-location", "53.8,-1.55"])
     try openSettings(app)
-    try tap("notify-place", in: app)
+    try tap("notify-place", in: app) { app.showsPage(titled: Copy.placeTitle) }
     try page(titled: Copy.placeTitle, in: app)
     let onScreen = app.find("notify-place-on-screen")
     XCTAssertTrue(onScreen.waitForExistence(timeout: 5), "No place on screen to choose")
@@ -210,7 +217,9 @@ final class NotificationsTests: XCTestCase {
     // At its top: it is short.
     try auditAccessibility(of: app, on: "Notification place", surface: .content)
     attach(app, as: "app-notification-place")
-    try tap("notify-place-my-location", in: app)
+    try tap("notify-place-my-location", in: app) {
+      holds("notify-place", Copy.yourLocation, in: app)
+    }
     let place = app.find("notify-place")
     try waitFor("notify-place", in: app, value: Copy.yourLocation)
     // Back on Settings: its place row takes a tap again.
@@ -220,12 +229,17 @@ final class NotificationsTests: XCTestCase {
 
     let denied = launch(Self.leeds + ["-notifications", "authorized", "-location", "denied"])
     try openSettings(denied)
-    try tap("notify-place", in: denied)
+    try tap("notify-place", in: denied) { denied.showsPage(titled: Copy.placeTitle) }
     try page(titled: Copy.placeTitle, in: denied)
-    try tap("notify-place-my-location", in: denied)
+    try tap("notify-place-my-location", in: denied) {
+      says("notify-place-problem", Copy.locationDenied, in: denied)
+    }
     try waitFor("notify-place-problem", in: denied, label: Copy.locationDenied)
-    try tap("notify-place-open-settings", in: denied)
-    try waitFor("debug-opened", .staticText, in: denied, value: UIApplication.openSettingsURLString)
+    let appSettings = UIApplication.openSettingsURLString
+    try tap("notify-place-open-settings", in: denied) {
+      holds("debug-opened", appSettings, .staticText, in: denied)
+    }
+    try waitFor("debug-opened", .staticText, in: denied, value: appSettings)
   }
 
   /// The Today card for Leeds: "Turn on" turns the evening notification on for the place on
@@ -235,7 +249,10 @@ final class NotificationsTests: XCTestCase {
     let app = launch(Self.leeds + ["-alertCard", "shown", "-notifications", "allow"])
     try showTheCard(in: app, on: "leeds-dry")
     try waitFor("card-line", in: app, label: Copy.cardChosen)
-    app.find("card-turn-on").tap()
+    let turnOn = app.find("card-turn-on")
+    watchedTap(
+      "card-turn-on", in: app, until: { says("card-line", Copy.cardOn, in: app) },
+      { turnOn.tap() })
     try waitFor("card-line", in: app, label: Copy.cardOn)
     if let still = gone("card-turn-on", in: app) {
       XCTFail("Turn on is still there once on: \(still)")
@@ -258,11 +275,21 @@ final class NotificationsTests: XCTestCase {
     XCTAssertTrue(app.find("card-use-my-location").exists, "No Use my location on the card")
     attach(app, as: "app-card-approximate")
     let shown = app.pickersShown ?? 0
-    app.find("card-search").tap()
+    // As the place button's tap (`openThePicker`): only the readout, read and not open, has the
+    // tap played again; the search box ends the wait while the readout can't be read.
+    let search = app.find("card-search")
+    let field = app.find("place-search")
+    watchedTap(
+      "card-search", in: app,
+      until: { pickerOpen(in: app, after: shown) ?? field.exists },
+      again: { self.pickerOpen(in: app, after: shown) == false }, { search.tap() })
     try expectThePicker(in: app, after: shown, "after the card's Search")
     try closeThePicker(in: app, after: shown)
     try showTheCard(in: app, on: "picker-first-launch")
-    app.find("card-not-now").tap()
+    let notNow = app.find("card-not-now")
+    watchedTap(
+      "card-not-now", in: app, until: { ElementRead(app, "notification-card").gone },
+      { notNow.tap() })
     if let still = gone("notification-card", in: app) {
       XCTFail("The card is still there after Not now: \(still); \(app.cancelsReport)")
     }
@@ -367,21 +394,15 @@ final class NotificationsTests: XCTestCase {
   }
 
   /// Taps the gear, and waits for Settings, by its Close and its title, with its Notifications. A
-  /// tap whose touch the system cancelled (`cancelled(_:in:within:until:_:)`) and that opened no
-  /// Settings is tapped once more; a tap the app completed never is (SettingsTests'
-  /// `openSettings`).
+  /// tap whose touch the system cancelled (`watchedTap`) and that opened no Settings is tapped
+  /// once more; a tap the app completed never is (SettingsTests' `openSettings`).
   @MainActor
   private func openSettings(_ app: XCUIApplication) throws {
     let gear = app.buttons["settings"]
     let close = app.buttons["close-settings"]
     // Opened, and not opened, as the home screen shows it (`sheetClosed`), not by Close, which
     // XCUITest may go on finding once an earlier Settings has closed.
-    let opened = { !app.sheetClosed }
-    if cancelled("tap on the gear", in: app, within: 2, until: opened, { gear.tap() }),
-      app.sheetClosed
-    {
-      _ = cancelled("second tap on the gear", in: app) { gear.tap() }
-    }
+    watchedTap("the gear", in: app, until: { !app.sheetClosed }, { gear.tap() })
     guard close.waitForExistence(timeout: 5) else {
       throw HomeScreenError(
         "No Settings after tapping the gear; \(app.cancelsReport); \(app.homeGeometry)")
@@ -396,7 +417,7 @@ final class NotificationsTests: XCTestCase {
   /// Opens Your privacy from Settings' row, and waits for its title on the page.
   @MainActor
   private func openYourPrivacy(in app: XCUIApplication) throws {
-    try tap("your-privacy", in: app)
+    try tap("your-privacy", in: app) { app.showsPage(titled: "Your privacy") }
     try page(titled: "Your privacy", in: app)
   }
 
@@ -406,7 +427,7 @@ final class NotificationsTests: XCTestCase {
   private func turnOnTheEvening(in app: XCUIApplication) throws {
     let evening = app.find("notify-evening")
     try expectSwitch(evening, on: false)
-    try tap("notify-evening", in: app)
+    try tap("notify-evening", in: app) { holds("notify-evening", "1", in: app) }
     try expectSwitch(evening, on: true)
   }
 
@@ -422,10 +443,12 @@ final class NotificationsTests: XCTestCase {
       "No page titled \"\(title)\"; the titles on screen: \(shown); \(app.cancelsReport)")
   }
 
-  /// Goes back one page on Settings' stack.
+  /// Goes back one page on Settings' stack, watched (`watchedTap`) until `done`, the page left
+  /// gone: never the page under it, which may be in the tree all along.
   @MainActor
-  private func back(in app: XCUIApplication) {
-    app.navigationBars.buttons.element(boundBy: 0).tap()
+  private func back(in app: XCUIApplication, until done: () -> Bool) {
+    let button = app.navigationBars.buttons.element(boundBy: 0)
+    watchedTap("Back", in: app, until: done) { button.tap() }
   }
 
   /// Whether a switch is on, from its value: "1" on and "0" off, as XCUITest gives a switch's;
@@ -513,12 +536,43 @@ final class NotificationsTests: XCTestCase {
 
   /// Taps the element identified `id` on Settings or a page on its stack, whatever type XCUITest
   /// gives it, once it lies whole on screen (`reveal`): a switch at its centre, which its whole
-  /// row takes (`SheetSwitchStyle`).
+  /// row takes (`SheetSwitchStyle`). Watched (`watchedTap`) until `done`, what the tap brings,
+  /// never met before it: a tap whose touch the system cancelled and that brought nothing is
+  /// played once more, as Report an ad's should have been on main's run on 1d643d3.
   @MainActor
-  private func tap(_ id: String, in app: XCUIApplication) throws {
+  private func tap(_ id: String, in app: XCUIApplication, until done: () -> Bool) throws {
     let element = app.find(id)
     try reveal(element, in: app)
-    element.tap()
+    watchedTap(id, in: app, until: done) { element.tap() }
+  }
+
+  /// Whether one read of the app (`ElementRead`) finds the element identified `id` holding
+  /// `value`, as `waitFor(_:_:in:value:)` judges it (of any type, the first; of a `type`, the
+  /// only one): a switch turned on ("1"), a row's result, the recorder's line.
+  @MainActor
+  private func holds(
+    _ id: String,
+    _ value: String,
+    _ type: XCUIElement.ElementType = .any,
+    in app: XCUIApplication
+  ) -> Bool {
+    let read = ElementRead(app, id, type)
+    return (type == .any ? read.found : read.one) && read.value == value
+  }
+
+  /// Whether one read of the app finds the first element identified `id` reading `label`, as
+  /// `waitFor(_:_:in:label:)` judges it: a line's new words.
+  @MainActor
+  private func says(_ id: String, _ label: String, in app: XCUIApplication) -> Bool {
+    let read = ElementRead(app, id)
+    return read.found && read.label == label
+  }
+
+  /// Whether the readout reads a picker open that came after it counted `shown` (`pickerOpens`);
+  /// nil when it can't be read, as under the picker it may not be.
+  @MainActor
+  private func pickerOpen(in app: XCUIApplication, after shown: Int) -> Bool? {
+    app.pickerState.map { $0 == "open" && (app.pickersShown ?? 0) > shown }
   }
 
   /// Scrolls Settings, or the page on its stack, until `element` lies whole on screen
@@ -637,32 +691,31 @@ final class NotificationsTests: XCTestCase {
   }
 
   /// Taps the place button and waits for the picker it opens, after the readout counted `shown`
-  /// (`expectThePicker`). A tap whose touch the system cancelled
-  /// (`cancelled(_:in:within:until:_:)`) and that opened no picker is tapped once more; a tap the
-  /// app completed never is (PickerTests' `openPicker`).
+  /// (`expectThePicker`). A tap whose touch the system cancelled (`watchedTap`) and that opened
+  /// no picker is tapped once more; a tap the app completed never is (PickerTests' `openPicker`).
   @MainActor
   private func openThePicker(in app: XCUIApplication, after shown: Int) throws {
     let place = app.buttons["place"]
     let field = app.find("place-search")
-    // Whether the readout reads this tap's picker open; nil when it can't be read, as under the
-    // picker it may not be (`pickerOpens`).
-    let open = { app.pickerState.map { $0 == "open" && (app.pickersShown ?? 0) > shown } }
     // The search box ends the wait only while the readout can't be read: an earlier picker's may
     // still be in XCUITest's tree. Only the readout, read and not open, has the tap played again.
-    let opened = { open() ?? field.exists }
-    if cancelled("tap on the place button", in: app, within: 2, until: opened, { place.tap() }),
-      open() == false
-    {
-      _ = cancelled("second tap on the place button", in: app) { place.tap() }
-    }
+    watchedTap(
+      "the place button", in: app,
+      until: { pickerOpen(in: app, after: shown) ?? field.exists },
+      again: { self.pickerOpen(in: app, after: shown) == false }, { place.tap() })
     try expectThePicker(in: app, after: shown, "after tapping the place button")
   }
 
-  /// Closes the picker opened after the readout counted `shown`, and waits for the readout to say
-  /// it has closed (`pickerCloses`).
+  /// Closes the picker opened after the readout counted `shown`, watched (`watchedTap`) until
+  /// the readout no longer reads it open, and waits for the readout to say it has closed
+  /// (`pickerCloses`). Under the picker the readout, and `debug-cancels` with it, may not be
+  /// read, and then nothing is played again.
   @MainActor
   private func closeThePicker(in app: XCUIApplication, after shown: Int) throws {
-    app.buttons["picker-close"].tap()
+    let close = app.buttons["picker-close"]
+    watchedTap(
+      "picker-close", in: app, until: { app.pickerState.map { $0 != "open" } ?? false },
+      { close.tap() })
     guard pickerCloses(in: app, after: shown, within: 10) else {
       throw HomeScreenError("The picker is still open; \(app.pickerReport); \(app.cancelsReport)")
     }

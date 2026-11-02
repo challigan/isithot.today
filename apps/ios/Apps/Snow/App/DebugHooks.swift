@@ -10,6 +10,7 @@ import Observation
 import StoreKit
 import SwiftUI
 import UIKit
+import UserNotifications
 import os
 
 /// Every test and debug hook in the app (iOS build spec, section 9.8), here and nowhere else.
@@ -451,6 +452,61 @@ enum DebugHooks {
     ) -> Bool {
       guard standsInForNotifications(arguments: arguments) else { return true }
       return value(after: "-notifications", in: arguments) == NotificationsMode.system.rawValue
+    }
+
+    /// The banner step's report (`ci/push.sh`, which has no XCUITest to read the screen with):
+    /// under `-notifications system`, once the page on screen shows its answer in its colours
+    /// (`ThemeReadout` reading its band), one line on the app's standard output, once a launch:
+    /// `debug-notifications shown`, then the real centre's settings as the app reads them, each
+    /// a word (`authorizationStatus=authorized alertSetting=enabled alertStyle=banner`). So the
+    /// step waits for the answer rather than a guessed time, and names the permission rather than
+    /// guessing at it, as its message did on main's run on 1d643d3 (DECISIONS, "What main's run on
+    /// 1d643d3 showed"). Written straight to the file `simctl launch --stdout` names, which
+    /// `print`, buffered, would hold until the app ended. Nothing otherwise, and nothing in a
+    /// Release build, which `scripts/check-archive.sh` proves of the line's name.
+    static func answerShown(arguments: [String] = ProcessInfo.processInfo.arguments) {
+      guard value(after: "-notifications", in: arguments) == NotificationsMode.system.rawValue,
+        !answerReported
+      else { return }
+      answerReported = true
+      Task {
+        let settings = await notificationSettings()
+        FileHandle.standardOutput.write(Data("debug-notifications shown \(settings)\n".utf8))
+      }
+    }
+
+    /// Whether `answerShown` has written its line this launch.
+    private static var answerReported = false
+
+    /// The real centre's settings as `answerShown` writes them. Off the main actor, so the
+    /// settings, which aren't Sendable, never cross into it (as `UserNotificationsPlatform` reads
+    /// them).
+    private nonisolated static func notificationSettings() async -> String {
+      let settings = await UNUserNotificationCenter.current().notificationSettings()
+      let status: String
+      switch settings.authorizationStatus {
+      case .notDetermined: status = "notDetermined"
+      case .denied: status = "denied"
+      case .authorized: status = "authorized"
+      case .provisional: status = "provisional"
+      case .ephemeral: status = "ephemeral"
+      @unknown default: status = "unknown\(settings.authorizationStatus.rawValue)"
+      }
+      let alert: String
+      switch settings.alertSetting {
+      case .notSupported: alert = "notSupported"
+      case .disabled: alert = "disabled"
+      case .enabled: alert = "enabled"
+      @unknown default: alert = "unknown\(settings.alertSetting.rawValue)"
+      }
+      let style: String
+      switch settings.alertStyle {
+      case .none: style = "none"
+      case .banner: style = "banner"
+      case .alert: style = "alert"
+      @unknown default: style = "unknown\(settings.alertStyle.rawValue)"
+      }
+      return "authorizationStatus=\(status) alertSetting=\(alert) alertStyle=\(style)"
     }
 
     /// `-pushToken`'s answer: put-leeds's token without it. Hex is lowercase and 64 to 200
@@ -1430,7 +1486,8 @@ enum DebugHooks {
   /// it, here in the readout's body, from the page on screen's band and theme and the fades the
   /// shell has told of (`DebugPresence.fades`). The theme the readout first appears with is
   /// the background's, as nothing fades in. Each value is one lowercase word, shown to no one, so
-  /// none of it is copy.
+  /// none of it is copy. Once it reads an answer's band, the answer is on screen in its colours,
+  /// which the banner step is told (`DebugHooks.answerShown`).
   @MainActor
   private struct ThemeReadout: View {
     let band: SnowBand?
@@ -1438,8 +1495,12 @@ enum DebugHooks {
 
     var body: some View {
       let presence = DebugPresence.shared
-      Reading(id: "debug-theme", value: presence.fades.reading(band: band, theme: theme))
+      let reading = presence.fades.reading(band: band, theme: theme)
+      Reading(id: "debug-theme", value: reading)
         .allowsHitTesting(false)
+        .onChange(of: band.map { $0.rawValue == reading } ?? false, initial: true) { _, shown in
+          if shown { DebugHooks.answerShown() }
+        }
         .onAppear {
           // Written only the first time: a write in place tells the readout it changed.
           if presence.fades.last == nil { presence.fades.appeared(with: theme) }

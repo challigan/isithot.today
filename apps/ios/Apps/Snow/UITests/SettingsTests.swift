@@ -46,7 +46,8 @@ final class SettingsTests: XCTestCase {
     // Each row is a whole row's button, at least 54 tall (`SheetRowStyle`).
     let row = app.buttons["your-privacy"]
     XCTAssertGreaterThanOrEqual(row.frame.height, 44, "Your privacy's row at \(row.frame)")
-    units.buttons["in"].tap()
+    let inches = units.buttons["in"]
+    watchedTap("in", in: app, until: { holds("debug-units", "f", in: app) }, { inches.tap() })
     waitFor("debug-units", in: app, value: "f")
     XCTAssertTrue(units.buttons["in"].isSelected, "in isn't chosen")
     XCTAssertFalse(units.buttons["cm"].isSelected, "cm is still chosen")
@@ -80,12 +81,14 @@ final class SettingsTests: XCTestCase {
     openSettings(app)
     assertSnowOnly(app)
 
-    tap("privacy-policy", in: app)
-    waitFor("debug-opened", in: app, value: "https://willitsnow.today/privacy")
-    tap("terms", in: app)
-    waitFor("debug-opened", in: app, value: "https://willitsnow.today/terms")
-    tap("support", in: app)
-    waitFor("debug-opened", in: app, value: "https://willitsnow.today/support")
+    for (id, url) in [
+      ("privacy-policy", "https://willitsnow.today/privacy"),
+      ("terms", "https://willitsnow.today/terms"),
+      ("support", "https://willitsnow.today/support"),
+    ] {
+      tap(id, in: app) { holds("debug-opened", url, in: app) }
+      waitFor("debug-opened", in: app, value: url)
+    }
 
     let version = app.staticTexts["version"]
     reveal(version, in: app)
@@ -94,7 +97,7 @@ final class SettingsTests: XCTestCase {
       version.label)
 
     // How it works, with the judging's numbers and the rounded location.
-    tap("how-it-works", in: app)
+    tap("how-it-works", in: app) { app.showsPage(titled: "How it works") }
     page(titled: "How it works", in: app)
     XCTAssertTrue(text("When 60% or more of them do, the answer is yes", in: app).exists)
     XCTAssertTrue(text("rounded to about 5 km before it leaves your phone", in: app).exists)
@@ -102,36 +105,43 @@ final class SettingsTests: XCTestCase {
     assertSnowOnly(app)
     try auditAccessibility(of: app, on: "How it works", surface: .content)
     attachScreen(of: app, named: "app-how-it-works")
-    back(in: app)
+    back(in: app) { app.lacksPage(titled: "How it works") }
 
     // Credits and licences, and a notice in full.
-    tap("credits", in: app)
+    tap("credits", in: app) { app.showsPage(titled: "Credits and licences") }
     page(titled: "Credits and licences", in: app)
     XCTAssertTrue(text("Place names: GeoNames, licensed under CC BY 4.0", in: app).exists)
     XCTAssertTrue(text("Contains Met Office data", in: app).exists)
     assertSnowOnly(app)
     try auditAccessibility(of: app, on: "Credits and licences", surface: .content)
     attachScreen(of: app, named: "app-credits")
-    tap("notice-BricolageGrotesque-OFL", in: app)
+    // Each licence's row is known to have opened by its own words: the text of a licence just
+    // left may linger in the tree, as a closed picker's search box did.
+    let sil = "SIL OPEN FONT LICENSE Version 1.1"
+    tap("notice-BricolageGrotesque-OFL", in: app) { licence(saying: sil, in: app) }
     let notice = app.staticTexts["notice-text"]
     XCTAssertTrue(notice.waitForExistence(timeout: 5), "No notice text")
-    XCTAssertTrue(notice.label.contains("SIL OPEN FONT LICENSE Version 1.1"))
+    XCTAssertTrue(notice.label.contains(sil))
     // A licence in full is a screen of its own, audited too.
     try auditAccessibility(of: app, on: "the typeface's licence", surface: .content)
     attachScreen(of: app, named: "app-notice")
-    back(in: app)
-    tap("notice-Google-Mobile-Ads-LICENSE", in: app)
+    back(in: app) { noLicence(in: app) }
+    tap("notice-Google-Mobile-Ads-LICENSE", in: app) { licence(saying: "Apache License", in: app) }
     XCTAssertTrue(app.staticTexts["notice-text"].waitForExistence(timeout: 5), "No notice text")
     XCTAssertTrue(app.staticTexts["notice-text"].label.contains("Apache License"))
-    back(in: app)
-    back(in: app)
+    back(in: app) { noLicence(in: app) }
+    back(in: app) { app.lacksPage(titled: "Credits and licences") }
 
     // The emails, with no audit after them (above).
-    tap("contact-us", in: app)
-    waitFor("debug-opened", in: app, value: "mailto:support@willitsnow.today")
-    tap("report-ad", in: app)
-    let report = opened(app)
+    let support = "mailto:support@willitsnow.today"
+    tap("contact-us", in: app) { holds("debug-opened", support, in: app) }
+    waitFor("debug-opened", in: app, value: support)
+    // Report an ad's email, which only it starts so: Contact us's has nothing after the address.
     let mail = "mailto:support@willitsnow.today?"
+    tap("report-ad", in: app) {
+      ElementRead(app, "debug-opened", .staticText).value?.hasPrefix(mail) == true
+    }
+    let report = opened(app)
     let sent = readElement("debug-opened", .staticText, in: app, within: 5, "to hold an email") {
       $0.one && $0.value?.hasPrefix(mail) == true
     }
@@ -156,22 +166,28 @@ final class SettingsTests: XCTestCase {
   func testReportAnAdWithoutAMailApp() throws {
     let app = launch(["-resetStore", "-fixture", "leeds-dry", "-openURLs", "nomail"])
     openSettings(app)
-    tap("report-ad", in: app)
+    tap("report-ad", in: app) { app.showsPage(titled: "Report an ad") }
     page(titled: "Report an ad", in: app)
     XCTAssertEqual(
       app.staticTexts["fallback-body"].label,
       "Email support@willitsnow.today with a screenshot of the ad and the time you saw it.")
     XCTAssertFalse(app.staticTexts["copy-confirmation"].exists)
-    app.buttons["copy-address"].tap()
+    let copy = app.buttons["copy-address"]
+    watchedTap(
+      "copy-address", in: app, until: { ElementRead(app, "copy-confirmation").found },
+      { copy.tap() })
     let copied = app.staticTexts["copy-confirmation"]
     XCTAssertTrue(copied.waitForExistence(timeout: 5), "No confirmation; \(app.cancelsReport)")
     XCTAssertEqual(copied.label, "Address copied.")
     try auditAccessibility(of: app, on: "Report an ad's fallback", surface: .content)
     attachScreen(of: app, named: "app-report-ad-fallback")
-    app.buttons["close-fallback"].tap()
+    // Closed once the fallback has gone: Settings' title is in the tree under it all along.
+    let close = app.buttons["close-fallback"]
+    watchedTap(
+      "close-fallback", in: app, until: { app.lacksPage(titled: "Report an ad") }, { close.tap() })
 
     // Contact us falls back the same way.
-    tap("contact-us", in: app)
+    tap("contact-us", in: app) { app.showsPage(titled: "Contact us") }
     page(titled: "Contact us", in: app)
     XCTAssertEqual(
       app.staticTexts["fallback-body"].label,
@@ -188,7 +204,7 @@ final class SettingsTests: XCTestCase {
   func testYourPrivacy() throws {
     let app = launch(["-resetStore", "-fixture", "leeds-dry", "-openURLs", "record"])
     openSettings(app)
-    tap("your-privacy", in: app)
+    tap("your-privacy", in: app) { app.showsPage(titled: "Your privacy") }
     page(titled: "Your privacy", in: app)
     // At its top, as How it works and the licences are, where each line on screen starts below
     // the bar. At its end, since the purchase's line made the page longer, the second line runs
@@ -232,8 +248,9 @@ final class SettingsTests: XCTestCase {
     assertSnowOnly(app)
     let policy = app.buttons["full-policy"]
     XCTAssertGreaterThanOrEqual(policy.frame.height, 44, "The full policy's row at \(policy.frame)")
-    tap("full-policy", in: app)
-    waitFor("debug-opened", in: app, value: "https://willitsnow.today/privacy")
+    let policyURL = "https://willitsnow.today/privacy"
+    tap("full-policy", in: app) { holds("debug-opened", policyURL, in: app) }
+    waitFor("debug-opened", in: app, value: policyURL)
   }
 
   // MARK: - Helpers
@@ -254,8 +271,8 @@ final class SettingsTests: XCTestCase {
   }
 
   /// Taps the gear, and waits for the sheet, with its Close and its title. A tap whose touch the
-  /// system cancelled (`cancelled(_:in:within:until:_:)`) and that opened no sheet is tapped once
-  /// more; a tap the app completed never is. With no sheet, the failure says where the top bar
+  /// system cancelled (`watchedTap`) and that opened no sheet is tapped once more; a tap the app
+  /// completed never is. With no sheet, the failure says where the top bar
   /// was (on main's first macOS run the gear was under the status bar, where the tap never
   /// reached it) and `debug-cancels`.
   @MainActor
@@ -264,12 +281,7 @@ final class SettingsTests: XCTestCase {
     let close = app.buttons["close-settings"]
     // Opened, and not opened, as the home screen shows it (`sheetClosed`), not by Close, which
     // XCUITest may go on finding once an earlier Settings has closed.
-    let opened = { !app.sheetClosed }
-    if cancelled("tap on the gear", in: app, within: 2, until: opened, { gear.tap() }),
-      app.sheetClosed
-    {
-      _ = cancelled("second tap on the gear", in: app) { gear.tap() }
-    }
+    watchedTap("the gear", in: app, until: { !app.sheetClosed }, { gear.tap() })
     XCTAssertTrue(
       close.waitForExistence(timeout: 5),
       "No Settings after tapping the gear; \(app.cancelsReport); \(app.homeGeometry)")
@@ -346,18 +358,43 @@ final class SettingsTests: XCTestCase {
     return !recorder.exists || frame.maxY <= recorder.frame.minY
   }
 
-  /// Taps the row or button identified `id`, scrolling to it first.
+  /// Taps the row or button identified `id`, scrolling to it first; watched (`watchedTap`), so a
+  /// tap whose touch the system cancelled and that brought nothing, as `done` reads it, is played
+  /// once more, as Report an ad's should have been on main's run on 1d643d3.
   @MainActor
-  private func tap(_ id: String, in app: XCUIApplication) {
+  private func tap(_ id: String, in app: XCUIApplication, until done: () -> Bool) {
     let element = app.buttons[id]
     reveal(element, in: app)
-    element.tap()
+    watchedTap(id, in: app, until: done) { element.tap() }
   }
 
-  /// Goes back one page on Settings' stack.
+  /// Goes back one page on Settings' stack, watched (`watchedTap`) until `done`, the page left
+  /// gone: never the page under it, which may be in the tree all along.
   @MainActor
-  private func back(in app: XCUIApplication) {
-    app.navigationBars.buttons.element(boundBy: 0).tap()
+  private func back(in app: XCUIApplication, until done: () -> Bool) {
+    let button = app.navigationBars.buttons.element(boundBy: 0)
+    watchedTap("Back", in: app, until: done) { button.tap() }
+  }
+
+  /// Whether one read of the app (`ElementRead`) finds the one recorder's line identified `id`
+  /// holding `value`, as `waitFor` waits for it: what a row that opens a URL, or the units, bring.
+  @MainActor
+  private func holds(_ id: String, _ value: String, in app: XCUIApplication) -> Bool {
+    let read = ElementRead(app, id, .staticText)
+    return read.one && read.value == value
+  }
+
+  /// Whether one read of the app finds a licence's text (`notice-text`) holding `words`: what that
+  /// licence's row brings, which another licence's text left in the tree can't pass for.
+  @MainActor
+  private func licence(saying words: String, in app: XCUIApplication) -> Bool {
+    ElementRead(app, "notice-text", .staticText).labels.contains { $0.contains(words) }
+  }
+
+  /// Whether one read of an app it could read finds no licence's text: Back from a licence done.
+  @MainActor
+  private func noLicence(in app: XCUIApplication) -> Bool {
+    ElementRead(app, "notice-text", .staticText).gone
   }
 
   /// Waits up to 10 seconds until the recorder's line identified `id` (`debug-opened`,
