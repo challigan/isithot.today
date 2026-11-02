@@ -231,8 +231,9 @@ final class AdsTests: XCTestCase {
   @MainActor
   func testTheConsentFormThenPrivacyChoices() throws {
     let page = try HomeScreen.named("leeds-dry").opening()
-    let app = try launch(["-resetStore", "-fixture", "leeds-dry", "-umpGeography", "eea"])
-    try awaitHeading(page.heading, in: app)
+    let app = try launch(
+      ["-resetStore", "-fixture", "leeds-dry", "-umpGeography", "eea"], orForm: true)
+    try awaitHeadingOrForm(page.heading, in: app)
     // Up to 30 seconds for the form's web view, or for the ads to stop asking without one.
     let form = app.webViews.firstMatch
     let phase = waitForAdsPhase(["on", "withheld"], in: app, timeout: 30) { form.exists }
@@ -348,16 +349,40 @@ final class AdsTests: XCTestCase {
   // MARK: - Helpers
 
   /// Launches the app with `-uitest` and `arguments`, the ads and all: no `-noads 1`, unlike
-  /// every other UI test's launch (`launchApp`). Waits for the heading.
+  /// every other UI test's launch (`launchApp`). Waits for the heading, or with `orForm` (in the
+  /// EEA) for Google's consent form, should it have come over the home screen first
+  /// (`awaitHeadingOrForm`).
   @MainActor
-  private func launch(_ arguments: [String]) throws -> XCUIApplication {
+  private func launch(_ arguments: [String], orForm: Bool = false) throws -> XCUIApplication {
     let app = XCUIApplication()
     app.launchArguments = ["-uitest"] + arguments
     app.launch()
-    if let failure = readHeading(in: app, within: 20, "to come after the launch", until: \.found) {
+    let what = "to come after the launch" + (orForm ? ", or Google's form over it" : "")
+    let read = readHeading(in: app, within: 20, what) { $0.found || (orForm && $0.webViews > 0) }
+    if let failure = read {
       throw HomeScreenError("No heading on screen after launching with \(arguments): \(failure)")
     }
     return app
+  }
+
+  /// Waits up to `timeout` seconds for the heading to read `label` or, should it come first, for
+  /// Google's consent form over the home screen: a web view, the ads being off until the form is
+  /// answered, so no banner. By `readUntil`'s rules, as `awaitHeading`, which can't be used
+  /// here: while the form is up the home screen is out of the accessibility tree, so a read finds
+  /// no heading. On PR #44's run 41423209752 the answer was on screen for about 4 seconds before
+  /// the form came, while the launch's one read took 6.8 s, and each of the 52 reads after found
+  /// no heading (docs/DECISIONS.md, "What PR #44's run on b206ff3 showed"). Either is the launch
+  /// done; what the form then does is the test.
+  @MainActor
+  private func awaitHeadingOrForm(
+    _ label: String, in app: XCUIApplication, timeout: TimeInterval = 20
+  ) throws {
+    let what = "to read \"\(label)\", or Google's form over it"
+    let read = readHeading(in: app, within: timeout, what) { $0.shows(label) || $0.webViews > 0 }
+    if let failure = read {
+      throw HomeScreenError(
+        "Neither the heading reading \"\(label)\" nor Google's consent form came: \(failure)")
+    }
   }
 
   /// The ads' phase as the Debug readout says it (`debug-ads`, `DebugHooks.adsReadout`): idle,
