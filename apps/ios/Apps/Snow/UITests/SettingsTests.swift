@@ -47,7 +47,7 @@ final class SettingsTests: XCTestCase {
     let row = app.buttons["your-privacy"]
     XCTAssertGreaterThanOrEqual(row.frame.height, 44, "Your privacy's row at \(row.frame)")
     units.buttons["in"].tap()
-    waitFor(app.staticTexts["debug-units"], value: "f")
+    waitFor("debug-units", in: app, value: "f")
     XCTAssertTrue(units.buttons["in"].isSelected, "in isn't chosen")
     XCTAssertFalse(units.buttons["cm"].isSelected, "cm is still chosen")
     try auditAccessibility(of: app, on: "Settings", surface: .content)
@@ -81,11 +81,11 @@ final class SettingsTests: XCTestCase {
     assertSnowOnly(app)
 
     tap("privacy-policy", in: app)
-    waitFor(opened(app), value: "https://willitsnow.today/privacy")
+    waitFor("debug-opened", in: app, value: "https://willitsnow.today/privacy")
     tap("terms", in: app)
-    waitFor(opened(app), value: "https://willitsnow.today/terms")
+    waitFor("debug-opened", in: app, value: "https://willitsnow.today/terms")
     tap("support", in: app)
-    waitFor(opened(app), value: "https://willitsnow.today/support")
+    waitFor("debug-opened", in: app, value: "https://willitsnow.today/support")
 
     let version = app.staticTexts["version"]
     reveal(version, in: app)
@@ -128,11 +128,16 @@ final class SettingsTests: XCTestCase {
 
     // The emails, with no audit after them (above).
     tap("contact-us", in: app)
-    waitFor(opened(app), value: "mailto:support@willitsnow.today")
+    waitFor("debug-opened", in: app, value: "mailto:support@willitsnow.today")
     tap("report-ad", in: app)
     let report = opened(app)
-    let mail = NSPredicate(format: "value BEGINSWITH %@", "mailto:support@willitsnow.today?")
-    wait(for: [expectation(for: mail, evaluatedWith: report)], timeout: 5)
+    let mail = "mailto:support@willitsnow.today?"
+    let sent = readElement("debug-opened", .staticText, in: app, within: 5, "to hold an email") {
+      $0.one && $0.value?.hasPrefix(mail) == true
+    }
+    if let failure = sent {
+      XCTFail("debug-opened never held an email starting \"\(mail)\": \(failure)")
+    }
     // Section 10.7's subject and body, encoded: the version, the time on the phone, the place.
     let email = recorded(report)
     XCTAssertTrue(
@@ -227,7 +232,7 @@ final class SettingsTests: XCTestCase {
     let policy = app.buttons["full-policy"]
     XCTAssertGreaterThanOrEqual(policy.frame.height, 44, "The full policy's row at \(policy.frame)")
     tap("full-policy", in: app)
-    waitFor(opened(app), value: "https://willitsnow.today/privacy")
+    waitFor("debug-opened", in: app, value: "https://willitsnow.today/privacy")
   }
 
   // MARK: - Helpers
@@ -354,14 +359,18 @@ final class SettingsTests: XCTestCase {
     app.navigationBars.buttons.element(boundBy: 0).tap()
   }
 
-  /// Waits until `element`, a recorder's line, holds `value`.
+  /// Waits up to 10 seconds until the recorder's line identified `id` (`debug-opened`,
+  /// `debug-units`), the one such text, holds `value`, read from snapshots (`readElement`, by
+  /// `readUntil`'s rules, as the heading is); fails, stopping the test, with what the last read
+  /// found, never a fresh read (docs/DECISIONS.md, "What PR #46's first macOS run showed").
   @MainActor
-  private func waitFor(_ element: XCUIElement, value: String) {
-    let holds = NSPredicate(format: "exists == true AND value == %@", value)
-    let expectation = XCTNSPredicateExpectation(predicate: holds, object: element)
-    let done = XCTWaiter.wait(for: [expectation], timeout: 10)
-    let held = element.exists ? recorded(element) : "nothing"
-    XCTAssertEqual(done, .completed, "\(element) never held \(value); it holds \"\(held)\"")
+  private func waitFor(_ id: String, in app: XCUIApplication, value: String) {
+    let read = readElement(id, .staticText, in: app, within: 10, "to hold \"\(value)\"") {
+      $0.one && $0.value == value
+    }
+    if let failure = read {
+      XCTFail("\(id) never held \"\(value)\": \(failure)")
+    }
   }
 
   @MainActor

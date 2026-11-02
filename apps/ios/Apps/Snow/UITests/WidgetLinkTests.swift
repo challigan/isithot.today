@@ -25,9 +25,13 @@ final class WidgetLinkTests: XCTestCase {
   }
 
   /// Opens `willitsnow://view/<view>` in `app`, and waits for `screen`'s page for it: its heading
-  /// (`awaitHeading`), then its tab selected, for 10 seconds each, and only once both have come
-  /// reads where the page is (`pageOffScreen`), as the tree lags the screen. The tree holds the
-  /// chosen view's page wherever the pages are, so only its frame shows the link moved them.
+  /// (`awaitHeading`), then its tab selected and reading the page's label (the one button
+  /// `view-<view>`, IsItUI's `ViewSwitcher.identifier`, read from snapshots by `readElement`, the
+  /// failure the last read's: the words too, as the query by them, `app.buttons[label]`, needed
+  /// before, so Tomorrow's tab after 6pm is still told from Today's), for 10 seconds each, and
+  /// only once both have come reads where the page is (`pageOffScreen`), as the tree lags the
+  /// screen. The tree holds the chosen view's page wherever the pages are, so only its frame
+  /// shows the link moved them.
   @MainActor
   private func open(_ view: String, of screen: HomeScreen, in app: XCUIApplication) throws {
     let page = try screen.page(view)
@@ -38,11 +42,15 @@ final class WidgetLinkTests: XCTestCase {
     } catch {
       throw HomeScreenError("\(error) after \(link); \(app.homeGeometry)")
     }
-    let tab = app.buttons[page.label]
-    let selected = XCTNSPredicateExpectation(
-      predicate: NSPredicate(format: "isSelected == true"), object: tab)
-    guard XCTWaiter().wait(for: [selected], timeout: 10) == .completed else {
-      throw HomeScreenError("After \(link), the \(page.label) tab isn't selected")
+    let tab = "view-\(view)"
+    let selected = readElement(
+      tab, .button, in: app, within: 10, "to be selected, reading \"\(page.label)\""
+    ) {
+      $0.one && $0.selected && $0.label == page.label
+    }
+    if let failure = selected {
+      throw HomeScreenError(
+        "After \(link), the tab \(tab) isn't selected, reading \"\(page.label)\": \(failure)")
     }
     if let off = app.pageOffScreen(view) {
       throw HomeScreenError("After \(link), \(off)")
