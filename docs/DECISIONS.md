@@ -5302,6 +5302,17 @@ attached one `slow-read`, the failure's.
   Three planted faults (the form not counted, any element counted as a web view, the heading
   taken in any words) are each caught. `swift format lint --strict` passes.
 
+**Main merged in after PR #43.** PR #43 brought NotificationsTests, with waits of its own written
+before PR #46's run: `waitFor(_:label:)` and `waitFor(_:value:)`, predicates in a 10 s
+`XCTWaiter` whose failures read the element afresh, and `gone`, a `waitForNonExistence`. They
+now read snapshots by `readElement`, as UpgradeTests' do: by identifier, the first of any type
+(as `app.find` took it), the recorder's line as the one static text `debug-opened`, the failure
+the last read's with `debug-cancels` after it; `gone` needs a read of an app that could be read.
+`waitForNonExistence` moves too: unlike `waitForExistence`, nothing has shown that it ends with a
+read that runs to its end. Linux's XCUITest stub gains what the notification tests use
+(`UIApplication`'s settings URLs, the switch and toggle types, SpringBoard's alerts), so the
+harness type-checks them; the element waits' 53 checks still pass.
+
 ## After #34's fourth full run
 
 PR #34's fourth full macOS run, on c74aa22 (run 40189947895, job 121158965836), passed 43 of the 44
