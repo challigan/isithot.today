@@ -1139,6 +1139,9 @@ struct HeadingRead: ScreenRead {
   let headings: [(label: String, frame: CGRect)]
   /// The window's frame.
   let window: CGRect
+  /// How many web views the same snapshot holds: Google's consent form, which AdsTests' launch in
+  /// the EEA waits for as well as the heading (`AdsTests.awaitHeadingOrForm`), or a banner.
+  let webViews: Int
   /// Why the app couldn't be read, when it couldn't.
   let unreadable: String?
 
@@ -1147,6 +1150,7 @@ struct HeadingRead: ScreenRead {
   init(_ app: XCUIApplication) {
     began = Date()
     var headings: [(label: String, frame: CGRect)] = []
+    var webViews = 0
     var window = CGRect.zero
     var unreadable: String?
     do {
@@ -1155,6 +1159,7 @@ struct HeadingRead: ScreenRead {
       var pending = [root]
       while let element = pending.popLast() {
         if element.identifier == "heading" { headings.append((element.label, element.frame)) }
+        if element.elementType == .webView { webViews += 1 }
         pending.append(contentsOf: element.children.reversed())
       }
     } catch {
@@ -1162,6 +1167,7 @@ struct HeadingRead: ScreenRead {
     }
     took = Date().timeIntervalSince(began)
     self.headings = headings
+    self.webViews = webViews
     self.window = window
     self.unreadable = unreadable
   }
