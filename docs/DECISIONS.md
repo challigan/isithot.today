@@ -21,6 +21,36 @@ City pages and OG images are server-rendered by Astro's Netlify adapter. The API
 mounted as Astro routes (same handlers), so `pnpm dev` works without the Netlify CLI. In
 production, responses carry `x-isithot-via: function` when the dedicated function answered.
 
+**A new deploy reaches Netlify's servers one by one.** For some seconds after it goes live, and
+after `version.json` shows its commit, some servers still answer 404 for it.
+
+- **The smoke test** tries again every 2 s, up to 6 times, when a response is Netlify's own
+  "Not Found - Request ID" page (after PR #22's preview failed 14 checks in its first five
+  seconds). It matches that page only, because it also checks pages that must 404.
+- **The OG image renderer** fetches the resvg wasm and three fonts from the deploy's own
+  `/_astro/` files. In run 41457280649 on PR #48's preview (2 November), all seven OG image checks
+  answered 500 (`asset /_astro/index_bg.Blvrv-U2.wasm: 404`). They ran from 13:57:00.7, about 6 s
+  after `version.json` showed the commit, until the run ended at 13:57:06.5. So the 404s were seen
+  for about 6 s, and when they stopped wasn't recorded.
+- **`ownAsset` (packages/server)** now tries any 404 for those files again, 1 s apart, up to 15
+  tries. Those files are content-hashed and come from the build that made the function, so a 404
+  means the server asked hasn't got the deploy yet, or the build is broken; a broken build still
+  fails after the last try ("404 after 15 tries"). Any other status, or a dropped connection,
+  fails at once.
+- **Any 404, not only Netlify's page.** On a later push to the same pull request, a lagging server
+  still has the previous deploy, whose own function would answer the new file's path with the
+  site's 404 page.
+- **The 14 s of waiting is a guess**, sized from the budget rather than a measured spread. The
+  worst case (the forecast's 7.5 s, the waits, 15 quick 404s and the render) is about 24 s,
+  inside the function's 30 s. On an account still on the old 10 s limit, a request still waiting
+  at 10 s would be stopped instead of answering 500 at once.
+- **Each 404 tried again is logged** (`asset …: 404 on try 3 of 15, trying again in 1000 ms`), so
+  the function log will show how long a spread really lasts.
+- **Each function instance waits on its own.** The four files are fetched together, once per
+  instance. Netlify runs functions on AWS Lambda, where an instance takes one request at a time,
+  so each new instance that starts during a spread waits for itself. Only later requests on the
+  same warm instance, or every request to one Node process such as `astro dev`, share one fetch.
+
 ## Data
 
 - **Model IDs.** The current Open-Meteo docs list `ncep_gfs_seamless`, `dwd_icon_seamless`
