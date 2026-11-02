@@ -6071,15 +6071,23 @@ changes for it only makes its next miss name itself.
   a status bar's change, a row of icons and a strip too thin. The app's Debug and Release code
   type-check against stubs (main-1d643d3/typecheck).
 
-**For the next macOS run to show.** That the UI tests pass, with any tap played again in the
-summary's list of cancelled touches; that `Push/app-stdout.txt` holds the line with
-`authorizationStatus=authorized alertSetting=enabled`; that each banner is seen at a read with its
-time since the push, and the one over the app gone at a later one; and that `Push/simulator.log`
-holds both pushes' way through CoreSimulatorBridge, usernotificationsd and SpringBoard. If a banner
-is missed again, which of those lines the log lacks says where it stopped. Two things here are
-unchecked on macOS: that `simctl launch --stdout` delivers the app's line (the step goes on
-without it), and that `log show --start` reads the simulator's log at the host's time (the step
-says how many lines it read).
+**What #52's first macOS run showed** (run 41524175742, job 125548704866, 10dec38):
+
+- **The UI tests:** all 80 passed. The list of cancelled touches held only the one
+  `testASystemGestureCountsACancelledTouch` makes on purpose, so no tap was played again.
+- **The app's line:** read 2.87 s after the launch, and kept in `Push/app-stdout.txt`:
+  `authorizationStatus=authorized alertSetting=enabled alertStyle=banner`. So
+  `simctl launch --stdout` delivers it.
+- **The banner over the app:** seen at the second read, +1.64 s to +4.70 s after the push (rows 152
+  to 499), and gone at the sixth, +9.20 s.
+- **The banner on the Home Screen:** seen at the second read, +1.31 s to +2.26 s (rows 152 to 529).
+- **The simulator's log:** `Push/simulator.log` holds 3,711 lines from the step's start, 22:21:51.
+  Both pushes go through it: CoreSimulatorBridge adds request A366-0E4E at 22:22:00.066 and
+  C851-A8BA at 22:22:15.066, usernotificationsd forwards each, and SpringBoard's notifications
+  pipeline takes each. So `log show --start` reads at the host's time.
+
+If a banner is missed again, which of those lines the log lacks says where it stopped. Main's
+failure on 1d643d3 stays unexplained until then.
 
 ## After #34's fourth full run
 
