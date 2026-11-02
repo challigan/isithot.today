@@ -1329,6 +1329,39 @@ any other trigger could call it.
   at 03:00 on 1 December, 27 and 28 November go, 29 November on stay. Cut short or failed, it
   releases its marker, so the next run in the hour carries on. The marker goes with its day's
   `done/` keys. That is at most four conditional writes a day, and no other run pays anything.
+- **Ids entries left behind.** `forgetDevice` deletes a phone's `ids/v1/` entry last, and a store
+  failure there (or in reading it first, when the trigger then goes alone) left it: the full id,
+  the salt and every record's key, saved places' zones included. Its comment said the next
+  registration would replace it, but after Apple's refusal or 90 days unseen none comes, so the
+  privacy notice's "when Apple tells us the app is no longer installed, or 90 days after the app
+  last checked in" was untrue for that phone. Returning `failed` instead would not help: the run
+  and the sender retry only a record they find again, and by then the records have gone. So once
+  the cleanup's old keys are deleted, it lists every zone's registrations (the saved-places
+  count's walk), then the ids entries, and for each device with no record in any zone
+  `forgetIdsLeft` reads the entry, every key it names, the entry again and the keys again,
+  deleting it only if unchanged and nothing it names is there. The entries are listed as decision
+  26 lists the registrations, never all in one call: there is one a device, and Blobs pages a
+  listing through one 1.5 s call, so a single listing would fail every night once there were
+  5,000 to 15,000 devices, and every entry left would then stay for good. So they are listed in
+  16 shards an app, by the id's first hex digit (`ids/v1/snow.0` to `ids/v1/snow.f`; 80 listings
+  for the five apps, 25 at once, none started once the pushes' grace is over), and a shard
+  reaches that size only at 16 times as many devices. The walk itself is still one listing a
+  zone, decision 26's limit: a zone too big to list stops the walk, and with it the sweep. A
+  shard or an entry that fails is logged and left for tomorrow, the others going on. Such an
+  entry now goes at the next 03:00 UTC, entries left before this change included
+  (`cleanup deleted N old keys` counts them, and a line names each by its id prefix), but only
+  once no record of the phone is left. A phone with another place whose record stayed (the ids
+  read failed, so the trigger went alone, or that record's read or delete failed) keeps that
+  record and the entry naming it, as before this change, until that place is refused in turn or
+  goes stale, 90 days after the phone last checked in; the cleanup rightly keeps an entry that
+  names a record. Closing that would take `forgetDevice` failing before it touches the trigger
+  when it can't read the entry, and the sender releasing the claim of a refusal it could not
+  forget, so the next run sends again and retries: a change to the sender's claims, left for now.
+  A registration names a record in its entry before writing it, and a version 2 one ends by writing
+  its entry again, so one under way keeps its entry or writes it back; as in `forgetDevice`, only a
+  record written between the last read and the delete could lose it, until it is stale. There is
+  no age test on the entry's `updatedAt`: 8.1 entries and a new salt have none, and it would keep a
+  refused phone's salt for up to 90 days. A walk that can't finish deletes no entry that day.
 - **The log line**, one a run:
   `alerts-run: zones 1, records 2, groups 2, fetches 2, sent 1, deleted 0, errors 0; 812 ms`.
   Notes follow when they apply: `dry run, 3 logged`, `2 forced`,

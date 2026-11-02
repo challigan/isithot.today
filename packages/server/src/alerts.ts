@@ -19,7 +19,7 @@
  *    unfinished, marks judged each registration finished with but unclaimed, so the next run
  *    reads only what is left;
  * 8. in the 03:00 UTC hour, deletes `sent/`, `judged/`, `done/` and `test/` keys more than 2 days
- *    old, and logs how many devices have saved places.
+ *    old, and the ids entries left naming no record, and logs how many devices have saved places.
  *
  * **A phone's places.** Each place of a phone is a registration of its own, in its own zone: the
  * free place ("where you are", "snow.<id>") and each saved place ("snow.<id>.<pid>"), by which name
@@ -62,9 +62,12 @@ import {
   doneKey,
   donePrefix,
   forgetDevice,
+  forgetIdsLeft,
   idPrefix,
+  idsShards,
   judgedKey,
   judgedPrefix,
+  parseIdsKey,
   parseRegKey,
   redact,
   regKey,
@@ -839,10 +842,12 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
 
   /**
    * Step 8: once a day, in the 03:00 UTC hour, the `sent/`, `judged/`, `done/` and `test/` keys
-   * more than 2 days old, then a count of the devices with saved places. Its marker is claimed
+   * more than 2 days old, then every zone's registrations listed, for the ids entries left naming
+   * no record (`sweepIds`) and a count of the devices with saved places. Its marker is claimed
    * first, so one run cleans; a cleanup cut short or failed releases it, so the next run in the
-   * hour carries on, and only the run that finishes it counts. A count that can't finish is
-   * logged as unavailable, and keeps the marker: the deletes are done.
+   * hour carries on, and only the run that finishes it counts. A listing of the zones that can't
+   * finish leaves the ids entries for tomorrow and the count logged as unavailable, and keeps the
+   * marker: the old keys' deletes are done.
    */
   const clean = async (): Promise<void> => {
     if (at.getUTCHours() !== CLEANUP_HOUR) return;
@@ -887,7 +892,9 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
     });
     result.cleaned = deleted;
     if (complete) {
-      const count = await countSaved();
+      const zones = await walkZones();
+      if (zones) result.cleaned = deleted + (await sweepIds(zones.devices));
+      const count = zones?.saved.size ?? null;
       say(
         `alerts-run: cleanup: ${
           count === null
@@ -905,12 +912,13 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
   };
 
   /**
-   * The day's count of devices with a saved place (a key with a pid), which Carl compares each
-   * month with the purchases (DECISIONS): zone by zone, so no one listing grows with every
-   * registration, and none started once the pushes' grace is over. Null when a listing failed or
-   * time ran out; the cleanup stays finished all the same, its deletes done.
+   * Every zone's registrations, as "<app>.<id>": each device with a record, and each with a saved
+   * place (a key with a pid), whose count Carl compares each month with the purchases
+   * (DECISIONS). Zone by zone, so no one listing grows with every registration, and none started
+   * once the pushes' grace is over. Null when a listing failed or time ran out; the cleanup stays
+   * finished all the same, its deletes done.
    */
-  const countSaved = async (): Promise<number | null> => {
+  const walkZones = async (): Promise<{ devices: Set<string>; saved: Set<string> } | null> => {
     let zoneList: string[];
     try {
       const { directories } = await store.list(REG_PREFIX, { directories: true });
@@ -918,6 +926,7 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
     } catch {
       return null;
     }
+    const devices = new Set<string>();
     const saved = new Set<string>();
     let counted = true;
     await pool(zoneList, READ_CONCURRENCY, async (tz) => {
@@ -929,13 +938,50 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
       try {
         for (const key of (await store.list(regZonePrefix(tz))).keys) {
           const reg = parseRegKey(key);
+          if (reg) devices.add(`${reg.app}.${reg.id}`);
           if (reg?.pid) saved.add(`${reg.app}.${reg.id}`);
         }
       } catch {
         counted = false;
       }
     });
-    return counted ? saved.size : null;
+    return counted ? { devices, saved } : null;
+  };
+
+  /**
+   * The ids entries of devices with no record in any zone (`devices`, from a walk of every zone
+   * listed before them), each deleted by `forgetIdsLeft` only if no key it names holds anything,
+   * read again: those `forgetDevice` left when the store failed it, which nothing else deletes
+   * once Apple has refused the phone or it has gone stale. Listed shard by shard (`idsShards`, 16
+   * an app), as the zones are, so no one listing grows with every device; the reads only for
+   * those entries. None started once the pushes' grace is over, and a shard or an entry that
+   * fails is left for tomorrow, the rest going on. How many it deleted.
+   */
+  const sweepIds = async (devices: ReadonlySet<string>): Promise<number> => {
+    const left: { app: string; id: string }[] = [];
+    await pool(idsShards(), READ_CONCURRENCY, async (shard) => {
+      if (clock() >= pushDeadline) return;
+      try {
+        for (const key of (await store.list(shard)).keys) {
+          const device = parseIdsKey(key);
+          if (device && !devices.has(`${device.app}.${device.id}`)) left.push(device);
+        }
+      } catch {
+        // Logged by the store; tomorrow's cleanup lists the shard again.
+      }
+    });
+    let swept = 0;
+    await pool(left, CLEANUP_CONCURRENCY, async (device) => {
+      if (clock() >= pushDeadline) return;
+      try {
+        if (!(await forgetIdsLeft(store, device.app, device.id))) return;
+        swept++;
+        say(`alerts-run: cleanup: deleted the ids entry of ${who(device)} (no record left)`);
+      } catch {
+        // Logged by the store; tomorrow's cleanup reads it again.
+      }
+    });
+    return swept;
   };
 
   await gather();
