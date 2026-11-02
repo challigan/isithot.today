@@ -566,9 +566,9 @@ it on your phone. StoreKit needs nothing in GitHub or Netlify: no secret and no 
    1. Open the app, tap the gear, then **Remove ads and add widgets · £1.99**, then **Buy for
       £1.99**, and confirm on Apple's own sheet. A TestFlight build buys in Apple's test
       environment with your own Apple Account, so nothing is charged and you need no Sandbox
-      tester. The ads go at once: the band under the pages, the ad at the end of each page, and
-      no more full-screen ads. The page and Settings then say "Thank you. Ads are off and widgets
-      are on."
+      tester, unless you want to buy again (step 6). The ads go at once: the band under the
+      pages, the ad at the end of each page, and no more full-screen ads. The page and Settings
+      then say "Thank you. Ads are off and widgets are on."
    2. If there is no price, and the page says the purchase isn't available right now, the App
       Store has nothing to sell the app yet. Check that the agreement is Active (step 1), and
       that the purchase has its price and its English (U.K.) name (step 2); it doesn't need to be
@@ -582,16 +582,33 @@ it on your phone. StoreKit needs nothing in GitHub or Netlify: no secret and no 
 
    If any step shows something else, tell me what it said, with a screenshot.
 
-6. **A Sandbox tester (C16) is optional.** TestFlight never uses one, and a build you run from
-   Xcode sells from Snow.storekit, Xcode's local stand-in for the App Store, which needs no
-   account (apps/ios/README.md, "Phase 7.1: the purchase", "Trying it"). Only a build from Xcode
-   with that turned off (**Product → Scheme → Edit Scheme → Run → Options**, **StoreKit
-   Configuration** set to None) buys from Apple's test environment, and needs one: **Users and
-   Access → Sandbox → Test Accounts**, then **+**, with an email address that isn't an Apple
-   Account already. On the iPhone, with Developer Mode on, try one purchase in a build Xcode
-   installed; **Settings → Developer → Sandbox Apple Account → Sign In** appears after that
-   (Apple, "Testing In-App Purchases with sandbox"). Refunds, Ask to Buy and a purchase taken
-   back are already tested on CI (the StoreKit tests).
+6. **A Sandbox tester (C16) is optional.** You need one only to buy again on the same phone: a
+   purchase your own Apple Account makes in TestFlight can't be undone, and deleting the app only
+   restores it. Apple's "Clear Purchase History" works for a Sandbox Apple Account only.
+   1. **Make the tester:** **Users and Access → Sandbox → Test Accounts**, then **+**, with an
+      email address that isn't an Apple Account already.
+   2. **Install from TestFlight** as usual, signed in with your own Apple Account (TestFlight
+      needs it to download).
+   3. **Sign out of purchases only:** Settings → your name → **Media & Purchases → Sign Out**.
+      iCloud stays signed in.
+   4. **Sign in to the tester:** Settings → **Developer**, then at the foot **Sandbox Apple
+      Account → Sign In**. Developer appears only with Developer Mode on (Settings → Privacy &
+      Security → **Developer Mode**), and that switch appears once the iPhone has been connected
+      to a Mac with Xcode.
+   5. **Buy in the app.** The purchase is now the tester's.
+   6. **To buy again:** Settings → Developer → the Sandbox Apple Account → **Manage → Clear
+      Purchase History** (or the tester's page in App Store Connect), then sign out of the
+      tester and back in.
+
+   While you're signed out of Media & Purchases, purchased content in other apps on that phone
+   may not work, so a spare phone is safest. Signing back in to Media & Purchases moves
+   TestFlight's purchases back to your own Apple Account. Some developers report that a purchase
+   made before the switch stays with the app; if Settings still says "Thank you" after step 4,
+   delete the app and install it again before buying (Apple, "Testing In-App Purchases with
+   sandbox", "Sign in to your Sandbox Apple Account for a TestFlight app"). A build you run from
+   Xcode sells from Snow.storekit instead, which needs no account (apps/ios/README.md, "Phase
+   7.1: the purchase", "Trying it"). Refunds, Ask to Buy and a purchase taken back are already
+   tested on CI (the StoreKit tests).
 
 ### The app's widgets (phase 7.2)
 
