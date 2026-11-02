@@ -8,6 +8,7 @@ import {
   MemoryAlertStore,
   MemoryKV,
   PUSH_GRACE_MS,
+  SafeAlertStore,
   alertsDryRun,
   alertsRun,
   apnsSender,
@@ -103,6 +104,32 @@ async function seed(store: AlertStore, ...records: AlertRecord[]): Promise<void>
     await store.set(regKey(r.tz, r.app, r.id), r);
     await store.set(idsKey(r.app, r.id), { tz: r.tz });
   }
+}
+
+/** Saved places' pids, as their keys have them. */
+const PIDS = ['1a2b3c4d5e6f', '2b3c4d5e6f7a'] as const;
+
+/** A place's own name in its claims and judgements: "<id>.<pid>" for a saved place. */
+const nameOf = (r: AlertRecord): string => (r.slot ? `${r.id}.${r.slot}` : r.id);
+
+/** How a line names a place: "snow.3f9c1a2b…", or "snow.3f9c1a2b….1a2b3c4d5e6f" for a saved one. */
+const who = (r: AlertRecord): string => `snow.${r.id.slice(0, 8)}…${r.slot ? `.${r.slot}` : ''}`;
+
+/**
+ * One phone's places as the devices handler writes them (version 2): each record under its own
+ * key (a saved place's pid there, not in the record), then the ids entry naming them all.
+ */
+async function seedPhone(store: AlertStore, ...places: AlertRecord[]): Promise<void> {
+  const { app, id } = places[0]!;
+  const free = places.find((r) => !r.slot);
+  for (const { slot, ...r } of places) await store.set(regKey(r.tz, app, id, slot), r);
+  await store.set(idsKey(app, id), {
+    v: 2,
+    ...(free ? { tz: free.tz } : {}),
+    saved: places.filter((r) => r.slot).map((r) => regKey(r.tz, app, id, r.slot)),
+    salt: 'f'.repeat(32),
+    updatedAt: places[0]!.updatedAt,
+  });
 }
 
 /** `getToday`'s dependencies at a fixed moment, on synthetic forecasts. */
@@ -276,6 +303,36 @@ describe('runAlerts: the evening', () => {
     expect(third).toMatchObject({ zones: 1, records: 1, groups: 1, sent: 0, done: 1 });
     expect(seen).toHaveLength(1);
     expect(lines).toEqual([]);
+  });
+
+  it('notifies an 8.1 record as before, byte for byte', async () => {
+    const { origin, seen } = await fakeApns(apple());
+    const store = new MemoryAlertStore();
+    // As 8.1 wrote it: no pid, no zone of the phone's own, and an ids entry of { tz }.
+    const r = registration(token('a0'));
+    await seed(store, r);
+    const result = await runAt(EVENING, { store, origin });
+    expect(result).toMatchObject({ sent: 1, silent: 0 });
+    expect(seen[0]!.body).toBe(
+      JSON.stringify({
+        aps: {
+          alert: DURHAM,
+          sound: 'default',
+          'thread-id': 'snow',
+          'interruption-level': 'active',
+          'relevance-score': 0.6,
+        },
+        topic: 'snow',
+        kind: 'evening',
+        date: '2026-10-19',
+        view: 'today',
+        place: 'place=durham-gb',
+        name: 'Durham',
+      }),
+    );
+    expect(seen[0]!.headers['apns-collapse-id']).toBe('snow-evening-2026-10-19');
+    expect(sentKeys(store)).toEqual([sentKey('2026-10-18', 'snow', 'evening', 'snow', r.id)]);
+    expect(result.notifications[0]).not.toHaveProperty('slot');
   });
 
   it('sends each notification once when two runs overlap', async () => {
@@ -634,6 +691,294 @@ describe('runAlerts: Apple refusals', () => {
   });
 });
 
+describe('runAlerts: several places on one phone', () => {
+  /** Every switch on, "possible" too, so Kendal's "Snow possible" goes. */
+  const ALL = { snow: { evening: true, morning: true, possible: true } };
+  const DATE = '2026-10-18';
+
+  it('notifies each place of a phone in one zone and window once: two claims, two collapse ids, two threads', async () => {
+    const { origin, seen } = await fakeApns(apple());
+    const store = new MemoryAlertStore();
+    const device = token('a0');
+    const here = registration(device, { alerts: ALL });
+    const kendal = registration(device, { ...place('kendal-gb'), alerts: ALL, slot: PIDS[0] });
+    await seedPhone(store, here, kendal);
+    const first = await runAt(EVENING, { store, origin });
+    expect(first).toMatchObject({ zones: 1, records: 2, groups: 2, sent: 2, errors: 0, done: 1 });
+    expect(devices(seen)).toEqual([device, device]);
+    const pushes = seen.map((s) => {
+      const body = JSON.parse(s.body);
+      return [s.headers['apns-collapse-id'], body.aps['thread-id'], body.name];
+    });
+    expect(pushes.sort()).toEqual([
+      ['snow-evening-2026-10-19', 'snow', 'Durham'],
+      [`snow-evening-2026-10-19-${PIDS[0]}`, `snow-${PIDS[0]}`, 'Kendal'],
+    ]);
+    expect(sentKeys(store)).toEqual(
+      [here, kendal].map((r) => sentKey(DATE, 'snow', 'evening', 'snow', nameOf(r))).sort(),
+    );
+    expect(new Set(first.notifications.map((n) => n.slot))).toEqual(new Set([undefined, PIDS[0]]));
+    // Once each: nothing more at 18:20 even without the zone's marker, and neither is read again.
+    await store.delete(doneKey(DATE, 'evening', 'Europe/London'));
+    expect(await runAt(LATER, { store, origin })).toMatchObject({ records: 0, sent: 0, done: 1 });
+    expect(seen).toHaveLength(2);
+  });
+
+  it('notifies places in two zones, each at its own 18:05', async () => {
+    const { origin, seen } = await fakeApns(apple());
+    const store = new MemoryAlertStore();
+    const device = token('a0');
+    const here = registration(device);
+    const newYork = registration(device, {
+      ...place('new-york-city-us'),
+      tz: 'America/New_York',
+      slot: PIDS[0],
+    });
+    await seedPhone(store, here, newYork);
+    const forceIds = [here.id.slice(0, 8)];
+    // 18:05 in London, 13:05 in New York.
+    expect(await runAt(EVENING, { store, origin, forceIds })).toMatchObject({
+      zones: 1,
+      records: 1,
+      sent: 1,
+    });
+    // 18:05 in New York, 23:05 in London.
+    expect(await runAt('2026-10-18T22:05:00Z', { store, origin, forceIds })).toMatchObject({
+      zones: 1,
+      records: 1,
+      sent: 1,
+    });
+    expect(seen.map((s) => [s.headers['apns-collapse-id'], JSON.parse(s.body).name])).toEqual([
+      ['snow-evening-2026-10-19', 'Durham'],
+      [`snow-evening-2026-10-19-${PIDS[0]}`, 'New York'],
+    ]);
+  });
+
+  // Mammoth Lakes, California, not Whistler: British Columbia keeps UTC−7 all year from November
+  // 2026 (time zone data from 2026; Node's on CI has it, older data doesn't), so Vancouver's
+  // clocks no longer change and a Whistler case can't test the change.
+  it("sends a London phone's Mammoth Lakes evening silently in London's small hours, and with sound to a phone in Los Angeles, either side of the clocks changing", async () => {
+    const mammoth = {
+      query: 'lat=37.65&lon=-118.97&name=Mammoth Lakes&country=US&source=search',
+      name: 'Mammoth Lakes',
+      tz: 'America/Los_Angeles',
+    };
+    const london = registration(token('a0', 1), {
+      ...mammoth,
+      slot: PIDS[0],
+      deviceTz: 'Europe/London',
+    });
+    const losAngeles = registration(token('a0', 2), {
+      ...mammoth,
+      slot: PIDS[1],
+      deviceTz: 'America/Los_Angeles',
+    });
+    const forceIds = [london, losAngeles].map((r) => r.id.slice(0, 8));
+    // Mammoth Lakes' 18:05: 02:05 BST with both on summer time, 01:05 GMT between the two
+    // changes (London's on 25 October, California's on 1 November), and 02:05 GMT with both on
+    // winter time.
+    for (const iso of ['2026-10-21T01:05:00Z', '2026-10-28T01:05:00Z', '2026-11-11T02:05:00Z']) {
+      expect(alertWindows('America/Los_Angeles', new Date(iso))).toMatchObject({
+        kind: 'evening',
+        hours: 18 + 5 / 60,
+      });
+      expect(inQuietHours('Europe/London', new Date(iso))).toBe(true);
+      const { origin, seen } = await fakeApns(apple());
+      const store = new MemoryAlertStore();
+      await seedPhone(store, london);
+      await seedPhone(store, losAngeles);
+      const result = await runAt(iso, { store, origin, forceIds });
+      expect(result).toMatchObject({ sent: 2, silent: 1, errors: 0, done: 1 });
+      expect(runSummary(result)).toContain('; 2 forced; 1 silent; ');
+      const aps = new Map(
+        seen.map((s) => [String(s.headers[':path']).split('/').pop(), JSON.parse(s.body).aps]),
+      );
+      expect(aps.get(london.token)).toMatchObject({
+        'thread-id': `snow-${PIDS[0]}`,
+        'interruption-level': 'passive',
+      });
+      expect(aps.get(london.token)).not.toHaveProperty('sound');
+      expect(aps.get(losAngeles.token)).toMatchObject({
+        sound: 'default',
+        'thread-id': `snow-${PIDS[1]}`,
+        'interruption-level': 'active',
+      });
+      const silent = result.notifications.filter((n) => n.silent).map((n) => n.id);
+      expect(silent).toEqual([london.id]);
+    }
+  });
+
+  it("goes by the phone's clock as it changes: a saved place's 20:05 UTC evening is silent in London only on summer time", async () => {
+    // Fernando de Noronha keeps UTC−2 all year, so its 18:05 is 20:05 UTC: 21:05 in London on
+    // summer time, 20:05 once the clocks have gone back (25 October).
+    const noronha = registration(token('a0', 3), {
+      query: 'lat=-3.85&lon=-32.4&name=Fernando de Noronha&country=BR&source=search',
+      name: 'Fernando de Noronha',
+      tz: 'America/Noronha',
+      slot: PIDS[0],
+      deviceTz: 'Europe/London',
+    });
+    const forceIds = [noronha.id.slice(0, 8)];
+    for (const [iso, silent] of [
+      ['2026-10-21T20:05:00Z', true],
+      ['2026-10-28T20:05:00Z', false],
+    ] as const) {
+      expect(alertWindows('America/Noronha', new Date(iso))).toMatchObject({
+        kind: 'evening',
+        hours: 18 + 5 / 60,
+      });
+      const { origin, seen } = await fakeApns(apple());
+      const store = new MemoryAlertStore();
+      await seedPhone(store, noronha);
+      const result = await runAt(iso, { store, origin, forceIds });
+      expect(result).toMatchObject({ sent: 1, silent: silent ? 1 : 0, errors: 0, done: 1 });
+      const aps = JSON.parse(seen[0]!.body).aps;
+      if (silent) {
+        expect(aps['interruption-level']).toBe('passive');
+        expect(aps).not.toHaveProperty('sound');
+      } else {
+        expect(aps).toMatchObject({ sound: 'default', 'interruption-level': 'active' });
+      }
+    }
+  });
+
+  it('judges a shadowed free place without sending it or asking for its forecast, and the next run skips it unread', async () => {
+    let answers = 0;
+    const { origin, seen } = await fakeApns(
+      apple({
+        '53': () =>
+          answers++ === 0
+            ? { status: 503, body: { reason: 'ServiceUnavailable' } }
+            : { status: 200 },
+      }),
+    );
+    const store = new MemoryAlertStore();
+    const device = token('a0');
+    // Where the phone is, in Durham's cell, and Durham saved: only the saved place's goes.
+    const here = registration(device, {
+      query: 'lat=54.8&lon=-1.55&source=device',
+      name: 'Your location',
+      shadowedBy: PIDS[0],
+    });
+    const durham = registration(device, { slot: PIDS[0] });
+    // Apple can't take this one at first, so the zone is left unfinished.
+    const waiting = registration(token('53'));
+    await seedPhone(store, here, durham);
+    await seed(store, waiting);
+    const first = await runAt(EVENING, { store, origin });
+    expect(first).toMatchObject({ records: 3, groups: 1, fetches: 1, sent: 1, done: 0 });
+    expect(devices(seen)).toEqual([token('53'), device]);
+    const pushed = seen.find((s) => String(s.headers[':path']).endsWith(device))!;
+    expect(JSON.parse(pushed.body)).toMatchObject({
+      aps: { 'thread-id': `snow-${PIDS[0]}` },
+      name: 'Durham',
+    });
+    expect(store.keys().filter((k) => k.startsWith('judged/'))).toEqual([
+      judgedKey(DATE, 'snow', 'evening', 'snow', here.id),
+    ]);
+    const second = await runAt(LATER, { store, origin });
+    expect(second).toMatchObject({ records: 1, sent: 1, done: 1 });
+    expect(devices(seen)).toEqual([token('53'), token('53'), device]);
+  });
+
+  it('notifies a free place whose saved place has gone, whatever its shadowedBy still says', async () => {
+    const { origin, seen } = await fakeApns(apple());
+    const store = new MemoryAlertStore();
+    const device = token('a0');
+    // Durham was unstarred and deleted, and the free record not yet rewritten without
+    // `shadowedBy` (a store failure after the removal, or the minute's 429 after it).
+    const here = registration(device, { shadowedBy: PIDS[0] });
+    await seedPhone(store, here);
+    // Another phone's saved place with the same pid is no twin of this one.
+    await seedPhone(store, registration(token('a0', 1), { ...place('leeds-gb'), slot: PIDS[0] }));
+    const result = await runAt(EVENING, { store, origin });
+    expect(result).toMatchObject({ records: 2, groups: 2, sent: 1, done: 1, errors: 0 });
+    expect(devices(seen)).toEqual([device]);
+    expect(JSON.parse(seen[0]!.body)).toMatchObject({
+      aps: { 'thread-id': 'snow' },
+      name: 'Durham',
+    });
+  });
+
+  it('forces every place of a forced phone', async () => {
+    const { origin, seen } = await fakeApns(apple());
+    const store = new MemoryAlertStore();
+    const device = token('a0');
+    const places = [
+      registration(device, place('london-gb')),
+      registration(device, { ...place('leeds-gb'), slot: PIDS[0] }),
+      registration(device, { ...place('york-gb'), slot: PIDS[1] }),
+    ];
+    await seedPhone(store, ...places);
+    await seed(store, registration(token('a0', 1), place('london-gb')));
+    const result = await runAt(EVENING, { store, origin, forceIds: [places[0]!.id.slice(0, 8)] });
+    expect(result).toMatchObject({ records: 4, sent: 3, forced: 3, done: 1 });
+    expect(devices(seen)).toEqual([device, device, device]);
+    expect(seen.map((s) => s.headers['apns-collapse-id']).sort()).toEqual([
+      'snow-evening-2026-10-19',
+      `snow-evening-2026-10-19-${PIDS[0]}`,
+      `snow-evening-2026-10-19-${PIDS[1]}`,
+    ]);
+  });
+
+  it('deletes every place of a phone not seen for 90 days, in a window or not', async () => {
+    const { origin, seen } = await fakeApns(apple());
+    const store = new MemoryAlertStore();
+    const seenAt = new Date(Date.parse(EVENING) - 91 * DAY).toISOString();
+    const device = token('a0');
+    const places = [
+      registration(device, { seenAt }),
+      registration(device, { ...place('leeds-gb'), slot: PIDS[0], seenAt }),
+      // 13:05 in New York: not read by this run, but forgotten with the rest.
+      registration(device, {
+        ...place('new-york-city-us'),
+        tz: 'America/New_York',
+        slot: PIDS[1],
+        seenAt,
+      }),
+    ];
+    await seedPhone(store, ...places);
+    const lines: string[] = [];
+    const result = await runAt(EVENING, { store, origin, lines });
+    expect(result).toMatchObject({ records: 2, sent: 0, deleted: 2, errors: 0, done: 1 });
+    expect(store.keys().filter((k) => k.startsWith('reg/') || k.startsWith('ids/'))).toEqual([]);
+    expect(lines.sort()).toEqual(
+      places
+        .slice(0, 2)
+        .map((r) => `alerts-run: deleted ${who(r)} (not seen for 90 days)`)
+        .sort(),
+    );
+    expect(seen).toHaveLength(0);
+  });
+
+  it('counts claims and judgements place by place', async () => {
+    const { origin, seen } = await fakeApns(apple());
+    const store = new MemoryAlertStore();
+    const claimed = token('a0', 1);
+    const judged = token('a0', 2);
+    const one = [
+      registration(claimed, { alerts: ALL }),
+      registration(claimed, { ...place('kendal-gb'), alerts: ALL, slot: PIDS[0] }),
+    ];
+    const two = [
+      registration(judged, place('london-gb')),
+      registration(judged, { ...place('york-gb'), slot: PIDS[1] }),
+    ];
+    await seedPhone(store, ...one);
+    await seedPhone(store, ...two);
+    // Another run claimed the first phone's free place, and judged the second's.
+    await store.set(sentKey(DATE, 'snow', 'evening', 'snow', nameOf(one[0]!)), { at: 'earlier' });
+    await store.set(judgedKey(DATE, 'snow', 'evening', 'snow', nameOf(two[0]!)), { at: 'earlier' });
+    const result = await runAt(EVENING, { store, origin });
+    // Kendal is read and sent, York read and judged with nothing to send; the others are not read.
+    expect(result).toMatchObject({ records: 2, sent: 1, done: 1 });
+    expect(devices(seen)).toEqual([claimed]);
+    expect(JSON.parse(seen[0]!.body).name).toBe('Kendal');
+    // The marker counted on the other run's claim, which still stands.
+    expect(await store.get(doneKey(DATE, 'evening', 'Europe/London'))).not.toBeNull();
+  });
+});
+
 describe('runAlerts: limits', () => {
   /** Six forced registrations at six different UK places, in one zone. */
   async function sixPlaces(store: AlertStore) {
@@ -751,6 +1096,23 @@ describe('runAlerts: limits', () => {
     expect(logs).toHaveLength(6);
     expect(seen).toHaveLength(0);
     expect(sentKeys(store)).toEqual([]);
+  });
+
+  it('starts the group with the oldest registration first, of groups the same size', async () => {
+    const { origin, seen } = await fakeApns(apple());
+    const store = new MemoryAlertStore();
+    const [listedFirst, listedLast] = [
+      registration(token('a0', 1), place('london-gb')),
+      registration(token('a0', 2), place('leeds-gb')),
+    ].sort((a, b) => a.id.localeCompare(b.id));
+    // The one listed (and read) first registered yesterday; the other in September.
+    const young = { ...listedFirst!, createdAt: '2026-10-17T09:00:00.000Z' };
+    const old = { ...listedLast!, createdAt: '2026-09-01T09:00:00.000Z' };
+    await seed(store, young, old);
+    const forceIds = [young, old].map((r) => r.id.slice(0, 8));
+    const result = await runAt(EVENING, { store, origin, forceIds, maxFetches: 1 });
+    expect(result).toMatchObject({ records: 2, groups: 1, sent: 1, stopped: 'fetches' });
+    expect(devices(seen)).toEqual([old.token]);
   });
 
   it('allows 60 fetches a run on the free API and 300 with a key', async () => {
@@ -908,6 +1270,34 @@ describe('runAlerts: the cleanup', () => {
     expect(await store.get(sentKey('2026-11-20', 'snow', 'evening', 'snow', id))).not.toBeNull();
   });
 
+  it('counts the devices with saved places once a day, in the cleanup', async () => {
+    const { origin } = await fakeApns(apple());
+    const store = new MemoryAlertStore();
+    const both = token('a0', 2);
+    await seed(store, registration(token('a0', 1)));
+    await seedPhone(
+      store,
+      registration(both),
+      registration(both, { ...place('leeds-gb'), slot: PIDS[0] }),
+      registration(both, { ...place('york-gb'), slot: PIDS[1] }),
+    );
+    await seedPhone(
+      store,
+      registration(token('a0', 3), {
+        ...place('new-york-city-us'),
+        tz: 'America/New_York',
+        slot: PIDS[0],
+      }),
+    );
+    const lines: string[] = [];
+    await runAt('2026-12-01T02:45:00Z', { store, origin, lines });
+    expect(lines).toEqual([]);
+    await runAt('2026-12-01T03:00:00Z', { store, origin, lines });
+    expect(lines).toEqual(['alerts-run: cleanup: 2 devices with saved places']);
+    await runAt('2026-12-01T03:15:00Z', { store, origin, lines });
+    expect(lines).toHaveLength(1);
+  });
+
   it('lets the next run in the hour carry on with a cleanup cut short', async () => {
     const { origin } = await fakeApns(apple());
     const store = new MemoryAlertStore();
@@ -919,6 +1309,96 @@ describe('runAlerts: the cleanup', () => {
     const next = await runAt('2026-12-01T03:15:00Z', { store, origin });
     expect(next.cleaned).toBe(14);
     expect(await store.get(cleanupKey('2026-12-01'))).not.toBeNull();
+  });
+
+  /**
+   * A store that notes each listing of registrations: of every one at once (never made), and of
+   * each zone; `failing` fails a zone's, and `onZone` hears of each as it starts.
+   */
+  class Listings extends MemoryAlertStore {
+    whole = 0;
+    zones: string[] = [];
+    failing: string | null = null;
+    onZone: (prefix: string) => void = () => {};
+
+    override async list(prefix: string, options?: { directories?: boolean }) {
+      if (prefix === 'reg/v1/' && !options?.directories) this.whole++;
+      if (/^reg\/v1\/[^/]+\/$/.test(prefix)) {
+        this.zones.push(prefix);
+        this.onZone(prefix);
+        if (prefix === this.failing) throw new Error('list failed');
+      }
+      return super.list(prefix, options);
+    }
+  }
+
+  it('counts once a day, in the run that finishes the cleanup, zone by zone', async () => {
+    const { origin } = await fakeApns(apple());
+    const store = new Listings();
+    await oldKeys(store);
+    const both = token('a0', 2);
+    await seedPhone(
+      store,
+      registration(both),
+      registration(both, { ...place('leeds-gb'), slot: PIDS[0] }),
+      registration(both, { ...place('new-york-city-us'), tz: 'America/New_York', slot: PIDS[1] }),
+    );
+    const lines: string[] = [];
+    const counted = () => lines.filter((line) => line.startsWith('alerts-run: cleanup:'));
+    // Cut short: no count.
+    await runAt('2026-12-01T03:00:00Z', { store, origin, lines, budgetMs: -PUSH_GRACE_MS });
+    expect([counted(), store.zones]).toEqual([[], []]);
+    // Finished: each zone listed once, no listing of every registration at once.
+    expect((await runAt('2026-12-01T03:15:00Z', { store, origin, lines })).cleaned).toBe(14);
+    expect(counted()).toEqual(['alerts-run: cleanup: 1 device with saved places']);
+    expect(store.zones.sort()).toEqual(['reg/v1/America%2FNew_York/', 'reg/v1/Europe%2FLondon/']);
+    await runAt('2026-12-01T03:30:00Z', { store, origin, lines });
+    expect(counted()).toHaveLength(1);
+    expect([store.zones.length, store.whole]).toEqual([2, 0]);
+  });
+
+  it('says so when the count cannot finish, and keeps the cleanup finished', async () => {
+    const { origin } = await fakeApns(apple());
+    const store = new Listings();
+    const both = token('a0', 2);
+    await seedPhone(
+      store,
+      registration(both),
+      registration(both, { ...place('new-york-city-us'), tz: 'America/New_York', slot: PIDS[0] }),
+    );
+    const lines: string[] = [];
+    // A zone's listing fails (Blobs' 1.5 s, say): the count is unknown, the old keys are gone, and
+    // the marker stays, so the hour's next runs don't clean again.
+    await oldKeys(store);
+    store.failing = 'reg/v1/America%2FNew_York/';
+    expect((await runAt('2026-12-01T03:00:00Z', { store, origin, lines })).cleaned).toBe(14);
+    expect(lines).toEqual([
+      'alerts-run: error: list failed',
+      'alerts-run: cleanup: count unavailable',
+    ]);
+    expect(await store.get(cleanupKey('2026-12-01'))).not.toBeNull();
+    for (const iso of ['2026-12-01T03:15:00Z', '2026-12-01T03:30:00Z', '2026-12-01T03:45:00Z']) {
+      expect((await runAt(iso, { store, origin, lines })).cleaned).toBeNull();
+    }
+    expect(lines).toHaveLength(2);
+    // The next day, out of time once the first zone is listed: no more zones, and no count.
+    store.failing = null;
+    store.zones = [];
+    let late = false;
+    store.onZone = () => {
+      late = true;
+    };
+    const next = await runAt('2026-12-02T03:00:00Z', {
+      store,
+      origin,
+      lines,
+      clock: () => (late ? 60_000 : 0),
+    });
+    // 29 November's keys, due that day.
+    expect(next.cleaned).toBe(7);
+    expect(store.zones).toHaveLength(1);
+    expect(lines.slice(2)).toEqual(['alerts-run: cleanup: count unavailable']);
+    expect(store.whole).toBe(0);
   });
 });
 
@@ -1047,6 +1527,71 @@ describe('runAlerts: failures', () => {
     expect(lines).toEqual([
       `alerts-run: error: snow.${r.id.slice(0, 8)}… in Europe/London is not a registration the run can read`,
     ]);
+  });
+
+  it("never names a saved place's zone, not even in the store's errors", async () => {
+    const { origin } = await fakeApns(apple());
+    const newYork = { ...place('new-york-city-us'), tz: 'America/New_York' };
+    const unread = registration(token('a0', 1), { ...newYork, slot: PIDS[0] });
+    const broken = registration(token('a0', 2), { ...newYork, slot: PIDS[1] });
+    const inner = new MemoryAlertStore();
+    await seedPhone(inner, unread);
+    await seedPhone(inner, { ...broken, token: 'not hex' });
+    const unreadKey = regKey(unread.tz, 'snow', unread.id, PIDS[0]);
+    // The real store's errors quote the key.
+    const store = new SafeAlertStore({
+      get: (key) => (key === unreadKey ? Promise.reject(new Error('down')) : inner.get(key)),
+      set: (key, value, options) => inner.set(key, value, options),
+      list: (prefix, options) => inner.list(prefix, options),
+      delete: (key) => inner.delete(key),
+    });
+    const lines: string[] = [];
+    // 18:05 in New York.
+    const result = await runAt('2026-10-18T22:05:00Z', { store, origin, lines });
+    expect(result).toMatchObject({ records: 1, errors: 2, done: 0 });
+    expect(lines.sort()).toEqual(
+      [
+        `alerts-run: error: ${who(broken)} is not a registration the run can read`,
+        `alerts-run: error: alert store: get reg/v1/…/${who(unread)}: down`,
+      ].sort(),
+    );
+    for (const line of lines) expect(line).not.toMatch(/New_York|New%20York/);
+  });
+
+  it("leaves the forecast's own words, which name its zone, out of a saved place's no-forecast line", async () => {
+    const { origin } = await fakeApns(apple());
+    // 18:05 in Tokyo; synthetic forecasts give Japan a fixed offset (Open-Meteo's own: Asia/Tokyo).
+    const iso = '2026-10-18T09:05:00Z';
+    const japan = { tz: 'Etc/GMT-9' };
+    const tokyo = registration(token('a0', 1), { ...place('tokyo-jp'), ...japan, slot: PIDS[0] });
+    const osaka = registration(token('a0', 2), { ...place('osaka-jp'), ...japan });
+    const store = new MemoryAlertStore();
+    await seedPhone(store, tokyo);
+    await seedPhone(store, osaka);
+    // An answer with no temperatures for today: no day the run can use (503, its words saying so).
+    const synthetic = createSyntheticFetch(CITIES, () => new Date(Date.parse(iso)));
+    const fetch: FetchLike = async (url, init) => {
+      const res = await synthetic(url, init);
+      if (!new URL(url).pathname.endsWith('/forecast')) return res;
+      const json = (await res.json()) as { hourly: Record<string, unknown[]> };
+      const times = json.hourly.time as string[];
+      for (const [key, series] of Object.entries(json.hourly)) {
+        if (!key.startsWith('temperature_2m')) continue;
+        times.forEach((t, i) => {
+          if (t.startsWith(times[0]!.slice(0, 10))) series[i] = null;
+        });
+      }
+      return new Response(JSON.stringify(json), { status: 200, headers: res.headers });
+    };
+    const lines: string[] = [];
+    const result = await runAt(iso, { store, origin, fetch, lines });
+    expect(result).toMatchObject({ groups: 2, sent: 0, errors: 2 });
+    expect(lines.sort()).toEqual(
+      [
+        `alerts-run: error: no forecast for ${who(osaka)}: 503 upstream_unavailable (open-meteo: the forecast has no data for 2026-10-18 (Etc/GMT-9))`,
+        `alerts-run: error: no forecast for ${who(tokyo)}: 503 upstream_unavailable`,
+      ].sort(),
+    );
   });
 });
 

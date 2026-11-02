@@ -36,7 +36,7 @@
  * - `delete` resolves for 200, 204 and 404. The client retries 429s, 5xxs and network failures up
  *   to five times, 5 s apart, hence the timeout.
  */
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { getDeployStore, getStore, type Store } from '@netlify/blobs';
 
 /** The Blobs store's name. */
@@ -267,20 +267,42 @@ export function regZonePrefix(tz: string): string {
   return `${REG_PREFIX}${zone(tz)}/`;
 }
 
-/** A registration: `reg/v1/<tz>/<app>.<id>`, written by the devices handler only. */
-export function regKey(tz: string, app: string, id: string): string {
-  return `${regZonePrefix(tz)}${app}.${id}`;
+/**
+ * A registration, written by the devices handler only: `reg/v1/<tz>/<app>.<id>` for the free
+ * place ("where you are"), `reg/v1/<tz>/<app>.<id>.<pid>` for a saved place (`placeId`). Each
+ * place is in its own zone's directory, so windows, claims and done markers stay per zone.
+ */
+export function regKey(tz: string, app: string, id: string, pid?: string): string {
+  return `${regZonePrefix(tz)}${app}.${id}${pid ? `.${pid}` : ''}`;
 }
 
-/** A registration key's parts, or null for any other key. */
-export function parseRegKey(key: string): { tz: string; app: string; id: string } | null {
-  const match = /^reg\/v1\/([^/]+)\/([a-z]+)\.([0-9a-f]+)$/.exec(key);
+/** A registration key's parts, `pid` only for a saved place's, or null for any other key. */
+export function parseRegKey(
+  key: string,
+): { tz: string; app: string; id: string; pid?: string } | null {
+  const match = /^reg\/v1\/([^/]+)\/([a-z]+)\.([0-9a-f]{32})(?:\.([0-9a-f]{12}))?$/.exec(key);
   if (!match) return null;
   try {
-    return { tz: decodeURIComponent(match[1]!), app: match[2]!, id: match[3]! };
+    const parts = { tz: decodeURIComponent(match[1]!), app: match[2]!, id: match[3]! };
+    return match[4] ? { ...parts, pid: match[4] } : parts;
   } catch {
     return null;
   }
+}
+
+/**
+ * A saved place's pid: the first 12 hex characters of HMAC-SHA256 keyed with the device's salt
+ * (`newSalt`, kept only in its ids entry) over the place's canonical query. Without the salt, no
+ * pid in a key, a claim or a log can be matched to a place by hashing candidate places, so once
+ * the ids entry is deleted nothing left behind names the place.
+ */
+export function placeId(salt: string, query: string): string {
+  return createHmac('sha256', salt).update(query).digest('hex').slice(0, 12);
+}
+
+/** A device's salt for its pids: 16 random bytes, as hex. */
+export function newSalt(): string {
+  return randomBytes(16).toString('hex');
 }
 
 /** The zone a directory of `list(REG_PREFIX, { directories: true })` stands for, or null. */
@@ -294,9 +316,36 @@ export function zoneOfDirectory(directory: string): string | null {
   }
 }
 
-/** Where a registration is: `ids/v1/<app>.<id>`, holding `{ tz }`. */
+/**
+ * Where a device's registrations are: `ids/v1/<app>.<id>`, holding `{ tz }` (version 1) or the
+ * set (version 2, with its salt): devices.ts's `DeviceIdsEntry`.
+ */
 export function idsKey(app: string, id: string): string {
   return `${IDS_PREFIX}${app}.${id}`;
+}
+
+const strings = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+
+/**
+ * Every registration key an ids entry names, version 1 or 2, each once: the free record's zone
+ * (`tz`) and the zones it is leaving (`from`) as keys, then the `saved` and `leaving` keys that are
+ * this device's. None for anything malformed.
+ */
+export function keysOf(entry: unknown, app: string, id: string): string[] {
+  if (!entry || typeof entry !== 'object') return [];
+  const e = entry as Record<string, unknown>;
+  const zones = [...(typeof e.tz === 'string' ? [e.tz] : []), ...strings(e.from)];
+  const mine = (key: string): boolean => {
+    const reg = parseRegKey(key);
+    return reg?.app === app && reg.id === id;
+  };
+  return [
+    ...new Set([
+      ...zones.map((tz) => regKey(tz, app, id)),
+      ...[...strings(e.saved), ...strings(e.leaving)].filter(mine),
+    ]),
+  ];
 }
 
 /** One day's claims for a topic and kind: `sent/v1/<localDate>/<topic>.<kind>/`. */
@@ -375,47 +424,90 @@ export async function claimTestSend(
   return false;
 }
 
-/** What `forgetRegistration` needs of a record, as it was read. */
+/** What `forgetDevice` needs of a record, as it was read. */
 export interface RegistrationStamp {
   id: string;
   app: string;
   tz: string;
+  /** Absent for the free place ("where you are"); a saved place's pid, as its key has it. */
+  slot?: string;
   updatedAt: string;
   seenAt?: string;
 }
 
-/**
- * Deletes a registration, and its `ids` key while that still points at the same zone, but only if
- * the record is as it was read: one written or refreshed since (the app registered again) is kept.
- * A read or delete that fails deletes nothing it is unsure of.
- * - "deleted": deleted now, or already gone;
- * - "changed": written since it was read, so kept;
- * - "failed": the store failed, so kept.
- */
-export async function forgetRegistration(
+/** The record that set `forgetDevice` off, as it was read: where it is, and its stamp. */
+export type SlotStamp = Pick<RegistrationStamp, 'tz' | 'slot' | 'updatedAt' | 'seenAt'>;
+
+/** Deletes the record at `key` if it is as `stamp` was read; a missing record counts as gone. */
+async function forgetIfUnchanged(
   store: AlertStore,
-  record: RegistrationStamp,
-): Promise<'deleted' | 'changed' | 'failed'> {
-  const key = regKey(record.tz, record.app, record.id);
-  let current: RegistrationStamp | null;
+  key: string,
+  stamp: SlotStamp,
+): Promise<'gone' | 'changed' | 'failed'> {
+  let current: Partial<SlotStamp> | null;
   try {
-    current = await store.get<RegistrationStamp>(key);
+    current = await store.get<Partial<SlotStamp>>(key);
   } catch {
     return 'failed';
   }
-  if (current === null) return 'deleted';
-  if (current.updatedAt !== record.updatedAt || current.seenAt !== record.seenAt) return 'changed';
+  if (current === null) return 'gone';
+  if (current.updatedAt !== stamp.updatedAt || current.seenAt !== stamp.seenAt) return 'changed';
   try {
     await store.delete(key);
   } catch {
     return 'failed';
   }
-  const ids = idsKey(record.app, record.id);
+  return 'gone';
+}
+
+/**
+ * Forgets a device's every place, starting from the record that set it off (`trigger`: one the
+ * run found stale, or whose push Apple refused). A record goes only if its `updatedAt` and
+ * `seenAt` are the trigger's, so whatever the app wrote since stays (a registration writes every
+ * place with one stamp):
+ * 1. read the ids key;
+ * 2. the trigger's own record, by that rule; written since, or a store failure, and nothing else
+ *    is touched;
+ * 3. every other key the ids entry names, at once, by the same rule;
+ * 4. the ids key last (and the salt in it), re-read, only if unchanged and all it names has gone,
+ *    still, when read again after it (a registration may have written them back meanwhile).
+ * A record the ids entry doesn't name (an orphan: a rollback, two registrations overlapping) is
+ * thus forgotten alone, by its own stamp, and so is the trigger when the ids key can't be read.
+ * - "deleted": the trigger's record is gone, whatever became of the others, so its zone can finish;
+ * - "changed": it was written since it was read, so the device is kept;
+ * - "failed": the store failed, so it is kept.
+ */
+export async function forgetDevice(
+  store: AlertStore,
+  app: string,
+  id: string,
+  trigger: SlotStamp,
+): Promise<'deleted' | 'changed' | 'failed'> {
+  const ids = idsKey(app, id);
+  let entry: unknown;
+  let entryRead = true;
   try {
-    const where = await store.get<{ tz: string }>(ids);
-    if (where?.tz === record.tz) await store.delete(ids);
+    entry = await store.get<unknown>(ids);
   } catch {
-    // An ids key left behind points at nothing; the device's next registration replaces it.
+    entryRead = false;
+  }
+  const own = regKey(trigger.tz, app, id, trigger.slot);
+  const first = await forgetIfUnchanged(store, own, trigger);
+  if (first !== 'gone') return first;
+  if (!entryRead || entry === null) return 'deleted';
+  const named = keysOf(entry, app, id);
+  const outcomes = await Promise.all(
+    named.map((key) => (key === own ? first : forgetIfUnchanged(store, key, trigger))),
+  );
+  if (outcomes.every((outcome) => outcome === 'gone')) {
+    try {
+      const again = await store.get<unknown>(ids);
+      if (JSON.stringify(again) !== JSON.stringify(entry)) return 'deleted';
+      const back = await Promise.all(named.map((key) => store.get<unknown>(key)));
+      if (back.every((value) => value === null)) await store.delete(ids);
+    } catch {
+      // An ids key left behind names nothing; the device's next registration replaces it.
+    }
   }
   return 'deleted';
 }

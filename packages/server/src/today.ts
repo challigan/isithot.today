@@ -248,6 +248,18 @@ async function locateFromIp(geo: VisitorGeo | null, fallback: string): Promise<L
   return city ? { ...city, source: 'ip' } : null;
 }
 
+/**
+ * Where the connection is, for a notification registration's free place ("where you are"): only
+ * when the platform names a town as well as giving valid coordinates, so a country-only match
+ * never stands for where someone is, and never the fallback city. Null otherwise.
+ */
+export async function locateFromIpOnly(
+  geo: VisitorGeo | null | undefined,
+): Promise<Located | null> {
+  // With valid coordinates, `locateFromIp` never reaches its fallback.
+  return geo?.city && isValidLatLon(geo.lat, geo.lon) ? locateFromIp(geo, '') : null;
+}
+
 const inflight = new Map<string, Promise<Forecast>>();
 
 /** Days whose hours are kept: "now" looks a day ahead and may run past midnight. */

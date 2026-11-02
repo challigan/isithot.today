@@ -108,6 +108,33 @@ async function seed(store: AlertStore, ...records: PushRecord[]): Promise<void> 
   }
 }
 
+/** A saved place's pid, as its key has it. */
+const PID = '1a2b3c4d5e6f';
+
+/** A run's delivery for one place of a phone, claimed by its own name: "snow.<id>.<pid>" if saved. */
+const placeDelivery = (
+  r: PushRecord,
+  over: Partial<AlertPushInput> = {},
+): Delivery & { claimKey: string } => ({
+  record: r,
+  claimKey: sentKey(LOCAL_DATE, 'snow', 'evening', r.app, r.slot ? `${r.id}.${r.slot}` : r.id),
+  push: pushFor(r, over),
+});
+
+/** One phone's places as the devices handler leaves them (version 2): each record, then the ids entry. */
+async function seedPhone(store: AlertStore, ...places: PushRecord[]): Promise<void> {
+  const { app, id } = places[0]!;
+  const free = places.find((r) => !r.slot);
+  for (const r of places)
+    await store.set(regKey(r.tz, app, id, r.slot), { v: 1, ...r, units: 'c' });
+  await store.set(idsKey(app, id), {
+    v: 2,
+    ...(free ? { tz: free.tz } : {}),
+    saved: places.filter((r) => r.slot).map((r) => regKey(r.tz, app, id, r.slot)),
+    salt: 'f'.repeat(32),
+  });
+}
+
 /** Every line logged and every store error, for the check that nothing secret is in them. */
 const logged: string[] = [];
 const log = (line: string) => logged.push(line);
@@ -301,6 +328,34 @@ describe('alertPush', () => {
     expect(() =>
       pushFor(r, { alert: { ...DURHAM, body: 'x'.repeat(APNS_PAYLOAD_LIMIT) } }),
     ).toThrow(/over Apple's limit/);
+  });
+
+  it('puts a saved place in its own thread, and sends a quiet push passive with no sound', () => {
+    const r = record(token('a0'), { slot: PID });
+    const saved = pushFor(r, {
+      thread: `snow-${PID}`,
+      collapseId: `snow-evening-2026-12-02-${PID}`,
+    });
+    expect(saved.payload.aps).toMatchObject({
+      sound: 'default',
+      'thread-id': `snow-${PID}`,
+      'interruption-level': 'active',
+    });
+    expect(saved.collapseId).toBe(`snow-evening-2026-12-02-${PID}`);
+    // In the phone's night: into the notification list, without a sound or a lit screen.
+    const quiet = pushFor(r, { thread: `snow-${PID}`, quiet: true });
+    expect(JSON.stringify(quiet.payload.aps)).toBe(
+      JSON.stringify({
+        alert: { title: DURHAM.title, body: DURHAM.body },
+        'thread-id': `snow-${PID}`,
+        'interruption-level': 'passive',
+        'relevance-score': 0.6,
+      }),
+    );
+    // Neither given, or given as the free place's: byte for byte the push 8.1's fixtures hold.
+    const before = JSON.stringify(pushFor(record(token('a0'))).payload);
+    expect(JSON.stringify(pushFor(record(token('a0')), { thread: 'snow' }).payload)).toBe(before);
+    expect(JSON.stringify(pushFor(record(token('a0')), { quiet: false }).payload)).toBe(before);
   });
 });
 
@@ -1058,6 +1113,156 @@ describe('sendAlerts', () => {
       'deferred',
     ]);
     expect(store.keys().filter((k) => k.startsWith('sent/'))).toHaveLength(2);
+  });
+
+  it("forgets every place of a phone when Apple refuses a saved place's push, unless it registered again since", async () => {
+    const gone = Date.parse('2026-12-01T18:00:00Z');
+    const { origin } = await fakeApns(
+      apple({ de: { status: 410, body: { reason: 'Unregistered', timestamp: gone } } }),
+    );
+    const store = new MemoryAlertStore();
+    const newYork = { tz: 'America/New_York', query: 'place=new-york-city-us', name: 'New York' };
+    const dead = [record(token('de', 1)), record(token('de', 1), { ...newYork, slot: PID })];
+    const back = [record(token('de', 2)), record(token('de', 2), { ...newYork, slot: PID })];
+    await seedPhone(store, ...dead);
+    // The second phone registers again after the run read it: every place has the new stamp.
+    const since = '2026-12-01T18:01:00.000Z';
+    await seedPhone(store, ...back.map((r) => ({ ...r, updatedAt: since, seenAt: since })));
+    const lines: string[] = [];
+    const { results } = await run(origin, {
+      store,
+      deliveries: [placeDelivery(dead[1]!), placeDelivery(back[1]!)],
+      log: (l) => lines.push(l),
+    });
+    expect(results.map((x) => x.outcome)).toEqual(['deleted', 'kept']);
+    const phone = (r: PushRecord) => store.keys().filter((k) => k.includes(r.id));
+    // The free place and the ids entry go with the saved place Apple refused.
+    expect(phone(dead[0]!).filter((k) => !k.startsWith('sent/'))).toEqual([]);
+    expect(phone(back[0]!).filter((k) => !k.startsWith('sent/'))).toEqual(
+      [
+        regKey(back[0]!.tz, 'snow', back[0]!.id),
+        ...back.slice(1).map((r) => regKey(r.tz, 'snow', r.id, PID)),
+        idsKey('snow', back[0]!.id),
+      ].sort(),
+    );
+    const who = (r: PushRecord) => `snow.${r.id.slice(0, 8)}….${PID}`;
+    expect(lines.sort()).toEqual(
+      [
+        `alerts: deleted ${who(dead[1]!)} (410 Unregistered, sandbox, app 1.0 (7))`,
+        `alerts: kept ${who(back[1]!)} (410 Unregistered, sandbox, app 1.0 (7)): it registered again since`,
+      ].sort(),
+    );
+  });
+
+  it('sends none of a phone’s other pushes once Apple has refused it', async () => {
+    const { origin, seen } = await fakeApns(
+      apple({ b0: { status: 400, body: { reason: 'BadDeviceToken' } } }),
+    );
+    const store = new MemoryAlertStore();
+    const places = [
+      record(token('b0')),
+      record(token('b0'), { slot: PID, query: 'place=leeds-gb', name: 'Leeds' }),
+    ];
+    const other = record(token('a0'));
+    await seedPhone(store, ...places);
+    await seed(store, other);
+    const deliveries = [...places, other].map((r) => placeDelivery(r));
+    const { results } = await run(origin, { store, deliveries, apnsConcurrency: 1 });
+    expect(results.map((x) => x.outcome)).toEqual(['deleted', 'deferred', 'sent']);
+    expect(devicesSeen(seen)).toEqual([token('b0'), token('a0')]);
+    // Not tried, so not claimed: the next run finds the place gone.
+    expect(await store.get(deliveries[1]!.claimKey)).toBeNull();
+    expect(store.keys().filter((k) => k.includes(places[0]!.id) && !k.startsWith('sent/'))).toEqual(
+      [],
+    );
+  });
+
+  it("takes phones in turn, each phone's least relevant first", async () => {
+    const { origin, seen } = await fakeApns(apple({}));
+    const store = new MemoryAlertStore();
+    const slots = ['aaaaaaaaaaa1', 'aaaaaaaaaaa2', 'aaaaaaaaaaa3'];
+    const one = slots.map((slot) => record(token('a0'), { slot }));
+    const two = record(token('a1'));
+    const three = record(token('a2'));
+    const at = (r: PushRecord, relevance: number) =>
+      placeDelivery(r, { alert: { ...DURHAM, relevance } });
+    const { counts } = await run(origin, {
+      store,
+      deliveries: [
+        at(one[0]!, 1),
+        at(one[1]!, 0.3),
+        at(one[2]!, 0.6),
+        at(two, 0.6),
+        at(three, 0.8),
+      ],
+      apnsConcurrency: 1,
+    });
+    expect(counts.sent).toBe(5);
+    const order = seen.map((s) => [
+      String(s.headers[':path']).split('/').pop(),
+      JSON.parse(s.body).aps['relevance-score'],
+    ]);
+    // One phone's pushes side by side only once no other phone is waiting; the deepest snow last,
+    // so it is the one Apple keeps for a phone that is offline.
+    expect(order).toEqual([
+      [token('a0'), 0.3],
+      [token('a1'), 0.6],
+      [token('a2'), 0.8],
+      [token('a0'), 0.6],
+      [token('a0'), 1],
+    ]);
+  });
+
+  it("judges quiet hours by a delivery's quietTz when it has one, and names no saved place's zone", async () => {
+    const { origin, seen } = await fakeApns(apple({}));
+    const store = new MemoryAlertStore();
+    // 18:05 UTC on 1 December: 18:05 in London, 03:05 in Tokyo.
+    const london = record(token('a0', 0));
+    const tokyo = record(token('a0', 1), { tz: 'Asia/Tokyo' });
+    const saved = record(token('a0', 2), { slot: PID, tz: 'America/New_York' });
+    const lines: string[] = [];
+    const { results } = await run(origin, {
+      store,
+      deliveries: [
+        { ...delivery(london), quietTz: 'Asia/Tokyo' },
+        { ...delivery(tokyo), quietTz: 'Europe/London' },
+        { ...placeDelivery(saved), quietTz: 'Asia/Tokyo' },
+      ],
+      log: (l) => lines.push(l),
+    });
+    expect(results.map((x) => x.outcome)).toEqual(['quiet', 'sent', 'quiet']);
+    expect(devicesSeen(seen)).toEqual([token('a0', 1)]);
+    expect(lines).toEqual([
+      `alerts: error: refused snow.${london.id.slice(0, 8)}…: quiet hours in Asia/Tokyo`,
+      `alerts: error: refused snow.${saved.id.slice(0, 8)}….${PID}: quiet hours`,
+    ]);
+  });
+
+  it("in a dry run never logs a saved place's words, and says which would go silently", async () => {
+    const { origin, seen } = await fakeApns(apple({}));
+    const store = new MemoryAlertStore();
+    const here = record(token('a0'));
+    const saved = record(token('a0'), { slot: PID, query: 'place=leeds-gb', name: 'Leeds' });
+    const lines: string[] = [];
+    const { results } = await run(origin, {
+      store,
+      deliveries: [
+        delivery(here),
+        placeDelivery(saved, { thread: `snow-${PID}` }),
+        placeDelivery(saved, { thread: `snow-${PID}`, quiet: true }),
+      ],
+      keys: {},
+      dryRun: true,
+      log: (l) => lines.push(l),
+    });
+    expect(results.map((x) => x.outcome)).toEqual(['logged', 'logged', 'logged']);
+    const who = `snow.${here.id.slice(0, 8)}…`;
+    expect(lines).toEqual([
+      `alerts: dry run: ${who} sandbox evening 2026-12-02: ${DURHAM.title} / ${DURHAM.body}`,
+      `alerts: dry run: ${who}.${PID} sandbox evening 2026-12-02`,
+      `alerts: dry run: ${who}.${PID} sandbox evening 2026-12-02 (silent)`,
+    ]);
+    expect(seen).toHaveLength(0);
   });
 
   it('never logs a device token, a provider token, a key, a full id or coordinates', async () => {

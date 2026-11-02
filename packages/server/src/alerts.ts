@@ -8,32 +8,42 @@
  * 1. lists the zones that hold a registration;
  * 2. keeps those in a window at the place (core's `alertWindows`) with no done marker for it today;
  * 3. lists today's claims and judgements for those windows, then each zone's registrations, and
- *    strong-reads each one neither notified nor judged today, deleting any not seen for
- *    `ALERTS.staleAfterDays` and skipping any whose switch for this window is off;
- * 4. groups the rest by place and units, the biggest groups first, and asks `getToday` once per
- *    group (`climateWaitMs` 0), starting no group after the budget or the forecast-fetch cap;
+ *    strong-reads each one neither notified nor judged today, forgetting the phone of any not seen
+ *    for `ALERTS.staleAfterDays` and skipping any whose switch for this window is off;
+ * 4. groups the rest by place and units, the biggest groups first (of the same size, the one with
+ *    the oldest registration), and asks `getToday` once per group (`climateWaitMs` 0), starting no
+ *    group after the budget or the forecast-fetch cap;
  * 5. decides with core's `snowAlert` (ALERTS_FORCE_IDS: the test copy when it says no);
  * 6. claims and sends through `sendAlerts`, which acts on Apple's answers;
  * 7. marks done each zone whose every registration is finished with, and in each zone it leaves
  *    unfinished, marks judged each registration finished with but unclaimed, so the next run
  *    reads only what is left;
  * 8. in the 03:00 UTC hour, deletes `sent/`, `judged/`, `done/` and `test/` keys more than 2 days
- *    old.
+ *    old, and logs how many devices have saved places.
+ *
+ * **A phone's places.** Each place of a phone is a registration of its own, in its own zone: the
+ * free place ("where you are", "snow.<id>") and each saved place ("snow.<id>.<pid>"), by which name
+ * it is claimed, judged and logged, with its own collapse id and thread. A saved place's
+ * notification in the phone's night (its `deviceTz`) goes silently; a free place in a saved place's
+ * cell (`shadowedBy`) has nothing to send, since the saved place's goes under the name the person
+ * chose. Apple refusing a phone, or a phone not seen for 90 days, forgets all its places.
  *
  * **Overlapping runs** send once, by the claims. They also never lose a notification: a run that
  * counts another run's claim as finished checks, after marking the zone done, that the claim is
  * still there, and a run that releases a claim deletes its zone's done marker.
  *
- * What it logs is fit for a public log: id prefixes, zones and counts, never a device token, a
- * provider token, a full id, a place query or coordinates.
+ * What it logs is fit for a public log: id prefixes, pids, the free places' zones and counts, never
+ * a device token, a provider token, a full id, a place query, coordinates or a saved place's zone.
  */
 import {
   ALERTS,
   alertWindows,
   collapseId,
   expiresAt,
+  inQuietHours,
   snowAlert,
   testAlert,
+  threadId,
   type AlertContent,
   type AlertKind,
   type ApiError,
@@ -51,12 +61,13 @@ import {
   createBlobsAlertStore,
   doneKey,
   donePrefix,
-  forgetRegistration,
+  forgetDevice,
   idPrefix,
   judgedKey,
   judgedPrefix,
   parseRegKey,
   redact,
+  regKey,
   regZonePrefix,
   sentKey,
   sentPrefix,
@@ -83,7 +94,11 @@ import type { EnvGetter } from './config';
 import { createDeps, type ServerDeps } from './deps';
 import { getToday } from './today';
 
-/** A registration as the devices handler writes it (section 8.2), as far as the run reads it. */
+/**
+ * A registration as the devices handler writes it (section 8.2), as far as the run reads it: one
+ * place of a device, the free place ("where you are") or a saved place (its `slot`, from
+ * `PushRecord`).
+ */
 export interface AlertRecord extends PushRecord {
   v: 1;
   platform: string;
@@ -91,6 +106,13 @@ export interface AlertRecord extends PushRecord {
   /** Each topic's switches; the snow app sends only `snow`. */
   alerts: Partial<Record<Topic, TopicAlertPrefs>>;
   createdAt?: string;
+  /**
+   * The free place only: the pid of the saved place in the same 0.05° cell, whose notification
+   * goes instead, under the name the person chose.
+   */
+  shadowedBy?: string;
+  /** Saved places only: the phone's own zone, for its night (sent silently then). */
+  deviceTz?: string;
 }
 
 export interface RunAlertsOptions {
@@ -125,6 +147,8 @@ export interface RunAlertsOptions {
 export interface RunNotification {
   app: string;
   id: string;
+  /** A saved place's pid; absent for the free place. */
+  slot?: string;
   tz: string;
   kind: AlertKind;
   units: Units;
@@ -134,6 +158,8 @@ export interface RunNotification {
   title: string;
   body: string;
   forced: boolean;
+  /** Present, and true, for a saved place's notification sent silently in the phone's night. */
+  silent?: true;
   outcome: DeliveryOutcome;
 }
 
@@ -158,6 +184,8 @@ export interface RunAlertsResult {
   errors: number;
   /** Notifications for ALERTS_FORCE_IDS. */
   forced: number;
+  /** Saved places' notifications sent (or logged) silently, in the phone's night. */
+  silent: number;
   /** Zones marked done (and still so when the run ended). */
   done: number;
   /** Why the run left work for the next one, if it did: its budget or the fetch cap. */
@@ -197,12 +225,14 @@ export function cleanupKey(utcDate: string): string {
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
 /**
- * Text fit for a public log: ids cut to a prefix, no provider token (`redact`), and no
- * coordinates, whether a cache key's cell ("53.80,-1.55") or a query's lat, lon or key. The
- * devices handlers' lines go through it too.
+ * Text fit for a public log: ids cut to a prefix, no provider token (`redact`), no coordinates,
+ * whether a cache key's cell ("53.80,-1.55") or a query's lat, lon or key, and no saved place's
+ * zone, as its key ("reg/v1/<tz>/snow.<id>.<pid>", in a store's error) holds it. The devices
+ * handlers' lines go through it too.
  */
 export function scrub(text: string): string {
   return redact(text)
+    .replace(/\breg\/v1\/[^/\s]+\/(?=[a-z]+\.[0-9a-f]{8}…\.[0-9a-f]{12}\b)/g, 'reg/v1/…/')
     .replace(/-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+/g, '<cell>')
     .replace(/\b(lat|lon|latitude|longitude|apikey)=[^&\s]*/gi, '$1=…');
 }
@@ -243,13 +273,28 @@ function watched(store: AlertStore, onError: (err: unknown) => void): AlertStore
   };
 }
 
-/** A stored registration, checked, with its zone, app and id from its key; null if unusable. */
-function readRecord(
-  value: unknown,
-  at: { tz: string; app: string; id: string },
-): AlertRecord | null {
+/** Where a registration is, as its key says: its zone, app and id, and a saved place's pid. */
+interface Registration {
+  tz: string;
+  app: string;
+  id: string;
+  /** The pid of a saved place; absent for the free place. */
+  slot?: string;
+}
+
+/** A registration key's `Registration`, or null for any other key. */
+function registrationAt(key: string): Registration | null {
+  const reg = parseRegKey(key);
+  if (!reg) return null;
+  const { pid, ...at } = reg;
+  return pid ? { ...at, slot: pid } : at;
+}
+
+/** A stored registration, checked, with where it is from its key; null if unusable. */
+function readRecord(value: unknown, at: Registration): AlertRecord | null {
   if (!value || typeof value !== 'object') return null;
-  const r = value as Partial<AlertRecord>;
+  // The key says which place it is, whatever the record says.
+  const { slot: _stored, ...r } = value as Partial<AlertRecord>;
   if (typeof r.token !== 'string' || !TOKEN.test(r.token)) return null;
   if (r.env !== 'sandbox' && r.env !== 'production') return null;
   if (typeof r.query !== 'string' || r.query === '') return null;
@@ -267,11 +312,13 @@ interface Zone {
   date: string;
   /** Registrations listed in the zone. */
   count: number;
+  /** Every key listed in the zone, so a free place's saved twin (`shadowedBy`) is known to be there. */
+  listed: ReadonlySet<string>;
   unfinished: boolean;
   /**
-   * Registrations ("<app>.<id>") counted as finished on another run's claim: claimed in the
-   * listing, or found taken. That run may yet release the claim, so a done marker that counts on
-   * them is checked once written.
+   * Registrations (`nameOf`) counted as finished on another run's claim: claimed in the listing,
+   * or found taken. That run may yet release the claim, so a done marker that counts on them is
+   * checked once written.
    */
   relied: Set<string>;
   /** Whether this run released a claim in the zone, which takes back any done marker for it. */
@@ -295,15 +342,28 @@ interface Pending {
   entry: Entry;
   alert: AlertContent;
   delivery: Delivery;
+  /** Sent silently, in the phone's night. */
+  quiet: boolean;
 }
 
-const who = (record: Pick<AlertRecord, 'app' | 'id'>): string =>
-  `${record.app}.${idPrefix(record.id)}`;
+/**
+ * The id a place's claims and judgements are kept under: the device's for the free place, and
+ * "<id>.<pid>" for a saved place, so each place of a phone is claimed once a window, apart.
+ */
+const placeKeyId = (r: Pick<Registration, 'id' | 'slot'>): string =>
+  r.slot ? `${r.id}.${r.slot}` : r.id;
+
+/** A place's name in a window's claims and judgements: "<app>.<id>" or "<app>.<id>.<pid>". */
+const nameOf = (r: Omit<Registration, 'tz'>): string => `${r.app}.${placeKeyId(r)}`;
+
+/** A place as a log names it: "snow.3f9c1a2b…", or "snow.3f9c1a2b….1a2b3c4d5e6f" if saved. */
+const who = (r: Omit<Registration, 'tz'>): string =>
+  `${r.app}.${idPrefix(r.id)}${r.slot ? `.${r.slot}` : ''}`;
 
 /** A zone's window for the day, as the claims and judgements are kept: "2026-10-18.evening". */
 const windowOf = (z: Pick<Zone, 'date' | 'kind'>): string => `${z.date}.${z.kind}`;
 
-/** The last segment of a key: a claim's or judgement's "<app>.<id>". */
+/** The last segment of a key: a claim's or judgement's `nameOf`. */
 const lastSegment = (key: string): string => key.slice(key.lastIndexOf('/') + 1);
 
 /**
@@ -336,6 +396,7 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
     deleted: 0,
     errors: 0,
     forced: 0,
+    silent: 0,
     done: 0,
     stopped: null,
     cleaned: null,
@@ -375,6 +436,12 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
 
   const zones: Zone[] = [];
   const entries: Entry[] = [];
+  /**
+   * Registrations finished with but unclaimed: judged with nothing to send (or shadowed), or
+   * logged by a dry run. Where their zone is left unfinished, they are marked judged for the next
+   * run (step 7).
+   */
+  const unclaimed: Entry[] = [];
 
   /** Steps 2 to 4: the due zones, and their due registrations. */
   const gather = async (): Promise<void> => {
@@ -396,6 +463,7 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
           kind,
           date,
           count: 0,
+          listed: new Set(),
           unfinished: false,
           relied: new Set(),
           released: false,
@@ -445,7 +513,7 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
     );
 
     // Each zone's registrations, then a strong read of each one due.
-    const reads: { zone: Zone; key: string; reg: { tz: string; app: string; id: string } }[] = [];
+    const reads: { zone: Zone; key: string; reg: Registration }[] = [];
     await pool(
       zones.filter((z) => !z.unfinished),
       READ_CONCURRENCY,
@@ -463,10 +531,11 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
           return;
         }
         zone.count = keys.length;
+        zone.listed = new Set(keys);
         for (const key of keys) {
-          const reg = parseRegKey(key);
+          const reg = registrationAt(key);
           if (!reg) continue;
-          const name = `${reg.app}.${reg.id}`;
+          const name = nameOf(reg);
           if (listed.judged.has(name)) continue;
           if (listed.claimed.has(name)) {
             zone.relied.add(name);
@@ -494,12 +563,15 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
       result.records++;
       const record = readRecord(value, reg);
       if (!record) {
-        say(`alerts-run: error: ${who(reg)} in ${reg.tz} is not a registration the run can read`);
+        // A saved place's zone is never logged: beside its id, it would trace a trip.
+        const where = reg.slot ? '' : ` in ${reg.tz}`;
+        say(`alerts-run: error: ${who(reg)}${where} is not a registration the run can read`);
         return;
       }
       const seen = Date.parse(record.seenAt ?? '') || Date.parse(record.updatedAt);
       if (now - seen > ALERTS.staleAfterDays * DAY) {
-        const forgot = await forgetRegistration(store, record);
+        // Every place of the phone was seen when this one was, so all of them go.
+        const forgot = await forgetDevice(store, record.app, record.id, record);
         if (forgot === 'deleted') {
           result.deleted++;
           say(`alerts-run: deleted ${who(record)} (not seen for ${ALERTS.staleAfterDays} days)`);
@@ -511,21 +583,21 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
       }
       const prefs = record.alerts.snow;
       if (prefs?.[zone.kind] !== true) return;
-      entries.push({
-        zone,
-        record,
-        prefs,
-        forced: forceIds.some((p) => record.id.startsWith(p)),
-      });
+      const entry = { zone, record, prefs, forced: forceIds.some((p) => record.id.startsWith(p)) };
+      // Where the phone is, in a saved place's cell: that place's notification goes instead, under
+      // the name the person chose, so this one has nothing to send and needs no forecast. Only
+      // while that place is there: in the same cell, it is in this zone's listing. One deleted
+      // before the free record was rewritten (a registration cut short) silences nothing.
+      const twin =
+        typeof record.shadowedBy === 'string' && !record.slot
+          ? regKey(zone.tz, record.app, record.id, record.shadowedBy)
+          : null;
+      if (twin && zone.listed.has(twin)) unclaimed.push(entry);
+      else entries.push(entry);
     });
   };
 
   const pending: Pending[] = [];
-  /**
-   * Registrations finished with but unclaimed: judged with nothing to send, or logged by a dry
-   * run. Where their zone is left unfinished, they are marked judged for the next run (step 7).
-   */
-  const unclaimed: Entry[] = [];
 
   /** Step 5: the notification for one registration from its place's answer; false if none. */
   const decide = (entry: Entry, body: TodayResponse): boolean => {
@@ -543,6 +615,12 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
         : null);
     if (!alert) return false;
     if (forced) result.forced++;
+    // A saved place's window can fall in the phone's night: sent all the same, but silently, to
+    // be seen in the morning. The place's own quiet hours are the sender's to check.
+    const quiet =
+      record.slot !== undefined &&
+      typeof record.deviceTz === 'string' &&
+      inQuietHours(record.deviceTz, at, ALERTS.quiet);
     let push: AlertPush;
     try {
       push = alertPush({
@@ -551,7 +629,9 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
         topic: 'snow',
         kind: zone.kind,
         date: alert.date,
-        collapseId: collapseId('snow', zone.kind, alert.date),
+        collapseId: collapseId('snow', zone.kind, alert.date, record.slot),
+        thread: threadId('snow', record.slot),
+        quiet,
         expiration: expiresAt(zone.tz, zone.kind, zone.date),
         priority: ALERTS.apnsPriority[zone.kind],
       });
@@ -560,8 +640,8 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
       say(`alerts-run: error: no push for ${who(record)}: ${errorText(err)}`);
       return false;
     }
-    const claimKey = sentKey(zone.date, 'snow', zone.kind, record.app, record.id);
-    pending.push({ entry, alert, delivery: { record, claimKey, push } });
+    const claimKey = sentKey(zone.date, 'snow', zone.kind, record.app, placeKeyId(record));
+    pending.push({ entry, alert, delivery: { record, claimKey, push }, quiet });
     return true;
   };
 
@@ -581,7 +661,17 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
       group.entries.push(entry);
     }
     // The biggest first: a run stopped by its cap or budget has then notified the most it could.
-    const list = [...groups.values()].sort((a, b) => b.entries.length - a.entries.length);
+    // Of groups the same size, the one with the oldest registration, so a flood of new ones
+    // can't push established ones out of a run.
+    const oldest = (group: Group): number =>
+      Math.min(
+        ...group.entries.map(
+          (e) => Date.parse(e.record.createdAt ?? '') || Number.MAX_SAFE_INTEGER,
+        ),
+      );
+    const list = [...groups.values()].sort(
+      (a, b) => b.entries.length - a.entries.length || oldest(a) - oldest(b),
+    );
     const leave = (group: Group): void => {
       for (const e of group.entries) e.zone.unfinished = true;
     };
@@ -601,9 +691,12 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
         const { error } = answer.body as ApiError & { error: { detail?: string } };
         // A place that no longer exists stays that way; a forecast that failed may not.
         const retry = answer.status >= 500;
+        // The forecast's own words can name its zone, which beside a saved place's name would
+        // trace a trip (decision 36), so a line naming one leaves them out.
+        const detail = error.detail && !first.slot ? ` (${error.detail})` : '';
         say(
           `alerts-run: error: no forecast for ${named}: ${answer.status} ${error.code}` +
-            `${error.detail ? ` (${error.detail})` : ''}${retry ? '' : ', so none today'}`,
+            `${detail}${retry ? '' : ', so none today'}`,
         );
         if (retry) leave(group);
         return;
@@ -654,7 +747,7 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
       clock,
     });
     results.forEach(({ outcome }, i) => {
-      const { entry, alert } = pending[i]!;
+      const { entry, alert, quiet } = pending[i]!;
       const { record, zone } = entry;
       if (!deliveryFinished(outcome)) zone.unfinished = true;
       if (outcome === 'sent') result.sent++;
@@ -662,12 +755,14 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
         result.logged++;
         unclaimed.push(entry);
       }
+      if (quiet && (outcome === 'sent' || outcome === 'logged')) result.silent++;
       if (outcome === 'deleted') result.deleted++;
-      if (outcome === 'taken') zone.relied.add(`${record.app}.${record.id}`);
+      if (outcome === 'taken') zone.relied.add(nameOf(record));
       if (outcome === 'released') zone.released = true;
       result.notifications.push({
         app: record.app,
         id: record.id,
+        ...(record.slot ? { slot: record.slot } : {}),
         tz: zone.tz,
         kind: zone.kind,
         units: record.units,
@@ -676,6 +771,7 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
         title: alert.title,
         body: alert.body,
         forced: entry.forced,
+        ...(quiet ? { silent: true as const } : {}),
         outcome,
       });
     });
@@ -708,7 +804,7 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
       // Only saves the next run work, so it is the first thing to go when time is short.
       if (clock() >= pushDeadline) return Promise.resolve();
       return store
-        .set(judgedKey(zone.date, 'snow', zone.kind, record.app, record.id), {
+        .set(judgedKey(zone.date, 'snow', zone.kind, record.app, placeKeyId(record)), {
           at: at.toISOString(),
         })
         .then(
@@ -743,8 +839,10 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
 
   /**
    * Step 8: once a day, in the 03:00 UTC hour, the `sent/`, `judged/`, `done/` and `test/` keys
-   * more than 2 days old. Its marker is claimed first, so one run cleans; a cleanup cut short or
-   * failed releases it, so the next run in the hour carries on.
+   * more than 2 days old, then a count of the devices with saved places. Its marker is claimed
+   * first, so one run cleans; a cleanup cut short or failed releases it, so the next run in the
+   * hour carries on, and only the run that finishes it counts. A count that can't finish is
+   * logged as unavailable, and keeps the marker: the deletes are done.
    */
   const clean = async (): Promise<void> => {
     if (at.getUTCHours() !== CLEANUP_HOUR) return;
@@ -788,13 +886,56 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
       }
     });
     result.cleaned = deleted;
-    if (!complete) {
-      try {
-        await store.delete(marker);
-      } catch {
-        // Tomorrow's cleanup takes what is left.
-      }
+    if (complete) {
+      const count = await countSaved();
+      say(
+        `alerts-run: cleanup: ${
+          count === null
+            ? 'count unavailable'
+            : `${count} ${count === 1 ? 'device' : 'devices'} with saved places`
+        }`,
+      );
+      return;
     }
+    try {
+      await store.delete(marker);
+    } catch {
+      // Tomorrow's cleanup takes what is left.
+    }
+  };
+
+  /**
+   * The day's count of devices with a saved place (a key with a pid), which Carl compares each
+   * month with the purchases (DECISIONS): zone by zone, so no one listing grows with every
+   * registration, and none started once the pushes' grace is over. Null when a listing failed or
+   * time ran out; the cleanup stays finished all the same, its deletes done.
+   */
+  const countSaved = async (): Promise<number | null> => {
+    let zoneList: string[];
+    try {
+      const { directories } = await store.list(REG_PREFIX, { directories: true });
+      zoneList = directories.map(zoneOfDirectory).filter((tz): tz is string => tz !== null);
+    } catch {
+      return null;
+    }
+    const saved = new Set<string>();
+    let counted = true;
+    await pool(zoneList, READ_CONCURRENCY, async (tz) => {
+      if (!counted) return;
+      if (clock() >= pushDeadline) {
+        counted = false;
+        return;
+      }
+      try {
+        for (const key of (await store.list(regZonePrefix(tz))).keys) {
+          const reg = parseRegKey(key);
+          if (reg?.pid) saved.add(`${reg.app}.${reg.id}`);
+        }
+      } catch {
+        counted = false;
+      }
+    });
+    return counted ? saved.size : null;
   };
 
   await gather();
@@ -807,7 +948,10 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
   return result;
 }
 
-/** The run's one line: zones, records, groups, fetches, sent, deleted and errors, then notes. */
+/**
+ * The run's one line: zones, records, groups, fetches, sent, deleted and errors, then notes (a
+ * dry run's, those forced, those sent silently, zones left, the cleanup's).
+ */
 export function runSummary(r: RunAlertsResult): string {
   const counts = [
     `zones ${r.zones}`,
@@ -821,6 +965,7 @@ export function runSummary(r: RunAlertsResult): string {
   const notes: string[] = [];
   if (r.dryRun) notes.push(`dry run, ${r.logged} logged`);
   if (r.forced) notes.push(`${r.forced} forced`);
+  if (r.silent) notes.push(`${r.silent} silent`);
   const left = r.zones - r.done;
   if (left > 0) {
     const why =

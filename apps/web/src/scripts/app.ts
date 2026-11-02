@@ -294,9 +294,15 @@ function hushLive(): void {
   hushTimer = setTimeout(() => live.setAttribute('aria-live', 'polite'), 300);
 }
 
+/**
+ * Puts `text` in an element, unless its words are there already. The server's markup holds them
+ * with the template's spacing around them ("\n  Is it hot in Leeds today?\n"), which is no
+ * change: written again, Today's live region would read out the same answer again, as it did at
+ * the first answer asked for again after the page loaded, at the top of the hour.
+ */
 function setText(id: string, text: string): void {
   const el = $(id);
-  if (el && el.textContent !== text) el.textContent = text;
+  if (el && el.textContent?.trim() !== text) el.textContent = text;
 }
 
 function popAnswer(): void {

@@ -8,7 +8,7 @@ import { createPrivateKey, randomUUID, sign } from 'node:crypto';
 import { connect, type ClientHttp2Session } from 'node:http2';
 import { inQuietHours, type QuietHours } from '@isithot/core';
 import {
-  forgetRegistration,
+  forgetDevice,
   idPrefix,
   jwtKey,
   redact,
@@ -366,9 +366,11 @@ export type AlertPushKind = 'evening' | 'morning';
 export interface AlertPayload {
   aps: {
     alert: { title: string; body: string };
-    sound: 'default';
+    /** None for a quiet push. */
+    sound?: 'default';
     'thread-id': string;
-    'interruption-level': 'active';
+    /** `passive` for a quiet push: into the notification list, with no sound or lit screen. */
+    'interruption-level': 'active' | 'passive';
     'relevance-score': number;
   };
   topic: string;
@@ -400,8 +402,15 @@ export interface AlertPushInput {
   kind: AlertPushKind;
   /** The local date the notification is about, YYYY-MM-DD. */
   date: string;
-  /** Core's `collapseId(topic, kind, date)`, "snow-evening-2026-12-02"; at most 64 bytes. */
+  /** Core's `collapseId(topic, kind, date, slot)`, "snow-evening-2026-12-02"; at most 64 bytes. */
   collapseId: string;
+  /** Core's `threadId(topic, slot)`, the payload's `thread-id`; the topic when absent. */
+  thread?: string;
+  /**
+   * The phone's night (a saved place's `deviceTz`, 21:00 to 06:59 there): sent `passive` with no
+   * sound, to be seen in the morning.
+   */
+  quiet?: boolean;
   /** When Apple stops trying, in Unix seconds: core's `expiresAt` (21:00 at the place for the evening, 11:00 for the morning). */
   expiration: number;
   /** `ALERTS.apnsPriority[kind]`: 5 for the evening, 10 for the morning. */
@@ -414,8 +423,9 @@ export type AlertPush = ApnsPush & { id: string; payload: AlertPayload };
 
 /**
  * One notification's push: the headers' values and the payload, exactly as section 8.5 has
- * them. Throws for an app with no topic, an expiration that is not whole Unix seconds, a collapse
- * id over 64 bytes, or a payload over Apple's 4,096 bytes, so nothing is claimed for a push that
+ * them, in the thread given (the topic's otherwise) and, when `quiet`, `passive` with no sound.
+ * Throws for an app with no topic, an expiration that is not whole Unix seconds, a collapse id
+ * over 64 bytes, or a payload over Apple's 4,096 bytes, so nothing is claimed for a push that
  * cannot go.
  */
 export function alertPush(input: AlertPushInput): AlertPush {
@@ -431,9 +441,9 @@ export function alertPush(input: AlertPushInput): AlertPush {
   const payload: AlertPayload = {
     aps: {
       alert: { title: alert.title, body: alert.body },
-      sound: 'default',
-      'thread-id': input.topic,
-      'interruption-level': 'active',
+      ...(input.quiet ? {} : { sound: 'default' as const }),
+      'thread-id': input.thread ?? input.topic,
+      'interruption-level': input.quiet ? 'passive' : 'active',
       'relevance-score': alert.relevance,
     },
     topic: input.topic,
@@ -489,12 +499,17 @@ export function classifyApns(
 export interface Delivery {
   record: PushRecord;
   /**
-   * The run's `sentKey(localDate, topic, kind, app, id)`, claimed with `onlyIfNew` just before the
-   * push. Null for a push already counted where it was asked for (a test send, by its slot in the
-   * hour), which goes unclaimed.
+   * The run's `sentKey(localDate, topic, kind, app, id)`, with "<id>.<pid>" for a saved place,
+   * claimed with `onlyIfNew` just before the push. Null for a push already counted where it was
+   * asked for (a test send, by its slot in the hour), which goes unclaimed.
    */
   claimKey: string | null;
   push: AlertPush;
+  /**
+   * The zone whose quiet hours the sender checks; the record's when absent. A test send gives the
+   * phone's.
+   */
+  quietTz?: string;
 }
 
 /**
@@ -508,7 +523,8 @@ export interface Delivery {
  * - "held": as "released", but the release failed, so the claim stays: not retried today.
  * - "taken": another run holds the claim; nothing sent.
  * - "deferred": not tried in this run (the claim could not be written, there is no key or token
- *   for its environment, its environment stopped, or the deadline passed); nothing claimed.
+ *   for its environment, its environment stopped, the deadline passed, or Apple refused its device
+ *   token for another of the phone's places and the phone was forgotten); nothing claimed.
  * - "quiet": quiet hours at the place; nothing claimed or sent.
  * - "logged": a dry run wrote it to the log instead.
  */
@@ -576,20 +592,46 @@ export interface SendAlertsResult {
   counts: Record<DeliveryOutcome, number>;
 }
 
-/** A registration as a log names it: "snow.3f9c1a2b…". */
-const who = ({ record }: Delivery): string => `${record.app}.${idPrefix(record.id)}`;
+/**
+ * A registration as a log names it: "snow.3f9c1a2b…", and a saved place's with its pid,
+ * "snow.3f9c1a2b….1a2b3c4d5e6f".
+ */
+const who = ({ record }: Delivery): string =>
+  `${record.app}.${idPrefix(record.id)}${record.slot ? `.${record.slot}` : ''}`;
 
 const answer = (status: number, reason: string | null): string =>
   `${status}${reason ? ` ${reason}` : ''}`;
 
 /**
- * Sends the notifications: one HTTP/2 session per APNs environment, the first push alone (Apple
- * allows one stream until a push with a valid provider token), then up to
- * min(`apnsConcurrency`, the session's maximum concurrent streams) at once. Each push is claimed
- * just before it goes (unless its claim key is null: a test send), and Apple's answer is acted on
- * (`classifyApns`). Refuses any delivery in quiet hours at its place, the run's and a test's
- * alike. A 403, a token-update 429 or no answer at all stops that environment for the run: what is
- * left there is deferred, unclaimed.
+ * The order one environment's deliveries go in: each phone's (device token's) least relevant
+ * first, so the one Apple keeps for a phone that is offline is likelier the deepest snow, and the
+ * phones in turn, so one phone's pushes are side by side only once no other phone is waiting.
+ */
+function inTurn(deliveries: readonly Delivery[], list: readonly number[]): number[] {
+  const byPhone = new Map<string, number[]>();
+  for (const i of list) {
+    const phone = deliveries[i]!.record.token.toLowerCase();
+    byPhone.set(phone, [...(byPhone.get(phone) ?? []), i]);
+  }
+  const relevance = (i: number): number => deliveries[i]!.push.payload.aps['relevance-score'];
+  const queues = [...byPhone.values()].map((q) => q.sort((a, b) => relevance(a) - relevance(b)));
+  const order: number[] = [];
+  for (let turn = 0; order.length < list.length; turn++) {
+    for (const q of queues) if (turn < q.length) order.push(q[turn]!);
+  }
+  return order;
+}
+
+/**
+ * Sends the notifications: one HTTP/2 session per APNs environment, the phones in turn
+ * (`inTurn`), the first push alone (Apple allows one stream until a push with a valid provider
+ * token), then up to min(`apnsConcurrency`, the session's maximum concurrent streams) at once.
+ * Each push is claimed just before it goes (unless its claim key is null: a test send), and
+ * Apple's answer is acted on (`classifyApns`); once a phone is forgotten, its pushes not yet
+ * started are deferred. Refuses any delivery in quiet hours at its place, the run's and a test's
+ * alike, or at its `quietTz` when given (a test send's, the phone's). A 403, a token-update 429
+ * or no answer at all stops that environment for the run: what is left there is deferred,
+ * unclaimed.
  */
 export async function sendAlerts(input: SendAlertsInput): Promise<SendAlertsResult> {
   const { store, deliveries, now } = input;
@@ -610,19 +652,24 @@ export async function sendAlerts(input: SendAlertsInput): Promise<SendAlertsResu
   const byEnv = new Map<ApnsEnv, number[]>();
   deliveries.forEach((d, i) => {
     const { push, record } = d;
-    if (inQuietHours(record.tz, new Date(now), input.quiet)) {
-      say(`alerts: error: refused ${who(d)}: quiet hours in ${record.tz}`);
+    const tz = d.quietTz ?? record.tz;
+    if (inQuietHours(tz, new Date(now), input.quiet)) {
+      // A saved place's zone is never logged: beside its id, it would trace a trip.
+      say(`alerts: error: refused ${who(d)}: quiet hours${record.slot ? '' : ` in ${tz}`}`);
       settle(i, 'quiet');
     } else if (input.dryRun) {
       const { kind, date, aps } = push.payload;
-      say(
-        `alerts: dry run: ${who(d)} ${record.env} ${kind} ${date}: ${aps.alert.title} / ${aps.alert.body}`,
-      );
+      // Nor are a saved place's words, which name it.
+      const silent = aps['interruption-level'] === 'passive' ? ' (silent)' : '';
+      const words = record.slot ? '' : `: ${aps.alert.title} / ${aps.alert.body}`;
+      say(`alerts: dry run: ${who(d)} ${record.env} ${kind} ${date}${silent}${words}`);
       settle(i, 'logged');
     } else {
       byEnv.set(record.env, [...(byEnv.get(record.env) ?? []), i]);
     }
   });
+  /** Phones (device tokens) forgotten in this call. */
+  const forgotten = new Set<string>();
 
   const release = async (i: number): Promise<'released' | 'held'> => {
     const { claimKey } = deliveries[i]!;
@@ -663,7 +710,12 @@ export async function sendAlerts(input: SendAlertsInput): Promise<SendAlertsResu
     /** Claims, sends and acts on the answer; true once Apple has taken the provider token. */
     const one = async (i: number): Promise<boolean> => {
       const d = deliveries[i]!;
-      if (stopped || (input.deadline !== undefined && clock() >= input.deadline)) {
+      const phone = d.record.token.toLowerCase();
+      if (
+        stopped ||
+        forgotten.has(phone) ||
+        (input.deadline !== undefined && clock() >= input.deadline)
+      ) {
         settle(i, 'deferred');
         return false;
       }
@@ -698,7 +750,10 @@ export async function sendAlerts(input: SendAlertsInput): Promise<SendAlertsResu
       if (verdict === 'sent') {
         settle(i, 'sent', status, reason);
       } else if (verdict === 'forget') {
-        const forgot = await forgetRegistration(store, d.record);
+        // Apple refuses the token, not the place, so every place of the phone goes.
+        const { app, id } = d.record;
+        const forgot = await forgetDevice(store, app, id, d.record);
+        if (forgot === 'deleted') forgotten.add(phone);
         const why = `${answer(status, reason)}, ${env}, app ${d.record.appVersion ?? 'unknown'}`;
         say(
           forgot === 'deleted'
@@ -759,7 +814,7 @@ export async function sendAlerts(input: SendAlertsInput): Promise<SendAlertsResu
     }
   };
 
-  await Promise.all([...byEnv].map(([env, list]) => sendEnv(env, list)));
+  await Promise.all([...byEnv].map(([env, list]) => sendEnv(env, inTurn(deliveries, list))));
   const counts = Object.fromEntries(DELIVERY_OUTCOMES.map((o) => [o, 0])) as Record<
     DeliveryOutcome,
     number

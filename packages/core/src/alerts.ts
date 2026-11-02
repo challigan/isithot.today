@@ -125,9 +125,19 @@ export function expiresAt(tz: string, kind: AlertKind, date: string): number {
 /**
  * `apns-collapse-id`, "snow-evening-2026-12-02": a second notification about the same day
  * replaces the first on the phone rather than adding another. `date` is the day it is about.
+ * A saved place's `slot` (its pid) follows, "snow-evening-2026-12-02-1a2b3c4d5e6f", so two places
+ * about one day are two notifications; the free place ("where you are") has none, as before.
  */
-export function collapseId(topic: Topic, kind: AlertKind, date: string): string {
-  return `${topic}-${kind}-${date}`;
+export function collapseId(topic: Topic, kind: AlertKind, date: string, slot?: string): string {
+  return slot ? `${topic}-${kind}-${date}-${slot}` : `${topic}-${kind}-${date}`;
+}
+
+/**
+ * `thread-id`, which stacks notifications together on the phone: the topic, "snow", for the free
+ * place, as before, and "snow-1a2b3c4d5e6f" for a saved place, so each place has its own stack.
+ */
+export function threadId(topic: Topic, slot?: string): string {
+  return slot ? `${topic}-${slot}` : topic;
 }
 
 // ---- Snow ----------------------------------------------------------------------
