@@ -107,8 +107,14 @@ test.describe('the legal pages', () => {
       );
       const items = main.locator('h2:text-is("Our apps") + p + ul > li');
       await expect(items).toHaveText([
-        "Notifications. If you turn on notifications in the app, we keep your device's notification token for the app, the place you chose (a town, or a location rounded to about 5 km), its time zone, your units and which notifications you asked for, so we can tell you when snow is likely. " +
-          "With them we keep an ID made from the token, the app's version, whether it is a developer build, when you turned notifications on and when the app last checked in with us. It checks in when you open it: at most once a week, unless you change something. " +
+        // Every place a phone has notifications for, and its check-ins: hourly while where it is
+        // comes from its connection (DECISIONS, "Notifications: several places on one phone").
+        "Notifications. If you turn on notifications in the app, so we can tell you when snow is likely, we keep your device's notification token for the app, your units, which notifications you asked for and the places you get notifications for, with their time zones: " +
+          "where you are (your location rounded to about 5 km or, if you haven't shared it, a rough place estimated from your IP address, but not the address itself) and any saved places you turned notifications on for. " +
+          // Only a saved place's record holds the phone's zone (decisions 16 and 21).
+          "While you have those, we also keep your iPhone's time zone. " +
+          "With all of this we keep an ID made from the token, the app's version, whether it is a developer build, when you turned notifications on and when the app last checked in with us. " +
+          'It checks in when you open it: at most once an hour while it uses a rough place from your internet connection, otherwise at most once a week, unless you change something. ' +
           'We delete all of this when you turn notifications off in the app, when Apple tells us the app is no longer installed, or 90 days after the app last checked in, so about 90 days after you last opened it. ' +
           "If you turn notifications off in your iPhone's Settings instead, we delete it the next time you open the app. " +
           'For a few days after each notification and each test, and after some forecast checks that found nothing to send, we also keep a note of it, even once the rest is deleted, so nothing is sent or checked twice and tests keep to 3 an hour; it holds no token or place. ' +

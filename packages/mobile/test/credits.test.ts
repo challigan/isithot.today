@@ -187,9 +187,11 @@ describe("Your privacy and the website's privacy notice", () => {
         'it keeps your place, units, recent and saved places, your notification choices and last answer on your iPhone',
       ],
       ["your device's notification token, an ID made from it", 'an ID made from the token'],
+      // The notice names every place the server keeps for a phone since "Notifications: several
+      // places on one phone"; the app names its one place until phase 8.4a.
       [
         'the place, its time zone, your units and which notifications you chose',
-        'its time zone, your units and which notifications you asked for',
+        'your units, which notifications you asked for and the places you get notifications for, with their time zones',
       ],
       ["the app's version and when it last checked in", "the app's version"],
       ['turn notifications off in the app', 'when you turn notifications off in the app'],
