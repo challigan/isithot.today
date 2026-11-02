@@ -4886,6 +4886,81 @@ whose page or sheet is slow to come. Until then the re-tap rests on a count
 nothing on a simulator has shown working, and a run whose control fails says so before any
 re-tap is trusted.
 
+**What main's offline run showed** (63bc449's push run 41327075971, job 124909676510; PR #43's
+and #44's runs passed the test):
+
+- **OfflineTests.testOfflineWithNothingSaved failed on a heading that was right.** After a tap on
+  This week it said the heading never read the week's words, and that it read them: the two
+  texts identical, plain ASCII. The tap worked: the recording shows the week page settled by
+  17:30:14.99, half a second after it; `debug-cancels` read 0; the tree held one `heading`, on
+  `page-week`. Every read of it that finished after the tap gave the expected words (17:30:23.46
+  to 17:31:06.29).
+- **The wait compared nothing.** `awaitHeading` waited with an `XCTNSPredicateExpectation`
+  (`label == …`) in an `XCTWaiter`. Each evaluation is one query of the heading, in which the app
+  fetches the attributes of each element on the way to it one at a time, on its main thread: 114
+  fetches here. The wait evaluated once, a second after it began, and that query took the app
+  21.5 s, about 0.19 s a fetch against 0.5 to 2.8 ms in the test before. At the 20 s deadline the
+  waiter interrupted it ("Interrupted by waiter") and reported a timeout. The failure's own
+  `heading.exists` and `heading.label`, fresh reads outside any waiter, then ran to their end
+  (10.9 s, 2.5 of it queued behind the abandoned query, which the app finished anyway, and 4.7 s)
+  and found the expected words. `tap(_:in:)`'s own check had already read them at 17:30:30.48,
+  and threw that away.
+- **The whole simulator was slow.** Queries in this test took a median of 1.17 s, against 0.02 to
+  0.27 in every other test of the run; the same process went fast, slow and fast again in the
+  next test, and quitting it took 22 seconds. The slow spells match mediaanalysisd's CoreML text
+  embedding for spotlightknowledged, which dasd's periodic timer started at 17:29:24, about 50
+  minutes after the simulator booted, to within 2 to 4 seconds across three starts and stops.
+  That it caused them is inferred (the log has no CPU figures), and reads of 3 to 7.5 s came
+  elsewhere in the run without it. Not the app: the same tree, 22 elements before the heading,
+  and no work of its own logged.
+- **A snapshot of the whole app stayed fast.** It is one call into the app, whose main thread
+  captures the whole tree at once: in the same slow spell each took 0.4 s at most (the capture
+  0.00 to 0.34 s), while a query of the heading took up to 21.5 s.
+- **So the heading's waits read snapshots** (`readHeading`, `HeadingRead`, HomeScreens.swift):
+  one at once, then four a second, each the screen at one moment, judged there and then: one
+  `heading`, its middle within the window's width, so on the page on screen and not one beside
+  it (the tree holds the chosen view's page wherever the pages are), reading the page's words
+  exactly. Each wait keeps its timeout, and the deadline is strict: a read counts only if it ended
+  by then. A snapshot is the tree as the app's main thread captured it, which a stuck main thread
+  puts off towards the read's end, so a read begun in time and answered late shows the screen
+  after the deadline: it fails the wait whatever it found, and says so ("but only at 31.2 s,
+  after the 20.0 s deadline"). No read begins after the deadline, and none is interrupted (an
+  interrupted query runs on in the app and holds up the next). The failure is that last read's:
+  how many reads in how long, when the last began and how long it took, and what it found (the
+  words, the frame when off the window, each heading when more than one, or why the app couldn't
+  be read), so the verdict and the message can't disagree. A read of 5 seconds or more is
+  attached as `slow-read`, pass or fail, so a slow main thread shows even when the wait passes.
+  Every wait for the heading reads this way: `awaitHeading`; the launches' (`launchApp`, and the
+  own launches of `AdsTests`, `FixtureLaunchTests`, `LaunchTests` and `PickerTests`); the check
+  for the heading in the 2 seconds after a tab tap (`tap(_:in:)`, `FixtureLaunchTests.show`);
+  `FixtureLaunchTests.waitForHeading`; and `PickerTests.waitForHeading`, after a picker choice,
+  where `wait(for:label:)` had a predicate on the heading in a waiter. No wait is longer, no retry
+  is added, and the words must still match exactly.
+- **Still exposed**: the waits on elements other than the heading (about 85 `waitForExistence`
+  calls and 13 predicate expectations, some in helpers used many times, on tabs, buttons,
+  readouts, sheets and the picker's lines), whose queries took up to 10.9 s in this spell against
+  timeouts of 5 to 15 s; none failed. Each is the next to move to a snapshot read should one fail
+  so. Stopping the simulator's Spotlight embedding in `ci/simulator.sh` might make the load
+  rarer; untried.
+- **Checked on Linux, against stubs** (session scratchpad: flaky/uicheck): the 13 UI test files
+  compiled against the XCUITest stubs; 12 checks of the wait against fake apps (a read answered
+  after the deadline failing, and saying it found the words only then, as a stuck main thread's
+  would; a slow read that ends in time counting; no read begun after the deadline, and the wait
+  ending at it; the first read at once; a heading that comes later; the failure being the last
+  read's, each read's words numbered; a starved wait naming itself; the words exactly, a no-break
+  space failing; a heading beside the window, and two headings, failing; no heading, and no app,
+  saying so; the launch's wait), which each of four planted faults fails (the message from a
+  fresh read, a read answered after the deadline counting, a read begun after the deadline, no
+  check of where the heading is); and the tab tap's checks from PR #40's harness (a tap
+  completed, cancelled once, cancelled with its heading come, and cancelled twice, which now
+  fails on the heading with the last read and the count), the fake's snapshot now holding the
+  heading. And `swift format lint --strict` over every Swift file changed.
+
+**For the next macOS run to show.** That the heading's waits pass in a read or two, as a
+snapshot of the app took 0.4 s at most on run 41327075971 where a query of the heading took up to
+21.5; that no `slow-read` is attached outside a slow spell; and that a heading wait that fails
+under load says how many reads it made and how long the last took.
+
 ## After #34's fourth full run
 
 PR #34's fourth full macOS run, on c74aa22 (run 40189947895, job 121158965836), passed 43 of the 44
@@ -5840,7 +5915,10 @@ suite runs on an iPhone 17 with iOS 26.2, which Xcode 26.6 can test on as the ap
   then stops each `StoreKitPurchases` the test made (XCTest keeps every test case, and what it
   holds, until the run ends, so a listener left running would hear, and finish, the next tests'
   transactions), waits again for an update that came in between, and clears them again.
-  Simulated errors are cleared by `resetToDefaultState()`, never by
+  setUp, once it has cleared them, waits until StoreKit itself lists none of the app's
+  transactions, as storekitd forgets them only after `clearTransactions()` returns, and each
+  refund test refunds the transaction its own buy made (below, "What PR #44's StoreKit run
+  showed"). Simulated errors are cleared by `resetToDefaultState()`, never by
   `setSimulatedError(nil, forAPI:)` (below, "What PR #40's first macOS run showed").
 - **Never a pass on a broken environment.** Every buy and restore test first requires the product
   loaded at `Constants.Purchase.displayPrice` (`readyModel()`, which stops the test otherwise).
@@ -6115,6 +6193,64 @@ element that takes no tap.
   reuses a transaction ID.
 - **Inferred, not seen**: the done's transaction ID (its query is redacted) and what the test
   server did with two requests for 0 at once (it logs nothing of it). It happened once.
+
+**What PR #44's StoreKit run showed** (run 41364703412, job 125022702988, on a798031, which
+changes only SystemFaces.swift and DECISIONS.md; 25f803c's run 41358085179 and a6d0a7d's run
+41300854428 passed all 18):
+
+- **testARefundLocksAgain failed at its unwrap: the session had nothing to refund.** Its timeline
+  ("StoreKit calls, the launch") reads `listen`, then `entitlements → verified [transaction 0]`
+  15 ms later, then `product → ready`, and nothing more: no buy and no finish, and storekitd
+  logged no payment. The model had started owned, so `buy()` returned at its `owned` guard
+  without asking StoreKit, `XCTAssertTrue(owned)` passed for the wrong reason, and
+  `session.allTransactions()` was empty.
+- **The purchase it read was the previous test's.** testAPurchaseElsewhereArrivesThroughUpdates
+  ends owning transaction 0 (the copy's last revision decodes to 00:09:00.860942, its
+  `session.buyProduct`). `SKTestSession.clearTransactions()` empties StoreKit Test's server and
+  returns in about 0.5 ms, but storekitd drops its own copy of the app's transactions
+  (`[InAppReceiptDatabaseStore] Clearing transactions`) later, on a queue of its own: 1.3 to 47 ms
+  later on this run, up to 84 ms on 25f803c's. tearDown cleared at 00:09:01.695 and setUp at
+  01.708; the launch read ran from 01.719 to 01.723 and answered from the copy, starting no sync
+  with the server ("Finished enumerating 1 current transactions"); the two clears reached the copy
+  at 01.743 and 01.752.
+- **Not a6d0a7d's late finish, which held**: test 5's finish returned at 01.684, 12 ms before
+  tearDown's clear, and no transaction-done request reached StoreKit Test after any clear.
+- **An old race, seldom lost.** setUp has always cleared only milliseconds before a test's first
+  read: this read began 11.0 ms after setUp's clear, and the same read on 25f803c 14.6 ms after.
+  There it came 3.9 ms after tearDown's clear reached the copy, and found nothing. Reads begun with
+  a clear still on its way are routine (five on that run, and two on this besides the failing one;
+  three and one of them ended with it still on its way); they matter only when the copy still holds
+  a verified, unrevoked purchase and the next test reads at launch, as this pair does.
+  testBuyUnlocksKeepsItAndFinishes could read testAskToBuyWaitsThenApproved's purchase the same way,
+  across the 25 ms test between them, should a clear lag more than about 45 ms; testRestoreCancelled
+  reads a stale copy too but asserts nothing on it. How often it fails is unmeasured.
+- **So setUp waits until StoreKit itself lists nothing for the app** once it has cleared
+  (`untilStoreKitListsNothing`: `Transaction.all`, `currentEntitlements` and `unfinished`, read
+  every 20 ms for up to 10 seconds), records "StoreKit listed [] at …, N ms after
+  clearTransactions() at …", and otherwise fails, naming the IDs still listed, and stops the test.
+  Not a fixed sleep: the lags reached 84 ms, so any figure is a guess. Not in tearDown alone,
+  which leaves setUp's own clear and a run's first test unguarded. Not `currentEntitlements`
+  alone, which misses a refunded or unverified leftover. Once a read lists nothing, nothing from
+  before the clear can come back, as the server holds none; the other clear can still land
+  during a test, after which storekitd reads the server again, which still holds the test's own
+  purchase (inferred, not seen). The session is kept before the clear, so tearDown resets it
+  should setUp stop.
+- **And each refund test refunds its own purchase**: the transaction with the ID its buy's result
+  gave, once StoreKit Test lists it (waited for up to 10 seconds), never the session's first. A
+  buy that made none fails as that, saying whether the model never asked StoreKit (with its
+  calls) or what StoreKit answered; a session that never lists it fails with what it lists.
+  testARefundLocksAgain also requires nothing owned at launch, as
+  testBuyUnlocksKeepsItAndFinishes does. Each test's timeline is still attached.
+- **No change to the app.** `currentEntitlements` is StoreKit's answer, which the model must
+  trust; only StoreKit Test's `clearTransactions()` can empty a history under it, and the App
+  Store has nothing like it. Reading again in `buy()`, or dropping its `owned` guard, would let an
+  owner buy again.
+- **Inferred, not seen**: why this clear lagged 47 ms (test 5's post-finish queue check was still
+  running; nothing in the log shows a lock), and that a clear landing after a test's own purchase
+  is harmless (the one case on record was `AppStore.sync()`'s clear, not a late one).
+- **Checked on Linux, against stubs** (session scratchpad: flaky/typecheck): the StoreKit tests,
+  with the app's sources, type-check in Debug and Release against stub StoreKit and StoreKitTest
+  modules; and `swift format lint --strict` over every Swift file changed.
 
 **What only Carl's TestFlight purchase shows**: the real product and its price from the App
 Store, Apple's sheet, a purchase with his own Apple Account, the ads going, and the purchase back

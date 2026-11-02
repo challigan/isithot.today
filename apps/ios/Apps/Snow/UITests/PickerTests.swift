@@ -52,7 +52,7 @@ final class PickerTests: XCTestCase {
     XCTAssertTrue(
       pickerCloses(in: app, after: pickersBefore, within: 10),
       "The picker is still open; \(app.pickerReport); \(app.cancelsReport)")
-    wait(for: heading(in: app), label: "Leeds. Will it snow today? No.")
+    waitForHeading("Leeds. Will it snow today? No.", in: app)
     XCTAssertEqual(app.buttons["place"].label, "Place: Leeds. Change place.")
     XCTAssertFalse(app.buttons["use-my-location"].exists, "Still on approximate location")
   }
@@ -178,7 +178,7 @@ final class PickerTests: XCTestCase {
     XCTAssertTrue(
       pickerCloses(in: app, after: pickersBefore, within: 10),
       "The picker is still open; \(app.pickerReport); \(app.cancelsReport)")
-    wait(for: heading(in: app), label: "Leeds. Will it snow today? No.")
+    waitForHeading("Leeds. Will it snow today? No.", in: app)
     XCTAssertEqual(app.buttons["place"].label, "Place: Leeds. Change place.")
     // Still under Saved, and not under Recent.
     _ = openPicker(in: app, focusing: false)
@@ -436,13 +436,15 @@ final class PickerTests: XCTestCase {
   }
 
   /// Launches the app with `-uitest`, `-noads 1` (no consent form or ad, as `launchApp`) and
-  /// `arguments`, and waits for the heading.
+  /// `arguments`, and waits for the heading, from snapshots (`readHeading`, as `launchApp` does).
   @MainActor
   private func launch(_ arguments: [String]) -> XCUIApplication {
     let app = XCUIApplication()
     app.launchArguments = ["-uitest", "-noads", "1"] + arguments
     app.launch()
-    XCTAssertTrue(heading(in: app).waitForExistence(timeout: 15), "No heading on screen")
+    if let failure = readHeading(in: app, within: 15, "to come after the launch", until: \.found) {
+      XCTFail("No heading on screen: \(failure)")
+    }
     return app
   }
 
@@ -497,6 +499,19 @@ final class PickerTests: XCTestCase {
   @MainActor
   private func heading(in app: XCUIApplication) -> XCUIElement {
     app.descendants(matching: .any).matching(identifier: "heading").firstMatch
+  }
+
+  /// Waits up to 15 seconds for the screen to show the heading reading `label`, as a user sees it
+  /// (`readHeading`, as `awaitHeading` does: snapshots, judged as they are read, the deadline
+  /// strict); fails, stopping the test, with what the last read found. Not `wait(for:label:)`,
+  /// a predicate on the heading in a waiter, whose one query a busy simulator can stretch past
+  /// the deadline (docs/DECISIONS.md, "What main's offline run showed").
+  @MainActor
+  private func waitForHeading(_ label: String, in app: XCUIApplication) {
+    let read = readHeading(in: app, within: 15, "to read \"\(label)\"") { $0.shows(label) }
+    if let failure = read {
+      XCTFail("The heading never read \"\(label)\" on screen: \(failure)")
+    }
   }
 
   /// Waits until `element` reads `label`.

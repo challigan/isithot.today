@@ -97,9 +97,7 @@ final class FixtureLaunchTests: XCTestCase {
     }
     XCTAssertTrue(dundee.isHittable, "No Dundee under Nearby; \(app.cancelsReport)")
     dundee.tap()
-    let moved = NSPredicate(format: "label == %@", "Dundee. Will it snow today? Yes.")
-    let loaded = expectation(for: moved, evaluatedWith: heading(in: app))
-    wait(for: [loaded], timeout: 15)
+    waitForHeading("Dundee. Will it snow today? Yes.", in: app, after: "a tap on Dundee")
     XCTAssertEqual(app.buttons["place"].label, "Place: Dundee. Change place.")
     XCTAssertEqual(app.staticTexts["verdict"].label, "It'll snow.")
   }
@@ -113,7 +111,9 @@ final class FixtureLaunchTests: XCTestCase {
     let app = XCUIApplication()
     app.launchArguments = ["-uitest", "-noads", "1", "-resetStore", "-fixture", fixture]
     app.launch()
-    XCTAssertTrue(heading(in: app).waitForExistence(timeout: 15), "No heading on screen")
+    if let failure = readHeading(in: app, within: 15, "to come after the launch", until: \.found) {
+      XCTFail("No heading on screen: \(failure)")
+    }
     XCTAssertTrue(app.staticTexts[element].waitForExistence(timeout: 15), "No answer on screen")
     return app
   }
@@ -132,8 +132,7 @@ final class FixtureLaunchTests: XCTestCase {
   private func show(_ tab: String, in app: XCUIApplication, heading label: String) {
     let button = app.buttons[tab]
     XCTAssertTrue(button.waitForExistence(timeout: 15), "No \(tab) tab")
-    let shown = heading(in: app)
-    let arrived = { shown.exists && shown.label == label }
+    let arrived = { HeadingRead(app).shows(label) }
     if cancelled("tap on \(tab)", in: app, within: 2, until: arrived, { button.tap() }),
       !arrived()
     {
@@ -143,18 +142,17 @@ final class FixtureLaunchTests: XCTestCase {
     XCTAssertTrue(button.isSelected, "The \(tab) tab isn't selected")
   }
 
-  /// Waits for the page on screen's heading to read `label` after `what`, a tap or a swipe. When
-  /// it doesn't within 15 seconds, fails, stopping the test, with what it reads and what
-  /// `debug-cancels` reads, so a gesture the simulator cancelled names itself.
+  /// Waits for the page on screen's heading to read `label` after `what`, a tap or a swipe, as a
+  /// user sees it (`readHeading`, as `awaitHeading` does). When it doesn't within 15 seconds,
+  /// fails, stopping the test, with what the last read found and what `debug-cancels` reads, so
+  /// a gesture the simulator cancelled names itself.
   @MainActor
   private func waitForHeading(_ label: String, in app: XCUIApplication, after what: String) {
-    let shown = heading(in: app)
-    let reads = NSPredicate(format: "label == %@", label)
-    let waited = XCTNSPredicateExpectation(predicate: reads, object: shown)
-    guard XCTWaiter().wait(for: [waited], timeout: 15) != .completed else { return }
+    let read = readHeading(in: app, within: 15, "to read \"\(label)\"") { $0.shows(label) }
+    guard let failure = read else { return }
     XCTFail(
-      "The heading never read \"\(label)\" after \(what); it reads \""
-        + (shown.exists ? shown.label : "no heading") + "\"; \(app.cancelsReport)")
+      "The heading never read \"\(label)\" on screen after \(what): \(failure); "
+        + app.cancelsReport)
   }
 
   @MainActor
