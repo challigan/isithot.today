@@ -1,11 +1,12 @@
 /**
- * Nothing the widget compiles names the ads SDKs or the app's location code. The archive check
- * (scripts/check-archive.sh) greps the widget's binary for those names, among its type names and
- * literals, and fails the build: the widget must not link Google Mobile Ads or UMP, and has no
- * location purpose string. A name in a literal fails it as surely as a link does, as the licence
- * files named in the generated credits once did (`"GoogleMobileAds-LICENSE"`), so this reads the
- * same patterns from the script and the same sources here, on Linux, before macOS CI does.
- * Comment lines never reach the binary and are skipped.
+ * Nothing the widget compiles names the ads SDKs, the app's location code or its notifications
+ * code. The archive check (scripts/check-archive.sh) greps the widget's binary for those names,
+ * among its type names and literals, and fails the build: the widget must not link Google Mobile
+ * Ads or UMP, has no location purpose string, and never registers for notifications (only the
+ * app does, in IsItNotifications). A name in a literal fails it as surely as a link does, as the
+ * licence files named in the generated credits once did (`"GoogleMobileAds-LICENSE"`), so this
+ * reads the same patterns from the script and the same sources here, on Linux, before macOS CI
+ * does. Comment lines never reach the binary and are skipped.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -41,13 +42,15 @@ function swiftFiles(dir: string): string[] {
 }
 
 describe("the widget's strings", () => {
-  it("reads both of check-archive.sh's greps: the ads SDKs and the location code", () => {
+  it("reads each of check-archive.sh's greps: the ads SDKs, the location code and the notifications code", () => {
     expect(patterns).toEqual([
       'GoogleMobileAds|GADMobileAds|UserMessagingPlatform',
       'CLLocationManager|CoreLocationService',
+      'UNUserNotificationCenter|registerForRemoteNotifications|UserNotificationsPlatform',
     ]);
     expect(forbidden.test('file: "GoogleMobileAds-LICENSE"')).toBe(true);
     expect(forbidden.test('file: "Google-Mobile-Ads-LICENSE"')).toBe(false);
+    expect(forbidden.test('UNUserNotificationCenter.current().delegate = delegate')).toBe(true);
   });
 
   it('names none of them in anything the widget compiles', () => {

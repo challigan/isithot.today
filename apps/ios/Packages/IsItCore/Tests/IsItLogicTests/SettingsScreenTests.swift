@@ -29,6 +29,13 @@ private let products: [PurchaseState.Product] = [
   .loading, .unavailable, .blocked, .ready(price: "£1.99", familyShareable: true),
 ]
 
+/// The icons of Settings → Notifications and its place page, drawn between the units and the
+/// upgrade card rather than as one of `sections` (NotificationSettingsTests).
+private let notificationIcons: Set<SettingsScreen.Icon> = [
+  .evening, .morning, .possible, .notificationPlace, .test, .useMyLocation, .search,
+  .openSettings, .warnings, .onScreenPlace, .myLocation,
+]
+
 @Suite("Settings, as plain values")
 struct SettingsScreenTests {
   let version = AppVersion(version: "1.0", build: "112")
@@ -181,10 +188,11 @@ struct SettingsScreenTests {
       ])
     #expect(screen.units.icon == .units)
     // Every icon is some row's, and no two rows share one, so each row reads apart at a glance:
-    // the free screen's, and the thanks that takes the upgrade row's place once bought.
+    // the free screen's, and the thanks that takes the upgrade row's place once bought. The rest
+    // are the notifications' own (`notificationIcons`).
     let shown = [screen.units.icon] + rows.map(\.icon) + [thanks.icon]
     #expect(Set(shown).count == shown.count)
-    #expect(Set(shown) == Set(SettingsScreen.Icon.allCases))
+    #expect(Set(shown) == Set(SettingsScreen.Icon.allCases).subtracting(notificationIcons))
     // The other versions drop rows, never change an icon.
     let known = rows + [thanks]
     for unlocked in [false, true] {
@@ -201,6 +209,46 @@ struct SettingsScreenTests {
     }
     // Your privacy's button to the policy is the same kind of row as Settings'.
     #expect(try #require(YourPrivacy(adsOn: true, privacyChoices: false).policy).icon == .policy)
+  }
+
+  @Test("the notifications' icons are their section's and place page's, none a Settings row's")
+  func notificationsOwnIcons() throws {
+    let leeds = Target.city(slug: "leeds-gb", name: "Leeds")
+    let onLeeds = OnScreen(target: leeds, name: "Leeds", country: "GB", units: .c)
+    let onIP = OnScreen(target: .ip, name: "Leeds", country: "GB", units: .c)
+    let on = AlertSettings(prefs: AlertPrefs(evening: true), place: .chosen(leeds, name: "Leeds"))
+    let denied = NotificationsState(settings: on, permission: .denied)
+    var located = NotificationsState(settings: on, permission: .authorized)
+    located.placeProblem = .locationDenied
+    let away = OnScreen(
+      target: .city(slug: "durham-gb", name: "Durham"), name: "Durham", country: "GB", units: .c)
+    func icons(_ section: NotificationSettings) -> [SettingsScreen.Icon] {
+      section.items.map {
+        switch $0 {
+        case .toggle(let row): row.icon
+        case .place(let row): row.icon
+        case .row(let row): row.icon
+        }
+      } + [section.warnings?.icon].compactMap { $0 }
+    }
+    func icons(_ page: NotificationPlacePage) -> [SettingsScreen.Icon] {
+      page.choices.map(\.icon) + [page.openSettings?.icon].compactMap { $0 }
+    }
+    let gate = icons(NotificationSettings(NotificationsState(), onScreen: onIP))
+    let section = icons(NotificationSettings(denied, onScreen: onLeeds))
+    let page = icons(NotificationPlacePage(located, onScreen: away))
+    #expect(gate == [.useMyLocation, .search])
+    #expect(
+      section == [
+        .openSettings, .evening, .morning, .possible, .notificationPlace, .test, .warnings,
+      ])
+    #expect(page == [.notificationPlace, .onScreenPlace, .myLocation, .openSettings])
+    // Within each, no two rows share one; together they are every notification icon.
+    for shown in [gate, section, page] {
+      #expect(Set(shown).count == shown.count, "\(shown)")
+    }
+    #expect(Set(gate + section + page) == notificationIcons)
+    #expect(notificationIcons.isSubset(of: Set(SettingsScreen.Icon.allCases)))
   }
 
   @Test("before the first answer chose the units, neither choice is chosen")

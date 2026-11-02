@@ -4,8 +4,8 @@ import IsItModel
 
 /// What Settings asks the app to do (iOS build spec, section 10.4). The sheet keeps no state of
 /// its own but the page on screen and the mail fallback: it draws the presenters' values
-/// (`SettingsScreen`, `UpgradePage`, `YourPrivacy`, `HowItWorks`, `CreditsPage`) and hands each
-/// choice to the app through these. Web pages and emails open through SwiftUI's `openURL`, so
+/// (`SettingsScreen`, `NotificationSettings`, `NotificationPlacePage`, `UpgradePage`,
+/// `YourPrivacy`, `HowItWorks`, `CreditsPage`) and hands each choice to the app through these. Web pages and emails open through SwiftUI's `openURL`, so
 /// links in text and rows alike go the same way.
 public struct SettingsActions {
   /// The snow units control: every request asks in these units from now on.
@@ -21,8 +21,10 @@ public struct SettingsActions {
   /// "Privacy choices": Google's privacy options form. Nil while Settings doesn't show the row:
   /// in the paid version, and while Google says the form isn't required.
   public var privacyChoices: (() -> Void)?
-  /// "Turn off notifications and delete my data". Nil until phase 8 brings notifications.
+  /// "Turn off notifications and delete my data". Nil while not registered for notifications.
   public var deleteMyData: (() -> Void)?
+  /// Settings → Notifications' and the place page's.
+  public var notifications: NotificationActions
 
   public init(
     setUnits: @escaping (Units) -> Void,
@@ -31,7 +33,8 @@ public struct SettingsActions {
     notice: @escaping (String) -> String?,
     upgrade: UpgradeActions,
     privacyChoices: (() -> Void)? = nil,
-    deleteMyData: (() -> Void)? = nil
+    deleteMyData: (() -> Void)? = nil,
+    notifications: NotificationActions
   ) {
     self.setUnits = setUnits
     self.reportAd = reportAd
@@ -40,5 +43,6 @@ public struct SettingsActions {
     self.upgrade = upgrade
     self.privacyChoices = privacyChoices
     self.deleteMyData = deleteMyData
+    self.notifications = notifications
   }
 }

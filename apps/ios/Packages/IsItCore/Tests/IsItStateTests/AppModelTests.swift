@@ -225,6 +225,24 @@ struct AppModelLaunchTests {
     #expect(h.hooks.calls.contains("syncAlerts ip c"))
   }
 
+  @Test("an offline first launch's units, chosen by a later answer, reach the notifications")
+  func firstUnitsAfterAnOfflineLaunch() async throws {
+    let h = Harness(
+      now: try fixtureNow("ip-first-launch"),
+      replies: [.failure(.notConnectedToInternet), try FakeTransport.fixture("ip-first-launch")])
+    await h.model.launch()
+    #expect(h.model.units == nil)
+    #expect(h.hooks.calls.last == "syncAlerts ip none")
+    // "Try again": the first answer chooses the units, and the notifications sync with them.
+    await h.model.refresh()
+    #expect(h.model.units == .c)
+    #expect(h.hooks.calls.last == "syncAlerts ip c")
+    // Once chosen, an answer syncs nothing more.
+    let calls = h.hooks.calls.count
+    await h.model.refresh()
+    #expect(h.hooks.calls.count == calls)
+  }
+
   @Test("with nothing painted, the first answer opens on the view for the time of day")
   func firstAnswerView() async throws {
     // Durham at 6:05pm: the middle view shows tomorrow, so the app opens on Now.
@@ -458,6 +476,118 @@ struct AppModelStepTests {
     )
     await plain.model.launch()
     #expect(plain.model.view == .now)
+  }
+}
+
+/// A notification's tap (phase 8.1; iOS build spec, section 12.3): AppModel puts its place on
+/// screen itself, as the picker chooses one, on the notification's view, or with none on the
+/// place's view for the time of day; then the route goes to the hooks, as every route does.
+@MainActor
+@Suite("A route to a place")
+struct AppModelPlaceRouteTests {
+  static let dundeeURL = "https://willitsnow.today/api/v1/today?place=dundee-gb&units=c&ahead=snow"
+
+  /// aberdeen-snow at its own moment (9:05am), launched, with the server answering Dundee next.
+  func launched() async throws -> Harness {
+    let h = Harness(
+      now: try fixtureNow("aberdeen-snow"),
+      store: .init(place: aberdeen, units: .c),
+      replies: [try FakeTransport.fixture("aberdeen-snow"), .answer(try dundee())]
+    )
+    await h.model.launch()
+    return h
+  }
+
+  @Test("another place is chosen as the picker chooses one, on the route's view")
+  func aPlaceRouteChoosesThePlace() async throws {
+    let h = try await launched()
+    let before = h.hooks.calls.count
+    await h.model.open(.place(dundeeTarget, view: .week))
+    #expect(h.model.target == dundeeTarget)
+    #expect(h.store.loadPlace() == dundeeTarget)
+    #expect(h.model.recents == [RecentPlace(target: dundeeTarget, name: "Dundee")])
+    #expect(h.model.view == .week)
+    #expect(h.transport.urls.last == Self.dundeeURL)
+    #expect(h.model.response?.location.name == "Dundee")
+    #expect(Array(h.hooks.calls.dropFirst(before)) == ["syncAlerts city:dundee-gb c", "handle"])
+    #expect(h.hooks.routes == [.place(dundeeTarget, view: .week)])
+  }
+
+  @Test("the place on screen only gets the route's view: nothing is asked again")
+  func aPlaceRouteToThePlaceOnScreenSetsItsView() async throws {
+    let h = try await launched()
+    let before = h.hooks.calls.count
+    await h.model.open(.place(aberdeen, view: .week))
+    #expect(h.model.view == .week)
+    // Its key is the place on screen's, whatever name the route carries.
+    await h.model.open(.place(.city(slug: "aberdeen-gb"), view: nil))
+    #expect(h.model.view == MiddleDay.defaultView(h.model.response, at: h.model.now))
+    #expect(h.model.view == .today)
+    #expect(h.transport.requests.count == 1)
+    #expect(h.model.recents.isEmpty)
+    #expect(h.model.target == aberdeen)
+    #expect(Array(h.hooks.calls.dropFirst(before)) == ["handle", "handle"])
+  }
+
+  @Test("another place without a view opens on its answer's view for the time of day")
+  func aPlaceRouteWithoutAViewOpensOnTheDefault() async throws {
+    // 6:05pm in Durham, where its answer opens on Now.
+    let h = Harness(
+      now: try fixtureNow("durham-tomorrow"),
+      store: .init(place: leedsCity, units: .c),
+      replies: [
+        try FakeTransport.fixture("leeds-dry"), try FakeTransport.fixture("durham-tomorrow"),
+      ]
+    )
+    await h.model.launch()
+    h.model.view = .week
+    await h.model.open(.place(durham, view: nil))
+    #expect(h.model.target == durham)
+    #expect(h.model.response?.location.name == "Durham")
+    #expect(h.model.view == .now)
+  }
+
+  @Test("a route to a place opened during the launch waits for its end")
+  func aPlaceRouteDuringTheLaunchWaits() async throws {
+    let h = Harness(
+      now: try fixtureNow("aberdeen-snow"),
+      store: .init(place: aberdeen, units: .c),
+      replies: [try FakeTransport.fixture("aberdeen-snow"), .answer(try dundee())]
+    )
+    await h.model.open(.place(dundeeTarget, view: .week))
+    #expect(h.model.route == .place(dundeeTarget, view: .week))
+    #expect(h.transport.requests.isEmpty)
+    #expect(h.hooks.calls.isEmpty)
+    await h.model.launch()
+    #expect(h.model.route == nil)
+    #expect(h.model.target == dundeeTarget)
+    #expect(h.model.view == .week)
+    #expect(h.transport.urls == [AppModelLaunchTests.aberdeenURL, Self.dundeeURL])
+    #expect(
+      Array(h.hooks.calls.suffix(3)) == [
+        "syncAlerts city:aberdeen-gb c", "syncAlerts city:dundee-gb c", "handle",
+      ])
+  }
+
+  @Test("a route to a place while away keeps its view over the return; a return alone resets it")
+  func aPlaceRouteWhileAwayKeepsItsViewOverTheReturn() async throws {
+    let made = try fixtureNow("aberdeen-snow")
+    for place in [aberdeen, dundeeTarget] {
+      let h = try await launched()
+      h.clock.now = later(made, minutes: 2)
+      h.model.didEnterBackground()
+      // A notification tapped 31 minutes later: its tap can come before the app is back.
+      h.clock.now = later(made, minutes: 33)
+      await h.model.open(.place(place, view: .week))
+      await h.model.willEnterForeground()
+      #expect(h.model.view == .week, "\(place.key)")
+      #expect(h.model.target == place)
+      // The route kept its view for that return only: the next long one resets it.
+      h.model.didEnterBackground()
+      h.clock.now = later(made, minutes: 64)
+      await h.model.willEnterForeground()
+      #expect(h.model.view == .today, "\(place.key)")
+    }
   }
 }
 

@@ -310,9 +310,12 @@ preview's store is new with every deploy, so the settings go in before the previ
    Redeploy, then check the log shows the line above every 15 minutes, saying `dry run`, with
    `errors 0`. Until the app registers, `zones` stays 0.
 2. **From the first build with notifications on your phone (TestFlight, target Wed 4 Nov): on,
-   for real.** In that build, switch notifications on and open **Your privacy** for your
-   registration's id. In Netlify, for the **Production** context only, set `ALERTS_DRY_RUN` =
-   `false` and `ALERTS_FORCE_IDS` = your id (or its first 8 characters or more; several ids go
+   for real.** In that build, Settings → Notifications, turn on **Evening before (about 6pm)** and
+   allow notifications, then **Send a test notification**: until you've done the rest of this step
+   it says **Our server isn't sending notifications yet, so nothing was sent.** Settings → **Your
+   privacy** shows **ID** and its first 8 characters: that is enough for `ALERTS_FORCE_IDS`. In
+   Netlify, for the **Production** context only, set `ALERTS_DRY_RUN` = `false` and
+   `ALERTS_FORCE_IDS` = your id (or its first 8 characters or more; several ids go
    comma-separated). Redeploy. **Send a test notification** now arrives within seconds (between
    7am and 9pm at your notifications' place). Your phone also gets one notification at about 6pm
    and one at about 7am at your place, for each switch you have on: the real one when snow is
@@ -320,7 +323,8 @@ preview's store is new with every deploy, so the settings go in before the previ
    runs. Everyone else (TestFlight testers) gets only real notifications, when snow is likely.
 3. **By Thu 12 Nov:** it is already fully on. Press **Send a test notification** in the current
    TestFlight build; it must arrive before submission. The review notes should say that nothing
-   is sent from 9pm to 7am at the chosen place, test notifications included.
+   is sent from 9pm to 7am at the chosen place, test notifications included (their notifications
+   paragraph is in "The app's notifications (phases 8.1 and 8.2)", below).
 4. **Release day:** delete `ALERTS_FORCE_IDS` and redeploy. The log line no longer says
    `forced`.
 
@@ -341,6 +345,97 @@ window (the next day's, if the place was already done for this one) logs
 prints each notification the run would send at that moment. At that moment it prints the Durham
 example: "Snow likely in Durham tomorrow" / "1 to 2cm of snow. Mostly between 2am and 6am. 5 of 6
 forecasts expect snow."
+
+### The app's notifications (phases 8.1 and 8.2)
+
+The iPhone app's side of the notifications: Settings → Notifications, the card on the Today page,
+and Your privacy's "What we keep for notifications" with its delete button. It continues the
+rollout above. Already done and needed as they are: the two Apple push keys in Netlify (above),
+the App ID `today.willitsnow.app` with Push Notifications and App Groups (C8), and the app's
+record in App Store Connect (C9). Nothing here needs a certificate (the server signs with the
+keys), a profile made by hand, or anything in GitHub.
+
+1. **Apple Developer portal, before the first build with notifications (2 minutes).**
+   Certificates, Identifiers & Profiles → **Identifiers** → `today.willitsnow.app`: Push
+   Notifications should be ticked. It says "Configured" with no certificates, which is right for
+   push keys. While you are there, `today.willitsnow.app.widgets` should have App Groups
+   (`group.today.willitsnow.app`) and nothing else ticked. Then **Profiles**: if there is a profile
+   for `today.willitsnow.app` that you made by hand before Push Notifications was ticked, delete
+   it, as it lacks the push permission; Xcode's and CI's automatic signing make their own, which
+   carry it. If there are none, there is nothing to do.
+2. **Netlify, by Fri 30 Oct:** rollout step 1 above (`ALERTS_ENABLED`, with `ALERTS_DRY_RUN` left
+   unset), then redeploy. The `alerts-run` log line says `dry run` and `errors 0`.
+3. **Optional, a Debug build from your Mac.** Run it on your iPhone, as a Debug build, never
+   Release: a Release build run from Xcode registers for the wrong push environment, and the server
+   deletes it at its first notification. Settings → Notifications → **Evening before (about 6pm)**
+   → **Allow** → **Send a test notification**: while production is dry it says "Our server isn't
+   sending notifications yet, so nothing was sent." To see a real delivery before C18, ask me for
+   a deploy preview that sends, and point the Debug build at it: in Xcode, **Product → Scheme →
+   Edit Scheme → Run → Arguments**, under Arguments Passed On Launch add `-apiOrigin` and the
+   preview's address (`-apiOrigin https://deploy-preview-<n>--isithotapp.netlify.app`), then run
+   again. Only a Debug build reads it; untick it afterwards. The Push Notifications Console
+   (developer.apple.com → Push Notifications Console → Delivery Log) then shows the delivery.
+4. **The first TestFlight build with notifications (target Wed 4 Nov, M4).** Install it, then
+   Settings → Notifications → turn on **Evening before (about 6pm)** → **Allow**. **Send a test
+   notification**: it says "Our server isn't sending notifications yet, so nothing was sent."
+   Then Settings → **Your privacy**: the first line under "What we keep for notifications" is
+   **ID** and 8 characters. Send me those 8 characters.
+5. **C18 (Wed 4 Nov, 10 minutes):** rollout step 2 above, in Netlify's **Production** context only
+   (`ALERTS_DRY_RUN` = `false`, and `ALERTS_FORCE_IDS` = your 8 characters), then redeploy. Send a
+   test again, between 7am and 9pm at your notifications' place: it arrives within seconds, and the
+   `devices-test` log says `test sent`.
+6. **The checks on your phone (C19)**, each with that TestFlight build. If one shows something
+   else, tell me what it said, with a screenshot.
+   - **The prompt** appears once, at the first switch you turn on, never when the app opens. On a
+     fresh install (delete the app and install it again) the Today card's **Turn on** asks the
+     same way.
+   - **A test arrives**, and a tap on it opens that place's middle page (Today, or Tomorrow after
+     6pm).
+   - **The cold start:** press **Send a test notification**, at once swipe the app away in the app
+     switcher, wait for the banner and tap it. The app should open on the place. If it opens on
+     the home screen only, tell me: it is the open question in apps/ios/README.md's "Settled"
+     (8.1), and its fix is ready to write.
+   - **The app in front:** with the app open on another place, a test shows a banner over the app,
+     and the page refreshes.
+   - **iOS Settings' link:** iOS Settings → will it snow? → Notifications → **Notification
+     Settings** (the link at the foot) opens the app's own Settings at Notifications.
+   - **Off in iOS Settings:** turn the app's notifications off there, then open the app again.
+     Settings says "Notifications are off for this app in Settings.", Your privacy shows nothing
+     kept for notifications, and the log says `devices: deleted`.
+   - **Your location:** Settings → Notifications → **Place** → **Use my location**, then allow
+     location. The row says "Your location", and Your privacy's place line names your area.
+   - **A UK place** shows **Met Office warnings** at the foot of Notifications, which opens Safari.
+   - **Delete:** Your privacy → **Turn off notifications and delete my data** says "Notifications
+     are off. We've deleted your notification token, place, units and choices.", and the log says
+     `devices: deleted`.
+   - **Quiet hours:** from 9pm to 7am at the place, the test says "Nothing is sent from 9pm to 7am
+     at the place. Try again after 7am there."
+7. **App Store Connect (C22, by Fri 13 Nov).**
+   - **App Privacy:** under Identifiers, **Device ID** gets the purpose **App Functionality** (the
+     push token): linked to the user, not used for tracking, beside Coarse Location. If Device ID
+     is already there for Google's ads (Third-Party Advertising), tick App Functionality on that
+     same entry: App Store Connect keeps one entry for each kind of data, with its purposes
+     ticked, so Device ID is then linked overall.
+   - **Review notes:** the notifications paragraph, beside the purchase's (phase 9.2 puts the
+     whole note in the listing's files):
+
+     > Notifications are optional and off by default. The app works fully without them. To try
+     > them, open Settings (the gear), then Notifications. If it asks for a place instead of
+     > showing the switches, the app is using an approximate location: tap "Use my location" or
+     > "Search" and choose a town first. Turn on "Evening before (about 6pm)", allow
+     > notifications, then tap "Send a test notification". It arrives within a minute. Tests
+     > aren't sent from 9pm to 7am at the chosen place, and at most three times an hour, so at
+     > night there choose a place where it's daytime. Real notifications are sent only when snow
+     > is likely at the chosen place: about 6pm the evening before, and about 7am on the day.
+     > Tapping one opens that place's forecast. They never carry promotions. Settings, then Your
+     > privacy, shows what we keep for notifications, and "Turn off notifications and delete my
+     > data" removes it.
+
+8. **C20 (Thu 12 Nov):** rollout step 3 above. Notifications are already fully on since C18
+   (`ALERTS_ENABLED` = `true` and `ALERTS_DRY_RUN` = `false` in Production), so there is nothing to
+   set or redeploy. Send a test from the release candidate before you submit: it must arrive, as
+   App Review's will only arrive with the production push key in place.
+9. **Release day (C25):** rollout step 4 above: delete `ALERTS_FORCE_IDS`, then redeploy.
 
 ### The app's purchase (C2, C9, C16)
 

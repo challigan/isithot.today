@@ -200,12 +200,16 @@ public protocol AppHooks: Sendable {
   func startAds() async
   /// Phase 7: the purchase became owned while the app runs: the ads stop for good this launch.
   func stopAds() async
-  /// Step 6 (phase 8): when a notification switch is on, registration and `AlertSync`. Also
-  /// called when the picker chooses a place (section 10.3), so a notification place that
-  /// follows the device's location follows it; a chosen notification place never follows
-  /// browsing, which `AlertSync` decides.
+  /// Step 6 (phase 8.1): the notifications' start, then their sync (section 12.2). The app hands
+  /// it to `NotificationsModel.screenChanged(target:units:)`, which returns at once, as the ads'
+  /// start does, so a pending route never waits on a request. Also called when the picker
+  /// chooses a place (section 10.3) and when the units change, so a notification place that
+  /// follows the device's location follows it and the registration carries the units; a chosen
+  /// notification place never follows browsing.
   func syncAlerts(target: Target, units: Units?) async
-  /// Step 7 (phases 6 and 8): a notification tap, a widget or a deep link.
+  /// Step 7 (phases 6 to 8): every route, once AppModel has followed it. A widget's view and a
+  /// notification's place are AppModel's own, on screen before this is called; `.upgrade`
+  /// (phase 7.1) and `.settings` (phase 8.1) open their sheets here.
   func handle(_ route: DeepLink.Route) async
 }
 

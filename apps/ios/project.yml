@@ -49,8 +49,11 @@ targets:
         products: [IsItModel, IsItLogic, IsItState]
       # IsItLocation (Core Location) is the app's alone, as IsItAds is: never the widget's. So is
       # IsItPurchases: the purchase is the app's alone, as the ads are.
+      # So is IsItNotifications: only the app registers for notifications
+      # (`registerForRemoteNotifications` is unavailable in an extension).
       - package: IsItKit
-        products: [IsItServices, IsItLocation, IsItUI, IsItAds, IsItPurchases, SnowKit]
+        products:
+          [IsItServices, IsItLocation, IsItUI, IsItAds, IsItPurchases, IsItNotifications, SnowKit]
       - target: WillItSnowWidgets
   WillItSnowWidgets:
     type: app-extension
@@ -73,6 +76,7 @@ targets:
       # Never IsItAds: the widget links no ads SDK (sections 9.1 and 18.3); nor IsItLocation,
       # so no location API is in its binary; nor IsItPurchases: a widget never sells (App Review
       # 4.4).
+      # Nor IsItNotifications: only the app registers for notifications.
       - package: IsItKit
         products: [IsItServices, IsItWidgetUI, SnowKit]
   WillItSnowTests:
@@ -93,7 +97,7 @@ targets:
       - package: IsItCore
         products: [IsItModel, IsItLogic, IsItState]
       - package: IsItKit
-        products: [IsItServices, IsItUI, IsItWidgetUI, SnowKit]
+        products: [IsItServices, IsItUI, IsItWidgetUI, IsItNotifications, SnowKit]
   # The SKTestSession tests (spec 13 and 17.2), hosted by the app as StoreKit Test needs (a
   # hostless bundle gets xctest's own StoreKit environment), in a plan of their own on the iOS
   # 26.2 simulator (StoreKit.xctestplan; ci/test.sh StoreKit; ios.yml's storekit job).
@@ -131,6 +135,8 @@ targets:
       # (DebugHooks.swift); Generated/HomeScreens.json (pnpm mobile:generate, from
       # page.json) and Generated/Surfaces.json (from brandColours.ts) are resources of the bundle,
       # where the tests read what each screen shows and the colours it is drawn in.
+      # Phase 8.1's NotificationsTests, over the notifications' stand-in (DebugHooks.swift), and
+      # NotificationPermissionTests, the one test that meets the system's notification prompt.
       - path: Apps/Snow/UITests
     settings:
       base:

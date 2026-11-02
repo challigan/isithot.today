@@ -83,6 +83,7 @@ public final class AppModel {
   /// Whether a route to a view came while the app was still in the background (a widget's link
   /// can arrive before the return): its view then stands over the return's reset to the view for
   /// the time of day. That return clears it, and so does leaving again.
+  /// A route to a place (a notification tapped) sets it too.
   @ObservationIgnored private var routedWhileAway = false
   /// A place the picker chose without a name (the device's), which joins the recent places
   /// under its answer's name when that answer arrives.
@@ -177,6 +178,7 @@ public final class AppModel {
   /// the next forecast hour, or the retry a minute after a failure. Does nothing unless the app
   /// was in the background, or before the launch. A route to a view that came while the app was
   /// away (a widget tapped) keeps its view: only the fetch is the return's.
+  /// So does a route to a place (a notification tapped).
   public func willEnterForeground() async {
     guard let away = awayFrom else { return }
     let due = dueOnReturn
@@ -224,11 +226,27 @@ public final class AppModel {
   /// come after a failed launch keeps it; every route then goes to the later phases' hooks.
   /// One followed while the app is still away keeps its view over the return's reset too
   /// (`routedWhileAway`).
+  ///
+  /// A notification's route to a place (section 12.3) puts the place on screen itself: the place
+  /// on screen already only gets the route's view, or with none its view for the time of day;
+  /// another is chosen as the picker chooses one (`choose`, under its own name), on the route's
+  /// view, or with none on its first answer's view for the time of day.
   private func follow(_ route: DeepLink.Route) async {
     if case .view(let shown) = route {
       shownView = shown
       opened = true
       if awayFrom != nil { routedWhileAway = true }
+    }
+    if case .place(let place, let shown) = route {
+      if awayFrom != nil { routedWhileAway = true }
+      if place.key.utf8.elementsEqual(target.key.utf8) {
+        shownView = shown ?? MiddleDay.defaultView(response, at: environment.clock.now)
+        opened = true
+      } else {
+        if let shown { shownView = shown }
+        opened = shown != nil
+        await choose(place, name: place.ownName)
+      }
     }
     await environment.hooks.handle(route)
   }
@@ -423,7 +441,9 @@ public final class AppModel {
 
   /// Fetches the answer for the place, as `fetch` says, and shows it, or what went wrong. With
   /// nothing on screen, the loading state meanwhile; otherwise the answer stays. When a newer
-  /// fetch has started meanwhile, its answer wins and this one is dropped.
+  /// fetch has started meanwhile, its answer wins and this one is dropped. An answer that first
+  /// chooses the units after launch step 6 (an offline first launch, then "Try again") syncs the
+  /// notifications with them, as step 6 had none to send.
   private func load(_ fetch: Fetch) async {
     requests += 1
     let request = requests
@@ -439,6 +459,9 @@ public final class AppModel {
       }
       guard request == requests else { return }
       show(answer, for: target, holding: fetch == .fresh)
+      if units == nil, self.units != nil, launchFinished {
+        await environment.hooks.syncAlerts(target: self.target, units: self.units)
+      }
     } catch {
       guard request == requests else { return }
       await failed(APIClient.failure(for: error))

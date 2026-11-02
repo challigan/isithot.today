@@ -8,8 +8,8 @@ import SwiftUI
 /// at the website's size, 0.3 of the page's width; the question and the answer one heading for
 /// VoiceOver with the place; the verdict and the detail; the body (the middle page's agreement,
 /// strip and grid of models, Now's grid of hours, or the week's days); Retry in the error state;
-/// the page's `cards`, which the app gives: on the middle page in the free version, the upgrade
-/// row; the footer, with Retry under its line after a failed request while an answer shows; and
+/// the page's `cards`, which the app gives: on the middle page, the notifications card, then in
+/// the free version the upgrade row; the footer, with Retry under its line after a failed request while an answer shows; and
 /// the page's `end`, which the app gives too: in the free version, the ad box. Everything else
 /// shown is `page`'s, so the page reads as the website does for the same answer. Up to the
 /// largest accessibility text size nothing is cut short: text wraps, the glyph moves above the
@@ -27,8 +27,8 @@ public struct ForecastPageView<Cards: View, End: View>: View {
   let pageWidth: CGFloat
   let actions: HomeActions
   /// What the page shows between its body and its footer, which the app gives: on the middle
-  /// page in the free version, the upgrade row (`UpgradeRow`); phase 8.1's notifications card
-  /// goes above it. Inside the margins, with no space of its own around it.
+  /// page, the notifications card first (`NotificationCardView`), then in the free version the
+  /// upgrade row (`UpgradeRow`). Inside the margins, with no space of its own around it.
   let cards: Cards
   /// What the page ends with, after the footer and inside its margins, with no space of its own
   /// above it: the free version's ad box (`AdBox`), or nothing.

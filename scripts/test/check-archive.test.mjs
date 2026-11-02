@@ -66,6 +66,8 @@ const HOOKS = [
   '-openURLs',
   'URLProtocolStub',
   'FakePurchases',
+  'FakeNotifications',
+  'DevicesStub',
   '127.0.0.1',
 ];
 
@@ -174,6 +176,19 @@ const ROUTE_CODE = [0xd28e45a6, 0xf2aeade6, 0xf2ccae86];
 const PURCHASE_CODE = [0xd28e05a0, 0xf2ae4ea0, 0xf2cd0c60, 0xf2ee6c20, 0xd2800ca1, 0xf2fd2001];
 // "-restore" (8 bytes) built in x0, then its second word, 0xE8 and nothing else, in x1.
 const RESTORE_CODE = [0xd28e45a0, 0xf2ae6ca0, 0xf2cdee80, 0xf2ecae40, 0xd2fd0001];
+// "-notifications" (14 bytes): "-notific" built in x0, then its second word in x1, "ations"
+// under 0xEE.
+const NOTIFICATIONS_CODE = [
+  0xd28dc5a0, 0xf2ae8de0, 0xf2cccd20, 0xf2ec6d20, 0xd28e8c21, 0xf2aded21, 0xf2ce6dc1, 0xf2fdc001,
+];
+// "-pushToken" and "-alertCard" (10 bytes each): the first 8 built in x0, then the second word
+// in x1, "en" or "rd" under 0xEA.
+const PUSH_TOKEN_CODE = [0xd28e05a0, 0xf2ae6ea0, 0xf2ca8d00, 0xf2ed6de0, 0xd28dcca1, 0xf2fd4001];
+const ALERT_CARD_CODE = [0xd28c25a0, 0xf2acad80, 0xf2ce8e40, 0xf2ec2860, 0xd28c8e41, 0xf2fd4001];
+// "-devices" (8 bytes) built in x0, then its second word, 0xE8 and nothing else, in x1.
+const DEVICES_CODE = [0xd28c85a0, 0xf2aecca0, 0xf2cc6d20, 0xf2ee6ca0, 0xd2fd0001];
+// "-place" (6 bytes) built in x0 in three moves, as "-route" is above.
+const PLACE_CODE = [0xd28e05a0, 0xf2ac2d80, 0xf2ccac60];
 
 /**
  * A privacy manifest that collects `types` (NSPrivacyCollectedDataType…), each as the app's own
@@ -192,8 +207,11 @@ function collects(...types) {
 }
 
 // What each bundle's manifest says it collects: the app, the phone's rounded place (coarse
-// location); the widget, the same place, which it asks for too.
-const APP_PRIVACY = collects('NSPrivacyCollectedDataTypeCoarseLocation');
+// location) and a device ID for its notifications; the widget, the same place, which it asks for too.
+const APP_PRIVACY = collects(
+  'NSPrivacyCollectedDataTypeCoarseLocation',
+  'NSPrivacyCollectedDataTypeDeviceID',
+);
 const WIDGET_PRIVACY = collects('NSPrivacyCollectedDataTypeCoarseLocation');
 
 function appInfo(over = {}) {
@@ -208,6 +226,7 @@ function appInfo(over = {}) {
     IsItBannerUnitID: DEMO_BANNER,
     IsItInterstitialUnitID: DEMO_INTERSTITIAL,
     IsItPageBannerUnitID: DEMO_BANNER,
+    IsItPushEnvironment: 'production',
     SKAdNetworkItems: [
       { SKAdNetworkIdentifier: GOOGLE_SKADNETWORK },
       { SKAdNetworkIdentifier: '4fzdc2evr5.skadnetwork' },
@@ -351,7 +370,7 @@ describe('an archive that passes', () => {
         '',
         '- WillItSnow 1.0 (101)',
         `- ads test: Google's demo units (${DEMO_APP})`,
-        "- checked: privacy manifests and what they collect, the icon, the four fonts, the widget's glyphs and origin, 18 debug hooks in both binaries, the ad units and SKAdNetworkItems, the widget's links, versions, encryption, fixtures, StoreKit configurations and StoreKitTest",
+        "- checked: privacy manifests and what they collect, the icon, the four fonts, the widget's glyphs and origin, 25 debug hooks in both binaries, the push environment, the ad units and SKAdNetworkItems, the widget's links, versions, encryption, fixtures, StoreKit configurations and StoreKitTest",
         '',
       ].join('\n'),
     );
@@ -386,6 +405,9 @@ describe('an archive that passes', () => {
           'use-location',
           'in-app-purchase',
           'tap-to-restore',
+          'the-notifications-page',
+          'my-place',
+          'all-devices',
         ]),
       },
     });
@@ -443,14 +465,34 @@ describe('an archive that fails', () => {
     const missing =
       "WillItSnow.app's PrivacyInfo.xcprivacy doesn't declare NSPrivacyCollectedDataTypeCoarseLocation";
     const manifests = [
-      collects(),
-      collects('NSPrivacyCollectedDataTypePreciseLocation'),
-      plist({ NSPrivacyTracking: false }),
+      collects('NSPrivacyCollectedDataTypeDeviceID'),
+      collects('NSPrivacyCollectedDataTypePreciseLocation', 'NSPrivacyCollectedDataTypeDeviceID'),
     ];
     for (const manifest of manifests) {
       const dir = archive({ files: { 'PrivacyInfo.xcprivacy': manifest } });
       expect(check(dir).errors).toEqual([missing]);
     }
+  });
+
+  it("fails when the app's manifest doesn't declare the device ID", () => {
+    const missing =
+      "WillItSnow.app's PrivacyInfo.xcprivacy doesn't declare NSPrivacyCollectedDataTypeDeviceID";
+    const manifests = [
+      collects('NSPrivacyCollectedDataTypeCoarseLocation'),
+      collects('NSPrivacyCollectedDataTypeCoarseLocation', 'NSPrivacyCollectedDataTypeUserID'),
+    ];
+    for (const manifest of manifests) {
+      const dir = archive({ files: { 'PrivacyInfo.xcprivacy': manifest } });
+      expect(check(dir).errors).toEqual([missing]);
+    }
+    // A manifest that collects nothing at all lacks both.
+    const none = archive({
+      files: { 'PrivacyInfo.xcprivacy': plist({ NSPrivacyTracking: false }) },
+    });
+    expect(check(none).errors).toEqual([
+      "WillItSnow.app's PrivacyInfo.xcprivacy doesn't declare NSPrivacyCollectedDataTypeCoarseLocation",
+      missing,
+    ]);
   });
 
   it.each([
@@ -575,6 +617,17 @@ describe('an archive that fails', () => {
     expect(check(dir).errors).toEqual(["the widget links the app's purchase code"]);
   });
 
+  it.each([
+    'UNUserNotificationCenter',
+    'registerForRemoteNotifications',
+    'UserNotificationsPlatform',
+  ])("fails when the widget links the app's notifications code (%s)", (text) => {
+    const dir = archive({ files: { [`${WIDGET}/WillItSnowWidgets`]: binary([text]) } });
+    expect(check(dir).errors).toEqual(["the widget links the app's notifications code"]);
+    // Only the app registers for notifications, so its binary may name them all.
+    expect(check(archive({ files: { WillItSnow: binary([text]) } })).errors).toEqual([]);
+  });
+
   it("passes with the location code in the app's binary", () => {
     const dir = archive({ files: { WillItSnow: binary(['CLLocationManager']) } });
     expect(check(dir).errors).toEqual([]);
@@ -660,6 +713,22 @@ describe('an archive that fails', () => {
       `the app binary builds the debug hook ${hook} as a short Swift literal`,
     ]);
   });
+
+  it.each([
+    ['-notifications', NOTIFICATIONS_CODE],
+    ['-pushToken', PUSH_TOKEN_CODE],
+    ['-devices', DEVICES_CODE],
+    ['-alertCard', ALERT_CARD_CODE],
+    ['-place', PLACE_CODE],
+  ])(
+    "fails on the notifications tests' launch argument %s as a short Swift literal",
+    (hook, code) => {
+      const dir = archive({ files: { WillItSnow: binary(['will it snow?'], code) } });
+      expect(check(dir).errors).toEqual([
+        `the app binary builds the debug hook ${hook} as a short Swift literal`,
+      ]);
+    },
+  );
 
   it("fails a real build that names Google's demo publisher, in the binary or the Info.plist", () => {
     const inBinary = archive({
@@ -825,6 +894,21 @@ describe('an archive that fails', () => {
     });
     expect(check(yes).errors).toEqual([
       "the app's ITSAppUsesNonExemptEncryption is true, not false",
+    ]);
+  });
+
+  it('fails unless the app registers for notifications in production', () => {
+    const env = (value) =>
+      archive({ files: { 'Info.plist': appInfo({ IsItPushEnvironment: value }) } });
+    expect(check(env('sandbox')).errors).toEqual([
+      'the app registers in the sandbox (IsItPushEnvironment is sandbox), not production',
+    ]);
+    expect(check(env(undefined)).errors).toEqual([
+      "the app's IsItPushEnvironment is missing, not production",
+    ]);
+    // Snow.xcconfig without PUSH_ENV leaves $(PUSH_ENV) empty.
+    expect(check(env('')).errors).toEqual([
+      "the app's IsItPushEnvironment is empty, not production",
     ]);
   });
 
