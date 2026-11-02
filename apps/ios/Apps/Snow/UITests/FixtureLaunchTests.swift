@@ -8,7 +8,8 @@ import XCTest
 /// accessibility tree, so the heading and the verdict are that page's. Every launch starts from
 /// a clean store (`-resetStore`), so no test depends on another: the place a test leaves in the
 /// App Group (Dundee, after `testNearbyLoadsInPlace`) would otherwise name the next one's
-/// heading. The screen is attached to the result bundle for the contact sheet.
+/// heading. The screen is attached to the result bundle for the contact sheet, once the page's
+/// colours have settled on its band (`awaitColours`), which each launch and tap names.
 final class FixtureLaunchTests: XCTestCase {
   override func setUpWithError() throws {
     continueAfterFailure = false
@@ -16,7 +17,7 @@ final class FixtureLaunchTests: XCTestCase {
 
   @MainActor
   func testAberdeenSnow() throws {
-    let app = launch(fixture: "aberdeen-snow")
+    let app = launch(fixture: "aberdeen-snow", band: "snow")
     XCTAssertEqual(app.buttons["place"].label, "Place: Aberdeen. Change place.")
     XCTAssertEqual(heading(in: app).label, "Aberdeen. Will it snow today? Yes.")
     XCTAssertEqual(app.staticTexts["verdict"].label, "It'll snow.")
@@ -25,7 +26,7 @@ final class FixtureLaunchTests: XCTestCase {
 
   @MainActor
   func testLeedsDry() throws {
-    let app = launch(fixture: "leeds-dry")
+    let app = launch(fixture: "leeds-dry", band: "nosnow")
     XCTAssertEqual(app.buttons["place"].label, "Place: Leeds. Change place.")
     XCTAssertEqual(heading(in: app).label, "Leeds. Will it snow today? No.")
     XCTAssertEqual(app.staticTexts["verdict"].label, "Rain, not snow.")
@@ -36,11 +37,11 @@ final class FixtureLaunchTests: XCTestCase {
   /// answers for tomorrow.
   @MainActor
   func testDurhamTomorrow() throws {
-    let app = launch(fixture: "durham-tomorrow")
+    let app = launch(fixture: "durham-tomorrow", band: "nosnow")
     XCTAssertEqual(app.buttons["place"].label, "Place: Durham. Change place.")
     XCTAssertEqual(heading(in: app).label, "Durham. Is it snowing right now? No.")
     XCTAssertFalse(app.buttons["Today"].exists, "The middle tab reads Today after 6pm")
-    show("Tomorrow", in: app, heading: "Durham. Will it snow tomorrow? Yes.")
+    show("Tomorrow", in: app, heading: "Durham. Will it snow tomorrow? Yes.", band: "snow")
     XCTAssertEqual(app.staticTexts["verdict"].label, "It'll snow.")
     attachScreen(of: app, named: "app-durham-tomorrow")
   }
@@ -51,14 +52,15 @@ final class FixtureLaunchTests: XCTestCase {
   /// app opens on Now.
   @MainActor
   func testOldForecast() throws {
-    let app = launch(fixture: "old-forecast", waitingFor: "updated")
+    let app = launch(fixture: "old-forecast", band: nil, waitingFor: "updated")
     XCTAssertEqual(
       heading(in: app).label,
       "Durham. Is it snowing right now? No recent forecast. Connect to the internet to refresh.")
     show(
       "Tomorrow", in: app,
       heading:
-        "Durham. Will it snow tomorrow? No recent forecast. Connect to the internet to refresh.")
+        "Durham. Will it snow tomorrow? No recent forecast. Connect to the internet to refresh.",
+      band: nil)
     XCTAssertFalse(app.staticTexts["verdict"].exists, "An old answer's verdict is on screen")
     attachScreen(of: app, named: "app-old-forecast")
   }
@@ -67,14 +69,14 @@ final class FixtureLaunchTests: XCTestCase {
   /// next and back, and the screens of Now and This week go to the contact sheet.
   @MainActor
   func testSwitcherAndSwipe() throws {
-    let app = launch(fixture: "aberdeen-snow")
+    let app = launch(fixture: "aberdeen-snow", band: "snow")
     XCTAssertTrue(app.buttons["Now"].exists, "No Now tab")
     XCTAssertTrue(app.buttons["Today"].exists, "No Today tab")
     XCTAssertTrue(app.buttons["This week"].exists, "No This week tab")
-    show("Now", in: app, heading: "Aberdeen. Is it snowing right now? No.")
+    show("Now", in: app, heading: "Aberdeen. Is it snowing right now? No.", band: "nosnow")
     XCTAssertTrue(app.staticTexts["hours-heading"].exists, "No next hours on Now")
     attachScreen(of: app, named: "app-aberdeen-snow-now")
-    show("This week", in: app, heading: "Aberdeen. Will it snow this week? Yes.")
+    show("This week", in: app, heading: "Aberdeen. Will it snow this week? Yes.", band: "heavysnow")
     attachScreen(of: app, named: "app-aberdeen-snow-week")
     app.swipeRight()
     waitForHeading("Aberdeen. Will it snow today? Yes.", in: app, after: "a swipe right")
@@ -88,7 +90,7 @@ final class FixtureLaunchTests: XCTestCase {
   /// bar and the heading. (The fixture's server answers every place with the same fixture.)
   @MainActor
   func testNearbyLoadsInPlace() throws {
-    let app = launch(fixture: "aberdeen-snow")
+    let app = launch(fixture: "aberdeen-snow", band: "snow")
     let dundee = app.buttons["Dundee"]
     var swipes = 0
     while !dundee.isHittable && swipes < 8 {
@@ -104,10 +106,16 @@ final class FixtureLaunchTests: XCTestCase {
 
   /// Launches the app on `fixture`, from a clean store (`-resetStore` forgets the place, the
   /// units and the saved answer before `-fixture` is read), with no consent form or ad
-  /// (`-noads 1`, as `launchApp`), and waits for its heading and for `element`, a text only an
-  /// answer shows (the verdict, by default).
+  /// (`-noads 1`, as `launchApp`), and waits for its heading, for `element`, a text only an
+  /// answer shows (the verdict, by default), and for the colours to settle on `band`, the band
+  /// of the page it opens on (nil without an answer): the loading page is drawn as no snow, so
+  /// an answer in another band fades in.
   @MainActor
-  private func launch(fixture: String, waitingFor element: String = "verdict") -> XCUIApplication {
+  private func launch(
+    fixture: String,
+    band: String?,
+    waitingFor element: String = "verdict"
+  ) -> XCUIApplication {
     let app = XCUIApplication()
     app.launchArguments = ["-uitest", "-noads", "1", "-resetStore", "-fixture", fixture]
     app.launch()
@@ -115,6 +123,7 @@ final class FixtureLaunchTests: XCTestCase {
       XCTFail("No heading on screen: \(failure)")
     }
     XCTAssertTrue(app.staticTexts[element].waitForExistence(timeout: 15), "No answer on screen")
+    waitForColours(band, in: app, after: "the launch")
     return app
   }
 
@@ -124,21 +133,33 @@ final class FixtureLaunchTests: XCTestCase {
     app.descendants(matching: .any).matching(identifier: "heading").firstMatch
   }
 
-  /// Taps the switcher's tab labelled `tab`, and waits for its page's heading. A tap whose touch
-  /// the system cancelled (`cancelled(_:in:within:until:_:)`, read for up to 2 seconds or until
-  /// the heading comes) and whose heading hasn't come is tapped once more, as `tap(_:in:)` does:
-  /// the app never had it as a tap. A tap the app completed is never tapped again.
+  /// Taps the switcher's tab labelled `tab`, and waits for its page's heading and for the
+  /// colours to settle on `band`, its page's band, as `tap(_:in:)` does. A tap whose touch the
+  /// system cancelled (`cancelled(_:in:within:until:_:)`, read for up to 2 seconds or until the
+  /// heading comes) and whose heading hasn't come is tapped once more, as `tap(_:in:)` does: the
+  /// app never had it as a tap. A tap the app completed is never tapped again.
   @MainActor
-  private func show(_ tab: String, in app: XCUIApplication, heading label: String) {
+  private func show(
+    _ tab: String,
+    in app: XCUIApplication,
+    heading label: String,
+    band: String?
+  ) {
     let button = app.buttons[tab]
     XCTAssertTrue(button.waitForExistence(timeout: 15), "No \(tab) tab")
     let arrived = { HeadingRead(app).shows(label) }
-    if cancelled("tap on \(tab)", in: app, within: 2, until: arrived, { button.tap() }),
-      !arrived()
-    {
-      _ = cancelled("second tap on \(tab)", in: app) { button.tap() }
+    // When the tap the app had began, which the colours' wait is measured from, as in
+    // `tap(_:in:)`.
+    var tapped = Date()
+    let tapTab = {
+      tapped = Date()
+      button.tap()
+    }
+    if cancelled("tap on \(tab)", in: app, within: 2, until: arrived, tapTab), !arrived() {
+      _ = cancelled("second tap on \(tab)", in: app, tapTab)
     }
     waitForHeading(label, in: app, after: "a tap on \(tab)")
+    waitForColours(band, in: app, after: "the tap on \(tab)", began: tapped)
     XCTAssertTrue(button.isSelected, "The \(tab) tab isn't selected")
   }
 
@@ -153,6 +174,20 @@ final class FixtureLaunchTests: XCTestCase {
     XCTFail(
       "The heading never read \"\(label)\" on screen after \(what): \(failure); "
         + app.cancelsReport)
+  }
+
+  /// Waits for the home screen's colours to settle on `band` after `what` (`awaitColours`), which
+  /// began at `began` when that is known, and fails, stopping the test, with what the last read
+  /// found when they don't.
+  @MainActor
+  private func waitForColours(
+    _ band: String?, in app: XCUIApplication, after what: String, began: Date? = nil
+  ) {
+    do {
+      try awaitColours(band, in: app, after: what, began: began)
+    } catch {
+      XCTFail("\(error)")
+    }
   }
 
   @MainActor

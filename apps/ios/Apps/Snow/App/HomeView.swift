@@ -179,7 +179,9 @@ private struct HomeContent: View {
     let theme = PageTheme(shown.palette)
     let adsShown = !model.unlocked && ads.phase == .on
     let upgrade = UpgradePage.homeRow(unlocked: model.unlocked, purchase: purchases.state)
-    HomeShell(topBar: model.topBar, theme: theme, actions: actions) {
+    HomeShell(
+      topBar: model.topBar, theme: theme, actions: actions, fades: DebugHooks.themeFades()
+    ) {
       VStack(spacing: 0) {
         ViewSwitcher(pages: pages, selection: $model.view, theme: theme)
         HomePager(
@@ -237,6 +239,13 @@ private struct HomeContent: View {
     // Release build.
     .overlay(alignment: .topLeading) {
       DebugHooks.adsReadout(ads)
+    }
+    // A Debug build's readout of the colours for the UI tests (`DebugHooks.themeReadout`): the
+    // page on screen's band once every fade the background has begun is over and the last was to
+    // its colours, which a screenshot then shows, and "fading" until then. In the middle of the
+    // top edge, clear of the other readouts and the top bar's controls; none in a Release build.
+    .overlay(alignment: .top) {
+      DebugHooks.themeReadout(band: shown.band, theme: theme)
     }
     .onChange(of: model.view, initial: true) { _, view in
       ads.shown(view)

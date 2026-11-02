@@ -4,6 +4,7 @@ import IsItLogic
 import IsItModel
 import IsItServices
 import IsItState
+import IsItUI
 import Observation
 import StoreKit
 import SwiftUI
@@ -20,11 +21,14 @@ enum DebugHooks {
     static let storeFallback = true
 
     /// The launch arguments that change how the app starts, before the model reads `store`:
-    /// `-uitest` turns animations off and counts the touches the system cancels, for
-    /// `debug-cancels` (`TouchWatch`); `-resetStore` forgets the place, the units, the saved
-    /// answer, the recent and saved places and when the last full-screen ad showed, for a first
-    /// launch. It leaves `unlock.v1` alone, which only `PurchaseModel` writes, and which nothing
-    /// reads under StoreKit's stand-in (`standsInForStoreKit`), as every UI test runs.
+    /// `-uitest` turns UIKit's animations off and counts the touches the system cancels, for
+    /// `debug-cancels` (`TouchWatch`). It leaves SwiftUI's own animations and transitions running,
+    /// which `setAnimationsEnabled(_:)` doesn't reach: the home screen's background still fades
+    /// from one band's colours to the next, which `debug-theme` reads (`themeReadout`).
+    /// `-resetStore` forgets the place, the units, the saved answer, the recent and saved places
+    /// and when the last full-screen ad showed, for a first launch. It leaves `unlock.v1` alone,
+    /// which only `PurchaseModel` writes, and which nothing reads under StoreKit's stand-in
+    /// (`standsInForStoreKit`), as every UI test runs.
     static func prepare(
       store: SharedStore?,
       arguments: [String] = ProcessInfo.processInfo.arguments
@@ -204,6 +208,40 @@ enum DebugHooks {
       DebugPresence.shared.pickerOnScreen = false
     }
 
+    /// The home screen's colours as the UI tests read them (`ThemeReadout`), at the top of the
+    /// home screen, for every UI test (`-uitest`): `debug-theme`, the band of the page on screen
+    /// (`band`, or "none" without one) once every fade the background has begun is over and the
+    /// last was to that page's `theme`, and "fading" until then. A tab tap or an answer brings the
+    /// new page's heading at once, and the background takes 0.9 s more to fade to its colours
+    /// (`HomeShell`), so a test that read the words and took a screenshot caught the fade on PR
+    /// #45's run (DECISIONS, "What PR #45's first macOS run showed"). Nothing without `-uitest`.
+    @ViewBuilder
+    static func themeReadout(
+      band: SnowBand?,
+      theme: PageTheme,
+      arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> some View {
+      if arguments.contains("-uitest") {
+        ThemeReadout(band: band, theme: theme)
+      }
+    }
+
+    /// What `HomeShell` tells as its background begins fading to a theme, and what it hands back
+    /// to be called once that fade is over, for `themeReadout`, under `-uitest`; nil otherwise, so
+    /// the shell adds nothing to the fade. Each is kept (`ThemeFades`) on the main actor, where
+    /// the readout reads them, after the update the fade begins in, whose state is SwiftUI's and
+    /// not to be changed then, and whatever thread the completion comes on: the main actor runs
+    /// them in the order they come, so a fade's end is never kept before its beginning.
+    static func themeFades(
+      arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> ((PageTheme) -> () -> Void)? {
+      guard arguments.contains("-uitest") else { return nil }
+      return { theme in
+        Task { @MainActor in DebugPresence.shared.fades.began(to: theme) }
+        return { Task { @MainActor in DebugPresence.shared.fades.ended() } }
+      }
+    }
+
     /// `-unlocked 0|1`: whether the purchase is owned, whatever `unlock.v1` says, so a UI test
     /// launches the free version or the paid one; nil without it. It stands in for StoreKit's
     /// answers too (`purchases(arguments:)`), so the launch's check gives the same answer rather
@@ -357,8 +395,8 @@ enum DebugHooks {
     }
 
     /// Whether the glyphs keep still, their flakes never drifting (section 10.2): in a test
-    /// launched at a set moment (`-now`), whose screens are compared as they are, and under
-    /// `-uitest`, which turns animations off.
+    /// launched at a set moment (`-now`), whose screens are compared as they are, and in every UI
+    /// test (`-uitest`), whose screens are attached.
     static func stillMotion(arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
       arguments.contains("-now") || arguments.contains("-uitest")
     }
@@ -464,6 +502,10 @@ enum DebugHooks {
     static func pickerAppeared() {}
 
     static func pickerDisappeared() {}
+
+    static func themeReadout(band: SnowBand?, theme: PageTheme) -> some View { EmptyView() }
+
+    static func themeFades() -> ((PageTheme) -> () -> Void)? { nil }
 
     static func store(_ store: any StoredState) -> any StoredState { store }
 
@@ -971,10 +1013,74 @@ enum DebugHooks {
     }
   }
 
+  /// `DebugHooks.themeReadout`: a clear element of a point, which shows nothing and takes no tap,
+  /// whose accessibility value the UI tests read: `debug-theme`, as `ThemeFades.reading` judges
+  /// it, here in the readout's body, from the page on screen's band and theme and the fades the
+  /// shell has told of (`DebugPresence.fades`). The theme the readout first appears with is
+  /// the background's, as nothing fades in. Each value is one lowercase word, shown to no one, so
+  /// none of it is copy.
+  @MainActor
+  private struct ThemeReadout: View {
+    let band: SnowBand?
+    let theme: PageTheme
+
+    var body: some View {
+      let presence = DebugPresence.shared
+      Reading(id: "debug-theme", value: presence.fades.reading(band: band, theme: theme))
+        .allowsHitTesting(false)
+        .onAppear {
+          // Written only the first time: a write in place tells the readout it changed.
+          if presence.fades.last == nil { presence.fades.appeared(with: theme) }
+        }
+    }
+  }
+
+  /// The home screen's background's fades as `ThemeReadout` judges them: how many it has begun
+  /// that aren't over (`HomeShell` tells each fade's beginning and end, `DebugHooks.themeFades`),
+  /// and the theme the last of them began fading to, or the background first appeared with. Its
+  /// reading is the page's band ("none" without one) only with no fade under way and the last
+  /// one to the page's theme, and "fading" otherwise. Counted, not judged by a theme alone: a
+  /// theme left and come back to within 0.9 s (a place chosen from Nearby, loading as no snow and
+  /// answering in snow) would otherwise read settled while the background is still fading away
+  /// and back, and an earlier fade's end pass for a later one's (that fade to no snow ending
+  /// after a tap on Now). A fade's beginning is kept only after the update it begins in, so in
+  /// that update the page's theme is the new one and the last fade's the old one, and it reads
+  /// "fading" from that very update, never the new band over the old colours. A band that
+  /// changes without changing the theme (a loading page, drawn as no snow, giving way to an
+  /// answer of no snow) begins no fade, and reads at once. A fade whose end never comes leaves it
+  /// "fading", failing the wait, never passing it early.
+  struct ThemeFades {
+    /// The fades begun and not yet over.
+    private(set) var underway = 0
+    /// The theme the last fade began to, or the background first appeared with; nil before.
+    private(set) var last: PageTheme?
+
+    /// The background on screen with `theme`, before any fade: the theme it shows.
+    mutating func appeared(with theme: PageTheme) {
+      if last == nil { last = theme }
+    }
+
+    /// A fade begun, to `theme`.
+    mutating func began(to theme: PageTheme) {
+      underway += 1
+      last = theme
+    }
+
+    /// A fade over.
+    mutating func ended() {
+      underway -= 1
+    }
+
+    /// `debug-theme` for a page in `band` (nil without one) with `theme`.
+    func reading(band: SnowBand?, theme: PageTheme) -> String {
+      underway == 0 && last == theme ? (band?.rawValue ?? "none") : "fading"
+    }
+  }
+
   /// What `PickerReadout` reads beyond the home screen's sheet: whether the picker's content is
   /// on screen, from its `onAppear` to its `onDisappear` (`DebugHooks.pickerAppeared` and
   /// `pickerDisappeared`), how many times it has come on screen, and how many touches the system
-  /// has cancelled.
+  /// has cancelled; and what `ThemeReadout` reads, the home screen's background's fades.
   @MainActor
   @Observable
   private final class DebugPresence {
@@ -984,6 +1090,8 @@ enum DebugHooks {
     var pickersShown = 0
     /// How many touches the system cancelled in the app this launch (`TouchWatch`).
     var touchesCancelled = 0
+    /// The home screen's background's fades (`HomeShell`'s `fades`), and the theme it shows.
+    var fades = ThemeFades()
   }
 
   /// `-uitest`'s count of the touches the system cancelled, for `debug-cancels`: on the CI
