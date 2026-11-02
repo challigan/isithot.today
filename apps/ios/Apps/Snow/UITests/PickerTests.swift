@@ -30,7 +30,7 @@ final class PickerTests: XCTestCase {
     XCTAssertTrue(status.waitForExistence(timeout: 10), "No line for too few letters")
     XCTAssertEqual(status.label, "Type at least 2 letters.")
     field.typeText("yzzy")
-    wait(for: status, label: "No places found.")
+    wait(for: "search-status", .staticText, in: app, label: "No places found.")
     XCTAssertFalse(app.buttons["result-0"].exists, "A result for a place nowhere")
     attachScreen(of: app, named: "picker-no-results")
   }
@@ -71,7 +71,7 @@ final class PickerTests: XCTestCase {
     XCTAssertTrue(result.waitForExistence(timeout: 10), "No results for Kathmandu")
     XCTAssertTrue(result.label.contains("Bagmati Province, Nepal"), result.label)
     result.tap()
-    wait(for: app.buttons["place"], label: "Place: Kathmandu. Change place.")
+    wait(for: "place", .button, in: app, label: "Place: Kathmandu. Change place.")
     XCTAssertTrue(heading(in: app).label.hasPrefix("Kathmandu. Will it snow "))
     XCTAssertTrue(app.staticTexts["verdict"].waitForExistence(timeout: 10), "No answer")
   }
@@ -87,7 +87,7 @@ final class PickerTests: XCTestCase {
     field.typeText("Leeds")
     XCTAssertTrue(first.buttons["result-0"].waitForExistence(timeout: 10), "No results")
     first.buttons["result-0"].tap()
-    wait(for: first.buttons["place"], label: "Place: Leeds. Change place.")
+    wait(for: "place", .button, in: first, label: "Place: Leeds. Change place.")
     first.terminate()
 
     // Kept: opened again, Leeds is there under Recent.
@@ -105,7 +105,7 @@ final class PickerTests: XCTestCase {
     // Typing hides them, and shows the box's clear button, 44 points square (the system's
     // search, whose clear button was about 20, is gone: PlacePickerView's `SearchBox`).
     field.typeText("Le")
-    waitUntilGone(recent, "Recent places while typing")
+    waitUntilGone("recent-heading", .staticText, in: app, "Recent places while typing")
     let clear = app.buttons["clear-search"]
     XCTAssertTrue(clear.waitForExistence(timeout: 5), "No clear button with text typed")
     XCTAssertEqual(clear.label, "Clear search")
@@ -116,16 +116,16 @@ final class PickerTests: XCTestCase {
       onPixels(clear.frame.height), 44, "The clear button at \(clear.frame)")
     field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 2))
     XCTAssertTrue(leeds.waitForExistence(timeout: 10), "No recent places once cleared")
-    waitUntilGone(clear, "The clear button with nothing typed")
+    waitUntilGone("clear-search", .button, in: app, "The clear button with nothing typed")
 
     // The clear button clears the box, and leaves it ready to type in.
     field.typeText("Le")
-    waitUntilGone(recent, "Recent places while typing")
+    waitUntilGone("recent-heading", .staticText, in: app, "Recent places while typing")
     XCTAssertTrue(clear.waitForExistence(timeout: 5), "No clear button with text typed")
     clear.tap()
     XCTAssertTrue(
       leeds.waitForExistence(timeout: 10), "No recent places once cleared; \(app.cancelsReport)")
-    waitUntilGone(clear, "The clear button after clearing")
+    waitUntilGone("clear-search", .button, in: app, "The clear button after clearing")
     XCTAssertTrue(app.keyboards.firstMatch.exists, "The keyboard went with the text")
 
     // Deleted: press and hold, then Delete in its menu.
@@ -134,7 +134,7 @@ final class PickerTests: XCTestCase {
     XCTAssertTrue(
       delete.waitForExistence(timeout: 5), "No Delete on press and hold; \(app.cancelsReport)")
     delete.tap()
-    waitUntilGone(leeds, "Leeds is still a recent place")
+    waitUntilGone("recent-city:leeds-gb", .button, in: app, "Leeds is still a recent place")
     XCTAssertFalse(recent.exists, "Recent, over no recent places")
   }
 
@@ -152,7 +152,7 @@ final class PickerTests: XCTestCase {
     XCTAssertNotEqual(
       first.buttons["result-0"].value as? String, "Saved", "Leeds reads as saved already")
     star.tap()
-    wait(for: star, label: "Remove Leeds from saved places")
+    wait(for: "star-result-0", .button, in: first, label: "Remove Leeds from saved places")
     XCTAssertEqual(first.buttons["result-0"].value as? String, "Saved")
     XCTAssertTrue(searchField(in: first).exists, "The star closed the picker")
     first.buttons["clear-search"].tap()
@@ -197,7 +197,7 @@ final class PickerTests: XCTestCase {
     field.typeText("Leeds")
     XCTAssertTrue(app.buttons["result-0"].waitForExistence(timeout: 10), "No results")
     app.buttons["result-0"].tap()
-    wait(for: app.buttons["place"], label: "Place: Leeds. Change place.")
+    wait(for: "place", .button, in: app, label: "Place: Leeds. Change place.")
 
     _ = openPicker(in: app, focusing: false)
     let hint = app.staticTexts["saved-hint"]
@@ -209,7 +209,7 @@ final class PickerTests: XCTestCase {
     let saved = app.buttons["saved-city:leeds-gb"]
     XCTAssertTrue(
       saved.waitForExistence(timeout: 10), "Leeds didn't move to Saved; \(app.cancelsReport)")
-    waitUntilGone(app.staticTexts["recent-heading"], "Recent, with its only place saved")
+    waitUntilGone("recent-heading", .staticText, in: app, "Recent, with its only place saved")
     XCTAssertFalse(hint.exists, "The hint, with a place saved")
 
     // Removed by its star: back under Recent, the hint under Saved again.
@@ -232,7 +232,7 @@ final class PickerTests: XCTestCase {
     XCTAssertTrue(
       remove.waitForExistence(timeout: 5), "No Remove on press and hold; \(app.cancelsReport)")
     remove.tap()
-    waitUntilGone(saved, "Leeds is still saved")
+    waitUntilGone("saved-city:leeds-gb", .button, in: app, "Leeds is still saved")
     XCTAssertTrue(
       recent.waitForExistence(timeout: 10), "Leeds isn't back under Recent; \(app.cancelsReport)")
   }
@@ -253,7 +253,9 @@ final class PickerTests: XCTestCase {
     XCTAssertEqual(app.buttons["open-settings"].label, "Open Settings")
     // The picker's own row says the same.
     app.buttons["picker-use-my-location"].tap()
-    wait(for: detail, label: "Location access is off. Search for a place instead.")
+    wait(
+      for: "location-detail", .staticText, in: app,
+      label: "Location access is off. Search for a place instead.")
     XCTAssertTrue(searchField(in: app).exists, "The picker closed")
     attachScreen(of: app, named: "picker-location-denied")
     // Close: still on approximate location.
@@ -279,8 +281,12 @@ final class PickerTests: XCTestCase {
     let open = app.buttons["open-settings"]
     XCTAssertTrue(open.waitForExistence(timeout: 10), "No Open Settings; \(app.cancelsReport)")
     open.tap()
-    let settingsPage = NSPredicate(format: "value BEGINSWITH %@", "app-settings:")
-    wait(for: [expectation(for: settingsPage, evaluatedWith: opened)], timeout: 10)
+    let settingsPage = readElement(
+      "debug-opened", .staticText, in: app, within: 10, "to hold the app's settings"
+    ) { $0.one && $0.value?.hasPrefix("app-settings:") == true }
+    if let failure = settingsPage {
+      XCTFail("debug-opened never held a URL starting \"app-settings:\": \(failure)")
+    }
     XCTAssertTrue(searchField(in: app).exists, "The picker closed")
   }
 
@@ -293,7 +299,7 @@ final class PickerTests: XCTestCase {
     ])
     _ = openPicker(in: app)
     app.buttons["picker-use-my-location"].tap()
-    wait(for: app.buttons["place"], label: "Place: Kathmandu. Change place.")
+    wait(for: "place", .button, in: app, label: "Place: Kathmandu. Change place.")
     XCTAssertFalse(app.buttons["use-my-location"].exists, "Still on approximate location")
     XCTAssertTrue(app.staticTexts["verdict"].waitForExistence(timeout: 10), "No answer")
   }
@@ -310,7 +316,7 @@ final class PickerTests: XCTestCase {
     field.typeText("Leeds")
     XCTAssertTrue(app.buttons["result-0"].waitForExistence(timeout: 10), "No results")
     app.buttons["result-0"].tap()
-    wait(for: app.buttons["place"], label: "Place: Leeds. Change place.")
+    wait(for: "place", .button, in: app, label: "Place: Leeds. Change place.")
     _ = openPicker(in: app, focusing: false)
     XCTAssertTrue(app.buttons["recent-city:leeds-gb"].waitForExistence(timeout: 10))
     app.buttons["picker-use-my-location"].tap()
@@ -334,8 +340,9 @@ final class PickerTests: XCTestCase {
     field.typeText("Leeds")
     let result = app.buttons["result-0"]
     XCTAssertTrue(result.waitForExistence(timeout: 10), "No results for Leeds")
+    expectTheKeyboard(in: app, "before the drag on the results")
     result.swipeDown()
-    waitUntilGone(app.keyboards.firstMatch, "The keyboard is still up")
+    waitUntilGone(nil, .keyboard, in: app, "The keyboard is still up")
     XCTAssertTrue(result.exists, "The results went with the keyboard")
     attachScreen(of: app, named: "picker-results-audit")
     try auditAccessibility(
@@ -365,7 +372,7 @@ final class PickerTests: XCTestCase {
     let star = app.buttons["star-result-0"]
     XCTAssertTrue(star.waitForExistence(timeout: 10), "No star beside Leeds")
     star.tap()
-    wait(for: star, label: "Remove Leeds from saved places")
+    wait(for: "star-result-0", .button, in: app, label: "Remove Leeds from saved places")
     app.buttons["clear-search"].tap()
     XCTAssertTrue(
       app.buttons["saved-city:leeds-gb"].waitForExistence(timeout: 10),
@@ -391,13 +398,13 @@ final class PickerTests: XCTestCase {
     field.typeText("Leeds")
     XCTAssertTrue(app.buttons["result-0"].waitForExistence(timeout: 10), "No results")
     app.buttons["result-0"].tap()
-    wait(for: app.buttons["place"], label: "Place: Leeds. Change place.")
+    wait(for: "place", .button, in: app, label: "Place: Leeds. Change place.")
     field = openPicker(in: app)
     field.typeText("Kathmandu")
     let star = app.buttons["star-result-0"]
     XCTAssertTrue(star.waitForExistence(timeout: 10), "No star beside Kathmandu")
     star.tap()
-    wait(for: star, label: "Remove Kathmandu from saved places")
+    wait(for: "star-result-0", .button, in: app, label: "Remove Kathmandu from saved places")
     app.buttons["clear-search"].tap()
     let saved = app.buttons["saved-search:27.7,85.3"]
     XCTAssertTrue(
@@ -422,8 +429,9 @@ final class PickerTests: XCTestCase {
   @MainActor
   private func putTheKeyboardAway(_ app: XCUIApplication) {
     let row = app.buttons["picker-use-my-location"]
+    expectTheKeyboard(in: app, "before the drag on the rows")
     row.swipeDown()
-    waitUntilGone(app.keyboards.firstMatch, "The keyboard is still up")
+    waitUntilGone(nil, .keyboard, in: app, "The keyboard is still up")
     XCTAssertTrue(row.exists, "The rows went with the keyboard")
   }
 
@@ -503,9 +511,10 @@ final class PickerTests: XCTestCase {
 
   /// Waits up to 15 seconds for the screen to show the heading reading `label`, as a user sees it
   /// (`readHeading`, as `awaitHeading` does: snapshots, judged as they are read, the deadline
-  /// strict); fails, stopping the test, with what the last read found. Not `wait(for:label:)`,
-  /// a predicate on the heading in a waiter, whose one query a busy simulator can stretch past
-  /// the deadline (docs/DECISIONS.md, "What main's offline run showed").
+  /// strict); fails, stopping the test, with what the last read found. Not
+  /// `wait(for:_:in:label:)`, which reads an element by identifier alone, not where it is on
+  /// screen; nor a predicate on the heading in a waiter, whose one query a busy simulator can
+  /// stretch past the deadline (docs/DECISIONS.md, "What main's offline run showed").
   @MainActor
   private func waitForHeading(_ label: String, in app: XCUIApplication) {
     let read = readHeading(in: app, within: 15, "to read \"\(label)\"") { $0.shows(label) }
@@ -514,20 +523,50 @@ final class PickerTests: XCTestCase {
     }
   }
 
-  /// Waits until `element` reads `label`.
+  /// Waits up to 15 seconds until the one element identified `id` of `type` reads `label`, read
+  /// from snapshots (`readElement`, by `readUntil`'s rules, as the heading is); fails, stopping
+  /// the test, with what the last read found, never a fresh read. Not a predicate in a waiter,
+  /// whose evaluation a busy simulator can stretch past the deadline, a verdict then made on no
+  /// read (docs/DECISIONS.md, "What PR #46's first macOS run showed").
   @MainActor
-  private func wait(for element: XCUIElement, label: String) {
-    let reads = NSPredicate(format: "label == %@", label)
-    wait(for: [expectation(for: reads, evaluatedWith: element)], timeout: 15)
+  private func wait(
+    for id: String,
+    _ type: XCUIElement.ElementType,
+    in app: XCUIApplication,
+    label: String
+  ) {
+    let read = readElement(id, type, in: app, within: 15, "to read \"\(label)\"") {
+      $0.one && $0.label == label
+    }
+    if let failure = read {
+      XCTFail("\(id) never read \"\(label)\": \(failure)")
+    }
   }
 
-  /// Waits until `element` is gone.
+  /// Waits up to 10 seconds until no element identified `id` of `type` is left (with `id` nil,
+  /// none of `type`: the keyboard), as a read of the app that ended in time finds none
+  /// (`readElement`; an app that couldn't be read is never one without it); fails, stopping the
+  /// test, with `message` and what the last read found.
   @MainActor
-  private func waitUntilGone(_ element: XCUIElement, _ message: String) {
-    let gone = NSPredicate(format: "exists == false")
-    let result = XCTWaiter().wait(
-      for: [XCTNSPredicateExpectation(predicate: gone, object: element)], timeout: 10)
-    XCTAssertEqual(result, .completed, message)
+  private func waitUntilGone(
+    _ id: String?,
+    _ type: XCUIElement.ElementType,
+    in app: XCUIApplication,
+    _ message: String
+  ) {
+    if let still = readElement(id, type, in: app, within: 10, "to go", until: { $0.gone }) {
+      XCTFail("\(message): \(still)")
+    }
+  }
+
+  /// Checks the keyboard is up `when`, from one snapshot (`ElementRead`), before a drag that
+  /// should put it away: the control for the wait for it to go (`waitUntilGone`), which a read
+  /// that couldn't see the keyboard would pass whatever the drag did. Text has been typed, so the
+  /// keyboard is up; one read, no wait.
+  @MainActor
+  private func expectTheKeyboard(in app: XCUIApplication, _ when: String) {
+    let read = ElementRead(app, nil, .keyboard)
+    XCTAssertTrue(read.found, "No keyboard \(when), so its going would prove nothing: \(read)")
   }
 
   @MainActor
