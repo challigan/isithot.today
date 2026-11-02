@@ -1676,7 +1676,9 @@ a free place kept through a failed lookup and re-stamped so Apple refusing eithe
 the phone, nothing kept when nothing could be looked up, a body without `v` after a set,
 the DELETE of a set and its salt, the test send's cases, and the logs. `today.test.ts`:
 `locateFromIpOnly`. `alerts.test.ts`: two places in one zone and window, two zones, a London phone's
-Whistler evening either side of the clocks changing, a Fernando de Noronha evening whose sound the
+Mammoth Lakes evening either side of the clocks changing (first written for Whistler, but British
+Columbia keeps UTC−7 all year from November 2026, which CI's newer time zone data knows and failed
+on, so Vancouver's clocks no longer change there), a Fernando de Noronha evening whose sound the
 change turns on, a shadowed free place, one whose saved place has gone, forcing, a stale phone,
 claims by place, the tie-break, the daily count (once, after a cleanup cut short; zone by zone; a
 count that can't finish), an 8.1 record byte for byte, and no saved zone in any line, a saved

@@ -754,27 +754,31 @@ describe('runAlerts: several places on one phone', () => {
     ]);
   });
 
-  it("sends a London phone's Whistler evening silently in London's small hours, and with sound to a phone in Vancouver, either side of the clocks changing", async () => {
-    const whistler = {
-      query: 'lat=50.10&lon=-122.95&name=Whistler&country=CA&source=search',
-      name: 'Whistler',
-      tz: 'America/Vancouver',
+  // Mammoth Lakes, California, not Whistler: British Columbia keeps UTC−7 all year from November
+  // 2026 (time zone data from 2026; Node's on CI has it, older data doesn't), so Vancouver's
+  // clocks no longer change and a Whistler case can't test the change.
+  it("sends a London phone's Mammoth Lakes evening silently in London's small hours, and with sound to a phone in Los Angeles, either side of the clocks changing", async () => {
+    const mammoth = {
+      query: 'lat=37.65&lon=-118.97&name=Mammoth Lakes&country=US&source=search',
+      name: 'Mammoth Lakes',
+      tz: 'America/Los_Angeles',
     };
     const london = registration(token('a0', 1), {
-      ...whistler,
+      ...mammoth,
       slot: PIDS[0],
       deviceTz: 'Europe/London',
     });
-    const vancouver = registration(token('a0', 2), {
-      ...whistler,
+    const losAngeles = registration(token('a0', 2), {
+      ...mammoth,
       slot: PIDS[1],
-      deviceTz: 'America/Vancouver',
+      deviceTz: 'America/Los_Angeles',
     });
-    const forceIds = [london, vancouver].map((r) => r.id.slice(0, 8));
-    // Whistler's 18:05: 02:05 BST with both on summer time, 01:05 GMT between the two changes,
-    // and 02:05 GMT with both on winter time.
+    const forceIds = [london, losAngeles].map((r) => r.id.slice(0, 8));
+    // Mammoth Lakes' 18:05: 02:05 BST with both on summer time, 01:05 GMT between the two
+    // changes (London's on 25 October, California's on 1 November), and 02:05 GMT with both on
+    // winter time.
     for (const iso of ['2026-10-21T01:05:00Z', '2026-10-28T01:05:00Z', '2026-11-11T02:05:00Z']) {
-      expect(alertWindows('America/Vancouver', new Date(iso))).toMatchObject({
+      expect(alertWindows('America/Los_Angeles', new Date(iso))).toMatchObject({
         kind: 'evening',
         hours: 18 + 5 / 60,
       });
@@ -782,7 +786,7 @@ describe('runAlerts: several places on one phone', () => {
       const { origin, seen } = await fakeApns(apple());
       const store = new MemoryAlertStore();
       await seedPhone(store, london);
-      await seedPhone(store, vancouver);
+      await seedPhone(store, losAngeles);
       const result = await runAt(iso, { store, origin, forceIds });
       expect(result).toMatchObject({ sent: 2, silent: 1, errors: 0, done: 1 });
       expect(runSummary(result)).toContain('; 2 forced; 1 silent; ');
@@ -794,7 +798,7 @@ describe('runAlerts: several places on one phone', () => {
         'interruption-level': 'passive',
       });
       expect(aps.get(london.token)).not.toHaveProperty('sound');
-      expect(aps.get(vancouver.token)).toMatchObject({
+      expect(aps.get(losAngeles.token)).toMatchObject({
         sound: 'default',
         'thread-id': `snow-${PIDS[1]}`,
         'interruption-level': 'active',
