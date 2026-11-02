@@ -1,12 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  ALERTS,
   COPY,
   CREDIT_LINKS,
   ERROR_MESSAGES,
   SNOW_BAND_LABELS,
   SNOW_REASON_LABELS,
   UNITS_LABELS,
+  UNIT_NAMES,
   VIEWS,
   WEEKDAYS,
   question,
@@ -70,6 +72,9 @@ describe('coreCopySwift', () => {
     expect(lets).toEqual([...keys, 'snowUnitsLabel', 'tomorrowLabel']);
     expect(swift).toContain('  public static let notAvailable = "Not available right now."');
     expect(swift).toContain('  public static let checking = "Checking…"');
+    // The notification place's value while it follows the phone, the name the server gives a
+    // device's place it has no name for, so Settings and Your privacy agree.
+    expect(swift).toContain('  public static let yourLocation = "Your location"');
     // The section 10.9 list, every one there.
     for (const key of [
       'searchPlaceholder',
@@ -292,6 +297,9 @@ describe('APP_COPY', () => {
       upgradeSettings: ['price'],
       buy: ['price'],
       notifyPlaceOnScreen: ['place'],
+      keptID: ['id'],
+      keptPlace: ['place', 'zone'],
+      keptUnits: ['label', 'units'],
       reportAdSubject: ['version'],
       reportAdMail: ['time', 'place'],
       reportAdBody: ['email'],
@@ -355,6 +363,63 @@ describe('APP_COPY', () => {
       expect(text, key).not.toMatch(/alert|warning|danger/i);
     }
     expect(APP_COPY.notifyFooter).toMatch(/^These are forecasts, not official warnings\./);
+  });
+
+  it('words the notifications as section 12 and the server do', () => {
+    // The server's limit on tests, and its quiet hours as its 409 words them (devices.ts's
+    // `hourName`: 21 is "9pm", 7 is "7am").
+    expect(APP_COPY.testLimited).toContain(`${ALERTS.testPerHour} test notifications`);
+    const hourName = (h: number) => `${h % 12 || 12}${h < 12 ? 'am' : 'pm'}`;
+    const [from, to] = [hourName(ALERTS.quiet.from), hourName(ALERTS.quiet.to)];
+    expect([from, to]).toEqual(['9pm', '7am']);
+    expect(APP_COPY.testQuiet).toBe(
+      `Nothing is sent from ${from} to ${to} at the place. Try again after ${to} there.`,
+    );
+    expect(APP_COPY.testQuiet).toContain(`after ${to}`);
+    // What iPhone Settings has turned off, in the app's own words for itself.
+    for (const key of ['notifyDenied', 'notifyLocationDenied'] as const) {
+      expect(APP_COPY[key], key).toContain('this app');
+      expect(APP_COPY[key], key).not.toMatch(/willitsnow/i);
+    }
+    expect(APP_COPY.notifyLocationDenied).toBe('Location access is off for this app in Settings.');
+    expect(APP_COPY.notifyPlaceTitle).toBe('Notification place');
+    expect(APP_COPY.notifyLocationUnavailable).toBe(
+      "Couldn't find your location. Try again, or use the place on screen.",
+    );
+    // Without a place on screen to choose (the phone's own place, or approximate location), the
+    // line names only what the page offers.
+    expect(APP_COPY.notifyLocationTryAgain).toBe("Couldn't find your location. Try again.");
+    // Production's dry run sends nothing, so the test row says so rather than "Sent".
+    expect(APP_COPY.testDryRun).toBe(
+      "Our server isn't sending notifications yet, so nothing was sent.",
+    );
+    expect(APP_COPY.cardOn).toBe(
+      "Done. You'll get a notification the evening before snow is likely here. You can change " +
+        'this in Settings.',
+    );
+    expect(APP_COPY.notifyNotSaved).toBe(
+      "Couldn't save your notification choices. The app will try again when you next open it.",
+    );
+  });
+
+  it('words what Your privacy shows is kept, and what its button deleted', () => {
+    // The kept lines, filled as the page fills them, then what the button did. The server
+    // deletes the record, not the notes keyed by its ID that `privacyNotifications` says outlive
+    // it, so the line names only what went.
+    expect(fill(APP_COPY.keptID, { id: '3f9c1a2b' })).toBe('ID 3f9c1a2b');
+    expect(fill(APP_COPY.keptPlace, { place: 'Leeds', zone: 'Europe/London' })).toBe(
+      'Leeds, Europe/London',
+    );
+    expect(fill(APP_COPY.keptUnits, { label: COPY.snowUnitsLabel, units: UNIT_NAMES.snow.c })).toBe(
+      'Snow units: cm',
+    );
+    expect(APP_COPY.deleteDone).toBe(
+      "Notifications are off. We've deleted your notification token, place, units and choices.",
+    );
+    expect(APP_COPY.deleteNotYet).toBe(
+      "Couldn't reach our server, so nothing is deleted yet. The app will try again when you " +
+        'next open it.',
+    );
   });
 
   it('has no stray spaces', () => {

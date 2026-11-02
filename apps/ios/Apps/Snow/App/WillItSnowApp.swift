@@ -2,6 +2,7 @@ import IsItAds
 import IsItLocation
 import IsItLogic
 import IsItModel
+import IsItNotifications
 import IsItPurchases
 import IsItServices
 import IsItState
@@ -17,9 +18,17 @@ import SwiftUI
 /// IsItState) runs on StoreKit 2 (`StoreKitPurchases`, IsItPurchases): started at the launch's
 /// step 2, asked again each time the app becomes active, and telling the model each change. A
 /// willitsnow:// link (`DeepLink`) goes to the model, which follows it once the launch has
-/// finished: `willitsnow://upgrade` opens the upgrade sheet.
+/// finished: `willitsnow://upgrade` opens the upgrade sheet. The notifications
+/// (`NotificationsModel`, IsItState) run on UserNotifications and UIKit's push registration
+/// (`UserNotificationsPlatform`, IsItNotifications): started at the launch's step 6, asked again
+/// each time the app becomes active. What the system says about them (the token, a notification
+/// shown or tapped, iOS Settings' link) comes through the app delegate (`AppDelegate`) to
+/// `NotificationInbox.shared`, which keeps it until this attaches its handler, so a tap that
+/// launched the app is followed as a link is, once the launch has finished.
 @main
 struct WillItSnowApp: App {
+  /// The centre's delegate and the push token's callbacks; the only adaptor.
+  @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
   @State private var model: AppModel
   /// The free version's ads, which the home screen, the picker and Settings read.
   @State private var ads: AdsModel
@@ -27,6 +36,8 @@ struct WillItSnowApp: App {
   @State private var google: GoogleAds
   /// The purchase, which the home screen, Settings and the upgrade sheet read.
   @State private var purchases: PurchaseModel
+  /// The notifications, which the home screen's card and Settings read.
+  @State private var notifications: NotificationsModel
   @Environment(\.scenePhase) private var scenePhase
 
   /// The model with the app's services and the launch's later steps. The ads count time by the
@@ -34,8 +45,10 @@ struct WillItSnowApp: App {
   /// the minutes between two full-screen ads. Whether this is the app's first run is read once
   /// the Debug hooks have prepared the store, so a `-resetStore` or `-fixture` launch is one.
   /// The purchase answers from `unlock.v1` until step 2 asks StoreKit, or a Debug build's
-  /// stand-in for it, and tells the model each change it keeps. Nothing here touches Google's
-  /// SDKs or StoreKit: only the launch does, which the unit tests' host never runs.
+  /// stand-in for it, and tells the model each change it keeps. The notifications read their
+  /// three keys here, and the inbox's handler is attached once both models exist, with a Debug
+  /// build's `-route` tap posted after it. Nothing here touches Google's SDKs, StoreKit or the
+  /// notification centre: only the launch does, which the unit tests' host never runs.
   @MainActor
   init() {
     let google = GoogleAds(geography: DebugHooks.umpGeography())
@@ -49,23 +62,44 @@ struct WillItSnowApp: App {
       clock: SystemClock(),
       productID: Constants.Purchase.productID
     )
+    let notifications = NotificationsModel(
+      platform: DebugHooks.notifications() ?? UserNotificationsPlatform(),
+      store: DebugHooks.notificationStore(NotificationDefaults()),
+      client: environment.client,
+      location: environment.location,
+      clock: environment.clock,
+      env: AppBundle.pushEnvironment,
+      appVersion: AppVersion.wire(AppBundle.version)
+    )
     environment.hooks = LiveHooks(
       ads: ads,
       purchases: purchases,
+      notifications: notifications,
       firstRun: Launch.firstRun(environment.store),
       noAds: DebugHooks.noAds()
     )
     let model = AppModel(environment: environment)
     purchases.changed = { [weak model] owned in await model?.purchaseChanged(owned: owned) }
+    NotificationInbox.shared.attach { [weak model, weak notifications] event in
+      guard let model, let notifications else { return }
+      if await !NotificationDispatch.handle(event, app: model, notifications: notifications) {
+        DebugHooks.unrouted()
+      }
+    }
+    // A Debug build's cold-start tap, held, as a real one is, to the launch's end.
+    if let tap = DebugHooks.route() {
+      NotificationInbox.shared.post(.tapped(tap))
+    }
     _google = State(initialValue: google)
     _ads = State(initialValue: ads)
     _purchases = State(initialValue: purchases)
+    _notifications = State(initialValue: notifications)
     _model = State(initialValue: model)
   }
 
   var body: some Scene {
     WindowGroup {
-      HomeView(model: model, ads: ads, google: google, purchases: purchases)
+      home
         .task {
           guard DebugHooks.launches() else { return }
           await model.launch()
@@ -79,6 +113,9 @@ struct WillItSnowApp: App {
             // The product, and an update still ahead of the entitlements, asked again; nothing
             // until step 2 has started the purchase, so a test host never asks StoreKit.
             Task { await purchases.becameActive() }
+            // The permission, the token and the sync again; nothing before step 6 has started
+            // the notifications, so a test host never asks the centre either.
+            Task { await notifications.becameActive() }
           default:
             break
           }
@@ -89,6 +126,12 @@ struct WillItSnowApp: App {
           Task { await model.open(route) }
         }
     }
+  }
+
+  /// The home screen, with every model it draws.
+  private var home: HomeView {
+    HomeView(
+      model: model, ads: ads, google: google, purchases: purchases, notifications: notifications)
   }
 
   /// The app's services (section 9.3): the API over URLSession, the system's clock, the App

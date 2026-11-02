@@ -7,10 +7,12 @@
 #       the four fonts, the app has no icon, the widget lacks SnowKit's glyphs or names no https API
 #       origin, or another than the app's, the widget links Google Mobile Ads or the app's location
 #       or purchase code, either binary names a debug hook, the ad units aren't Google's demo ones
-#       (test) or Carl's (real), the app's SKAdNetworkItems lack Google's, the app and widget
-#       differ in version or build, ITSAppUsesNonExemptEncryption isn't false, the fixtures or a
-#       StoreKit configuration are bundled, the app links StoreKitTest, or either bundle's manifest
-#       doesn't declare coarse location.
+#       (test) or Carl's (real), the app's SKAdNetworkItems lack Google's, the app registers for
+#       notifications in the sandbox or its manifest doesn't declare the device ID, the widget links
+#       the app's notifications code, the app and widget differ in version or build,
+#       ITSAppUsesNonExemptEncryption isn't false, the fixtures or a StoreKit configuration are
+#       bundled, the app links StoreKitTest, or either bundle's manifest doesn't declare coarse
+#       location.
 #   scripts/check-archive.sh --ipa <WillItSnow.ipa, or a folder holding its Payload>
 #       The exported app's signed entitlements. It fails unless the app has aps-environment
 #       production, both have the App Group, the widget has no aps-environment, and neither is
@@ -55,8 +57,10 @@ AD_UNITS=(
 GOOGLE_SKADNETWORK=cstr6suwn9.skadnetwork
 # The debug hooks' names (section 18.3), looked for anywhere in strings' output and as whole
 # short literals: debug-theme, the readout of the home screen's colours that the UI tests wait on.
-HOOKS=(-uitest -fixture -apiOrigin -umpGeography -openURLs URLProtocolStub FakePurchases 127.0.0.1
-  debug-theme)
+HOOKS=(
+  -uitest -fixture -apiOrigin -umpGeography -openURLs
+  URLProtocolStub FakePurchases FakeNotifications DevicesStub 127.0.0.1 debug-theme
+)
 # Debug hooks that begin ordinary words, so looked for in strings' output only where no letter
 # follows them, and as whole short literals: Google's SDK, linked into the app, holds OpenSSL's
 # name sbgp-routerIdentifier. Matched with grep -E, so none may hold a pattern's special
@@ -64,7 +68,10 @@ HOOKS=(-uitest -fixture -apiOrigin -umpGeography -openURLs URLProtocolStub FakeP
 WORD_HOOKS=(-route)
 # DebugHooks.swift's other launch arguments (section 9.8), too short or too ordinary to look
 # for inside longer strings, so matched only as whole short literals.
-LITERAL_HOOKS=(-now -clock -unlocked -noads -resetStore -network -location -purchase -restore)
+LITERAL_HOOKS=(
+  -now -clock -unlocked -noads -resetStore -network -location -purchase -restore
+  -notifications -pushToken -devices -alertCard -place
+)
 
 PLUTIL="${PLUTIL:-plutil}"
 CODESIGN="${CODESIGN:-codesign}"
@@ -339,6 +346,21 @@ check_versions() {
   facts=("$APP ${version:-?} (${build:-?})" ${facts[@]+"${facts[@]}"})
 }
 
+# The app's Info.plist XML $1 names production as the APNs environment its token is for:
+# IsItPushEnvironment, from Snow.xcconfig's PUSH_ENV, says sandbox only in Debug. The server
+# sends to the environment the app names, and an App Store build's token is production's
+# (check_ipa), so a Release build naming the sandbox would get no notification. Missing or empty
+# fails too: PUSH_ENV has to reach the Info.plist.
+check_push_env() {
+  local env
+  env="$(plist_get IsItPushEnvironment <"$1")" || env=missing
+  if [ "$env" = sandbox ]; then
+    fail "the app registers in the sandbox (IsItPushEnvironment is sandbox), not production"
+  elif [ "$env" != production ]; then
+    fail "the app's IsItPushEnvironment is ${env:-empty}, not production"
+  fi
+}
+
 # The ad units for $1 (test or real), from the app's Info.plist XML $2 and its binary's strings $3,
 # and Google's SKAdNetwork identifier.
 check_ads() {
@@ -431,10 +453,13 @@ check_archive() {
   check_privacy "$app"
   # The app sends the phone's place, rounded to the forecast grid (section 15.1).
   check_collects "$app" NSPrivacyCollectedDataTypeCoarseLocation
+  # And the push token it registers for notifications with (section 15.1).
+  check_collects "$app" NSPrivacyCollectedDataTypeDeviceID
   check_icon "$app" "$info"
   check_fonts "$app" "$info"
   read_binary "$(executable "$app" "$info")" "$work/app"
   check_hooks "$work/app" "the app binary"
+  check_push_env "$info"
   check_ads "$2" "$info" "$work/app.strings"
 
   encryption="$(plist_get ITSAppUsesNonExemptEncryption <"$info")" || encryption=missing
@@ -489,8 +514,14 @@ check_archive() {
   if grep -F -e StoreKitPurchases "$work/widget.strings" >/dev/null; then
     fail "the widget links the app's purchase code"
   fi
+  # Nor IsItNotifications: only the app registers for notifications (an extension can't call
+  # registerForRemoteNotifications), and only the app has aps-environment (check_ipa).
+  if grep -E -e 'UNUserNotificationCenter|registerForRemoteNotifications|UserNotificationsPlatform' "$work/widget.strings" \
+    >/dev/null; then
+    fail "the widget links the app's notifications code"
+  fi
   check_versions "$info" "$widget_info"
-  facts+=("checked: privacy manifests and what they collect, the icon, the four fonts, the widget's glyphs and origin, $((${#HOOKS[@]} + ${#WORD_HOOKS[@]} + ${#LITERAL_HOOKS[@]})) debug hooks in both binaries, the ad units and SKAdNetworkItems, the widget's links, versions, encryption, fixtures, StoreKit configurations and StoreKitTest")
+  facts+=("checked: privacy manifests and what they collect, the icon, the four fonts, the widget's glyphs and origin, $((${#HOOKS[@]} + ${#WORD_HOOKS[@]} + ${#LITERAL_HOOKS[@]})) debug hooks in both binaries, the push environment, the ad units and SKAdNetworkItems, the widget's links, versions, encryption, fixtures, StoreKit configurations and StoreKitTest")
 }
 
 # --- The exported app --------------------------------------------------------------------------

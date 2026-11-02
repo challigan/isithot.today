@@ -2,10 +2,11 @@ import Foundation
 import IsItModel
 import XCTest
 
-/// The app's Info.plist and bundle as built (iOS build spec, sections 9.7, 13 and 15.2): the
-/// location permission's purpose string is the one appCopy.ts words, which Info.plist reads as a
-/// build setting from the generated Configs/Generated/Copy.xcconfig, and no StoreKit
-/// configuration ships.
+/// The app's Info.plist and bundle as built (iOS build spec, sections 9.7, 13, 15.1 and 15.2):
+/// the location permission's purpose string is the one appCopy.ts words, which Info.plist reads
+/// as a build setting from the generated Configs/Generated/Copy.xcconfig; no StoreKit
+/// configuration ships; there are no background modes; and the privacy manifest declares the
+/// coarse location and the device ID.
 final class InfoPlistTests: XCTestCase {
   func testTheLocationPurposeStringIsTheAppsCopy() throws {
     let purpose = try XCTUnwrap(
@@ -41,5 +42,40 @@ final class InfoPlistTests: XCTestCase {
       }
     }
     XCTAssertEqual(found, [])
+  }
+
+  /// Section 9.7: no background modes. Notifications need none: no silent push and no background
+  /// fetch, only notifications the person sees (phase 8.1).
+  func testTheAppHasNoBackgroundModes() {
+    XCTAssertNil(Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes"))
+  }
+
+  /// Section 15.1: the app's privacy manifest declares what it collects, each linked to the
+  /// person, not used to track them, and for the app's functionality: the coarse location the
+  /// forecast is asked for, and the device ID, the push token the notifications are sent to.
+  func testThePrivacyManifestDeclaresTheDeviceID() throws {
+    let url = try XCTUnwrap(
+      Bundle.main.url(forResource: "PrivacyInfo", withExtension: "xcprivacy"),
+      "No PrivacyInfo.xcprivacy in the app"
+    )
+    let manifest = try XCTUnwrap(
+      PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil)
+        as? [String: Any])
+    let collected = try XCTUnwrap(manifest["NSPrivacyCollectedDataTypes"] as? [[String: Any]])
+    let types = collected.compactMap { $0["NSPrivacyCollectedDataType"] as? String }
+    XCTAssertEqual(
+      types,
+      ["NSPrivacyCollectedDataTypeCoarseLocation", "NSPrivacyCollectedDataTypeDeviceID"]
+    )
+    for entry in collected {
+      let type = entry["NSPrivacyCollectedDataType"] as? String ?? ""
+      XCTAssertEqual(entry["NSPrivacyCollectedDataTypeLinked"] as? Bool, true, type)
+      XCTAssertEqual(entry["NSPrivacyCollectedDataTypeTracking"] as? Bool, false, type)
+      XCTAssertEqual(
+        entry["NSPrivacyCollectedDataTypePurposes"] as? [String],
+        ["NSPrivacyCollectedDataTypePurposeAppFunctionality"],
+        type
+      )
+    }
   }
 }

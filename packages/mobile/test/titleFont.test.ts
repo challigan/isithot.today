@@ -11,7 +11,8 @@ import { cmapCodePoints } from './fontTables';
  * `TextRole.title`, `BricolageAnswer`, near the website's 750 h1), which is a subset: letters,
  * digits, a little punctuation and the space (`make-answer-font.py`). A title with any other
  * character would draw it in the system's font, mid-word. These are every title the app sets in
- * it: Settings, its three pages, each notice's name, and the mail fallback's two.
+ * it: Settings, its three pages, each notice's name, the mail fallback's two, and the page
+ * Settings → Notifications opens to choose the notification place.
  */
 const TITLES = [
   APP_COPY.settings,
@@ -21,6 +22,7 @@ const TITLES = [
   ...NOTICES.map((n) => n.name),
   APP_COPY.reportAd,
   APP_COPY.contactUs,
+  APP_COPY.notifyPlaceTitle,
 ];
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url));
@@ -41,7 +43,7 @@ describe("the titles, in the answer's face", () => {
     [...cmapCodePoints(new Uint8Array(repo(FONT_PATH)))].map((c) => String.fromCodePoint(c)),
   );
 
-  it("are the app's nine, as the screens title themselves", () => {
+  it("are the app's ten, as the screens title themselves", () => {
     expect(TITLES).toEqual([
       'Settings',
       'How it works',
@@ -52,6 +54,7 @@ describe("the titles, in the answer's face", () => {
       'Google User Messaging Platform SDK',
       'Report an ad',
       'Contact us',
+      'Notification place',
     ]);
   });
 

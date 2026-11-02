@@ -378,7 +378,7 @@ const ENV: Record<string, string> = { DATA_SOURCE: 'synthetic' };
  * The server's dependencies for `DATA_SOURCE=synthetic`, with the clock fixed at `now`, and the
  * upstream and the cache given.
  */
-function fixedAt(now: Date, fetch: FetchLike, cache: MemoryKV) {
+export function fixedAt(now: Date, fetch: FetchLike, cache: MemoryKV) {
   return (platform: Platform) => ({
     ...createDeps(platform),
     cache,

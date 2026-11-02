@@ -151,14 +151,26 @@ public enum AppCopy {
   public static let notifyFollows = "Follows your location each time you open the app."
   public static let needsPlace =
     "Choose a place for notifications: use your location or search for a town."
+  public static let notifyPlaceTitle = "Notification place"
+  public static let notifyLocationDenied = "Location access is off for this app in Settings."
+  public static let notifyLocationUnavailable =
+    "Couldn't find your location. Try again, or use the place on screen."
+  public static let notifyLocationTryAgain = "Couldn't find your location. Try again."
   public static let sendTest = "Send a test notification"
   public static let testSent = "Sent. It should arrive in a few seconds."
   public static let testLimited = "You can send 3 test notifications an hour. Try again later."
   public static let testFailed = "Couldn't send a test notification. Try again later."
+  public static let testDryRun = "Our server isn't sending notifications yet, so nothing was sent."
+  public static let testQuiet =
+    "Nothing is sent from 9pm to 7am at the place. Try again after 7am there."
+  public static let notifyNotSaved =
+    "Couldn't save your notification choices. The app will try again when you next open it."
   public static let notifyFooter =
     "These are forecasts, not official warnings. Times are at the place. Open the app at least every few months to keep notifications on."
   public static let notifyDenied = "Notifications are off for this app in Settings."
   public static let openSettings = "Open Settings"
+  public static let cardOn =
+    "Done. You'll get a notification the evening before snow is likely here. You can change this in Settings."
   public static let settingsPrivacy = "Privacy"
   public static let settingsAbout = "About"
   public static let settingsHelp = "Help"
@@ -166,7 +178,7 @@ public enum AppCopy {
   public static let yourPrivacy = "Your privacy"
   public static let privacyPolicy = "Privacy policy"
   public static let privacyForecast =
-    "To get the forecast, the app sends the place (a town, or your location rounded to about 5 km) and your units to our server. Until you choose a place, our server estimates a rough one from your internet connection. Place names you search for go to Open-Meteo, our forecast provider, to find matching places. The app keeps your place, units, recent and saved places and the last forecast on your iPhone."
+    "To get the forecast, the app sends the place (a town, or your location rounded to about 5 km) and your units to our server. Until you choose a place, our server estimates a rough one from your internet connection. Place names you search for go to Open-Meteo, our forecast provider, to find matching places. The app keeps your place, units, recent and saved places, your notification choices and the last forecast on your iPhone."
   public static let privacyNotifications =
     "Only while notifications are on, we keep your device's notification token, an ID made from it, the place, its time zone, your units and which notifications you chose, with a few details such as the app's version and when it last checked in. We delete them when you turn notifications off in the app, when Apple tells us the app is no longer installed, or about 90 days after you last open it. If you turn notifications off in your iPhone's Settings instead, we delete them the next time you open the app. For a few days after each notification and each test, and after some forecast checks that found nothing to send, we also keep a note of it, even once the rest is deleted. It holds no token or place."
   public static let privacyAds =
@@ -176,7 +188,24 @@ public enum AppCopy {
     "Apple handles purchases. We never see your payment details. The app keeps a note on your iPhone of whether you've made the one-off purchase."
   public static let privacyAccounts = "There are no accounts."
   public static let keptForNotifications = "What we keep for notifications"
+
+  public static func keptID(id: String) -> String {
+    "ID \(id)"
+  }
+
+  public static func keptPlace(place: String, zone: String) -> String {
+    "\(place), \(zone)"
+  }
+
+  public static func keptUnits(label: String, units: String) -> String {
+    "\(label): \(units)"
+  }
+
   public static let deleteMyData = "Turn off notifications and delete my data"
+  public static let deleteDone =
+    "Notifications are off. We've deleted your notification token, place, units and choices."
+  public static let deleteNotYet =
+    "Couldn't reach our server, so nothing is deleted yet. The app will try again when you next open it."
   public static let advertisement = "Advertisement"
   public static let reportAd = "Report an ad"
 
