@@ -22,7 +22,8 @@ import XCTest
 /// nothing before `start()`), so its listener can't take these tests' transactions. Every
 /// SKTestSession controls the one test environment, whose transactions and simulated errors
 /// last from test to test, so the tests run one at a time (StoreKit.xctestplan, on the iOS 26.2
-/// simulator), each from a cleared environment and with its own listener stopped after it.
+/// simulator), each from a cleared environment, once StoreKit itself lists none of the app's
+/// transactions, and with its own listener stopped after it.
 @MainActor
 final class PurchaseServiceTests: XCTestCase {
   private let id = Constants.Purchase.productID
@@ -39,9 +40,28 @@ final class PurchaseServiceTests: XCTestCase {
     // By its URL in this bundle: Apple documents `init(configurationFileNamed:)` as reading a
     // file in the application's bundle, which never holds it.
     let session = try SKTestSession(contentsOf: snowStoreKitURL())
+    // Kept first, so tearDown resets it should setUp stop below.
+    self.session = session
     clearSimulatedErrors(session)
     session.clearTransactions()
-    self.session = session
+    // No test starts until StoreKit itself lists nothing for the app. `clearTransactions()`
+    // returns once StoreKit Test's server is empty, before storekitd has dropped its own copy of
+    // the app's transactions (`untilStoreKitListsNothing`), and on PR #44's run 41364703412
+    // testARefundLocksAgain's launch read testAPurchaseElsewhereArrivesThroughUpdates' purchase
+    // from that copy, 11 ms after this clear and before either clear had reached it: its model
+    // started owned, so its buy never asked StoreKit, and the session had nothing to refund.
+    // Once a read lists nothing, nothing from before the clear can come back, as the server holds
+    // none; a clear still on its way can land during the test, after which storekitd reads the
+    // server again.
+    let cleared = logTime()
+    let (left, waited) = await untilStoreKitListsNothing()
+    XCTContext.runActivity(
+      named: "StoreKit listed \(left.sorted()) at \(logTime()), "
+        + "\(Int(waited * 1000)) ms after clearTransactions() at \(cleared)"
+    ) { _ in }
+    XCTAssertEqual(
+      left, [], "StoreKit still lists transactions from before clearTransactions(), after 10 s")
+    guard left.isEmpty else { throw StoreKitTestStop.notCleared }
     purchase = StoreKitPurchase()
   }
 
@@ -203,14 +223,19 @@ final class PurchaseServiceTests: XCTestCase {
 
   // MARK: - Refunds
 
+  /// The test's own purchase, refunded while the app runs: the transaction its buy made, by the
+  /// ID in the buy's result, never the session's first, so a buy that never asked StoreKit
+  /// (a model that started owned, as on run 41364703412) fails as that.
   func testARefundLocksAgain() async throws {
     let session = try XCTUnwrap(session)
     let purchase = try XCTUnwrap(purchase)
     purchase.model.start()
+    let atLaunch = await purchase.model.launchEntitlement()
+    XCTAssertFalse(atLaunch, "StoreKit gave a purchase from before the test at launch")
     try await purchase.readyModel()
     await purchase.model.buy()
     XCTAssertTrue(purchase.model.owned)
-    let bought = try XCTUnwrap(session.allTransactions().first)
+    let bought = try await listed(boughtBy: purchase.platform, in: session)
 
     try session.refundTransaction(identifier: bought.identifier)
 
@@ -230,6 +255,7 @@ final class PurchaseServiceTests: XCTestCase {
   func testARefundWhileClosedLocksAtLaunch() async throws {
     let session = try XCTUnwrap(session)
     let store: CountingUnlockStore
+    let bought: SKTestTransaction
     weak var firstModel: PurchaseModel?
     weak var firstStoreKit: StoreKitPurchases?
     do {
@@ -239,6 +265,7 @@ final class PurchaseServiceTests: XCTestCase {
       try await first.readyModel()
       await first.model.buy()
       XCTAssertTrue(first.model.owned)
+      bought = try await listed(boughtBy: first.platform, in: session)
       // The app closes.
       first.storeKit.stopListening()
       firstModel = first.model
@@ -251,7 +278,6 @@ final class PurchaseServiceTests: XCTestCase {
     await eventually(
       "the first launch's StoreKitPurchases gone", { firstStoreKit == nil }, is: true)
     let saves = store.saves
-    let bought = try XCTUnwrap(session.allTransactions().first)
 
     try session.refundTransaction(identifier: bought.identifier)
 
@@ -427,6 +453,44 @@ final class PurchaseServiceTests: XCTestCase {
     XCTAssertTrue(purchase.model.owned)
     XCTAssertTrue(shared.loadUnlocked())
     XCTAssertEqual(shared.loadUnlock()?.productID, id)
+  }
+
+  /// The transaction `platform`'s last buy made, as StoreKit Test lists it, for a refund test to
+  /// refund: found by the ID in the buy's own result, and waited for, looking every 0.1 s for up
+  /// to 10 seconds, until the session lists it. Stops the test, saying which, when the buy made
+  /// no purchase (StoreKit never asked, or its answer) or the session never lists it (what it
+  /// lists instead).
+  private func listed(
+    boughtBy platform: RecordingPlatform,
+    in session: SKTestSession,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) async throws -> SKTestTransaction {
+    guard case .completed(let fact)? = platform.lastBuy else {
+      let answers = platform.answers("buy")
+      let why =
+        answers.isEmpty
+        ? "the model never asked StoreKit to buy; its calls: \(platform.calls)"
+        : "StoreKit answered \(answers.joined(separator: ", "))"
+      XCTFail("No purchase of the test's own to refund: \(why)", file: file, line: line)
+      throw StoreKitTestStop.nothingBought
+    }
+    let own = { (listed: SKTestTransaction) in
+      UInt64(exactly: listed.identifier) == fact.transactionID
+    }
+    let deadline = Date().addingTimeInterval(10)
+    var all = session.allTransactions()
+    while !all.contains(where: own), Date() < deadline {
+      try await Task.sleep(for: .milliseconds(100))
+      all = session.allTransactions()
+    }
+    guard let bought = all.first(where: own) else {
+      XCTFail(
+        "StoreKit Test never listed the buy's transaction \(fact.transactionID) in 10 s; it "
+          + "lists \(all.map(\.identifier))", file: file, line: line)
+      throw StoreKitTestStop.notListed
+    }
+    return bought
   }
 
   /// The transactions StoreKit holds unfinished, by ID.

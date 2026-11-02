@@ -328,8 +328,8 @@ extension XCTestCase {
     let app = XCUIApplication()
     app.launchArguments = ["-uitest", "-noads", "1"] + arguments
     app.launch()
-    guard app.heading.waitForExistence(timeout: 20) else {
-      throw HomeScreenError("No heading on screen after launching with \(arguments)")
+    if let failure = readHeading(in: app, within: 20, "to come after the launch", until: \.found) {
+      throw HomeScreenError("No heading on screen after launching with \(arguments): \(failure)")
     }
     return app
   }
@@ -355,20 +355,76 @@ extension XCTestCase {
     return app
   }
 
-  /// Waits up to `timeout` seconds for the heading to read `label`; throws, stopping the test,
-  /// when it doesn't.
+  /// Waits up to `timeout` seconds for the screen to show the heading reading `label`, as a user
+  /// sees it (`HeadingRead.shows`); throws, stopping the test, when it doesn't, with what the
+  /// last read found: the read the verdict was made on, never a fresh one. Not a predicate in an
+  /// `XCTWaiter`: on main's run 41327075971 its one evaluation in 20 s, a query of the heading
+  /// that took the busy simulator 21.5 s, was interrupted at the deadline, so the wait failed
+  /// having compared nothing, and the failure's own fresh read then found the very text it
+  /// waited for (docs/DECISIONS.md, "What main's offline run showed").
   @MainActor
   func awaitHeading(
     _ label: String,
     in app: XCUIApplication,
     timeout: TimeInterval = 20
   ) throws {
-    let heading = app.heading
-    let reads = NSPredicate(format: "label == %@", label)
-    let waited = XCTNSPredicateExpectation(predicate: reads, object: heading)
-    guard XCTWaiter().wait(for: [waited], timeout: timeout) == .completed else {
-      let shown = heading.exists ? heading.label : "no heading"
-      throw HomeScreenError("The heading never read \"\(label)\"; it reads \"\(shown)\"")
+    let read = readHeading(in: app, within: timeout, "to read \"\(label)\"") { $0.shows(label) }
+    if let failure = read {
+      throw HomeScreenError("The heading never read \"\(label)\" on screen: \(failure)")
+    }
+  }
+
+  /// Reads the heading (`HeadingRead`) at once, then four times a second, until a read that
+  /// ended within `timeout` seconds finds what `done` holds for; the verdict is that read's. A
+  /// read counts only if it ended in time: a snapshot is the tree as the app's main thread
+  /// captured it, which a slow or stuck main thread puts off towards the read's end, so a read
+  /// begun in time and answered late shows the screen after the deadline, and fails the wait
+  /// whatever it found. No read begins after the deadline. Nil when one counted; otherwise what
+  /// the failure says: how many reads in how long, when the last began and how long it took,
+  /// what it found, and, when it found what was awaited too late, when it ended. A read that took
+  /// 5 seconds or more, which no screen should, is attached (`slow-read`, naming `what` was
+  /// awaited), pass or fail, so a slow main thread in the app (where the read is made) shows even
+  /// when the wait passes.
+  @MainActor
+  func readHeading(
+    in app: XCUIApplication,
+    within timeout: TimeInterval,
+    _ what: String,
+    until done: (HeadingRead) -> Bool
+  ) -> String? {
+    let start = Date()
+    let deadline = start.addingTimeInterval(timeout)
+    var reads = 0
+    var slow: [String] = []
+    defer {
+      if !slow.isEmpty {
+        attachText(
+          "Waiting for the heading \(what): " + slow.joined(separator: "; "), as: "slow-read")
+      }
+    }
+    while true {
+      let read = HeadingRead(app)
+      reads += 1
+      let begun = read.began.timeIntervalSince(start)
+      let ended = begun + read.took
+      if read.took >= 5 {
+        slow.append(
+          "read \(reads), begun at \(secondsText(begun)) s, took \(secondsText(read.took)) s")
+      }
+      let inTime = ended <= timeout
+      let matched = done(read)
+      if inTime, matched { return nil }
+      if inTime {
+        RunLoop.current.run(until: min(Date().addingTimeInterval(0.25), deadline))
+        if Date() < deadline { continue }
+      }
+      let waited = Date().timeIntervalSince(start)
+      let late =
+        matched
+        ? ", but only at \(secondsText(ended)) s, after the \(secondsText(timeout)) s deadline"
+        : ""
+      return "\(reads) \(reads == 1 ? "read" : "reads") in \(secondsText(waited)) s; the last, "
+        + "begun at \(secondsText(begun)) s, took \(secondsText(read.took)) s and \(read)\(late)"
     }
   }
 
@@ -464,8 +520,7 @@ extension XCTestCase {
     guard tab.waitForExistence(timeout: 10) else {
       throw HomeScreenError("No \(page.label) tab")
     }
-    let heading = app.heading
-    let arrived = { heading.exists && heading.label == page.heading }
+    let arrived = { HeadingRead(app).shows(page.heading) }
     if cancelled("tap on \(page.label)", in: app, within: 2, until: arrived, { tab.tap() }),
       !arrived()
     {
@@ -934,5 +989,83 @@ struct ShownScreen {
     if let element = matches.first {
       XCTAssertEqual(element.label, expected, what, file: file, line: line)
     }
+  }
+}
+
+/// The heading as one read of the screen finds it: from one snapshot of the app, every element
+/// with the identifier `heading`, with its label and frame, and the window's frame, with when the
+/// read began and how long the app took to answer it. A snapshot is one call into the app, whose
+/// main thread captures the whole tree at once; a query for the heading (`exists`, `label`, or a
+/// predicate on it) fetches the attributes of each element on its way there one at a time, each
+/// on that thread. On main's run 41327075971, with the simulator busy, such a query took 21.5 s
+/// (114 fetches at about 0.19 s) while a snapshot of the whole app took 0.4 s, the capture 0.26
+/// (docs/DECISIONS.md, "What main's offline run showed").
+struct HeadingRead: CustomStringConvertible {
+  let began: Date
+  let took: TimeInterval
+  /// Each element with the identifier `heading`, in the tree's order; none when the app couldn't
+  /// be read.
+  let headings: [(label: String, frame: CGRect)]
+  /// The window's frame.
+  let window: CGRect
+  /// Why the app couldn't be read, when it couldn't.
+  let unreadable: String?
+
+  /// The heading now, as `app`'s accessibility tree has it.
+  @MainActor
+  init(_ app: XCUIApplication) {
+    began = Date()
+    var headings: [(label: String, frame: CGRect)] = []
+    var window = CGRect.zero
+    var unreadable: String?
+    do {
+      let root = try app.snapshot()
+      window = root.frame
+      var pending = [root]
+      while let element = pending.popLast() {
+        if element.identifier == "heading" { headings.append((element.label, element.frame)) }
+        pending.append(contentsOf: element.children.reversed())
+      }
+    } catch {
+      unreadable = brief(error)
+    }
+    took = Date().timeIntervalSince(began)
+    self.headings = headings
+    self.window = window
+    self.unreadable = unreadable
+  }
+
+  /// Whether the read found a heading at all.
+  var found: Bool { !headings.isEmpty }
+
+  /// Whether a user sees the heading read `label`: one heading, reading exactly `label`, on the
+  /// page on screen, its middle within the window's width. The tree holds the chosen view's page
+  /// wherever the pages are (`pageOffScreen`), so a heading in the tree alone doesn't show it is
+  /// on screen.
+  func shows(_ label: String) -> Bool {
+    guard headings.count == 1, let heading = headings.first else { return false }
+    return heading.label == label && Self.onScreen(heading.frame, in: window)
+  }
+
+  /// Whether a heading's `frame` has its middle within the `window`'s width: on the page on
+  /// screen, not on one beside it.
+  static func onScreen(_ frame: CGRect, in window: CGRect) -> Bool {
+    frame.midX >= window.minX && frame.midX <= window.maxX
+  }
+
+  /// What the read found, for a failure: the heading's label, where it was if not on screen,
+  /// each heading when there were more than one, or why the app couldn't be read.
+  var description: String {
+    if let unreadable { return "couldn't read the app: \(unreadable)" }
+    guard headings.count == 1, let heading = headings.first else {
+      if headings.isEmpty { return "found no heading" }
+      return "found \(headings.count) headings: "
+        + headings.map { "\"\($0.label)\" at \($0.frame)" }.joined(separator: ", ")
+    }
+    let reads = "found it reading \"\(heading.label)\""
+    guard Self.onScreen(heading.frame, in: window) else {
+      return "\(reads) at \(heading.frame), off the window at \(window)"
+    }
+    return reads
   }
 }
