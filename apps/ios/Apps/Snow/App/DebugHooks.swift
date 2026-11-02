@@ -471,8 +471,14 @@ enum DebugHooks {
       answerReported = true
       Task {
         let settings = await notificationSettings()
-        FileHandle.standardOutput.write(Data("debug-notifications shown \(settings)\n".utf8))
+        writeStdout("debug-notifications shown \(settings)")
       }
+    }
+
+    /// Writes `line` and a newline to the app's own standard output, unbuffered: a line for CI's
+    /// `push.sh` to read from the file `simctl launch --stdout` names, never shown.
+    private static func writeStdout(_ line: String) {
+      FileHandle.standardOutput.write(Data((line + "\n").utf8))
     }
 
     /// Whether `answerShown` has written its line this launch.
