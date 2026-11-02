@@ -1626,7 +1626,74 @@ What the design's three reviews added:
     fixture requests (its `deviceFixtures.ts`) through these handlers: all 15 byte-identical. After
     the rebase on 8.1-merged main, the bar is `pnpm mobile:check` and `deviceFixtures.test.ts`
     passing with no packages/mobile or apps/ios file changed, and the iOS workflow, which runs on
-    `packages/server/**`, green.
+    `packages/server/**`, green. Checked on Linux after the merge of 8.1-merged main: all 183
+    generated files up to date, `deviceFixtures.test.ts` passing (17 tests), and no packages/mobile
+    source, generated file or fixture changed. One packages/mobile test changes: `credits.test.ts`
+    reads the website's privacy notice, so its pair for what is kept follows the notice's new
+    words (below). The apps/ios files the branch changes are the macOS test fixes merged into it.
+
+**The website's privacy notice** (`apps/web/src/components/PrivacyBody.astro`, the design's
+section 3.11) describes what the server keeps, so it changes with it. "Last updated" moves to 2
+November 2026. In "Our apps", the notifications item changes in two places, in the design's words
+but for two changes made after review (below the list):
+
+- **What is kept.** "the place you chose (a town, or a location rounded to about 5 km), its time
+  zone" becomes "the places you get notifications for, with their time zones: where you are (your
+  location rounded to about 5 km or, if you haven't shared it, a rough place estimated from your IP
+  address, but not the address itself) and any saved places you turned notifications on for", and a
+  sentence of its own follows: "While you have those, we also keep your iPhone's time zone." The
+  server now keeps a record for each place, each with its zone (decision 18): where the phone is,
+  its own point on the 0.05° grid or the town its connection is in (decisions 2 to 5), never a place
+  chosen on screen, for a version 2 body; and each saved place with its bell on, with the phone's
+  own zone, `deviceTz`, on those records only (decision 21). A body from 8.1's TestFlight builds
+  still registers its one place, any of the three forms, a place chosen on screen included, until
+  those builds expire (decision 27); the notice, written for release builds, no longer names that
+  place. The list of places, after its colon, has to end its sentence, or the units and the switches
+  would read as places. So they move ahead of the places, and "so we can tell you when snow is
+  likely" to the start: "If you turn on notifications in the app, so we can tell you when snow is
+  likely, we keep your device's notification token for the app, your units, which notifications you
+  asked for and the places you get notifications for, with their time zones: …"
+- **How often the app checks in.** "It checks in when you open it: at most once a week, unless you
+  change something." became untrue with decision 3: while where the phone is comes from its
+  connection, the app registers each time it is opened, at most once every
+  `ALERTS.hereRefreshMinutes` (60). It now reads "It checks in when you open it: at most once an
+  hour while it uses a rough place from your internet connection, otherwise at most once a week,
+  unless you change something."
+
+**Two changes to the design's words, from review.** Its "a rough place estimated from your IP
+address, which we don't keep" could be read as not keeping the place, which is kept: it is the free
+record (`follows: 'ip'`), kept for up to `ALERTS.ipPlaceKeepDays` (7 days) after it was located when
+a check-in's connection can't be located (decision 5). Only the address isn't, so "but not the
+address itself". Its "; while you have saved places, your iPhone's time zone" claimed the zone for
+starred places with no bell, and for saved places after a refund, when only a saved place with its
+bell on has a record to hold `deviceTz` (decision 16: "only while a saved place has notifications
+on"); after the colon, it also read as one more place. So it takes the design's words for the app's
+Your privacy (its section 3.11), as a sentence of its own: "While you have those, we also keep your
+iPhone's time zone." The next sentence's "With them" would then have read as "with those saved
+places", so it says "With all of this we keep an ID made from the token, …".
+
+The rest of the item stays, because it stays true. "but not the address itself", and the website's
+own "We do not store your IP address with them": `devices.mts` hands the handler Netlify's `geo`
+(town, region, country and coordinates), never the address, and only the located point on the grid
+is stored. "90 days after the app last checked in, so about 90 days after you last opened it":
+nearer still with hourly check-ins ("The app's support page and privacy notice (S8)", "When it
+goes"). "It holds no token or place": a saved place's notes are keyed `snow.<id>.<pid>`, and once a
+DELETE or forgetting has taken the salt no pid can be matched to a place (decision 18). The records'
+new fields add nothing the list leaves out: `slot` and `shadowedBy` are pids, `country` is the
+place's, `follows` and `locatedAt` say how the free place was found and at which check-in, and the
+salt is random bytes.
+
+`e2e/credits.spec.ts` pins the item in full on all four sites; written first, it failed on the old
+page (the 8 runs of the legal pages; the 2 of the footer's credits passed) and passes on the new.
+`credits.test.ts` (packages/mobile), which holds Your privacy's facts to the notice's words, reads
+the page too: its pair for what is kept keeps the app's half, 8.1's one place ("the place, its time
+zone, your units and which notifications you chose"), and the notice's half is now "your units,
+which notifications you asked for and the places you get notifications for, with their time
+zones". Phase 8.4a gives Your privacy the places (the design's section 3.11) and changes the app's
+half. The support page (`SupportBody.astro`) still names one place, in "Turning notifications off
+and deleting your data" ("the place, its time zone") and "It's for another place"; it describes the
+app as 8.1 builds it, so those two answers change with the app. The design's section 2.10 changes
+the page in phase 8.4b, but not them.
 
 **Where the build differs from its design.**
 
@@ -1701,7 +1768,8 @@ endpoints", the 2 KB limit, "No place, or the IP location's empty one, is a 400"
 bodies), one write per id a minute timed from the record and the move's single record (both now for
 8.1's bodies only), and the test's one push; in "Notifications: the alert store and the push layer"
 and "Notifications: the run", forgetting one registration; in "The app's support page and privacy
-notice (S8)", the deletion timing reasoned from the weekly check-in alone.
+notice (S8)", the notice's one place with its zone, and the deletion timing reasoned from the
+weekly check-in alone.
 
 ## The iPhone app's foundations (packages/mobile, apps/ios)
 
@@ -3233,9 +3301,11 @@ the website carries both for the snow app (iOS build spec, section 5.8 and 15.5)
   ID made from it, the place, zone, units and switches, the app's version, whether it is a
   developer build (`env`), when notifications were turned on (`createdAt`) and when the app last
   checked in (`updatedAt` and `seenAt`, both set by every PUT). `v`, `app` and `platform` say
-  nothing about anyone. The claims the run and the test send write (`sent/` and `test/`, keyed by
-  the ID, holding no token or place) outlive a delete until the 03:00 UTC cleanup takes them, up
-  to about three and a half days later, so the notice and the support page say "a few days".
+  nothing about anyone. (Since "Notifications: several places on one phone", every place with its
+  zone, and saved places' `deviceTz`: "The website's privacy notice" there.) The claims the run
+  and the test send write (`sent/` and `test/`, keyed by the ID, holding no token or place)
+  outlive a delete until the 03:00 UTC cleanup takes them, up to about three and a half days
+  later, so the notice and the support page say "a few days".
   So does the run's `judged/` note (`{ at }`, keyed the same way), written for a registration
   judged with nothing to send in a zone the run left unfinished; since phases 5 and 6 were
   reviewed together, both pages and Your privacy name it too ("some forecast checks that found
@@ -3250,12 +3320,15 @@ the website carries both for the snow app (iOS build spec, section 5.8 and 15.5)
     notice, "about three months" on the support page. (Since "Notifications: several places on
     one phone", every place a PUT writes gets the same stamp, so a phone's places go together,
     when the run first finds one stale. While the free place is approximate, the app puts each
-    time it is opened, at most once every `ALERTS.hereRefreshMinutes` (60, from phase 8.4a), so
-    its places go about 90 days after it was last opened; otherwise it still puts weekly with
-    nothing changed, so they can go about 83 days after. Both are still "about 90 days" and "about
-    three months". A place located from the connection can go sooner: the first PUT more than
-    `ALERTS.ipPlaceKeepDays` (7) after it was located whose connection can't be located deletes
-    it.)
+    time it is opened, at most once every `ALERTS.hereRefreshMinutes` (60, from phase 8.4a), as
+    the notice's check-in sentence now says ("at most once an hour while it uses a rough place
+    from your internet connection, otherwise at most once a week"). Its last PUT is then less than
+    an hour before it was last opened, so its places go about 90 days after that; otherwise it
+    still puts weekly with nothing changed, so they can go about 83 days after. Both are still the
+    notice's "90 days after the app last checked in, so about 90 days after you last opened it"
+    and the support page's "about three months". A place located from the connection can go
+    sooner: the first PUT more than `ALERTS.ipPlaceKeepDays` (7) after it was located whose
+    connection can't be located deletes it.)
   - **In the app's copy since phase 6.2.** Section 15.5's text and `APP_COPY.privacyNotifications`
     (the app's summary, above the live data and the link to this notice) had the shorter list and
     "90 days after you last open the app". Phase 6.2 gave the app's lines the notice's facts:
