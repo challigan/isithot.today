@@ -3,6 +3,7 @@ import IsItLogic
 import IsItModel
 import IsItPurchases
 import IsItState
+import StoreKit
 import XCTest
 
 /// StoreKit 2 as the app has it (`StoreKitPurchases`), forwarding every call `PurchaseModel`
@@ -74,7 +75,7 @@ final class RecordingPlatform: PurchasePlatform {
   /// Notes `call` in `calls`, and in `timeline` with the time and `transactions`.
   private func note(_ call: String, _ transactions: [UInt64] = []) {
     calls.append(call)
-    let time = Date().formatted(Date.ISO8601FormatStyle(includingFractionalSeconds: true))
+    let time = logTime()
     let ids = transactions.map(String.init).joined(separator: ", ")
     timeline.append(ids.isEmpty ? "\(time) \(call)" : "\(time) \(call) [transaction \(ids)]")
   }
@@ -193,6 +194,49 @@ enum StoreKitTestStop: Error {
   case productNotReady
   /// Snow.storekit isn't in the test bundle.
   case noConfiguration
+  /// StoreKit still listed the app's transactions after `clearTransactions()` (setUp).
+  case notCleared
+  /// A refund test's buy made no purchase of its own to refund.
+  case nothingBought
+  /// StoreKit Test never listed the transaction a refund test's buy made.
+  case notListed
+}
+
+/// Every transaction StoreKit itself lists for the app, by ID, read as the app reads StoreKit:
+/// `Transaction.all` (the history, refunded ones too), `currentEntitlements` (what
+/// `PurchaseModel` reads at launch) and `unfinished` (where an unverified purchase is left).
+func storeKitTransactionIDs() async -> Set<UInt64> {
+  var ids: Set<UInt64> = []
+  for await result in StoreKit.Transaction.all { ids.insert(result.unsafePayloadValue.id) }
+  for await result in StoreKit.Transaction.currentEntitlements {
+    ids.insert(result.unsafePayloadValue.id)
+  }
+  for await result in StoreKit.Transaction.unfinished { ids.insert(result.unsafePayloadValue.id) }
+  return ids
+}
+
+/// Waits, looking every 20 ms for up to `timeout` seconds, until StoreKit lists no transaction
+/// for the app (`storeKitTransactionIDs()`); gives what it listed last and how long it waited.
+/// `SKTestSession.clearTransactions()` empties StoreKit Test's server before it returns, but
+/// storekitd drops its own copy of the app's transactions, which `currentEntitlements` can answer
+/// from without asking the server, later, on a queue of its own: 1 to 84 ms later on runs
+/// 41364703412 and 41358085179 (docs/DECISIONS.md, "What PR #44's StoreKit run showed"). Once a
+/// read lists nothing, nothing from before the clear can come back, as the server holds none.
+func untilStoreKitListsNothing(timeout: TimeInterval = 10) async -> (
+  left: Set<UInt64>, waited: TimeInterval
+) {
+  let start = Date()
+  var left = await storeKitTransactionIDs()
+  while !left.isEmpty, Date().timeIntervalSince(start) < timeout {
+    try? await Task.sleep(for: .milliseconds(20))
+    left = await storeKitTransactionIDs()
+  }
+  return (left, Date().timeIntervalSince(start))
+}
+
+/// `date` as the simulator's log has it: UTC, to the millisecond.
+func logTime(_ date: Date = Date()) -> String {
+  date.formatted(Date.ISO8601FormatStyle(includingFractionalSeconds: true))
 }
 
 /// Waits up to `timeout` seconds, looking every 0.1 s, until `read()` gives `expected`; fails

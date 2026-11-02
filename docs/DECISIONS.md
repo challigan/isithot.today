@@ -2480,9 +2480,9 @@ once to VoiceOver, and every text size up to AX5 (sections 9.5, 10.1, 10.2 and 1
   little out of step. `GlyphMotion` says when: on the glyph's first paint (its first band, also
   after a new place's loading state) and when the band changes, never with Reduce Motion, which
   also stops a drift under way. `GlyphView` (IsItUI) draws it with `TimelineView(.animation)`,
-  paused when still. Under `-now` and, beyond the task, `-uitest` (which already turns
-  animations off) the glyphs never drift (`DebugHooks.stillMotion()`), so no attached screen
-  catches the flakes faded.
+  paused when still. Under `-now` and, beyond the task, `-uitest` (which turns UIKit's animations
+  off, though not SwiftUI's: below, "What PR #45's first macOS run showed") the glyphs never
+  drift (`DebugHooks.stillMotion()`), so no attached screen catches the flakes faded.
 - **Changes are announced once** (sections 9.5 and 16): `Announcements` (IsItState) is handed
   the page on screen each time it is drawn, and gives its heading when it says something new on
   the same view, which `HomeView` posts as an announcement: the answer arriving after
@@ -4912,6 +4912,407 @@ whose page or sheet is slow to come. Until then the re-tap rests on a count
 nothing on a simulator has shown working, and a run whose control fails says so before any
 re-tap is trusted.
 
+**What main's offline run showed** (63bc449's push run 41327075971, job 124909676510; PR #43's
+and #44's runs passed the test):
+
+- **OfflineTests.testOfflineWithNothingSaved failed on a heading that was right.** After a tap on
+  This week it said the heading never read the week's words, and that it read them: the two
+  texts identical, plain ASCII. The tap worked: the recording shows the week page settled by
+  17:30:14.99, half a second after it; `debug-cancels` read 0; the tree held one `heading`, on
+  `page-week`. Every read of it that finished after the tap gave the expected words (17:30:23.46
+  to 17:31:06.29).
+- **The wait compared nothing.** `awaitHeading` waited with an `XCTNSPredicateExpectation`
+  (`label == …`) in an `XCTWaiter`. Each evaluation is one query of the heading, in which the app
+  fetches the attributes of each element on the way to it one at a time, on its main thread: 114
+  fetches here. The wait evaluated once, a second after it began, and that query took the app
+  21.5 s, about 0.19 s a fetch against 0.5 to 2.8 ms in the test before. At the 20 s deadline the
+  waiter interrupted it ("Interrupted by waiter") and reported a timeout. The failure's own
+  `heading.exists` and `heading.label`, fresh reads outside any waiter, then ran to their end
+  (10.9 s, 2.5 of it queued behind the abandoned query, which the app finished anyway, and 4.7 s)
+  and found the expected words. `tap(_:in:)`'s own check had already read them at 17:30:30.48,
+  and threw that away.
+- **The whole simulator was slow.** Queries in this test took a median of 1.17 s, against 0.02 to
+  0.27 in every other test of the run; the same process went fast, slow and fast again in the
+  next test, and quitting it took 22 seconds. The slow spells match mediaanalysisd's CoreML text
+  embedding for spotlightknowledged, which dasd's periodic timer started at 17:29:24, about 50
+  minutes after the simulator booted, to within 2 to 4 seconds across three starts and stops.
+  That it caused them is inferred (the log has no CPU figures), and reads of 3 to 7.5 s came
+  elsewhere in the run without it. Not the app: the same tree, 22 elements before the heading,
+  and no work of its own logged.
+- **A snapshot of the whole app stayed fast.** It is one call into the app, whose main thread
+  captures the whole tree at once: in the same slow spell each took 0.4 s at most (the capture
+  0.00 to 0.34 s), while a query of the heading took up to 21.5 s.
+- **So the heading's waits read snapshots** (`readHeading`, `HeadingRead`, HomeScreens.swift):
+  one at once, then four a second, each the screen at one moment, judged there and then: one
+  `heading`, its middle within the window's width, so on the page on screen and not one beside
+  it (the tree holds the chosen view's page wherever the pages are), reading the page's words
+  exactly. Each wait keeps its timeout, and the deadline is strict: a read counts only if it ended
+  by then. A snapshot is the tree as the app's main thread captured it, which a stuck main thread
+  puts off towards the read's end, so a read begun in time and answered late shows the screen
+  after the deadline: it fails the wait whatever it found, and says so ("but only at 31.2 s,
+  after the 20.0 s deadline"). No read begins after the deadline, and none is interrupted (an
+  interrupted query runs on in the app and holds up the next). The failure is that last read's:
+  how many reads in how long, when the last began and how long it took, and what it found (the
+  words, the frame when off the window, each heading when more than one, or why the app couldn't
+  be read), so the verdict and the message can't disagree. A read of 5 seconds or more is
+  attached as `slow-read`, pass or fail, so a slow main thread shows even when the wait passes.
+  Every wait for the heading reads this way: `awaitHeading`; the launches' (`launchApp`, and the
+  own launches of `AdsTests`, `FixtureLaunchTests`, `LaunchTests` and `PickerTests`); the check
+  for the heading in the 2 seconds after a tab tap (`tap(_:in:)`, `FixtureLaunchTests.show`);
+  `FixtureLaunchTests.waitForHeading`; and `PickerTests.waitForHeading`, after a picker choice,
+  where `wait(for:label:)` had a predicate on the heading in a waiter. No wait is longer, no retry
+  is added, and the words must still match exactly.
+- **Still exposed, then**: the waits on elements other than the heading (about 85
+  `waitForExistence` calls and 13 predicate expectations, some in helpers used many times, on
+  tabs, buttons, readouts, sheets and the picker's lines), whose queries took up to 10.9 s in this
+  spell against timeouts of 5 to 15 s; none failed, and each was to move to a snapshot read should
+  one fail so. On PR #46's run one did, UpgradeTests' wait for the thanks, and all 13 predicate
+  waits have moved together, as the same helper came within 1.55 s of failing in another test of
+  that run, and PR #45's green run spent 4.42 s of 10 on one evaluation of the keyboard's wait
+  (below, "What PR #46's first macOS run showed"). The `waitForExistence` calls stay: a starved
+  query makes them slow, not wrong, as each ends with an existence check that runs to its end and
+  decides what it returns. Stopping the simulator's Spotlight embedding in `ci/simulator.sh` might
+  make the load rarer; untried.
+- **Checked on Linux, against stubs** (session scratchpad: flaky/uicheck): the 13 UI test files
+  compiled against the XCUITest stubs; 12 checks of the wait against fake apps (a read answered
+  after the deadline failing, and saying it found the words only then, as a stuck main thread's
+  would; a slow read that ends in time counting; no read begun after the deadline, and the wait
+  ending at it; the first read at once; a heading that comes later; the failure being the last
+  read's, each read's words numbered; a starved wait naming itself; the words exactly, a no-break
+  space failing; a heading beside the window, and two headings, failing; no heading, and no app,
+  saying so; the launch's wait), which each of four planted faults fails (the message from a
+  fresh read, a read answered after the deadline counting, a read begun after the deadline, no
+  check of where the heading is); and the tab tap's checks from PR #40's harness (a tap
+  completed, cancelled once, cancelled with its heading come, and cancelled twice, which now
+  fails on the heading with the last read and the count), the fake's snapshot now holding the
+  heading. And `swift format lint --strict` over every Swift file changed.
+
+**For the next macOS run to show.** That the heading's waits pass in a read or two, as a
+snapshot of the app took 0.4 s at most on run 41327075971 where a query of the heading took up to
+21.5; that no `slow-read` is attached outside a slow spell; and that a heading wait that fails
+under load says how many reads it made and how long the last took.
+
+**What PR #45's first macOS run showed** (c2cf199's run 41374081165, job 125050987037; main
+63bc449's run 41327075971, PR #43's on f048209 and PR #44's on 25f803c, run 41358085179, passed
+the same tests):
+
+- **Two contrast audits at Large failed on screenfuls caught mid-fade.**
+  `testDurhamTomorrowAtLarge` (the Tomorrow page, screenful 1) and `testLeedsDryAtLarge` (the
+  week, screenful 1) each found the one "detail" text that Apple's audit flags there on every run
+  "not proven": 93.34% and 68.48% of its pixels none of its surface's colours, the screenful's
+  darkest pixel there #77498a against the page's modelled #632d79, and its lightest #dacfea
+  against #d3c4e5. Apple's audit raised the same issues on the same screenfuls as on PR #44's
+  run.
+- **The words come at once, the colours 0.9 s later.** A tab tap moves the pager at once
+  (`PagerSync`'s `scrollTo` isn't animated), so the new page's heading, and its ink, which is
+  each page's own, are there in the first frame. The background behind the transparent pages is
+  the shell's (`HomeShell`): `PageBackground` keyed by the page on screen's theme, cross-fading
+  with `.easeInOut(duration: 0.9)` when its band changes, and the top bar and the switcher fade
+  on the same curve. The failing test's screen recording shows Tomorrow's white "Yes." over
+  Now's lilac in the first frame, then the background darkening for about 0.8 s; the attached
+  screenful's background is the frame 0.6 s in.
+- **`-uitest` doesn't stop it.** It calls `UIView.setAnimationsEnabled(false)`, which reaches
+  UIKit's animations, not SwiftUI's `.animation` and `.transition`. DebugHooks, the iOS README
+  and the glyphs' paragraph above had said it turned animations off; they now say what it does.
+- **#45 took away a margin no one had chosen.** Neither wait ever waited for the colours. The
+  old one was an `XCTNSPredicateExpectation`, whose first evaluation came 1.01 to 1.06 s after
+  the wait began in all 39 on PR #44's run, after reads by query: a tap's first screenful came
+  1.85 to 3.66 s after the tap. #45's snapshot reads match on their first read, and it came 0.51
+  to 1.95 s after. Every first screenful taken within about 0.95 s of a tap that changed band
+  caught the fade, less the later it came: Durham's week at AX3 after 0.65 s was 37 levels from
+  PR #44's, its Tomorrow at Large after 0.72 s 32 and at AX3 after 0.95 s 4, Leeds' week 9 and
+  11, and Aberdeen's Now at Large after 0.89 s 1, while Durham's week at Large after 1.01 s
+  matched. Every later screenful matched PR #44's exactly, and taps that changed no band (a
+  re-tap of Now; Leeds' Now and Today, both no snow) stayed clean however soon. Only two failed,
+  as only there did Apple flag a text shown whole on the screenful, which the proof reads from
+  that screenful's own screenshot. FixtureLaunchTests' `app-aberdeen-snow-week` caught the fade
+  too, with no proof to fail.
+- **Ruled out**: Apple's audit (the same issues, in the same places), another pixel source (the
+  proof reads the screenful as attached, unchanged), the order of the audit and the readouts, the
+  fixtures and the app (unchanged since main), the pager coming to rest (a tap's isn't animated),
+  and chance, beyond how fast the reads went.
+- **So the tests wait for the colours as well as the words.** A Debug readout, `debug-theme`
+  (DebugHooks' `themeReadout`, under `-uitest`, at the top of the home screen; a Release build has
+  none, and check-archive.sh looks for its name), reads the page on screen's band once every fade
+  the background has begun is over and the last was to that page's colours, and "fading" until then.
+  `HomeShell` tells the app each fade as it begins, with its theme, and gives what the app hands
+  back to `Transaction.addAnimationCompletion(criteria: .removed)` on the transaction the
+  background's own `.animation(_:value:)` gives that fade, so each fade's end is told too (`fades`).
+  IsItUI names no Debug hook, so the app passes the hook in; in a Release build, and without
+  `-uitest`, it is nil and the shell adds nothing. The app keeps both on the main actor, after the
+  update the fade begins in (`ThemeFades`: the fades under way, and the theme the last began to),
+  and the readout judges them in its own body: the band only with no fade under way and the last to
+  the page's theme. So it reads "fading" from the very update that changes the theme, the page's
+  theme then new and the last fade's still the old one, never the new band over the old colours. A
+  loading page is drawn as no snow, so a dry answer changes the band without changing the theme: it
+  begins no fade, and reads at once. `awaitColours` reads it from snapshots by the heading's rules
+  (`readUntil`, which both now share: a read counts only if it ended in time, none begins after the
+  deadline, and the failure is the last read's), for up to 10 seconds, until it reads the page's
+  band exactly ("none" without an answer), so a value left from the page before can't pass, and a
+  page in the same band passes on its first read. `tap(_:in:)` waits once the heading has come and
+  the page is on screen, `launch(_:)` once the opening heading has, and `FixtureLaunchTests`' launch
+  and taps once theirs have, each naming its band. A failure says after what, on which band, and
+  what the last read found ("After the tap on This week the colours never settled on heavysnow: 40
+  reads in 10.0 s; the last, begun at 9.8 s, took 0.0 s and found debug-theme reading "fading"").
+  Each wait that passes is attached (`colour-wait`: after what, on which band, on which read, when
+  that read began and ended, what the first read found, and, after a tap, how long after the tap
+  began the wait did), failing nothing, as a positive control (below). No audit, exception,
+  tolerance or pause changes; an issue the audit raises on the readout is set apart, as on the
+  others (`DebugReadout`).
+- **Counted, not judged by a theme** (the fix's review). The first version had the readout
+  compare the page's theme with the theme the last fade ended on, which reads settled whenever
+  the page's theme is the one the background last settled on, fades under way or not. A theme
+  left and come back to within 0.9 s would read settled at once, with the background still
+  fading away and back: in `HomeTests.testNearbyLoadsInPlace`, a place chosen from Nearby in snow
+  loads as no snow and answers in snow; in `testTheMiddleTabTurnsToTomorrowAt6pm`, a tap on Now
+  could come within 0.9 s of the 6pm flip from no snow to snow. And an earlier fade's end could
+  pass for a later one's to the same theme: the Nearby test's fade to no snow ending after its
+  tap on Now. Neither test takes a screenshot or audits after those moments, so no audit was
+  caught, but the readout said what it couldn't know. Counting each fade from its beginning to
+  its end closes both, and no longer rests on fades ending in the order they began.
+- **Not done**: a wait on the background's pixels, which would prove only the strip it samples
+  and take a screenshot a read; turning SwiftUI's animations off under `-uitest`, which would
+  test a screen no one sees. `LaunchTests`' launches change no band (the loading page and Leeds'
+  dry answer are both no snow, and the offline ones have no answer), so they don't wait. Nor do
+  the picker's audits, though its sheet wears the page on screen's band and fades between bands
+  in 0.9 s as the home screen does (PlacePickerView's `SheetBackground`, keyed by the theme, with
+  the same animation): those on Leeds and on the IP place's first launch stay in no snow, the
+  loading page's band too, so the theme never changes; `testPickerOnADarkBand`'s snow comes with
+  Aberdeen's answer at the launch, and its audit only after a search, a star, the search cleared
+  and the keyboard put away, each waited for, so seconds after any fade, by a margin no one
+  chose. A picker audit after a change of band would need a wait of its own, as `debug-theme` is
+  on the home screen, out of the tree under a sheet. Settings wears the fixed content palette,
+  so it never fades.
+- **Inferred, not seen**: that each completion comes once the background's opacity transition is
+  removed, and at once under Reduce Motion, as SwiftUI fires each exactly once; that the top
+  bar's and the switcher's fades, on the same curve from the same change, end with the
+  background's; and that the main actor keeps a fade's beginning before its end, running its jobs
+  in the order they come (kept the other way round, the count would only go below zero, still
+  "fading"). A completion that never came would leave the readout at "fading", failing the wait,
+  never passing it early. One that came before the fade was over would pass the waits on a
+  mid-fade screen, which no wait can see: the `colour-wait` attachments are there for that.
+- **Checked on Linux, against stubs** (session scratchpad: flaky/uicheck and flaky/typecheck):
+  the UI test files compiled against the XCUITest stubs; 10 checks of the colours' wait against
+  fake apps (settled, passing on the first read; a fade waited through; another band, or
+  "fading", never passing, the failure naming after what and the band; a page without an answer
+  settling on "none", not "nosnow"; a read answered after the deadline failing; the failure the
+  last read's, none begun after the deadline; no readout, an empty one, and no app, saying so; a
+  wait that passes after a fade attaching its `colour-wait`, kept, with the read it passed on and
+  the first read's "fading"; one settled at once saying its first read found the band; one that
+  fails attaching none) and 2 of the tab tap (waiting through a 0.9 s fade once its heading has
+  come, and attaching that wait, measured from the tap; colours that never settle failing the
+  tap at 10 s), which each of 14 planted faults fails (any settled value passing; no band read as
+  "nosnow"; a late read counting; the message from a fresh read; a read begun after the deadline;
+  the tap not waiting; no readout counting as settled; one read only; the first read a poll late;
+  no `colour-wait`; its first read the last; its count one read; one attached on a failure too;
+  the tap's start not passed to it); #45's 12 checks of
+  the heading's wait and the 4 of the tab tap, unchanged, on the shared `readUntil`; 8 checks of
+  `ThemeFades`, run against the real DebugHooks.swift (a fade read as "fading" from the update
+  that begins it to its end; the review's two timelines, a theme left and come back to, and an
+  earlier fade's end during a later one; every fade begun having to end; a band changing without
+  its theme reading at once; a fade that never ends staying "fading"; an end kept before its
+  beginning never passing early; only the first appearance setting the theme), which each of 7
+  planted faults fails, the rule before the review among them, which fails both of the review's
+  timelines; the app with the real `HomeShell`, type-checked in Debug and Release against a stub
+  SwiftUI with iOS 17's transactions; check-archive.sh's test with the new hook; and
+  `swift format lint --strict` over every Swift file changed.
+
+**For the next macOS run to show.** That the two audits pass again; that every first screenful
+after a tap that changes band comes at least 0.9 s after the tap and matches PR #44's within a
+level, `app-aberdeen-snow-week` too; that the waits for the colours pass in a few reads, on the
+first where the band doesn't change; that no `colour-wait` after a tap that changes band has a
+first read that began less than 0.9 s after the tap (the wait's start after the tap, and the
+read's after that) and found the band, which would mean the completion comes before the fade is
+over, though every wait passed, and that such first reads found "fading" instead; and that none
+times out, which would mean a completion never came.
+
+**What PR #46's first macOS run showed** (307f34d's run 41394508297, job 125113405200, the merge of
+#45's 2887d9b with a server change that touches no iOS code; PR #45's run 41391723791 and PR #44's
+on 7943448, run 41391924511, passed the same tests):
+
+- **UpgradeTests.testSettingsBuysOnItsOwnStack failed on a thanks that was there.** It said
+  `upgrade-outcome` never read "Thank you. Ads are off and widgets are on.", and that it read
+  exactly those words. The purchase wasn't slow: under `-uitest` StoreKit's stand-in
+  (`FakePurchases.buy`, DebugHooks.swift) returns `.completed` with nothing awaited; the app
+  received Buy's touch at 06:22:04.148, and the screen recording's next frame, at 04.208, shows the
+  thanks card with Buy gone, where the frame before, at 01.465, shows Buy for £1.99 (the gear's and
+  the upgrade row's touches put the recording's clock within 0.11 s of SpringBoard's). The wait
+  began at 04.353, 0.15 s after the thanks came, its deadline at 14.353. Every read of the element
+  in the test, the frame and four in the app between 14.171 and 25.929, found one StaticText
+  `upgrade-outcome` reading the thanks: no other match, no sheet over it, no change of label. Of the
+  run's five waiters that timed out, the other four were `waitForExistence` calls, three of them
+  negatives meant to time out.
+- **The wait compared nothing.** UpgradeTests' `waitFor(_:label:)` was an
+  `XCTNSPredicateExpectation` (`exists == true AND label == %@`) in an `XCTWaiter` of 10 s. Its
+  first evaluation comes about a second in (1.00 to 1.08 s after the step before, for all 61 in the
+  run), and each evaluation is one query per attribute: `exists`, then `label` (and three for
+  `expectBuyToTap`'s, `enabled` too, as the result bundle shows). A `firstMatch` query is evaluated
+  in the app as a walk of the live tree on its main thread, element by element. The one evaluation
+  began at 05.376. Its `exists` query took 8.897 s over 278 fetches and returned at 14.274, 0.08 s
+  before the deadline, holding the thanks; its `label` query began at 14.275, and at 14.645 the
+  waiter's watchdog interrupted it ("Interrupted by waiter") and reported a timeout. The failure's
+  own `element.exists` and `element.label`, fresh reads outside any waiter, then ran from 14.649 to
+  21.603 (4.16 s of it queued behind the abandoned query, which the app finished anyway at 18.757)
+  and from 21.604 to 25.932, and found the thanks: so "never read X; it reads X". It is main's
+  offline run's flaw (above), in a wait #45 left.
+- **The app was starved, on and off, through UpgradeTests.** From about 06:18:30 to 06:22:30 queries
+  ran slow in four of its tests (means of 0.86, 0.21, 0.72 and 2.01 s, against 0.02 to 0.28 s
+  elsewhere in the run), with fast stretches between (testRestoreFindsNothing, at 06:21:00, 0.046
+  s), and multi-second `firstMatch` queries came in other suites too (3.74 s in AdsTests, 2.6 and
+  2.8 s in two picker tests). The same helper's evaluation took 7.42 s in testAskToBuy, which passed
+  with 1.55 s to spare, and 3.57 s in testRestoreFindsThePurchase; in this test Buy's own queries
+  took 0.16 to 0.18 s, two seconds before the 8.9 s one. The fetches themselves stayed fast (a
+  median of 0.2 ms, 1.35 s of the 8.9 in all): the app's threads crawled between them, about 9 ms a
+  line of XCTest's own debug logging, roughly 980 lines a query, against 0.3 ms outside the spells.
+  What starved them, CPU or blocked writes to the app's captured standard output (454 MB over the
+  run), isn't shown; the result bundle's unified log wasn't decoded, so the Spotlight embedding
+  main's run pointed to is neither shown nor ruled out. The app logged no work of its own.
+- **Snapshots slowed far less.** Each launch's `colour-wait` snapshot took 0.06 to 0.58 s in those
+  spells, and the worst hierarchy capture seen took 0.84 s (06:19:41.8, against 0.12 s at 06:22:03):
+  a snapshot is one round trip into the app, where a `firstMatch` walk here made about 278 fetches.
+  A snapshot read would have found the thanks on its first read, as it was on screen since before
+  the wait; that is inferred, not run. (The diagnosis's pairing of each slow test's `colour-wait`
+  with a query of 2 to 4.5 s straight after held in two of the four.) PR #45's green run had a spell
+  of its own in PickerTests (query means of 0.50 to 1.15 s, single queries up to 7.9 s), where
+  `waitUntilGone(app.keyboards.firstMatch)` spent 4.42 s of its 10 on one evaluation.
+- **`waitForExistence` is slowed by it, not failed.** On this Xcode (26.6, 17F113) a
+  `waitForExistence` whose waiter times out makes one more existence check outside any waiter, which
+  runs to its end and decides what it returns. testAskToBuy's `page(titled: "Settings")`, 5 s, had
+  its one evaluation interrupted at 5.26 s; the check then took 24.58 s, found the title and passed.
+  testNoProductNoPrice's `XCTAssertFalse(… waitForExistence(timeout: 3))` had its interrupted at
+  3.25 s; the check took 7.37 s and found no row. So its verdict is always a completed read's. It
+  bends the deadline: a positive one can pass on a read that ended long after it, the lenient way,
+  and a negative one judges a later screen than its window, which is stricter, but harmless where
+  the element never comes. A bare `XCTNSPredicateExpectation` in a waiter, or
+  `XCTestCase.wait(for: [expectation(for:…)])`, has no such check. The hand-rolled loops
+  (HomeScreens' `sheetCloses`, `pickerOpens`, `pickerCloses`, `cancelled` and `settledFrame`;
+  UpgradeTests' `result(of:)` and `tapRow`; AdsTests' `waitForAdsPhase` and its own loops) each
+  judge a read that ran to its end, as does `app.wait(for: .runningForeground)`, which reads the
+  app's state. None of them changes.
+- **So every predicate wait on an element reads snapshots**, by the heading's rules (`readUntil`).
+  `ElementRead` (HomeScreens.swift) finds, in one snapshot of the app, every element below the app
+  with the identifier exactly, of the query's type unless any (with no identifier, every element of
+  the type, as the keyboard is found), in the order a `firstMatch` query takes them: level by level,
+  each level in the tree's order, as the app's log of this run shows the starved query walking the
+  tree (the app's children checked, then theirs, before anything deeper). So the first match is the
+  shallowest, the element `app.find` judged, even where an identifier is at two depths. It keeps how
+  many there were and the first one's label, value, frame, and whether it is enabled and selected.
+  `readElement` reads it at once, then four times a second; a read counts only if it ended by the
+  deadline, none begins after it, the failure is the last read's (how many reads in how long, when
+  the last began and how long it took, and what it found, or that it found what was awaited too
+  late), and a read of 5 seconds or more is attached as `slow-read`. Each of the 13 waits keeps its
+  timeout and its condition exactly, and judges the match its query did: the first, for a
+  `firstMatch` (`app.find`), or the only one, for a query that wasn't (`app.buttons["buy"]`), as
+  XCUITest won't read such a query's label, value or state while two elements match it. The
+  identifier exactly is narrower than XCUITest's `["buy"]`, which matches a label too: every element
+  waited on has its identifier, and WidgetLinkTests' tab, found by its words before, is now the
+  button `view-<view>` (IsItUI's `ViewSwitcher.identifier`, which HomeAuditTests already reads),
+  selected and reading the page's label, as the query by its words needed. The 13: UpgradeTests'
+  `waitFor` (the outcome's line, Settings' upgrade row, its thanks, the line with no product),
+  `expectBuyToTap` (one Buy, enabled, reading its price) and `gone`; AdsTests' wait for the thanks,
+  `gone` for the band, the full-screen ad's (`awaitAFullScreenAd`, below) and `expectPlace`;
+  WidgetLinkTests' tab selected, reading its label; SettingsTests' `waitFor` on the recorder's
+  lines, and its wait for Report an ad's email; and PickerTests' wait for the app's settings URL,
+  `wait(for:_:in:label:)` and `waitUntilGone`. A wait for an element to go passes only on a read of
+  an app it could read that found none (`ElementRead.gone`). And before each drag that should put
+  the keyboard away, PickerTests now reads the keyboard there (`expectTheKeyboard`, one read, as
+  text has been typed), so a read that couldn't see the keyboard fails there, rather than passing
+  blind the check that caught PR #33's keyboard bug. The failures that read the awaited element
+  again (UpgradeTests', SettingsTests' and `expectPlace`'s, and the band's `homeGeometry`) now give
+  the last read instead. No timeout is longer, no condition looser, nothing is retried or paused,
+  and nothing more skips.
+- **The full-screen ad's skip is narrower.** AdsTests skips when no full-screen ad loads in 30
+  seconds, as Google had none to give. A snapshot wait's last read can be one the app answered after
+  the deadline, or one that couldn't read the app, and a skip on those would put the simulator's
+  slowness down to Google and keep it out of the failures, as the first macOS run's skips did
+  (below, "When AdsTests skips, and when it fails"). So `awaitAFullScreenAd` skips only when its
+  last read ended in time and found `debug-interstitial` reading `none`, quoting that read, and
+  otherwise fails, stopping the test, saying why it isn't a skip. `readUntil` hands such a caller
+  its last read and whether it ended in time (`last`), so the rule for in time stays in one place.
+  Some skips become failures; none the other way.
+- **Found in review.** Three things the first version of this change got wrong. WidgetLinkTests' tab
+  wait had dropped the tab's words, which the query by them had checked: a selected `view-today`
+  reading Today would have passed for Tomorrow after 6pm. `ElementRead` took the first match depth
+  first, and called it the one `firstMatch` takes, which the app's log shows walking level by level;
+  the two differ only where an identifier is at two depths, as none waited on here is, but the claim
+  and its check were wrong. And the full-screen ad's skip quoted whatever the last read was, a late
+  or blind one included, before blaming Google.
+- **Not done**: moving the 84 `waitForExistence` calls, which starvation makes slow but never wrong,
+  and whose leniency would change; the app and the stand-in, which answered at once; and the
+  simulator's load, whose cause isn't shown, where stopping Spotlight's embedding in
+  `ci/simulator.sh` would at most make the spells rarer.
+- **Checked on Linux, against stubs** (session scratchpad: flaky/uicheck): the UI test files
+  compiled against the XCUITest stubs, whose snapshots now carry `isEnabled` and `isSelected`, as
+  XCUIElementAttributes does; 25 checks against fake apps, 10 of `ElementRead` and `readElement` (an
+  element there found on the first read, at once; one that comes later waited for; a read answered
+  after the deadline failing, and saying it found the words only then; the failure the last read's,
+  each read's words numbered; no read begun after the deadline; the type counting, Settings' upgrade
+  button apart from a group with its identifier, and the keyboard by its type alone; gone only on a
+  read, never on an app that couldn't be read; enabled, selected and the value apart from the label;
+  a slow read attached as `slow-read`, naming the element; the first match the shallowest, then the
+  first of its level, and "the first of 3" said), 6 of UpgradeTests' helpers as the copy has them
+  (run 41394508297's thanks passing on its first read, though each read takes 0.6 s; `waitFor`
+  failing with its last read, never a fresh one; `app.find`'s wait taking the first of two, a
+  button's never passing on two; Buy greyed out, or two Buys, never Buy to tap; `gone` never on an
+  app it couldn't read), 3 of PickerTests' keyboard (a drag putting it away; a read that can't see
+  it failing the control; one left up failing the wait with its last read), 2 of WidgetLinkTests'
+  `open` on durham-tomorrow at 6:05pm (Tomorrow's tab selected passing; one reading Today, or
+  Tomorrow's not selected, failing with its last read) and 4 of AdsTests' `awaitAFullScreenAd`
+  (ready in time passing; none on a last read in time skipping, quoting it; a last read answered
+  late, finding ready or none, failing; an app it couldn't read, or no readout, failing), which each
+  of 27 planted faults fails (the first read a poll late; one read only; a late read counting; the
+  message from a fresh read; a read begun after the deadline; the type ignored; gone on an
+  unreadable app; the value read as the label; enabled read as there; selected never read; the tree
+  read depth first; several never said; `slow-read` not naming the element; `waitFor`'s message from
+  a fresh read; a typed `waitFor` taking the first, and an any-type one needing one; Buy to tap not
+  enabled, or the first of two; `gone` passing blind; no keyboard control; the keyboard's wait not
+  by its type; a level read backwards; the tab's words dropped; the ad skipping on a late read, on
+  any failure, or without a readout; the last read always in time); #45's checks of the heading's
+  and the colours' waits, unchanged, on the same `readUntil`; and `swift format lint --strict` over
+  every Swift file changed.
+
+**For the next macOS run to show.** That these waits pass on their first read or two, the thanks at
+once after Buy; that the keyboard's control finds it before each drag, which shows a snapshot
+holds the keyboard; that WidgetLinkTests finds each tab as `view-<view>` reading its page's
+label; that none of them attaches a `slow-read` outside a slow spell; that the full-screen ad's
+wait, when Google has none, skips on a last read that ended in time; and that one that fails in a
+spell names its reads and the last read's time, and agrees with itself.
+
+**What PR #44's run on b206ff3 showed** (run 41423209752, job 125204342032: #45's 83df4a4 merged
+into the widget branch). 64 of the 65 UI tests passed and none skipped: PickerTests' keyboard
+control found the keyboard before each drag, so a snapshot holds it; WidgetLinkTests found each
+tab as `view-<view>` reading its page's label; the full-screen ad loaded and showed; and the run
+attached one `slow-read`, the failure's.
+
+- **AdsTests.testTheConsentFormThenPrivacyChoices raced its own subject.** It launches in the
+  EEA, where Google's consent form comes over the home screen, and then waited for the heading to
+  read Leeds' answer. The screen recording shows the answer ("No. Rain, not snow.") for about 4
+  seconds, then the form, dimming the home screen behind it. The launch's one read of the heading
+  took 6.8 s (the `slow-read`), so by its end the form was up, and each of the 52 reads of the
+  answer's wait found no heading: while the form is up, the home screen is out of the
+  accessibility tree. Earlier runs passed because a read came in those seconds.
+- **The fix waits for either.** `HeadingRead` counts the web views in its snapshot, and in this
+  test the launch and the answer's wait (`AdsTests.awaitHeadingOrForm`) pass on the heading
+  reading the answer or on Google's form, a web view, by `readUntil`'s rules. The ads are off
+  until the form is answered, so a web view then is the form, not a banner; the test goes on to
+  fail if the ads came on without one, as before.
+- **Checked on Linux** (session scratchpad: flaky/uicheck, `FormCheck`): the answer first passes;
+  the run's shape, the form first, fails `awaitHeading` and passes the new wait; neither, or the
+  heading reading Checking…, fails with the last read; a form read only after the deadline fails.
+  Three planted faults (the form not counted, any element counted as a web view, the heading
+  taken in any words) are each caught. `swift format lint --strict` passes.
+
+**Main merged in after PR #43.** PR #43 brought NotificationsTests, with waits of its own written
+before PR #46's run: `waitFor(_:label:)` and `waitFor(_:value:)`, predicates in a 10 s
+`XCTWaiter` whose failures read the element afresh, and `gone`, a `waitForNonExistence`. They
+now read snapshots by `readElement`, as UpgradeTests' do: by identifier, the first of any type
+(as `app.find` took it), the recorder's line as the one static text `debug-opened`, the failure
+the last read's with `debug-cancels` after it; `gone` needs a read of an app that could be read.
+`waitForNonExistence` moves too: unlike `waitForExistence`, nothing has shown that it ends with a
+read that runs to its end. Linux's XCUITest stub gains what the notification tests use
+(`UIApplication`'s settings URLs, the switch and toggle types, SpringBoard's alerts), so the
+harness type-checks them; the element waits' 53 checks still pass.
+
 ## After #34's fourth full run
 
 PR #34's fourth full macOS run, on c74aa22 (run 40189947895, job 121158965836), passed 43 of the 44
@@ -5448,8 +5849,10 @@ under `-noads 1` or in a Release build): `debug-ads`, the phase (`idle`, `asking
 shown and closed this launch (`AdsModel.interstitialsShown`). `asking` (UMP's update, its form or Mobile Ads'
 start still out) and `withheld` (UMP says no ads may be requested) skip; `idle` in a free launch,
 or no readout, fails, as does `on` with no band within 5 seconds. The full-screen test waits for
-`ready` before it chooses a place, skips if no ad ever loads, and fails if one was ready and the
-app never counts it shown. The screen can't say whether an ad showed, nor whether the consent form
+`ready` before it chooses a place, skips if no ad ever loads (since PR #46's review, only when its
+last read ended in time and found `none`; reads too slow to say fail, as the simulator's: above,
+"What PR #46's first macOS run showed"), and fails if one was ready and the app never counts it
+shown. The screen can't say whether an ad showed, nor whether the consent form
 took a tap: on eb5dfd8's run Google's full-screen ad came over the picker (the screen recording
 shows "This is an interstitial test ad" over it), yet XCUITest still found the home screen's place
 button, so the test took the ad for the home screen and failed; and the form's Consent button was
@@ -5866,7 +6269,10 @@ suite runs on an iPhone 17 with iOS 26.2, which Xcode 26.6 can test on as the ap
   then stops each `StoreKitPurchases` the test made (XCTest keeps every test case, and what it
   holds, until the run ends, so a listener left running would hear, and finish, the next tests'
   transactions), waits again for an update that came in between, and clears them again.
-  Simulated errors are cleared by `resetToDefaultState()`, never by
+  setUp, once it has cleared them, waits until StoreKit itself lists none of the app's
+  transactions, as storekitd forgets them only after `clearTransactions()` returns, and each
+  refund test refunds the transaction its own buy made (below, "What PR #44's StoreKit run
+  showed"). Simulated errors are cleared by `resetToDefaultState()`, never by
   `setSimulatedError(nil, forAPI:)` (below, "What PR #40's first macOS run showed").
 - **Never a pass on a broken environment.** Every buy and restore test first requires the product
   loaded at `Constants.Purchase.displayPrice` (`readyModel()`, which stops the test otherwise).
@@ -6142,6 +6548,64 @@ element that takes no tap.
 - **Inferred, not seen**: the done's transaction ID (its query is redacted) and what the test
   server did with two requests for 0 at once (it logs nothing of it). It happened once.
 
+**What PR #44's StoreKit run showed** (run 41364703412, job 125022702988, on a798031, which
+changes only SystemFaces.swift and DECISIONS.md; 25f803c's run 41358085179 and a6d0a7d's run
+41300854428 passed all 18):
+
+- **testARefundLocksAgain failed at its unwrap: the session had nothing to refund.** Its timeline
+  ("StoreKit calls, the launch") reads `listen`, then `entitlements → verified [transaction 0]`
+  15 ms later, then `product → ready`, and nothing more: no buy and no finish, and storekitd
+  logged no payment. The model had started owned, so `buy()` returned at its `owned` guard
+  without asking StoreKit, `XCTAssertTrue(owned)` passed for the wrong reason, and
+  `session.allTransactions()` was empty.
+- **The purchase it read was the previous test's.** testAPurchaseElsewhereArrivesThroughUpdates
+  ends owning transaction 0 (the copy's last revision decodes to 00:09:00.860942, its
+  `session.buyProduct`). `SKTestSession.clearTransactions()` empties StoreKit Test's server and
+  returns in about 0.5 ms, but storekitd drops its own copy of the app's transactions
+  (`[InAppReceiptDatabaseStore] Clearing transactions`) later, on a queue of its own: 1.3 to 47 ms
+  later on this run, up to 84 ms on 25f803c's. tearDown cleared at 00:09:01.695 and setUp at
+  01.708; the launch read ran from 01.719 to 01.723 and answered from the copy, starting no sync
+  with the server ("Finished enumerating 1 current transactions"); the two clears reached the copy
+  at 01.743 and 01.752.
+- **Not a6d0a7d's late finish, which held**: test 5's finish returned at 01.684, 12 ms before
+  tearDown's clear, and no transaction-done request reached StoreKit Test after any clear.
+- **An old race, seldom lost.** setUp has always cleared only milliseconds before a test's first
+  read: this read began 11.0 ms after setUp's clear, and the same read on 25f803c 14.6 ms after.
+  There it came 3.9 ms after tearDown's clear reached the copy, and found nothing. Reads begun with
+  a clear still on its way are routine (five on that run, and two on this besides the failing one;
+  three and one of them ended with it still on its way); they matter only when the copy still holds
+  a verified, unrevoked purchase and the next test reads at launch, as this pair does.
+  testBuyUnlocksKeepsItAndFinishes could read testAskToBuyWaitsThenApproved's purchase the same way,
+  across the 25 ms test between them, should a clear lag more than about 45 ms; testRestoreCancelled
+  reads a stale copy too but asserts nothing on it. How often it fails is unmeasured.
+- **So setUp waits until StoreKit itself lists nothing for the app** once it has cleared
+  (`untilStoreKitListsNothing`: `Transaction.all`, `currentEntitlements` and `unfinished`, read
+  every 20 ms for up to 10 seconds), records "StoreKit listed [] at …, N ms after
+  clearTransactions() at …", and otherwise fails, naming the IDs still listed, and stops the test.
+  Not a fixed sleep: the lags reached 84 ms, so any figure is a guess. Not in tearDown alone,
+  which leaves setUp's own clear and a run's first test unguarded. Not `currentEntitlements`
+  alone, which misses a refunded or unverified leftover. Once a read lists nothing, nothing from
+  before the clear can come back, as the server holds none; the other clear can still land
+  during a test, after which storekitd reads the server again, which still holds the test's own
+  purchase (inferred, not seen). The session is kept before the clear, so tearDown resets it
+  should setUp stop.
+- **And each refund test refunds its own purchase**: the transaction with the ID its buy's result
+  gave, once StoreKit Test lists it (waited for up to 10 seconds), never the session's first. A
+  buy that made none fails as that, saying whether the model never asked StoreKit (with its
+  calls) or what StoreKit answered; a session that never lists it fails with what it lists.
+  testARefundLocksAgain also requires nothing owned at launch, as
+  testBuyUnlocksKeepsItAndFinishes does. Each test's timeline is still attached.
+- **No change to the app.** `currentEntitlements` is StoreKit's answer, which the model must
+  trust; only StoreKit Test's `clearTransactions()` can empty a history under it, and the App
+  Store has nothing like it. Reading again in `buy()`, or dropping its `owned` guard, would let an
+  owner buy again.
+- **Inferred, not seen**: why this clear lagged 47 ms (test 5's post-finish queue check was still
+  running; nothing in the log shows a lock), and that a clear landing after a test's own purchase
+  is harmless (the one case on record was `AppStore.sync()`'s clear, not a late one).
+- **Checked on Linux, against stubs** (session scratchpad: flaky/typecheck): the StoreKit tests,
+  with the app's sources, type-check in Debug and Release against stub StoreKit and StoreKitTest
+  modules; and `swift format lint --strict` over every Swift file changed.
+
 **What only Carl's TestFlight purchase shows**: the real product and its price from the App
 Store, Apple's sheet, a purchase with his own Apple Account, the ads going, and the purchase back
 after a reinstall (docs/SETUP.md, "The app's purchase"); with 7.2, V3 (read from the widget's log
@@ -6395,9 +6859,12 @@ re-banded in the test: the answer, band label, amount 0 to 25 and counts) in eve
 Screen families in full colour, accented and StandBy, the Lock Screen ones vibrant (iPhone draws
 them in nothing else), 54 tiles; locked and stale in every family and mode, 18; ten real fixture
 moments and durham-tomorrow at 6:05pm on the Lock Screen, 23; AX3, 4; the gallery and the
-placeholder, 3; and the medium with its `Link`, to see whether `ImageRenderer` draws it. 103 tiles,
-at the HIG's 430-wide row (small 170, medium 364 by 170, circular 76, rectangular 172 by 76, inline
-257 by 26), which `widgetSizes.test.ts` holds to the contrast gate's. The test draws the palette
+placeholder, 3; the medium with its `Link`, to see whether `ImageRenderer` draws it; and, since
+Carl's first look (below), the medium with all six days after the middle day: at XXXL, in its `Link`
+at Large and XXXL, at the 393-wide row's size (338 by 158, `-narrow`) at both, and with "Snow
+possible" first at XXXL and narrow at Large, 7. 110 tiles, at the HIG's 430-wide row (small 170,
+medium 364 by 170, circular 76, rectangular 172 by 76, inline 257 by 26) but for the narrow mediums,
+which `widgetSizes.test.ts` holds to the contrast gate's two rows. The test draws the palette
 itself, as `containerBackground` draws nothing outside a widget, and the accented, StandBy and
 vibrant tiles are approximations over mid grey (0x8e8e93), black and 0x1c1c1e, since only WidgetKit
 draws the real glass, tint and Lock Screen. Each asserts it drew something over its backdrop, its
@@ -6459,8 +6926,9 @@ them is two blocks, their vectors regenerated, no strings.
 - **`privacyApis.test.ts` is stricter** than the design's walk: it reads the generated folders too,
   as they ship, and matches the five names case-insensitively inside longer ones
   (`contentModificationDateKey`), as Apple's list does.
-- **`WidgetSample.swift` is 2.5 KB, not 1.5:** four week rows in two-space JSON. Every line is
-  under 100 columns, and a test holds it under 3,000 bytes.
+- **`WidgetSample.swift` is 2.7 KB, not 1.5:** five week rows in two-space JSON (four, 2.5 KB,
+  until Carl's first look, below). Every line is under 100 columns, and a test holds it under
+  3,000 bytes.
 - **The test fakes that hold give up after 10 seconds**, not never: Swift Testing's time limit
   can't end a test body that ignores cancellation, so the first mutant run (a `Deadline` that
   waits) hung the whole suite. Ten seconds is 200 times every limit tested, and such a mutant now
@@ -6523,8 +6991,12 @@ them is two blocks, their vectors regenerated, no strings.
 8. **SnowKit's glyphs in the extension** rest on Xcode copying the package's resource bundle into
    the appex: `WidgetBundleTests` and the archive check prove it on the first run; if not,
    `project.yml` copies it (one build phase).
-9. **Memory** (30 MB, forum reports): one answer, the 2.5 KB sample, vector glyphs, about thirty
-   entries at most.
+9. **Memory** (30 MB, forum reports): one answer, the 2.7 KB sample, vector glyphs, about thirty
+   entries at most. Since Carl's first look the medium's right half holds every way to show the
+   week, each list built whole: for six days with dots, 13 lists, 42 rows in all, each with its
+   day, glyph and four copies of its band's label (two of them hidden, measuring), so about 210
+   lines of text where there were 6 rows; unmeasured, as the log line is written before any view
+   is drawn.
 10. **Fonts in the extension** are proven by the archive check, `WidgetBundleTests` and the log
     line's `font=`, not by a render in the extension's own process.
 11. **Merging with 8.1 and 8.2:** in the files both touch, each track's lines stay at least one
@@ -6535,8 +7007,9 @@ them is two blocks, their vectors regenerated, no strings.
     full macOS run with both: about 56 minutes of the ios job's 90.
 12. **Swift without a compiler:** the views and the extension compile only on macOS; the harness
     type-checks them against stubs with Apple's shapes.
-13. **Snapshot sizes** are the HIG's 430-wide row, not the iPhone 17's own; the log line's `width`
-    and `height` tell the real ones on the device, and the contrast gate judges both rows.
+13. **Snapshot sizes** are the HIG's 430-wide row (and its 393-wide medium for four of the week's
+    tiles), not the iPhone 17's own; the log line's `width` and `height` tell the real ones on the
+    device, and the contrast gate judges both rows.
 14. **The link UI test** needs `XCUIApplication.open(_:)` to reach `.onOpenURL`, which 7.1's run
     proves first; if it doesn't, the test goes with 7.1's, and AppModelTests' route tests stand.
 15. **Netlify's quota:** the widgets add requests for each widget on each phone: once every 4 hours
@@ -6550,7 +7023,9 @@ them is two blocks, their vectors regenerated, no strings.
    `WillItSnowTests` with IsItLogic and IsItState linked.
 2. The snapshots draw: every tile, the gauge's (whether `ImageRenderer` draws a `Gauge`) and
    `widget-medium-snow-ok-full-link` (whether it draws a `Link`'s label or a placeholder) in
-   particular, and the 103 tiles on the contact sheet, grouped by family.
+   particular, and the 110 tiles on the contact sheet, grouped by family; the week's tiles
+   (`widget-medium-week-…`) with as many rows as the fonts' metrics say ("After Carl's first
+   look"), none cut off, no word cut short, and the `-link` ones laid out as those without.
 3. The embedded appex (`WidgetBundleTests`): its `IsItAPIOrigin` expanded to the app's https
    origin, its App Group, the four fonts listed, carried and named as `BrandFont` names them,
    SnowKit's bundle with `Assets.car` and the snow glyph in it, its PrivacyInfo.xcprivacy's Coarse
@@ -6598,6 +7073,56 @@ optional refund on a Debug build is in Carl's widget checks, docs/SETUP.md); 20.
 widget lines in the merged words, docs/SETUP.md, "The app's widgets"); V3 ("A Debug log in the
 provider during the snapshot tests": a log line in every build, read on the device, StoreKit asked
 on every timeline); 23.3 (7.3 and 7.4 cut, to 1.1).
+
+**After Carl's first look.** On his iPhone (iOS 26, a large iPhone), the medium widget for Newcastle
+showed on its right half "Now", then "No. Too warm for…" on one line, then two rows (Mon, Tue), with
+room below for about two more, and he asked: "can it fill the space with the rest of the days?" The
+brief found three causes. The planner kept four of the days after the middle day (`slice(0, 4)` in
+client `widgetEntries`, `prefix(4)` in `WidgetPlanner`), though the week has up to six after it; the
+right half's `ViewThatFits` tried four rows, then two, then none, with no three; and Now's line (two
+lines at most) and the rows shared the height at the default layout priority, so Now got one line.
+The first two are plain in the code. The third is the brief's reading: by the fonts' metrics the old
+stack would have given Now its two lines and shown four rows at Large on a 364 by 170 medium, so
+Carl's text size, or the phone, differs from the model, and his Text Size setting is worth asking
+before his report is called fixed. Now, TypeScript first, the face carries every day after the
+middle day (six, or the week's seven with no middle day; `widget.json`, `widgetFace.json` and the
+sample regenerated, the sample with five rows). The medium gives Now its lines first, by a layout
+priority (SwiftUI offers the higher-priority child all the space but the minimum the others need,
+and the rows need none): up to XXXL, two lines at most, shrinking to `WidgetType`'s 0.75, which by
+the metrics every Now line fits on every iPhone medium the HIG lists, from the SE's to the 430-wide
+row's; at the accessibility sizes, as many lines as the height holds, shrinking to half (12.5 points
+at AX1, over the HIG's 11), and the word "Now" above it goes before any of its own words (VoiceOver
+reads "Now: …" either way). Not `fixedSize`: a fixed Now taller than the half would draw past the
+widget's edge. By the metrics one Now line still ends in "…": "Maybe. Snow showers around." at AX5
+on the SE's medium. Then the medium shows as many whole rows as fit, from all of them down to one,
+then none (`ViewThatFits`, which takes the first child whose ideal size fits): no row cut off, and
+no gap another whole row would fill. A row's words are never cut short: its band's label shrinks to
+0.85 on one line, as before, then wraps at its words at full size, the row as tall as its lines;
+where even a word won't fit, the row isn't drawn and the list ends before it, as the days run in
+order. The review of the first build found that rows left out for width alone emptied the right half
+at XL and XXL on snowy days; wrapping ends that below XXXL. The dots are the list's choice: a row
+without them means no forecast has data for its day, so they go from every row at once, and only
+where keeping them would cost a row, as the small family's go first. That happens at Large when a
+long label ("Snow possible", "Heavy snow") would wrap beside them and lose a row, so snowy weeks
+often show their rows without dots. By the metrics, durham's week at 5:59pm shows four rows with
+dots at Large on the 364 by 170 medium and three on the 393-wide 338 by 158, two and one at XXXL,
+and none under Now at the accessibility sizes. At XXXL on the SE's and the 375- and 393-wide mediums
+one row fits under Now, and only on one line, so a week whose next day is snowy (a label that wraps)
+shows Now alone there; rows without glyphs would fit most of those, a third way to show each list,
+not taken for its cost (every list is built whole: known risk 9, above). VoiceOver still reads the
+right half as one element, Now and the rows shown. `WidgetSnapshotTests` adds seven tiles of the
+medium with six days (`widget-medium-week-…`): at XXXL; in its `Link` at Large and XXXL, as the
+widget draws it; at the 393-wide size at both; and with "Snow possible" first at XXXL and narrow at
+Large. The next macOS run's tiles, and Carl's iPhone, show the real counts.
+
+**What PR #44's first macOS run showed.** Every check passed, and the tiles match the metrics: four
+rows with dots at Large on the 364 by 170 medium, three on the 338 by 158, two at XXXL, and at AX3
+Now alone on three lines with no word cut. "Snow possible" first stays on one line at Large on the
+338 by 158. The `-link` tiles showed one fault no test checks: in the `Link` around the right half,
+the widget as it is on a Home Screen, Now's second line was centred under its first ("No. Too warm"
+/ "for snow."), as a button centres its label's lines. The right half now sets
+`multilineTextAlignment(.leading)`, so Now's lines, and a wrapped band label's, start at the left in
+the `Link` as without it. Only the next run's `-link` tiles show it.
 
 ## The iPhone app's notifications (phases 8.1 and 8.2)
 

@@ -126,6 +126,12 @@ describe('WidgetSample.swift', () => {
         bandLabel: 'Dry',
         agreement: { snowy: 0, total: 5 },
       }),
+      // Every day after Thursday, the middle day, to the week's end: not only the first four.
+      expect.objectContaining({
+        label: 'Tue',
+        bandLabel: 'Rain',
+        agreement: { snowy: 0, total: 5 },
+      }),
     ]);
   });
 

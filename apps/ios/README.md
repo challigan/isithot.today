@@ -246,7 +246,7 @@ reach the key.
 - **Archive checks**: both bundles have privacy manifests, each declaring coarse location, and the
   four fonts, each named in `UIAppFonts`; the widget has SnowKit's glyphs and the app's https API
   origin; the app has its icon; the widget links no Google Mobile Ads, no location code and
-  no purchase code, nor notifications code; neither binary names any of the 25 debug hooks; the
+  no purchase code, nor notifications code; neither binary names any of the 26 debug hooks; the
   app's manifest declares the device ID (the push token) and its Info.plist registers for
   notifications in production; the three ad units are Google's
   demo ones (test) or yours (real); the app's `SKAdNetworkItems` hold Google's; the app and widget
@@ -780,7 +780,36 @@ as VoiceOver reads them, the week's heading, the Updated line, the offline, unav
 line and Retry, and that nothing else of them is there; `expect(topBar, in:)` the app's name
 (`app-name`), the place pill's label, the notice (`approximate`), "Use my exact location" and
 Settings. Nothing in a test types a page's words. A difference is reported and the test goes on
-to the next; a screen that never comes stops it.
+to the next; a screen that never comes stops it. A test waits for a page's heading the same way
+(`awaitHeading`, `readHeading`): a snapshot at once, then four a second, until one heading, on
+the page on screen, reads the page's words exactly; a read counts only if it ended by the
+deadline, so one the app answers late fails the wait and says when it found the words, and the
+failure is that last read's, with how many reads there were and how long the last took
+(docs/DECISIONS.md, "What main's offline run showed": a predicate in an `XCTWaiter` had its only
+query interrupted at the deadline, and failed having compared nothing). Every wait for the
+heading reads this way, the launches' and the picker tests' too, and so does every other wait that
+was a predicate in an `XCTWaiter`, in UpgradeTests, AdsTests, SettingsTests, PickerTests and
+WidgetLinkTests (`readElement`, `ElementRead`): an element by its identifier exactly and its
+query's type, the first match where the query was a `firstMatch` (level by level, the shallowest
+first, as `firstMatch` walks the tree) and the only one where it wasn't, and gone only on a read of
+an app it could read, each wait with its own timeout and condition
+(docs/DECISIONS.md, "What PR #46's first macOS run showed": UpgradeTests' wait for the thanks had
+its one evaluation cut off at the deadline, the thanks on screen since before it began). PickerTests
+reads the keyboard up before each drag that should put it away, so its wait for the keyboard to go
+can't pass on a read that couldn't see it. The `waitForExistence` calls stay: each ends with an
+existence check that runs to its end and decides it, slow under load but never judged on no read.
+The words come before the colours: a tab tap or an answer brings a page's heading at once, and the
+home screen's background takes 0.9 s more to fade to the page's band. So once the heading has come,
+`tap(_:in:)`, `launch(_:)` and `FixtureLaunchTests`' launch and taps also wait, for up to 10
+seconds, for the colours (`awaitColours`), by the same rules and from snapshots too (`readUntil`,
+`ThemeRead`), until the Debug readout `debug-theme` (below, "Debug hooks") reads the page's band
+exactly ("none" for a page without an answer), which it does only once every fade is over. Colours
+that never settle fail the test, naming the band and what the last read found. No screenshot or
+audit after them catches the fade (docs/DECISIONS.md, "What PR #45's first macOS run showed"). Each
+wait that passes is attached as `colour-wait` (the read it passed on, when that read began and
+ended, what the first read found, and, after a tap, how long after the tap began the wait did),
+failing nothing: after a tap that changes band, a first read less than 0.9 s after the tap should
+find `fading`, which says the readout waits for the fade, as passing waits alone can't.
 
 **The tests** (the UI test plan; `### UI:` in the `ios` job's log names each failure with its
 file and line):
@@ -862,8 +891,8 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   #33's contrast exception for the details and the places nearby alone became the proof for
   every text element after PR #34's first full run.) The issues allowed and any exception a test didn't need are attached
   (`home-<fixture>-<size>-allowed`) and listed in its failure. An issue on one of a Debug build's
-  readouts (`debug-picker`, `debug-pickers` and `debug-cancels`: a point square at most, which a
-  Release build hasn't, `DebugReadout`) is set apart, failing nothing, and listed in
+  readouts (`debug-picker`, `debug-pickers`, `debug-cancels` and `debug-theme`: a point square at
+  most, which a Release build hasn't, `DebugReadout`) is set apart, failing nothing, and listed in
   the times and `-allowed`, every audit's, the sheets' too. Each page's first screenful also
   attaches the app's element tree (`<page>-tree`). Each call goes through `runAudit`
   (ScreenAudit.swift), which times it and reads its issues once it is done, outside XCTest's
@@ -1464,7 +1493,12 @@ website's privacy notice. On the macOS CI:
   cleared, so a test environment that cancels every purchase fails rather than passing as a
   cancel. Simulated errors are cleared by `resetToDefaultState()`, never by
   `setSimulatedError(nil, forAPI:)`, which leaves every later purchase failing (docs/DECISIONS.md,
-  "What PR #40's first macOS run showed"). Each test logs the simulator's iOS version. It runs on an iPhone 17 with iOS 26.2
+  "What PR #40's first macOS run showed"). setUp, once it has cleared the transactions, waits until
+  StoreKit itself lists none of the app's (`untilStoreKitListsNothing`, which it records with how
+  long it took), as storekitd forgets them a little after `clearTransactions()` returns, and a
+  test that read them sooner started with the previous test's purchase; and each refund test
+  refunds the transaction its own buy made, by the ID in the buy's result (docs/DECISIONS.md,
+  "What PR #44's StoreKit run showed"). Each test logs the simulator's iOS version. It runs on an iPhone 17 with iOS 26.2
   (below, "Settled"), in a job of its own (`storekit`), with test timeouts on and 60 seconds a
   test (`ci/test.sh StoreKit`).
 - **The Unit plan:** `AppGroupTests` writes `unlock.v1` through `saveUnlock(_:)`, and
@@ -1514,8 +1548,12 @@ composed widget screenshot) and 7.4 (the App Shortcut) to 1.1. DECISIONS has eac
     for all of it, the slot and the dots go first, then the place. With no middle day, the glyph
     alone and "Not available right now.".
   - **Medium:** the small's face on the left; on the right, Now ("Now", "No. Too warm for snow.")
-    and up to four days after the middle day, each its short name, a small glyph, its band and
-    its dots: four rows, two or none, whichever fits.
+    in up to two lines, then every day after the middle day that fits whole below it (all six,
+    or the week's seven with no middle day, down to none), each its short name, a small glyph,
+    its band and its dots; fewer at larger text sizes. No word is cut short: a band's label
+    shrinks a little, then wraps at its words, and the dots go from every row at once where
+    keeping them would cost a row. At the accessibility sizes Now takes the lines it needs,
+    shrinking to half, and drops its "Now" before its words.
   - **Circular:** the system's capacity gauge, filled for the forecasts that expect snow of those
     with data, with the glyph in the middle; the glyph alone on the system's background without
     counts.
@@ -1670,33 +1708,36 @@ sample), each suite under a one-minute limit and each `WidgetTimeline` with a `F
 own, as Swift Testing runs them in parallel. In packages/mobile: the copy, the face
 (`widgetFace.test.ts`), the sample, the vectors, the client's `widgetReuses`, `widgetFallsBack`
 and `routeLink`, `privacyApis.test.ts` (no shipped Swift names a file-timestamp or boot-time API,
-spec 15.1), `widgetSizes.test.ts` (the snapshots' small and medium sizes are the contrast gate's),
-and the widget's contrast gate in `brandColours.test.ts`: the ink passes 4.5:1 over the whole
-widget at the HIG's sizes for 430- and 393-wide iPhones, glow and all (the lowest is maybesnow's
-small, 4.96). On the macOS CI:
+spec 15.1), `widgetSizes.test.ts` (the snapshots' small and medium sizes, and the narrow medium's,
+are the contrast gate's), and the widget's contrast gate in `brandColours.test.ts`: the ink passes
+4.5:1 over the whole widget at the HIG's sizes for 430- and 393-wide iPhones, glow and all (the
+lowest is maybesnow's small, 4.96). On the macOS CI:
 
-- **The Unit plan:** `WidgetSnapshotTests` draws 103 tiles with `ImageRenderer` at 3x, each
+- **The Unit plan:** `WidgetSnapshotTests` draws 110 tiles with `ImageRenderer` at 3x, each
   `ForecastWidgetView` faced by the real code: every band (durham-tomorrow's tomorrow re-banded in
-  the test) in every family, the Home Screen families in full colour, accented and StandBy, the
-  Lock Screen ones vibrant; locked and stale in every family and mode; ten fixture moments, and
-  durham-tomorrow at 6:05pm on the Lock Screen; AX3; the gallery and the placeholder; and the
-  medium with its `Link`. They are named `widget-<family>-<case>-<mode>`, with `-ax3` at AX3 (say
-  `widget-medium-snow-ok-full`, `widget-small-locked-accented`,
-  `widget-small-durham-tomorrow-1805-full`), at the HIG's sizes for 430-wide iPhones (small 170,
-  medium 364 by 170, circular 76, rectangular 172 by 76, inline 257 by 26), and land on the
-  contact sheet grouped by family. The accented, StandBy and vibrant tiles are approximations,
-  over mid grey (0x8e8e93), black and 0x1c1c1e, since only WidgetKit draws the real ones; they are
-  review artefacts, not pixel gates. `AppGroupTests` (V1) runs the real `WidgetTimeline` over the
-  real App Group, with a server that never answers and StoreKit holding nothing: the answer the
-  app saved is reused, each hour ahead then stale, locked until `unlock.v1` says otherwise, and
-  another store version's file ignored. `WidgetBundleTests` opens the embedded appex: its
-  `IsItAPIOrigin` the app's and https, its App Group, all four fonts listed, carried and named,
-  SnowKit's glyph catalogue in it, its manifest's Coarse Location, a WidgetKit extension, and
+  the test) in every family, the Home Screen families in full colour, accented and StandBy, the Lock
+  Screen ones vibrant; locked and stale in every family and mode; ten fixture moments, and
+  durham-tomorrow at 6:05pm on the Lock Screen; AX3; the gallery and the placeholder; the medium
+  with its `Link`; and the medium with all six days after the middle day (`widget-medium-week-…`):
+  at XXXL, in its `Link` at Large and XXXL, at the 393-wide size at both, and with "Snow possible"
+  first at XXXL and 393-wide. They are named `widget-<family>-<case>-<mode>`, with `-xxxl` at XXXL,
+  `-ax3` at AX3, `-narrow` at the 393-wide size and `-link` with the `Link` (say
+  `widget-medium-snow-ok-full`, `widget-small-locked-accented`, `widget-medium-week-full-narrow`),
+  at the HIG's sizes for 430-wide iPhones (small 170, medium 364 by 170, circular 76, rectangular
+  172 by 76, inline 257 by 26; the narrow medium 338 by 158), and land on the contact sheet
+  grouped by family. The accented, StandBy and vibrant tiles are approximations, over mid grey
+  (0x8e8e93), black and 0x1c1c1e, since only WidgetKit draws the real ones; they are review
+  artefacts, not pixel gates. `AppGroupTests` (V1) runs the real `WidgetTimeline` over the real App
+  Group, with a server that never answers and StoreKit holding nothing: the answer the app saved is
+  reused, each hour ahead then stale, locked until `unlock.v1` says otherwise, and another store
+  version's file ignored. `WidgetBundleTests` opens the embedded appex: its `IsItAPIOrigin` the
+  app's and https, its App Group, all four fonts listed, carried and named, SnowKit's glyph
+  catalogue in it, its manifest's Coarse Location, a WidgetKit extension, and
   `WidgetTimeline.live(in:)` built from its own plist; and the factory over a plist of its own,
   naming another origin than the app's: its client asks that origin, its gate is `FetchGate.shared`,
-  and without `IsItAppGroup` there is no timeline. `WidgetProviderTests`: a locked plan is
-  never reloaded, an answer's reloads when its planner says, and every family and rendering mode
-  has its look.
+  and without `IsItAppGroup` there is no timeline. `WidgetProviderTests`: a locked plan is never
+  reloaded, an answer's reloads when its planner says, and every family and rendering mode has its
+  look.
 - **The UI plan:** `WidgetLinkTests` opens `willitsnow://view/week`, `view/today` and `view/now`
   as a tapped widget does, and checks each lands: the heading, the tab selected, and the page on
   screen (`pageOffScreen`). XCUITest can't add a widget to the Home Screen, so nothing tests the
@@ -2045,7 +2086,8 @@ units over the real network: the band under the pager and the box at a page's en
 within 5 minutes (`ads-full-screen`), and since phase 7.1 a purchase taking them all away
 (`ads-after-purchase`, a test that never skips). Each other test skips, saying why, only when Google
 didn't answer in time, which a Debug build's readout of the ads model tells it (`debug-ads`,
-`debug-interstitial`, `debug-shown`); what is the app's fails.
+`debug-interstitial`, `debug-shown`); what is the app's fails. The full-screen test skips only when
+the last read of `debug-interstitial` ended in time and found `none`; reads too slow to say fail.
 
 **Trying it.** A Debug build run from Xcode is the free version, with Google's demo ads. `-noads 1`
 runs it without them, `-unlocked 1` as the paid version, and on the simulator `-umpGeography eea`
@@ -2201,9 +2243,12 @@ Every test and debug hook is in `Apps/Snow/App/DebugHooks.swift`, inside `#if DE
 section 9.8). A Release build compiles a stub with the same names that does nothing and names no
 launch argument. So far there are these:
 
-- `-uitest` turns animations off, and keeps the glyphs' flakes still (`stillMotion()`), as
-  `-now` does too; since phase 7.1 it also puts StoreKit's stand-in in StoreKit's place (below);
-  and since PR #40 it counts the touches the system cancels, for `debug-cancels` (below);
+- `-uitest` turns UIKit's animations off (`UIView.setAnimationsEnabled(false)`), which leaves
+  SwiftUI's own animations and transitions running: the home screen's background still fades
+  between bands, which `debug-theme` reads (below). It keeps the glyphs' flakes still
+  (`stillMotion()`), as `-now` does too; since phase 7.1 it also puts StoreKit's stand-in in
+  StoreKit's place (below); and since PR #40 it counts the touches the system cancels, for
+  `debug-cancels` (below);
 - `-resetStore` forgets the place, the units, the saved answer, the recent and saved places and
   when the last full-screen ad showed, and since phase 8.1 the notifications' switches and place,
   their registration and the card's being put away (`alerts.v1`, `alertSync.v1`, `ui.alertCard`),
@@ -2340,6 +2385,18 @@ launch argument. So far there are these:
   phases it reads are the system's (backboardd's cancel, a system gesture, deactivation), read
   before UIKit dispatches the event and before any recognizer sees it, and no event's delivery
   changes. It adds no recognizer and wraps no binding;
+- the colours' readout, which the UI tests wait on (`awaitColours`): under `-uitest`, a clear
+  one-point element at the top of the home screen, `debug-theme`, reading the page on screen's
+  band (`none` without an answer) once every fade the background has begun is over and the last
+  was to that page's colours, and `fading` until then. `HomeShell` (IsItUI, which names no Debug
+  hook) tells the app each fade's theme as it begins and, from
+  `Transaction.addAnimationCompletion(criteria: .removed)` on the background's own transaction,
+  its end (`fades`, nil in a Release build and without `-uitest`). The app counts the fades under
+  way (`ThemeFades`), so a theme left and come back to within 0.9 s reads `fading` until both
+  fades are over, and the readout judges them in its own body, so it reads `fading` from the very
+  update that changes the theme; a band that changes without changing the theme (a loading page,
+  drawn as no snow, giving way to a dry answer) reads at once. `check-archive.sh` looks for its
+  name in both binaries;
 - the unit tests' host: when the app only hosts the unit tests (XCTest's
   `XCTestConfigurationFilePath` in its environment), it doesn't launch (`AppModel.launch()`), so
   the hosted tests have the App Group to themselves, and its `PurchaseModel` never starts (its

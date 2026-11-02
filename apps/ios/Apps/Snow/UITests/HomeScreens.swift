@@ -328,8 +328,8 @@ extension XCTestCase {
     let app = XCUIApplication()
     app.launchArguments = ["-uitest", "-noads", "1"] + arguments
     app.launch()
-    guard app.heading.waitForExistence(timeout: 20) else {
-      throw HomeScreenError("No heading on screen after launching with \(arguments)")
+    if let failure = readHeading(in: app, within: 20, "to come after the launch", until: \.found) {
+      throw HomeScreenError("No heading on screen after launching with \(arguments): \(failure)")
     }
     return app
   }
@@ -337,7 +337,8 @@ extension XCTestCase {
   /// Launches the app on `screen`'s fixture at its moment, from a clean store (`-resetStore`),
   /// the clock fixed there unless `clock` is "run", at `size`, with `extra` launch arguments
   /// after those (`-purchase bought`, say, for the home row StoreKit's stand-in brings); and
-  /// waits for the page it opens on.
+  /// waits for the page it opens on, its heading and then its colours (`awaitColours`): the
+  /// loading page is drawn as no snow, so an answer in another band fades in.
   @MainActor
   func launch(
     _ screen: HomeScreen,
@@ -351,24 +352,202 @@ extension XCTestCase {
     let app = try launchApp(
       ["-resetStore", "-fixture", fixture, "-now", screen.now, "-clock", clock] + size.arguments
         + extra)
-    try awaitHeading(try screen.opening().heading, in: app)
+    let opening = try screen.opening()
+    try awaitHeading(opening.heading, in: app)
+    try awaitColours(opening.band, in: app, after: "the launch")
     return app
   }
 
-  /// Waits up to `timeout` seconds for the heading to read `label`; throws, stopping the test,
-  /// when it doesn't.
+  /// Waits up to `timeout` seconds for the screen to show the heading reading `label`, as a user
+  /// sees it (`HeadingRead.shows`); throws, stopping the test, when it doesn't, with what the
+  /// last read found: the read the verdict was made on, never a fresh one. Not a predicate in an
+  /// `XCTWaiter`: on main's run 41327075971 its one evaluation in 20 s, a query of the heading
+  /// that took the busy simulator 21.5 s, was interrupted at the deadline, so the wait failed
+  /// having compared nothing, and the failure's own fresh read then found the very text it
+  /// waited for (docs/DECISIONS.md, "What main's offline run showed").
   @MainActor
   func awaitHeading(
     _ label: String,
     in app: XCUIApplication,
     timeout: TimeInterval = 20
   ) throws {
-    let heading = app.heading
-    let reads = NSPredicate(format: "label == %@", label)
-    let waited = XCTNSPredicateExpectation(predicate: reads, object: heading)
-    guard XCTWaiter().wait(for: [waited], timeout: timeout) == .completed else {
-      let shown = heading.exists ? heading.label : "no heading"
-      throw HomeScreenError("The heading never read \"\(label)\"; it reads \"\(shown)\"")
+    let read = readHeading(in: app, within: timeout, "to read \"\(label)\"") { $0.shows(label) }
+    if let failure = read {
+      throw HomeScreenError("The heading never read \"\(label)\" on screen: \(failure)")
+    }
+  }
+
+  /// Reads the heading (`HeadingRead`) at once, then four times a second, until a read that
+  /// ended within `timeout` seconds finds what `done` holds for, by `readUntil`'s rules; nil
+  /// when one did, otherwise what the failure says.
+  @MainActor
+  func readHeading(
+    in app: XCUIApplication,
+    within timeout: TimeInterval,
+    _ what: String,
+    until done: (HeadingRead) -> Bool
+  ) -> String? {
+    readUntil(within: timeout, "the heading \(what)", reading: { HeadingRead(app) }, until: done)
+  }
+
+  /// Reads the element identified `id` (`ElementRead`: of `type`, any unless given; with `id`
+  /// nil, any element of `type`, as the keyboard is read) at once, then four times a second,
+  /// until a read that ended within `timeout` seconds finds what `done` holds for, by
+  /// `readUntil`'s rules, as the heading is read; nil when one did, otherwise what the failure
+  /// says, which is the last read's. `what` says what was awaited after the element's name ("to
+  /// read \"Purchase restored.\""), for a `slow-read`. Every wait on an element that was a
+  /// predicate in an `XCTWaiter` reads this way now: on PR #46's run 41394508297 UpgradeTests'
+  /// wait for the thanks made one evaluation in its 10 seconds, begun a second in, which was two
+  /// queries of the element, `exists` and then `label`. The busy simulator took 8.9 s over the
+  /// first, and the waiter interrupted the second at the deadline, so the wait failed having
+  /// compared nothing, with the thanks on screen since before it began; its message's own fresh
+  /// reads then found the very words it waited for (docs/DECISIONS.md, "What PR #46's first
+  /// macOS run showed"). `waitForExistence` isn't one: a timed-out one ends with an existence
+  /// check that runs to its end and decides what it returns, slow under load but never judged
+  /// on no read. `last`, when given, is handed the last read and whether it ended in time
+  /// (`readUntil`).
+  @MainActor
+  func readElement(
+    _ id: String?,
+    _ type: XCUIElement.ElementType = .any,
+    in app: XCUIApplication,
+    within timeout: TimeInterval,
+    _ what: String,
+    last: ((ElementRead, _ inTime: Bool) -> Void)? = nil,
+    until done: (ElementRead) -> Bool
+  ) -> String? {
+    readUntil(
+      within: timeout, "\(ElementRead.name(id, type)) \(what)",
+      reading: { ElementRead(app, id, type) }, last: last, until: done)
+  }
+
+  /// Waits up to `timeout` seconds for the home screen's colours to settle on `band`, the page on
+  /// screen's (nil, a page without an answer, drawn as no snow): the app's readout,
+  /// `debug-theme` (DebugHooks' `themeReadout`), reading the band exactly, which it does only
+  /// once every fade the background has begun is over and the last was to that page's colours,
+  /// and "fading" until then. Read from snapshots by `readUntil`'s rules, as the heading is
+  /// (`ThemeRead`); throws, stopping the test, when they don't settle, saying after `what` (a
+  /// tap, the launch), on what, and what the last read found. For after the heading has come: a
+  /// tab tap or an answer brings the page's words at once, and its colours 0.9 s later
+  /// (`HomeShell`), so a screenshot taken on the words alone caught the fade, and failed the
+  /// contrast proof, on PR #45's run (docs/DECISIONS.md, "What PR #45's first macOS run
+  /// showed"). Exactly the band, not any settled value, so a value left from the page before
+  /// can't pass; a page in the same band as the one before starts no fade, and passes on the
+  /// first read. A timeout, not a pause: the fade takes 0.9 s. Each wait that passes is attached
+  /// (`colour-wait`, `colourWait`), failing nothing, with how long after `began`, when `what`
+  /// began, when the caller knows it (a tap's), the wait began: what the waits passing can't
+  /// show, that the readout waits for the fade.
+  @MainActor
+  func awaitColours(
+    _ band: String?,
+    in app: XCUIApplication,
+    after what: String,
+    began: Date? = nil,
+    timeout: TimeInterval = 10
+  ) throws {
+    let settled = band ?? "none"
+    let start = Date()
+    var reads: [ThemeRead] = []
+    let read = readUntil(
+      within: timeout, "the colours to settle on \(settled)",
+      reading: { () -> ThemeRead in
+        let read = ThemeRead(app)
+        reads.append(read)
+        return read
+      },
+      until: { $0.value == settled })
+    if let failure = read {
+      throw HomeScreenError("After \(what) the colours never settled on \(settled): \(failure)")
+    }
+    let line = colourWait(after: what, began: began, on: settled, reads: reads, waited: start)
+    attachText(line, as: "colour-wait")
+  }
+
+  /// A passing wait for the colours (`awaitColours`) in a line, for its attachment: after what,
+  /// on which band, on which read, when that read began and ended from the wait's start
+  /// (`start`), what the first read found, and, when `began` (when `what` began) is known, how
+  /// long after it the wait began. A positive control, not a check: a first read that began
+  /// less than 0.9 s after a tap that changed band (the wait's start after the tap, and the
+  /// read's after that), and found the band, would say the readout settles before the fade is
+  /// over, though every wait passed; such first reads should find "fading". A read can come
+  /// after the fade in a slow spell, so none of it fails a test.
+  func colourWait(
+    after what: String, began: Date?, on band: String, reads: [ThemeRead], waited start: Date
+  ) -> String {
+    guard let first = reads.first, let last = reads.last else {
+      return "After \(what) the colours settled on \(band) on no read"
+    }
+    func seconds(_ interval: TimeInterval) -> String { String(format: "%.2f", interval) }
+    func at(_ date: Date) -> String { seconds(date.timeIntervalSince(start)) }
+    let ended = last.began.addingTimeInterval(last.took)
+    let since = began.map {
+      "; the wait began \(seconds(start.timeIntervalSince($0))) s after \(what) began"
+    }
+    return "After \(what) the colours settled on \(band) on read \(reads.count), begun at "
+      + "\(at(last.began)) s and ended at \(at(ended)) s; the first read, begun at "
+      + "\(at(first.began)) s, \(first)\(since ?? "")"
+  }
+
+  /// Reads the app with `next` (`HeadingRead`, `ThemeRead`, `ElementRead`) at once, then four
+  /// times a second, until a read that ended within `timeout` seconds finds what `done` holds
+  /// for; the verdict is that read's. A read counts only if it ended in time: a snapshot is the
+  /// tree as the app's main thread captured it, which a slow or stuck main thread puts off
+  /// towards the read's end, so a read begun in time and answered late shows the screen after
+  /// the deadline, and fails the wait whatever it found. No read begins after the deadline, and
+  /// none is interrupted (an interrupted query runs on in the app and holds up the next, as on
+  /// main's run 41327075971 and PR #46's 41394508297). Nil when one counted;
+  /// otherwise what the failure says: how many reads in how long, when the last began and how
+  /// long it took, what it found, and, when it found what was awaited too late, when it ended. A
+  /// read that took 5 seconds or more, which no screen should, is attached (`slow-read`, naming
+  /// `what` was awaited), pass or fail, so a slow main thread in the app (where the read is made)
+  /// shows even when the wait passes. `last`, when given, is handed the read the verdict rests
+  /// on, the last, and whether it ended in time, as the wait ends: for a caller whose next step
+  /// turns on why a wait failed, as AdsTests' skip for Google's having no full-screen ad does,
+  /// which only a last read that ended in time can show.
+  @MainActor
+  func readUntil<Read: ScreenRead>(
+    within timeout: TimeInterval,
+    _ what: String,
+    reading next: () -> Read,
+    last: ((Read, _ inTime: Bool) -> Void)? = nil,
+    until done: (Read) -> Bool
+  ) -> String? {
+    let start = Date()
+    let deadline = start.addingTimeInterval(timeout)
+    var reads = 0
+    var slow: [String] = []
+    defer {
+      if !slow.isEmpty {
+        attachText("Waiting for \(what): " + slow.joined(separator: "; "), as: "slow-read")
+      }
+    }
+    while true {
+      let read = next()
+      reads += 1
+      let begun = read.began.timeIntervalSince(start)
+      let ended = begun + read.took
+      if read.took >= 5 {
+        slow.append(
+          "read \(reads), begun at \(secondsText(begun)) s, took \(secondsText(read.took)) s")
+      }
+      let inTime = ended <= timeout
+      let matched = done(read)
+      if inTime, matched {
+        last?(read, true)
+        return nil
+      }
+      if inTime {
+        RunLoop.current.run(until: min(Date().addingTimeInterval(0.25), deadline))
+        if Date() < deadline { continue }
+      }
+      last?(read, inTime)
+      let waited = Date().timeIntervalSince(start)
+      let late =
+        matched
+        ? ", but only at \(secondsText(ended)) s, after the \(secondsText(timeout)) s deadline"
+        : ""
+      return "\(reads) \(reads == 1 ? "read" : "reads") in \(secondsText(waited)) s; the last, "
+        + "begun at \(secondsText(begun)) s, took \(secondsText(read.took)) s and \(read)\(late)"
     }
   }
 
@@ -451,27 +630,32 @@ extension XCTestCase {
   }
 
   /// Taps `page`'s tab in the switcher (a tab, a button labelled as the tab reads, on the track or
-  /// at accessibility sizes a chip of its own), waits for its heading, and checks its page is the
-  /// one on screen (`pageOffScreen`) and the tab is the one selected. A tap whose touch the system
-  /// cancelled (`cancelled(_:in:within:until:_:)`, read for up to 2 seconds or until the heading
-  /// comes) and whose heading hasn't come is tapped once more: the app never had it as a tap. A
-  /// tap the app completed is never tapped again. A heading that never comes fails with where the
-  /// tab was, the tab the app has chosen, `debug-cancels` and where the pages are
-  /// (`homeGeometry`: the page in the tree is the chosen view's).
+  /// at accessibility sizes a chip of its own), waits for its heading, checks its page is the one
+  /// on screen (`pageOffScreen`), waits for its colours (`awaitColours`), and checks the tab is
+  /// the one selected. A tap whose touch the system cancelled (`cancelled(_:in:within:until:_:)`,
+  /// read for up to 2 seconds or until the heading comes) and whose heading hasn't come is tapped
+  /// once more: the app never had it as a tap. A tap the app completed is never tapped again. A
+  /// heading that never comes fails with where the tab was, the tab the app has chosen,
+  /// `debug-cancels` and where the pages are (`homeGeometry`: the page in the tree is the chosen
+  /// view's).
   @MainActor
   func tap(_ page: HomeScreen.Page, in app: XCUIApplication) throws {
     let tab = app.buttons[page.label]
     guard tab.waitForExistence(timeout: 10) else {
       throw HomeScreenError("No \(page.label) tab")
     }
-    let heading = app.heading
-    let arrived = { heading.exists && heading.label == page.heading }
-    if cancelled("tap on \(page.label)", in: app, within: 2, until: arrived, { tab.tap() }),
-      !arrived()
-    {
+    let arrived = { HeadingRead(app).shows(page.heading) }
+    // When the tap the app had began (the second, after a cancel), which the colours' wait is
+    // measured from (`colourWait`).
+    var tapped = Date()
+    let tapTab = {
+      tapped = Date()
+      tab.tap()
+    }
+    if cancelled("tap on \(page.label)", in: app, within: 2, until: arrived, tapTab), !arrived() {
       // The system cancelled the touch, so the app never had a tap (DECISIONS, "What the
       // simulator's log showed"): tap once more, itself watched, so a second cancel names itself.
-      _ = cancelled("second tap on \(page.label)", in: app) { tab.tap() }
+      _ = cancelled("second tap on \(page.label)", in: app, tapTab)
     }
     do {
       try awaitHeading(page.heading, in: app)
@@ -492,6 +676,8 @@ extension XCTestCase {
     if let off = app.pageOffScreen(page.view) {
       throw HomeScreenError("After a tap on \(page.label), \(off)")
     }
+    // The page's words come at once, its colours 0.9 s later: what follows a tap screenshots it.
+    try awaitColours(page.band, in: app, after: "the tap on \(page.label)", began: tapped)
     XCTAssertTrue(tab.isSelected, "The \(page.label) tab isn't selected")
   }
 
@@ -934,5 +1120,246 @@ struct ShownScreen {
     if let element = matches.first {
       XCTAssertEqual(element.label, expected, what, file: file, line: line)
     }
+  }
+}
+
+/// The heading as one read of the screen finds it: from one snapshot of the app, every element
+/// with the identifier `heading`, with its label and frame, and the window's frame, with when the
+/// read began and how long the app took to answer it. A snapshot is one call into the app, whose
+/// main thread captures the whole tree at once; a query for the heading (`exists`, `label`, or a
+/// predicate on it) fetches the attributes of each element on its way there one at a time, each
+/// on that thread. On main's run 41327075971, with the simulator busy, such a query took 21.5 s
+/// (114 fetches at about 0.19 s) while a snapshot of the whole app took 0.4 s, the capture 0.26
+/// (docs/DECISIONS.md, "What main's offline run showed").
+struct HeadingRead: ScreenRead {
+  let began: Date
+  let took: TimeInterval
+  /// Each element with the identifier `heading`, in the tree's order; none when the app couldn't
+  /// be read.
+  let headings: [(label: String, frame: CGRect)]
+  /// The window's frame.
+  let window: CGRect
+  /// How many web views the same snapshot holds: Google's consent form, which AdsTests' launch in
+  /// the EEA waits for as well as the heading (`AdsTests.awaitHeadingOrForm`), or a banner.
+  let webViews: Int
+  /// Why the app couldn't be read, when it couldn't.
+  let unreadable: String?
+
+  /// The heading now, as `app`'s accessibility tree has it.
+  @MainActor
+  init(_ app: XCUIApplication) {
+    began = Date()
+    var headings: [(label: String, frame: CGRect)] = []
+    var webViews = 0
+    var window = CGRect.zero
+    var unreadable: String?
+    do {
+      let root = try app.snapshot()
+      window = root.frame
+      var pending = [root]
+      while let element = pending.popLast() {
+        if element.identifier == "heading" { headings.append((element.label, element.frame)) }
+        if element.elementType == .webView { webViews += 1 }
+        pending.append(contentsOf: element.children.reversed())
+      }
+    } catch {
+      unreadable = brief(error)
+    }
+    took = Date().timeIntervalSince(began)
+    self.headings = headings
+    self.webViews = webViews
+    self.window = window
+    self.unreadable = unreadable
+  }
+
+  /// Whether the read found a heading at all.
+  var found: Bool { !headings.isEmpty }
+
+  /// Whether a user sees the heading read `label`: one heading, reading exactly `label`, on the
+  /// page on screen, its middle within the window's width. The tree holds the chosen view's page
+  /// wherever the pages are (`pageOffScreen`), so a heading in the tree alone doesn't show it is
+  /// on screen.
+  func shows(_ label: String) -> Bool {
+    guard headings.count == 1, let heading = headings.first else { return false }
+    return heading.label == label && Self.onScreen(heading.frame, in: window)
+  }
+
+  /// Whether a heading's `frame` has its middle within the `window`'s width: on the page on
+  /// screen, not on one beside it.
+  static func onScreen(_ frame: CGRect, in window: CGRect) -> Bool {
+    frame.midX >= window.minX && frame.midX <= window.maxX
+  }
+
+  /// What the read found, for a failure: the heading's label, where it was if not on screen,
+  /// each heading when there were more than one, or why the app couldn't be read.
+  var description: String {
+    if let unreadable { return "couldn't read the app: \(unreadable)" }
+    guard headings.count == 1, let heading = headings.first else {
+      if headings.isEmpty { return "found no heading" }
+      return "found \(headings.count) headings: "
+        + headings.map { "\"\($0.label)\" at \($0.frame)" }.joined(separator: ", ")
+    }
+    let reads = "found it reading \"\(heading.label)\""
+    guard Self.onScreen(heading.frame, in: window) else {
+      return "\(reads) at \(heading.frame), off the window at \(window)"
+    }
+    return reads
+  }
+}
+
+/// One read of the app that `readUntil` judges: when it began, how long the app took to answer,
+/// and what it found, for a failure (`description`).
+protocol ScreenRead: CustomStringConvertible {
+  var began: Date { get }
+  var took: TimeInterval { get }
+}
+
+/// The home screen's colours as one read of the screen finds them: from one snapshot of the app,
+/// as `HeadingRead` reads the heading, the value of the app's readout `debug-theme`
+/// (DebugHooks' `themeReadout`): the page on screen's band once the background has finished
+/// fading to its colours, "none" for a page without an answer, "fading" until then. With when
+/// the read began and how long the app took to answer it.
+struct ThemeRead: ScreenRead {
+  let began: Date
+  let took: TimeInterval
+  /// Whether the tree held the readout.
+  let found: Bool
+  /// The readout's value, as text; nil without the readout, or with no value.
+  let value: String?
+  /// Why the app couldn't be read, when it couldn't.
+  let unreadable: String?
+
+  /// The readout now, as `app`'s accessibility tree has it: the first element identified
+  /// `debug-theme`.
+  @MainActor
+  init(_ app: XCUIApplication) {
+    began = Date()
+    var found = false
+    var value: String?
+    var unreadable: String?
+    do {
+      var pending = [try app.snapshot()]
+      while let element = pending.popLast() {
+        if element.identifier == "debug-theme" {
+          found = true
+          value = element.value as? String
+          break
+        }
+        pending.append(contentsOf: element.children.reversed())
+      }
+    } catch {
+      unreadable = brief(error)
+    }
+    took = Date().timeIntervalSince(began)
+    self.found = found
+    self.value = value
+    self.unreadable = unreadable
+  }
+
+  /// What the read found, for a failure: the readout's value, no readout (a Release build, or
+  /// the home screen not there), or why the app couldn't be read.
+  var description: String {
+    if let unreadable { return "couldn't read the app: \(unreadable)" }
+    guard found else { return "found no debug-theme readout" }
+    return "found debug-theme reading \"\(value ?? "nothing")\""
+  }
+}
+
+/// An element as one read of the screen finds it: from one snapshot of the app, as `HeadingRead`
+/// reads the heading, every element below the app identified `id` and of `type` (any type for
+/// `.any`; with `id` nil, every element of `type`, as the keyboard is found), in the order a
+/// `firstMatch` query takes them: level by level, breadth first, each level in the tree's order,
+/// as the app's log of PR #46's run 41394508297 shows one walking the tree (Xcode 26.6: the
+/// app's children checked, then theirs, before anything deeper), so the first is the shallowest,
+/// the element `app.find` judged even where an identifier is at two depths; how many there were,
+/// and the first one's label, value, frame, and whether it is enabled and selected; with when
+/// the read began and how long the app took to answer it. The identifier exactly, which is
+/// narrower than XCUITest's `app.buttons["buy"]`, which also matches a button labelled "buy":
+/// every element a wait reads has its identifier (`accessibilityIdentifier`). A wait
+/// (`readElement`) says which match it judges, as the query it replaced did: the first
+/// (`found`), for a `firstMatch` (`app.find`); the only one (`one`), for a query that wasn't, as
+/// `app.buttons["buy"]`, whose label, value or state XCUITest won't read while two elements match
+/// it; none, from an app that could be read (`gone`).
+struct ElementRead: ScreenRead {
+  let id: String?
+  let type: XCUIElement.ElementType
+  let began: Date
+  let took: TimeInterval
+  /// How many elements matched; none when the app couldn't be read.
+  let count: Int
+  /// The first match's label, value (as text; nil without one), frame, and whether it is enabled
+  /// and selected; "", nil, zero and false without one.
+  let label: String
+  let value: String?
+  let frame: CGRect
+  let enabled: Bool
+  let selected: Bool
+  /// Why the app couldn't be read, when it couldn't.
+  let unreadable: String?
+
+  /// The element now, as `app`'s accessibility tree has it.
+  @MainActor
+  init(_ app: XCUIApplication, _ id: String?, _ type: XCUIElement.ElementType = .any) {
+    self.id = id
+    self.type = type
+    began = Date()
+    var matches: [any XCUIElementSnapshot] = []
+    var unreadable: String?
+    do {
+      // A queue: the app's children first, each element's children after every element already
+      // waiting, so a level is read whole before the next.
+      var pending = try app.snapshot().children
+      var next = 0
+      while next < pending.count {
+        let element = pending[next]
+        next += 1
+        let named = id.map { element.identifier == $0 } ?? true
+        if named, type == .any || element.elementType == type { matches.append(element) }
+        pending.append(contentsOf: element.children)
+      }
+    } catch {
+      unreadable = brief(error)
+    }
+    took = Date().timeIntervalSince(began)
+    let first = matches.first
+    count = matches.count
+    label = first?.label ?? ""
+    value = first?.value as? String
+    frame = first?.frame ?? .zero
+    enabled = first?.isEnabled ?? false
+    selected = first?.isSelected ?? false
+    self.unreadable = unreadable
+  }
+
+  /// Whether the read found the element at all: what a `firstMatch` needs, the first (the
+  /// shallowest) taken.
+  var found: Bool { count > 0 }
+
+  /// Whether the read found exactly one: what a query that isn't a `firstMatch` needs before
+  /// XCUITest reads its label, value or state.
+  var one: Bool { count == 1 }
+
+  /// Whether the read found none in an app it could read: an app that couldn't be read is not
+  /// one without the element.
+  var gone: Bool { unreadable == nil && count == 0 }
+
+  /// The element's name in a failure: its identifier, or with none its type's ("keyboard").
+  static func name(_ id: String?, _ type: XCUIElement.ElementType) -> String {
+    id ?? type.name
+  }
+
+  /// What the read found, for a failure: the first match's label, its value when it has one,
+  /// not enabled, selected, and where it was, with how many matched when more than one; none;
+  /// or why the app couldn't be read.
+  var description: String {
+    if let unreadable { return "couldn't read the app: \(unreadable)" }
+    let name = Self.name(id, type)
+    guard found else { return "found no \(name)" }
+    var said = "found \(name)" + (label.isEmpty ? "" : " reading \"\(label)\"")
+    if let value, !value.isEmpty { said += ", its value \"\(value)\"" }
+    if !enabled { said += ", not enabled" }
+    if selected { said += ", selected" }
+    said += " at \(frame)"
+    return count > 1 ? "\(said), the first of \(count)" : said
   }
 }

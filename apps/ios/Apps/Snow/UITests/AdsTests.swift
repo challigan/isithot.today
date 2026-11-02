@@ -16,13 +16,15 @@ import XCTest
 /// `debug-ads`, the ads' phase, `debug-interstitial`, whether a full-screen ad is loaded, and
 /// `debug-shown`, how many have shown and closed. A test skips only while the ads are still asking
 /// or are withheld (UMP or Mobile Ads didn't answer, or the network didn't carry it; `notOn`), or
-/// while no full-screen ad has loaded. What is the app's fails: ads that never start in the free
-/// version, no band once they are on, a consent form skipped, a band or a box out of place, a space
-/// that moves as its ad loads, ads started or shown in the paid version, a loaded full-screen ad
-/// that doesn't show, a picker that never closes, a second full-screen ad, an ad left once the
-/// purchase is made (that test never skips: `testBuyingTakesTheAdsAway`). Nothing here is audited,
-/// since the ads' own elements are Google's (HomeAuditTests audit the home screen without them).
-/// The screens are attached for the contact sheet (`ads-…`).
+/// while no full-screen ad has loaded, as a read that ended in time shows (`awaitAFullScreenAd`:
+/// reads too slow to show it fail, as the simulator's, not Google's). What is the app's fails: ads
+/// that never start in the free version, no band once they are on, a consent form skipped, a band
+/// or a box out of place, a space that moves as its ad loads, ads started or shown in the paid
+/// version, a loaded full-screen ad that doesn't show, a picker that never closes, a second
+/// full-screen ad, an ad left once the purchase is made (that test never skips:
+/// `testBuyingTakesTheAdsAway`). Nothing here is audited, since the ads' own elements are
+/// Google's (HomeAuditTests audit the home screen without them). The screens are attached for the
+/// contact sheet (`ads-…`).
 final class AdsTests: XCTestCase {
   /// How many pickers the app's readout had counted (`debug-pickers`) before `choose` last tapped
   /// the place button, for `pickerCloses(in:after:within:)`.
@@ -159,11 +161,13 @@ final class AdsTests: XCTestCase {
         "No Buy on the upgrade page Settings' upgrade row opened; \(app.cancelsReport)")
     }
     buy.tap()
-    let thanks = NSPredicate(format: "label == %@", "Thank you. Ads are off and widgets are on.")
-    let outcome = XCTNSPredicateExpectation(predicate: thanks, object: app.find("upgrade-outcome"))
-    guard XCTWaiter().wait(for: [outcome], timeout: 10) == .completed else {
+    let thanks = "Thank you. Ads are off and widgets are on."
+    let outcome = readElement("upgrade-outcome", in: app, within: 10, "to read the thanks") {
+      $0.found && $0.label == thanks
+    }
+    if let failure = outcome {
       throw HomeScreenError(
-        "No thanks on the upgrade page 10 seconds after Buy; \(app.cancelsReport)")
+        "No thanks on the upgrade page 10 seconds after Buy: \(failure); \(app.cancelsReport)")
     }
     app.navigationBars.buttons.element(boundBy: 0).tap()
     app.buttons["close-settings"].tap()
@@ -175,8 +179,9 @@ final class AdsTests: XCTestCase {
     XCTAssertEqual(
       waitForAdsPhase(["off"], in: app, timeout: 2), "off",
       "debug-ads doesn't read off 2 seconds after the purchase")
-    XCTAssertTrue(
-      gone(band, within: 2), "An ad band 2 seconds after the purchase; \(app.homeGeometry)")
+    if let still = gone("ad-home", in: app, within: 2) {
+      XCTFail("An ad band 2 seconds after the purchase: \(still)")
+    }
     if let reach = before?.frames["ad-banner-home"]?.maxY,
       let pager = homeScreen(of: app)?.frames["pager"]
     {
@@ -226,8 +231,9 @@ final class AdsTests: XCTestCase {
   @MainActor
   func testTheConsentFormThenPrivacyChoices() throws {
     let page = try HomeScreen.named("leeds-dry").opening()
-    let app = try launch(["-resetStore", "-fixture", "leeds-dry", "-umpGeography", "eea"])
-    try awaitHeading(page.heading, in: app)
+    let app = try launch(
+      ["-resetStore", "-fixture", "leeds-dry", "-umpGeography", "eea"], orForm: true)
+    try awaitHeadingOrForm(page.heading, in: app)
     // Up to 30 seconds for the form's web view, or for the ads to stop asking without one.
     let form = app.webViews.firstMatch
     let phase = waitForAdsPhase(["on", "withheld"], in: app, timeout: 30) { form.exists }
@@ -265,15 +271,16 @@ final class AdsTests: XCTestCase {
   /// The full-screen ad as a place is chosen. Never in the app's first run: a first launch saves
   /// an answer, so the next isn't one; once the ads are on there, the ad loads, which only the
   /// Debug readout shows (`debug-interstitial` reads ready), within 30 seconds or the test skips,
-  /// Google having none to give. A place chosen in the picker then brings the ad over everything,
-  /// the picker under it: the test closes it with Google's close button and waits for the app to
-  /// count it shown (`debug-shown`), or fails, as the app had an ad and didn't show it; closed,
-  /// the picker closes too, onto the place chosen. Once the next ad has loaded (30 seconds again,
-  /// or the rest skips, as a choice with no ad loaded would show nothing), another place chosen,
-  /// within 5 minutes of the first ad, brings none: no close button comes, the picker closes
-  /// straight onto it, and the app still counts one. The stub
-  /// (`-network`) answers the launch's request by IP with Leeds and each place chosen with its
-  /// fixture; Google's traffic goes to Google.
+  /// Google having none to give, which only a last read that ended in time and found none shows
+  /// (`awaitAFullScreenAd`, which fails otherwise). A place chosen in the picker then brings the
+  /// ad over everything, the picker under it: the test closes it with Google's close button and
+  /// waits for the app to count it shown (`debug-shown`), or fails, as the app had an ad and
+  /// didn't show it; closed, the picker closes too, onto the place chosen. Once the next ad has
+  /// loaded (30 seconds again, or the rest skips, by the same rule, as a choice with no ad loaded
+  /// would show nothing), another place chosen, within 5 minutes of the first ad, brings none: no
+  /// close button comes, the picker closes straight onto it, and the app still counts one. The
+  /// stub (`-network`) answers the launch's request by IP with Leeds and each place chosen with
+  /// its fixture; Google's traffic goes to Google.
   @MainActor
   func testAFullScreenAdWhenAPlaceIsChosen() throws {
     let network = [
@@ -287,11 +294,8 @@ final class AdsTests: XCTestCase {
     // day old by then.
     let app = try launch(network + ["-now", "2026-12-02T11:50:00.000Z"])
     try awaitTheAds(in: app, after: "the second launch")
-    guard waitForAFullScreenAd(in: app, timeout: 30) else {
-      throw XCTSkip(
-        "No full-screen ad loaded 30 seconds after the ads came on (debug-interstitial reads "
-          + "none): Google had no demo ad to give")
-    }
+    try awaitAFullScreenAd(
+      in: app, timeout: 30, "No full-screen ad loaded 30 seconds after the ads came on")
     try choose("Kathmandu", in: app)
     let firstAd = closeTheAd(in: app, untilShown: 1, timeout: 40)
     guard firstAd.shown else {
@@ -316,12 +320,11 @@ final class AdsTests: XCTestCase {
 
     // The next ad, loaded once the first closed, up to 30 seconds on, well within 5 minutes of
     // the first: with none loaded, a choice would bring no ad whatever the minutes since.
-    guard waitForAFullScreenAd(in: app, timeout: 30) else {
-      throw XCTSkip(
-        "The first full-screen ad showed and closed onto the place chosen, but no next one loaded "
-          + "in the 30 seconds after (debug-interstitial reads none): Google had no demo ad to "
-          + "give, so that a second choice within 5 minutes brings none can't be shown")
-    }
+    try awaitAFullScreenAd(
+      in: app, timeout: 30,
+      "The first full-screen ad showed and closed onto the place chosen, but no next one loaded "
+        + "in the 30 seconds after",
+      so: ", so that a second choice within 5 minutes brings none can't be shown")
     try choose("Leeds", in: app)
     // No ad's close button on the way: the picker closes straight onto Leeds, and the app still
     // counts one ad shown.
@@ -346,16 +349,40 @@ final class AdsTests: XCTestCase {
   // MARK: - Helpers
 
   /// Launches the app with `-uitest` and `arguments`, the ads and all: no `-noads 1`, unlike
-  /// every other UI test's launch (`launchApp`). Waits for the heading.
+  /// every other UI test's launch (`launchApp`). Waits for the heading, or with `orForm` (in the
+  /// EEA) for Google's consent form, should it have come over the home screen first
+  /// (`awaitHeadingOrForm`).
   @MainActor
-  private func launch(_ arguments: [String]) throws -> XCUIApplication {
+  private func launch(_ arguments: [String], orForm: Bool = false) throws -> XCUIApplication {
     let app = XCUIApplication()
     app.launchArguments = ["-uitest"] + arguments
     app.launch()
-    guard app.heading.waitForExistence(timeout: 20) else {
-      throw HomeScreenError("No heading on screen after launching with \(arguments)")
+    let what = "to come after the launch" + (orForm ? ", or Google's form over it" : "")
+    let read = readHeading(in: app, within: 20, what) { $0.found || (orForm && $0.webViews > 0) }
+    if let failure = read {
+      throw HomeScreenError("No heading on screen after launching with \(arguments): \(failure)")
     }
     return app
+  }
+
+  /// Waits up to `timeout` seconds for the heading to read `label` or, should it come first, for
+  /// Google's consent form over the home screen: a web view, the ads being off until the form is
+  /// answered, so no banner. By `readUntil`'s rules, as `awaitHeading`, which can't be used
+  /// here: while the form is up the home screen is out of the accessibility tree, so a read finds
+  /// no heading. On PR #44's run 41423209752 the answer was on screen for about 4 seconds before
+  /// the form came, while the launch's one read took 6.8 s, and each of the 52 reads after found
+  /// no heading (docs/DECISIONS.md, "What PR #44's run on b206ff3 showed"). Either is the launch
+  /// done; what the form then does is the test.
+  @MainActor
+  private func awaitHeadingOrForm(
+    _ label: String, in app: XCUIApplication, timeout: TimeInterval = 20
+  ) throws {
+    let what = "to read \"\(label)\", or Google's form over it"
+    let read = readHeading(in: app, within: timeout, what) { $0.shows(label) || $0.webViews > 0 }
+    if let failure = read {
+      throw HomeScreenError(
+        "Neither the heading reading \"\(label)\" nor Google's consent form came: \(failure)")
+    }
   }
 
   /// The ads' phase as the Debug readout says it (`debug-ads`, `DebugHooks.adsReadout`): idle,
@@ -428,23 +455,43 @@ final class AdsTests: XCTestCase {
     }
   }
 
-  /// Whether `element` is gone, or goes within `timeout` seconds: an element of the home screen
-  /// itself, which no closed presentation leaves behind (`sheetClosed`).
+  /// Nil when the element identified `id` is gone, or goes within `timeout` seconds, as a read
+  /// of the app that ended in time finds none (`readElement`; an app that couldn't be read is
+  /// never one without it): an element of the home screen itself, which no closed presentation
+  /// leaves behind (`sheetClosed`). Otherwise what the last read found, and where.
   @MainActor
-  private func gone(_ element: XCUIElement, within timeout: TimeInterval) -> Bool {
-    let gone = NSPredicate(format: "exists == false")
-    let waited = XCTNSPredicateExpectation(predicate: gone, object: element)
-    return XCTWaiter().wait(for: [waited], timeout: timeout) == .completed
+  private func gone(_ id: String, in app: XCUIApplication, within timeout: TimeInterval)
+    -> String?
+  {
+    readElement(id, in: app, within: timeout, "to go") { $0.gone }
   }
 
-  /// Whether a full-screen ad is loaded, waiting for a place to be chosen, within `timeout`
-  /// seconds: the Debug readout `debug-interstitial` reads ready, where it reads none until then.
+  /// Waits up to `timeout` seconds for a full-screen ad to be loaded, waiting for a place to be
+  /// chosen: the Debug readout `debug-interstitial` reads ready, where it reads none until then,
+  /// as a read that ended in time finds it (`readElement`). When none does, it skips, saying
+  /// `missing` (what didn't load), what the last read found, that Google had no demo ad to give,
+  /// and `so` (what that leaves unshown), only when that last read ended in time and found the
+  /// readout reading none: Google's having no ad is all that shows. Otherwise it fails, stopping
+  /// the test, saying the same and why it isn't a skip: a last read the app answered after the
+  /// deadline (ready or not, it saw the screen after it), an app that couldn't be read, or no
+  /// readout, is the simulator or the app, not Google, and a skip would hide it from the failures
+  /// and blame Google, as the first macOS run's skips did (docs/DECISIONS.md, "When AdsTests
+  /// skips, and when it fails").
   @MainActor
-  private func waitForAFullScreenAd(in app: XCUIApplication, timeout: TimeInterval) -> Bool {
-    let ready = NSPredicate(format: "value == %@", "ready")
-    let readout = app.find("debug-interstitial")
-    let waited = XCTNSPredicateExpectation(predicate: ready, object: readout)
-    return XCTWaiter().wait(for: [waited], timeout: timeout) == .completed
+  private func awaitAFullScreenAd(
+    in app: XCUIApplication, timeout: TimeInterval, _ missing: String, so: String = ""
+  ) throws {
+    var last: (read: ElementRead, inTime: Bool)?
+    let failure = readElement(
+      "debug-interstitial", in: app, within: timeout, "to read ready",
+      last: { last = ($0, $1) }, until: { $0.found && $0.value == "ready" })
+    guard let failure else { return }
+    if let last, last.inTime, last.read.found, last.read.value == "none" {
+      throw XCTSkip("\(missing) (\(failure)): Google had no demo ad to give\(so)")
+    }
+    throw HomeScreenError(
+      "\(missing) (\(failure)), and no skip: only a last read that ended in time and found "
+        + "debug-interstitial reading none shows Google had no demo ad to give")
   }
 
   /// The window and the home screen's frames, the ads' included (`homeFrames`), from one
@@ -660,17 +707,19 @@ final class AdsTests: XCTestCase {
     return (adsShown(in: app) == count, sawAd)
   }
 
-  /// Checks the home screen shows `name`, the place chosen: the place button names it, within 15
-  /// seconds, as the place loads; the picker is closed, as the app's readout says
-  /// (`pickerClosed`); and the top bar is no longer on approximate location.
+  /// Checks the home screen shows `name`, the place chosen: the one place button names it,
+  /// within 15 seconds, as the place loads, read from snapshots (`readElement`), its failure the
+  /// last read's; the picker is closed, as the app's readout says (`pickerClosed`); and the top
+  /// bar is no longer on approximate location.
   @MainActor
   private func expectPlace(_ name: String, in app: XCUIApplication) {
-    let place = app.buttons["place"]
-    let reads = NSPredicate(format: "label == %@", "Place: \(name). Change place.")
-    let waited = XCTNSPredicateExpectation(predicate: reads, object: place)
-    let shown = XCTWaiter().wait(for: [waited], timeout: 15) == .completed
-    XCTAssertTrue(
-      shown, "The place button reads \"\(place.exists ? place.label : "nothing")\", not \(name)")
+    let label = "Place: \(name). Change place."
+    let read = readElement("place", .button, in: app, within: 15, "to read \"\(label)\"") {
+      $0.one && $0.label == label
+    }
+    if let failure = read {
+      XCTFail("The place button never read \"\(label)\": \(failure)")
+    }
     XCTAssertTrue(app.pickerClosed, "The picker is still open; \(app.pickerReport)")
     XCTAssertFalse(app.buttons["use-my-location"].exists, "Still on approximate location")
   }

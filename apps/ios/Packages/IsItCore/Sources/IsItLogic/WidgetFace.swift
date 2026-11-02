@@ -74,7 +74,8 @@ public struct WidgetFace: Codable, Sendable, Equatable {
   public let spokenGauge: String
   /// The medium's right half: Now, or nil without it.
   public let now: Now?
-  /// The medium's right half: up to 4 days after the middle day.
+  /// The medium's right half: every day of the week after the middle day (up to 6, or all 7
+  /// without a middle day), of which the medium shows as many whole rows as fit under Now.
   public let week: [Day]
   /// The right half's link, view/week; "" when locked or stale.
   public let weekLink: String

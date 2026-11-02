@@ -54,12 +54,16 @@ final class UpgradeTests: XCTestCase {
     attach(app, as: "app-upgrade")
 
     try buy(in: app)
-    try waitFor(app.find("upgrade-outcome"), label: Copy.thanks)
-    XCTAssertTrue(gone(app.buttons["buy"]), "Buy is still there once the purchase is owned")
+    try waitFor("upgrade-outcome", in: app, label: Copy.thanks)
+    if let still = gone("buy", .button, in: app) {
+      XCTFail("Buy is still there once the purchase is owned: \(still)")
+    }
     try auditAccessibility(of: app, on: "the upgrade sheet, bought", surface: .content)
     attach(app, as: "app-upgrade-thanks")
     try close("close-upgrade", in: app)
-    XCTAssertTrue(gone(app.find("upgrade-row")), "The home row is still there once bought")
+    if let still = gone("upgrade-row", in: app) {
+      XCTFail("The home row is still there once bought: \(still)")
+    }
     try openSettings(app)
     try expectThePaidCard(in: app)
     XCTAssertFalse(app.buttons["report-ad"].exists, "Report an ad once bought")
@@ -72,7 +76,7 @@ final class UpgradeTests: XCTestCase {
     let app = try launch(["-purchase", "pending"])
     try openTheSheet(app)
     try buy(in: app)
-    try waitFor(app.find("upgrade-outcome"), label: Copy.pending)
+    try waitFor("upgrade-outcome", in: app, label: Copy.pending)
     try expectBuyToTap(in: app, "while the purchase waits for approval")
     try close("close-upgrade", in: app)
     try expectTheFreeVersion(app)
@@ -118,13 +122,12 @@ final class UpgradeTests: XCTestCase {
   func testSettingsBuysOnItsOwnStack() throws {
     let app = try launch(["-purchase", "bought"])
     try openSettings(app)
-    let upgrade = app.buttons["upgrade"]
-    try waitFor(upgrade, label: Copy.settingsRow)
+    try waitFor("upgrade", .button, in: app, label: Copy.settingsRow)
     tapRow("upgrade", in: app)
     try page(titled: Copy.title, in: app)
     XCTAssertFalse(app.buttons["close-upgrade"].exists, "The page is a sheet over Settings")
     try buy(in: app)
-    try waitFor(app.find("upgrade-outcome"), label: Copy.thanks)
+    try waitFor("upgrade-outcome", in: app, label: Copy.thanks)
     back(in: app)
     try page(titled: "Settings", in: app)
     try expectThePaidCard(in: app)
@@ -183,7 +186,7 @@ final class UpgradeTests: XCTestCase {
 
     let paid = try launch(["-unlocked", "1"])
     try openTheLink(in: paid)
-    try waitFor(paid.find("upgrade-outcome"), label: Copy.thanks)
+    try waitFor("upgrade-outcome", in: paid, label: Copy.thanks)
     XCTAssertFalse(paid.buttons["buy"].exists, "Buy in the paid version")
   }
 
@@ -198,7 +201,7 @@ final class UpgradeTests: XCTestCase {
       app.find("upgrade-row").waitForExistence(timeout: 3), "A home row with no product")
     try openSettings(app)
     let upgrade = app.buttons["upgrade"]
-    try waitFor(upgrade, label: Copy.title)
+    try waitFor("upgrade", .button, in: app, label: Copy.title)
     XCTAssertFalse(upgrade.label.contains("£"), "A price with no product: \(upgrade.label)")
     let restore = app.buttons["restore"]
     XCTAssertTrue(restore.exists, "No Restore purchase with no product")
@@ -314,25 +317,24 @@ final class UpgradeTests: XCTestCase {
     try expectBuyToTap(in: app, "after a purchase that failed")
   }
 
-  /// Checks Buy can be tapped again, `after` saying when: enabled and reading its price, as an
-  /// attempt left under way greys it out with its spinner (`.disabled(busy)`). Up to 5 seconds,
-  /// so an attempt that never came back fails.
+  /// Checks Buy can be tapped again, `after` saying when: the one `buy` button, enabled and
+  /// reading its price, as an attempt left under way greys it out with its spinner
+  /// (`.disabled(busy)`). Up to 5 seconds, so an attempt that never came back fails, read from
+  /// snapshots (`readElement`, as `waitFor` reads); the failure is the last read's.
   @MainActor
   private func expectBuyToTap(in app: XCUIApplication, _ after: String) throws {
-    let buy = app.buttons["buy"]
-    let ready = NSPredicate(format: "exists == true AND enabled == true AND label == %@", Copy.buy)
-    let waited = XCTNSPredicateExpectation(predicate: ready, object: buy)
-    guard XCTWaiter().wait(for: [waited], timeout: 5) == .completed else {
-      let shown =
-        buy.exists ? "\"\(buy.label)\", \(buy.isEnabled ? "enabled" : "not enabled")" : "none"
-      throw HomeScreenError("No Buy to tap \(after); Buy: \(shown)")
+    let read = readElement("buy", .button, in: app, within: 5, "to take a tap") {
+      $0.one && $0.enabled && $0.label == Copy.buy
+    }
+    if let failure = read {
+      throw HomeScreenError("No Buy to tap \(after): \(failure)")
     }
   }
 
   /// Checks the page says the purchase isn't available, with Restore purchase and no Buy.
   @MainActor
   private func expectNothingToSell(in app: XCUIApplication) throws {
-    try waitFor(app.find("upgrade-unavailable"), label: Copy.unavailable)
+    try waitFor("upgrade-unavailable", in: app, label: Copy.unavailable)
     XCTAssertEqual(app.buttons["sheet-restore"].label, Copy.restore)
     XCTAssertFalse(app.buttons["buy"].exists, "Buy with no product")
   }
@@ -341,9 +343,11 @@ final class UpgradeTests: XCTestCase {
   /// no upgrade row.
   @MainActor
   private func expectThePaidCard(in app: XCUIApplication) throws {
-    try waitFor(app.find("thanks"), label: Copy.thanks)
+    try waitFor("thanks", in: app, label: Copy.thanks)
     XCTAssertEqual(app.buttons["restore"].label, Copy.restore)
-    XCTAssertTrue(gone(app.buttons["upgrade"]), "The upgrade row in the paid version")
+    if let still = gone("upgrade", .button, in: app) {
+      XCTFail("The upgrade row in the paid version: \(still)")
+    }
   }
 
   /// Checks Settings is still the free version's, from the home screen: the upgrade row and
@@ -418,15 +422,26 @@ final class UpgradeTests: XCTestCase {
     row.tap()
   }
 
-  /// Waits up to 10 seconds for `element` to read `label`; throws, saying what it reads, when it
-  /// doesn't.
+  /// Waits up to 10 seconds for the element identified `id` to read `label`, from snapshots
+  /// (`readElement`, by `readUntil`'s rules): of any type, the first in the tree, as `app.find`
+  /// took it; of a `type` (Settings' upgrade row, a button), the only one, as `app.buttons[id]`
+  /// had to be for XCUITest to read its label. Throws, stopping the test, with what the last read
+  /// found, the read the verdict was made on, never a fresh one. Not a predicate in an
+  /// `XCTWaiter`: on PR #46's run 41394508297, waiting here for the thanks, which was on screen
+  /// before the wait began, its one evaluation was cut off at the deadline, and the failure's own
+  /// fresh read found the thanks (docs/DECISIONS.md, "What PR #46's first macOS run showed").
   @MainActor
-  private func waitFor(_ element: XCUIElement, label: String) throws {
-    let reads = NSPredicate(format: "exists == true AND label == %@", label)
-    let waited = XCTNSPredicateExpectation(predicate: reads, object: element)
-    guard XCTWaiter().wait(for: [waited], timeout: 10) == .completed else {
-      let shown = element.exists ? "\"\(element.label)\"" : "nothing, not being there"
-      throw HomeScreenError("\(element) never read \"\(label)\"; it reads \(shown)")
+  private func waitFor(
+    _ id: String,
+    _ type: XCUIElement.ElementType = .any,
+    in app: XCUIApplication,
+    label: String
+  ) throws {
+    let read = readElement(id, type, in: app, within: 10, "to read \"\(label)\"") {
+      (type == .any ? $0.found : $0.one) && $0.label == label
+    }
+    if let failure = read {
+      throw HomeScreenError("\(id) never read \"\(label)\": \(failure)")
     }
   }
 
@@ -442,14 +457,18 @@ final class UpgradeTests: XCTestCase {
     return ""
   }
 
-  /// Whether `element` is gone, or goes within 5 seconds: one the screen took away, still in its
+  /// Nil when the element identified `id` (of `type`, any unless given) is gone, or goes within
+  /// 5 seconds, as a read of the app that ended in time finds none (`readElement`; an app that
+  /// couldn't be read is never one without it): one the screen took away, still in its
   /// presentation (Buy once bought) or on the home screen (the row, once the sheet over it has
-  /// closed: `sheetCloses`).
+  /// closed: `sheetCloses`). Otherwise what the last read found, for the caller's failure.
   @MainActor
-  private func gone(_ element: XCUIElement) -> Bool {
-    let gone = NSPredicate(format: "exists == false")
-    let waited = XCTNSPredicateExpectation(predicate: gone, object: element)
-    return XCTWaiter().wait(for: [waited], timeout: 5) == .completed
+  private func gone(
+    _ id: String,
+    _ type: XCUIElement.ElementType = .any,
+    in app: XCUIApplication
+  ) -> String? {
+    readElement(id, type, in: app, within: 5, "to go") { $0.gone }
   }
 
   /// Your privacy's lines, in order (`privacy-line-<n>`), up to 10, more than it ever has.

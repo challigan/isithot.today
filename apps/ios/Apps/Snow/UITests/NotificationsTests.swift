@@ -53,7 +53,7 @@ final class NotificationsTests: XCTestCase {
   func testTheGateAtApproximateLocation() throws {
     let app = launch(["-fixture", "ip-first-launch"])
     try openSettings(app)
-    try waitFor(app.find("notify-notice"), label: Copy.needsPlace)
+    try waitFor("notify-notice", in: app, label: Copy.needsPlace)
     XCTAssertTrue(app.find("notify-use-my-location").exists, "No Use my location")
     XCTAssertTrue(app.find("notify-search").exists, "No Search")
     XCTAssertFalse(app.find("notify-evening").exists, "A switch at approximate location")
@@ -81,15 +81,15 @@ final class NotificationsTests: XCTestCase {
     XCTAssertTrue(
       app.find("notify-possible").waitForExistence(timeout: 10),
       "No possible switch; \(app.cancelsReport)")
-    try waitFor(app.find("notify-place"), value: "Leeds")
+    try waitFor("notify-place", in: app, value: "Leeds")
     try tap("notify-test", in: app)
-    try waitFor(app.find("notify-test"), value: Copy.testSent)
+    try waitFor("notify-test", in: app, value: Copy.testSent)
     try expectSettingsAtItsTop(in: app)
     try auditAccessibility(of: app, on: "Settings, notifications on", surface: .content)
     attach(app, as: "app-notifications-on")
 
     try openYourPrivacy(in: app)
-    try waitFor(app.find("kept-heading"), label: Copy.kept)
+    try waitFor("kept-heading", in: app, label: Copy.kept)
     let id = app.find("kept-line-0").label
     XCTAssertNotNil(id.range(of: #"^ID [0-9a-f]{8}$"#, options: .regularExpression), id)
     XCTAssertEqual(app.find("kept-line-1").label, Copy.keptPlace)
@@ -100,18 +100,22 @@ final class NotificationsTests: XCTestCase {
     try auditAccessibility(of: app, on: "Your privacy, registered", surface: .content)
     attach(app, as: "app-your-privacy-registered")
     try tap("delete-my-data", in: app)
-    try waitFor(app.find("delete-status"), label: Copy.deleteDone)
-    XCTAssertTrue(gone(app.find("kept-line-0")), "The kept block is still there once deleted")
+    try waitFor("delete-status", in: app, label: Copy.deleteDone)
+    if let still = gone("kept-line-0", in: app) {
+      XCTFail("The kept block is still there once deleted: \(still)")
+    }
     back(in: app)
     try page(titled: "Settings", in: app)
     try expectSwitch(app.find("notify-evening"), on: false)
-    XCTAssertTrue(gone(app.find("notify-test")), "The test is still there with every switch off")
+    if let still = gone("notify-test", in: app) {
+      XCTFail("The test is still there with every switch off: \(still)")
+    }
 
     // Last, once every audit is done: the recorder's lines at the sheet's foot wrap the whole
     // URL, which at the audits' largest text sizes would squeeze the screen above them
     // (SettingsTests).
     try tap("notify-warnings", in: app)
-    try waitFor(opened(app), value: Copy.metOfficeWarnings)
+    try waitFor("debug-opened", .staticText, in: app, value: Copy.metOfficeWarnings)
   }
 
   /// Notifications refused at the prompt: the switch stays off, the notice says they are off for
@@ -123,13 +127,14 @@ final class NotificationsTests: XCTestCase {
     let evening = app.find("notify-evening")
     try expectSwitch(evening, on: false)
     try tap("notify-evening", in: app)
-    try waitFor(app.find("notify-notice"), label: Copy.notifyDenied)
+    try waitFor("notify-notice", in: app, label: Copy.notifyDenied)
     try expectSwitch(evening, on: false)
     try expectSettingsAtItsTop(in: app)
     try auditAccessibility(of: app, on: "Settings, notifications denied", surface: .content)
     attach(app, as: "app-notifications-denied")
     try tap("notify-open-settings", in: app)
-    try waitFor(opened(app), value: UIApplication.openNotificationSettingsURLString)
+    try waitFor(
+      "debug-opened", .staticText, in: app, value: UIApplication.openNotificationSettingsURLString)
   }
 
   /// Notifications turned off in iOS Settings while the app was away: at the next launch the
@@ -147,12 +152,14 @@ final class NotificationsTests: XCTestCase {
     // What the first launch kept, Leeds and the registration, with the permission now denied.
     let again = launch(["-fixture", "leeds-dry", "-notifications", "denied"], reset: false)
     try openSettings(again)
-    try waitFor(again.find("notify-notice"), label: Copy.notifyDenied)
+    try waitFor("notify-notice", in: again, label: Copy.notifyDenied)
     try expectSwitch(again.find("notify-evening"), on: false)
     try openYourPrivacy(in: again)
     XCTAssertTrue(again.find("privacy-line-0").waitForExistence(timeout: 10), "No privacy lines")
     // The DELETE answered 204, so nothing is kept.
-    XCTAssertTrue(gone(again.find("kept-heading")), "Still kept once denied")
+    if let still = gone("kept-heading", in: again) {
+      XCTFail("Still kept once denied: \(still)")
+    }
   }
 
   /// Each answer to "Send a test notification", in turn, in its own words: one too many this
@@ -166,7 +173,7 @@ final class NotificationsTests: XCTestCase {
     try turnOnTheEvening(in: app)
     for result in [Copy.testLimited, Copy.testQuiet, Copy.testDryRun, Copy.testFailed] {
       try tap("notify-test", in: app)
-      try waitFor(app.find("notify-test"), value: result)
+      try waitFor("notify-test", in: app, value: result)
     }
     try openYourPrivacy(in: app)
     XCTAssertTrue(app.find("kept-line-0").waitForExistence(timeout: 10), "Not registered afresh")
@@ -179,7 +186,7 @@ final class NotificationsTests: XCTestCase {
     let app = launch(Self.leeds + ["-notifications", "authorized", "-devices", "offline"])
     try openSettings(app)
     try turnOnTheEvening(in: app)
-    try waitFor(app.find("notify-status"), label: Copy.notSaved)
+    try waitFor("notify-status", in: app, label: Copy.notSaved)
     try expectSwitch(app.find("notify-evening"), on: true)
   }
 
@@ -205,7 +212,7 @@ final class NotificationsTests: XCTestCase {
     attach(app, as: "app-notification-place")
     try tap("notify-place-my-location", in: app)
     let place = app.find("notify-place")
-    try waitFor(place, value: Copy.yourLocation)
+    try waitFor("notify-place", in: app, value: Copy.yourLocation)
     // Back on Settings: its place row takes a tap again.
     try reveal(place, in: app)
     XCTAssertTrue(place.label.contains(Copy.follows), place.label)
@@ -216,9 +223,9 @@ final class NotificationsTests: XCTestCase {
     try tap("notify-place", in: denied)
     try page(titled: Copy.placeTitle, in: denied)
     try tap("notify-place-my-location", in: denied)
-    try waitFor(denied.find("notify-place-problem"), label: Copy.locationDenied)
+    try waitFor("notify-place-problem", in: denied, label: Copy.locationDenied)
     try tap("notify-place-open-settings", in: denied)
-    try waitFor(opened(denied), value: UIApplication.openSettingsURLString)
+    try waitFor("debug-opened", .staticText, in: denied, value: UIApplication.openSettingsURLString)
   }
 
   /// The Today card for Leeds: "Turn on" turns the evening notification on for the place on
@@ -227,10 +234,12 @@ final class NotificationsTests: XCTestCase {
   func testTheCardTurnsOn() throws {
     let app = launch(Self.leeds + ["-alertCard", "shown", "-notifications", "allow"])
     try showTheCard(in: app, on: "leeds-dry")
-    try waitFor(app.find("card-line"), label: Copy.cardChosen)
+    try waitFor("card-line", in: app, label: Copy.cardChosen)
     app.find("card-turn-on").tap()
-    try waitFor(app.find("card-line"), label: Copy.cardOn)
-    XCTAssertTrue(gone(app.find("card-turn-on")), "Turn on is still there once on")
+    try waitFor("card-line", in: app, label: Copy.cardOn)
+    if let still = gone("card-turn-on", in: app) {
+      XCTFail("Turn on is still there once on: \(still)")
+    }
     attach(app, as: "app-card-on")
     try openSettings(app)
     try expectSwitch(app.find("notify-evening"), on: true)
@@ -245,7 +254,7 @@ final class NotificationsTests: XCTestCase {
     let launching = ["-fixture", "ip-first-launch", "-alertCard", "shown"]
     let app = launch(launching)
     try showTheCard(in: app, on: "picker-first-launch")
-    try waitFor(app.find("card-line"), label: Copy.cardApprox)
+    try waitFor("card-line", in: app, label: Copy.cardApprox)
     XCTAssertTrue(app.find("card-use-my-location").exists, "No Use my location on the card")
     attach(app, as: "app-card-approximate")
     let shown = app.pickersShown ?? 0
@@ -254,9 +263,9 @@ final class NotificationsTests: XCTestCase {
     try closeThePicker(in: app, after: shown)
     try showTheCard(in: app, on: "picker-first-launch")
     app.find("card-not-now").tap()
-    XCTAssertTrue(
-      gone(app.find("notification-card")),
-      "The card is still there after Not now; \(app.cancelsReport)")
+    if let still = gone("notification-card", in: app) {
+      XCTFail("The card is still there after Not now: \(still); \(app.cancelsReport)")
+    }
     app.terminate()
 
     let again = launch(launching, reset: false)
@@ -446,27 +455,42 @@ final class NotificationsTests: XCTestCase {
     }
   }
 
-  /// Waits up to 10 seconds for `element` to read `label`; throws, saying what it reads, when it
-  /// doesn't.
+  /// Waits up to 10 seconds for the element identified `id` to read `label`, from snapshots
+  /// (`readElement`, by `readUntil`'s rules): of any type, the first in the tree, as `app.find`
+  /// took it; of a `type`, the only one. Throws, stopping the test, with what the last read found,
+  /// never a fresh read, and the touches cancelled: not a predicate in an `XCTWaiter`, whose one
+  /// evaluation a busy simulator can stretch past the deadline, a verdict then made on no read
+  /// (docs/DECISIONS.md, "What PR #46's first macOS run showed").
   @MainActor
-  private func waitFor(_ element: XCUIElement, label: String) throws {
-    let reads = NSPredicate(format: "exists == true AND label == %@", label)
-    let waited = XCTNSPredicateExpectation(predicate: reads, object: element)
-    guard XCTWaiter().wait(for: [waited], timeout: 10) == .completed else {
-      let shown = element.exists ? "\"\(element.label)\"" : "nothing, not being there"
-      throw HomeScreenError("\(element) never read \"\(label)\"; it reads \(shown); \(cancels)")
+  private func waitFor(
+    _ id: String,
+    _ type: XCUIElement.ElementType = .any,
+    in app: XCUIApplication,
+    label: String
+  ) throws {
+    let read = readElement(id, type, in: app, within: 10, "to read \"\(label)\"") {
+      (type == .any ? $0.found : $0.one) && $0.label == label
+    }
+    if let failure = read {
+      throw HomeScreenError("\(id) never read \"\(label)\": \(failure); \(cancels)")
     }
   }
 
-  /// Waits up to 10 seconds for `element`'s value to be `value`: the place row's place, the
-  /// test row's result, the recorder's last link; throws, saying what it holds, when it isn't.
+  /// Waits up to 10 seconds for the value of the element identified `id` to be `value`: the
+  /// place row's place, the test row's result, the recorder's last link (`debug-opened`, a text).
+  /// Read as `waitFor(_:_:in:label:)` reads; throws with what the last read found.
   @MainActor
-  private func waitFor(_ element: XCUIElement, value: String) throws {
-    let holds = NSPredicate(format: "exists == true AND value == %@", value)
-    let waited = XCTNSPredicateExpectation(predicate: holds, object: element)
-    guard XCTWaiter().wait(for: [waited], timeout: 10) == .completed else {
-      let held = element.exists ? "\"\(element.value as? String ?? "")\"" : "nothing"
-      throw HomeScreenError("\(element) never held \"\(value)\"; it holds \(held); \(cancels)")
+  private func waitFor(
+    _ id: String,
+    _ type: XCUIElement.ElementType = .any,
+    in app: XCUIApplication,
+    value: String
+  ) throws {
+    let read = readElement(id, type, in: app, within: 10, "to hold \"\(value)\"") {
+      (type == .any ? $0.found : $0.one) && $0.value == value
+    }
+    if let failure = read {
+      throw HomeScreenError("\(id) never held \"\(value)\": \(failure); \(cancels)")
     }
   }
 
@@ -477,18 +501,14 @@ final class NotificationsTests: XCTestCase {
     launched?.cancelsReport ?? "debug-cancels reads nothing"
   }
 
-  /// Whether `element` is gone, or goes within 10 seconds. Each test asks only once it has read
-  /// what took its place (a line's new words, a switch's value), as XCUITest's tree can lag the
-  /// screen.
+  /// Nil when the element identified `id` is gone, or goes within 10 seconds, as a read of the
+  /// app that ended in time finds none (`readElement`; an app that couldn't be read is never one
+  /// without it); otherwise what the last read found, for the caller's failure. Each test asks
+  /// only once it has read what took its place (a line's new words, a switch's value), as
+  /// XCUITest's tree can lag the screen.
   @MainActor
-  private func gone(_ element: XCUIElement) -> Bool {
-    element.waitForNonExistence(timeout: 10)
-  }
-
-  /// The recorder's line whose value is the last URL the app would have opened.
-  @MainActor
-  private func opened(_ app: XCUIApplication) -> XCUIElement {
-    app.staticTexts["debug-opened"]
+  private func gone(_ id: String, in app: XCUIApplication) -> String? {
+    readElement(id, in: app, within: 10, "to go") { $0.gone }
   }
 
   /// Taps the element identified `id` on Settings or a page on its stack, whatever type XCUITest

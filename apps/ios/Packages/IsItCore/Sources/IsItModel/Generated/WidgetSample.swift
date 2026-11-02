@@ -71,6 +71,16 @@ public enum WidgetSample {
             "total": 5
           },
           "spoken": "Monday, 0cm, dry, 0 of 5 forecasts expect snow"
+        },
+        {
+          "label": "Tue",
+          "band": "nosnow",
+          "bandLabel": "Rain",
+          "agreement": {
+            "snowy": 0,
+            "total": 5
+          },
+          "spoken": "Tuesday, 0cm, rain, 0 of 5 forecasts expect snow"
         }
       ],
       "weekLink": "willitsnow://view/week"
