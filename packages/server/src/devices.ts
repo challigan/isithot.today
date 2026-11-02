@@ -53,6 +53,7 @@ import {
 import { alertsDryRun, scrub, type AlertRecord } from './alerts';
 import {
   AlertStoreError,
+  DEVICE_APPS,
   SafeAlertStore,
   claimTestSend,
   createBlobsAlertStore,
@@ -65,6 +66,7 @@ import {
   regKey,
   registrationId,
   type AlertStore,
+  type DeviceApp,
 } from './alertStore';
 import {
   APNS_ORIGINS,
@@ -88,10 +90,6 @@ import {
   type Located,
   type VisitorGeo,
 } from './today';
-
-/** The apps a registration may name. One registration per install per app. */
-export const DEVICE_APPS = ['snow', 'wet', 'wind', 'hot', 'all'] as const;
-export type DeviceApp = (typeof DEVICE_APPS)[number];
 
 /** The apps whose notifications are live: snow's only. */
 export const LIVE_DEVICE_APPS: readonly DeviceApp[] = ['snow'];
