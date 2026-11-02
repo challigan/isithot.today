@@ -390,6 +390,37 @@ extension XCTestCase {
     readUntil(within: timeout, "the heading \(what)", reading: { HeadingRead(app) }, until: done)
   }
 
+  /// Reads the element identified `id` (`ElementRead`: of `type`, any unless given; with `id`
+  /// nil, any element of `type`, as the keyboard is read) at once, then four times a second,
+  /// until a read that ended within `timeout` seconds finds what `done` holds for, by
+  /// `readUntil`'s rules, as the heading is read; nil when one did, otherwise what the failure
+  /// says, which is the last read's. `what` says what was awaited after the element's name ("to
+  /// read \"Purchase restored.\""), for a `slow-read`. Every wait on an element that was a
+  /// predicate in an `XCTWaiter` reads this way now: on PR #46's run 41394508297 UpgradeTests'
+  /// wait for the thanks made one evaluation in its 10 seconds, begun a second in, which was two
+  /// queries of the element, `exists` and then `label`. The busy simulator took 8.9 s over the
+  /// first, and the waiter interrupted the second at the deadline, so the wait failed having
+  /// compared nothing, with the thanks on screen since before it began; its message's own fresh
+  /// reads then found the very words it waited for (docs/DECISIONS.md, "What PR #46's first
+  /// macOS run showed"). `waitForExistence` isn't one: a timed-out one ends with an existence
+  /// check that runs to its end and decides what it returns, slow under load but never judged
+  /// on no read. `last`, when given, is handed the last read and whether it ended in time
+  /// (`readUntil`).
+  @MainActor
+  func readElement(
+    _ id: String?,
+    _ type: XCUIElement.ElementType = .any,
+    in app: XCUIApplication,
+    within timeout: TimeInterval,
+    _ what: String,
+    last: ((ElementRead, _ inTime: Bool) -> Void)? = nil,
+    until done: (ElementRead) -> Bool
+  ) -> String? {
+    readUntil(
+      within: timeout, "\(ElementRead.name(id, type)) \(what)",
+      reading: { ElementRead(app, id, type) }, last: last, until: done)
+  }
+
   /// Waits up to `timeout` seconds for the home screen's colours to settle on `band`, the page on
   /// screen's (nil, a page without an answer, drawn as no snow): the app's readout,
   /// `debug-theme` (DebugHooks' `themeReadout`), reading the band exactly, which it does only
@@ -457,22 +488,28 @@ extension XCTestCase {
       + "\(at(first.began)) s, \(first)\(since ?? "")"
   }
 
-  /// Reads the app with `next` (`HeadingRead`, `ThemeRead`) at once, then four times a second,
-  /// until a read that ended within `timeout` seconds finds what `done` holds for; the verdict
-  /// is that read's. A read counts only if it ended in time: a snapshot is the tree as the app's
-  /// main thread captured it, which a slow or stuck main thread puts off towards the read's end,
-  /// so a read begun in time and answered late shows the screen after the deadline, and fails
-  /// the wait whatever it found. No read begins after the deadline. Nil when one counted;
+  /// Reads the app with `next` (`HeadingRead`, `ThemeRead`, `ElementRead`) at once, then four
+  /// times a second, until a read that ended within `timeout` seconds finds what `done` holds
+  /// for; the verdict is that read's. A read counts only if it ended in time: a snapshot is the
+  /// tree as the app's main thread captured it, which a slow or stuck main thread puts off
+  /// towards the read's end, so a read begun in time and answered late shows the screen after
+  /// the deadline, and fails the wait whatever it found. No read begins after the deadline, and
+  /// none is interrupted (an interrupted query runs on in the app and holds up the next, as on
+  /// main's run 41327075971 and PR #46's 41394508297). Nil when one counted;
   /// otherwise what the failure says: how many reads in how long, when the last began and how
   /// long it took, what it found, and, when it found what was awaited too late, when it ended. A
   /// read that took 5 seconds or more, which no screen should, is attached (`slow-read`, naming
   /// `what` was awaited), pass or fail, so a slow main thread in the app (where the read is made)
-  /// shows even when the wait passes.
+  /// shows even when the wait passes. `last`, when given, is handed the read the verdict rests
+  /// on, the last, and whether it ended in time, as the wait ends: for a caller whose next step
+  /// turns on why a wait failed, as AdsTests' skip for Google's having no full-screen ad does,
+  /// which only a last read that ended in time can show.
   @MainActor
   func readUntil<Read: ScreenRead>(
     within timeout: TimeInterval,
     _ what: String,
     reading next: () -> Read,
+    last: ((Read, _ inTime: Bool) -> Void)? = nil,
     until done: (Read) -> Bool
   ) -> String? {
     let start = Date()
@@ -495,11 +532,15 @@ extension XCTestCase {
       }
       let inTime = ended <= timeout
       let matched = done(read)
-      if inTime, matched { return nil }
+      if inTime, matched {
+        last?(read, true)
+        return nil
+      }
       if inTime {
         RunLoop.current.run(until: min(Date().addingTimeInterval(0.25), deadline))
         if Date() < deadline { continue }
       }
+      last?(read, inTime)
       let waited = Date().timeIntervalSince(start)
       let late =
         matched
@@ -1215,5 +1256,104 @@ struct ThemeRead: ScreenRead {
     if let unreadable { return "couldn't read the app: \(unreadable)" }
     guard found else { return "found no debug-theme readout" }
     return "found debug-theme reading \"\(value ?? "nothing")\""
+  }
+}
+
+/// An element as one read of the screen finds it: from one snapshot of the app, as `HeadingRead`
+/// reads the heading, every element below the app identified `id` and of `type` (any type for
+/// `.any`; with `id` nil, every element of `type`, as the keyboard is found), in the order a
+/// `firstMatch` query takes them: level by level, breadth first, each level in the tree's order,
+/// as the app's log of PR #46's run 41394508297 shows one walking the tree (Xcode 26.6: the
+/// app's children checked, then theirs, before anything deeper), so the first is the shallowest,
+/// the element `app.find` judged even where an identifier is at two depths; how many there were,
+/// and the first one's label, value, frame, and whether it is enabled and selected; with when
+/// the read began and how long the app took to answer it. The identifier exactly, which is
+/// narrower than XCUITest's `app.buttons["buy"]`, which also matches a button labelled "buy":
+/// every element a wait reads has its identifier (`accessibilityIdentifier`). A wait
+/// (`readElement`) says which match it judges, as the query it replaced did: the first
+/// (`found`), for a `firstMatch` (`app.find`); the only one (`one`), for a query that wasn't, as
+/// `app.buttons["buy"]`, whose label, value or state XCUITest won't read while two elements match
+/// it; none, from an app that could be read (`gone`).
+struct ElementRead: ScreenRead {
+  let id: String?
+  let type: XCUIElement.ElementType
+  let began: Date
+  let took: TimeInterval
+  /// How many elements matched; none when the app couldn't be read.
+  let count: Int
+  /// The first match's label, value (as text; nil without one), frame, and whether it is enabled
+  /// and selected; "", nil, zero and false without one.
+  let label: String
+  let value: String?
+  let frame: CGRect
+  let enabled: Bool
+  let selected: Bool
+  /// Why the app couldn't be read, when it couldn't.
+  let unreadable: String?
+
+  /// The element now, as `app`'s accessibility tree has it.
+  @MainActor
+  init(_ app: XCUIApplication, _ id: String?, _ type: XCUIElement.ElementType = .any) {
+    self.id = id
+    self.type = type
+    began = Date()
+    var matches: [any XCUIElementSnapshot] = []
+    var unreadable: String?
+    do {
+      // A queue: the app's children first, each element's children after every element already
+      // waiting, so a level is read whole before the next.
+      var pending = try app.snapshot().children
+      var next = 0
+      while next < pending.count {
+        let element = pending[next]
+        next += 1
+        let named = id.map { element.identifier == $0 } ?? true
+        if named, type == .any || element.elementType == type { matches.append(element) }
+        pending.append(contentsOf: element.children)
+      }
+    } catch {
+      unreadable = brief(error)
+    }
+    took = Date().timeIntervalSince(began)
+    let first = matches.first
+    count = matches.count
+    label = first?.label ?? ""
+    value = first?.value as? String
+    frame = first?.frame ?? .zero
+    enabled = first?.isEnabled ?? false
+    selected = first?.isSelected ?? false
+    self.unreadable = unreadable
+  }
+
+  /// Whether the read found the element at all: what a `firstMatch` needs, the first (the
+  /// shallowest) taken.
+  var found: Bool { count > 0 }
+
+  /// Whether the read found exactly one: what a query that isn't a `firstMatch` needs before
+  /// XCUITest reads its label, value or state.
+  var one: Bool { count == 1 }
+
+  /// Whether the read found none in an app it could read: an app that couldn't be read is not
+  /// one without the element.
+  var gone: Bool { unreadable == nil && count == 0 }
+
+  /// The element's name in a failure: its identifier, or with none its type's ("keyboard").
+  static func name(_ id: String?, _ type: XCUIElement.ElementType) -> String {
+    id ?? type.name
+  }
+
+  /// What the read found, for a failure: the first match's label, its value when it has one,
+  /// not enabled, selected, and where it was, with how many matched when more than one; none;
+  /// or why the app couldn't be read.
+  var description: String {
+    if let unreadable { return "couldn't read the app: \(unreadable)" }
+    let name = Self.name(id, type)
+    guard found else { return "found no \(name)" }
+    var said = "found \(name)" + (label.isEmpty ? "" : " reading \"\(label)\"")
+    if let value, !value.isEmpty { said += ", its value \"\(value)\"" }
+    if !enabled { said += ", not enabled" }
+    if selected { said += ", selected" }
+    said += " at \(frame)"
+    return count > 1 ? "\(said), the first of \(count)" : said
   }
 }

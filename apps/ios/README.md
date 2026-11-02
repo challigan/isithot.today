@@ -723,19 +723,29 @@ deadline, so one the app answers late fails the wait and says when it found the 
 failure is that last read's, with how many reads there were and how long the last took
 (docs/DECISIONS.md, "What main's offline run showed": a predicate in an `XCTWaiter` had its only
 query interrupted at the deadline, and failed having compared nothing). Every wait for the
-heading reads this way, the launches' and the picker tests' too. The words come before the
-colours: a tab tap or an answer brings a page's heading at once, and the home screen's background
-takes 0.9 s more to fade to the page's band. So once the heading has come, `tap(_:in:)`,
-`launch(_:)` and `FixtureLaunchTests`' launch and taps also wait, for up to 10 seconds, for the
-colours (`awaitColours`), by the same rules and from snapshots too (`readUntil`, `ThemeRead`),
-until the Debug readout `debug-theme` (below, "Debug hooks") reads the page's band exactly
-("none" for a page without an answer), which it does only once every fade is over. Colours that
-never settle fail the test, naming the band and what the last read found. No screenshot or audit
-after them catches the fade (docs/DECISIONS.md, "What PR #45's first macOS run showed"). Each wait
-that passes is attached as `colour-wait` (the read it passed on, when that read began and ended,
-what the first read found, and, after a tap, how long after the tap began the wait did), failing
-nothing: after a tap that changes band, a first read less than 0.9 s after the tap should find
-`fading`, which says the readout waits for the fade, as passing waits alone can't.
+heading reads this way, the launches' and the picker tests' too, and so does every other wait that
+was a predicate in an `XCTWaiter`, in UpgradeTests, AdsTests, SettingsTests, PickerTests and
+WidgetLinkTests (`readElement`, `ElementRead`): an element by its identifier exactly and its
+query's type, the first match where the query was a `firstMatch` (level by level, the shallowest
+first, as `firstMatch` walks the tree) and the only one where it wasn't, and gone only on a read of
+an app it could read, each wait with its own timeout and condition
+(docs/DECISIONS.md, "What PR #46's first macOS run showed": UpgradeTests' wait for the thanks had
+its one evaluation cut off at the deadline, the thanks on screen since before it began). PickerTests
+reads the keyboard up before each drag that should put it away, so its wait for the keyboard to go
+can't pass on a read that couldn't see it. The `waitForExistence` calls stay: each ends with an
+existence check that runs to its end and decides it, slow under load but never judged on no read.
+The words come before the colours: a tab tap or an answer brings a page's heading at once, and the
+home screen's background takes 0.9 s more to fade to the page's band. So once the heading has come,
+`tap(_:in:)`, `launch(_:)` and `FixtureLaunchTests`' launch and taps also wait, for up to 10
+seconds, for the colours (`awaitColours`), by the same rules and from snapshots too (`readUntil`,
+`ThemeRead`), until the Debug readout `debug-theme` (below, "Debug hooks") reads the page's band
+exactly ("none" for a page without an answer), which it does only once every fade is over. Colours
+that never settle fail the test, naming the band and what the last read found. No screenshot or
+audit after them catches the fade (docs/DECISIONS.md, "What PR #45's first macOS run showed"). Each
+wait that passes is attached as `colour-wait` (the read it passed on, when that read began and
+ended, what the first read found, and, after a tap, how long after the tap began the wait did),
+failing nothing: after a tap that changes band, a first read less than 0.9 s after the tap should
+find `fading`, which says the readout waits for the fade, as passing waits alone can't.
 
 **The tests** (the UI test plan; `### UI:` in the `ios` job's log names each failure with its
 file and line):
@@ -1735,7 +1745,8 @@ units over the real network: the band under the pager and the box at a page's en
 within 5 minutes (`ads-full-screen`), and since phase 7.1 a purchase taking them all away
 (`ads-after-purchase`, a test that never skips). Each other test skips, saying why, only when Google
 didn't answer in time, which a Debug build's readout of the ads model tells it (`debug-ads`,
-`debug-interstitial`, `debug-shown`); what is the app's fails.
+`debug-interstitial`, `debug-shown`); what is the app's fails. The full-screen test skips only when
+the last read of `debug-interstitial` ended in time and found `none`; reads too slow to say fail.
 
 **Trying it.** A Debug build run from Xcode is the free version, with Google's demo ads. `-noads 1`
 runs it without them, `-unlocked 1` as the paid version, and on the simulator `-umpGeography eea`

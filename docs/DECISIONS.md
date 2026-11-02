@@ -5337,12 +5337,17 @@ and #44's runs passed the test):
   `FixtureLaunchTests.waitForHeading`; and `PickerTests.waitForHeading`, after a picker choice,
   where `wait(for:label:)` had a predicate on the heading in a waiter. No wait is longer, no retry
   is added, and the words must still match exactly.
-- **Still exposed**: the waits on elements other than the heading (about 85 `waitForExistence`
-  calls and 13 predicate expectations, some in helpers used many times, on tabs, buttons,
-  readouts, sheets and the picker's lines), whose queries took up to 10.9 s in this spell against
-  timeouts of 5 to 15 s; none failed. Each is the next to move to a snapshot read should one fail
-  so. Stopping the simulator's Spotlight embedding in `ci/simulator.sh` might make the load
-  rarer; untried.
+- **Still exposed, then**: the waits on elements other than the heading (about 85
+  `waitForExistence` calls and 13 predicate expectations, some in helpers used many times, on
+  tabs, buttons, readouts, sheets and the picker's lines), whose queries took up to 10.9 s in this
+  spell against timeouts of 5 to 15 s; none failed, and each was to move to a snapshot read should
+  one fail so. On PR #46's run one did, UpgradeTests' wait for the thanks, and all 13 predicate
+  waits have moved together, as the same helper came within 1.55 s of failing in another test of
+  that run, and PR #45's green run spent 4.42 s of 10 on one evaluation of the keyboard's wait
+  (below, "What PR #46's first macOS run showed"). The `waitForExistence` calls stay: a starved
+  query makes them slow, not wrong, as each ends with an existence check that runs to its end and
+  decides what it returns. Stopping the simulator's Spotlight embedding in `ci/simulator.sh` might
+  make the load rarer; untried.
 - **Checked on Linux, against stubs** (session scratchpad: flaky/uicheck): the 13 UI test files
   compiled against the XCUITest stubs; 12 checks of the wait against fake apps (a read answered
   after the deadline failing, and saying it found the words only then, as a stuck main thread's
@@ -5495,6 +5500,158 @@ first read that began less than 0.9 s after the tap (the wait's start after the 
 read's after that) and found the band, which would mean the completion comes before the fade is
 over, though every wait passed, and that such first reads found "fading" instead; and that none
 times out, which would mean a completion never came.
+
+**What PR #46's first macOS run showed** (307f34d's run 41394508297, job 125113405200, the merge of
+#45's 2887d9b with a server change that touches no iOS code; PR #45's run 41391723791 and PR #44's
+on 7943448, run 41391924511, passed the same tests):
+
+- **UpgradeTests.testSettingsBuysOnItsOwnStack failed on a thanks that was there.** It said
+  `upgrade-outcome` never read "Thank you. Ads are off and widgets are on.", and that it read
+  exactly those words. The purchase wasn't slow: under `-uitest` StoreKit's stand-in
+  (`FakePurchases.buy`, DebugHooks.swift) returns `.completed` with nothing awaited; the app
+  received Buy's touch at 06:22:04.148, and the screen recording's next frame, at 04.208, shows the
+  thanks card with Buy gone, where the frame before, at 01.465, shows Buy for £1.99 (the gear's and
+  the upgrade row's touches put the recording's clock within 0.11 s of SpringBoard's). The wait
+  began at 04.353, 0.15 s after the thanks came, its deadline at 14.353. Every read of the element
+  in the test, the frame and four in the app between 14.171 and 25.929, found one StaticText
+  `upgrade-outcome` reading the thanks: no other match, no sheet over it, no change of label. Of the
+  run's five waiters that timed out, the other four were `waitForExistence` calls, three of them
+  negatives meant to time out.
+- **The wait compared nothing.** UpgradeTests' `waitFor(_:label:)` was an
+  `XCTNSPredicateExpectation` (`exists == true AND label == %@`) in an `XCTWaiter` of 10 s. Its
+  first evaluation comes about a second in (1.00 to 1.08 s after the step before, for all 61 in the
+  run), and each evaluation is one query per attribute: `exists`, then `label` (and three for
+  `expectBuyToTap`'s, `enabled` too, as the result bundle shows). A `firstMatch` query is evaluated
+  in the app as a walk of the live tree on its main thread, element by element. The one evaluation
+  began at 05.376. Its `exists` query took 8.897 s over 278 fetches and returned at 14.274, 0.08 s
+  before the deadline, holding the thanks; its `label` query began at 14.275, and at 14.645 the
+  waiter's watchdog interrupted it ("Interrupted by waiter") and reported a timeout. The failure's
+  own `element.exists` and `element.label`, fresh reads outside any waiter, then ran from 14.649 to
+  21.603 (4.16 s of it queued behind the abandoned query, which the app finished anyway at 18.757)
+  and from 21.604 to 25.932, and found the thanks: so "never read X; it reads X". It is main's
+  offline run's flaw (above), in a wait #45 left.
+- **The app was starved, on and off, through UpgradeTests.** From about 06:18:30 to 06:22:30 queries
+  ran slow in four of its tests (means of 0.86, 0.21, 0.72 and 2.01 s, against 0.02 to 0.28 s
+  elsewhere in the run), with fast stretches between (testRestoreFindsNothing, at 06:21:00, 0.046
+  s), and multi-second `firstMatch` queries came in other suites too (3.74 s in AdsTests, 2.6 and
+  2.8 s in two picker tests). The same helper's evaluation took 7.42 s in testAskToBuy, which passed
+  with 1.55 s to spare, and 3.57 s in testRestoreFindsThePurchase; in this test Buy's own queries
+  took 0.16 to 0.18 s, two seconds before the 8.9 s one. The fetches themselves stayed fast (a
+  median of 0.2 ms, 1.35 s of the 8.9 in all): the app's threads crawled between them, about 9 ms a
+  line of XCTest's own debug logging, roughly 980 lines a query, against 0.3 ms outside the spells.
+  What starved them, CPU or blocked writes to the app's captured standard output (454 MB over the
+  run), isn't shown; the result bundle's unified log wasn't decoded, so the Spotlight embedding
+  main's run pointed to is neither shown nor ruled out. The app logged no work of its own.
+- **Snapshots slowed far less.** Each launch's `colour-wait` snapshot took 0.06 to 0.58 s in those
+  spells, and the worst hierarchy capture seen took 0.84 s (06:19:41.8, against 0.12 s at 06:22:03):
+  a snapshot is one round trip into the app, where a `firstMatch` walk here made about 278 fetches.
+  A snapshot read would have found the thanks on its first read, as it was on screen since before
+  the wait; that is inferred, not run. (The diagnosis's pairing of each slow test's `colour-wait`
+  with a query of 2 to 4.5 s straight after held in two of the four.) PR #45's green run had a spell
+  of its own in PickerTests (query means of 0.50 to 1.15 s, single queries up to 7.9 s), where
+  `waitUntilGone(app.keyboards.firstMatch)` spent 4.42 s of its 10 on one evaluation.
+- **`waitForExistence` is slowed by it, not failed.** On this Xcode (26.6, 17F113) a
+  `waitForExistence` whose waiter times out makes one more existence check outside any waiter, which
+  runs to its end and decides what it returns. testAskToBuy's `page(titled: "Settings")`, 5 s, had
+  its one evaluation interrupted at 5.26 s; the check then took 24.58 s, found the title and passed.
+  testNoProductNoPrice's `XCTAssertFalse(… waitForExistence(timeout: 3))` had its interrupted at
+  3.25 s; the check took 7.37 s and found no row. So its verdict is always a completed read's. It
+  bends the deadline: a positive one can pass on a read that ended long after it, the lenient way,
+  and a negative one judges a later screen than its window, which is stricter, but harmless where
+  the element never comes. A bare `XCTNSPredicateExpectation` in a waiter, or
+  `XCTestCase.wait(for: [expectation(for:…)])`, has no such check. The hand-rolled loops
+  (HomeScreens' `sheetCloses`, `pickerOpens`, `pickerCloses`, `cancelled` and `settledFrame`;
+  UpgradeTests' `result(of:)` and `tapRow`; AdsTests' `waitForAdsPhase` and its own loops) each
+  judge a read that ran to its end, as does `app.wait(for: .runningForeground)`, which reads the
+  app's state. None of them changes.
+- **So every predicate wait on an element reads snapshots**, by the heading's rules (`readUntil`).
+  `ElementRead` (HomeScreens.swift) finds, in one snapshot of the app, every element below the app
+  with the identifier exactly, of the query's type unless any (with no identifier, every element of
+  the type, as the keyboard is found), in the order a `firstMatch` query takes them: level by level,
+  each level in the tree's order, as the app's log of this run shows the starved query walking the
+  tree (the app's children checked, then theirs, before anything deeper). So the first match is the
+  shallowest, the element `app.find` judged, even where an identifier is at two depths. It keeps how
+  many there were and the first one's label, value, frame, and whether it is enabled and selected.
+  `readElement` reads it at once, then four times a second; a read counts only if it ended by the
+  deadline, none begins after it, the failure is the last read's (how many reads in how long, when
+  the last began and how long it took, and what it found, or that it found what was awaited too
+  late), and a read of 5 seconds or more is attached as `slow-read`. Each of the 13 waits keeps its
+  timeout and its condition exactly, and judges the match its query did: the first, for a
+  `firstMatch` (`app.find`), or the only one, for a query that wasn't (`app.buttons["buy"]`), as
+  XCUITest won't read such a query's label, value or state while two elements match it. The
+  identifier exactly is narrower than XCUITest's `["buy"]`, which matches a label too: every element
+  waited on has its identifier, and WidgetLinkTests' tab, found by its words before, is now the
+  button `view-<view>` (IsItUI's `ViewSwitcher.identifier`, which HomeAuditTests already reads),
+  selected and reading the page's label, as the query by its words needed. The 13: UpgradeTests'
+  `waitFor` (the outcome's line, Settings' upgrade row, its thanks, the line with no product),
+  `expectBuyToTap` (one Buy, enabled, reading its price) and `gone`; AdsTests' wait for the thanks,
+  `gone` for the band, the full-screen ad's (`awaitAFullScreenAd`, below) and `expectPlace`;
+  WidgetLinkTests' tab selected, reading its label; SettingsTests' `waitFor` on the recorder's
+  lines, and its wait for Report an ad's email; and PickerTests' wait for the app's settings URL,
+  `wait(for:_:in:label:)` and `waitUntilGone`. A wait for an element to go passes only on a read of
+  an app it could read that found none (`ElementRead.gone`). And before each drag that should put
+  the keyboard away, PickerTests now reads the keyboard there (`expectTheKeyboard`, one read, as
+  text has been typed), so a read that couldn't see the keyboard fails there, rather than passing
+  blind the check that caught PR #33's keyboard bug. The failures that read the awaited element
+  again (UpgradeTests', SettingsTests' and `expectPlace`'s, and the band's `homeGeometry`) now give
+  the last read instead. No timeout is longer, no condition looser, nothing is retried or paused,
+  and nothing more skips.
+- **The full-screen ad's skip is narrower.** AdsTests skips when no full-screen ad loads in 30
+  seconds, as Google had none to give. A snapshot wait's last read can be one the app answered after
+  the deadline, or one that couldn't read the app, and a skip on those would put the simulator's
+  slowness down to Google and keep it out of the failures, as the first macOS run's skips did
+  (below, "When AdsTests skips, and when it fails"). So `awaitAFullScreenAd` skips only when its
+  last read ended in time and found `debug-interstitial` reading `none`, quoting that read, and
+  otherwise fails, stopping the test, saying why it isn't a skip. `readUntil` hands such a caller
+  its last read and whether it ended in time (`last`), so the rule for in time stays in one place.
+  Some skips become failures; none the other way.
+- **Found in review.** Three things the first version of this change got wrong. WidgetLinkTests' tab
+  wait had dropped the tab's words, which the query by them had checked: a selected `view-today`
+  reading Today would have passed for Tomorrow after 6pm. `ElementRead` took the first match depth
+  first, and called it the one `firstMatch` takes, which the app's log shows walking level by level;
+  the two differ only where an identifier is at two depths, as none waited on here is, but the claim
+  and its check were wrong. And the full-screen ad's skip quoted whatever the last read was, a late
+  or blind one included, before blaming Google.
+- **Not done**: moving the 84 `waitForExistence` calls, which starvation makes slow but never wrong,
+  and whose leniency would change; the app and the stand-in, which answered at once; and the
+  simulator's load, whose cause isn't shown, where stopping Spotlight's embedding in
+  `ci/simulator.sh` would at most make the spells rarer.
+- **Checked on Linux, against stubs** (session scratchpad: flaky/uicheck): the UI test files
+  compiled against the XCUITest stubs, whose snapshots now carry `isEnabled` and `isSelected`, as
+  XCUIElementAttributes does; 25 checks against fake apps, 10 of `ElementRead` and `readElement` (an
+  element there found on the first read, at once; one that comes later waited for; a read answered
+  after the deadline failing, and saying it found the words only then; the failure the last read's,
+  each read's words numbered; no read begun after the deadline; the type counting, Settings' upgrade
+  button apart from a group with its identifier, and the keyboard by its type alone; gone only on a
+  read, never on an app that couldn't be read; enabled, selected and the value apart from the label;
+  a slow read attached as `slow-read`, naming the element; the first match the shallowest, then the
+  first of its level, and "the first of 3" said), 6 of UpgradeTests' helpers as the copy has them
+  (run 41394508297's thanks passing on its first read, though each read takes 0.6 s; `waitFor`
+  failing with its last read, never a fresh one; `app.find`'s wait taking the first of two, a
+  button's never passing on two; Buy greyed out, or two Buys, never Buy to tap; `gone` never on an
+  app it couldn't read), 3 of PickerTests' keyboard (a drag putting it away; a read that can't see
+  it failing the control; one left up failing the wait with its last read), 2 of WidgetLinkTests'
+  `open` on durham-tomorrow at 6:05pm (Tomorrow's tab selected passing; one reading Today, or
+  Tomorrow's not selected, failing with its last read) and 4 of AdsTests' `awaitAFullScreenAd`
+  (ready in time passing; none on a last read in time skipping, quoting it; a last read answered
+  late, finding ready or none, failing; an app it couldn't read, or no readout, failing), which each
+  of 27 planted faults fails (the first read a poll late; one read only; a late read counting; the
+  message from a fresh read; a read begun after the deadline; the type ignored; gone on an
+  unreadable app; the value read as the label; enabled read as there; selected never read; the tree
+  read depth first; several never said; `slow-read` not naming the element; `waitFor`'s message from
+  a fresh read; a typed `waitFor` taking the first, and an any-type one needing one; Buy to tap not
+  enabled, or the first of two; `gone` passing blind; no keyboard control; the keyboard's wait not
+  by its type; a level read backwards; the tab's words dropped; the ad skipping on a late read, on
+  any failure, or without a readout; the last read always in time); #45's checks of the heading's
+  and the colours' waits, unchanged, on the same `readUntil`; and `swift format lint --strict` over
+  every Swift file changed.
+
+**For the next macOS run to show.** That these waits pass on their first read or two, the thanks at
+once after Buy; that the keyboard's control finds it before each drag, which shows a snapshot
+holds the keyboard; that WidgetLinkTests finds each tab as `view-<view>` reading its page's
+label; that none of them attaches a `slow-read` outside a slow spell; that the full-screen ad's
+wait, when Google has none, skips on a last read that ended in time; and that one that fails in a
+spell names its reads and the last read's time, and agrees with itself.
 
 ## After #34's fourth full run
 
@@ -6032,8 +6189,10 @@ under `-noads 1` or in a Release build): `debug-ads`, the phase (`idle`, `asking
 shown and closed this launch (`AdsModel.interstitialsShown`). `asking` (UMP's update, its form or Mobile Ads'
 start still out) and `withheld` (UMP says no ads may be requested) skip; `idle` in a free launch,
 or no readout, fails, as does `on` with no band within 5 seconds. The full-screen test waits for
-`ready` before it chooses a place, skips if no ad ever loads, and fails if one was ready and the
-app never counts it shown. The screen can't say whether an ad showed, nor whether the consent form
+`ready` before it chooses a place, skips if no ad ever loads (since PR #46's review, only when its
+last read ended in time and found `none`; reads too slow to say fail, as the simulator's: above,
+"What PR #46's first macOS run showed"), and fails if one was ready and the app never counts it
+shown. The screen can't say whether an ad showed, nor whether the consent form
 took a tap: on eb5dfd8's run Google's full-screen ad came over the picker (the screen recording
 shows "This is an interstitial test ad" over it), yet XCUITest still found the home screen's place
 button, so the test took the ad for the home screen and failed; and the form's Consent button was
