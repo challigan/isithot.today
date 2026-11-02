@@ -221,7 +221,7 @@ reach the key.
 - **Archive checks**: both bundles have privacy manifests, each declaring coarse location, and the
   four fonts, each named in `UIAppFonts`; the widget has SnowKit's glyphs and the app's https API
   origin; the app has its icon; the widget links no Google Mobile Ads, no location code and
-  no purchase code; neither binary names any of the 18 debug hooks; the three ad units are Google's
+  no purchase code; neither binary names any of the 19 debug hooks; the three ad units are Google's
   demo ones (test) or yours (real); the app's `SKAdNetworkItems` hold Google's; the app and widget
   have the same version and build; `ITSAppUsesNonExemptEncryption` is false; no fixture and no
   StoreKit configuration is bundled, and the app doesn't link StoreKitTest. Each failure is named;
@@ -723,7 +723,19 @@ deadline, so one the app answers late fails the wait and says when it found the 
 failure is that last read's, with how many reads there were and how long the last took
 (docs/DECISIONS.md, "What main's offline run showed": a predicate in an `XCTWaiter` had its only
 query interrupted at the deadline, and failed having compared nothing). Every wait for the
-heading reads this way, the launches' and the picker tests' too.
+heading reads this way, the launches' and the picker tests' too. The words come before the
+colours: a tab tap or an answer brings a page's heading at once, and the home screen's background
+takes 0.9 s more to fade to the page's band. So once the heading has come, `tap(_:in:)`,
+`launch(_:)` and `FixtureLaunchTests`' launch and taps also wait, for up to 10 seconds, for the
+colours (`awaitColours`), by the same rules and from snapshots too (`readUntil`, `ThemeRead`),
+until the Debug readout `debug-theme` (below, "Debug hooks") reads the page's band exactly
+("none" for a page without an answer), which it does only once every fade is over. Colours that
+never settle fail the test, naming the band and what the last read found. No screenshot or audit
+after them catches the fade (docs/DECISIONS.md, "What PR #45's first macOS run showed"). Each wait
+that passes is attached as `colour-wait` (the read it passed on, when that read began and ended,
+what the first read found, and, after a tap, how long after the tap began the wait did), failing
+nothing: after a tap that changes band, a first read less than 0.9 s after the tap should find
+`fading`, which says the readout waits for the fade, as passing waits alone can't.
 
 **The tests** (the UI test plan; `### UI:` in the `ios` job's log names each failure with its
 file and line):
@@ -805,8 +817,8 @@ off` at 10:30am): the 10am hour on Now and Today, and the offline line on every 
   #33's contrast exception for the details and the places nearby alone became the proof for
   every text element after PR #34's first full run.) The issues allowed and any exception a test didn't need are attached
   (`home-<fixture>-<size>-allowed`) and listed in its failure. An issue on one of a Debug build's
-  readouts (`debug-picker`, `debug-pickers` and `debug-cancels`: a point square at most, which a
-  Release build hasn't, `DebugReadout`) is set apart, failing nothing, and listed in
+  readouts (`debug-picker`, `debug-pickers`, `debug-cancels` and `debug-theme`: a point square at
+  most, which a Release build hasn't, `DebugReadout`) is set apart, failing nothing, and listed in
   the times and `-allowed`, every audit's, the sheets' too. Each page's first screenful also
   attaches the app's element tree (`<page>-tree`). Each call goes through `runAudit`
   (ScreenAudit.swift), which times it and reads its issues once it is done, outside XCTest's
@@ -1873,9 +1885,12 @@ Every test and debug hook is in `Apps/Snow/App/DebugHooks.swift`, inside `#if DE
 section 9.8). A Release build compiles a stub with the same names that does nothing and names no
 launch argument. So far there are these:
 
-- `-uitest` turns animations off, and keeps the glyphs' flakes still (`stillMotion()`), as
-  `-now` does too; since phase 7.1 it also puts StoreKit's stand-in in StoreKit's place (below);
-  and since PR #40 it counts the touches the system cancels, for `debug-cancels` (below);
+- `-uitest` turns UIKit's animations off (`UIView.setAnimationsEnabled(false)`), which leaves
+  SwiftUI's own animations and transitions running: the home screen's background still fades
+  between bands, which `debug-theme` reads (below). It keeps the glyphs' flakes still
+  (`stillMotion()`), as `-now` does too; since phase 7.1 it also puts StoreKit's stand-in in
+  StoreKit's place (below); and since PR #40 it counts the touches the system cancels, for
+  `debug-cancels` (below);
 - `-resetStore` forgets the place, the units, the saved answer, the recent and saved places and
   when the last full-screen ad showed before the model reads them, for a first launch (not
   `unlock.v1`, which only `PurchaseModel` writes, and which nothing reads under the stand-in);
@@ -1977,6 +1992,18 @@ launch argument. So far there are these:
   phases it reads are the system's (backboardd's cancel, a system gesture, deactivation), read
   before UIKit dispatches the event and before any recognizer sees it, and no event's delivery
   changes. It adds no recognizer and wraps no binding;
+- the colours' readout, which the UI tests wait on (`awaitColours`): under `-uitest`, a clear
+  one-point element at the top of the home screen, `debug-theme`, reading the page on screen's
+  band (`none` without an answer) once every fade the background has begun is over and the last
+  was to that page's colours, and `fading` until then. `HomeShell` (IsItUI, which names no Debug
+  hook) tells the app each fade's theme as it begins and, from
+  `Transaction.addAnimationCompletion(criteria: .removed)` on the background's own transaction,
+  its end (`fades`, nil in a Release build and without `-uitest`). The app counts the fades under
+  way (`ThemeFades`), so a theme left and come back to within 0.9 s reads `fading` until both
+  fades are over, and the readout judges them in its own body, so it reads `fading` from the very
+  update that changes the theme; a band that changes without changing the theme (a loading page,
+  drawn as no snow, giving way to a dry answer) reads at once. `check-archive.sh` looks for its
+  name in both binaries;
 - the unit tests' host: when the app only hosts the unit tests (XCTest's
   `XCTestConfigurationFilePath` in its environment), it doesn't launch (`AppModel.launch()`), so
   the hosted tests have the App Group to themselves, and its `PurchaseModel` never starts (its

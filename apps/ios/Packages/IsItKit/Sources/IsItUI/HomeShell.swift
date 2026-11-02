@@ -12,6 +12,11 @@ public struct HomeShell<Content: View>: View {
   let topBar: HomeTopBar
   let theme: PageTheme
   let actions: HomeActions
+  /// Told the theme each time the background begins fading to it, when given, and what it hands
+  /// back is called once that fade is over: for a Debug build's readout of the colours, which the
+  /// UI tests wait on (`debug-theme`, DebugHooks.swift), and which IsItUI doesn't name, so the app
+  /// passes it.
+  let fades: ((PageTheme) -> () -> Void)?
   let content: Content
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -20,11 +25,13 @@ public struct HomeShell<Content: View>: View {
     topBar: HomeTopBar,
     theme: PageTheme,
     actions: HomeActions,
+    fades: ((PageTheme) -> () -> Void)? = nil,
     @ViewBuilder content: () -> Content
   ) {
     self.topBar = topBar
     self.theme = theme
     self.actions = actions
+    self.fades = fades
     self.content = content()
   }
 
@@ -48,6 +55,16 @@ public struct HomeShell<Content: View>: View {
         PageBackground(theme: theme)
           .id(theme)
           .transition(.opacity)
+      }
+      // Each fade a new theme begins is told to `fades`, and what it hands back is called once
+      // that fade is over: the completion joins the transaction the animation below gives the
+      // fade, and SwiftUI fires each exactly once, so at once under Reduce Motion, with no
+      // animation to wait for. One per fade, so a fade begun before the last is over is counted
+      // as well. The top bar and the switcher fade on the same curve from the same change, so
+      // they end with it.
+      .transaction(value: theme) { transaction in
+        guard let fades else { return }
+        transaction.addAnimationCompletion(criteria: .removed, fades(theme))
       }
       .animation(reduceMotion ? nil : .easeInOut(duration: 0.9), value: theme)
       // Decoration with no accessibility element, and no accessibility modifier here or in

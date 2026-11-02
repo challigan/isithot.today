@@ -54,8 +54,9 @@ AD_UNITS=(
 # 14.4).
 GOOGLE_SKADNETWORK=cstr6suwn9.skadnetwork
 # The debug hooks' names (section 18.3), looked for anywhere in strings' output and as whole
-# short literals.
-HOOKS=(-uitest -fixture -apiOrigin -umpGeography -openURLs URLProtocolStub FakePurchases 127.0.0.1)
+# short literals: debug-theme, the readout of the home screen's colours that the UI tests wait on.
+HOOKS=(-uitest -fixture -apiOrigin -umpGeography -openURLs URLProtocolStub FakePurchases 127.0.0.1
+  debug-theme)
 # Debug hooks that begin ordinary words, so looked for in strings' output only where no letter
 # follows them, and as whole short literals: Google's SDK, linked into the app, holds OpenSSL's
 # name sbgp-routerIdentifier. Matched with grep -E, so none may hold a pattern's special

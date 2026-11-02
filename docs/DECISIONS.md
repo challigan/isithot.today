@@ -2865,9 +2865,9 @@ once to VoiceOver, and every text size up to AX5 (sections 9.5, 10.1, 10.2 and 1
   little out of step. `GlyphMotion` says when: on the glyph's first paint (its first band, also
   after a new place's loading state) and when the band changes, never with Reduce Motion, which
   also stops a drift under way. `GlyphView` (IsItUI) draws it with `TimelineView(.animation)`,
-  paused when still. Under `-now` and, beyond the task, `-uitest` (which already turns
-  animations off) the glyphs never drift (`DebugHooks.stillMotion()`), so no attached screen
-  catches the flakes faded.
+  paused when still. Under `-now` and, beyond the task, `-uitest` (which turns UIKit's animations
+  off, though not SwiftUI's: below, "What PR #45's first macOS run showed") the glyphs never
+  drift (`DebugHooks.stillMotion()`), so no attached screen catches the flakes faded.
 - **Changes are announced once** (sections 9.5 and 16): `Announcements` (IsItState) is handed
   the page on screen each time it is drawn, and gives its heading when it says something new on
   the same view, which `HomeView` posts as an announcement: the answer arriving after
@@ -5361,6 +5361,140 @@ and #44's runs passed the test):
 snapshot of the app took 0.4 s at most on run 41327075971 where a query of the heading took up to
 21.5; that no `slow-read` is attached outside a slow spell; and that a heading wait that fails
 under load says how many reads it made and how long the last took.
+
+**What PR #45's first macOS run showed** (c2cf199's run 41374081165, job 125050987037; main
+63bc449's run 41327075971, PR #43's on f048209 and PR #44's on 25f803c, run 41358085179, passed
+the same tests):
+
+- **Two contrast audits at Large failed on screenfuls caught mid-fade.**
+  `testDurhamTomorrowAtLarge` (the Tomorrow page, screenful 1) and `testLeedsDryAtLarge` (the
+  week, screenful 1) each found the one "detail" text that Apple's audit flags there on every run
+  "not proven": 93.34% and 68.48% of its pixels none of its surface's colours, the screenful's
+  darkest pixel there #77498a against the page's modelled #632d79, and its lightest #dacfea
+  against #d3c4e5. Apple's audit raised the same issues on the same screenfuls as on PR #44's
+  run.
+- **The words come at once, the colours 0.9 s later.** A tab tap moves the pager at once
+  (`PagerSync`'s `scrollTo` isn't animated), so the new page's heading, and its ink, which is
+  each page's own, are there in the first frame. The background behind the transparent pages is
+  the shell's (`HomeShell`): `PageBackground` keyed by the page on screen's theme, cross-fading
+  with `.easeInOut(duration: 0.9)` when its band changes, and the top bar and the switcher fade
+  on the same curve. The failing test's screen recording shows Tomorrow's white "Yes." over
+  Now's lilac in the first frame, then the background darkening for about 0.8 s; the attached
+  screenful's background is the frame 0.6 s in.
+- **`-uitest` doesn't stop it.** It calls `UIView.setAnimationsEnabled(false)`, which reaches
+  UIKit's animations, not SwiftUI's `.animation` and `.transition`. DebugHooks, the iOS README
+  and the glyphs' paragraph above had said it turned animations off; they now say what it does.
+- **#45 took away a margin no one had chosen.** Neither wait ever waited for the colours. The
+  old one was an `XCTNSPredicateExpectation`, whose first evaluation came 1.01 to 1.06 s after
+  the wait began in all 39 on PR #44's run, after reads by query: a tap's first screenful came
+  1.85 to 3.66 s after the tap. #45's snapshot reads match on their first read, and it came 0.51
+  to 1.95 s after. Every first screenful taken within about 0.95 s of a tap that changed band
+  caught the fade, less the later it came: Durham's week at AX3 after 0.65 s was 37 levels from
+  PR #44's, its Tomorrow at Large after 0.72 s 32 and at AX3 after 0.95 s 4, Leeds' week 9 and
+  11, and Aberdeen's Now at Large after 0.89 s 1, while Durham's week at Large after 1.01 s
+  matched. Every later screenful matched PR #44's exactly, and taps that changed no band (a
+  re-tap of Now; Leeds' Now and Today, both no snow) stayed clean however soon. Only two failed,
+  as only there did Apple flag a text shown whole on the screenful, which the proof reads from
+  that screenful's own screenshot. FixtureLaunchTests' `app-aberdeen-snow-week` caught the fade
+  too, with no proof to fail.
+- **Ruled out**: Apple's audit (the same issues, in the same places), another pixel source (the
+  proof reads the screenful as attached, unchanged), the order of the audit and the readouts, the
+  fixtures and the app (unchanged since main), the pager coming to rest (a tap's isn't animated),
+  and chance, beyond how fast the reads went.
+- **So the tests wait for the colours as well as the words.** A Debug readout, `debug-theme`
+  (DebugHooks' `themeReadout`, under `-uitest`, at the top of the home screen; a Release build has
+  none, and check-archive.sh looks for its name), reads the page on screen's band once every fade
+  the background has begun is over and the last was to that page's colours, and "fading" until then.
+  `HomeShell` tells the app each fade as it begins, with its theme, and gives what the app hands
+  back to `Transaction.addAnimationCompletion(criteria: .removed)` on the transaction the
+  background's own `.animation(_:value:)` gives that fade, so each fade's end is told too (`fades`).
+  IsItUI names no Debug hook, so the app passes the hook in; in a Release build, and without
+  `-uitest`, it is nil and the shell adds nothing. The app keeps both on the main actor, after the
+  update the fade begins in (`ThemeFades`: the fades under way, and the theme the last began to),
+  and the readout judges them in its own body: the band only with no fade under way and the last to
+  the page's theme. So it reads "fading" from the very update that changes the theme, the page's
+  theme then new and the last fade's still the old one, never the new band over the old colours. A
+  loading page is drawn as no snow, so a dry answer changes the band without changing the theme: it
+  begins no fade, and reads at once. `awaitColours` reads it from snapshots by the heading's rules
+  (`readUntil`, which both now share: a read counts only if it ended in time, none begins after the
+  deadline, and the failure is the last read's), for up to 10 seconds, until it reads the page's
+  band exactly ("none" without an answer), so a value left from the page before can't pass, and a
+  page in the same band passes on its first read. `tap(_:in:)` waits once the heading has come and
+  the page is on screen, `launch(_:)` once the opening heading has, and `FixtureLaunchTests`' launch
+  and taps once theirs have, each naming its band. A failure says after what, on which band, and
+  what the last read found ("After the tap on This week the colours never settled on heavysnow: 40
+  reads in 10.0 s; the last, begun at 9.8 s, took 0.0 s and found debug-theme reading "fading"").
+  Each wait that passes is attached (`colour-wait`: after what, on which band, on which read, when
+  that read began and ended, what the first read found, and, after a tap, how long after the tap
+  began the wait did), failing nothing, as a positive control (below). No audit, exception,
+  tolerance or pause changes; an issue the audit raises on the readout is set apart, as on the
+  others (`DebugReadout`).
+- **Counted, not judged by a theme** (the fix's review). The first version had the readout
+  compare the page's theme with the theme the last fade ended on, which reads settled whenever
+  the page's theme is the one the background last settled on, fades under way or not. A theme
+  left and come back to within 0.9 s would read settled at once, with the background still
+  fading away and back: in `HomeTests.testNearbyLoadsInPlace`, a place chosen from Nearby in snow
+  loads as no snow and answers in snow; in `testTheMiddleTabTurnsToTomorrowAt6pm`, a tap on Now
+  could come within 0.9 s of the 6pm flip from no snow to snow. And an earlier fade's end could
+  pass for a later one's to the same theme: the Nearby test's fade to no snow ending after its
+  tap on Now. Neither test takes a screenshot or audits after those moments, so no audit was
+  caught, but the readout said what it couldn't know. Counting each fade from its beginning to
+  its end closes both, and no longer rests on fades ending in the order they began.
+- **Not done**: a wait on the background's pixels, which would prove only the strip it samples
+  and take a screenshot a read; turning SwiftUI's animations off under `-uitest`, which would
+  test a screen no one sees. `LaunchTests`' launches change no band (the loading page and Leeds'
+  dry answer are both no snow, and the offline ones have no answer), so they don't wait. Nor do
+  the picker's audits, though its sheet wears the page on screen's band and fades between bands
+  in 0.9 s as the home screen does (PlacePickerView's `SheetBackground`, keyed by the theme, with
+  the same animation): those on Leeds and on the IP place's first launch stay in no snow, the
+  loading page's band too, so the theme never changes; `testPickerOnADarkBand`'s snow comes with
+  Aberdeen's answer at the launch, and its audit only after a search, a star, the search cleared
+  and the keyboard put away, each waited for, so seconds after any fade, by a margin no one
+  chose. A picker audit after a change of band would need a wait of its own, as `debug-theme` is
+  on the home screen, out of the tree under a sheet. Settings wears the fixed content palette,
+  so it never fades.
+- **Inferred, not seen**: that each completion comes once the background's opacity transition is
+  removed, and at once under Reduce Motion, as SwiftUI fires each exactly once; that the top
+  bar's and the switcher's fades, on the same curve from the same change, end with the
+  background's; and that the main actor keeps a fade's beginning before its end, running its jobs
+  in the order they come (kept the other way round, the count would only go below zero, still
+  "fading"). A completion that never came would leave the readout at "fading", failing the wait,
+  never passing it early. One that came before the fade was over would pass the waits on a
+  mid-fade screen, which no wait can see: the `colour-wait` attachments are there for that.
+- **Checked on Linux, against stubs** (session scratchpad: flaky/uicheck and flaky/typecheck):
+  the UI test files compiled against the XCUITest stubs; 10 checks of the colours' wait against
+  fake apps (settled, passing on the first read; a fade waited through; another band, or
+  "fading", never passing, the failure naming after what and the band; a page without an answer
+  settling on "none", not "nosnow"; a read answered after the deadline failing; the failure the
+  last read's, none begun after the deadline; no readout, an empty one, and no app, saying so; a
+  wait that passes after a fade attaching its `colour-wait`, kept, with the read it passed on and
+  the first read's "fading"; one settled at once saying its first read found the band; one that
+  fails attaching none) and 2 of the tab tap (waiting through a 0.9 s fade once its heading has
+  come, and attaching that wait, measured from the tap; colours that never settle failing the
+  tap at 10 s), which each of 14 planted faults fails (any settled value passing; no band read as
+  "nosnow"; a late read counting; the message from a fresh read; a read begun after the deadline;
+  the tap not waiting; no readout counting as settled; one read only; the first read a poll late;
+  no `colour-wait`; its first read the last; its count one read; one attached on a failure too;
+  the tap's start not passed to it); #45's 12 checks of
+  the heading's wait and the 4 of the tab tap, unchanged, on the shared `readUntil`; 8 checks of
+  `ThemeFades`, run against the real DebugHooks.swift (a fade read as "fading" from the update
+  that begins it to its end; the review's two timelines, a theme left and come back to, and an
+  earlier fade's end during a later one; every fade begun having to end; a band changing without
+  its theme reading at once; a fade that never ends staying "fading"; an end kept before its
+  beginning never passing early; only the first appearance setting the theme), which each of 7
+  planted faults fails, the rule before the review among them, which fails both of the review's
+  timelines; the app with the real `HomeShell`, type-checked in Debug and Release against a stub
+  SwiftUI with iOS 17's transactions; check-archive.sh's test with the new hook; and
+  `swift format lint --strict` over every Swift file changed.
+
+**For the next macOS run to show.** That the two audits pass again; that every first screenful
+after a tap that changes band comes at least 0.9 s after the tap and matches PR #44's within a
+level, `app-aberdeen-snow-week` too; that the waits for the colours pass in a few reads, on the
+first where the band doesn't change; that no `colour-wait` after a tap that changes band has a
+first read that began less than 0.9 s after the tap (the wait's start after the tap, and the
+read's after that) and found the band, which would mean the completion comes before the fade is
+over, though every wait passed, and that such first reads found "fading" instead; and that none
+times out, which would mean a completion never came.
 
 ## After #34's fourth full run
 
