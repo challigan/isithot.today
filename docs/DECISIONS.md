@@ -5653,6 +5653,30 @@ label; that none of them attaches a `slow-read` outside a slow spell; that the f
 wait, when Google has none, skips on a last read that ended in time; and that one that fails in a
 spell names its reads and the last read's time, and agrees with itself.
 
+**What PR #44's run on b206ff3 showed** (run 41423209752, job 125204342032: #45's 83df4a4 merged
+into the widget branch). 64 of the 65 UI tests passed and none skipped: PickerTests' keyboard
+control found the keyboard before each drag, so a snapshot holds it; WidgetLinkTests found each
+tab as `view-<view>` reading its page's label; the full-screen ad loaded and showed; and the run
+attached one `slow-read`, the failure's.
+
+- **AdsTests.testTheConsentFormThenPrivacyChoices raced its own subject.** It launches in the
+  EEA, where Google's consent form comes over the home screen, and then waited for the heading to
+  read Leeds' answer. The screen recording shows the answer ("No. Rain, not snow.") for about 4
+  seconds, then the form, dimming the home screen behind it. The launch's one read of the heading
+  took 6.8 s (the `slow-read`), so by its end the form was up, and each of the 52 reads of the
+  answer's wait found no heading: while the form is up, the home screen is out of the
+  accessibility tree. Earlier runs passed because a read came in those seconds.
+- **The fix waits for either.** `HeadingRead` counts the web views in its snapshot, and in this
+  test the launch and the answer's wait (`AdsTests.awaitHeadingOrForm`) pass on the heading
+  reading the answer or on Google's form, a web view, by `readUntil`'s rules. The ads are off
+  until the form is answered, so a web view then is the form, not a banner; the test goes on to
+  fail if the ads came on without one, as before.
+- **Checked on Linux** (session scratchpad: flaky/uicheck, `FormCheck`): the answer first passes;
+  the run's shape, the form first, fails `awaitHeading` and passes the new wait; neither, or the
+  heading reading Checking…, fails with the last read; a form read only after the deadline fails.
+  Three planted faults (the form not counted, any element counted as a web view, the heading
+  taken in any words) are each caught. `swift format lint --strict` passes.
+
 ## After #34's fourth full run
 
 PR #34's fourth full macOS run, on c74aa22 (run 40189947895, job 121158965836), passed 43 of the 44
