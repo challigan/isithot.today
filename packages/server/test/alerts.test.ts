@@ -5,6 +5,8 @@ import { createSyntheticFetch, type FetchLike } from '@isithot/providers';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import {
   CITIES,
+  DEVICE_APPS,
+  IDS_PREFIX,
   MemoryAlertStore,
   MemoryKV,
   PUSH_GRACE_MS,
@@ -1312,22 +1314,28 @@ describe('runAlerts: the cleanup', () => {
   });
 
   /**
-   * A store that notes each listing of registrations: of every one at once (never made), and of
-   * each zone; `failing` fails a zone's, and `onZone` hears of each as it starts.
+   * A store that notes each listing of registrations and ids entries: of every one at once (never
+   * made), and of each zone and ids shard; `failing` fails a zone's or a shard's, and `onZone` and
+   * `onShard` hear of each as it starts.
    */
   class Listings extends MemoryAlertStore {
     whole = 0;
     zones: string[] = [];
+    shards: string[] = [];
     failing: string | null = null;
     onZone: (prefix: string) => void = () => {};
+    onShard: (prefix: string) => void = () => {};
 
     override async list(prefix: string, options?: { directories?: boolean }) {
-      if (prefix === 'reg/v1/' && !options?.directories) this.whole++;
+      if ((prefix === 'reg/v1/' && !options?.directories) || prefix === IDS_PREFIX) this.whole++;
       if (/^reg\/v1\/[^/]+\/$/.test(prefix)) {
         this.zones.push(prefix);
         this.onZone(prefix);
-        if (prefix === this.failing) throw new Error('list failed');
+      } else if (prefix.startsWith(IDS_PREFIX) && prefix !== IDS_PREFIX) {
+        this.shards.push(prefix);
+        this.onShard(prefix);
       }
+      if (prefix === this.failing) throw new Error('list failed');
       return super.list(prefix, options);
     }
   }
@@ -1399,6 +1407,223 @@ describe('runAlerts: the cleanup', () => {
     expect(store.zones).toHaveLength(1);
     expect(lines.slice(2)).toEqual(['alerts-run: cleanup: count unavailable']);
     expect(store.whole).toBe(0);
+  });
+
+  const registrations = (store: MemoryAlertStore) =>
+    store.keys().filter((key) => /^(reg|ids)\//.test(key));
+  const sweptLine = (id: string) =>
+    `alerts-run: cleanup: deleted the ids entry of snow.${id.slice(0, 8)}… (no record left)`;
+
+  it('deletes the ids entries of phones Apple refused that a failing store left, at the next cleanup', async () => {
+    const { origin } = await fakeApns(
+      apple({ '41': { status: 410, body: { reason: 'Unregistered' } } }),
+    );
+    const inner = new MemoryAlertStore();
+    const set = registration(token('41'));
+    const single = registration(token('41', 1));
+    const kept = registration(token('a0', 1));
+    await seedPhone(inner, set, registration(token('41'), { ...place('leeds-gb'), slot: PIDS[0] }));
+    await seed(inner, single, kept);
+    // The store fails the set's last step, deleting its ids key, and the 8.1 phone's first,
+    // reading its ids key.
+    let down = true;
+    const store = view(inner, {
+      before: (op, key) =>
+        down &&
+        ((op === 'delete' && key === idsKey('snow', set.id)) ||
+          (op === 'get' && key === idsKey('snow', single.id)))
+          ? Promise.reject(new Error(`${op} failed`))
+          : undefined,
+    });
+    const lines: string[] = [];
+    expect(await runAt(EVENING, { store, origin, lines })).toMatchObject({ deleted: 2, errors: 2 });
+    // Their records have gone, but not their ids entries (the set's with its salt), which name
+    // nothing now, and which no registration of theirs will come back to replace.
+    expect(registrations(inner)).toEqual(
+      [
+        idsKey('snow', set.id),
+        idsKey('snow', single.id),
+        idsKey('snow', kept.id),
+        regKey(kept.tz, 'snow', kept.id),
+      ].sort(),
+    );
+    down = false;
+    lines.length = 0;
+    const night = await runAt('2026-10-19T03:00:00Z', { store, origin, lines });
+    expect(night.cleaned).toBe(2);
+    expect(registrations(inner)).toEqual(
+      [idsKey('snow', kept.id), regKey(kept.tz, 'snow', kept.id)].sort(),
+    );
+    expect(lines).toEqual([
+      ...[sweptLine(set.id), sweptLine(single.id)].sort(),
+      'alerts-run: cleanup: 0 devices with saved places',
+    ]);
+  });
+
+  it('keeps the ids entry of a phone that registers while the cleanup runs', async () => {
+    const { origin } = await fakeApns(apple());
+    const inner = new MemoryAlertStore();
+    const late = registration(token('a0', 4));
+    // An 8.1 registration landing once the zones are listed, before its ids entry's shard is: its
+    // entry, then its record. The cleanup lists the entry, having seen no record in any zone.
+    let landed = false;
+    const store = view(inner, {
+      before: async (op, key) => {
+        if (op !== 'list' || key !== `${IDS_PREFIX}snow.${late.id[0]}` || landed) return;
+        landed = true;
+        await inner.set(idsKey('snow', late.id), { tz: late.tz });
+        await inner.set(regKey(late.tz, 'snow', late.id), late);
+      },
+    });
+    const lines: string[] = [];
+    const result = await runAt('2026-12-01T03:00:00Z', { store, origin, lines });
+    expect(landed).toBe(true);
+    expect(result.cleaned).toBe(0);
+    expect(registrations(inner)).toEqual([
+      idsKey('snow', late.id),
+      regKey(late.tz, 'snow', late.id),
+    ]);
+    expect(lines).toEqual(['alerts-run: cleanup: 0 devices with saved places']);
+  });
+
+  it('deletes no ids entry on a day not every zone could be listed, and does the next', async () => {
+    const { origin } = await fakeApns(apple());
+    const store = new Listings();
+    const both = token('a0', 2);
+    await seedPhone(
+      store,
+      registration(both),
+      registration(both, { ...place('new-york-city-us'), tz: 'America/New_York', slot: PIDS[0] }),
+    );
+    const left = registrationId('snow', token('41'));
+    await store.set(idsKey('snow', left), { tz: 'Europe/London' });
+    store.failing = 'reg/v1/America%2FNew_York/';
+    const lines: string[] = [];
+    await runAt('2026-12-01T03:00:00Z', { store, origin, lines });
+    expect(await store.get(idsKey('snow', left))).not.toBeNull();
+    expect(lines).toEqual([
+      'alerts-run: error: list failed',
+      'alerts-run: cleanup: count unavailable',
+    ]);
+    store.failing = null;
+    lines.length = 0;
+    expect((await runAt('2026-12-02T03:00:00Z', { store, origin, lines })).cleaned).toBe(1);
+    expect(registrations(store).filter((key) => key.startsWith('ids/'))).toEqual([
+      idsKey('snow', registrationId('snow', both)),
+    ]);
+    expect(lines).toEqual([sweptLine(left), 'alerts-run: cleanup: 1 device with saved places']);
+  });
+
+  /** An id whose ids entry is in the shard of its first hex digit, `h`. */
+  const idIn = (h: string) => `${h}${'0'.repeat(31)}`;
+  const ALL_SHARDS = DEVICE_APPS.flatMap((app) =>
+    [...'0123456789abcdef'].map((h) => `${IDS_PREFIX}${app}.${h}`),
+  ).sort();
+
+  it('lists the ids entries shard by shard, and a shard or delete that fails keeps only its own', async () => {
+    const { origin } = await fakeApns(apple());
+    const store = new Listings();
+    const [unlisted, undeleted, swept] = ['3', 'c', 'e'].map(idIn) as [string, string, string];
+    for (const id of [unlisted, undeleted, swept]) {
+      await store.set(idsKey('snow', id), { tz: 'Europe/London' });
+    }
+    let down = true;
+    store.failing = `${IDS_PREFIX}snow.3`;
+    const run = view(store, {
+      before: (op, key) =>
+        down && op === 'delete' && key === idsKey('snow', undeleted)
+          ? Promise.reject(new Error('delete failed'))
+          : undefined,
+    });
+    const lines: string[] = [];
+    const night = await runAt('2026-12-01T03:00:00Z', { store: run, origin, lines });
+    expect(night).toMatchObject({ cleaned: 1, errors: 2 });
+    // Each app's 16 shards once, never every entry in one listing (decision 26).
+    expect([store.whole, store.shards.sort()]).toEqual([0, ALL_SHARDS]);
+    expect(registrations(store)).toEqual([idsKey('snow', unlisted), idsKey('snow', undeleted)]);
+    expect(lines.sort()).toEqual(
+      [
+        'alerts-run: cleanup: 0 devices with saved places',
+        'alerts-run: error: delete failed',
+        'alerts-run: error: list failed',
+        sweptLine(swept),
+      ].sort(),
+    );
+    // The next day's cleanup takes them.
+    down = false;
+    store.failing = null;
+    lines.length = 0;
+    expect((await runAt('2026-12-02T03:00:00Z', { store: run, origin, lines })).cleaned).toBe(2);
+    expect(registrations(store)).toEqual([]);
+  });
+
+  it("starts no ids listing, and reads no ids entry, once the pushes' grace is over", async () => {
+    const { origin } = await fakeApns(apple());
+    const store = new Listings();
+    await seed(store, registration(token('a0')));
+    const left = idIn('3');
+    await store.set(idsKey('snow', left), { tz: 'Europe/London' });
+    let late = false;
+    const clock = () => (late ? 60_000 : 0);
+    const lines: string[] = [];
+    // Out of time once the zones are listed: the count is logged, and no shard is listed.
+    store.onZone = () => {
+      late = true;
+    };
+    expect((await runAt('2026-12-01T03:00:00Z', { store, origin, lines, clock })).cleaned).toBe(0);
+    expect(store.shards).toEqual([]);
+    // Out of time once the entry's shard is listed: it is listed, but not read or deleted.
+    late = false;
+    store.onZone = () => {};
+    store.onShard = (prefix) => {
+      if (prefix === `${IDS_PREFIX}snow.3`) late = true;
+    };
+    expect((await runAt('2026-12-02T03:00:00Z', { store, origin, lines, clock })).cleaned).toBe(0);
+    expect(store.shards).toContain(`${IDS_PREFIX}snow.3`);
+    expect(await store.get(idsKey('snow', left))).not.toBeNull();
+    expect(lines).toEqual(Array(2).fill('alerts-run: cleanup: 0 devices with saved places'));
+    // In time, it goes.
+    late = false;
+    store.onShard = () => {};
+    expect((await runAt('2026-12-03T03:00:00Z', { store, origin, clock })).cleaned).toBe(1);
+    expect(await store.get(idsKey('snow', left))).toBeNull();
+  });
+
+  it("keeps a refused phone's other place, and the ids entry naming it, when the store fails the ids read, until that place goes", async () => {
+    const { origin } = await fakeApns(
+      apple({ '41': { status: 410, body: { reason: 'Unregistered' } } }),
+    );
+    const inner = new MemoryAlertStore();
+    const device = token('41', 2);
+    const [durham, leeds] = [
+      registration(device),
+      registration(device, { ...place('leeds-gb'), slot: PIDS[0] }),
+    ] as const;
+    await seedPhone(inner, durham, leeds);
+    // Apple refuses Durham's push (Leeds has nothing to send), and the store fails the read of
+    // the ids entry, so Durham's record goes alone: nothing else names Leeds.
+    let down = true;
+    const store = view(inner, {
+      before: (op, key) =>
+        down && op === 'get' && key === idsKey('snow', durham.id)
+          ? Promise.reject(new Error('get failed'))
+          : undefined,
+    });
+    expect(await runAt(EVENING, { store, origin })).toMatchObject({ deleted: 1, errors: 1 });
+    const left = [idsKey('snow', durham.id), regKey(leeds.tz, 'snow', leeds.id, PIDS[0])].sort();
+    expect(registrations(inner)).toEqual(left);
+    // The cleanup finds Leeds's record, so it keeps the entry that names it.
+    down = false;
+    const lines: string[] = [];
+    expect((await runAt('2026-10-19T03:00:00Z', { store, origin, lines })).cleaned).toBe(0);
+    expect(registrations(inner)).toEqual(left);
+    expect(lines).toEqual(['alerts-run: cleanup: 1 device with saved places']);
+    // Both go with Leeds: refused in turn, or (here) 90 days after the phone was last seen.
+    lines.length = 0;
+    const stale = await runAt('2027-01-16T18:05:00Z', { store, origin, lines });
+    expect(stale).toMatchObject({ deleted: 1, errors: 0 });
+    expect(registrations(inner)).toEqual([]);
+    expect(lines).toEqual([`alerts-run: deleted ${who(leeds)} (not seen for 90 days)`]);
   });
 });
 

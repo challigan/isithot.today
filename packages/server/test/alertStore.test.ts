@@ -17,6 +17,7 @@ import {
   doneKey,
   donePrefix,
   forgetDevice,
+  forgetIdsLeft,
   idPrefix,
   idsKey,
   jwtKey,
@@ -896,7 +897,7 @@ describe('forgetDevice', () => {
       );
       expect(inner.keys()).toEqual(all.filter((k) => k !== keyOf(durham)));
     }
-    // The entry can't be deleted: it stays, naming nothing; the next registration replaces it.
+    // The entry can't be deleted: it stays, naming nothing, for the daily cleanup (`forgetIdsLeft`).
     {
       const inner = await seeded();
       expect(
@@ -904,5 +905,100 @@ describe('forgetDevice', () => {
       ).toBe('deleted');
       expect(inner.keys()).toEqual([idsKey('snow', ID)]);
     }
+  });
+});
+
+describe('forgetIdsLeft', () => {
+  const ids = idsKey('snow', ID);
+  const london = regKey('Europe/London', 'snow', ID);
+  const durham = regKey('Europe/London', 'snow', ID, PID);
+  const kolkata = regKey('Asia/Kolkata', 'snow', ID);
+  const salt = '00112233445566778899aabbccddeeff';
+  const set: DeviceIdsEntry = { v: 2, tz: 'Europe/London', saved: [durham], salt };
+  const record = { v: 1, id: ID, app: 'snow', updatedAt: '2026-12-01T18:04:00.000Z' };
+
+  it('deletes an ids entry naming no record that is there, and nothing else', async () => {
+    const theirs = idsKey('snow', registrationId('snow', 'cd'.repeat(32)));
+    // A set, an 8.1 entry, a salt alone (a first registration cut short), a malformed one.
+    for (const entry of [set, { tz: 'Europe/London' }, { v: 2, saved: [], salt }, { zone: 'x' }]) {
+      const store = new MemoryAlertStore();
+      await store.set(ids, entry);
+      await store.set(theirs, { tz: 'Asia/Kolkata' });
+      expect(await forgetIdsLeft(store, 'snow', ID)).toBe(true);
+      expect(store.keys()).toEqual([theirs]);
+    }
+    expect(await forgetIdsLeft(new MemoryAlertStore(), 'snow', ID)).toBe(false);
+  });
+
+  it('keeps one naming any record that is there', async () => {
+    for (const key of [london, durham]) {
+      const store = new MemoryAlertStore();
+      await store.set(ids, set);
+      await store.set(key, record);
+      expect(await forgetIdsLeft(store, 'snow', ID)).toBe(false);
+      expect(store.keys()).toEqual([ids, key].sort());
+    }
+  });
+
+  it('keeps an entry a registration writes to while it is read', async () => {
+    // An 8.1 registration in the zone its entry names writes only the record; one moving to
+    // another zone writes the entry first, then the record (devices.ts `saveRegistration`).
+    const again = async (inner: AlertStore) => void (await inner.set(london, record));
+    const moved = async (inner: AlertStore) => {
+      await inner.set(ids, { tz: 'Asia/Kolkata', from: ['Europe/London'] });
+      await inner.set(kolkata, { ...record, tz: 'Asia/Kolkata' });
+      await inner.set(ids, { tz: 'Asia/Kolkata' });
+    };
+    // The reads, in order: the entry, its record, the entry again, the record again.
+    for (const [put, at, kept] of [
+      [again, 2, [ids, london]],
+      [again, 3, [ids, london]],
+      [moved, 2, [ids, kolkata]],
+      [moved, 3, [ids, kolkata]],
+    ] as const) {
+      const inner = new MemoryAlertStore();
+      await inner.set(ids, { tz: 'Europe/London' });
+      let gets = 0;
+      const store: AlertStore = {
+        get: async (key) => {
+          if (++gets === at) await put(inner);
+          return inner.get(key);
+        },
+        set: (key, value, options) => inner.set(key, value, options),
+        list: (prefix, options) => inner.list(prefix, options),
+        delete: (key) => inner.delete(key),
+      };
+      expect(await forgetIdsLeft(store, 'snow', ID), `${put.name} at read ${at}`).toBe(false);
+      expect(gets).toBeGreaterThanOrEqual(at);
+      expect(inner.keys()).toEqual([...kept].sort());
+    }
+  });
+
+  it('deletes nothing when a read fails', async () => {
+    for (const failing of [ids, london]) {
+      const inner = new MemoryAlertStore();
+      await inner.set(ids, { tz: 'Europe/London' });
+      const store = new SafeAlertStore({
+        get: (key) => (key === failing ? Promise.reject(new Error('down')) : inner.get(key)),
+        set: (key, value, options) => inner.set(key, value, options),
+        list: (prefix, options) => inner.list(prefix, options),
+        delete: (key) => inner.delete(key),
+      });
+      await expect(forgetIdsLeft(store, 'snow', ID)).rejects.toThrow(AlertStoreError);
+      expect(inner.keys()).toEqual([ids]);
+    }
+  });
+
+  it('rejects when the delete fails, so the entry is not counted as gone', async () => {
+    const inner = new MemoryAlertStore();
+    await inner.set(ids, set);
+    const store = new SafeAlertStore({
+      get: (key) => inner.get(key),
+      set: (key, value, options) => inner.set(key, value, options),
+      list: (prefix, options) => inner.list(prefix, options),
+      delete: () => Promise.reject(new Error('down')),
+    });
+    await expect(forgetIdsLeft(store, 'snow', ID)).rejects.toThrow(AlertStoreError);
+    expect(inner.keys()).toEqual([ids]);
   });
 });

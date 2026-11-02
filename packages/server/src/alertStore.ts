@@ -245,6 +245,13 @@ export function createBlobsAlertStore(
 
 const zone = (tz: string): string => encodeURIComponent(tz);
 
+/**
+ * The apps a registration may name. One registration per install per app. Here rather than in
+ * devices.ts, which checks a request's app against it, so the run can list each app's ids keys.
+ */
+export const DEVICE_APPS = ['snow', 'wet', 'wind', 'hot', 'all'] as const;
+export type DeviceApp = (typeof DEVICE_APPS)[number];
+
 /** A registration's id: the first 32 hex characters of sha256(app + ':' + token). */
 export function registrationId(app: string, token: string): string {
   return createHash('sha256').update(`${app}:${token}`).digest('hex').slice(0, 32);
@@ -322,6 +329,23 @@ export function zoneOfDirectory(directory: string): string | null {
  */
 export function idsKey(app: string, id: string): string {
   return `${IDS_PREFIX}${app}.${id}`;
+}
+
+/** An ids key's app and id, or null for any other key. */
+export function parseIdsKey(key: string): { app: string; id: string } | null {
+  const match = /^ids\/v1\/([a-z]+)\.([0-9a-f]{32})$/.exec(key);
+  return match ? { app: match[1]!, id: match[2]! } : null;
+}
+
+/**
+ * The prefixes that list every ids key between them, 16 an app, by the id's first hex digit:
+ * `ids/v1/snow.0` to `ids/v1/snow.f`. One key a device, so a single listing would outgrow the
+ * store's one bounded call as the devices grew (decision 26); each of these holds a sixteenth.
+ */
+export function idsShards(): string[] {
+  return DEVICE_APPS.flatMap((app) =>
+    [...'0123456789abcdef'].map((digit) => `${IDS_PREFIX}${app}.${digit}`),
+  );
 }
 
 const strings = (value: unknown): string[] =>
@@ -473,6 +497,10 @@ async function forgetIfUnchanged(
  *    still, when read again after it (a registration may have written them back meanwhile).
  * A record the ids entry doesn't name (an orphan: a rollback, two registrations overlapping) is
  * thus forgotten alone, by its own stamp, and so is the trigger when the ids key can't be read.
+ * An ids key this leaves naming nothing (the store failed in step 4, or the trigger went alone
+ * and was the phone's only place) is deleted by the daily cleanup (`forgetIdsLeft`). One still
+ * naming a record (the trigger went alone, or a record in step 3 failed) stays with that record,
+ * until it is forgotten in turn: refused, or stale.
  * - "deleted": the trigger's record is gone, whatever became of the others, so its zone can finish;
  * - "changed": it was written since it was read, so the device is kept;
  * - "failed": the store failed, so it is kept.
@@ -501,13 +529,48 @@ export async function forgetDevice(
   );
   if (outcomes.every((outcome) => outcome === 'gone')) {
     try {
-      const again = await store.get<unknown>(ids);
-      if (JSON.stringify(again) !== JSON.stringify(entry)) return 'deleted';
-      const back = await Promise.all(named.map((key) => store.get<unknown>(key)));
-      if (back.every((value) => value === null)) await store.delete(ids);
+      await dropIdsEntry(store, app, id, entry);
     } catch {
-      // An ids key left behind names nothing; the device's next registration replaces it.
+      // An ids key left behind names nothing, and the device may never register again: the
+      // daily cleanup deletes it (`forgetIdsLeft`).
     }
   }
   return 'deleted';
+}
+
+/**
+ * Deletes the ids key if it still holds `entry`, as read before, and no key it names holds
+ * anything, read again after it (a registration names a record in its entry before writing it,
+ * and may write one back with an entry the same as before); true if it did.
+ */
+async function dropIdsEntry(
+  store: AlertStore,
+  app: string,
+  id: string,
+  entry: unknown,
+): Promise<boolean> {
+  const ids = idsKey(app, id);
+  const again = await store.get<unknown>(ids);
+  if (JSON.stringify(again) !== JSON.stringify(entry)) return false;
+  const back = await Promise.all(keysOf(entry, app, id).map((key) => store.get<unknown>(key)));
+  if (!back.every((value) => value === null)) return false;
+  await store.delete(ids);
+  return true;
+}
+
+/**
+ * Deletes a device's ids entry, and the salt in it, if no key it names holds anything: one
+ * `forgetDevice` left behind, when the store failed it once the records had gone (or the run
+ * stopped there), which no registration of the device may ever come back to replace. The daily
+ * cleanup calls it for each device it found no record of in any zone. It reads the entry and
+ * every key it names, then both again as `forgetDevice` does before deleting it, so a
+ * registration writing meanwhile keeps it. True if it was deleted; rejects when the store fails,
+ * having deleted nothing.
+ */
+export async function forgetIdsLeft(store: AlertStore, app: string, id: string): Promise<boolean> {
+  const entry = await store.get<unknown>(idsKey(app, id));
+  if (entry === null) return false;
+  const held = await Promise.all(keysOf(entry, app, id).map((key) => store.get<unknown>(key)));
+  if (held.some((value) => value !== null)) return false;
+  return dropIdsEntry(store, app, id, entry);
 }
