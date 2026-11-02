@@ -11,3 +11,4 @@ export * from './alertStore';
 export * from './apns';
 export * from './devices';
 export * from './alerts';
+export * from './ownAsset';

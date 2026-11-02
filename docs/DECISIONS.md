@@ -21,6 +21,36 @@ City pages and OG images are server-rendered by Astro's Netlify adapter. The API
 mounted as Astro routes (same handlers), so `pnpm dev` works without the Netlify CLI. In
 production, responses carry `x-isithot-via: function` when the dedicated function answered.
 
+**A new deploy reaches Netlify's servers one by one.** For some seconds after it goes live, and
+after `version.json` shows its commit, some servers still answer 404 for it.
+
+- **The smoke test** tries again every 2 s, up to 6 times, when a response is Netlify's own
+  "Not Found - Request ID" page (after PR #22's preview failed 14 checks in its first five
+  seconds). It matches that page only, because it also checks pages that must 404.
+- **The OG image renderer** fetches the resvg wasm and three fonts from the deploy's own
+  `/_astro/` files. In run 41457280649 on PR #48's preview (2 November), all seven OG image checks
+  answered 500 (`asset /_astro/index_bg.Blvrv-U2.wasm: 404`). They ran from 13:57:00.7, about 6 s
+  after `version.json` showed the commit, until the run ended at 13:57:06.5. So the 404s were seen
+  for about 6 s, and when they stopped wasn't recorded.
+- **`ownAsset` (packages/server)** now tries any 404 for those files again, 1 s apart, up to 15
+  tries. Those files are content-hashed and come from the build that made the function, so a 404
+  means the server asked hasn't got the deploy yet, or the build is broken; a broken build still
+  fails after the last try ("404 after 15 tries"). Any other status, or a dropped connection,
+  fails at once.
+- **Any 404, not only Netlify's page.** On a later push to the same pull request, a lagging server
+  still has the previous deploy, whose own function would answer the new file's path with the
+  site's 404 page.
+- **The 14 s of waiting is a guess**, sized from the budget rather than a measured spread. The
+  worst case (the forecast's 7.5 s, the waits, 15 quick 404s and the render) is about 24 s,
+  inside the function's 30 s. On an account still on the old 10 s limit, a request still waiting
+  at 10 s would be stopped instead of answering 500 at once.
+- **Each 404 tried again is logged** (`asset …: 404 on try 3 of 15, trying again in 1000 ms`), so
+  the function log will show how long a spread really lasts.
+- **Each function instance waits on its own.** The four files are fetched together, once per
+  instance. Netlify runs functions on AWS Lambda, where an instance takes one request at a time,
+  so each new instance that starts during a spread waits for itself. Only later requests on the
+  same warm instance, or every request to one Node process such as `astro dev`, share one fetch.
+
 ## Data
 
 - **Model IDs.** The current Open-Meteo docs list `ncep_gfs_seamless`, `dwd_icon_seamless`
@@ -1299,6 +1329,39 @@ any other trigger could call it.
   at 03:00 on 1 December, 27 and 28 November go, 29 November on stay. Cut short or failed, it
   releases its marker, so the next run in the hour carries on. The marker goes with its day's
   `done/` keys. That is at most four conditional writes a day, and no other run pays anything.
+- **Ids entries left behind.** `forgetDevice` deletes a phone's `ids/v1/` entry last, and a store
+  failure there (or in reading it first, when the trigger then goes alone) left it: the full id,
+  the salt and every record's key, saved places' zones included. Its comment said the next
+  registration would replace it, but after Apple's refusal or 90 days unseen none comes, so the
+  privacy notice's "when Apple tells us the app is no longer installed, or 90 days after the app
+  last checked in" was untrue for that phone. Returning `failed` instead would not help: the run
+  and the sender retry only a record they find again, and by then the records have gone. So once
+  the cleanup's old keys are deleted, it lists every zone's registrations (the saved-places
+  count's walk), then the ids entries, and for each device with no record in any zone
+  `forgetIdsLeft` reads the entry, every key it names, the entry again and the keys again,
+  deleting it only if unchanged and nothing it names is there. The entries are listed as decision
+  26 lists the registrations, never all in one call: there is one a device, and Blobs pages a
+  listing through one 1.5 s call, so a single listing would fail every night once there were
+  5,000 to 15,000 devices, and every entry left would then stay for good. So they are listed in
+  16 shards an app, by the id's first hex digit (`ids/v1/snow.0` to `ids/v1/snow.f`; 80 listings
+  for the five apps, 25 at once, none started once the pushes' grace is over), and a shard
+  reaches that size only at 16 times as many devices. The walk itself is still one listing a
+  zone, decision 26's limit: a zone too big to list stops the walk, and with it the sweep. A
+  shard or an entry that fails is logged and left for tomorrow, the others going on. Such an
+  entry now goes at the next 03:00 UTC, entries left before this change included
+  (`cleanup deleted N old keys` counts them, and a line names each by its id prefix), but only
+  once no record of the phone is left. A phone with another place whose record stayed (the ids
+  read failed, so the trigger went alone, or that record's read or delete failed) keeps that
+  record and the entry naming it, as before this change, until that place is refused in turn or
+  goes stale, 90 days after the phone last checked in; the cleanup rightly keeps an entry that
+  names a record. Closing that would take `forgetDevice` failing before it touches the trigger
+  when it can't read the entry, and the sender releasing the claim of a refusal it could not
+  forget, so the next run sends again and retries: a change to the sender's claims, left for now.
+  A registration names a record in its entry before writing it, and a version 2 one ends by writing
+  its entry again, so one under way keeps its entry or writes it back; as in `forgetDevice`, only a
+  record written between the last read and the delete could lose it, until it is stale. There is
+  no age test on the entry's `updatedAt`: 8.1 entries and a new salt have none, and it would keep a
+  refused phone's salt for up to 90 days. A walk that can't finish deletes no entry that day.
 - **The log line**, one a run:
   `alerts-run: zones 1, records 2, groups 2, fetches 2, sent 1, deleted 0, errors 0; 812 ms`.
   Notes follow when they apply: `dry run, 3 logged`, `2 forced`,
@@ -1626,7 +1689,74 @@ What the design's three reviews added:
     fixture requests (its `deviceFixtures.ts`) through these handlers: all 15 byte-identical. After
     the rebase on 8.1-merged main, the bar is `pnpm mobile:check` and `deviceFixtures.test.ts`
     passing with no packages/mobile or apps/ios file changed, and the iOS workflow, which runs on
-    `packages/server/**`, green.
+    `packages/server/**`, green. Checked on Linux after the merge of 8.1-merged main: all 183
+    generated files up to date, `deviceFixtures.test.ts` passing (17 tests), and no packages/mobile
+    source, generated file or fixture changed. One packages/mobile test changes: `credits.test.ts`
+    reads the website's privacy notice, so its pair for what is kept follows the notice's new
+    words (below). The apps/ios files the branch changes are the macOS test fixes merged into it.
+
+**The website's privacy notice** (`apps/web/src/components/PrivacyBody.astro`, the design's
+section 3.11) describes what the server keeps, so it changes with it. "Last updated" moves to 2
+November 2026. In "Our apps", the notifications item changes in two places, in the design's words
+but for two changes made after review (below the list):
+
+- **What is kept.** "the place you chose (a town, or a location rounded to about 5 km), its time
+  zone" becomes "the places you get notifications for, with their time zones: where you are (your
+  location rounded to about 5 km or, if you haven't shared it, a rough place estimated from your IP
+  address, but not the address itself) and any saved places you turned notifications on for", and a
+  sentence of its own follows: "While you have those, we also keep your iPhone's time zone." The
+  server now keeps a record for each place, each with its zone (decision 18): where the phone is,
+  its own point on the 0.05° grid or the town its connection is in (decisions 2 to 5), never a place
+  chosen on screen, for a version 2 body; and each saved place with its bell on, with the phone's
+  own zone, `deviceTz`, on those records only (decision 21). A body from 8.1's TestFlight builds
+  still registers its one place, any of the three forms, a place chosen on screen included, until
+  those builds expire (decision 27); the notice, written for release builds, no longer names that
+  place. The list of places, after its colon, has to end its sentence, or the units and the switches
+  would read as places. So they move ahead of the places, and "so we can tell you when snow is
+  likely" to the start: "If you turn on notifications in the app, so we can tell you when snow is
+  likely, we keep your device's notification token for the app, your units, which notifications you
+  asked for and the places you get notifications for, with their time zones: …"
+- **How often the app checks in.** "It checks in when you open it: at most once a week, unless you
+  change something." became untrue with decision 3: while where the phone is comes from its
+  connection, the app registers each time it is opened, at most once every
+  `ALERTS.hereRefreshMinutes` (60). It now reads "It checks in when you open it: at most once an
+  hour while it uses a rough place from your internet connection, otherwise at most once a week,
+  unless you change something."
+
+**Two changes to the design's words, from review.** Its "a rough place estimated from your IP
+address, which we don't keep" could be read as not keeping the place, which is kept: it is the free
+record (`follows: 'ip'`), kept for up to `ALERTS.ipPlaceKeepDays` (7 days) after it was located when
+a check-in's connection can't be located (decision 5). Only the address isn't, so "but not the
+address itself". Its "; while you have saved places, your iPhone's time zone" claimed the zone for
+starred places with no bell, and for saved places after a refund, when only a saved place with its
+bell on has a record to hold `deviceTz` (decision 16: "only while a saved place has notifications
+on"); after the colon, it also read as one more place. So it takes the design's words for the app's
+Your privacy (its section 3.11), as a sentence of its own: "While you have those, we also keep your
+iPhone's time zone." The next sentence's "With them" would then have read as "with those saved
+places", so it says "With all of this we keep an ID made from the token, …".
+
+The rest of the item stays, because it stays true. "but not the address itself", and the website's
+own "We do not store your IP address with them": `devices.mts` hands the handler Netlify's `geo`
+(town, region, country and coordinates), never the address, and only the located point on the grid
+is stored. "90 days after the app last checked in, so about 90 days after you last opened it":
+nearer still with hourly check-ins ("The app's support page and privacy notice (S8)", "When it
+goes"). "It holds no token or place": a saved place's notes are keyed `snow.<id>.<pid>`, and once a
+DELETE or forgetting has taken the salt no pid can be matched to a place (decision 18). The records'
+new fields add nothing the list leaves out: `slot` and `shadowedBy` are pids, `country` is the
+place's, `follows` and `locatedAt` say how the free place was found and at which check-in, and the
+salt is random bytes.
+
+`e2e/credits.spec.ts` pins the item in full on all four sites; written first, it failed on the old
+page (the 8 runs of the legal pages; the 2 of the footer's credits passed) and passes on the new.
+`credits.test.ts` (packages/mobile), which holds Your privacy's facts to the notice's words, reads
+the page too: its pair for what is kept keeps the app's half, 8.1's one place ("the place, its time
+zone, your units and which notifications you chose"), and the notice's half is now "your units,
+which notifications you asked for and the places you get notifications for, with their time
+zones". Phase 8.4a gives Your privacy the places (the design's section 3.11) and changes the app's
+half. The support page (`SupportBody.astro`) still names one place, in "Turning notifications off
+and deleting your data" ("the place, its time zone") and "It's for another place"; it describes the
+app as 8.1 builds it, so those two answers change with the app. The design's section 2.10 changes
+the page in phase 8.4b, but not them.
 
 **Where the build differs from its design.**
 
@@ -1701,7 +1831,8 @@ endpoints", the 2 KB limit, "No place, or the IP location's empty one, is a 400"
 bodies), one write per id a minute timed from the record and the move's single record (both now for
 8.1's bodies only), and the test's one push; in "Notifications: the alert store and the push layer"
 and "Notifications: the run", forgetting one registration; in "The app's support page and privacy
-notice (S8)", the deletion timing reasoned from the weekly check-in alone.
+notice (S8)", the notice's one place with its zone, and the deletion timing reasoned from the
+weekly check-in alone.
 
 ## The iPhone app's foundations (packages/mobile, apps/ios)
 
@@ -3233,9 +3364,11 @@ the website carries both for the snow app (iOS build spec, section 5.8 and 15.5)
   ID made from it, the place, zone, units and switches, the app's version, whether it is a
   developer build (`env`), when notifications were turned on (`createdAt`) and when the app last
   checked in (`updatedAt` and `seenAt`, both set by every PUT). `v`, `app` and `platform` say
-  nothing about anyone. The claims the run and the test send write (`sent/` and `test/`, keyed by
-  the ID, holding no token or place) outlive a delete until the 03:00 UTC cleanup takes them, up
-  to about three and a half days later, so the notice and the support page say "a few days".
+  nothing about anyone. (Since "Notifications: several places on one phone", every place with its
+  zone, and saved places' `deviceTz`: "The website's privacy notice" there.) The claims the run
+  and the test send write (`sent/` and `test/`, keyed by the ID, holding no token or place)
+  outlive a delete until the 03:00 UTC cleanup takes them, up to about three and a half days
+  later, so the notice and the support page say "a few days".
   So does the run's `judged/` note (`{ at }`, keyed the same way), written for a registration
   judged with nothing to send in a zone the run left unfinished; since phases 5 and 6 were
   reviewed together, both pages and Your privacy name it too ("some forecast checks that found
@@ -3250,12 +3383,15 @@ the website carries both for the snow app (iOS build spec, section 5.8 and 15.5)
     notice, "about three months" on the support page. (Since "Notifications: several places on
     one phone", every place a PUT writes gets the same stamp, so a phone's places go together,
     when the run first finds one stale. While the free place is approximate, the app puts each
-    time it is opened, at most once every `ALERTS.hereRefreshMinutes` (60, from phase 8.4a), so
-    its places go about 90 days after it was last opened; otherwise it still puts weekly with
-    nothing changed, so they can go about 83 days after. Both are still "about 90 days" and "about
-    three months". A place located from the connection can go sooner: the first PUT more than
-    `ALERTS.ipPlaceKeepDays` (7) after it was located whose connection can't be located deletes
-    it.)
+    time it is opened, at most once every `ALERTS.hereRefreshMinutes` (60, from phase 8.4a), as
+    the notice's check-in sentence now says ("at most once an hour while it uses a rough place
+    from your internet connection, otherwise at most once a week"). Its last PUT is then less than
+    an hour before it was last opened, so its places go about 90 days after that; otherwise it
+    still puts weekly with nothing changed, so they can go about 83 days after. Both are still the
+    notice's "90 days after the app last checked in, so about 90 days after you last opened it"
+    and the support page's "about three months". A place located from the connection can go
+    sooner: the first PUT more than `ALERTS.ipPlaceKeepDays` (7) after it was located whose
+    connection can't be located deletes it.)
   - **In the app's copy since phase 6.2.** Section 15.5's text and `APP_COPY.privacyNotifications`
     (the app's summary, above the live data and the link to this notice) had the shorter list and
     "90 days after you last open the app". Phase 6.2 gave the app's lines the notice's facts:

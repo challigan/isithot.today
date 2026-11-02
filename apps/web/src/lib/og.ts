@@ -10,6 +10,7 @@ import font500 from '@fontsource/bricolage-grotesque/files/bricolage-grotesque-l
 import font700 from '@fontsource/bricolage-grotesque/files/bricolage-grotesque-latin-700-normal.woff?url';
 import font800 from '@fontsource/bricolage-grotesque/files/bricolage-grotesque-latin-800-normal.woff?url';
 import { SITES, paletteFor, type AnyBand, type Topic } from '@isithot/core';
+import { ownAsset } from '@isithot/server';
 import { glyphFor } from './view';
 
 export interface OgContent {
@@ -25,12 +26,12 @@ export interface OgContent {
 
 let ready: Promise<{ name: string; data: ArrayBuffer; weight: 500 | 700 | 800 }[]> | null = null;
 
+/** setTimeout as a promise, for ownAsset's waits while a new deploy spreads. */
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const log = (line: string) => console.log(`[isithot] ${line}`);
+
 async function assets(origin: string) {
-  const get = async (path: string) => {
-    const res = await fetch(new URL(path, origin));
-    if (!res.ok) throw new Error(`asset ${path}: ${res.status}`);
-    return res.arrayBuffer();
-  };
+  const get = (path: string) => ownAsset(path, origin, { fetch, wait, log });
   const [wasm, f5, f7, f8] = await Promise.all([
     get(wasmUrl),
     get(font500),
