@@ -25,18 +25,26 @@ final class Locked<Value>: @unchecked Sendable {
   }
 }
 
-/// The server, as the tests have it answer: each request takes the next reply, and the last
-/// reply stands once the others are used up.
+/// The server, as the tests have it answer: each request, a GET or a devices call, takes the
+/// next reply as it is made, and the last reply stands once the others are used up. A request
+/// held (`hold(_:)`, before it is made) waits with its reply until the test releases that one
+/// request, and no other.
 final class FakeTransport: HTTPTransport {
   enum Reply: Sendable {
     case answer(HTTPResponse)
     case failure(URLError.Code)
   }
 
-  private let state: Locked<(replies: [Reply], requests: [HTTPRequest])>
+  private struct Record {
+    var replies: [Reply]
+    var requests: [HTTPRequest] = []
+    var gates: [Int: Gate] = [:]
+  }
+
+  private let state: Locked<Record>
 
   init(_ replies: [Reply]) {
-    state = Locked((replies, []))
+    state = Locked(Record(replies: replies))
   }
 
   /// The requests made, in order.
@@ -44,11 +52,36 @@ final class FakeTransport: HTTPTransport {
   /// The requests' URLs, in order.
   var urls: [String] { requests.map(\.url.absoluteString) }
 
+  /// From the next request on, the replies are `replies` instead of those still to come.
+  func replyNext(_ replies: [Reply]) {
+    state.change { $0.replies = replies }
+  }
+
+  /// Holds the `number`th request (from 1), which must not have been made yet, until released.
+  func hold(_ number: Int) {
+    state.change { $0.gates[number] = Gate() }
+  }
+
+  /// Lets the held `number`th request through.
+  func release(_ number: Int) {
+    state.read { $0.gates[number] }?.open()
+  }
+
   func get(_ request: HTTPRequest) async throws -> HTTPResponse {
-    let reply = state.change { state -> Reply in
+    try await answer(request)
+  }
+
+  func send(_ request: HTTPRequest) async throws -> HTTPResponse {
+    try await answer(request)
+  }
+
+  private func answer(_ request: HTTPRequest) async throws -> HTTPResponse {
+    let (reply, gate) = state.change { state -> (Reply, Gate?) in
       state.requests.append(request)
-      return state.replies.count > 1 ? state.replies.removeFirst() : state.replies[0]
+      let reply = state.replies.count > 1 ? state.replies.removeFirst() : state.replies[0]
+      return (reply, state.gates[state.requests.count])
     }
+    await gate?.wait()
     switch reply {
     case .answer(let response): return response
     case .failure(let code): throw URLError(code)
@@ -303,7 +336,9 @@ final class RecordingHooks: AppHooks, LocationService {
 }
 
 /// A model with fakes for everything, as a test sets them up. The later phases' steps are
-/// `hooks`, which is also the phone's location, unless `appHooks` are given for them.
+/// `hooks`, which is also the phone's location, unless `appHooks` are given for them. A
+/// `transport` and a `clock` given are shared with a `NotificationsHarness`, and `replies` is
+/// then unused.
 @MainActor
 struct Harness {
   let transport: FakeTransport
@@ -327,18 +362,20 @@ struct Harness {
     hooks: RecordingHooks = RecordingHooks(),
     appHooks: (any AppHooks)? = nil,
     recents: [RecentPlace] = [],
-    saved: [SavedPlace] = []
+    saved: [SavedPlace] = [],
+    transport: FakeTransport? = nil,
+    clock: TestClock? = nil
   ) {
-    transport = FakeTransport(replies)
-    clock = TestClock(now)
+    self.transport = transport ?? FakeTransport(replies)
+    self.clock = clock ?? TestClock(now)
     self.store = FakeState(store)
     self.hooks = hooks
     self.recents = MemoryRecents(recents)
     self.saved = MemorySavedPlaces(saved)
     model = AppModel(
       environment: AppEnvironment(
-        client: APIClient(transport: transport),
-        clock: clock,
+        client: APIClient(transport: self.transport),
+        clock: self.clock,
         store: self.store,
         widgets: widgets,
         location: hooks,
@@ -395,6 +432,11 @@ final class GatedTransport: HTTPTransport {
     guard number == 1 else { return others }
     await gate.wait()
     return first
+  }
+
+  /// A devices call, counted and held as a GET is.
+  func send(_ request: HTTPRequest) async throws -> HTTPResponse {
+    try await get(request)
   }
 
   /// Lets the first answer through.

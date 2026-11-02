@@ -5,6 +5,8 @@
  * pages and support address (core `SITES.snow` and `CONTACT_EMAIL`), which the app's Settings
  * open, so no URL or name is typed in Swift, and the one-off purchase's product ID and price
  * (`purchase.ts`), so no price is typed in Swift either.
+ * The Met Office's warnings page, which Settings → Notifications links to for a UK place, is
+ * core's `MET_OFFICE_WARNINGS` (`outbound.ts`), the URL of core's own warnings link.
  * A group written whole (`SEARCH`, `AHEAD`, `WIDGET`, `CLIENT`, `PLACES`, `ADS`) gains a member
  * when core or the client adds a key, and stops the generator if the new value isn't a whole
  * number, so a Swift type is chosen for it rather than guessed. `ALERTS` is not written whole: it
@@ -17,6 +19,7 @@ import {
   CACHE,
   CONTACT_EMAIL,
   GRID,
+  MET_OFFICE_WARNINGS,
   MODELS,
   MODEL_AGENCIES,
   SEARCH,
@@ -41,8 +44,8 @@ export const CONSTANTS_PATH =
   'apps/ios/Packages/IsItCore/Sources/IsItModel/Generated/Constants.swift';
 
 export const CONSTANTS_SOURCE =
-  'packages/core/src/config.ts, packages/core/src/copy.ts, packages/client/src/config.ts and ' +
-  'packages/mobile/src/purchase.ts';
+  'packages/core/src/config.ts, packages/core/src/copy.ts, packages/core/src/outbound.ts, ' +
+  'packages/client/src/config.ts and packages/mobile/src/purchase.ts';
 
 type Numbers = Readonly<Record<string, number>>;
 
@@ -248,6 +251,15 @@ export function constantsSwift(): string {
           swiftString(contactEmail(CONTACT_EMAIL)),
         ),
       ],
+    ),
+    ...group(
+      [
+        "Pages of others the app links to (core `outbound.ts`): the Met Office's official",
+        'warnings, under Settings → Notifications for a UK place (spec 12.1), never a warning of',
+        "the app's.",
+      ],
+      'Outbound',
+      swiftLet('    ', 'public static let metOfficeWarnings', swiftString(MET_OFFICE_WARNINGS)),
     ),
     ...group(
       [

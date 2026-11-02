@@ -1,0 +1,18 @@
+{
+  "aps": {
+    "alert": {
+      "title": "Snow likely in Durham tomorrow",
+      "body": "4 to 5cm of snow. Mostly between 2am and 8am. 6 of 6 forecasts expect snow."
+    },
+    "sound": "default",
+    "thread-id": "snow",
+    "interruption-level": "active",
+    "relevance-score": 0.6
+  },
+  "topic": "snow",
+  "kind": "evening",
+  "date": "2026-02-30",
+  "view": "today",
+  "place": "place=durham-gb",
+  "name": "Durham"
+}

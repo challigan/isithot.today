@@ -8,12 +8,16 @@ public enum SettingsPage: String, Sendable, Hashable, CaseIterable {
   case yourPrivacy
   case howItWorks
   case credits
+  /// Where the notifications are for (`NotificationPlacePage`), pushed from Settings →
+  /// Notifications' place row.
+  case notificationPlace
 }
 
 /// The Settings sheet as plain values (iOS build spec, section 10.4), in a native form's order:
 ///
 /// 1. Units: "Snow units", cm | in, and the footnote;
-/// 2. Notifications (section 12.1): phase 8 inserts it here, with its own switches;
+/// 2. Notifications (section 12.1): `NotificationSettings`, drawn between the units and the
+///    upgrade card; not one of `sections`;
 /// 3. Upgrade: in the free version, "Remove ads and add widgets · £1.99" once StoreKit has a
 ///    price, and "Remove ads and add widgets" without one until then (no price StoreKit didn't
 ///    give, and the purchase is always there to find), either opening the upgrade page, which
@@ -71,6 +75,25 @@ public struct SettingsScreen: Sendable, Equatable {
     case terms
     case contactUs
     case support
+    /// Settings → Notifications' switches: the evening before, on the day, and also when snow
+    /// is possible.
+    case evening
+    case morning
+    case possible
+    /// The notification place's row, and the place kept on the place page.
+    case notificationPlace
+    /// "Send a test notification".
+    case test
+    /// The gate's "Use my location" and "Search".
+    case useMyLocation
+    case search
+    /// "Open Settings", for the app's notifications or its location access.
+    case openSettings
+    /// "Met Office warnings", in Safari.
+    case warnings
+    /// The place page's place on screen and the phone's location.
+    case onScreenPlace
+    case myLocation
   }
 
   /// What a row does when tapped.
@@ -89,6 +112,24 @@ public struct SettingsScreen: Sendable, Equatable {
     case restore
     /// Says something and does nothing when tapped: the thanks once owned.
     case note
+    /// A row of Settings → Notifications or of its place page (`NotificationsModel` acts on it).
+    case notification(NotificationAction)
+  }
+
+  /// What a row of Settings → Notifications, or of its place page, asks for (section 12.1).
+  public enum NotificationAction: Sendable, Equatable {
+    /// "Send a test notification".
+    case sendTest
+    /// The gate's "Use my location": the picker, finding the phone.
+    case useMyLocation
+    /// The gate's "Search": the picker.
+    case search
+    /// "Open Settings" while notifications are off for the app: its notification settings.
+    case openNotificationSettings
+    /// "Open Settings" while location access is off for the app: its settings.
+    case openLocationSettings
+    /// A choice on the place page.
+    case choose(PlaceChoice)
   }
 
   public struct Row: Sendable, Equatable, Identifiable {

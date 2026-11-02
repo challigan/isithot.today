@@ -16,6 +16,12 @@ public struct AppVersion: Sendable, Equatable {
 
   /// Settings' last line (section 10.4): "Version 1.0 (112)".
   public var line: String { AppCopy.version(version: version, build: build) }
+
+  /// The version a notification registration sends (`appVersion`): "1.0 (112)", or "" when the
+  /// bundle doesn't give both parts, which the server keeps as no version.
+  public static func wire(_ version: AppVersion?) -> String {
+    version.map { "\($0.version) (\($0.build))" } ?? ""
+  }
 }
 
 /// What the app shows when no mail app can open a draft (section 10.7): where to write, with a

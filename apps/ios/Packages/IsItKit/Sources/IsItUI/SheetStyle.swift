@@ -179,14 +179,17 @@ struct PageHeading: View {
 }
 
 /// A section of Settings: its heading, the website's `.models h2` (`heading`, flush with the
-/// card, a heading to VoiceOver), then its rows on one card (`SheetCard`), a hairline between
-/// each two (`SheetDivider`, which the rows place). Report an ad's section has no heading.
+/// card, a heading to VoiceOver, identified `headerID` when given: Notifications', which the UI
+/// tests find), then its rows on one card (`SheetCard`), a hairline between each two
+/// (`SheetDivider`, which the rows place). Report an ad's section has no heading.
 struct SheetSection<Rows: View>: View {
   let header: String?
+  let headerID: String?
   let rows: Rows
 
-  init(header: String? = nil, @ViewBuilder rows: () -> Rows) {
+  init(header: String? = nil, headerID: String? = nil, @ViewBuilder rows: () -> Rows) {
     self.header = header
+    self.headerID = headerID
     self.rows = rows()
   }
 
@@ -197,6 +200,7 @@ struct SheetSection<Rows: View>: View {
           .brandFont(.heading)
           .fixedSize(horizontal: false, vertical: true)
           .accessibilityAddTraits(.isHeader)
+          .accessibilityIdentifier(optional: headerID)
       }
       SheetCard {
         rows
@@ -287,6 +291,17 @@ extension SettingsScreen.Icon {
     case .terms: "doc.plaintext"
     case .contactUs: "envelope"
     case .support: "lifepreserver"
+    case .evening: "moon.stars"
+    case .morning: "sunrise"
+    case .possible: "cloud.snow"
+    case .notificationPlace: "mappin.and.ellipse"
+    case .test: "bell.badge"
+    case .useMyLocation: "location"
+    case .search: "magnifyingglass"
+    case .openSettings: "gear"
+    case .warnings: "arrow.up.right.square"
+    case .onScreenPlace: "mappin"
+    case .myLocation: "location.circle"
     }
   }
 }
@@ -312,30 +327,38 @@ struct RowIcon: View {
 }
 
 /// A row's words, as a card's row draws them: its icon (none at accessibility sizes), its title
-/// in `row` (17.6 Medium), wrapping, an optional detail beneath it in `note` and `soft`, then its
-/// end's chevron or arrow in `affordance`, hidden from VoiceOver. Laid out by its button's style
-/// (`SheetRowStyle`).
+/// in `row` (17.6 Medium), wrapping, an optional detail beneath it in `note` and `soft`, an
+/// optional value in `row` and `soft` (the notification place's), then its end's chevron or arrow
+/// in `affordance`, hidden from VoiceOver. The value is trailing, after the title's column and
+/// wrapping, or at accessibility sizes under the title, so neither squeezes the other. Laid out
+/// by its button's style (`SheetRowStyle`).
 struct RowLabel: View {
   let title: String
   let detail: String?
   let icon: SettingsScreen.Icon?
   let end: RowEnd
+  let value: String?
 
   @SurfaceTokens private var tokens
   @Environment(\.dynamicTypeSize) private var typeSize
 
   /// Spelt out, since Settings and its pages make one from other files, and the private tokens
   /// could leave the memberwise initialiser private to this one.
-  init(title: String, detail: String? = nil, icon: SettingsScreen.Icon? = nil, end: RowEnd) {
+  init(
+    title: String, detail: String? = nil, icon: SettingsScreen.Icon? = nil, end: RowEnd,
+    value: String? = nil
+  ) {
     self.title = title
     self.detail = detail
     self.icon = icon
     self.end = end
+    self.value = value
   }
 
   var body: some View {
+    let stacked = typeSize.isAccessibilitySize
     HStack(spacing: SheetMetrics.iconGap) {
-      if let icon, !typeSize.isAccessibilitySize {
+      if let icon, !stacked {
         RowIcon(icon: icon)
       }
       VStack(alignment: .leading, spacing: 3) {
@@ -348,8 +371,15 @@ struct RowLabel: View {
             .foregroundStyle(tokens.soft)
             .fixedSize(horizontal: false, vertical: true)
         }
+        if let value, stacked {
+          valueText(value)
+        }
       }
       Spacer(minLength: 0)
+      if let value, !stacked {
+        valueText(value)
+          .multilineTextAlignment(.trailing)
+      }
       if let symbol = end.symbol {
         Image(systemName: symbol)
           .font(.footnote.weight(.semibold))
@@ -358,6 +388,75 @@ struct RowLabel: View {
       }
     }
     .foregroundStyle(tokens.ink)
+  }
+
+  /// The value's words: `row`, in `soft`, wrapping whole.
+  private func valueText(_ value: String) -> some View {
+    Text(verbatim: value)
+      .brandFont(.row)
+      .foregroundStyle(tokens.soft)
+      .fixedSize(horizontal: false, vertical: true)
+  }
+}
+
+/// The Settings switch (Settings → Notifications' three), drawn by the app as the units control
+/// is (`UnitsSegments`; DECISIONS, "Settings draws its own"), not UIKit's, whose track and
+/// shadowed thumb are no colour of the content surface's and whose label the audit would judge
+/// as text it can't prove. The whole row is one button that turns the switch over, pressed as
+/// every row of a card is (`SheetRowStyle`, never dimmed), holding the label and, at its trailing
+/// end, a 51 by 31 capsule with a 27-point knob: off, a `hairline` edge on the card round the
+/// content surface's `track` (the wash over the card), never stroked over the wash, which would
+/// make a colour the surface hasn't, and a `card` knob at the leading end; on, `ink` with a `card`
+/// knob at the trailing end. Every pixel is one the surface's model has (`SURFACES.content`), so
+/// the contrast proof can judge the row; no tint. A custom style keeps the Toggle's accessibility
+/// (Apple, `accessibilityRepresentation(representation:)`): VoiceOver reads the label, the note
+/// and on or off, and XCUITest finds the Toggle's element with its "0" or "1". The knob jumps,
+/// with no animation, so an audit's screenshot never catches it between its ends. A card's row,
+/// at least 54 tall, the label wrapping at every size.
+struct SheetSwitchStyle: ToggleStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    SheetSwitchBody(configuration: configuration)
+  }
+}
+
+private struct SheetSwitchBody: View {
+  let configuration: ToggleStyleConfiguration
+
+  var body: some View {
+    Button {
+      configuration.isOn.toggle()
+    } label: {
+      HStack(spacing: SheetMetrics.iconGap) {
+        configuration.label
+        SwitchCapsule(isOn: configuration.isOn)
+      }
+    }
+    .buttonStyle(SheetRowStyle())
+  }
+}
+
+/// The switch's capsule and knob, shapes with no element, which move at once when the switch
+/// turns over. Off, the outermost point is the hairline, on the card, and the wash lies inside it.
+private struct SwitchCapsule: View {
+  let isOn: Bool
+
+  @SurfaceTokens private var tokens
+
+  var body: some View {
+    ZStack(alignment: isOn ? .trailing : .leading) {
+      if isOn {
+        Capsule().fill(tokens.ink)
+      } else {
+        Capsule().strokeBorder(tokens.hairline, lineWidth: 1)
+        Capsule().inset(by: 1).fill(tokens.wash)
+      }
+      Circle()
+        .fill(tokens.card)
+        .frame(width: 27, height: 27)
+        .padding(2)
+    }
+    .frame(width: 51, height: 31)
+    .transaction { $0.animation = nil }
   }
 }
 
@@ -402,6 +501,15 @@ extension View {
   func paragraph() -> some View {
     brandFont(.detail)
       .fixedSize(horizontal: false, vertical: true)
+  }
+
+  /// `id` as the view's accessibility identifier, or the view as it is without one.
+  @ViewBuilder func accessibilityIdentifier(optional id: String?) -> some View {
+    if let id {
+      accessibilityIdentifier(id)
+    } else {
+      self
+    }
   }
 }
 

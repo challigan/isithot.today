@@ -64,6 +64,80 @@ public enum Fixtures {
     try JSONDecoder().decode(WithInfo.self, from: search(name)).info
   }
 
+  /// Every devices fixture's name, without `.json`, in order: the server's replies to the
+  /// notification requests (`PUT` and `DELETE /api/v1/devices`, `POST /api/v1/devices/test`),
+  /// made by its own handlers (packages/mobile `deviceFixtures.ts`), in the `Devices` folder.
+  public static func deviceNames() throws -> [String] {
+    let files = try FileManager.default.contentsOfDirectory(
+      at: try folder().appendingPathComponent("Devices", isDirectory: true),
+      includingPropertiesForKeys: nil
+    )
+    return files.filter { $0.pathExtension == "json" }
+      .map { $0.deletingPathExtension().lastPathComponent }
+      .sorted()
+  }
+
+  /// A devices fixture's bytes: `_fixture`, then the reply as the server sent it (`status`,
+  /// `retryAfter`, `text`).
+  public static func device(_ name: String) throws -> Data {
+    let url = try folder().appendingPathComponent("Devices", isDirectory: true)
+      .appendingPathComponent("\(name).json")
+    guard FileManager.default.fileExists(atPath: url.path) else {
+      throw LoadError.noFixture("Devices/\(name)")
+    }
+    return try Data(contentsOf: url)
+  }
+
+  /// What a devices fixture holds: the request it answers, and the server's reply.
+  public struct DeviceInfo: Sendable, Equatable {
+    /// "PUT /api/v1/devices", "DELETE /api/v1/devices" or "POST /api/v1/devices/test".
+    public let request: String
+    /// The request's JSON body, its keys sorted, or nil for none.
+    public let body: Data?
+    /// The moment the server answered, ISO 8601 UTC.
+    public let now: String
+    /// What the reply shows, and how the fixture was made.
+    public let note: String
+    /// The reply's status.
+    public let status: Int
+    /// The reply's `Retry-After` header, or nil without one.
+    public let retryAfter: String?
+    /// The reply's body as the server sent it, "" for none.
+    public let text: String
+
+    /// The reply's body as a transport hands it over.
+    public var reply: Data { Data(text.utf8) }
+  }
+
+  /// What the devices fixture `name` holds.
+  public static func deviceInfo(_ name: String) throws -> DeviceInfo {
+    let file = try JSONSerialization.jsonObject(with: device(name)) as? [String: Any]
+    guard let file, let fixture = file["_fixture"] as? [String: Any],
+      let request = fixture["request"] as? String,
+      let now = fixture["now"] as? String,
+      let note = fixture["note"] as? String,
+      let status = file["status"] as? Int,
+      let text = file["text"] as? String
+    else { throw LoadError.noPath("Devices/\(name)", "_fixture") }
+    let body = try (fixture["body"] as? [String: Any]).map {
+      try JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys])
+    }
+    return DeviceInfo(
+      request: request, body: body, now: now, note: note, status: status,
+      retryAfter: file["retryAfter"] as? String, text: text)
+  }
+
+  /// A notification's payload as the server's `alertPush()` makes it, what a phone receives: in
+  /// the `Payloads` folder, "durham-evening", "durham-old" or "malformed".
+  public static func payload(_ name: String) throws -> Data {
+    let url = try folder().appendingPathComponent("Payloads", isDirectory: true)
+      .appendingPathComponent("\(name).json")
+    guard FileManager.default.fileExists(atPath: url.path) else {
+      throw LoadError.noFixture("Payloads/\(name)")
+    }
+    return try Data(contentsOf: url)
+  }
+
   /// What a fixture says about itself (`_fixture`).
   public struct Info: Decodable, Sendable, Equatable {
     /// The query the app asked with, without the "?".

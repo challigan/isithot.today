@@ -329,13 +329,13 @@ struct SurfaceColours {
 ///
 /// Each pixel is, by the surface's model at its own point: one of its **fills** (within 6 levels
 /// a channel: the background, a chip, a card, the wash, the field); one of its **text** colours
-/// (within 3: its ink, or soft, the ink at 85% on a flat fill); for a button or link, one of the
-/// **marks** it draws (within 3: its edge, a hairline, a chevron); an **edge**, a blend of two of
-/// those colours (within 6 of the line between them) with a pixel of each within 2 pixels, in the
-/// frame or the point round it read with it, as a glyph's anti-aliasing is; or **other**: none of
-/// them. It proves when its frame is whole on the screen and at least a short line's size (10 by
-/// 10 points); the text colours are on 1% of its pixels or more; other pixels are no more than
-/// 0.5% of them, nor 2% of the text colours' pixels; and each text colour drawn on 9 pixels or
+/// (within 3: its ink, or soft, the ink at 85% on a flat fill); for a button, link or switch, one
+/// of the **marks** it draws (within 3: its edge, a hairline, a chevron); an **edge**, a blend of
+/// two of those colours (within 6 of the line between them) with a pixel of each within 2 pixels,
+/// in the frame or the point round it read with it, as a glyph's anti-aliasing is; or **other**:
+/// none of them. It proves when its frame is whole on the screen and at least a short line's size
+/// (10 by 10 points); the text colours are on 1% of its pixels or more; other pixels are no more
+/// than 0.5% of them, nor 2% of the text colours' pixels; and each text colour drawn on 9 pixels or
 /// more gives `minimum` or more with each fill shown clear of what is drawn on it (no pixel but a
 /// fill's within 2) on 1% of the frame or more, measured on the pixels: the text pixel nearest the
 /// fill in luminance against the fill pixel nearest the text.
@@ -351,7 +351,9 @@ struct SurfaceColours {
 /// same pixels dimmed to 50, 60 or 70%, in a lighter grey, over another fill, with no ink, or on
 /// another band, a dimmed copy of a row's words, or of a few letters of them, beside them, a few
 /// of its letters dimmed in place, and the website's ink-at-10% Retry fill on maybesnow, 4.03:1
-/// where it was drawn, all failed it (the Linux harness's checks).
+/// where it was drawn, all failed it (the Linux harness's checks). So did a Settings switch row
+/// drawn in UIKit's switch colours, with its edge stroked over its track, or dimmed, where the
+/// same row in the content colours proved, on and off.
 struct DrawnText: CustomStringConvertible {
   /// The smallest frame that holds a line of the smallest text the app draws (12.8 points at
   /// Large), each way, in points.
@@ -395,12 +397,12 @@ struct DrawnText: CustomStringConvertible {
   var proves: Bool { refusal == nil }
 
   /// Of `pixels`, the screenshot inside `frame` and up to a point round it (nil: it can't be
-  /// read), on `surface`; `withMarks` for a button or link, whose own edge or chevron may be in
-  /// its frame. The pixels round the frame (`margin`) are only neighbours, for a blend at the
-  /// frame's edge whose second colour lies just outside it, as Close's pill fills its frame and
-  /// its edge meets the sheet there (without them, 0.42% of Close's pixels on PR #34's first full
-  /// run were none of the sheet's colours): only the frame's own pixels are counted and
-  /// measured.
+  /// read), on `surface`; `withMarks` for a button, link or switch, whose own edge, chevron or
+  /// capsule's edge may be in its frame. The pixels round the frame (`margin`) are only
+  /// neighbours, for a blend at the frame's edge whose second colour lies just outside it, as
+  /// Close's pill fills its frame and its edge meets the sheet there (without them, 0.42% of
+  /// Close's pixels on PR #34's first full run were none of the sheet's colours): only the
+  /// frame's own pixels are counted and measured.
   init(_ pixels: ScreenPixels?, in frame: CGRect, on surface: SurfaceColours, withMarks: Bool) {
     guard !frame.isNull, frame.width >= Self.smallest, frame.height >= Self.smallest else {
       let size = frame.isNull ? "none" : "\(frame.width) by \(frame.height) points"
@@ -656,21 +658,27 @@ func percent(_ share: Double, places: Int = 1) -> String {
 }
 
 /// The contrast issue every audit allows, on every screen (DECISIONS, "Contrast by measured
-/// pixels, after #34's first full run"): one on a text element, a static text or a button or link
-/// with a label, whose screenshot's pixels prove it is text drawn in its surface's own colours over
-/// its own fills at 4.5:1 or more (`DrawnText`). No other kind is: hit regions, Dynamic Type,
-/// clipped text, descriptions, traits and element detection still fail.
+/// pixels, after #34's first full run"): one on a text element, a static text or a button, link
+/// or switch with a label, whose screenshot's pixels prove it is text drawn in its surface's own
+/// colours over its own fills at 4.5:1 or more (`DrawnText`). No other kind is: hit regions,
+/// Dynamic Type, clipped text, descriptions, traits and element detection still fail.
 enum MeasuredContrast {
-  /// Whether `element` is text: a static text, or a button or link with a label, icons included
-  /// (the gear, the stars, clear-search), each held to 4.5:1.
+  /// Whether `element` is text: a static text, or a button, link or switch with a label, icons
+  /// included (the gear, the stars, clear-search), each held to 4.5:1. A switch is one of
+  /// Settings → Notifications' (IsItUI's `SheetSwitchStyle`): one element for the whole row, its
+  /// label Bricolage as a row's button's is, so Apple's check would most likely fail it as it
+  /// failed every screen's Bricolage text, and its capsule is drawn in the content surface's own
+  /// colours, so the proof can read every pixel of it. XCUITest's type for a Toggle in a custom
+  /// style is the first macOS run's to show, `.switch` or `.toggle`, so both are text.
   static func isText(_ element: AuditedElement) -> Bool {
     guard let type = element.type, !element.label.isEmpty else { return false }
-    return [.staticText, .button, .link].contains(type)
+    return [.staticText, .button, .link, .switch, .toggle].contains(type)
   }
 
-  /// Whether a button or link, which may draw its own edge or chevron in its frame.
+  /// Whether a button, link or switch, which may draw its own edge or chevron in its frame, or a
+  /// switch's capsule's hairline edge.
   static func drawsMarks(_ type: XCUIElement.ElementType?) -> Bool {
-    type == .button || type == .link
+    type == .button || type == .link || type == .switch || type == .toggle
   }
 
   /// Whether the audit's contrast issue on `element` is allowed: text, with the proof.

@@ -106,15 +106,17 @@ public struct CreditsPage: Sendable, Equatable {
   }
 }
 
-/// "Your privacy" (section 10.6): what the app sends and what is kept, in plain lines that say
-/// what the website's privacy notice says; then, while notifications are registered, what the
-/// server keeps for them, with the button that deletes it (phase 8); then the full policy.
+/// "Your privacy" (section 10.6): while notifications are registered, what the server keeps for
+/// them comes first, under the title, with the button that deletes it, so the page's audit at
+/// its top sees it whole (phase 8.2); once that button is tapped, what it did, in its place. Then
+/// what the app sends and what is kept, in plain lines that say what the website's privacy
+/// notice says; then the full policy.
 public struct YourPrivacy: Sendable, Equatable {
-  /// What is kept for notifications, from the last registration's answer (phase 8).
+  /// What is kept for notifications, from the last registration's answer (`keptLines`).
   public struct Kept: Sendable, Equatable {
     /// "What we keep for notifications"
     public let heading: String
-    /// "ID 3f9c1a2b", "Leeds, Europe/London", "cm", "Evening before"
+    /// "ID b8465956", "Leeds, Europe/London", "Snow units: cm", "Evening before (about 6pm)"
     public let lines: [String]
     /// "Turn off notifications and delete my data"
     public let delete: String
@@ -125,14 +127,19 @@ public struct YourPrivacy: Sendable, Equatable {
   /// The plain lines, in order: the forecast's request, notifications, the ads (while they are
   /// on, with "See Privacy choices." while that row is in Settings), purchases, accounts.
   public let lines: [String]
-  /// Nil while not registered for notifications, and until phase 8 registers.
+  /// Nil while not registered for notifications.
   public let kept: Kept?
+  /// What "Turn off notifications and delete my data" did (`deleteStatus(_:)`), once tapped.
+  public let deleteStatus: String?
   /// "Privacy policy", opening willitsnow.today/privacy in Safari.
   public let policy: SettingsScreen.Row?
 
   /// The lines for the free version while `adsOn`, with the pointer to "Privacy choices" while
-  /// `privacyChoices`; `kept` is what the server keeps, line by line, while registered.
-  public init(adsOn: Bool, privacyChoices: Bool, kept: [String]? = nil) {
+  /// `privacyChoices`; `kept` is what the server keeps, line by line, while registered, and
+  /// `deleteStatus` what the delete did.
+  public init(
+    adsOn: Bool, privacyChoices: Bool, kept: [String]? = nil, deleteStatus: String? = nil
+  ) {
     title = AppCopy.yourPrivacy
     var lines = [AppCopy.privacyForecast, AppCopy.privacyNotifications]
     if adsOn {
@@ -144,9 +151,40 @@ public struct YourPrivacy: Sendable, Equatable {
     self.kept = kept.map {
       Kept(heading: AppCopy.keptForNotifications, lines: $0, delete: AppCopy.deleteMyData)
     }
+    self.deleteStatus = deleteStatus
     policy = URL(string: Constants.Site.privacy).map {
       SettingsScreen.Row(
         id: "full-policy", title: AppCopy.privacyPolicy, action: .open($0), icon: .policy)
+    }
+  }
+
+  /// What the server keeps for notifications, as the last PUT it answered (`alertSync.v1`) says:
+  /// the ID's first 8 digits, the place's name and time zone, the snow units it was sent in
+  /// ("Snow units: cm"), then each switch it holds on, in Settings' words and order. Nil while
+  /// not registered.
+  public static func keptLines(_ registration: AlertRegistration?) -> [String]? {
+    guard let registration else { return nil }
+    let response = registration.response
+    var lines = [
+      AppCopy.keptID(id: String(response.id.prefix(8))),
+      AppCopy.keptPlace(place: response.place.name, zone: response.place.timezone),
+      AppCopy.keptUnits(
+        label: CoreCopy.snowUnitsLabel, units: CoreCopy.snowUnitName(registration.units)),
+    ]
+    let snow = response.alerts.snow
+    if snow.evening { lines.append(AppCopy.evening) }
+    if snow.morning { lines.append(AppCopy.morning) }
+    if snow.possible { lines.append(AppCopy.possible) }
+    return lines
+  }
+
+  /// What the delete did, in words: done, or not yet, when it didn't reach the server (the app
+  /// tries again at its next open); nil before it and while it is under way.
+  public static func deleteStatus(_ delete: NotificationsState.Delete) -> String? {
+    switch delete {
+    case .done: AppCopy.deleteDone
+    case .notYet: AppCopy.deleteNotYet
+    case .idle, .deleting: nil
     }
   }
 }

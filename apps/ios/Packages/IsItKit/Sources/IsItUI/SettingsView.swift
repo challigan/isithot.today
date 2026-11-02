@@ -6,19 +6,25 @@ import UIKit
 /// The Settings sheet (iOS build spec, section 10.4) in the website's look (DECISIONS, "The
 /// iPhone app in the website's look", step 6): the website's content pages' palette, fixed and
 /// the same in both appearances, with the title on the page; the snow units on a card with the
-/// website's cm | in pill; the upgrade card, with no heading: the upgrade row in the free version
+/// website's cm | in pill; Notifications (section 12.1, `NotificationsSection`), its switches
+/// drawn by the app as the units are, with the place, which pushes the notification place's
+/// page, the test, and for a UK place the Met Office's warnings; the upgrade card, with no
+/// heading: the upgrade row in the free version
 /// (its price once StoreKit has one), or the thanks once owned, then Restore purchase with its
 /// result; the privacy rows, Report an ad in the free version, About and Help, as rows with icons
 /// on plum cards under their headings; and the version. A page that scrolls (`SheetPage`), not a
 /// `Form`, whose cells the audit failed on PR #33's runs though they grew; section 10.4's order
 /// and contents are kept, its native form and Dark Mode are not. Pages open on the sheet's own
-/// stack (the upgrade page, Your privacy, How it works, Credits and licences), so the upgrade
-/// page is never a sheet over a sheet; willitsnow.today's pages open in Safari and the emails in
+/// stack (the notification place, the upgrade page, Your privacy, How it works, Credits and
+/// licences), so the upgrade page is never a sheet over a sheet; willitsnow.today's pages open in Safari and the emails in
 /// the mail app, through `openURL`, and with no mail app the fallback sheet says where to write.
 /// Everything shown is the presenters'. Nothing is announced here: the Restore purchase row that
 /// was tapped says its result (`RestoreRow`), and the upgrade page its outcome.
 public struct SettingsView: View {
   let screen: SettingsScreen
+  /// Settings → Notifications, and the notification place's page, which its place row pushes.
+  let notifications: NotificationSettings
+  let notificationPlace: NotificationPlacePage
   let privacy: YourPrivacy
   /// The upgrade page, which the upgrade row pushes.
   let upgrade: UpgradePage
@@ -30,9 +36,16 @@ public struct SettingsView: View {
   @State private var fallback: MailFallback?
 
   public init(
-    screen: SettingsScreen, privacy: YourPrivacy, upgrade: UpgradePage, actions: SettingsActions
+    screen: SettingsScreen,
+    notifications: NotificationSettings,
+    notificationPlace: NotificationPlacePage,
+    privacy: YourPrivacy,
+    upgrade: UpgradePage,
+    actions: SettingsActions
   ) {
     self.screen = screen
+    self.notifications = notifications
+    self.notificationPlace = notificationPlace
     self.privacy = privacy
     self.upgrade = upgrade
     self.actions = actions
@@ -42,6 +55,8 @@ public struct SettingsView: View {
     NavigationStack {
       SheetPage(title: screen.title) {
         UnitsCard(control: screen.units, setUnits: actions.setUnits)
+        NotificationsSection(settings: notifications, actions: actions.notifications)
+          .padding(.top, SheetMetrics.sectionGap)
         ForEach(screen.sections) { section in
           // A heading only for a section with one: the upgrade card and Report an ad have none,
           // and follow closer.
@@ -142,6 +157,14 @@ public struct SettingsView: View {
         .sheetRow()
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier(row.id)
+    case .notification(let action):
+      Button {
+        actions.notifications.perform(action)
+      } label: {
+        RowLabel(title: row.title, icon: row.icon, end: .none)
+      }
+      .buttonStyle(SheetRowStyle())
+      .accessibilityIdentifier(row.id)
     }
   }
 
@@ -155,6 +178,8 @@ public struct SettingsView: View {
       HowItWorksView(page: HowItWorks())
     case .credits:
       CreditsView(page: CreditsPage(), notice: actions.notice)
+    case .notificationPlace:
+      NotificationPlaceView(page: notificationPlace, actions: actions.notifications)
     }
   }
 

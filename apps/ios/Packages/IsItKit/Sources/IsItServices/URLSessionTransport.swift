@@ -5,7 +5,9 @@ import IsItState
 /// The app's requests over URLSession, with the settings in iOS build spec section 4: never the
 /// local URL cache, since the app keeps its own saved answer (`reloadIgnoringLocalCacheData`,
 /// and no cache to write to either); a 12 s timeout; the request's own headers only, which are
-/// `Accept: application/json`; and the default User-Agent.
+/// `Accept: application/json`, and for the devices calls' JSON bodies `Content-Type:
+/// application/json` too; and the default User-Agent. The answer's `Retry-After` header goes
+/// back with it, for the devices calls' one write a minute.
 public struct URLSessionTransport: HTTPTransport {
   private let session: URLSession
 
@@ -30,18 +32,33 @@ public struct URLSessionTransport: HTTPTransport {
   }
 
   public func get(_ request: HTTPRequest) async throws -> HTTPResponse {
+    try await perform(request, method: .get)
+  }
+
+  /// The devices calls: the request's own method, and its body.
+  public func send(_ request: HTTPRequest) async throws -> HTTPResponse {
+    try await perform(request, method: request.method)
+  }
+
+  /// Sends `request` as `method`, with its body if it has one.
+  private func perform(_ request: HTTPRequest, method: HTTPMethod) async throws -> HTTPResponse {
     var urlRequest = URLRequest(
       url: request.url,
       cachePolicy: .reloadIgnoringLocalCacheData,
       timeoutInterval: request.timeout
     )
-    urlRequest.httpMethod = "GET"
+    urlRequest.httpMethod = method.rawValue
+    urlRequest.httpBody = request.body
     for (name, value) in request.headers {
       urlRequest.setValue(value, forHTTPHeaderField: name)
     }
     let (data, response) = try await session.data(for: urlRequest)
     guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
-    return HTTPResponse(status: http.statusCode, body: data)
+    return HTTPResponse(
+      status: http.statusCode,
+      body: data,
+      retryAfter: http.value(forHTTPHeaderField: "Retry-After")
+    )
   }
 }
 

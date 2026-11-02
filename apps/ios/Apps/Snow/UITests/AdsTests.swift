@@ -152,7 +152,7 @@ final class AdsTests: XCTestCase {
     guard upgrade.waitForExistence(timeout: 10) else {
       throw HomeScreenError("No upgrade row in Settings")
     }
-    upgrade.tap()
+    tapRow("upgrade", in: app)
     let buy = app.buttons["buy"]
     guard buy.waitForExistence(timeout: 10) else {
       throw HomeScreenError(
@@ -742,11 +742,25 @@ final class AdsTests: XCTestCase {
   /// Taps Settings' Your privacy, and waits for its title on the page (`page-title`).
   @MainActor
   private func openYourPrivacy(_ app: XCUIApplication) throws {
-    app.buttons["your-privacy"].tap()
+    tapRow("your-privacy", in: app)
     let titled = NSPredicate(format: "identifier == 'page-title' AND label == %@", "Your privacy")
     guard app.staticTexts.matching(titled).firstMatch.waitForExistence(timeout: 5) else {
       throw HomeScreenError("No Your privacy after tapping its row; \(app.cancelsReport)")
     }
+  }
+
+  /// Taps Settings' row `id`, swiping up to it first while a tap wouldn't reach it, as
+  /// UpgradeTests' `tapRow` does: the rows below the units, which the Notifications card moved
+  /// down.
+  @MainActor
+  private func tapRow(_ id: String, in app: XCUIApplication) {
+    let row = app.buttons[id]
+    var swipes = 0
+    while !(row.exists && row.isHittable) && swipes < 6 {
+      app.swipeUp()
+      swipes += 1
+    }
+    row.tap()
   }
 
   /// Your privacy's lines, in order (`privacy-line-<n>`), up to 10, more than it ever has: every
