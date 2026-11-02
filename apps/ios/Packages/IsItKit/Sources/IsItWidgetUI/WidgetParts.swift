@@ -109,7 +109,8 @@ struct GlyphMark: View {
 /// style does, a face up under Bold Text (`BrandFont.bolder`, the app's rule). Its own, as the
 /// app's `TextRole` sizes are a page's. Never caption2, and no line shrinks under 11 points at
 /// Large, the HIG's floor, once its `minimumScaleFactor` has scaled it: none of 13 points below
-/// 0.85, none of 15 below 0.75. The Lock Screen families keep the system's text styles.
+/// 0.85, none of 15 below 0.75 (the medium's Now line goes to half only at the accessibility
+/// sizes, 12.5 points at AX1). The Lock Screen families keep the system's text styles.
 enum WidgetType {
   /// The place caption.
   case place
@@ -166,29 +167,34 @@ enum WidgetType {
 
 extension View {
   /// Sets `type`'s face, size and tracking, growing with Dynamic Type as its text style does, a
-  /// face up under Bold Text, which a custom font doesn't follow on its own.
-  func widgetFont(_ type: WidgetType) -> some View {
-    modifier(WidgetFontModifier(type: type))
+  /// face up under Bold Text, which a custom font doesn't follow on its own. `scale` sets it at
+  /// that fraction of its size, for a hidden copy that measures a line at its smallest (a week
+  /// row's band label, `WeekRowView`): the faces have no size-specific tracking, so a line's
+  /// width scales with its size.
+  func widgetFont(_ type: WidgetType, scale: CGFloat = 1) -> some View {
+    modifier(WidgetFontModifier(type: type, scale: scale))
   }
 }
 
-/// `widgetFont(_:)`: the font, and the tracking in points from a `ScaledMetric` of the size, so
-/// it grows with the text.
+/// `widgetFont(_:scale:)`: the font, and the tracking in points from a `ScaledMetric` of the
+/// size, so it grows with the text.
 private struct WidgetFontModifier: ViewModifier {
   let type: WidgetType
+  let scale: CGFloat
 
   @ScaledMetric private var scaled: CGFloat
   @Environment(\.legibilityWeight) private var legibilityWeight
 
-  init(type: WidgetType) {
+  init(type: WidgetType, scale: CGFloat) {
     self.type = type
-    _scaled = ScaledMetric(wrappedValue: type.size, relativeTo: type.style)
+    self.scale = scale
+    _scaled = ScaledMetric(wrappedValue: type.size * scale, relativeTo: type.style)
   }
 
   func body(content: Content) -> some View {
     let face = legibilityWeight == .bold ? type.face.bolder : type.face
     content
-      .font(.custom(face.rawValue, size: type.size, relativeTo: type.style))
+      .font(.custom(face.rawValue, size: type.size * scale, relativeTo: type.style))
       .tracking(type.tracking * scaled)
   }
 }

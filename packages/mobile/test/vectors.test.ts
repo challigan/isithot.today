@@ -607,6 +607,11 @@ describe('the cases cover what section 7.4 asks for', () => {
           e.state === 'ok' && e.slot === 'tomorrow' && e.day === null && e.palette === 'nosnow',
       ),
     ).toBe(true);
+    // The week's rows are every day after the middle day: six from a morning, and the whole
+    // week's seven with no middle day, never cut to four.
+    const ok = cases.flatMap((c) => (c.out as any).entries).filter((e: any) => e.state === 'ok');
+    expect(ok.some((e: any) => e.week.length === 6)).toBe(true);
+    expect(noTomorrow.some((e: any) => e.state === 'ok' && e.week.length === 7)).toBe(true);
     // Older than the stale limit: a stale entry at the cut-off.
     const old = fixtures.get('old-forecast')!;
     expect(

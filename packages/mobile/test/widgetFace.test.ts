@@ -147,6 +147,23 @@ describe('widgetFace', () => {
     }
   });
 
+  it('carries every day of the week after the middle day, not the first four', () => {
+    const f = fixture('durham-tomorrow');
+    const now = Date.parse(f._fixture.now);
+    const labels = (answer: Fixture, at: number): string[] => {
+      const entry = widgetEntries(answer, { fetchedAt: madeAt(f), now: at, unlocked: true })
+        .entries[0]!;
+      return widgetFace(entry, 'cm').week.map((row) => row.label);
+    };
+    // At 5:59pm the middle day is Wednesday, today: the six days after it, to the week's end.
+    expect(labels(f, now - 6 * 60 * 1000)).toEqual(['Thu', 'Fri', 'Sat', 'Sun', 'Mon', 'Tue']);
+    // At 6:05pm it is Thursday, tomorrow: the five after it.
+    expect(labels(f, now)).toEqual(['Fri', 'Sat', 'Sun', 'Mon', 'Tue']);
+    // With no tomorrow for snow from 6pm there is no middle day, and the rows are the whole week.
+    const noTomorrow: Fixture = { ...f, snow: { ...f.snow!, days: f.snow!.days.slice(0, 1) } };
+    expect(labels(noTomorrow, now)).toEqual(['Today', 'Thu', 'Fri', 'Sat', 'Sun', 'Mon', 'Tue']);
+  });
+
   it('reads each week row as the app’s week page reads it', () => {
     for (const name of ['aberdeen-snow', 'durham-tomorrow']) {
       const f = fixture(name);

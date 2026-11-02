@@ -79,7 +79,8 @@ public struct WidgetEntry: Sendable, Equatable {
   /// The middle view's day.
   public let day: ApiSnowDay?
   public let now: Now?
-  /// Up to 4 days after the middle view's day.
+  /// Every day of the week after the middle view's day: up to 6, or the whole week's 7 without
+  /// that day. The medium widget shows as many of them as fit.
   public let week: [WidgetDay]
   /// The palette and glyph: the middle view's day's band, else `nosnow`.
   public let palette: SnowBand
@@ -187,7 +188,7 @@ public enum WidgetPlanner {
         now: picked.now.map {
           WidgetEntry.Now(answer: $0.answer, verdict: $0.verdict, band: $0.band)
         },
-        week: (picked.week?.days ?? []).filter { $0.date > after }.prefix(4).map(WidgetDay.init),
+        week: (picked.week?.days ?? []).filter { $0.date > after }.map(WidgetDay.init),
         palette: middle.day?.band ?? .nosnow
       )
     }

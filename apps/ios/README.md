@@ -1548,8 +1548,12 @@ composed widget screenshot) and 7.4 (the App Shortcut) to 1.1. DECISIONS has eac
     for all of it, the slot and the dots go first, then the place. With no middle day, the glyph
     alone and "Not available right now.".
   - **Medium:** the small's face on the left; on the right, Now ("Now", "No. Too warm for snow.")
-    and up to four days after the middle day, each its short name, a small glyph, its band and
-    its dots: four rows, two or none, whichever fits.
+    in up to two lines, then every day after the middle day that fits whole below it (all six,
+    or the week's seven with no middle day, down to none), each its short name, a small glyph,
+    its band and its dots; fewer at larger text sizes. No word is cut short: a band's label
+    shrinks a little, then wraps at its words, and the dots go from every row at once where
+    keeping them would cost a row. At the accessibility sizes Now takes the lines it needs,
+    shrinking to half, and drops its "Now" before its words.
   - **Circular:** the system's capacity gauge, filled for the forecasts that expect snow of those
     with data, with the glyph in the middle; the glyph alone on the system's background without
     counts.
@@ -1704,33 +1708,36 @@ sample), each suite under a one-minute limit and each `WidgetTimeline` with a `F
 own, as Swift Testing runs them in parallel. In packages/mobile: the copy, the face
 (`widgetFace.test.ts`), the sample, the vectors, the client's `widgetReuses`, `widgetFallsBack`
 and `routeLink`, `privacyApis.test.ts` (no shipped Swift names a file-timestamp or boot-time API,
-spec 15.1), `widgetSizes.test.ts` (the snapshots' small and medium sizes are the contrast gate's),
-and the widget's contrast gate in `brandColours.test.ts`: the ink passes 4.5:1 over the whole
-widget at the HIG's sizes for 430- and 393-wide iPhones, glow and all (the lowest is maybesnow's
-small, 4.96). On the macOS CI:
+spec 15.1), `widgetSizes.test.ts` (the snapshots' small and medium sizes, and the narrow medium's,
+are the contrast gate's), and the widget's contrast gate in `brandColours.test.ts`: the ink passes
+4.5:1 over the whole widget at the HIG's sizes for 430- and 393-wide iPhones, glow and all (the
+lowest is maybesnow's small, 4.96). On the macOS CI:
 
-- **The Unit plan:** `WidgetSnapshotTests` draws 103 tiles with `ImageRenderer` at 3x, each
+- **The Unit plan:** `WidgetSnapshotTests` draws 110 tiles with `ImageRenderer` at 3x, each
   `ForecastWidgetView` faced by the real code: every band (durham-tomorrow's tomorrow re-banded in
-  the test) in every family, the Home Screen families in full colour, accented and StandBy, the
-  Lock Screen ones vibrant; locked and stale in every family and mode; ten fixture moments, and
-  durham-tomorrow at 6:05pm on the Lock Screen; AX3; the gallery and the placeholder; and the
-  medium with its `Link`. They are named `widget-<family>-<case>-<mode>`, with `-ax3` at AX3 (say
-  `widget-medium-snow-ok-full`, `widget-small-locked-accented`,
-  `widget-small-durham-tomorrow-1805-full`), at the HIG's sizes for 430-wide iPhones (small 170,
-  medium 364 by 170, circular 76, rectangular 172 by 76, inline 257 by 26), and land on the
-  contact sheet grouped by family. The accented, StandBy and vibrant tiles are approximations,
-  over mid grey (0x8e8e93), black and 0x1c1c1e, since only WidgetKit draws the real ones; they are
-  review artefacts, not pixel gates. `AppGroupTests` (V1) runs the real `WidgetTimeline` over the
-  real App Group, with a server that never answers and StoreKit holding nothing: the answer the
-  app saved is reused, each hour ahead then stale, locked until `unlock.v1` says otherwise, and
-  another store version's file ignored. `WidgetBundleTests` opens the embedded appex: its
-  `IsItAPIOrigin` the app's and https, its App Group, all four fonts listed, carried and named,
-  SnowKit's glyph catalogue in it, its manifest's Coarse Location, a WidgetKit extension, and
+  the test) in every family, the Home Screen families in full colour, accented and StandBy, the Lock
+  Screen ones vibrant; locked and stale in every family and mode; ten fixture moments, and
+  durham-tomorrow at 6:05pm on the Lock Screen; AX3; the gallery and the placeholder; the medium
+  with its `Link`; and the medium with all six days after the middle day (`widget-medium-week-…`):
+  at XXXL, in its `Link` at Large and XXXL, at the 393-wide size at both, and with "Snow possible"
+  first at XXXL and 393-wide. They are named `widget-<family>-<case>-<mode>`, with `-xxxl` at XXXL,
+  `-ax3` at AX3, `-narrow` at the 393-wide size and `-link` with the `Link` (say
+  `widget-medium-snow-ok-full`, `widget-small-locked-accented`, `widget-medium-week-full-narrow`),
+  at the HIG's sizes for 430-wide iPhones (small 170, medium 364 by 170, circular 76, rectangular
+  172 by 76, inline 257 by 26; the narrow medium 338 by 158), and land on the contact sheet
+  grouped by family. The accented, StandBy and vibrant tiles are approximations, over mid grey
+  (0x8e8e93), black and 0x1c1c1e, since only WidgetKit draws the real ones; they are review
+  artefacts, not pixel gates. `AppGroupTests` (V1) runs the real `WidgetTimeline` over the real App
+  Group, with a server that never answers and StoreKit holding nothing: the answer the app saved is
+  reused, each hour ahead then stale, locked until `unlock.v1` says otherwise, and another store
+  version's file ignored. `WidgetBundleTests` opens the embedded appex: its `IsItAPIOrigin` the
+  app's and https, its App Group, all four fonts listed, carried and named, SnowKit's glyph
+  catalogue in it, its manifest's Coarse Location, a WidgetKit extension, and
   `WidgetTimeline.live(in:)` built from its own plist; and the factory over a plist of its own,
   naming another origin than the app's: its client asks that origin, its gate is `FetchGate.shared`,
-  and without `IsItAppGroup` there is no timeline. `WidgetProviderTests`: a locked plan is
-  never reloaded, an answer's reloads when its planner says, and every family and rendering mode
-  has its look.
+  and without `IsItAppGroup` there is no timeline. `WidgetProviderTests`: a locked plan is never
+  reloaded, an answer's reloads when its planner says, and every family and rendering mode has its
+  look.
 - **The UI plan:** `WidgetLinkTests` opens `willitsnow://view/week`, `view/today` and `view/now`
   as a tapped widget does, and checks each lands: the heading, the tab selected, and the page on
   screen (`pageOffScreen`). XCUITest can't add a widget to the Home Screen, so nothing tests the

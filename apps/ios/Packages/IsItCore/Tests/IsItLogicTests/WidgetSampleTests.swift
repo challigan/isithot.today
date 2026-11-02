@@ -31,6 +31,7 @@ struct WidgetSampleTests {
     #expect(face.agreement?.snowy == 6)
     #expect(face.agreement?.total == 6)
     #expect(face.band == .snow)
-    #expect(face.week.map(\.label) == ["Fri", "Sat", "Sun", "Mon"])
+    // Every day after Thursday, the middle day, to the week's end.
+    #expect(face.week.map(\.label) == ["Fri", "Sat", "Sun", "Mon", "Tue"])
   }
 }
