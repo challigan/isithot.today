@@ -60,14 +60,17 @@ final class LaunchTests: XCTestCase {
   }
 
   /// Launches the app with `-uitest`, `-noads 1` (no consent form or ad, as `launchApp`) and
-  /// `arguments`, and waits for the heading. The stub is beneath the app's own transport only:
-  /// Google's SDKs would reach the real network, under `-network off` too.
+  /// `arguments`, and waits for the heading, from snapshots (`readHeading`, as `launchApp` does).
+  /// The stub is beneath the app's own transport only: Google's SDKs would reach the real
+  /// network, under `-network off` too.
   @MainActor
   private func launch(_ arguments: [String]) -> XCUIApplication {
     let app = XCUIApplication()
     app.launchArguments = ["-uitest", "-noads", "1"] + arguments
     app.launch()
-    XCTAssertTrue(heading(in: app).waitForExistence(timeout: 15), "No heading on screen")
+    if let failure = readHeading(in: app, within: 15, "to come after the launch", until: \.found) {
+      XCTFail("No heading on screen: \(failure)")
+    }
     return app
   }
 

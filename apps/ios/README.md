@@ -716,7 +716,14 @@ as VoiceOver reads them, the week's heading, the Updated line, the offline, unav
 line and Retry, and that nothing else of them is there; `expect(topBar, in:)` the app's name
 (`app-name`), the place pill's label, the notice (`approximate`), "Use my exact location" and
 Settings. Nothing in a test types a page's words. A difference is reported and the test goes on
-to the next; a screen that never comes stops it.
+to the next; a screen that never comes stops it. A test waits for a page's heading the same way
+(`awaitHeading`, `readHeading`): a snapshot at once, then four a second, until one heading, on
+the page on screen, reads the page's words exactly; a read counts only if it ended by the
+deadline, so one the app answers late fails the wait and says when it found the words, and the
+failure is that last read's, with how many reads there were and how long the last took
+(docs/DECISIONS.md, "What main's offline run showed": a predicate in an `XCTWaiter` had its only
+query interrupted at the deadline, and failed having compared nothing). Every wait for the
+heading reads this way, the launches' and the picker tests' too.
 
 **The tests** (the UI test plan; `### UI:` in the `ios` job's log names each failure with its
 file and line):
@@ -1390,7 +1397,12 @@ website's privacy notice. On the macOS CI:
   cleared, so a test environment that cancels every purchase fails rather than passing as a
   cancel. Simulated errors are cleared by `resetToDefaultState()`, never by
   `setSimulatedError(nil, forAPI:)`, which leaves every later purchase failing (docs/DECISIONS.md,
-  "What PR #40's first macOS run showed"). Each test logs the simulator's iOS version. It runs on an iPhone 17 with iOS 26.2
+  "What PR #40's first macOS run showed"). setUp, once it has cleared the transactions, waits until
+  StoreKit itself lists none of the app's (`untilStoreKitListsNothing`, which it records with how
+  long it took), as storekitd forgets them a little after `clearTransactions()` returns, and a
+  test that read them sooner started with the previous test's purchase; and each refund test
+  refunds the transaction its own buy made, by the ID in the buy's result (docs/DECISIONS.md,
+  "What PR #44's StoreKit run showed"). Each test logs the simulator's iOS version. It runs on an iPhone 17 with iOS 26.2
   (below, "Settled"), in a job of its own (`storekit`), with test timeouts on and 60 seconds a
   test (`ci/test.sh StoreKit`).
 - **The Unit plan:** `AppGroupTests` writes `unlock.v1` through `saveUnlock(_:)`, and

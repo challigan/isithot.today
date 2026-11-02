@@ -352,8 +352,8 @@ final class AdsTests: XCTestCase {
     let app = XCUIApplication()
     app.launchArguments = ["-uitest"] + arguments
     app.launch()
-    guard app.heading.waitForExistence(timeout: 20) else {
-      throw HomeScreenError("No heading on screen after launching with \(arguments)")
+    if let failure = readHeading(in: app, within: 20, "to come after the launch", until: \.found) {
+      throw HomeScreenError("No heading on screen after launching with \(arguments): \(failure)")
     }
     return app
   }
