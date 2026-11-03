@@ -201,6 +201,28 @@ extension XCUIApplication {
     "debug-cancels reads \(touchesCancelled.map(String.init) ?? "nothing")"
   }
 
+  /// The titles of the pages in the tree, each a page's title on the page (`page-title`: Settings,
+  /// the pages on its stack, the mail fallback, the upgrade sheet), in the order a `firstMatch`
+  /// takes them, from one snapshot (`ElementRead`); nil when the app can't be read. A sheet's
+  /// title stays in the tree under a sheet over it, as Settings' does under the mail fallback.
+  var pageTitles: [String]? {
+    let read = ElementRead(self, "page-title", .staticText)
+    return read.unreadable == nil ? read.labels : nil
+  }
+
+  /// Whether one read of the app finds a page titled `title`: what a row or button that opens
+  /// that page brings (`watchedTap`).
+  func showsPage(titled title: String) -> Bool {
+    pageTitles?.contains(title) == true
+  }
+
+  /// Whether one read of an app it could read finds no page titled `title`: a page gone, as Back
+  /// or a Close leaves it, never met by the page still there. Not the page under it, whose title
+  /// may be in the tree all along (Settings' under the mail fallback).
+  func lacksPage(titled title: String) -> Bool {
+    pageTitles.map { !$0.contains(title) } ?? false
+  }
+
   /// The picker as the app and XCUITest have it, for a failure or `picker-closed-lag` to say: the
   /// readout's state; then the search box and the place button, each with its frame and whether a
   /// tap would reach it, or not found. A search box off the screen's foot (874 points down on the
@@ -629,12 +651,41 @@ extension XCTestCase {
     }
   }
 
+  /// Plays `tap`, a tap on `what` (a row, a button, a tab), watched for a touch the system
+  /// cancelled (`cancelled(_:in:within:until:_:)`, read for up to 2 seconds or until `done()`
+  /// holds), and plays it once more, itself watched, so a second cancel names itself, only when
+  /// `debug-cancels` rose meanwhile and the tap brought nothing: `again()`, which unless given is
+  /// `done()` not holding. `done` is what the tap brings, read from snapshots, and never met by
+  /// what was in the tree before it (a page's own title, a recorder's line holding the URL a row
+  /// opens, a page gone, never the page under a sheet). The gear, the place button and the tabs
+  /// went this way first (PR #40); every direct tap whose result can be read does now, after main's
+  /// run on 1d643d3, where Report an ad's touch lost its lift and the mail fallback never came
+  /// (DECISIONS, "What main's run on 1d643d3 showed", which lists the taps that don't). A tap the
+  /// app completed is never played again, as a cancelled touch never made one; the waits and
+  /// checks after a tap are the caller's, unchanged. Whether it was played again.
+  @MainActor
+  @discardableResult
+  func watchedTap(
+    _ what: String,
+    in app: XCUIApplication,
+    until done: () -> Bool,
+    again: (() -> Bool)? = nil,
+    _ tap: () -> Void
+  ) -> Bool {
+    guard cancelled("tap on \(what)", in: app, within: 2, until: done, tap), again?() ?? !done()
+    else { return false }
+    // The system cancelled the touch, so the app never had a tap (DECISIONS, "What the
+    // simulator's log showed").
+    _ = cancelled("second tap on \(what)", in: app, tap)
+    return true
+  }
+
   /// Taps `page`'s tab in the switcher (a tab, a button labelled as the tab reads, on the track or
   /// at accessibility sizes a chip of its own), waits for its heading, checks its page is the one
   /// on screen (`pageOffScreen`), waits for its colours (`awaitColours`), and checks the tab is
-  /// the one selected. A tap whose touch the system cancelled (`cancelled(_:in:within:until:_:)`,
-  /// read for up to 2 seconds or until the heading comes) and whose heading hasn't come is tapped
-  /// once more: the app never had it as a tap. A tap the app completed is never tapped again. A
+  /// the one selected. A tap whose touch the system cancelled (`watchedTap`, read for up to 2
+  /// seconds or until the heading comes) and whose heading hasn't come is tapped once more: the
+  /// app never had it as a tap. A tap the app completed is never tapped again. A
   /// heading that never comes fails with where the tab was, the tab the app has chosen,
   /// `debug-cancels` and where the pages are (`homeGeometry`: the page in the tree is the chosen
   /// view's).
@@ -652,11 +703,7 @@ extension XCTestCase {
       tapped = Date()
       tab.tap()
     }
-    if cancelled("tap on \(page.label)", in: app, within: 2, until: arrived, tapTab), !arrived() {
-      // The system cancelled the touch, so the app never had a tap (DECISIONS, "What the
-      // simulator's log showed"): tap once more, itself watched, so a second cancel names itself.
-      _ = cancelled("second tap on \(page.label)", in: app, tapTab)
-    }
+    watchedTap(page.label, in: app, until: arrived, tapTab)
     do {
       try awaitHeading(page.heading, in: app)
     } catch {
@@ -1271,12 +1318,12 @@ struct ThemeRead: ScreenRead {
 /// `firstMatch` query takes them: level by level, breadth first, each level in the tree's order,
 /// as the app's log of PR #46's run 41394508297 shows one walking the tree (Xcode 26.6: the
 /// app's children checked, then theirs, before anything deeper), so the first is the shallowest,
-/// the element `app.find` judged even where an identifier is at two depths; how many there were,
-/// and the first one's label, value, frame, and whether it is enabled and selected; with when
-/// the read began and how long the app took to answer it. The identifier exactly, which is
-/// narrower than XCUITest's `app.buttons["buy"]`, which also matches a button labelled "buy":
-/// every element a wait reads has its identifier (`accessibilityIdentifier`). A wait
-/// (`readElement`) says which match it judges, as the query it replaced did: the first
+/// the element `app.find` judged even where an identifier is at two depths; how many there were
+/// and each one's label, and the first one's value, frame, and whether it is enabled and
+/// selected; with when the read began and how long the app took to answer it. The identifier
+/// exactly, which is narrower than XCUITest's `app.buttons["buy"]`, which also matches a button
+/// labelled "buy": every element a wait reads has its identifier (`accessibilityIdentifier`). A
+/// wait (`readElement`) says which match it judges, as the query it replaced did: the first
 /// (`found`), for a `firstMatch` (`app.find`); the only one (`one`), for a query that wasn't, as
 /// `app.buttons["buy"]`, whose label, value or state XCUITest won't read while two elements match
 /// it; none, from an app that could be read (`gone`).
@@ -1287,6 +1334,9 @@ struct ElementRead: ScreenRead {
   let took: TimeInterval
   /// How many elements matched; none when the app couldn't be read.
   let count: Int
+  /// Every match's label, in the same order: the titles on screen (`pageTitles`), or which
+  /// licence's words a notice holds, where the first alone can't say.
+  let labels: [String]
   /// The first match's label, value (as text; nil without one), frame, and whether it is enabled
   /// and selected; "", nil, zero and false without one.
   let label: String
@@ -1323,6 +1373,7 @@ struct ElementRead: ScreenRead {
     took = Date().timeIntervalSince(began)
     let first = matches.first
     count = matches.count
+    labels = matches.map(\.label)
     label = first?.label ?? ""
     value = first?.value as? String
     frame = first?.frame ?? .zero

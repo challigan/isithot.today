@@ -10,9 +10,11 @@ import {
   attachmentLabel,
   auditCalls,
   buildSummary,
+  cancelSummary,
   cell,
   failures,
   notRun,
+  readCancels,
   readAuditTimes,
   readJson,
   sourceLocation,
@@ -424,6 +426,63 @@ describe('timingSummary', () => {
   });
 });
 
+describe('cancelSummary', () => {
+  it('lists every touch the system cancelled, with its test, what was played and the counts', () => {
+    expect(
+      cancelSummary([
+        {
+          test: 'SettingsTests/testReportAnAdWithoutAMailApp()',
+          text: 'tap on report-ad: debug-cancels 0 before, 1 after',
+        },
+        {
+          test: 'HomeTests/testASystemGestureCountsACancelledTouch()',
+          text: 'a drag up from the home indicator: debug-cancels 0 before, 1 after\n',
+        },
+        {
+          test: 'PickerTests/testA|B()',
+          text: 'second tap on picker-close: debug-cancels 1 before, 2 after',
+        },
+      ]),
+    ).toBe(
+      [
+        '### Touches the system cancelled: 3 in 3 tests',
+        '',
+        "Each a gesture after which the app's `debug-cancels` rose (`gesture-cancelled`); a " +
+          'tap or drag among them was played once more, and one cancelled twice fails its test. ' +
+          "HomeTests' testASystemGestureCountsACancelledTouch cancels one on purpose; a control " +
+          'cancelled run after run is a fault in the app, not the simulator.',
+        '',
+        '| Test | Played, and `debug-cancels` |',
+        '|---|---|',
+        '| SettingsTests/testReportAnAdWithoutAMailApp() | tap on report-ad: debug-cancels 0 before, 1 after |',
+        '| HomeTests/testASystemGestureCountsACancelledTouch() | a drag up from the home indicator: debug-cancels 0 before, 1 after |',
+        '| PickerTests/testA\\|B() | second tap on picker-close: debug-cancels 1 before, 2 after |',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('says when there were none, and when there was no manifest', () => {
+    expect(cancelSummary([])).toBe('### Touches the system cancelled: none\n');
+    expect(cancelSummary(null)).toBe(
+      '### Touches the system cancelled: no attachments manifest (see the log)\n',
+    );
+    expect(
+      cancelSummary([{ test: 'A/b()', text: 'tap on x: debug-cancels 0 before, 1 after' }]),
+    ).toMatch(/^### Touches the system cancelled: 1 in 1 test\n/);
+  });
+
+  it('counts the rows past the most a table shows', () => {
+    const many = Array.from({ length: MAX_ROWS + 2 }, (_, i) => ({
+      test: `T/t${i}()`,
+      text: `tap on ${i}: debug-cancels 0 before, 1 after`,
+    }));
+    const lines = cancelSummary(many).trim().split('\n');
+    expect(lines.at(-1)).toBe('| | …and 2 more |');
+    expect(lines.filter((line) => line.startsWith('| T/t'))).toHaveLength(MAX_ROWS);
+  });
+});
+
 describe('the command', () => {
   const dir = mkdtempSync(join(tmpdir(), 'xcresult-summary-'));
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -514,6 +573,44 @@ describe('the command', () => {
     expect(readAuditTimes(join(dir, 'nowhere'))).toBeNull();
     expect(run(['timings', join(dir, 'nowhere')])).toBe(
       '### Audit times: no attachments manifest (see the log)\n',
+    );
+  });
+
+  it('reads the touches the system cancelled that an export of attachments holds', () => {
+    const folder = join(dir, 'cancels');
+    mkdirSync(folder);
+    const uuid = '6A1D174D-5223-4C73-8D93-49F430D6B021';
+    writeFileSync(join(folder, 'A.txt'), 'tap on report-ad: debug-cancels 0 before, 1 after');
+    writeFileSync(join(folder, 'B.txt'), 'not a cancel');
+    writeFileSync(
+      join(folder, 'manifest.json'),
+      JSON.stringify([
+        {
+          testIdentifier: 'SettingsTests/testReportAnAdWithoutAMailApp()',
+          attachments: [
+            {
+              exportedFileName: 'A.txt',
+              suggestedHumanReadableName: `gesture-cancelled_0_${uuid}.txt`,
+            },
+            { exportedFileName: 'B.txt', suggestedHumanReadableName: `colour-wait_0_${uuid}.txt` },
+            { exportedFileName: 'gone.txt', suggestedHumanReadableName: 'gesture-cancelled.txt' },
+          ],
+        },
+        null,
+        { attachments: [{}] },
+      ]),
+    );
+    const cancels = readCancels(folder);
+    expect(cancels).toEqual([
+      {
+        test: 'SettingsTests/testReportAnAdWithoutAMailApp()',
+        text: 'tap on report-ad: debug-cancels 0 before, 1 after',
+      },
+    ]);
+    expect(run(['cancels', folder])).toBe(cancelSummary(cancels));
+    expect(readCancels(join(dir, 'nowhere'))).toBeNull();
+    expect(run(['cancels', join(dir, 'nowhere')])).toBe(
+      '### Touches the system cancelled: no attachments manifest (see the log)\n',
     );
   });
 

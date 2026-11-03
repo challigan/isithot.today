@@ -98,8 +98,9 @@ final class FixtureLaunchTests: XCTestCase {
       swipes += 1
     }
     XCTAssertTrue(dundee.isHittable, "No Dundee under Nearby; \(app.cancelsReport)")
-    dundee.tap()
-    waitForHeading("Dundee. Will it snow today? Yes.", in: app, after: "a tap on Dundee")
+    let heading = "Dundee. Will it snow today? Yes."
+    watchedTap("Dundee", in: app, until: { HeadingRead(app).shows(heading) }, { dundee.tap() })
+    waitForHeading(heading, in: app, after: "a tap on Dundee")
     XCTAssertEqual(app.buttons["place"].label, "Place: Dundee. Change place.")
     XCTAssertEqual(app.staticTexts["verdict"].label, "It'll snow.")
   }
@@ -135,9 +136,9 @@ final class FixtureLaunchTests: XCTestCase {
 
   /// Taps the switcher's tab labelled `tab`, and waits for its page's heading and for the
   /// colours to settle on `band`, its page's band, as `tap(_:in:)` does. A tap whose touch the
-  /// system cancelled (`cancelled(_:in:within:until:_:)`, read for up to 2 seconds or until the
-  /// heading comes) and whose heading hasn't come is tapped once more, as `tap(_:in:)` does: the
-  /// app never had it as a tap. A tap the app completed is never tapped again.
+  /// system cancelled (`watchedTap`, read for up to 2 seconds or until the heading comes) and
+  /// whose heading hasn't come is tapped once more, as `tap(_:in:)` does: the app never had it as
+  /// a tap. A tap the app completed is never tapped again.
   @MainActor
   private func show(
     _ tab: String,
@@ -155,9 +156,7 @@ final class FixtureLaunchTests: XCTestCase {
       tapped = Date()
       button.tap()
     }
-    if cancelled("tap on \(tab)", in: app, within: 2, until: arrived, tapTab), !arrived() {
-      _ = cancelled("second tap on \(tab)", in: app, tapTab)
-    }
+    watchedTap(tab, in: app, until: arrived, tapTab)
     waitForHeading(label, in: app, after: "a tap on \(tab)")
     waitForColours(band, in: app, after: "the tap on \(tab)", began: tapped)
     XCTAssertTrue(button.isSelected, "The \(tab) tab isn't selected")

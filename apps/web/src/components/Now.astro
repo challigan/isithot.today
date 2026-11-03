@@ -1,7 +1,8 @@
 ---
 /**
  * The Now view: the blended forecast for the current time and the next few hours, with on Hot the
- * UV index and on Wind where the wind blows from.
+ * UV index and on Wind where the wind blows from. Words the script puts in go in with set:text, as
+ * in Today.astro.
  */
 import type { NowDisplay, OutboundLink } from '@isithot/core';
 import { glyphFor, hoursHtml } from '../lib/view';
@@ -48,24 +49,21 @@ const { view, start = false, warnings = null } = Astro.props;
   />
   {/* The start view's heading is the page's main one, as scripts/views.ts makes it. */}
   <h2 class="heading" id="now-heading" aria-level={start ? '1' : undefined}>
-    <span class="question" id="now-question">
-      {view.question}
-    </span>{' '}
-    <span class="answer" id="now-answer" data-long={view.answer.length > 4 ? '' : undefined}>
-      {view.answer}
-    </span>
+    <span class="question" id="now-question" set:text={view.question} />{' '}
+    <span
+      class="answer"
+      id="now-answer"
+      data-long={view.answer.length > 4 ? '' : undefined}
+      set:text={view.answer}
+    />
   </h2>
-  <p class="verdict hold" id="now-verdict">
-    {view.verdict}
-  </p>
-  <p class="detail hold" id="now-detail">
-    {view.detail}
-  </p>
+  <p class="verdict hold" id="now-verdict" set:text={view.verdict} />
+  <p class="detail hold" id="now-detail" set:text={view.detail} />
   <DirectionLine direction={view.direction} />
   <UvLine id="now-uv" uv={view.uv} />
   <WarningsLine id="now-warnings" link={warnings} />
   <section class="ahead hold" aria-labelledby="now-h">
-    <h2 id="now-h">{view.heading}</h2>
+    <h2 id="now-h" set:text={view.heading} />
     <ul class="list" id="now-hours" set:html={hoursHtml(view.items)} />
   </section>
 </section>

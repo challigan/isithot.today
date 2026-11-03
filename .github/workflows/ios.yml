@@ -226,11 +226,15 @@ jobs:
       # On the UI plan's simulator, with the app it installed: NotificationPermissionTests allowed
       # notifications there at the real prompt, which simctl can't do. Before the upload below,
       # which takes the attachments once, so the banners reach the contact sheet. Not on an
-      # iteration run that names tests (`only`), whose plan may not have allowed them.
+      # iteration run that names tests (`only`), whose plan may not have allowed them. Its own
+      # limit, over twice its reads' deadlines (about four minutes in all) and the log read after
+      # them: should anything in it hang, the step fails there and the steps below still run, where
+      # the job's limit would cancel the job, uploads and all.
       - name: Notification banner (simctl push)
         if: >-
           ${{ !cancelled() && steps.build.outcome == 'success' && steps.ui.outcome != 'skipped'
           && !(github.event_name == 'workflow_dispatch' && inputs.only != '') }}
+        timeout-minutes: 10
         run: apps/ios/ci/push.sh "${{ steps.simulator.outputs.udid }}"
       - name: Release build has no debug hooks
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

@@ -70,6 +70,7 @@ const HOOKS = [
   'DevicesStub',
   '127.0.0.1',
   'debug-theme',
+  'debug-notifications',
 ];
 
 // --- Stand-ins for the macOS tools -----------------------------------------------------------
@@ -371,7 +372,7 @@ describe('an archive that passes', () => {
         '',
         '- WillItSnow 1.0 (101)',
         `- ads test: Google's demo units (${DEMO_APP})`,
-        "- checked: privacy manifests and what they collect, the icon, the four fonts, the widget's glyphs and origin, 26 debug hooks in both binaries, the push environment, the ad units and SKAdNetworkItems, the widget's links, versions, encryption, fixtures, StoreKit configurations and StoreKitTest",
+        "- checked: privacy manifests and what they collect, the icon, the four fonts, the widget's glyphs and origin, 27 debug hooks in both binaries, the push environment, the ad units and SKAdNetworkItems, the widget's links, versions, encryption, fixtures, StoreKit configurations and StoreKitTest",
         '',
       ].join('\n'),
     );

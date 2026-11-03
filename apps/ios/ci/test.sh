@@ -3,10 +3,11 @@
 # build spec, section 18.1). Then writes what happened to the GitHub step summary: the counts,
 # and each error or failing test with its file and line (ci/xcresult-summary.mjs). A test plan's
 # attachments are exported for the contact sheet, and the UI plan's audit calls' times read from
-# them: the slowest, and every call that didn't finish in time; its upgrade sheet's screenshot,
-# App Review's (docs/SETUP.md), is copied to review/app-upgrade.png beside them. The StoreKit
-# plan, on the iOS 26.2 simulator (simulator.sh 26.2), runs with test timeouts on and 60 seconds
-# for each test (XCTest rounds an allowance up to whole minutes, so none is shorter), so a
+# them: the slowest, and every call that didn't finish in time; so is every touch the system
+# cancelled in the app (`gesture-cancelled`), a tap played again among them; its upgrade sheet's
+# screenshot, App Review's (docs/SETUP.md), is copied to review/app-upgrade.png beside them. The
+# StoreKit plan, on the iOS 26.2 simulator (simulator.sh 26.2), runs with test timeouts on and 60
+# seconds for each test (XCTest rounds an allowance up to whole minutes, so none is shorter), so a
 # purchase sheet that hangs (FB22836426) fails its test rather than the job (ios.yml's storekit
 # job budgets for all 18 hanging).
 #
@@ -149,6 +150,10 @@ else
   if [ "$what" = UI ]; then
     node "$ios/ci/xcresult-summary.mjs" timings "$build/attachments/$name" | report ||
       echo "test.sh: no audit times" >&2
+    # Every touch the system cancelled, a tap played again among them, which a passing test
+    # wouldn't otherwise show.
+    node "$ios/ci/xcresult-summary.mjs" cancels "$build/attachments/$name" | report ||
+      echo "test.sh: no list of cancelled touches" >&2
     # The upgrade sheet's screenshot for App Review (docs/SETUP.md, "The app's purchase"), as
     # review/app-upgrade.png in the attachments: the export names each file by a UUID.
     review="$build/attachments/review"

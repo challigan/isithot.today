@@ -221,6 +221,9 @@ const NEVER_SHOWN_IN: Record<string, string> = {
   // `Logger.debug`'s message: DebugHooks.swift's line for a notification's payload that routes
   // nowhere, in Debug builds only, read in Console by whoever debugs the app.
   debug: "a Debug build's log line, read in Console, never shown",
+  // DebugHooks.swift's line on a Debug build's standard output, which CI's push.sh reads from the
+  // file `simctl launch --stdout` names (`debug-notifications shown …`).
+  writeStdout: "a Debug build's line for CI, on the app's standard output, never shown",
 };
 
 /** By its argument label, whatever the call: */

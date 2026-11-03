@@ -43,7 +43,7 @@ final class UpgradeTests: XCTestCase {
     XCTAssertTrue(
       frame.minX >= shown.minX - 0.5 && frame.maxX <= shown.maxX + 0.5,
       "The row at \(frame) runs on outside the page at \(shown)")
-    row.tap()
+    watchedTap("upgrade-row", in: app, until: { app.showsPage(titled: Copy.title) }, { row.tap() })
     try page(titled: Copy.title, in: app)
     XCTAssertEqual(app.find("upgrade-body").label, Copy.body)
     XCTAssertEqual(app.find("family-sharing").label, Copy.familySharing)
@@ -110,7 +110,7 @@ final class UpgradeTests: XCTestCase {
   func testACancelledPurchase() throws {
     let app = try launch(["-purchase", "cancelled"])
     try openTheSheet(app)
-    try buy(in: app)
+    try buy(in: app, answered: false)
     XCTAssertFalse(
       app.find("upgrade-outcome").waitForExistence(timeout: 3), "A line after a cancelled Buy")
     try expectBuyToTap(in: app, "after a cancelled purchase")
@@ -123,12 +123,12 @@ final class UpgradeTests: XCTestCase {
     let app = try launch(["-purchase", "bought"])
     try openSettings(app)
     try waitFor("upgrade", .button, in: app, label: Copy.settingsRow)
-    tapRow("upgrade", in: app)
+    tapRow("upgrade", in: app) { app.showsPage(titled: Copy.title) }
     try page(titled: Copy.title, in: app)
     XCTAssertFalse(app.buttons["close-upgrade"].exists, "The page is a sheet over Settings")
     try buy(in: app)
     try waitFor("upgrade-outcome", in: app, label: Copy.thanks)
-    back(in: app)
+    back(from: Copy.title, in: app)
     try page(titled: "Settings", in: app)
     try expectThePaidCard(in: app)
   }
@@ -140,11 +140,11 @@ final class UpgradeTests: XCTestCase {
     let app = try launch(["-restore", "found"])
     try openSettings(app)
     let restore = app.buttons["restore"]
-    tapRow("restore", in: app)
+    tapRow("restore", in: app) { restored(in: app) }
     XCTAssertEqual(result(of: restore), Copy.restored)
     try expectThePaidCard(in: app)
     XCTAssertFalse(app.buttons["report-ad"].exists, "Report an ad once restored")
-    tapRow("your-privacy", in: app)
+    tapRow("your-privacy", in: app) { app.showsPage(titled: "Your privacy") }
     try page(titled: "Your privacy", in: app)
     let lines = privacyLines(in: app)
     XCTAssertEqual(lines.count, 4, "Your privacy's lines once restored: \(lines)")
@@ -157,7 +157,7 @@ final class UpgradeTests: XCTestCase {
   func testRestoreFindsNothing() throws {
     let app = try launch(["-restore", "none"])
     try openSettings(app)
-    tapRow("restore", in: app)
+    tapRow("restore", in: app) { restored(in: app) }
     XCTAssertEqual(result(of: app.buttons["restore"]), Copy.nothingToRestore)
     XCTAssertTrue(app.buttons["upgrade"].exists, "No upgrade row after nothing was restored")
   }
@@ -168,7 +168,7 @@ final class UpgradeTests: XCTestCase {
   func testRestoreFails() throws {
     let app = try launch(["-restore", "failed"])
     try openSettings(app)
-    tapRow("restore", in: app)
+    tapRow("restore", in: app) { restored(in: app) }
     let said = result(of: app.buttons["restore"])
     XCTAssertFalse(said.isEmpty, "No result after a restore that failed")
     XCTAssertNotEqual(said, Copy.restored)
@@ -208,13 +208,13 @@ final class UpgradeTests: XCTestCase {
     XCTAssertLessThanOrEqual(
       upgrade.frame.maxY, restore.frame.minY + 0.5,
       "Restore purchase at \(restore.frame) isn't below the upgrade row at \(upgrade.frame)")
-    tapRow("upgrade", in: app)
+    tapRow("upgrade", in: app) { app.showsPage(titled: Copy.title) }
     try page(titled: Copy.title, in: app)
     try expectNothingToSell(in: app)
     assertSnowOnly(app)
     try auditAccessibility(of: app, on: "the upgrade page with no product", surface: .content)
     attach(app, as: "app-upgrade-unavailable")
-    back(in: app)
+    back(from: Copy.title, in: app)
     try close("close-settings", in: app)
     try openTheLink(in: app)
     try expectNothingToSell(in: app)
@@ -281,7 +281,7 @@ final class UpgradeTests: XCTestCase {
   private func openTheSheet(_ app: XCUIApplication) throws {
     let row = try homeRow(in: app)
     try scroll(try middle(), toShow: "upgrade-row", in: app)
-    row.tap()
+    watchedTap("upgrade-row", in: app, until: { app.showsPage(titled: Copy.title) }, { row.tap() })
     try page(titled: Copy.title, in: app)
   }
 
@@ -294,15 +294,21 @@ final class UpgradeTests: XCTestCase {
     try page(titled: Copy.title, in: app)
   }
 
-  /// Taps Buy, once it is there.
+  /// Taps Buy, once it is there; watched (`watchedTap`) until the page's line says what the
+  /// purchase came to, unless the purchase is one that brings no line (`answered` false: a
+  /// purchase cancelled in StoreKit's sheet), whose tap brings nothing to read, so isn't.
   @MainActor
-  private func buy(in app: XCUIApplication) throws {
+  private func buy(in app: XCUIApplication, answered: Bool = true) throws {
     let buy = app.buttons["buy"]
     guard buy.waitForExistence(timeout: 10) else {
       throw HomeScreenError("No Buy on the upgrade page")
     }
     XCTAssertEqual(buy.label, Copy.buy)
-    buy.tap()
+    guard answered else {
+      buy.tap()
+      return
+    }
+    watchedTap("buy", in: app, until: { ElementRead(app, "upgrade-outcome").found }, { buy.tap() })
   }
 
   /// Checks the page says what went wrong with Buy: a line, neither the thanks nor Ask to Buy's,
@@ -360,20 +366,15 @@ final class UpgradeTests: XCTestCase {
   }
 
   /// Taps the gear, and waits for Settings, by its Close and its title. A tap whose touch the
-  /// system cancelled (`cancelled(_:in:within:until:_:)`) and that opened no Settings is tapped
-  /// once more; a tap the app completed never is.
+  /// system cancelled (`watchedTap`) and that opened no Settings is tapped once more; a tap the
+  /// app completed never is.
   @MainActor
   private func openSettings(_ app: XCUIApplication) throws {
     let gear = app.buttons["settings"]
     let close = app.buttons["close-settings"]
     // Opened, and not opened, as the home screen shows it (`sheetClosed`), not by Close, which
     // XCUITest may go on finding once an earlier Settings has closed.
-    let opened = { !app.sheetClosed }
-    if cancelled("tap on the gear", in: app, within: 2, until: opened, { gear.tap() }),
-      app.sheetClosed
-    {
-      _ = cancelled("second tap on the gear", in: app) { gear.tap() }
-    }
+    watchedTap("the gear", in: app, until: { !app.sheetClosed }, { gear.tap() })
     guard close.waitForExistence(timeout: 5) else {
       throw HomeScreenError(
         "No Settings after tapping the gear; \(app.cancelsReport); \(app.homeGeometry)")
@@ -381,11 +382,12 @@ final class UpgradeTests: XCTestCase {
     try page(titled: "Settings", in: app)
   }
 
-  /// Taps the Close identified `id`, Settings' or the upgrade sheet's, and waits for the home
-  /// screen (`sheetCloses`).
+  /// Taps the Close identified `id`, Settings' or the upgrade sheet's, watched (`watchedTap`)
+  /// until the home screen is back (`sheetClosed`), and waits for it (`sheetCloses`).
   @MainActor
   private func close(_ id: String, in app: XCUIApplication) throws {
-    app.buttons[id].tap()
+    let button = app.buttons[id]
+    watchedTap(id, in: app, until: { app.sheetClosed }, { button.tap() })
     guard app.sheetCloses(within: 5) else {
       throw HomeScreenError(
         "The sheet is still open 5 seconds after \(id); \(app.cancelsReport)")
@@ -404,22 +406,34 @@ final class UpgradeTests: XCTestCase {
       "No page titled \"\(title)\"; the titles on screen: \(shown); \(app.cancelsReport)")
   }
 
-  /// Goes back one page on Settings' stack.
+  /// Goes back one page on Settings' stack, from the page titled `title`, watched (`watchedTap`)
+  /// until that page has gone (`lacksPage`).
   @MainActor
-  private func back(in app: XCUIApplication) {
-    app.navigationBars.buttons.element(boundBy: 0).tap()
+  private func back(from title: String, in app: XCUIApplication) {
+    let button = app.navigationBars.buttons.element(boundBy: 0)
+    watchedTap("Back", in: app, until: { app.lacksPage(titled: title) }, { button.tap() })
   }
 
-  /// Taps Settings' row `id`, swiping up to it first while a tap wouldn't reach it.
+  /// Taps Settings' row `id`, swiping up to it first while a tap wouldn't reach it; watched
+  /// (`watchedTap`), so a tap whose touch the system cancelled and that brought nothing, as `done`
+  /// reads it, is played once more.
   @MainActor
-  private func tapRow(_ id: String, in app: XCUIApplication) {
+  private func tapRow(_ id: String, in app: XCUIApplication, until done: () -> Bool) {
     let row = app.buttons[id]
     var swipes = 0
     while !(row.exists && row.isHittable) && swipes < 6 {
       app.swipeUp()
       swipes += 1
     }
-    row.tap()
+    watchedTap(id, in: app, until: done) { row.tap() }
+  }
+
+  /// Whether one read of the app (`ElementRead`) finds Restore purchase's row holding a result,
+  /// its value, which is empty until a restore has answered (`result(of:)`).
+  @MainActor
+  private func restored(in app: XCUIApplication) -> Bool {
+    let read = ElementRead(app, "restore", .button)
+    return read.one && !(read.value ?? "").isEmpty
   }
 
   /// Waits up to 10 seconds for the element identified `id` to read `label`, from snapshots

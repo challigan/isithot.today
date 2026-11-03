@@ -56,10 +56,13 @@ AD_UNITS=(
 # 14.4).
 GOOGLE_SKADNETWORK=cstr6suwn9.skadnetwork
 # The debug hooks' names (section 18.3), looked for anywhere in strings' output and as whole
-# short literals: debug-theme, the readout of the home screen's colours that the UI tests wait on.
+# short literals: debug-theme, the readout of the home screen's colours that the UI tests wait on;
+# debug-notifications, the line the app writes for ci/push.sh once its answer is on screen, with
+# the notification permission it reads.
 HOOKS=(
   -uitest -fixture -apiOrigin -umpGeography -openURLs
   URLProtocolStub FakePurchases FakeNotifications DevicesStub 127.0.0.1 debug-theme
+  debug-notifications
 )
 # Debug hooks that begin ordinary words, so looked for in strings' output only where no letter
 # follows them, and as whole short literals: Google's SDK, linked into the app, holds OpenSSL's

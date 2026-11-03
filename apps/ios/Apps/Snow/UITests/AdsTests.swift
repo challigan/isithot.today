@@ -154,13 +154,13 @@ final class AdsTests: XCTestCase {
     guard upgrade.waitForExistence(timeout: 10) else {
       throw HomeScreenError("No upgrade row in Settings")
     }
-    tapRow("upgrade", in: app)
+    tapRow("upgrade", in: app) { ElementRead(app, "buy", .button).found }
     let buy = app.buttons["buy"]
     guard buy.waitForExistence(timeout: 10) else {
       throw HomeScreenError(
         "No Buy on the upgrade page Settings' upgrade row opened; \(app.cancelsReport)")
     }
-    buy.tap()
+    watchedTap("buy", in: app, until: { ElementRead(app, "upgrade-outcome").found }, { buy.tap() })
     let thanks = "Thank you. Ads are off and widgets are on."
     let outcome = readElement("upgrade-outcome", in: app, within: 10, "to read the thanks") {
       $0.found && $0.label == thanks
@@ -169,8 +169,12 @@ final class AdsTests: XCTestCase {
       throw HomeScreenError(
         "No thanks on the upgrade page 10 seconds after Buy: \(failure); \(app.cancelsReport)")
     }
-    app.navigationBars.buttons.element(boundBy: 0).tap()
-    app.buttons["close-settings"].tap()
+    // Back once the upgrade page, its line with it, has gone; closed once the home screen is
+    // back (`sheetClosed`).
+    let back = app.navigationBars.buttons.element(boundBy: 0)
+    watchedTap("Back", in: app, until: { ElementRead(app, "upgrade-outcome").gone }, { back.tap() })
+    let close = app.buttons["close-settings"]
+    watchedTap("close-settings", in: app, until: { app.sheetClosed }, { close.tap() })
     guard app.sheetCloses(within: 5) else {
       throw HomeScreenError(
         "Settings is still open 5 seconds after its Close; \(app.cancelsReport)")
@@ -628,8 +632,10 @@ final class AdsTests: XCTestCase {
 
   /// Opens the picker with the place button, searches for `name` and chooses the first result,
   /// which the search fixtures give (`search-leeds`, `search-kathmandu`). A tap on the place
-  /// button whose touch the system cancelled (`cancelled(_:in:within:until:_:)`) and that opened
-  /// no picker is tapped once more; a tap the app completed never is.
+  /// button whose touch the system cancelled (`watchedTap`) and that opened no picker is tapped
+  /// once more, and so is a tap on the search box that brought no keyboard; a tap the app
+  /// completed never is. The tap on the result isn't watched: what it brings, Google's ad over
+  /// the picker or the picker closing, may take longer than the watch reads for.
   @MainActor
   private func choose(_ name: String, in app: XCUIApplication) throws {
     pickersBefore = app.pickersShown ?? 0
@@ -642,11 +648,8 @@ final class AdsTests: XCTestCase {
     // The search box ends the wait only while the readout can't be read: an earlier picker's may
     // still be in XCUITest's tree. Only the readout, read and not open, has the tap played again.
     let shown = { open() ?? field.exists }
-    if cancelled("tap on the place button", in: app, within: 2, until: shown, { place.tap() }),
-      open() == false
-    {
-      _ = cancelled("second tap on the place button", in: app) { place.tap() }
-    }
+    watchedTap(
+      "the place button", in: app, until: shown, again: { open() == false }, { place.tap() })
     if pickerOpens(in: app, after: pickersBefore, within: 10) == false {
       throw HomeScreenError(
         "No picker after tapping the place button; \(app.pickerReport); \(app.cancelsReport); "
@@ -656,7 +659,8 @@ final class AdsTests: XCTestCase {
       throw HomeScreenError(
         "No picker after tapping the place button; \(app.cancelsReport); \(app.homeGeometry)")
     }
-    field.tap()
+    watchedTap(
+      "place-search", in: app, until: { ElementRead(app, nil, .keyboard).found }, { field.tap() })
     field.typeText(name)
     let result = app.buttons["result-0"]
     guard result.waitForExistence(timeout: 10) else {
@@ -768,20 +772,15 @@ final class AdsTests: XCTestCase {
   }
 
   /// Taps the gear, and waits for Settings (its Close). A tap whose touch the system cancelled
-  /// (`cancelled(_:in:within:until:_:)`) and that opened no Settings is tapped once more; a tap
-  /// the app completed never is.
+  /// (`watchedTap`) and that opened no Settings is tapped once more; a tap the app completed never
+  /// is.
   @MainActor
   private func openSettings(_ app: XCUIApplication) throws {
     let gear = app.buttons["settings"]
     let close = app.buttons["close-settings"]
     // Opened, and not opened, as the home screen shows it (`sheetClosed`), not by Close, which
     // XCUITest may go on finding once an earlier Settings has closed.
-    let opened = { !app.sheetClosed }
-    if cancelled("tap on the gear", in: app, within: 2, until: opened, { gear.tap() }),
-      app.sheetClosed
-    {
-      _ = cancelled("second tap on the gear", in: app) { gear.tap() }
-    }
+    watchedTap("the gear", in: app, until: { !app.sheetClosed }, { gear.tap() })
     guard close.waitForExistence(timeout: 5) else {
       throw HomeScreenError(
         "No Settings after tapping the gear; \(app.cancelsReport); \(app.homeGeometry)")
@@ -791,7 +790,7 @@ final class AdsTests: XCTestCase {
   /// Taps Settings' Your privacy, and waits for its title on the page (`page-title`).
   @MainActor
   private func openYourPrivacy(_ app: XCUIApplication) throws {
-    tapRow("your-privacy", in: app)
+    tapRow("your-privacy", in: app) { app.showsPage(titled: "Your privacy") }
     let titled = NSPredicate(format: "identifier == 'page-title' AND label == %@", "Your privacy")
     guard app.staticTexts.matching(titled).firstMatch.waitForExistence(timeout: 5) else {
       throw HomeScreenError("No Your privacy after tapping its row; \(app.cancelsReport)")
@@ -800,16 +799,17 @@ final class AdsTests: XCTestCase {
 
   /// Taps Settings' row `id`, swiping up to it first while a tap wouldn't reach it, as
   /// UpgradeTests' `tapRow` does: the rows below the units, which the Notifications card moved
-  /// down.
+  /// down. Watched (`watchedTap`), so a tap whose touch the system cancelled and that brought
+  /// nothing, as `done` reads it, is played once more.
   @MainActor
-  private func tapRow(_ id: String, in app: XCUIApplication) {
+  private func tapRow(_ id: String, in app: XCUIApplication, until done: () -> Bool) {
     let row = app.buttons[id]
     var swipes = 0
     while !(row.exists && row.isHittable) && swipes < 6 {
       app.swipeUp()
       swipes += 1
     }
-    row.tap()
+    watchedTap(id, in: app, until: done) { row.tap() }
   }
 
   /// Your privacy's lines, in order (`privacy-line-<n>`), up to 10, more than it ever has: every
