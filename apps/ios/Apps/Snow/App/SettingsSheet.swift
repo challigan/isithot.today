@@ -27,21 +27,22 @@ import UIKit
 /// unlocked; the purchase sets `unlocked` the moment it is owned (`AppModel.purchaseChanged`),
 /// which hides both at once, and Report an ad with them.
 ///
-/// Notifications (section 12.1) sit between the units and the upgrade card: the switches, the
-/// place, whose page this builds from the model in its body too, so the pushed page follows the
-/// model, and the test. "Use my location" and "Search" at approximate location ask the home
-/// screen for the picker, which closes Settings first. The permission is read again as
-/// Settings or the place page appears, and the test's result, the place page's problem and the
+/// Notifications (section 12.1; design 2.4) sit between the units and the upgrade card: the
+/// switches, which need no place first, as where you are is always one; the line that says what
+/// is kept for it; "Where you are", whose page (design 2.1) this builds from the model in its body
+/// too, so the pushed page follows the model; and the test. That page's "Use my location" asks
+/// the model, which asks for location access at the tap and finds the phone. The permission is
+/// read again as Settings or that page appears, and the test's result, the page's problem and the
 /// delete's line go as Settings closes. While registered, Your privacy shows what the server
-/// keeps for them first, from `alertSync.v1`, with "Turn off notifications and delete my data"
-/// (phase 8.2).
+/// keeps for them first, from `alertSync.v2`, with "Turn off notifications and delete my data"
+/// (phase 8.2; design 2.8).
 struct SettingsSheet: View {
   let model: AppModel
   /// The free version's ads.
   let ads: AdsModel
   /// The purchase: the upgrade card and its page.
   let purchases: PurchaseModel
-  /// The notifications: their section, the place page and Your privacy's kept block.
+  /// The notifications: their section, the "Where you are" page and Your privacy's kept block.
   let notifications: NotificationsModel
 
   @Environment(\.openURL) private var openURL
@@ -52,7 +53,6 @@ struct SettingsSheet: View {
     let purchases = purchases
     let notifications = notifications
     let state = notifications.state
-    let onScreen = model.onScreen
     let choices = !model.unlocked && ads.privacyChoices
     SettingsView(
       screen: SettingsScreen(
@@ -62,8 +62,8 @@ struct SettingsSheet: View {
         purchase: purchases.state,
         version: AppBundle.version
       ),
-      notifications: NotificationSettings(state, onScreen: onScreen),
-      notificationPlace: NotificationPlacePage(state, onScreen: onScreen),
+      notifications: NotificationSettings(state),
+      notificationPlace: NotificationPlacePage(state),
       privacy: YourPrivacy(
         adsOn: !model.unlocked,
         privacyChoices: choices,
@@ -89,7 +89,7 @@ struct SettingsSheet: View {
           ? nil : { Task { await notifications.deleteMyData() } },
         notifications: NotificationActions(
           setSwitch: { which, on in
-            Task { await notifications.setSwitch(which, on: on, onScreen: model.onScreen) }
+            Task { await notifications.setSwitch(which, on: on) }
           },
           perform: perform,
           appeared: { Task { await notifications.refreshPermission() } }
@@ -103,25 +103,21 @@ struct SettingsSheet: View {
     }
   }
 
-  /// A row of Settings → Notifications or of its place page: the test; the picker, finding the
-  /// phone or searching; iOS Settings' page for the app's notifications, or for its location
-  /// access (through the environment's `openURL`, so a Debug build's recorder records both); a
-  /// place choice.
+  /// A row of Settings → Notifications or of its "Where you are" page: the test; "Use my
+  /// location", which asks for location access at the tap and finds the phone for where you are;
+  /// iOS Settings' page for the app's notifications, or for its location access (through the
+  /// environment's `openURL`, so a Debug build's recorder records both).
   private func perform(_ action: SettingsScreen.NotificationAction) {
     let notifications = notifications
     switch action {
     case .sendTest:
       Task { await notifications.sendTest() }
     case .useMyLocation:
-      notifications.requestPicker(locating: true)
-    case .search:
-      notifications.requestPicker(locating: false)
+      Task { await notifications.useMyLocation() }
     case .openNotificationSettings:
       open(UIApplication.openNotificationSettingsURLString)
     case .openLocationSettings:
       open(UIApplication.openSettingsURLString)
-    case .choose(let choice):
-      Task { await notifications.choosePlace(choice) }
     }
   }
 

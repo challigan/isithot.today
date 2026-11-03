@@ -18,7 +18,8 @@ import os
 /// no launch argument, and the fixtures aren't in its bundle (`EXCLUDED_SOURCE_FILE_NAMES`).
 /// Phase 8.1's hooks stand in for the system's notifications (`-notifications`, `-pushToken`),
 /// the devices calls (`-devices`), the card's being put away under `-uitest` (`-alertCard`), the
-/// place a test launches on (`-place`) and a notification's tap (`-route`).
+/// place a test launches on (`-place`) and a notification's tap (`-route`); phase 8.4a's
+/// `-location ask:<lat>,<lon>` stands in for location access asked for at a tap.
 @MainActor
 enum DebugHooks {
   #if DEBUG
@@ -32,13 +33,13 @@ enum DebugHooks {
     /// which `setAnimationsEnabled(_:)` doesn't reach: the home screen's background still fades
     /// from one band's colours to the next, which `debug-theme` reads (`themeReadout`).
     /// `-resetStore` forgets the place, the units, the saved answer, the recent and saved places,
-    /// when the last full-screen ad showed, and the notifications' switches and place, their
-    /// registration and the card's being put away (`alerts.v1`, `alertSync.v1`, `ui.alertCard`),
-    /// for a first launch. It leaves `unlock.v1` alone, which only `PurchaseModel` writes, and
-    /// which nothing reads under StoreKit's stand-in (`standsInForStoreKit`), as every UI test
-    /// runs. Then `-place <query>` keeps that place (`Target(query:)`, a city's or a searched
-    /// place's) as the one to launch on; a query that is no place, or approximate location's,
-    /// stops the app.
+    /// when the last full-screen ad showed, and the notifications' switches and the phone's cell
+    /// for where you are, their registration and the card's being put away (`alerts.v2`,
+    /// `alertSync.v2`, `ui.alertCard`), for a first launch. It leaves `unlock.v1` alone, which
+    /// only `PurchaseModel` writes, and which nothing reads under StoreKit's stand-in
+    /// (`standsInForStoreKit`), as every UI test runs. Then `-place <query>` keeps that place
+    /// (`Target(query:)`, a city's or a searched place's) as the one to launch on; a query that is
+    /// no place, or approximate location's, stops the app.
     static func prepare(
       store: SharedStore?,
       arguments: [String] = ProcessInfo.processInfo.arguments
@@ -148,9 +149,11 @@ enum DebugHooks {
     }
 
     /// The phone's location without Core Location, so a UI test never sees the system's prompt
-    /// (`-location <lat>,<lon>|denied|unavailable`): permission given and a fix at those
-    /// coordinates; permission off; or permission given and no fix. A value that is none of
-    /// these stops the app. Nil, for Core Location, without it.
+    /// (`-location <lat>,<lon>|ask:<lat>,<lon>|denied|unavailable`): permission given and a fix
+    /// at those coordinates; permission never asked until something asks for it (the "Where you
+    /// are" page's "Use my location", or the picker's), which the stand-in allows, and then a fix
+    /// at those coordinates (`AskingLocation`); permission off; or permission given and no fix. A
+    /// value that is none of these stops the app. Nil, for Core Location, without it.
     static func location(
       arguments: [String] = ProcessInfo.processInfo.arguments
     ) -> (any LocationService)? {
@@ -161,16 +164,19 @@ enum DebugHooks {
       case "unavailable":
         return FixedLocation(permission: .granted, answer: .unavailable)
       default:
-        let parts = text.split(separator: ",").compactMap { Double(String($0)) }
+        let asks = text.hasPrefix(askPrefix)
+        let point = asks ? String(text.dropFirst(askPrefix.count)) : text
+        let parts = point.split(separator: ",").compactMap { Double(String($0)) }
         guard parts.count == 2, abs(parts[0]) <= 90, abs(parts[1]) <= 180 else {
-          fatalError("-location: \(text) isn't <lat>,<lon>, denied or unavailable")
+          fatalError("-location: \(text) isn't <lat>,<lon>, ask:<lat>,<lon>, denied or unavailable")
         }
-        return FixedLocation(
-          permission: .granted,
-          answer: .located(latitude: parts[0], longitude: parts[1])
-        )
+        let fix = LocationFix.located(latitude: parts[0], longitude: parts[1])
+        return asks ? AskingLocation(answer: fix) : FixedLocation(permission: .granted, answer: fix)
       }
     }
+
+    /// What begins `-location`'s value when the permission is to be asked for first.
+    private static let askPrefix = "ask:"
 
     /// `-apiOrigin <url>`: a deploy preview's API instead of willitsnow.today's (section 4).
     static func apiOrigin(arguments: [String] = ProcessInfo.processInfo.arguments) -> URL? {
@@ -431,8 +437,8 @@ enum DebugHooks {
     ///   (`allow` by default): asked from not determined, the prompt's answer is kept; `system`
     ///   asks the real centre, for NotificationPermissionTests and the banner step only;
     /// - `-pushToken <hex>|none|fail`, what registering gives: that token (by default
-    ///   `Fixtures/Devices/put-leeds.json`'s, so the devices stub knows it, and no real token is
-    ///   in the app or a test), no token, or the failure.
+    ///   `Fixtures/Devices/put-here-ip.json`'s, so the devices stub knows it, and no real token
+    ///   is in the app or a test), no token, or the failure.
     /// Any other value stops the app.
     static func notifications(
       arguments: [String] = ProcessInfo.processInfo.arguments
@@ -515,11 +521,11 @@ enum DebugHooks {
       return "authorizationStatus=\(status) alertSetting=\(alert) alertStyle=\(style)"
     }
 
-    /// `-pushToken`'s answer: put-leeds's token without it. Hex is lowercase and 64 to 200
+    /// `-pushToken`'s answer: put-here-ip's token without it. Hex is lowercase and 64 to 200
     /// digits, as the server takes; any other value stops the app.
     private static func pushToken(arguments: [String]) -> PushTokenAnswer {
       guard let text = value(after: "-pushToken", in: arguments) else {
-        return .token(devicesFixture("put-leeds", body: TokenBody.self).note.body.token)
+        return .token(devicesFixture("put-here-ip", body: TokenBody.self).note.body.token)
       }
       switch text {
       case "none": return .nothing
@@ -1017,6 +1023,29 @@ enum DebugHooks {
     func fix() async -> LocationFix { answer }
   }
 
+  /// `-location ask:<lat>,<lon>`'s stand-in for Core Location: permission never asked until
+  /// `requestAccess()`, which allows it, as the system's prompt answered "Allow While Using App"
+  /// would, without showing one; then granted, and the same fix each time. Before that, no fix,
+  /// as Core Location gives none without permission (`CoreLocationService.fix()`).
+  private actor AskingLocation: LocationService {
+    let answer: LocationFix
+    /// `requestAccess()` was called: the permission is given.
+    private var allowed = false
+
+    init(answer: LocationFix) {
+      self.answer = answer
+    }
+
+    func access() -> LocationAccess { allowed ? .granted : .notDetermined }
+
+    func requestAccess() -> LocationAccess {
+      allowed = true
+      return .granted
+    }
+
+    func fix() -> LocationFix { allowed ? answer : .denied }
+  }
+
   /// The notifications' stand-in (`DebugHooks.notifications`), for the UI tests: the permission
   /// as `-notifications` says, never the system's prompt, and the token `-pushToken` names,
   /// posted to the inbox as UIKit's would be, a moment after registering. Under `-notifications
@@ -1109,22 +1138,52 @@ enum DebugHooks {
     let token: String
   }
 
-  /// `-devices sent|dryrun|limited|quiet|gone|down[,…]|offline`: the server's devices calls,
-  /// under `-fixture` (`FixtureTransport.send`) and `-network` (`URLProtocolStub`), from
+  /// A devices fixture's status and its request's version, read before the body is, so 8.1's
+  /// `put-*` fixtures (version 1 bodies, which `RegistrationBody` doesn't read) are passed over.
+  private struct FixtureVersion: Decodable {
+    struct Note: Decodable {
+      struct Body: Decodable {
+        let v: Int?
+      }
+
+      let body: Body
+    }
+
+    let note: Note
+    let status: Int
+
+    enum CodingKeys: String, CodingKey {
+      case note = "_fixture"
+      case status
+    }
+  }
+
+  /// `-devices sent|dryrun|limited|quiet|gone|down[,…]|unlocated|offline`: the server's devices
+  /// calls, under `-fixture` (`FixtureTransport.send`) and `-network` (`URLProtocolStub`), from
   /// `Fixtures/Devices`, which the server's own code wrote:
-  /// - `PUT /api/v1/devices`: with evening and morning off, 204, as the server forgets the
-  ///   device; else the reply of the `put-*` fixture registered for the same place, with the
-  ///   switches the request sent, as the server echoes them, 200; for any other place,
-  ///   `put-bad-place`'s 400;
+  /// - `PUT /api/v1/devices` (version 2, design 4.9): with evening and morning off, 204, as the
+  ///   server forgets the device; else the reply of the version 2 `put-*` fixture the server
+  ///   answered with 200 whose set is the request's (where you are as sent, approximate or the
+  ///   phone's cell, and the saved places), with the switches the request sent, as the server
+  ///   echoes them, 200; for any other set, `put-unlocated`'s 400, as the server answers a set it
+  ///   can't locate. Each fixture is a whole set, so no reply is put together here. Under
+  ///   `unlocated`, every PUT has that 400;
   /// - `DELETE /api/v1/devices`: 204;
-  /// - `POST /api/v1/devices/test`: the `test-*` fixture of each of `-devices`' names in turn,
-  ///   the last repeating (`sent` by default), with its `Retry-After`;
+  /// - `POST /api/v1/devices/test`: the `test-*` fixture of each of `-devices`' other names in
+  ///   turn, the last repeating (`sent` by default), with its `Retry-After`;
   /// - `offline`: every devices call fails with no connection.
   /// A name with no fixture stops the app.
   private final class DevicesStub: @unchecked Sendable {
     enum Reply {
       case failure(URLError.Code)
       case answer(status: Int, body: Data, retryAfter: String?)
+    }
+
+    /// A set the server stored, as a version 2 body names it: where you are, and the saved
+    /// places.
+    struct PlaceSet: Equatable {
+      let here: RegistrationBody.Here
+      let saved: [RegistrationBody.Saved]
     }
 
     /// Read once, from the launch arguments.
@@ -1134,29 +1193,38 @@ enum DebugHooks {
     private let tests: [DevicesFixture<TokenBody>]
     /// Every device call fails.
     private let offline: Bool
-    /// Each place registered with 200, and the server's reply for it.
-    private let places: [(place: RegistrationBody.Place, reply: DeviceResponse)]
-    private let badPlace: DevicesFixture<RegistrationBody>
+    /// Every PUT is answered as a set the server can't locate.
+    private let refusesAll: Bool
+    /// Each set registered with 200, and the server's reply for it, in the fixtures' order.
+    private let sets: [(set: PlaceSet, reply: DeviceResponse)]
+    /// The server's 400 for a set it can't locate.
+    private let unlocated: DevicesFixture<RegistrationBody>
     private let lock = NSLock()
     /// The next test send's place in `tests`.
     private var turn = 0
 
     init(arguments: [String]) {
-      let names = DebugHooks.value(after: "-devices", in: arguments) ?? "sent"
-      offline = names == "offline"
-      tests = (offline ? [] : names.split(separator: ",")).map { name in
+      let names = (DebugHooks.value(after: "-devices", in: arguments) ?? "sent")
+        .split(separator: ",").map(String.init)
+      offline = names == ["offline"]
+      refusesAll = names.contains("unlocated")
+      let testNames = names.filter { $0 != "unlocated" }
+      tests = (offline ? [] : testNames.isEmpty ? ["sent"] : testNames).map { name in
         guard ["sent", "dryrun", "limited", "quiet", "gone", "down"].contains(name) else {
-          fatalError("-devices: \(name) isn't sent, dryrun, limited, quiet, gone, down or offline")
+          fatalError(
+            "-devices: \(name) isn't sent, dryrun, limited, quiet, gone, down, unlocated "
+              + "or offline")
         }
         return DebugHooks.devicesFixture("test-\(name)", body: TokenBody.self)
       }
-      places = Self.registered().map { fixture in
+      sets = Self.registered().map { fixture in
         guard
           let reply = try? JSONDecoder().decode(DeviceResponse.self, from: Data(fixture.text.utf8))
         else { fatalError("A put fixture's reply doesn't decode") }
-        return (fixture.note.body.place, reply)
+        let body = fixture.note.body
+        return (PlaceSet(here: body.here, saved: body.saved), reply)
       }
-      badPlace = DebugHooks.devicesFixture("put-bad-place", body: RegistrationBody.self)
+      unlocated = DebugHooks.devicesFixture("put-unlocated", body: RegistrationBody.self)
     }
 
     /// Whether `url` is a devices call.
@@ -1181,20 +1249,24 @@ enum DebugHooks {
       }
     }
 
-    /// A PUT's reply: forgotten with no switch on, the place's record, or the place refused.
+    /// A PUT's reply: forgotten with no switch on, the set's record, or the set refused.
     private func registered(_ body: Data?) -> Reply {
-      guard let body, let sent = try? JSONDecoder().decode(RegistrationBody.self, from: body)
+      guard let body, let sent = try? JSONDecoder().decode(RegistrationBody.self, from: body),
+        sent.v == RegistrationBody.version
       else { return .answer(status: 400, body: Data(), retryAfter: nil) }
       if !sent.alerts.snow.evening, !sent.alerts.snow.morning {
         return .answer(status: 204, body: Data(), retryAfter: nil)
       }
-      guard let found = places.first(where: { $0.place == sent.place })?.reply,
+      let set = PlaceSet(here: sent.here, saved: sent.saved)
+      guard !refusesAll, let found = sets.first(where: { $0.set == set })?.reply,
         let echoed = try? JSONEncoder().encode(
           DeviceResponse(
-            id: found.id, place: found.place, alerts: sent.alerts, seenAt: found.seenAt))
+            id: found.id, deviceTz: found.deviceTz, here: found.here, saved: found.saved,
+            refused: found.refused, alerts: sent.alerts, seenAt: found.seenAt))
       else {
         return .answer(
-          status: badPlace.status, body: Data(badPlace.text.utf8), retryAfter: badPlace.retryAfter)
+          status: unlocated.status, body: Data(unlocated.text.utf8),
+          retryAfter: unlocated.retryAfter)
       }
       return .answer(status: 200, body: echoed, retryAfter: nil)
     }
@@ -1208,7 +1280,8 @@ enum DebugHooks {
       }
     }
 
-    /// The `put-*` fixtures the server answered with 200, each a place's registration.
+    /// The version 2 `put-*` fixtures the server answered with 200, each a whole set's
+    /// registration, by name.
     private static func registered() -> [DevicesFixture<RegistrationBody>] {
       let folder = Bundle.main.url(forResource: "Fixtures", withExtension: nil)?
         .appendingPathComponent("Devices", isDirectory: true)
@@ -1216,11 +1289,18 @@ enum DebugHooks {
         try? FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil)
       }
       return (urls ?? [])
-        .map { $0.deletingPathExtension().lastPathComponent }
-        .filter { $0.hasPrefix("put-") }
-        .sorted()
-        .map { DebugHooks.devicesFixture($0, body: RegistrationBody.self) }
-        .filter { $0.status == 200 }
+        .filter { $0.lastPathComponent.hasPrefix("put-") && $0.pathExtension == "json" }
+        .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        .filter { url in
+          guard let data = try? Data(contentsOf: url),
+            let header = try? JSONDecoder().decode(FixtureVersion.self, from: data)
+          else { fatalError("Fixtures/Devices/\(url.lastPathComponent) doesn't decode") }
+          return header.status == 200 && header.note.body.v == RegistrationBody.version
+        }
+        .map {
+          DebugHooks.devicesFixture(
+            $0.deletingPathExtension().lastPathComponent, body: RegistrationBody.self)
+        }
     }
   }
 

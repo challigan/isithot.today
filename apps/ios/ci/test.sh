@@ -11,6 +11,16 @@
 # purchase sheet that hangs (FB22836426) fails its test rather than the job (ios.yml's storekit
 # job budgets for all 18 hanging).
 #
+# ONLY_TESTING, set only by an iteration run (ios.yml's `only` input, phase 8.4a), names the tests
+# to run as xcodebuild does, Target/Class or Target/Class/method, separated by commas or spaces
+# (WillItSnowUITests/NotificationsTests/testWhereYouAre). A plan then runs only the named tests
+# whose target is one of its own, each passed as -only-testing:, and a plan with none of them
+# isn't run and says so; a build builds everything. A name that isn't Target/Class[/method], or
+# whose target is in no plan, stops the script before anything runs; and a name of the plan's
+# own that ran no test (a misspelt class or method, which xcodebuild runs as nothing and passes)
+# fails the step once the plan has run, saying which (xcresult-summary.mjs `ran`), so a misspelt
+# name never passes. Unset or empty, as on every pull-request and merge run, the whole plan runs.
+#
 #   apps/ios/ci/test.sh build <UDID>      build-for-testing        -> build/Build.xcresult
 #   apps/ios/ci/test.sh Unit <UDID>       the Unit test plan       -> build/Unit.xcresult, build/attachments/Unit
 #   apps/ios/ci/test.sh UI <UDID>         the UI test plan         -> build/UI.xcresult, build/attachments/UI
@@ -44,6 +54,53 @@ case "$what" in
     exit 2
     ;;
 esac
+
+# Into the step summary for people, and the log for agents (the GitHub MCP's get_job_logs
+# returns the log, not the summary).
+report() {
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then tee -a "$GITHUB_STEP_SUMMARY"; else cat; fi
+}
+
+# The test targets of the plan named $1, one a line, from its file.
+plan_targets() {
+  node -e 'for (const t of JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))
+    .testTargets) console.log(t.target.name)' "$ios/TestPlans/$1.xctestplan"
+}
+
+# ONLY_TESTING's names (above), and those in this plan as -only-testing: arguments.
+tests=()
+if [ "$what" != build ]; then
+  IFS=$', \t\n' read -r -d '' -a fields <<<"${ONLY_TESTING:-}" || true
+  for field in ${fields[@]+"${fields[@]}"}; do
+    if [ -n "$field" ]; then tests+=("$field"); fi
+  done
+fi
+only=()
+if [ ${#tests[@]} -gt 0 ]; then
+  mine="$(plan_targets "$what")"
+  every="$(plan_targets Unit && plan_targets UI && plan_targets StoreKit)"
+  for test in "${tests[@]}"; do
+    if ! [[ $test =~ ^[A-Za-z0-9_]+/[A-Za-z0-9_]+(/[A-Za-z0-9_]+)?$ ]]; then
+      echo "test.sh: ONLY_TESTING's \"$test\" isn't a test's name: Target/Class or" \
+        "Target/Class/method" >&2
+      exit 2
+    fi
+    target="${test%%/*}"
+    if ! grep -qxF "$target" <<<"$every"; then
+      echo "test.sh: ONLY_TESTING's \"$test\" names no test plan's target" \
+        "(${every//$'\n'/, })" >&2
+      exit 2
+    fi
+    if grep -qxF "$target" <<<"$mine"; then only+=("-only-testing:$test"); fi
+  done
+  if [ ${#only[@]} -eq 0 ]; then
+    echo "### $what: not run (ONLY_TESTING names none of its tests: ${tests[*]})" | report
+    exit 0
+  fi
+  echo "### $what: only ${only[*]#-only-testing:}" | report
+  action+=("${only[@]}")
+fi
+
 result="$build/$name.xcresult"
 mkdir -p "$build"
 rm -rf "$result"
@@ -65,12 +122,6 @@ xcodebuild "${action[@]}" \
 status=${PIPESTATUS[0]}
 set -e
 
-# Into the step summary for people, and the log for agents (the GitHub MCP's get_job_logs
-# returns the log, not the summary).
-report() {
-  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then tee -a "$GITHUB_STEP_SUMMARY"; else cat; fi
-}
-
 if [ ! -d "$result" ]; then
   echo "### $name: no result bundle (xcodebuild exited $status; see the log)" | report
   exit "$status"
@@ -87,6 +138,11 @@ else
     echo "test.sh: xcresulttool couldn't read the tests" >&2
   node "$ios/ci/xcresult-summary.mjs" tests "$name" "$build/$name.summary.json" \
     "$build/$name.tests.json" | report || echo "test.sh: no summary of the tests" >&2
+  # Each test an iteration run named ran here, or the step fails, whatever xcodebuild said.
+  if [ ${#only[@]} -gt 0 ] && ! node "$ios/ci/xcresult-summary.mjs" ran "$name" \
+    "$build/$name.tests.json" "${only[@]#-only-testing:}" | report; then
+    if [ "$status" -eq 0 ]; then status=1; fi
+  fi
   rm -rf "$build/attachments/$name"
   mkdir -p "$build/attachments/$name"
   xcrun xcresulttool export attachments --path "$result" --output-path "$build/attachments/$name" ||

@@ -3,6 +3,10 @@ import XCTest
 /// The one UI test that meets the system's notification prompt (iOS build spec, section 12.4):
 /// Leeds with `-notifications system`, the real notification centre, its token still the
 /// stand-in's, which the devices stub knows, so no real token is made or sent (DebugHooks.swift).
+/// Location access is the stand-in's, off (`-location denied`), whatever the simulator grants
+/// (ci/simulator.sh grants it): since phase 8.4a the notifications take a fix at the start while
+/// access is allowed, and a simulated fix would register a cell no devices fixture holds, so
+/// nothing would be kept. Off, where you are is approximate, which `put-here-ip` registers.
 /// The prompt is SpringBoard's alert, over the app, so the test finds it through SpringBoard and
 /// waits for it: not through an interruption monitor, which handles only an alert that blocks an
 /// element a test needs (Apple, "Handling UI interruptions"), and which SpringBoard's alerts have
@@ -23,7 +27,7 @@ final class NotificationPermissionTests: XCTestCase {
     let app = XCUIApplication()
     app.launchArguments = [
       "-uitest", "-noads", "1", "-clock", "fixed", "-resetStore", "-fixture", "leeds-dry",
-      "-place", "place=leeds-gb", "-notifications", "system",
+      "-place", "place=leeds-gb", "-notifications", "system", "-location", "denied",
     ]
     app.launch()
     XCTAssertTrue(app.staticTexts["verdict"].waitForExistence(timeout: 15), "No answer on screen")

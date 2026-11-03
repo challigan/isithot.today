@@ -1,26 +1,33 @@
 import UIKit
 import XCTest
 
-/// Notifications in the app (iOS build spec, sections 10.2 item 5, 10.6 and 12): Settings →
-/// Notifications' gate at approximate location; its switches, the place, the test and each result
-/// it can come to; a change that couldn't be saved; a permission refused at the switch, and one
-/// turned off in iOS Settings before the next launch; the notification place's page; what Your
-/// privacy shows as kept while registered, and "Turn off notifications and delete my data"; the
-/// Today card, turned on and put away; a notification's route; and the link to Settings →
+/// Notifications in the app (iOS build spec, sections 10.2 item 5, 10.6 and 12; phase 8.4a's
+/// design, 2.1 to 2.8): Settings → Notifications turned on at approximate location, where you are
+/// then the town the server located from the connection; its switches, "Where you are", the test
+/// and each result it can come to; a change that couldn't be saved; a permission refused at the
+/// switch, and one turned off in iOS Settings before the next launch; the "Where you are" page and
+/// its "Use my location"; what Your privacy shows as kept while registered, and "Turn off
+/// notifications and delete my data"; the Today card where you are, turned on and put away, and
+/// none on a chosen city's page; a notification's route; and the link to Settings →
 /// Notifications. Each launch is `-uitest`, with the ads off (`-noads 1`), the clock fixed at its
 /// fixture's moment and the Debug recorder on (`-openURLs record`, DebugHooks.swift), from a clean
-/// store unless a test relaunches on purpose; the place chosen is Leeds (`leeds`).
+/// store unless a test relaunches on purpose; the place chosen, when one is, is Leeds (`leeds`).
 ///
 /// Nothing here meets a system alert: the notifications' stand-in, every UI test's under
 /// `-uitest`, asks the real centre nothing (`-notifications` says what the permission is, or what
-/// asking comes to), and `-location` stands in for Core Location. NotificationPermissionTests
+/// asking comes to), and `-location` stands in for Core Location: in every launch here, location
+/// access never asked until something asks for it, which only "Use my location" does, and then
+/// allowed, with a fix at 53.8, -1.55 (`-location ask:`), so where you are is approximate until
+/// that tap, whatever the simulator's own location settings say. NotificationPermissionTests
 /// meets the real prompt. The server's devices calls are the stub's (`-devices`), answered from
-/// the fixtures the server's own code wrote, so no request leaves the phone. Each step waits for
+/// the fixtures the server's own code wrote, each a whole set (`put-here-ip`, Leeds located from
+/// the connection; `put-here-device`, the phone's cell at 53.8, -1.55, also Leeds), so no request
+/// leaves the phone. Each step waits for
 /// what the app shows, never a sleep: a switch's value (`isOn`), a line's words, the test row's
 /// result, the kept block; and the picker by the app's own readout (`pickerOpens`), not by
-/// XCUITest's tree, which lags the screen. The gear, the place button and the switcher's tabs are
-/// tapped as every UI test taps them, once more only when the system cancelled the touch
-/// (`cancelled(_:in:within:until:_:)`), and a failure after a gesture names `debug-cancels`
+/// XCUITest's tree, which lags the screen. Every tap whose result can be read is watched, as
+/// every UI test's is (`watchedTap`): played once more only when the system cancelled the touch
+/// and the tap brought nothing. A failure after a gesture names `debug-cancels`
 /// (`cancelsReport`). Every tap is on an element whole on screen (`reveal`), as the
 /// Notifications section moves every Settings row below the units down. Settings is audited at
 /// its top, as every sheet is (SettingsTests, and Your privacy since PR #40's run), and the pages
@@ -35,6 +42,15 @@ final class NotificationsTests: XCTestCase {
   /// Leeds, a city's page: its fixture, kept as the place to launch on.
   private static let leeds = ["-fixture", "leeds-dry", "-place", "place=leeds-gb"]
 
+  /// leeds-dry's page at approximate location: its fixture, with no place chosen, so the screen
+  /// shows where you are (the card's only screen), which the fixture's answer names Leeds.
+  private static let whereYouAre = ["-fixture", "leeds-dry"]
+
+  /// Core Location's stand-in in every launch (`-location ask:`): access never asked until "Use
+  /// my location" asks, which the stand-in allows, then the phone at 53.8, -1.55, the cell the
+  /// stub's `put-here-device` registered.
+  private static let notAsked = ["-location", "ask:53.8,-1.55"]
+
   /// The app the test launched last (`launch`), whose `debug-cancels` a wait's failure names, as
   /// each wait follows a gesture.
   private var launched: XCUIApplication?
@@ -47,34 +63,40 @@ final class NotificationsTests: XCTestCase {
     continueAfterFailure = false
   }
 
-  /// At approximate location there is no place for notifications: the line that says so, "Use my
-  /// location" and "Search", and no switch. Search closes Settings and opens the picker.
+  /// At approximate location, the first launch's, with location never asked, the switches show
+  /// and turning one on works, with no place to choose (8.1's gate has gone): under them the line
+  /// that says what is kept, and "Where you are", which says it is approximate, with no town
+  /// while nothing is on. Turned on, it asks for no location (the stand-in would allow it, and
+  /// the row would then say "Your location"), and the row names the town the server located from
+  /// the connection, Leeds (`put-here-ip`). Your privacy then shows where you are among what is
+  /// kept. Settings is audited off, as the first launch shows it; on is
+  /// `testTurningOnRegistersAndYourPrivacyShowsIt`'s audit.
   @MainActor
-  func testTheGateAtApproximateLocation() throws {
-    let app = launch(["-fixture", "ip-first-launch"])
+  func testTurningOnAtApproximateLocation() throws {
+    let app = launch(["-fixture", "ip-first-launch", "-notifications", "allow"])
     try openSettings(app)
-    try waitFor("notify-notice", in: app, label: Copy.needsPlace)
-    XCTAssertTrue(app.find("notify-use-my-location").exists, "No Use my location")
-    XCTAssertTrue(app.find("notify-search").exists, "No Search")
-    XCTAssertFalse(app.find("notify-evening").exists, "A switch at approximate location")
+    try waitFor("notify-here-kept", in: app, label: Copy.hereKept)
+    try waitForHere(in: app, note: Copy.approximate)
     try expectSettingsAtItsTop(in: app)
     try auditAccessibility(
-      of: app, on: "Settings, notifications at approximate location", surface: .content)
-    attach(app, as: "app-notifications-gate")
-    let shown = app.pickersShown ?? 0
-    // The picker opens only once Settings has gone (HomeView's `present(_:)`), so a new picker
-    // on the readout says both; the tap has done its work once Settings has gone.
-    try tap("notify-search", in: app) {
-      app.sheetClosed || pickerOpen(in: app, after: shown) == true
-    }
-    try expectThePicker(in: app, after: shown, "after Settings' Search")
+      of: app, on: "Settings, notifications off at approximate location", surface: .content)
+    attach(app, as: "app-notifications-off")
+    try turnOnTheEvening(in: app)
+    try waitForHere(in: app, note: Copy.approximate, town: "Leeds")
+    try waitFor("notify-here-kept", in: app, label: Copy.hereKept)
+
+    try openYourPrivacy(in: app)
+    try waitFor("kept-heading", in: app, label: Copy.kept)
+    try waitFor("kept-line-1", in: app, label: Copy.keptHere)
   }
 
-  /// Turned on, the evening switch registers: "Also when snow is possible" comes, the place is
-  /// Leeds, and the test is sent. Your privacy then shows first what the server keeps; "Turn off
+  /// Turned on, the evening switch registers: "Also when snow is possible" comes, where you are
+  /// is Leeds, located from the connection (never the city on screen, though here they agree),
+  /// and the test is sent. Your privacy then shows first what the server keeps; "Turn off
   /// notifications and delete my data" says it is done and the kept block goes, and back on
-  /// Settings the switch is off, with no test. For a UK place, the Met Office's warnings open in
-  /// Safari.
+  /// Settings the switch is off, with no test. Turned on again, where you are is Leeds once
+  /// more, in the UK, so the Met Office's warnings show (only while a notification is on, by the
+  /// country the server answered with) and open in Safari.
   @MainActor
   func testTurningOnRegistersAndYourPrivacyShowsIt() throws {
     let app = launch(Self.leeds + ["-notifications", "allow"])
@@ -83,18 +105,22 @@ final class NotificationsTests: XCTestCase {
     XCTAssertTrue(
       app.find("notify-possible").waitForExistence(timeout: 10),
       "No possible switch; \(app.cancelsReport)")
-    try waitFor("notify-place", in: app, value: "Leeds")
-    try tap("notify-test", in: app) { holds("notify-test", Copy.testSent, in: app) }
-    try waitFor("notify-test", in: app, value: Copy.testSent)
+    try waitForHere(in: app, note: Copy.approximate, town: "Leeds")
+    // Audited before the test is sent: on PR #43's run the footer under the test row began at
+    // 791, 3 points above the content's foot at Settings' top, and since phase 8.4a the kept line
+    // above "Where you are" pushes both further down, so the test row's tap scrolls first
+    // (`reveal`), and a scrolled Settings is never audited (`expectSettingsAtItsTop`).
     try expectSettingsAtItsTop(in: app)
     try auditAccessibility(of: app, on: "Settings, notifications on", surface: .content)
     attach(app, as: "app-notifications-on")
+    try tap("notify-test", in: app) { holds("notify-test", Copy.testSent, in: app) }
+    try waitFor("notify-test", in: app, value: Copy.testSent)
 
     try openYourPrivacy(in: app)
     try waitFor("kept-heading", in: app, label: Copy.kept)
     let id = app.find("kept-line-0").label
     XCTAssertNotNil(id.range(of: #"^ID [0-9a-f]{8}$"#, options: .regularExpression), id)
-    XCTAssertEqual(app.find("kept-line-1").label, Copy.keptPlace)
+    XCTAssertEqual(app.find("kept-line-1").label, Copy.keptHere)
     XCTAssertEqual(app.find("kept-line-2").label, Copy.keptUnits)
     XCTAssertEqual(app.find("kept-line-3").label, Copy.evening)
     XCTAssertFalse(app.find("kept-line-4").exists, "A kept line too many")
@@ -115,7 +141,9 @@ final class NotificationsTests: XCTestCase {
 
     // Last, once every audit is done: the recorder's lines at the sheet's foot wrap the whole
     // URL, which at the audits' largest text sizes would squeeze the screen above them
-    // (SettingsTests).
+    // (SettingsTests). The warnings row needs a notification on, and the server's answer.
+    try turnOnTheEvening(in: app)
+    try waitForHere(in: app, note: Copy.approximate, town: "Leeds")
     try tap("notify-warnings", in: app) {
       holds("debug-opened", Copy.metOfficeWarnings, .staticText, in: app)
     }
@@ -197,63 +225,60 @@ final class NotificationsTests: XCTestCase {
     try expectSwitch(app.find("notify-evening"), on: true)
   }
 
-  /// The notification place's page: the place on screen, in use, and "Use my location", which,
-  /// tapped, follows the phone once it has a fix and goes back to Settings. With location access
-  /// off, the page says so, and its Open Settings opens the app's page in iOS Settings.
+  /// The "Where you are" page, with location never asked: turned on, where you are is Leeds,
+  /// approximate; its page says how where you are is found, shows it as Settings' row does, and
+  /// offers "Use my location", which asks for location only at its tap (the stand-in allows it)
+  /// and takes one fix, at 53.8, -1.55. Where you are then follows the phone: the page goes back
+  /// to Settings by itself, whose row says "Your location", with the town the server named for
+  /// that cell, Leeds (`put-here-device`). Location access off, and a tap that finds no fix, are
+  /// NotificationSettingsTests' and NotificationsModelTests' (on Linux).
   @MainActor
-  func testThePlaceChoice() throws {
-    let app = launch(Self.leeds + ["-notifications", "authorized", "-location", "53.8,-1.55"])
+  func testWhereYouAre() throws {
+    let app = launch(Self.leeds + ["-notifications", "authorized"])
     try openSettings(app)
-    try tap("notify-place", in: app) { app.showsPage(titled: Copy.placeTitle) }
-    try page(titled: Copy.placeTitle, in: app)
-    let onScreen = app.find("notify-place-on-screen")
-    XCTAssertTrue(onScreen.waitForExistence(timeout: 5), "No place on screen to choose")
-    XCTAssertTrue(onScreen.label.hasPrefix(Copy.onScreen), onScreen.label)
-    XCTAssertTrue(onScreen.isSelected, "The place on screen isn't the one in use")
-    let mine = app.find("notify-place-my-location")
-    XCTAssertTrue(mine.label.hasPrefix(Copy.myLocation), mine.label)
-    XCTAssertTrue(mine.label.contains(Copy.follows), mine.label)
-    XCTAssertFalse(mine.isSelected, "The phone's location is in use already")
+    try turnOnTheEvening(in: app)
+    try waitForHere(in: app, note: Copy.approximate, town: "Leeds")
+    try tap("notify-here", in: app) { app.showsPage(titled: Copy.hereTitle) }
+    try page(titled: Copy.hereTitle, in: app)
+    try waitFor("notify-place-about", in: app, label: Copy.hereAbout)
+    try waitForHere("notify-place-here", in: app, note: Copy.approximate, town: "Leeds")
+    try waitFor("notify-place-my-location", in: app, label: Copy.myLocation)
     // At its top: it is short.
-    try auditAccessibility(of: app, on: "Notification place", surface: .content)
+    try auditAccessibility(of: app, on: "Where you are", surface: .content)
     attach(app, as: "app-notification-place")
+    // Watched until "Use my location" goes, which only a tap the app had brings: the page drops
+    // it once the fix is in, before the server names the town, then goes back by itself. A tap
+    // the system cancelled leaves it there, and so, dimmed, does one still finding the phone.
     try tap("notify-place-my-location", in: app) {
-      holds("notify-place", Copy.yourLocation, in: app)
+      ElementRead(app, "notify-place-my-location").gone
     }
-    let place = app.find("notify-place")
-    try waitFor("notify-place", in: app, value: Copy.yourLocation)
-    // Back on Settings: its place row takes a tap again.
-    try reveal(place, in: app)
-    XCTAssertTrue(place.label.contains(Copy.follows), place.label)
-    app.terminate()
-
-    let denied = launch(Self.leeds + ["-notifications", "authorized", "-location", "denied"])
-    try openSettings(denied)
-    try tap("notify-place", in: denied) { denied.showsPage(titled: Copy.placeTitle) }
-    try page(titled: Copy.placeTitle, in: denied)
-    try tap("notify-place-my-location", in: denied) {
-      says("notify-place-problem", Copy.locationDenied, in: denied)
+    try waitForHere(in: app, note: Copy.yourLocation, town: "Leeds")
+    // Asked once the row has changed, as Settings may keep it in the tree under the page: the
+    // page went back by itself, rather than the row changing behind it.
+    if let still = gone("notify-place-about", in: app) {
+      XCTFail("The Where you are page is still there once it follows the phone: \(still)")
     }
-    try waitFor("notify-place-problem", in: denied, label: Copy.locationDenied)
-    let appSettings = UIApplication.openSettingsURLString
-    try tap("notify-place-open-settings", in: denied) {
-      holds("debug-opened", appSettings, .staticText, in: denied)
-    }
-    try waitFor("debug-opened", .staticText, in: denied, value: appSettings)
+    try page(titled: "Settings", in: app)
   }
 
-  /// The Today card for Leeds: "Turn on" turns the evening notification on for the place on
-  /// screen, and the card says it is done, with no buttons; Settings has the switch on.
+  /// The Today card where you are: leeds-dry's middle page at approximate location, no place
+  /// chosen. It offers the evening notification for where you are, with the line that says what
+  /// is kept; "Turn on" turns it on, and the card says it is done, with no buttons, naming the
+  /// town the server located from the connection, Leeds (`put-here-ip`); Settings has the switch
+  /// on.
   @MainActor
   func testTheCardTurnsOn() throws {
-    let app = launch(Self.leeds + ["-alertCard", "shown", "-notifications", "allow"])
+    let app = launch(Self.whereYouAre + ["-alertCard", "shown", "-notifications", "allow"])
     try showTheCard(in: app, on: "leeds-dry")
-    try waitFor("card-line", in: app, label: Copy.cardChosen)
+    try waitFor("card-line", in: app, label: Copy.cardOffer)
+    try waitFor("card-kept", in: app, label: Copy.hereKept)
     let turnOn = app.find("card-turn-on")
+    // Watched until Turn on goes, as it does once the permission is allowed: the card says it is
+    // done, and names Leeds only once the server has answered.
     watchedTap(
-      "card-turn-on", in: app, until: { says("card-line", Copy.cardOn, in: app) },
+      "card-turn-on", in: app, until: { ElementRead(app, "card-turn-on").gone },
       { turnOn.tap() })
-    try waitFor("card-line", in: app, label: Copy.cardOn)
+    try waitFor("card-line", in: app, label: Copy.cardOnNearLeeds)
     if let still = gone("card-turn-on", in: app) {
       XCTFail("Turn on is still there once on: \(still)")
     }
@@ -262,30 +287,22 @@ final class NotificationsTests: XCTestCase {
     try expectSwitch(app.find("notify-evening"), on: true)
   }
 
-  /// The card at approximate location: "Use my location" and "Search", which opens the picker;
-  /// "Not now" puts it away for good, so the next launch shows none. That launch shows the card
-  /// as this one does (`-alertCard shown`), else the stand-in's store would hide it whatever was
-  /// kept (`CardHidden`).
+  /// The card shows only where you are, and "Not now" puts it away for good. Leeds's page with
+  /// Leeds chosen (`-place`) shows none, though the launch would show it (`-alertCard shown`);
+  /// the same page at approximate location offers it; "Not now" puts it away, so the next launch
+  /// shows none. Each launch shows the card as the first does (`-alertCard shown`), else the
+  /// stand-in's store would hide it whatever was kept (`CardHidden`).
   @MainActor
-  func testTheCardAtApproximateLocation() throws {
-    let launching = ["-fixture", "ip-first-launch", "-alertCard", "shown"]
+  func testTheCardOnlyWhereYouAre() throws {
+    let city = launch(Self.leeds + ["-alertCard", "shown"])
+    try expectNoCard(in: city, on: "leeds-dry", "on Leeds's page with Leeds chosen")
+    city.terminate()
+
+    let launching = Self.whereYouAre + ["-alertCard", "shown"]
     let app = launch(launching)
-    try showTheCard(in: app, on: "picker-first-launch")
-    try waitFor("card-line", in: app, label: Copy.cardApprox)
-    XCTAssertTrue(app.find("card-use-my-location").exists, "No Use my location on the card")
-    attach(app, as: "app-card-approximate")
-    let shown = app.pickersShown ?? 0
-    // As the place button's tap (`openThePicker`): only the readout, read and not open, has the
-    // tap played again; the search box ends the wait while the readout can't be read.
-    let search = app.find("card-search")
-    let field = app.find("place-search")
-    watchedTap(
-      "card-search", in: app,
-      until: { pickerOpen(in: app, after: shown) ?? field.exists },
-      again: { self.pickerOpen(in: app, after: shown) == false }, { search.tap() })
-    try expectThePicker(in: app, after: shown, "after the card's Search")
-    try closeThePicker(in: app, after: shown)
-    try showTheCard(in: app, on: "picker-first-launch")
+    try showTheCard(in: app, on: "leeds-dry")
+    try waitFor("card-line", in: app, label: Copy.cardOffer)
+    attach(app, as: "app-card-offer")
     let notNow = app.find("card-not-now")
     watchedTap(
       "card-not-now", in: app, until: { ElementRead(app, "notification-card").gone },
@@ -296,10 +313,7 @@ final class NotificationsTests: XCTestCase {
     app.terminate()
 
     let again = launch(launching, reset: false)
-    let middle = try HomeScreen.named("picker-first-launch").page("today")
-    if again.heading.label != middle.heading { try tap(middle, in: again) }
-    XCTAssertTrue(again.find("updated").waitForExistence(timeout: 10), "No footer on the page")
-    XCTAssertFalse(again.find("notification-card").exists, "The card is back after Not now")
+    try expectNoCard(in: again, on: "leeds-dry", "after Not now")
   }
 
   /// A tapped notification that launched the app (`-route`, the server's own payload) opens its
@@ -339,13 +353,22 @@ final class NotificationsTests: XCTestCase {
 
   // MARK: - Helpers
 
-  /// What Settings → Notifications, the place page, Your privacy and the card say, as
-  /// packages/mobile's `APP_COPY` and core word them (AppCopy.swift, CoreCopy.swift), and the
-  /// Met Office's page (`Constants.Outbound`): typed here, as SettingsTests types Settings', since
-  /// the UI tests link none of the app's modules.
+  /// What Settings → Notifications, the "Where you are" page, Your privacy and the card say, as
+  /// packages/mobile's `APP_COPY` and core word them (AppCopy.swift, CoreCopy.swift), with the
+  /// town the devices fixtures name, and the Met Office's page (`Constants.Outbound`): typed
+  /// here, as SettingsTests types Settings', since the UI tests link none of the app's modules.
   private enum Copy {
-    static let needsPlace =
-      "Choose a place for notifications: use your location or search for a town."
+    static let hereKept =
+      "Uses your location if you share it, otherwise a rough place from your internet "
+      + "connection, which we keep while notifications are on."
+    static let approximate = "Approximate, from your internet connection"
+    static let yourLocation = "Your location"
+    static let hereTitle = "Where you are"
+    static let hereAbout =
+      "Notifications for where you are use your location if you share it with the app, "
+      + "otherwise a rough place from your internet connection. It's updated when you open the "
+      + "app, at most once an hour, and kept only while notifications are on."
+    static let myLocation = "Use my location"
     static let notifyDenied = "Notifications are off for this app in Settings."
     static let testSent = "Sent. It should arrive in a few seconds."
     static let testLimited = "You can send 3 test notifications an hour. Try again later."
@@ -355,37 +378,29 @@ final class NotificationsTests: XCTestCase {
     static let testFailed = "Couldn't send a test notification. Try again later."
     static let notSaved =
       "Couldn't save your notification choices. The app will try again when you next open it."
-    static let placeTitle = "Notification place"
-    static let onScreen = "Use the place on screen: Leeds"
-    static let myLocation = "Use my location"
-    static let follows = "Follows your location each time you open the app."
-    static let yourLocation = "Your location"
-    static let locationDenied = "Location access is off for this app in Settings."
     static let kept = "What we keep for notifications"
-    static let keptPlace = "Leeds, Europe/London"
+    static let keptHere = "Where you are: Leeds, Europe/London"
     static let keptUnits = "Snow units: cm"
     static let evening = "Evening before (about 6pm)"
     static let deleteDone =
       "Notifications are off. We've deleted your notification token, place, units and choices."
-    static let cardChosen = "Get a notification the evening before snow is likely here."
-    static let cardOn =
-      "Done. You'll get a notification the evening before snow is likely here. You can change "
-      + "this in Settings."
-    static let cardApprox =
-      "Choose a place for notifications: use your location or search for a town."
+    static let cardOffer = "Get a notification the evening before snow is likely where you are."
+    static let cardOnNearLeeds =
+      "Done. You'll get a notification the evening before snow is likely near Leeds. You can "
+      + "change this in Settings."
     static let metOfficeWarnings =
       "https://weather.metoffice.gov.uk/warnings-and-advice/uk-warnings"
   }
 
   /// Launches the app with `-uitest`, `-noads 1`, the clock fixed (`-clock fixed`, at the
-  /// fixture's moment) and the recorder (`-openURLs record`), from a clean store unless not
-  /// `reset` (a relaunch, which keeps what the first launch kept, so `-place` is left out), and
-  /// `extra`; waits for the answer's verdict.
+  /// fixture's moment), the recorder (`-openURLs record`) and location never asked (`notAsked`),
+  /// from a clean store unless not `reset` (a relaunch, which keeps what the first launch kept,
+  /// so `-place` is left out), and `extra`; waits for the answer's verdict.
   @MainActor
   private func launch(_ extra: [String], reset: Bool = true) -> XCUIApplication {
     let app = XCUIApplication()
     app.launchArguments =
-      ["-uitest", "-noads", "1", "-clock", "fixed", "-openURLs", "record"]
+      ["-uitest", "-noads", "1", "-clock", "fixed", "-openURLs", "record"] + Self.notAsked
       + (reset ? ["-resetStore"] : []) + extra
     app.launch()
     launched = app
@@ -514,6 +529,26 @@ final class NotificationsTests: XCTestCase {
     }
     if let failure = read {
       throw HomeScreenError("\(id) never held \"\(value)\": \(failure); \(cancels)")
+    }
+  }
+
+  /// Waits up to 10 seconds for "Where you are" (`notify-here` in Settings, `notify-place-here`
+  /// on its page) to say how where you are was found, `note`, in its label, and, given a `town`,
+  /// to hold it as its value: the row's note is in its label, and its town, when it has one, is
+  /// its value. Read as `waitFor(_:_:in:label:)` reads; throws with what the last read found.
+  @MainActor
+  private func waitForHere(
+    _ id: String = "notify-here",
+    in app: XCUIApplication,
+    note: String,
+    town: String? = nil
+  ) throws {
+    let says = town.map { "\"\(note)\" and \"\($0)\"" } ?? "\"\(note)\""
+    let read = readElement(id, in: app, within: 10, "to say \(says)") { read in
+      read.found && read.label.contains(note) && (town.map { read.value == $0 } ?? true)
+    }
+    if let failure = read {
+      throw HomeScreenError("\(id) never said \(says): \(failure); \(cancels)")
     }
   }
 
@@ -676,6 +711,23 @@ final class NotificationsTests: XCTestCase {
     let middle = try HomeScreen.named(screen).page("today")
     if app.heading.label != middle.heading { try tap(middle, in: app) }
     try scroll(middle, toShow: "notification-card", in: app)
+  }
+
+  /// Shows the middle page of `screen`, as `showTheCard` does, and throws, saying `when`, unless
+  /// it has no card once its footer is there (`updated`, the end of the page's content, read with
+  /// the rest of the answer): a snapshot read that finds none in an app it could read (`gone`).
+  @MainActor
+  private func expectNoCard(
+    in app: XCUIApplication, on screen: String, _ when: String
+  ) throws {
+    let middle = try HomeScreen.named(screen).page("today")
+    if app.heading.label != middle.heading { try tap(middle, in: app) }
+    guard app.find("updated").waitForExistence(timeout: 10) else {
+      throw HomeScreenError("No footer on the \(middle.view) page \(when)")
+    }
+    if let card = gone("notification-card", in: app) {
+      throw HomeScreenError("A card \(when): \(card); \(cancels)")
+    }
   }
 
   /// Waits for the picker a tap opened, after the readout counted `shown` (`pickerOpens`), and

@@ -2,19 +2,22 @@ import IsItLogic
 import SwiftUI
 import UIKit
 
-/// The Today card (spec 10.2, item 5): page content on the middle page, above the upgrade row,
-/// never a screen before a prompt. A chip card (the page's opaque `chip`, corners of 24, padded
-/// 18) with its line in `detail` and ink, then its buttons as bordered chips (`PillButton`, words
-/// in `labelStrong`): side by side, wrapping onto the next line when one doesn't fit, as the
+/// The Today card (spec 10.2, item 5; design 2.6): page content on the middle page, above the
+/// upgrade row, never a screen before a prompt, shown only while the screen shows where you are
+/// (`NotificationCard.card`). A chip card (the page's opaque `chip`, corners of 24, padded 18)
+/// with its line in `detail` and ink, under the offer the line that says what is kept for where
+/// you are in `note` and ink, then its buttons as bordered chips (`PillButton`, words in
+/// `labelStrong`): side by side, wrapping onto the next line when one doesn't fit, as the
 /// footer's links do (`FlowLayout`), and a pill wider than the card onto lines of its own. Each
 /// button is laid out once at every text size, so the accessibility audit follows one element as
 /// the text grows: a `ViewThatFits` of a row and a column of copies failed its Dynamic Type and
 /// clipped-text checks on PR #43's first macOS run (DECISIONS). Ink on the chip, and the border,
 /// are what the page surface's model (`SURFACES.page`) holds, so the contrast proof can read
 /// every pixel of it. Top 28, bottom 0 (the upgrade row's own top 28 follows). One container
-/// (`notification-card`), its line a text (`card-line`), each button its id. The line that comes
-/// after "Turn on" ("Done. …", or that notifications are off for the app) is said to VoiceOver
-/// once, as Restore purchase's result is.
+/// (`notification-card`), its line a text (`card-line`), the kept line one (`card-kept`), each
+/// button its id. The line that comes after "Turn on" ("Done. …", or that notifications are off
+/// for the app) is said to VoiceOver once, as Restore purchase's result is; the town the server
+/// names in it afterwards ("…likely near Leeds…") is shown, not said again.
 public struct NotificationCardView: View {
   let card: NotificationCard
   let act: (NotificationCard.Action) -> Void
@@ -34,6 +37,12 @@ public struct NotificationCardView: View {
       Text(verbatim: card.line)
         .paragraph()
         .accessibilityIdentifier("card-line")
+      if let kept = card.kept {
+        Text(verbatim: kept)
+          .brandFont(.note)
+          .fixedSize(horizontal: false, vertical: true)
+          .accessibilityIdentifier("card-kept")
+      }
       if !card.buttons.isEmpty {
         FlowLayout(spacing: 10, lineSpacing: 10) {
           buttons

@@ -231,14 +231,16 @@ describe('APP_COPY', () => {
     expect(APP_COPY.unitsFootnote).toBe('Temperatures follow: cm with °C, inches with °F.');
     expect(APP_COPY.widgetName).toBe('Snow forecast');
     expect(APP_COPY.intentPhrase).toBe('Will it snow tomorrow in {app}?');
-    // Every key in section 10.9's table.
+    // Every key in section 10.9's table, but those phase 8.4a's "where you are" replaced (the
+    // card's offer is `cardOffer`; Settings' place row, its choice and its notice went, design
+    // 4.3), which `the notifications where you are` holds gone.
     const table = [
       ...['placeButtonLabel', 'settings', 'recent', 'slugGone', 'offline', 'staleApp'],
-      ...['cardChosen', 'cardApprox', 'turnOn', 'notNow', 'search', 'upgradeRow'],
+      ...['cardOffer', 'turnOn', 'notNow', 'search', 'upgradeRow'],
       ...['upgradeTitle', 'upgradeBody', 'familySharing', 'thanks', 'pending', 'restore'],
       ...['restored', 'nothingToRestore', 'unitsFootnote', 'notifications', 'evening'],
-      ...['eveningNote', 'morning', 'morningNote', 'possible', 'possibleNote', 'notifyPlace'],
-      ...['notifyPlaceOnScreen', 'notifyPlaceMyLocation', 'notifyFollows', 'needsPlace'],
+      ...['eveningNote', 'morning', 'morningNote', 'possible', 'possibleNote'],
+      ...['notifyPlaceMyLocation'],
       ...['sendTest', 'testSent', 'testLimited', 'testFailed', 'notifyFooter', 'notifyDenied'],
       ...['openSettings', 'privacyChoices', 'yourPrivacy', 'privacyPolicy'],
       ...['keptForNotifications', 'deleteMyData', 'reportAd', 'reportAdBody', 'copyAddress'],
@@ -296,8 +298,9 @@ describe('APP_COPY', () => {
       placeDeleted: ['place'],
       upgradeSettings: ['price'],
       buy: ['price'],
-      notifyPlaceOnScreen: ['place'],
+      cardOnNamed: ['place'],
       keptID: ['id'],
+      keptHere: ['place', 'zone'],
       keptPlace: ['place', 'zone'],
       keptUnits: ['label', 'units'],
       reportAdSubject: ['version'],
@@ -382,20 +385,12 @@ describe('APP_COPY', () => {
       expect(APP_COPY[key], key).not.toMatch(/willitsnow/i);
     }
     expect(APP_COPY.notifyLocationDenied).toBe('Location access is off for this app in Settings.');
-    expect(APP_COPY.notifyPlaceTitle).toBe('Notification place');
-    expect(APP_COPY.notifyLocationUnavailable).toBe(
-      "Couldn't find your location. Try again, or use the place on screen.",
-    );
-    // Without a place on screen to choose (the phone's own place, or approximate location), the
-    // line names only what the page offers.
-    expect(APP_COPY.notifyLocationTryAgain).toBe("Couldn't find your location. Try again.");
+    // The "Where you are" page offers no place to choose instead (design 2.1), so a fix that
+    // found nothing has one line, 8.1's two merged.
+    expect(APP_COPY.notifyLocationUnavailable).toBe("Couldn't find your location. Try again.");
     // Production's dry run sends nothing, so the test row says so rather than "Sent".
     expect(APP_COPY.testDryRun).toBe(
       "Our server isn't sending notifications yet, so nothing was sent.",
-    );
-    expect(APP_COPY.cardOn).toBe(
-      "Done. You'll get a notification the evening before snow is likely here. You can change " +
-        'this in Settings.',
     );
     expect(APP_COPY.notifyNotSaved).toBe(
       "Couldn't save your notification choices. The app will try again when you next open it.",
@@ -465,6 +460,128 @@ describe('APP_COPY', () => {
         expect(word, `${key}: "${word}"`).toMatch(/^[A-Z][^A-Z]*$/);
       }
     }
+  });
+});
+
+describe('the notifications where you are (phase 8.4a)', () => {
+  /** Every string 8.4a adds or rewords, for the guards that hold them all. */
+  const HERE = [
+    ...['notifyHere', 'notifyHereApprox', 'notifyHereUnknown', 'notifyHereAbout'],
+    ...['notifyHereKept', 'notifyPlaceTitle', 'notifyLocationUnavailable', 'cardOffer'],
+    ...['cardOn', 'cardOnNamed', 'keptHere', 'privacyNotifications', 'locationPurpose'],
+  ] as const;
+
+  it('leaves out 8.1’s place on screen, its choice and its notices', () => {
+    // The free notification follows where the phone is, never a place chosen on screen (design
+    // decision 1), so nothing offers one; and turning a switch on always works, so nothing asks
+    // for a place first (4.3's removed keys).
+    const gone = [
+      ...['cardChosen', 'cardApprox', 'needsPlace', 'notifyPlace', 'notifyPlaceOnScreen'],
+      ...['notifyFollows', 'notifyLocationTryAgain'],
+    ];
+    for (const key of gone) expect(APP_COPY, key).not.toHaveProperty(key);
+    for (const [key, text] of Object.entries(APP_COPY)) {
+      expect(text, key).not.toMatch(/place on screen|choose a place for notifications/i);
+    }
+  });
+
+  it('names Settings’ row and the three ways where you are was found (design 2.1, 2.4)', () => {
+    expect(APP_COPY.notifyHere).toBe('Where you are');
+    // The row's kind: the phone's location (core's words, which the server gives a device's
+    // place it has no name for), the connection's rough place, or none found.
+    expect([COPY.yourLocation, APP_COPY.notifyHereApprox, APP_COPY.notifyHereUnknown]).toEqual([
+      'Your location',
+      'Approximate, from your internet connection',
+      'Not found yet',
+    ]);
+    // Under the switches, and under the card's offer: what is kept, and for how long.
+    expect(APP_COPY.notifyHereKept).toBe(
+      'Uses your location if you share it, otherwise a rough place from your internet ' +
+        'connection, which we keep while notifications are on.',
+    );
+  });
+
+  it('titles the page the row opens as the row is named, and says how it works (design 2.1)', () => {
+    expect(APP_COPY.notifyPlaceTitle).toBe('Where you are');
+    expect(APP_COPY.notifyPlaceTitle).toBe(APP_COPY.notifyHere);
+    expect(APP_COPY.notifyHereAbout).toBe(
+      'Notifications for where you are use your location if you share it with the app, ' +
+        "otherwise a rough place from your internet connection. It's updated when you open the " +
+        'app, at most once an hour, and kept only while notifications are on.',
+    );
+    // What the page offers while location access isn't allowed, and its two answers.
+    expect(APP_COPY.notifyPlaceMyLocation).toBe('Use my location');
+    expect(APP_COPY.notifyLocationDenied).toBe('Location access is off for this app in Settings.');
+    expect(APP_COPY.notifyLocationUnavailable).toBe("Couldn't find your location. Try again.");
+  });
+
+  it('says the place is updated as often as the app registers again (core ALERTS)', () => {
+    // While where you are is approximate, the app registers again each time it opens, at most
+    // every `hereRefreshMinutes` (design decision 3): an hour.
+    expect(ALERTS.hereRefreshMinutes).toBe(60);
+    const hourly = Object.entries(APP_COPY).filter(([, text]) => /once an? \w+/.test(text));
+    expect(hourly.map(([key]) => key)).toEqual(['notifyHereAbout', 'privacyNotifications']);
+    for (const [key, text] of hourly) {
+      expect(text, key).toContain('when you open the app, at most once an hour');
+      expect(text, key).not.toMatch(/weekly|once a week/);
+    }
+  });
+
+  it('offers the card for where you are, and names the town once the server has (design 2.6)', () => {
+    expect(APP_COPY.cardOffer).toBe(
+      'Get a notification the evening before snow is likely where you are.',
+    );
+    expect(APP_COPY.cardOn).toBe(
+      "Done. You'll get a notification the evening before snow is likely where you are. You " +
+        'can change this in Settings.',
+    );
+    expect(fill(APP_COPY.cardOnNamed, { place: 'Leeds' })).toBe(
+      "Done. You'll get a notification the evening before snow is likely near Leeds. You can " +
+        'change this in Settings.',
+    );
+    // The same words, with the reply's town for "where you are" once it is known; and the
+    // offer's promise, kept.
+    expect(APP_COPY.cardOnNamed.replace('near {place}', 'where you are')).toBe(APP_COPY.cardOn);
+    expect(APP_COPY.cardOn).toContain(APP_COPY.cardOffer.replace(/^Get a/, 'a').replace(/\.$/, ''));
+    for (const key of ['cardOffer', 'cardOn', 'cardOnNamed'] as const) {
+      expect(APP_COPY[key], key).not.toMatch(/\bhere\b/);
+    }
+  });
+
+  it('lists where you are first in Your privacy’s kept block (design 2.8)', () => {
+    expect(fill(APP_COPY.keptHere, { place: 'Leeds', zone: 'Europe/London' })).toBe(
+      'Where you are: Leeds, Europe/London',
+    );
+    expect(APP_COPY.keptHere.startsWith(`${APP_COPY.notifyHere}: `)).toBe(true);
+  });
+
+  it('says what the server keeps for where you are, without saved places yet (design 3.11)', () => {
+    // 8.4a's words: 8.4b adds the saved places and the iPhone's time zone.
+    expect(APP_COPY.privacyNotifications).toBe(
+      "Only while notifications are on, we keep your device's notification token, an ID made " +
+        'from it, the place you get notifications for and its time zone, your units and which ' +
+        "notifications you chose, with a few details such as the app's version and when it last " +
+        'checked in. The place is where you are (your location rounded to about 5 km or, if you ' +
+        "haven't shared it, a rough place our server estimates from your internet connection, " +
+        'updated when you open the app, at most once an hour). We delete them when you turn ' +
+        'notifications off in the app, when Apple tells us the app is no longer installed, or ' +
+        "about 90 days after you last open it. If you turn notifications off in your iPhone's " +
+        'Settings instead, we delete them the next time you open the app. For a few days after ' +
+        'each notification and each test, and after some forecast checks that found nothing to ' +
+        'send, we also keep a note of it, even once the rest is deleted. It holds no token or ' +
+        'place.',
+    );
+    expect(APP_COPY.privacyNotifications).not.toMatch(/saved|time zone: |iPhone's time zone/);
+  });
+
+  it('says "location" only for the phone’s own, and "place" for the rest', () => {
+    // "Your location", "that rounded location": the phone's. A rough place from the connection is
+    // a place (`appCopy.ts`'s rule, design's house rules).
+    for (const key of HERE) {
+      const rest = APP_COPY[key].replace(/\b(your|rounded) location\b/gi, '');
+      expect(rest, key).not.toMatch(/\blocation/i);
+    }
+    expect(APP_COPY.notifyHereApprox).not.toMatch(/location/i);
   });
 });
 
@@ -566,12 +683,15 @@ describe('configCopy', () => {
     expect(configCopy()).toBe(xcconfig);
   });
 
-  it('has section 15.2’s purpose string, word for word', () => {
+  it('has section 15.2’s purpose string, as phase 8.4a words what notifications keep', () => {
+    // Notifications for where you are follow the phone's location whenever it is shared (design
+    // 3.11): the rounded location is kept while notifications are on, and moves as the app opens.
     expect(APP_COPY.locationPurpose).toBe(
       'Your location shows whether it will snow where you are. It is rounded to about 5 km ' +
-        'before it leaves your phone. If you turn on notifications for your location, that ' +
-        'rounded location is kept so we can tell you when snow is likely.',
+        'before it leaves your phone. If notifications are on, that rounded location is kept, ' +
+        'and updated when you open the app, so we can tell you when snow is likely where you are.',
     );
+    expect(APP_COPY.locationPurpose).not.toMatch(/turn on notifications for your location/);
   });
 
   it("refuses what an xcconfig would read as something else, and a name that isn't one", () => {

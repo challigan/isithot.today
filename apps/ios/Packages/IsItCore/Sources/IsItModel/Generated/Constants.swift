@@ -39,9 +39,11 @@ public enum Constants {
     public static let retryMinutes = 60
   }
 
-  /// Core `ALERTS`: how often an app registers for notifications again while it is used.
+  /// Core `ALERTS`: how often an app registers for notifications again while it is used, days,
+  /// and, while where you are is approximate, on becoming active, minutes.
   public enum Alerts {
     public static let heartbeatDays = 7
+    public static let hereRefreshMinutes = 60
   }
 
   /// Core `SNOW`: the share of forecasts that makes a day "Yes" (`likelyFrom`) and "Maybe"

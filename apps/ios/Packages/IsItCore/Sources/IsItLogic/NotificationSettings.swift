@@ -2,8 +2,8 @@ import Foundation
 import IsItModel
 
 /// What the app's notifications are doing, as the views show them (`NotificationsModel.state`):
-/// what `alerts.v1` and `alertSync.v1` keep, the permission, and what this session's taps came
-/// to.
+/// what `alerts.v2` and `alertSync.v2` keep, the permission and location access, where you are,
+/// and what this session's taps came to.
 public struct NotificationsState: Sendable, Equatable {
   /// "Send a test notification": not tapped, under way, or its outcome.
   public enum Test: Sendable, Equatable {
@@ -12,15 +12,10 @@ public struct NotificationsState: Sendable, Equatable {
   }
 
   /// The section's status line: nothing to say, a change the server didn't take, or the server's
-  /// own words for a place it refused (400 `bad_location`).
+  /// own words for a set it refused (400 `bad_location`: it couldn't tell where you are).
   public enum Status: Sendable, Equatable {
     case ok, notSaved
     case placeRefused(String)
-  }
-
-  /// Why "Use my location" on the place page found no place.
-  public enum PlaceProblem: Sendable, Equatable {
-    case locationDenied, locationUnavailable
   }
 
   /// "Turn off notifications and delete my data" (Your privacy): not tapped, under way, done, or
@@ -31,14 +26,23 @@ public struct NotificationsState: Sendable, Equatable {
 
   public var settings: AlertSettings
   public var permission: AlertSync.Permission
+  /// Whether the app may use the phone's location (Core Location's When In Use).
+  public var locationAccess: AlertSync.LocationAccess
+  /// Where you are as the app sends it, and whether the server refused it.
+  public var here: HereState
   /// The server's record, as the last PUT it answered made it; nil while none is kept.
   public var registration: AlertRegistration?
   public var test: Test
   public var status: Status
-  public var placeProblem: PlaceProblem?
-  /// "Use my location" on the place page is finding the phone.
+  /// This session's "Use my location" on the "Where you are" page found no fix, though location
+  /// access is allowed.
+  public var locationUnavailable: Bool
+  /// "Use my location" on the "Where you are" page is finding the phone.
   public var locating: Bool
   public var delete: Delete
+  /// The screen shows where you are, approximate location or the phone's point in where you
+  /// are's cell (`NotificationCard.showsHere(_:here:)`): the only screen the card shows on.
+  public var showsHere: Bool
   /// The card is put away for good (`ui.alertCard`).
   public var cardDismissed: Bool
   /// This session: the card's "Turn on" was allowed (the card says so until the next launch).
@@ -49,50 +53,57 @@ public struct NotificationsState: Sendable, Equatable {
   public init(
     settings: AlertSettings = AlertSettings(),
     permission: AlertSync.Permission = .notDetermined,
+    locationAccess: AlertSync.LocationAccess = .notDetermined,
+    here: HereState = HereState(),
     registration: AlertRegistration? = nil,
+    showsHere: Bool = false,
     cardDismissed: Bool = false
   ) {
     self.settings = settings
     self.permission = permission
+    self.locationAccess = locationAccess
+    self.here = here
     self.registration = registration
     test = .idle
     status = .ok
-    placeProblem = nil
+    locationUnavailable = false
     locating = false
     delete = .idle
+    self.showsHere = showsHere
     self.cardDismissed = cardDismissed
     cardTurnedOn = false
     cardRefused = false
   }
+}
 
-  /// The place the notifications are for, or would be for once a switch is first turned on: the
-  /// one kept, else the place on screen (`AlertSync.firstPlace`). Nil only at approximate
-  /// location with none kept.
-  func place(onScreen: OnScreen) -> AlertPlace? {
-    settings.place ?? AlertSync.firstPlace(onScreen: onScreen.target, name: onScreen.name)
-  }
+/// Where you are, as the model last worked it out (`AlertSync.here`), and whether the server
+/// refused it. Settings' row, its page and the card read how it was found (`AlertSync.hereKind`)
+/// and the town the server named (`AlertSync.hereName`) from this and the registration's answer.
+public struct HereState: Sendable, Equatable {
+  /// What the app sends for where you are: the phone's cell, or approximate.
+  public var place: HerePlace
+  /// The server's last answer to a registration was its refusal (400 `bad_location`): it
+  /// couldn't tell where you are, and forgot the set. False again once it stores one.
+  public var refused: Bool
 
-  /// A chosen place's name as it shows: its own, else the server's for it while the registration
-  /// is for that place; nil when there is neither.
-  func name(of target: Target, given name: String) -> String? {
-    if !name.isEmpty { return name }
-    guard let registration, Target(query: registration.response.place.query)?.key == target.key
-    else { return nil }
-    return registration.response.place.name
+  public init(place: HerePlace = .ip, refused: Bool = false) {
+    self.place = place
+    self.refused = refused
   }
 }
 
-/// Settings → Notifications (section 12.1), as plain values: drawn between the units and the
+/// Settings → Notifications (design 2.4), as plain values: drawn between the units and the
 /// upgrade card, in Settings' own parts.
 ///
-/// - With no place kept and the screen on approximate location, the gate: "Choose a place for
-///   notifications…", "Use my location" and "Search", and no switch (approximate location is
-///   never a notification place).
-/// - Otherwise, while notifications are off for the app in iOS Settings, that line and "Open
-///   Settings" first. Then the switches: the evening before, on the day, and "Also when snow is
-///   possible" only while one of them is on; the place, which opens the place page; while a
-///   notification is on, "Send a test notification", its outcome beneath it; and the status line.
-/// - Always the footer, and for a UK place, "Met Office warnings" in Safari.
+/// - While notifications are off for the app in iOS Settings, that line and "Open Settings"
+///   first.
+/// - The switches: the evening before, on the day, and "Also when snow is possible" only while
+///   one of them is on. Turning one on needs no place first: where you are is always one.
+/// - Under them, what is kept for where you are; then "Where you are", its town and how it was
+///   found, which pushes its page; while a notification is on, "Send a test notification", its
+///   outcome beneath it; and the status line.
+/// - Always the footer, and "Met Office warnings" in Safari while where you are, as the server
+///   stored it, is in the UK.
 ///
 /// Nothing here names another app, website or weather type.
 public struct NotificationSettings: Sendable, Equatable {
@@ -109,25 +120,29 @@ public struct NotificationSettings: Sendable, Equatable {
     public let isOn: Bool
   }
 
-  /// The place row, which pushes the place page (`SettingsPage.notificationPlace`).
-  public struct PlaceRow: Sendable, Equatable {
-    /// "notify-place"
+  /// "Where you are": its town and how it was found. In Settings it pushes the "Where you are"
+  /// page (`SettingsPage.notificationPlace`); on that page it only says.
+  public struct HereRow: Sendable, Equatable {
+    /// "notify-here" in Settings, "notify-place-here" on the page.
     public let id: String
-    /// "Place"
+    /// "Where you are"
     public let title: String
-    /// "Leeds"; "Your location" while it follows the phone; nil while there is no name for it.
+    /// "Leeds": the town the server named (`AlertSync.hereName`); nil before it has, while no
+    /// notification is on, and for a place it has no name for.
     public let value: String?
-    /// "Follows your location each time you open the app.", while it follows.
-    public let note: String?
+    /// How it was found (`AlertSync.hereKind`): "Your location", "Approximate, from your
+    /// internet connection" or "Not found yet".
+    public let note: String
     /// `.notificationPlace`
     public let icon: SettingsScreen.Icon
   }
 
   public enum Item: Sendable, Equatable {
     case toggle(Switch)
-    case place(PlaceRow)
-    /// A row that acts: the gate's two, Open Settings, the test (its outcome its detail, busy
-    /// while sending).
+    /// "notify-here-kept": what is kept for where you are, and for how long.
+    case line(Line)
+    case here(HereRow)
+    /// A row that acts: Open Settings, the test (its outcome its detail, busy while sending).
     case row(SettingsScreen.Row)
   }
 
@@ -139,36 +154,20 @@ public struct NotificationSettings: Sendable, Equatable {
 
   /// "Notifications"
   public let heading: String
-  /// "notify-notice": the gate's line, or that notifications are off in Settings.
+  /// "notify-notice": that notifications are off in Settings.
   public let notice: Line?
   public let items: [Item]
-  /// "notify-status": a change not saved, or the server's words for a place it refused.
+  /// "notify-status": a change not saved, or the server's words for a set it refused.
   public let status: Line?
   /// "notify-footer": these are forecasts, not official warnings.
   public let footer: Line
-  /// "notify-warnings": the Met Office's warnings page, for a UK place.
+  /// "notify-warnings": the Met Office's warnings page, while where you are is in the UK.
   public let warnings: SettingsScreen.Row?
 
-  /// The section for `state`, with `onScreen` the place on screen.
-  public init(_ state: NotificationsState, onScreen: OnScreen) {
+  /// The section for `state`.
+  public init(_ state: NotificationsState) {
     heading = AppCopy.notifications
     footer = Line(id: "notify-footer", text: AppCopy.notifyFooter)
-    guard let place = state.place(onScreen: onScreen) else {
-      notice = Line(id: "notify-notice", text: AppCopy.needsPlace)
-      items = [
-        .row(
-          SettingsScreen.Row(
-            id: "notify-use-my-location", title: CoreCopy.useMyLocation,
-            action: .notification(.useMyLocation), icon: .useMyLocation)),
-        .row(
-          SettingsScreen.Row(
-            id: "notify-search", title: AppCopy.search, action: .notification(.search),
-            icon: .search)),
-      ]
-      status = nil
-      warnings = nil
-      return
-    }
     var items: [Item] = []
     if state.permission == .denied {
       notice = Line(id: "notify-notice", text: AppCopy.notifyDenied)
@@ -184,20 +183,8 @@ public struct NotificationSettings: Sendable, Equatable {
     items.append(.toggle(Self.toggle(.evening, isOn: prefs.evening)))
     items.append(.toggle(Self.toggle(.morning, isOn: prefs.morning)))
     if state.settings.anyOn { items.append(.toggle(Self.toggle(.possible, isOn: prefs.possible))) }
-    switch place {
-    case .chosen(let target, let name):
-      items.append(
-        .place(
-          PlaceRow(
-            id: "notify-place", title: AppCopy.notifyPlace,
-            value: state.name(of: target, given: name), note: nil, icon: .notificationPlace)))
-    case .follows:
-      items.append(
-        .place(
-          PlaceRow(
-            id: "notify-place", title: AppCopy.notifyPlace, value: CoreCopy.yourLocation,
-            note: AppCopy.notifyFollows, icon: .notificationPlace)))
-    }
+    items.append(.line(Line(id: "notify-here-kept", text: AppCopy.notifyHereKept)))
+    items.append(.here(Self.hereRow(state, id: "notify-here")))
     if state.settings.anyOn {
       items.append(
         .row(
@@ -211,7 +198,8 @@ public struct NotificationSettings: Sendable, Equatable {
     case .notSaved: status = Line(id: "notify-status", text: AppCopy.notifyNotSaved)
     case .placeRefused(let text): status = Line(id: "notify-status", text: text)
     }
-    if AlertSync.country(of: place, onScreen: onScreen) == "GB",
+    let country = Self.answer(state)?.here?.country
+    if country?.utf8.elementsEqual("GB".utf8) == true,
       let url = URL(string: Constants.Outbound.metOfficeWarnings)
     {
       warnings = SettingsScreen.Row(
@@ -220,6 +208,31 @@ public struct NotificationSettings: Sendable, Equatable {
     } else {
       warnings = nil
     }
+  }
+
+  /// The server's answer for what is switched on now: none while no notification is, since
+  /// nothing is sent then, whatever the last answer said.
+  private static func answer(_ state: NotificationsState) -> DeviceResponse? {
+    state.settings.anyOn ? state.registration?.response : nil
+  }
+
+  /// "Where you are", with `id`: the town the server named for the kind of place sent
+  /// (`AlertSync.hereName`), and how it was found (`AlertSync.hereKind`). While no notification
+  /// is on, nothing is sent, so the row shows the kind alone: the phone's location or
+  /// approximate, never a town, nor "Not found yet".
+  static func hereRow(_ state: NotificationsState, id: String) -> HereRow {
+    let reply = answer(state)
+    let refused = state.settings.anyOn && state.here.refused
+    let note =
+      switch AlertSync.hereKind(here: state.here.place, reply: reply, refused: refused) {
+      case .device: CoreCopy.yourLocation
+      case .ip: AppCopy.notifyHereApprox
+      case .unknown: AppCopy.notifyHereUnknown
+      }
+    return HereRow(
+      id: id, title: AppCopy.notifyHere,
+      value: AlertSync.hereName(here: state.here.place, reply: reply), note: note,
+      icon: .notificationPlace)
   }
 
   /// The switch for `kind`, in its Settings words.
@@ -254,103 +267,53 @@ public struct NotificationSettings: Sendable, Equatable {
   }
 }
 
-/// The place page (`SettingsPage.notificationPlace`): where the notifications are for, in
-/// order, the place kept when it isn't the one on screen, the place on screen (a city's page or
-/// a searched place, with its name), and the phone's location, followed; the one in use is
-/// selected. Beneath, why "Use my location" found nothing, with "Open Settings" when location
-/// access is off.
+/// The "Where you are" page (`SettingsPage.notificationPlace`, design 2.1): how where you are is
+/// found and how often it moves; the place now, with how it was found, as Settings' row says; and
+/// what can be done about it. "Use my location" while location access was never asked (it asks
+/// at the tap), while a tap is finding the phone (busy), and after a tap that found no fix; while
+/// access is off for the app, that line and "Open Settings"; nothing to do while it is allowed.
+/// No place is ever chosen here.
 public struct NotificationPlacePage: Sendable, Equatable {
-  public struct Choice: Sendable, Equatable, Identifiable {
-    /// "notify-place-kept", "notify-place-on-screen", "notify-place-my-location".
-    public let id: String
-    /// "Leeds", "Use the place on screen: Durham", "Use my location".
-    public let title: String
-    /// "Follows your location each time you open the app.", under "Use my location".
-    public let note: String?
-    public let icon: SettingsScreen.Icon
-    public let selected: Bool
-    /// "Use my location" while it finds the phone: no second tap.
-    public let busy: Bool
-    public let choice: PlaceChoice
-  }
-
-  /// "Notification place"
+  /// "Where you are"
   public let title: String
-  public let choices: [Choice]
-  /// "notify-place-problem": location off for the app, or no fix (naming the place on screen
-  /// only when it is a choice).
+  /// "notify-place-about": how where you are is found, how often it moves, how long it is kept.
+  public let about: NotificationSettings.Line
+  /// "notify-place-here": the town and how it was found, as Settings' row says.
+  public let place: NotificationSettings.HereRow
+  /// "notify-place-my-location": "Use my location".
+  public let useMyLocation: SettingsScreen.Row?
+  /// "notify-place-problem": location access off for the app, or no fix.
   public let problem: NotificationSettings.Line?
   /// "notify-place-open-settings", while location access is off.
   public let openSettings: SettingsScreen.Row?
 
-  /// The page for `state`, with `onScreen` the place on screen.
-  public init(_ state: NotificationsState, onScreen: OnScreen) {
+  /// The page for `state`.
+  public init(_ state: NotificationsState) {
     title = AppCopy.notifyPlaceTitle
-    let shown = state.place(onScreen: onScreen)
-    var choices: [Choice] = []
-    if case .chosen(let target, let name)? = state.settings.place,
-      target.key != onScreen.target.key
-    {
-      choices.append(
-        Choice(
-          id: "notify-place-kept",
-          title: state.name(of: target, given: name) ?? AppCopy.notifyPlace, note: nil,
-          icon: .notificationPlace, selected: true, busy: false, choice: .kept))
-    }
-    if Self.choosable(onScreen.target), let name = onScreen.name, !name.isEmpty {
-      var selected = false
-      if case .chosen(let target, _)? = shown { selected = target.key == onScreen.target.key }
-      choices.append(
-        Choice(
-          id: "notify-place-on-screen", title: AppCopy.notifyPlaceOnScreen(place: name),
-          note: nil, icon: .onScreenPlace, selected: selected, busy: false,
-          choice: .onScreen(onScreen.target, name: name)))
-    }
-    var follows = false
-    if case .follows? = shown { follows = true }
-    choices.append(
-      Choice(
-        id: "notify-place-my-location", title: AppCopy.notifyPlaceMyLocation,
-        note: AppCopy.notifyFollows, icon: .myLocation, selected: follows,
-        busy: state.locating, choice: .myLocation))
-    self.choices = choices
-    switch state.placeProblem {
-    case .locationDenied?:
+    about = NotificationSettings.Line(id: "notify-place-about", text: AppCopy.notifyHereAbout)
+    place = NotificationSettings.hereRow(state, id: "notify-place-here")
+    if state.locationAccess == .denied {
+      useMyLocation = nil
       problem = NotificationSettings.Line(
         id: "notify-place-problem", text: AppCopy.notifyLocationDenied)
       openSettings = SettingsScreen.Row(
         id: "notify-place-open-settings", title: AppCopy.openSettings,
         action: .notification(.openLocationSettings), icon: .openSettings)
-    case .locationUnavailable?:
-      // The place on screen as the other way only while the page offers it.
-      let offered = choices.contains { $0.id == "notify-place-on-screen" }
-      problem = NotificationSettings.Line(
-        id: "notify-place-problem",
-        text: offered ? AppCopy.notifyLocationUnavailable : AppCopy.notifyLocationTryAgain)
-      openSettings = nil
-    case nil:
-      problem = nil
-      openSettings = nil
+      return
     }
-  }
-
-  /// A place on screen that can be chosen and fixed: a city's page or a searched place, never
-  /// approximate location, and not the phone's point, which "Use my location" follows.
-  private static func choosable(_ target: Target) -> Bool {
-    switch target {
-    case .city: true
-    case .coords(let place): place.source == .search
-    case .ip: false
+    openSettings = nil
+    // While a tap is finding the phone its row stays, busy, though access may be allowed by
+    // then: it goes once the fix is in, and stays after none.
+    if state.locationAccess == .notDetermined || state.locationUnavailable || state.locating {
+      useMyLocation = SettingsScreen.Row(
+        id: "notify-place-my-location", title: AppCopy.notifyPlaceMyLocation,
+        action: .notification(.useMyLocation), icon: .myLocation, busy: state.locating)
+    } else {
+      useMyLocation = nil
     }
+    problem =
+      state.locationUnavailable
+      ? NotificationSettings.Line(
+        id: "notify-place-problem", text: AppCopy.notifyLocationUnavailable) : nil
   }
-}
-
-/// What a choice on the place page asks for.
-public enum PlaceChoice: Sendable, Equatable {
-  /// The place on screen, under its name: chosen and fixed.
-  case onScreen(Target, name: String)
-  /// The phone's location, followed.
-  case myLocation
-  /// The place already chosen, kept.
-  case kept
 }

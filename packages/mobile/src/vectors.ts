@@ -20,7 +20,9 @@
  * - A field a function leaves out (`undefined`) is left out here too; `null` is kept.
  */
 import {
+  ALERTS,
   ATTRIBUTION,
+  COPY,
   ELEVATION,
   ERROR_MESSAGES,
   GRID,
@@ -46,15 +48,15 @@ import {
   PLACES as PLACE_LISTS,
   addRecent,
   alertAction,
-  alertPlaceAllowed,
   canSave,
   choosePlace,
   dayUntil,
   deviceTarget,
   fingerprint,
-  firstAlertPlace,
-  followLocation,
   freshQuery,
+  hereKind,
+  hereName,
+  herePlace,
   hold,
   hourUntil,
   isSaved,
@@ -66,6 +68,7 @@ import {
   pickHour,
   registrationBody,
   removeRecent,
+  replyZones,
   resultDetail,
   routeLink,
   savePlace,
@@ -85,10 +88,13 @@ import {
   widgetEntries,
   widgetFallsBack,
   widgetReuses,
-  type AlertPlace,
   type AlertPrefs,
   type AlertSwitch,
+  type DeviceReply,
+  type HerePlace,
   type Holds,
+  type KeptCell,
+  type LocationAccess,
   type Permission,
   type PlaceLists,
   type PlaceTarget,
@@ -1472,61 +1478,101 @@ const PREFS = {
   off: { evening: false, morning: false, possible: false },
 } satisfies Record<string, AlertPrefs>;
 
-/** Places someone chose, in every form a registration names. */
-const PLACES: readonly PlaceTarget[] = [
-  { kind: 'city', slug: 'durham-gb' },
-  { kind: 'city', slug: 'reykjavik-is', name: 'Reykjavík' },
-  { kind: 'coords', source: 'device', lat: 53.8, lon: -1.55 },
+const ACCESSES: readonly LocationAccess[] = ['granted', 'denied', 'notDetermined'];
+
+/**
+ * What the app may have as this launch's fix: none; the phone's own, as `deviceTarget` makes it;
+ * the phone's, finer and named, which only its cell leaves; one not on Earth; and places that
+ * aren't the phone's, which are never a fix.
+ */
+const FIXES: readonly (Target | null)[] = [
+  null,
+  deviceTarget(53.8, -1.55),
+  { kind: 'coords', source: 'device', lat: 53.8123, lon: -1.5561, name: 'Leeds', country: 'GB' },
+  { kind: 'coords', source: 'device', lat: 95, lon: 0 },
   { kind: 'coords', source: 'search', lat: 39.75, lon: -105, name: 'Denver', country: 'US' },
-  {
-    kind: 'coords',
-    source: 'search',
-    lat: 47.15,
-    lon: 7.25,
-    name: 'Biel/Bienne',
-    region: 'Bern',
-    country: 'CH',
-    geonameId: 2661513,
-    elevation: 437,
-  },
-  {
-    kind: 'coords',
-    source: 'search',
-    lat: 51.2,
-    lon: -2.65,
-    name: 'Bath & Wells “Ünïcode”',
-    region: null,
-    country: null,
-    geonameId: 0,
-    elevation: 0,
-  },
-  // A searched place the search couldn't name, as searchTarget keeps it (an empty name, region
-  // and geonameId), and one with no name at all: the registration leaves each out.
-  {
-    kind: 'coords',
-    source: 'search',
-    lat: 0.05,
-    lon: -0.05,
-    name: '',
-    region: '',
-    country: null,
-    geonameId: 0,
-  },
-  { kind: 'coords', source: 'search', lat: -33.85, lon: 151.2, region: '', country: '' },
+  { kind: 'city', slug: 'durham-gb', name: 'Durham' },
+  { kind: 'ip' },
 ];
+
+/** What `alerts.v2` may keep as the phone's last cell: none, a cell, a finer point, a bad one. */
+const KEPT: readonly (KeptCell | null)[] = [
+  null,
+  { lat: 54.75, lon: -1.6 },
+  { lat: 54.7712, lon: -1.5713 },
+  { lat: 91, lon: 0 },
+];
+
+/**
+ * Where you are, as registrations send it: approximate; the phone's cell; and a cell given more
+ * than its point (and south and east of zero), of which only the point is sent.
+ */
+const HERES: readonly HerePlace[] = [
+  { kind: 'ip' },
+  { kind: 'device', target: deviceTarget(53.8, -1.55) },
+  {
+    kind: 'device',
+    target: {
+      kind: 'coords',
+      source: 'device',
+      lat: -33.85,
+      lon: 151.2,
+      name: 'Sydney',
+      region: 'New South Wales',
+      country: 'AU',
+    },
+  },
+];
+
+/** The server's 200 to a version 2 PUT whose connection it located in Leeds. */
+const REPLY: DeviceReply = {
+  id: '3f9c1a2b4d5e6f708192a3b4c5d6e7f8',
+  deviceTz: null,
+  here: {
+    name: 'Leeds',
+    timezone: 'Europe/London',
+    query: 'lat=53.8&lon=-1.55&source=device',
+    country: 'GB',
+    follows: 'ip',
+  },
+  saved: [],
+  refused: [],
+  alerts: { snow: PREFS.evening },
+  seenAt: '2026-12-01T09:05:00.000Z',
+};
+const DURHAM = {
+  pid: '1a2b3c4d5e6f',
+  name: 'Durham',
+  timezone: 'Europe/London',
+  query: 'place=durham-gb',
+  country: 'GB',
+};
+const KATHMANDU = {
+  pid: '0f1e2d3c4b5a',
+  name: 'Kathmandu',
+  timezone: 'Asia/Kathmandu',
+  query: 'lat=27.7&lon=85.3&name=Kathmandu&country=NP&source=search',
+  country: 'NP',
+};
 
 function alertVectors(): VectorFile {
   const { cases, add } = collector();
-  for (const target of [null, { kind: 'ip' } as const, ...PLACES]) {
-    add('alertPlaceAllowed', { target }, alertPlaceAllowed(target));
+  // Where you are: every location access, with every kind of fix and every kept cell.
+  for (const access of ACCESSES) {
+    for (const fix of FIXES) {
+      for (const kept of KEPT) {
+        add('herePlace', { access, fix, kept }, herePlace({ access, fix, kept }));
+      }
+    }
   }
+
   const bodies = [];
-  for (const place of PLACES) {
+  for (const here of HERES) {
     for (const [prefs, env, units] of [
       [PREFS.both, 'production', 'c'],
       [PREFS.morning, 'sandbox', 'f'],
     ] as const) {
-      const input = { token: 'a1b2c3d4e5f6', env, place, units, prefs, appVersion: '1.0 (42)' };
+      const input = { token: 'a1b2c3d4e5f6', env, here, units, prefs, appVersion: '1.0 (42)' };
       const body = registrationBody(input);
       add('registrationBody', input, body);
       bodies.push(body);
@@ -1537,7 +1583,7 @@ function alertVectors(): VectorFile {
   const awkward = {
     token: 'q"b\\s/\b\t\n\f\r\u0001\u001f\u007f\u2028é😀',
     env: 'sandbox',
-    place: PLACES[4]!,
+    here: HERES[1]!,
     units: 'c',
     prefs: PREFS.all,
     appVersion: '1.0 (42)',
@@ -1548,28 +1594,28 @@ function alertVectors(): VectorFile {
   for (const body of bodies) add('fingerprint', { body }, fingerprint(body));
 
   const now = Date.parse('2026-12-16T18:05:00Z');
+  const refresh = ALERTS.hereRefreshMinutes * MINUTE;
+  const heartbeat = 7 * DAY;
+  const ip = HERES[0]!;
+  const cell = HERES[1]!;
   const base = {
     prefs: PREFS.both as AlertPrefs,
     permission: 'authorized' as Permission,
     token: 'a1b2c3d4e5f6' as string | null,
-    place: PLACES[0]! as Target | null,
+    here: ip,
     units: 'c' as Units,
+    refused: null as { fingerprint: string; at: number } | null,
+    activeAt: now,
     env: 'production' as PushEnv,
     appVersion: '1.0 (42)',
   };
-  const sent = fingerprint(
-    registrationBody({
-      token: 'a1b2c3d4e5f6',
-      env: 'production',
-      place: PLACES[0]!,
-      units: 'c',
-      prefs: PREFS.both,
-      appVersion: '1.0 (41)',
-    }),
-  );
-  const heartbeat = 7 * DAY;
-  const lastAt = (at: number) => ({ fingerprint: sent, at });
-  const recent = lastAt(now - DAY);
+  /** What was last sent for `here`, by an earlier version of the app. */
+  const sentFor = (here: HerePlace) =>
+    fingerprint(registrationBody({ ...base, token: base.token!, here, appVersion: '1.0 (41)' }));
+  const sentIp = (at: number) => ({ fingerprint: sentFor(ip), at });
+  const sentCell = (at: number) => ({ fingerprint: sentFor(cell), at });
+  // Sent earlier in this visit, and the phone's cell yesterday: nothing due.
+  const recent = sentIp(now - 30 * MINUTE);
   const action = (
     change: Partial<typeof base> & { last: { fingerprint: string; at: number } | null },
   ) => {
@@ -1583,30 +1629,56 @@ function alertVectors(): VectorFile {
   // 2. Permission denied: the same, before anything else is asked for.
   for (const last of [null, recent]) {
     action({ permission: 'denied', last });
-    action({ permission: 'denied', place: null, token: null, last });
+    action({ permission: 'denied', token: null, last });
   }
-  // 3. No place chosen: ask for one, before the token.
-  for (const place of [null, { kind: 'ip' } as const]) {
-    action({ place, last: null });
-    action({ place, token: null, last: recent });
-  }
-  // 4. No push token yet.
+  // 3. No push token yet; never a place to ask for, as where you are is always one.
   for (const token of [null, '']) action({ token, last: null });
-  // 5. Nothing sent, something changed, or the heartbeat is due: send it.
+  action({ token: null, here: cell, last: recent });
+  // 4. Nothing sent, or something changed: send it.
   action({ last: null });
-  action({ last: { fingerprint: 'something else', at: now - DAY } });
-  action({ last: lastAt(now - heartbeat) });
-  action({ last: lastAt(now - heartbeat + 1) });
-  action({ last: lastAt(now - heartbeat - 1) });
-  action({ last: lastAt(now + HOUR) });
+  action({ here: cell, last: null });
+  action({ last: { fingerprint: 'something else', at: now - MINUTE } });
   action({ units: 'f', last: recent });
   action({ env: 'sandbox', last: recent });
   action({ token: 'f6e5d4c3b2a1', last: recent });
   action({ prefs: PREFS.evening, last: recent });
   action({ prefs: PREFS.all, last: recent });
-  action({ place: PLACES[1]!, last: recent });
-  action({ place: PLACES[2]!, last: recent });
-  // 6. Otherwise nothing: an app update alone is no reason to send it again.
+  action({ here: cell, last: recent });
+  action({ here: HERES[2]!, last: sentCell(now - DAY) });
+  action({ last: sentCell(now - DAY) });
+  // 5. The phone's cell: again once a week, whenever the app became active.
+  for (const ago of [DAY, heartbeat - 1, heartbeat, heartbeat + 1, -HOUR]) {
+    action({ here: cell, last: sentCell(now - ago) });
+  }
+  // 6. Approximate: again on becoming active an hour or more after it was sent, so the server
+  // locates the connection afresh; later in the visit too, until it has been sent; once sent in
+  // this visit, not until the next, however long the visit, but weekly.
+  for (const activeAt of [now, now - 20 * MINUTE]) {
+    for (const gap of [refresh - 1, refresh, refresh + 1, 6 * DAY]) {
+      action({ activeAt, last: sentIp(activeAt - gap) });
+    }
+  }
+  action({ activeAt: now - 3 * HOUR, last: sentIp(now - 2 * HOUR) });
+  action({ activeAt: now - heartbeat - HOUR, last: sentIp(now - heartbeat + 1) });
+  action({ activeAt: now - heartbeat - HOUR, last: sentIp(now - heartbeat) });
+  action({ last: sentIp(now + HOUR) });
+  // 7. Refused (the server couldn't tell where you are, and forgot the set): not the same set
+  // again until the app becomes active again or the set changes; a delete or a token wait as ever.
+  const refusal = { fingerprint: sentFor(ip), at: now - MINUTE };
+  for (const activeAt of [now - 2 * MINUTE, now - MINUTE, now]) {
+    action({ refused: refusal, activeAt, last: null });
+  }
+  action({ refused: refusal, activeAt: now - 2 * MINUTE, here: cell, last: null });
+  action({ refused: refusal, activeAt: now - 2 * MINUTE, prefs: PREFS.evening, last: null });
+  action({ refused: refusal, activeAt: now - 2 * MINUTE, units: 'f', last: null });
+  action({ refused: refusal, activeAt: now - 2 * MINUTE, prefs: PREFS.off, last: recent });
+  action({ refused: refusal, activeAt: now - 2 * MINUTE, token: null, last: null });
+  // The set last sent, refused since: neither the hourly refresh nor the heartbeat sends it
+  // again in this visit, whether or not the app kept what it last sent; the next visit does.
+  for (const last of [sentIp(now - 2 * HOUR), sentIp(now - heartbeat)]) {
+    for (const activeAt of [now - 2 * MINUTE, now]) action({ refused: refusal, activeAt, last });
+  }
+  // 8. Otherwise nothing: an app update alone is no reason to send it again.
   action({ last: recent });
   action({ appVersion: '1.1 (50)', last: recent });
   for (const permission of ['provisional', 'notDetermined'] as const) {
@@ -1614,27 +1686,6 @@ function alertVectors(): VectorFile {
     action({ permission, last: null });
   }
 
-  // The notification place: the place on screen when notifications are first turned on, and a
-  // followed one moved by the phone's own fix only.
-  for (const onScreen of [{ kind: 'ip' } as const, ...PLACES]) {
-    for (const name of [null, 'Leeds']) {
-      add('firstAlertPlace', { onScreen, name }, firstAlertPlace(onScreen, name));
-    }
-  }
-  const alertPlaces: (AlertPlace | null)[] = [
-    null,
-    { follows: false, target: PLACES[0]!, name: 'Durham' },
-    { follows: true, target: PLACES[2]! },
-  ];
-  const fixes: Target[] = [
-    PLACES[2]!,
-    { kind: 'coords', source: 'device', lat: 53.85, lon: -1.55 },
-    PLACES[3]!,
-    { kind: 'ip' },
-  ];
-  for (const place of alertPlaces) {
-    for (const fix of fixes) add('followLocation', { place, fix }, followLocation(place, fix));
-  }
   for (const prefs of Object.values(PREFS)) {
     for (const which of ['evening', 'morning', 'possible'] satisfies AlertSwitch[]) {
       for (const on of [true, false]) {
@@ -1645,33 +1696,103 @@ function alertVectors(): VectorFile {
 
   // What the devices replies mean: every case of the client's tests. The fixtures the real
   // handlers made (Fixtures/Devices) are checked against the same functions on their own.
-  const reply = {
-    id: '3f9c1a2b4d5e6f708192a3b4c5d6e7f8',
-    place: { name: 'Leeds', timezone: 'Europe/London', query: 'place=leeds-gb' },
-    alerts: { snow: PREFS.evening },
-    seenAt: '2026-12-01T09:05:00.000Z',
-  };
   const json = (o: unknown) => JSON.stringify(o);
   const error = (code: unknown, message?: unknown) => json({ error: { code, message } });
   const sync = (status: number, text: string, retryAfter: string | null = null) =>
     add('syncReply', { status, text, retryAfter }, syncReply(status, text, retryAfter));
-  sync(200, json(reply));
-  sync(200, json({ ...reply, tz: 'Europe/London' }));
+  const here = REPLY.here!;
+  const fromPhone = { ...REPLY, here: { ...here, follows: 'device' as const } };
+  const withSaved = { ...REPLY, deviceTz: 'Europe/London', saved: [DURHAM, KATHMANDU] };
+  const away = { ...REPLY, here: null, saved: [{ ...KATHMANDU, country: null }] };
+  const refused = { ...REPLY, saved: [DURHAM], refused: [{ index: 1, code: 'not_found' }] };
+  // The phone far from any town, mid-Atlantic, as the server answers it: core's "Your
+  // location", and no country.
+  const atSea = {
+    ...REPLY,
+    here: {
+      name: COPY.yourLocation,
+      timezone: 'Etc/GMT+2',
+      query: 'lat=0&lon=-30&source=device',
+      country: null,
+      follows: 'device' as const,
+    },
+  };
+  for (const reply of [REPLY, fromPhone, withSaved, away, refused, atSea]) sync(200, json(reply));
+  // `refused` left out; fields it doesn't know, at every level.
+  const { refused: _, ...unlisted } = REPLY;
+  sync(200, json(unlisted));
+  sync(
+    200,
+    json({
+      ...REPLY,
+      tz: 'Europe/London',
+      here: { ...here, locatedAt: '2026-12-01T09:05:00.000Z' },
+      saved: [{ ...DURHAM, slot: 'x' }],
+      refused: [{ index: 3, code: 'not_found', why: 'gone' }],
+      alerts: { snow: { ...REPLY.alerts.snow, loud: true }, wind: {} },
+    }),
+  );
+  // 8.1's answer, which names one place.
+  sync(
+    200,
+    json({
+      id: REPLY.id,
+      place: { name: 'Leeds', timezone: 'Europe/London', query: 'place=leeds-gb' },
+      alerts: REPLY.alerts,
+      seenAt: REPLY.seenAt,
+    }),
+  );
+  const without = (key: keyof DeviceReply) => {
+    const copy: Record<string, unknown> = { ...REPLY };
+    delete copy[key];
+    return copy;
+  };
+  // A place's country may be null, but never left out.
+  const { country: _hereCountry, ...hereNoCountry } = here;
+  const { country: _durhamCountry, ...durhamNoCountry } = DURHAM;
   for (const wrong of [
-    { ...reply, id: reply.id.slice(1) },
-    { ...reply, id: reply.id.toUpperCase() },
-    { ...reply, id: 42 },
-    { ...reply, place: { name: 'Leeds', timezone: 'Europe/London' } },
-    { ...reply, place: null },
-    { ...reply, place: { ...reply.place, name: 1 } },
-    { ...reply, place: { ...reply.place, timezone: null } },
-    { ...reply, place: { ...reply.place, query: 7 } },
-    { ...reply, alerts: { snow: { ...reply.alerts.snow, evening: 'true' } } },
-    { ...reply, alerts: { snow: { ...reply.alerts.snow, morning: 0 } } },
-    { ...reply, alerts: { snow: { ...reply.alerts.snow, possible: null } } },
-    { ...reply, alerts: { snow: null } },
-    { ...reply, alerts: null },
-    { ...reply, seenAt: 0 },
+    { ...REPLY, id: REPLY.id.slice(1) },
+    { ...REPLY, id: REPLY.id.toUpperCase() },
+    { ...REPLY, id: 42 },
+    without('deviceTz'),
+    { ...REPLY, deviceTz: 0 },
+    without('here'),
+    { ...REPLY, here: [] },
+    { ...REPLY, here: 'Leeds' },
+    { ...REPLY, here: { ...here, name: 1 } },
+    { ...REPLY, here: { ...here, timezone: null } },
+    { ...REPLY, here: { ...here, query: 7 } },
+    { ...REPLY, here: { ...here, country: 44 } },
+    { ...REPLY, here: { name: 'Leeds', timezone: 'Europe/London', query: here.query } },
+    { ...REPLY, here: { ...here, follows: 'search' } },
+    { ...REPLY, here: hereNoCountry },
+    without('saved'),
+    { ...REPLY, saved: null },
+    { ...REPLY, saved: { 0: DURHAM } },
+    { ...REPLY, saved: [null] },
+    { ...REPLY, saved: [{ ...DURHAM, pid: '1a2b3c4d5e6' }] },
+    { ...REPLY, saved: [{ ...DURHAM, pid: '1A2B3C4D5E6F' }] },
+    { ...REPLY, saved: [{ ...DURHAM, pid: 12 }] },
+    { ...REPLY, saved: [DURHAM, { ...KATHMANDU, name: null }] },
+    { ...REPLY, saved: [{ ...DURHAM, timezone: 1 }] },
+    { ...REPLY, saved: [{ ...DURHAM, query: null }] },
+    { ...REPLY, saved: [{ ...DURHAM, country: false }] },
+    { ...REPLY, saved: [durhamNoCountry] },
+    { ...REPLY, saved: [{ pid: DURHAM.pid, name: 'Durham', timezone: 'Europe/London' }] },
+    { ...REPLY, refused: null },
+    { ...REPLY, refused: {} },
+    { ...REPLY, refused: [null] },
+    { ...REPLY, refused: [{ index: -1, code: 'not_found' }] },
+    { ...REPLY, refused: [{ index: 1.5, code: 'not_found' }] },
+    { ...REPLY, refused: [{ index: '0', code: 'not_found' }] },
+    { ...REPLY, refused: [{ index: 0, code: 1 }] },
+    { ...REPLY, refused: [{ index: 0 }] },
+    { ...REPLY, alerts: { snow: { ...REPLY.alerts.snow, evening: 'true' } } },
+    { ...REPLY, alerts: { snow: { ...REPLY.alerts.snow, morning: 0 } } },
+    { ...REPLY, alerts: { snow: { ...REPLY.alerts.snow, possible: null } } },
+    { ...REPLY, alerts: { snow: null } },
+    { ...REPLY, alerts: null },
+    { ...REPLY, seenAt: 0 },
   ]) {
     sync(200, json(wrong));
   }
@@ -1683,30 +1804,85 @@ function alertVectors(): VectorFile {
   sync(429, '', 'Wed, 21 Oct 2026 07:28:00 GMT');
   sync(429, '', null);
   sync(429, error('rate_limited', 'One change a minute for each device. Try again shortly.'), '50');
-  sync(400, error('bad_location', "We couldn't find that place."));
+  sync(
+    429,
+    error('rate_limited', 'Up to 3 new places are added at a time. Try again in a minute.'),
+    '60',
+  );
+  sync(
+    400,
+    error(
+      'bad_location',
+      "We couldn't tell where you are from your internet connection. Try again later, or use " +
+        'your location.',
+    ),
+  );
   sync(400, json({ error: { code: 'bad_location' } }));
   sync(400, error('bad_location', ''));
   sync(400, error('bad_location', 42));
-  sync(400, error('bad_request', 'token must be 64 to 200 hex characters.'));
+  sync(400, error('bad_request', 'here from the connection has no place: the server locates it.'));
   sync(400, error(1, 'There is no page for that place.'));
   sync(400, json({ error: null }));
   sync(400, '<html>');
   sync(404, error('bad_location', 'There is no page for that place.'));
   for (const status of [413, 404, 405, 500, 502, 503, 0]) sync(status, '');
-  sync(201, json(reply));
+  sync(201, json(REPLY));
+
+  // Settings' row: how where you are was found, and the town the server named it, from what is
+  // sent now, the last answer (approximate, the phone's, none, unnamed) and the 400.
+  const unnamed = [atSea, { ...REPLY, here: { ...here, name: '' } }];
+  const located = [REPLY, fromPhone, away];
+  for (const sent of [ip, cell]) {
+    for (const reply of [null, ...located]) {
+      for (const refused of [false, true]) {
+        add('hereKind', { here: sent, reply, refused }, hereKind({ here: sent, reply, refused }));
+      }
+    }
+    for (const reply of [null, ...located, ...unnamed]) {
+      add('hereName', { here: sent, reply }, hereName({ here: sent, reply }));
+    }
+  }
+
+  // The router's zones: each place's by its key, where you are first; none for no place, for a
+  // query that names none, and the first for one key.
+  for (const reply of [
+    REPLY,
+    withSaved,
+    away,
+    { ...REPLY, here: null },
+    {
+      ...REPLY,
+      here: null,
+      saved: [
+        { ...DURHAM, query: '' },
+        { ...DURHAM, query: 'lat=95&lon=0&source=search' },
+        { ...DURHAM, query: 'units=c' },
+      ],
+    },
+    { ...REPLY, here: null, saved: [DURHAM, { ...DURHAM, timezone: 'Etc/UTC' }] },
+  ]) {
+    add('replyZones', { reply }, replyZones(reply));
+  }
+
   const test = (status: number, text: string) =>
     add('testOutcome', { status, text }, testOutcome(status, text));
   for (const text of [
     '{"sent":true}',
+    '{"sent":true,"count":2}',
     '{"sent":true,"dryRun":"x"}',
     '{"sent":false,"dryRun":true}',
   ]) {
     test(202, text);
   }
+  for (const count of ['"2"', '0', '-2', '1.5', 'null', 'true']) {
+    test(202, `{"sent":true,"count":${count}}`);
+  }
   for (const text of ['{"sent":false}', '{"sent":false,"dryRun":1}', '{"dryRun":true}']) {
     test(202, text);
   }
-  for (const text of ['{"sent":"true"}', '{}', '[]', '', 'null', '<html>']) test(202, text);
+  for (const text of ['{"sent":"true"}', '{"count":2}', '{}', '[]', '', 'null', '<html>']) {
+    test(202, text);
+  }
   test(429, error('test_limited', "That's 3 test notifications this hour. Try again later."));
   test(409, error('quiet_hours', 'Nothing is sent from 9pm to 7am at the place.'));
   test(404, error('not_registered', "This device isn't registered for notifications."));
@@ -1722,14 +1898,15 @@ function alertVectors(): VectorFile {
   test(502, error('push_refused', 'Apple refused the test notification.'));
   return vectorFile(
     [
-      ['client', 'alertPlaceAllowed'],
+      ['client', 'herePlace'],
       ['client', 'registrationBody'],
       ['client', 'fingerprint'],
       ['client', 'alertAction'],
-      ['client', 'firstAlertPlace'],
-      ['client', 'followLocation'],
       ['client', 'setAlert'],
       ['client', 'syncReply'],
+      ['client', 'hereKind'],
+      ['client', 'hereName'],
+      ['client', 'replyZones'],
       ['client', 'testOutcome'],
     ],
     cases,

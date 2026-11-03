@@ -22,9 +22,8 @@ public enum AppCopy {
   }
 
   public static let staleApp = "No recent forecast. Connect to the internet to refresh."
-  public static let cardChosen = "Get a notification the evening before snow is likely here."
-  public static let cardApprox =
-    "Choose a place for notifications: use your location or search for a town."
+  public static let cardOffer =
+    "Get a notification the evening before snow is likely where you are."
   public static let turnOn = "Turn on"
   public static let notNow = "Not now"
   public static let search = "Search"
@@ -110,7 +109,7 @@ public enum AppCopy {
   public static let searchOffline = "You're offline. Connect to the internet to search."
   public static let locationUnavailable = "Couldn't find your location. Search for a place instead."
   public static let locationPurpose =
-    "Your location shows whether it will snow where you are. It is rounded to about 5 km before it leaves your phone. If you turn on notifications for your location, that rounded location is kept so we can tell you when snow is likely."
+    "Your location shows whether it will snow where you are. It is rounded to about 5 km before it leaves your phone. If notifications are on, that rounded location is kept, and updated when you open the app, so we can tell you when snow is likely where you are."
   public static let upgradeTitle = "Remove ads and add widgets"
 
   public static func upgradeSettings(price: String) -> String {
@@ -141,21 +140,17 @@ public enum AppCopy {
   public static let morningNote = "When snow is likely today."
   public static let possible = "Also when snow is possible"
   public static let possibleNote = "When some forecasts expect snow, but not most."
-  public static let notifyPlace = "Place"
-
-  public static func notifyPlaceOnScreen(place: String) -> String {
-    "Use the place on screen: \(place)"
-  }
-
+  public static let notifyHere = "Where you are"
+  public static let notifyHereApprox = "Approximate, from your internet connection"
+  public static let notifyHereUnknown = "Not found yet"
+  public static let notifyHereKept =
+    "Uses your location if you share it, otherwise a rough place from your internet connection, which we keep while notifications are on."
+  public static let notifyPlaceTitle = "Where you are"
+  public static let notifyHereAbout =
+    "Notifications for where you are use your location if you share it with the app, otherwise a rough place from your internet connection. It's updated when you open the app, at most once an hour, and kept only while notifications are on."
   public static let notifyPlaceMyLocation = "Use my location"
-  public static let notifyFollows = "Follows your location each time you open the app."
-  public static let needsPlace =
-    "Choose a place for notifications: use your location or search for a town."
-  public static let notifyPlaceTitle = "Notification place"
   public static let notifyLocationDenied = "Location access is off for this app in Settings."
-  public static let notifyLocationUnavailable =
-    "Couldn't find your location. Try again, or use the place on screen."
-  public static let notifyLocationTryAgain = "Couldn't find your location. Try again."
+  public static let notifyLocationUnavailable = "Couldn't find your location. Try again."
   public static let sendTest = "Send a test notification"
   public static let testSent = "Sent. It should arrive in a few seconds."
   public static let testLimited = "You can send 3 test notifications an hour. Try again later."
@@ -170,7 +165,12 @@ public enum AppCopy {
   public static let notifyDenied = "Notifications are off for this app in Settings."
   public static let openSettings = "Open Settings"
   public static let cardOn =
-    "Done. You'll get a notification the evening before snow is likely here. You can change this in Settings."
+    "Done. You'll get a notification the evening before snow is likely where you are. You can change this in Settings."
+
+  public static func cardOnNamed(place: String) -> String {
+    "Done. You'll get a notification the evening before snow is likely near \(place). You can change this in Settings."
+  }
+
   public static let settingsPrivacy = "Privacy"
   public static let settingsAbout = "About"
   public static let settingsHelp = "Help"
@@ -180,7 +180,7 @@ public enum AppCopy {
   public static let privacyForecast =
     "To get the forecast, the app sends the place (a town, or your location rounded to about 5 km) and your units to our server. Until you choose a place, our server estimates a rough one from your internet connection. Place names you search for go to Open-Meteo, our forecast provider, to find matching places. The app keeps your place, units, recent and saved places, your notification choices and the last forecast on your iPhone."
   public static let privacyNotifications =
-    "Only while notifications are on, we keep your device's notification token, an ID made from it, the place, its time zone, your units and which notifications you chose, with a few details such as the app's version and when it last checked in. We delete them when you turn notifications off in the app, when Apple tells us the app is no longer installed, or about 90 days after you last open it. If you turn notifications off in your iPhone's Settings instead, we delete them the next time you open the app. For a few days after each notification and each test, and after some forecast checks that found nothing to send, we also keep a note of it, even once the rest is deleted. It holds no token or place."
+    "Only while notifications are on, we keep your device's notification token, an ID made from it, the place you get notifications for and its time zone, your units and which notifications you chose, with a few details such as the app's version and when it last checked in. The place is where you are (your location rounded to about 5 km or, if you haven't shared it, a rough place our server estimates from your internet connection, updated when you open the app, at most once an hour). We delete them when you turn notifications off in the app, when Apple tells us the app is no longer installed, or about 90 days after you last open it. If you turn notifications off in your iPhone's Settings instead, we delete them the next time you open the app. For a few days after each notification and each test, and after some forecast checks that found nothing to send, we also keep a note of it, even once the rest is deleted. It holds no token or place."
   public static let privacyAds =
     "In the free version, Google shows the ads and may collect device and usage data. The app keeps when it last showed a full-screen ad, so it shows one at most every 5 minutes."
   public static let seePrivacyChoices = "See Privacy choices."
@@ -191,6 +191,10 @@ public enum AppCopy {
 
   public static func keptID(id: String) -> String {
     "ID \(id)"
+  }
+
+  public static func keptHere(place: String, zone: String) -> String {
+    "Where you are: \(place), \(zone)"
   }
 
   public static func keptPlace(place: String, zone: String) -> String {

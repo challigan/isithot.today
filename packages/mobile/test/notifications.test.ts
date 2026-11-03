@@ -1,6 +1,17 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { syncReply, testOutcome, type SyncReply, type TestOutcome } from '@isithot/client';
+import {
+  hereKind,
+  hereName,
+  herePlace,
+  replyZones,
+  syncReply,
+  testOutcome,
+  type DeviceReply,
+  type RegistrationBody,
+  type SyncReply,
+  type TestOutcome,
+} from '@isithot/client';
 import { DEVICE_FIXTURES, type DeviceFixture } from '../src/deviceFixtures';
 import { DEVICE_FIXTURES_DIR } from '../src/generate';
 
@@ -21,7 +32,7 @@ describe('what the app reads for its notifications', () => {
     }
   });
 
-  it("types no device token into DebugHooks.swift: the stand-in's is put-leeds's", () => {
+  it("types no device token into DebugHooks.swift: the stand-in's is put-here-ip's", () => {
     const hooks = read('apps/ios/Apps/Snow/App/DebugHooks.swift');
     expect(hooks).not.toMatch(/[0-9a-f]{64}/i);
   });
@@ -39,22 +50,30 @@ describe('what the app reads for its notifications', () => {
       kind: 'stored',
       reply: JSON.parse(onDisk(name).text),
     });
+    const failed: SyncReply = { kind: 'failed' };
+    const sent: TestOutcome = { kind: 'sent', count: 1 };
     const outcomes: Record<string, SyncReply | TestOutcome> = {
-      'put-leeds': stored('put-leeds'),
-      'put-durham': stored('put-durham'),
-      'put-device': stored('put-device'),
-      'put-kathmandu': stored('put-kathmandu'),
-      'put-bad-place': { kind: 'placeRefused', message: 'There is no page for that place.' },
+      // 8.1's answer to its version 1 body, which 8.4's app never sends, and couldn't read.
+      'put-leeds': failed,
       'put-twice': { kind: 'retry', afterSeconds: 50 },
       delete: { kind: 'forgotten' },
-      'test-sent': 'sent',
-      'test-dryrun': 'dryRun',
-      'test-limited': 'limited',
-      'test-quiet': 'quiet',
-      'test-gone': 'notRegistered',
-      'test-unregistered': 'notRegistered',
-      'test-down': 'failed',
+      'test-sent': sent,
+      'test-dryrun': { kind: 'dryRun' },
+      'test-limited': { kind: 'limited' },
+      'test-quiet': { kind: 'quiet' },
+      'test-gone': { kind: 'notRegistered' },
+      'test-unregistered': { kind: 'notRegistered' },
+      'test-down': failed,
       'rate-limited': { kind: 'retry', afterSeconds: 60 },
+      // 8.4's sets.
+      'put-here-ip': stored('put-here-ip'),
+      'put-here-device': stored('put-here-device'),
+      'put-here-refresh': stored('put-here-refresh'),
+      'put-unlocated': {
+        kind: 'placeRefused',
+        message:
+          "We couldn't tell where you are from your internet connection. Try again later, or use your location.",
+      },
     };
     expect(Object.keys(outcomes)).toEqual(DEVICE_FIXTURES.map((s) => s.name));
     for (const [name, outcome] of Object.entries(outcomes)) {
@@ -66,10 +85,48 @@ describe('what the app reads for its notifications', () => {
     }
     // Netlify's limiter answers a test the same way: a failure, with no words of its own.
     const limited = onDisk('rate-limited');
-    expect(testOutcome(limited.status, limited.text)).toBe('failed');
+    expect(testOutcome(limited.status, limited.text)).toEqual(failed);
     // What the app keeps is the server's reply, whole.
-    expect((outcomes['put-leeds'] as { reply: unknown }).reply).toEqual(
-      JSON.parse(onDisk('put-leeds').text),
+    expect((outcomes['put-here-ip'] as { reply: unknown }).reply).toEqual(
+      JSON.parse(onDisk('put-here-ip').text),
     );
+  });
+
+  it("gives Settings' row, the card and the router what each set says of where you are", () => {
+    const approximate = herePlace({ access: 'denied', fix: null, kept: null });
+    /** The set as the app keeps it, and where you are as the app sent it. */
+    const read = (name: string) => {
+      const { _fixture, text } = onDisk(name);
+      const sent = (_fixture.body as RegistrationBody).here;
+      const here =
+        sent.source === 'ip'
+          ? approximate
+          : herePlace({
+              access: 'granted',
+              fix: { kind: 'coords', source: 'device', lat: sent.lat, lon: sent.lon },
+              kept: null,
+            });
+      return { here, reply: JSON.parse(text) as DeviceReply };
+    };
+    const rows = Object.fromEntries(
+      ['put-here-ip', 'put-here-device', 'put-here-refresh'].map((name) => {
+        const { here, reply } = read(name);
+        return [
+          name,
+          [hereKind({ here, reply, refused: false }), hereName({ here, reply }), replyZones(reply)],
+        ];
+      }),
+    );
+    expect(rows).toEqual({
+      'put-here-ip': ['ip', 'Leeds', { 'device:53.8,-1.55': 'Europe/London' }],
+      'put-here-device': ['device', 'Leeds', { 'device:53.8,-1.55': 'Europe/London' }],
+      'put-here-refresh': ['ip', 'Newcastle', { 'device:55,-1.6': 'Europe/London' }],
+    });
+    // Refused, Settings says "Not found yet" and the card names no town.
+    expect(hereKind({ here: approximate, reply: null, refused: true })).toBe('unknown');
+    expect(hereName({ here: approximate, reply: null })).toBeNull();
+    // A reply about the phone's location names no town once the app sends approximate.
+    const { reply } = read('put-here-device');
+    expect(hereName({ here: approximate, reply })).toBeNull();
   });
 });

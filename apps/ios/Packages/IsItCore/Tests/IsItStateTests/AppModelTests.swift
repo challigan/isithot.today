@@ -434,6 +434,58 @@ struct AppModelStepTests {
     #expect(h.hooks.calls.last == "syncAlerts city:dundee-gb c")
   }
 
+  @Test("a place under Nearby: tells the notifications, as a place the picker chooses does, once")
+  func aNearbyPlaceTellsTheNotifications() async throws {
+    // Approximate location on screen (where you are, the card's screen), then a city under
+    // "Nearby:": the notifications hear of it, so the card goes from the city's page.
+    let h = Harness(
+      now: try fixtureNow("ip-first-launch"),
+      store: .init(units: .c),
+      replies: [try FakeTransport.fixture("ip-first-launch"), .answer(try dundee())]
+    )
+    await h.model.launch()
+    let before = h.hooks.calls.count
+    await h.model.select(dundeeTarget)
+    #expect(h.model.target == dundeeTarget)
+    #expect(Array(h.hooks.calls.dropFirst(before)) == ["syncAlerts city:dundee-gb c"])
+    // The place on screen again only asks again: the notifications already have it.
+    let again = h.hooks.calls.count
+    await h.model.select(dundeeTarget)
+    #expect(h.hooks.calls.count == again)
+  }
+
+  @Test("a city gone after the launch: approximate location, told to the notifications")
+  func aGonePlaceTellsTheNotifications() async throws {
+    let h = Harness(
+      now: try fixtureNow("ip-first-launch"),
+      store: .init(units: .c),
+      replies: [
+        try FakeTransport.fixture("ip-first-launch"),
+        try FakeTransport.error(404, code: "not_found"),
+        try FakeTransport.fixture("ip-first-launch"),
+        .answer(try dundee()),
+        try FakeTransport.error(404, code: "not_found"),
+        try FakeTransport.fixture("ip-first-launch"),
+      ]
+    )
+    await h.model.launch()
+    // Under "Nearby:", a city no longer there: approximate location, once.
+    var before = h.hooks.calls.count
+    await h.model.select(.city(slug: "atlantis-xx", name: "Atlantis"))
+    #expect(h.model.target == .ip)
+    #expect(h.model.notice == AppCopy.slugGone)
+    #expect(
+      Array(h.hooks.calls.dropFirst(before)) == [
+        "syncAlerts city:atlantis-xx c", "syncAlerts ip c",
+      ])
+    // A city on screen that a later refresh finds gone (data/cities.json changed meanwhile).
+    await h.model.select(dundeeTarget)
+    before = h.hooks.calls.count
+    await h.model.refresh()
+    #expect(h.model.target == .ip)
+    #expect(Array(h.hooks.calls.dropFirst(before)) == ["syncAlerts ip c"])
+  }
+
   @Test("a route opened during the launch waits for its end; one opened after, at once")
   func routes() async throws {
     let h = Harness(

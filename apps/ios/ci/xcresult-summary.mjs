@@ -9,6 +9,7 @@
  *   node xcresult-summary.mjs timings <attachments folder>
  *   node xcresult-summary.mjs cancels <attachments folder>
  *   node xcresult-summary.mjs attachment <attachments folder> <name>
+ *   node xcresult-summary.mjs ran <plan> <tests.json> <name>...
  *
  * The JSON is `xcrun xcresulttool get build-results`, `get test-results summary` and
  * `get test-results tests` (Xcode 16 and later). A field that isn't there is left out, never
@@ -20,7 +21,10 @@
  * gesture after which the app's count of touches the system cancelled rose), so a tap played
  * again shows in a passing run too. `attachment`
  * prints the path of the file an attachment was exported to, found by the name the test gave it
- * (`app-upgrade`, the review screenshot), as the export names each file by a UUID.
+ * (`app-upgrade`, the review screenshot), as the export names each file by a UUID. `ran` checks
+ * that each test an iteration run named (ci/test.sh's ONLY_TESTING) ran in the plan: it prints
+ * nothing when each did, and otherwise says which didn't and exits 1, as xcodebuild runs a
+ * misspelt class or method as nothing and passes.
  */
 import { readFileSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
@@ -135,6 +139,50 @@ export function testSummary(plan, summary, tests) {
     out.push(...rows(found, (f) => `| ${cell(f.test)} | ${cell(f.where)} | ${cell(f.message)} |`));
   }
   return `${out.join('\n')}\n`;
+}
+
+/**
+ * The names an iteration run gave (Target/Class or Target/Class/method, as ci/test.sh's
+ * ONLY_TESTING has them) that ran no test in the test tree: each test case is named by its
+ * bundle, its suite and itself without the "()" (WillItSnowUITests/NotificationsTests/
+ * testWhereYouAre), and a name matches a test it is, or a class's tests.
+ */
+export function notRun(tests, names) {
+  const ran = [];
+  const walk = (node, path) => {
+    if (!node || typeof node !== 'object') return;
+    if (node.nodeType === 'Test Case') {
+      ran.push([...path, String(node.name ?? '').replace(/\(\)$/, '')].join('/'));
+      return;
+    }
+    let inner = path;
+    if (/test bundle$/i.test(node.nodeType ?? '')) inner = [node.name ?? ''];
+    else if (node.nodeType === 'Test Suite') inner = [...path, node.name ?? ''];
+    for (const child of node.children ?? []) walk(child, inner);
+  };
+  for (const node of tests?.testNodes ?? []) walk(node, []);
+  return names.filter((name) => !ran.some((test) => test === name || test.startsWith(`${name}/`)));
+}
+
+/**
+ * What `ran` says of a plan's run of the named tests: nothing when each ran, else which didn't;
+ * and whether the step should pass.
+ */
+export function ranSummary(plan, tests, names) {
+  if (!tests) {
+    return {
+      ok: false,
+      text: `### ${plan}: no test tree, so the tests named (\`only\`) couldn’t be checked (see the log)\n`,
+    };
+  }
+  const missing = notRun(tests, names);
+  if (!missing.length) return { ok: true, text: '' };
+  return {
+    ok: false,
+    text:
+      `### ${plan}: no test ran for ${missing.join(', ')}, though named (\`only\`): a misspelt ` +
+      'class or method, which xcodebuild runs as nothing\n',
+  };
 }
 
 /** At most this many of the slowest audit calls are listed, with every call that timed out. */
@@ -328,6 +376,11 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     process.stdout.write(timingSummary(readAuditTimes(args[0])));
   } else if (kind === 'cancels' && args.length === 1) {
     process.stdout.write(cancelSummary(readCancels(args[0])));
+  } else if (kind === 'ran' && args.length >= 3) {
+    const { ok, text } = ranSummary(args[0], readJson(args[1]), args.slice(2));
+    process.stdout.write(text);
+    // Not process.exit: on macOS a pipe's writes are asynchronous, and exiting could lose them.
+    if (!ok) process.exitCode = 1;
   } else if (kind === 'attachment' && args.length === 2) {
     const file = attachmentFile(args[0], args[1]);
     if (!file) {
@@ -338,7 +391,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   } else {
     console.error(
       'usage: xcresult-summary.mjs build <json> | tests <plan> <summary> <tests> | ' +
-        'timings <attachments> | cancels <attachments> | attachment <attachments> <name>',
+        'timings <attachments> | cancels <attachments> | attachment <attachments> <name> | ' +
+        'ran <plan> <tests> <name>...',
     );
     process.exit(2);
   }

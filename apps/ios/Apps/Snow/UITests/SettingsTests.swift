@@ -220,15 +220,18 @@ final class SettingsTests: XCTestCase {
         + "our forecast provider, to find matching places. The app keeps your place, units, "
         + "recent and saved places, your notification choices and the last forecast on your "
         + "iPhone.",
-      "Only while notifications are on, we keep your device's notification token, an ID made "
-        + "from it, the place, its time zone, your units and which notifications you chose, "
-        + "with a few details such as the app's version and when it last checked in. We delete "
-        + "them when you turn notifications off in the app, when Apple tells us the app is no "
-        + "longer installed, or about 90 days after you last open it. If you turn notifications "
-        + "off in your iPhone's Settings instead, we delete them the next time you open the app. "
-        + "For a few days after each notification and each test, and after some forecast checks "
-        + "that found nothing to send, we also keep a note of it, even once the rest is deleted. "
-        + "It holds no token or place.",
+      "Only while notifications are on, we keep your device's notification token, an ID made from "
+        + "it, the place you get notifications for and its time zone, your units and which "
+        + "notifications you chose, with a few details such as the app's version and when it last "
+        + "checked in. The place is where you are (your location rounded to about 5 km or, if you "
+        + "haven't shared it, a rough place our server estimates from your internet connection, "
+        + "updated when you open the app, at most once an hour). We delete them when you turn "
+        + "notifications off in the app, when Apple tells us the app is no longer installed, or "
+        + "about 90 days after you last open it. If you turn notifications off in your iPhone's "
+        + "Settings instead, we delete them the next time you open the app. For a few days after "
+        + "each notification and each test, and after some forecast checks that found nothing to "
+        + "send, we also keep a note of it, even once the rest is deleted. It holds no token or "
+        + "place.",
       "In the free version, Google shows the ads and may collect device and usage data. The app "
         + "keeps when it last showed a full-screen ad, so it shows one at most every 5 minutes.",
       "Apple handles purchases. We never see your payment details. The app keeps a note on your "

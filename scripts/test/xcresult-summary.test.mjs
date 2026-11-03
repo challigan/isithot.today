@@ -13,6 +13,7 @@ import {
   cancelSummary,
   cell,
   failures,
+  notRun,
   readCancels,
   readAuditTimes,
   readJson,
@@ -223,6 +224,76 @@ describe('testSummary', () => {
       '### UI: unknown, ? tests: ? passed, ? failed, ? skipped\n',
     );
     expect(testSummary('UI', null, null)).toBe('### UI: no test results (see the log)\n');
+  });
+});
+
+// The UI plan's tree as `get test-results tests` writes it, for an iteration run's names
+// (ci/test.sh's ONLY_TESTING).
+const UI_TESTS = {
+  testNodes: [
+    {
+      name: 'UI',
+      nodeType: 'Test Plan',
+      result: 'Failed',
+      children: [
+        {
+          name: 'WillItSnowUITests',
+          nodeType: 'UI test bundle',
+          children: [
+            {
+              name: 'NotificationsTests',
+              nodeType: 'Test Suite',
+              children: [
+                {
+                  name: 'testWhereYouAre()',
+                  nodeIdentifier: 'NotificationsTests/testWhereYouAre()',
+                  nodeType: 'Test Case',
+                  result: 'Passed',
+                },
+                {
+                  name: 'testEveryTestResult()',
+                  nodeIdentifier: 'NotificationsTests/testEveryTestResult()',
+                  nodeType: 'Test Case',
+                  result: 'Failed',
+                  children: [
+                    { name: 'NotificationsTests.swift:9: no', nodeType: 'Failure Message' },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+describe('notRun', () => {
+  it('finds a test for each name, a class or a method, in its own target', () => {
+    expect(
+      notRun(UI_TESTS, [
+        'WillItSnowUITests/NotificationsTests',
+        'WillItSnowUITests/NotificationsTests/testWhereYouAre',
+        'WillItSnowUITests/NotificationsTests/testEveryTestResult',
+      ]),
+    ).toEqual([]);
+    expect(notRun(TESTS, ['WillItSnowTests/AppGroupTests/testTheAppGroupOpens'])).toEqual([]);
+  });
+
+  it('names each that ran nothing: a misspelt class or method, or another target’s class', () => {
+    const misspelt = [
+      'WillItSnowUITests/NotificationsTest/testWhereYouAre',
+      'WillItSnowUITests/NotificationsTest',
+      'WillItSnowUITests/NotificationsTests/testWhereYouAreNow',
+      'WillItSnowUITests/NotificationsTests/testWhere',
+      'WillItSnowTests/NotificationsTests',
+    ];
+    expect(notRun(UI_TESTS, ['WillItSnowUITests/NotificationsTests', ...misspelt])).toEqual(
+      misspelt,
+    );
+    expect(notRun({ testNodes: [] }, ['WillItSnowUITests/NotificationsTests'])).toEqual([
+      'WillItSnowUITests/NotificationsTests',
+    ]);
   });
 });
 
@@ -577,6 +648,40 @@ describe('the command', () => {
       status = error.status;
     }
     expect(status).toBe(1);
+  });
+
+  it('fails a plan where a test named ran nothing, and says which', () => {
+    const tree = write('ui.json', JSON.stringify(UI_TESTS));
+    expect(run(['ran', 'UI', tree, 'WillItSnowUITests/NotificationsTests/testWhereYouAre'])).toBe(
+      '',
+    );
+    let failed = { status: 0, stdout: '' };
+    try {
+      run([
+        'ran',
+        'UI',
+        tree,
+        'WillItSnowUITests/NotificationsTests/testWhereYouAre',
+        'WillItSnowUITests/NotificationsTest/testWhereYouAre',
+      ]);
+    } catch (error) {
+      failed = error;
+    }
+    expect(failed.status).toBe(1);
+    expect(failed.stdout).toBe(
+      '### UI: no test ran for WillItSnowUITests/NotificationsTest/testWhereYouAre, though ' +
+        'named (`only`): a misspelt class or method, which xcodebuild runs as nothing\n',
+    );
+    let missing = { status: 0, stdout: '' };
+    try {
+      run(['ran', 'UI', join(dir, 'missing.json'), 'WillItSnowUITests/NotificationsTests']);
+    } catch (error) {
+      missing = error;
+    }
+    expect(missing.status).toBe(1);
+    expect(missing.stdout).toBe(
+      '### UI: no test tree, so the tests named (`only`) couldn’t be checked (see the log)\n',
+    );
   });
 
   it('explains its arguments', () => {
