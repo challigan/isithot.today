@@ -296,11 +296,8 @@ extension SettingsScreen.Icon {
     case .possible: "cloud.snow"
     case .notificationPlace: "mappin.and.ellipse"
     case .test: "bell.badge"
-    case .useMyLocation: "location"
-    case .search: "magnifyingglass"
     case .openSettings: "gear"
     case .warnings: "arrow.up.right.square"
-    case .onScreenPlace: "mappin"
     case .myLocation: "location.circle"
     }
   }
@@ -328,10 +325,11 @@ struct RowIcon: View {
 
 /// A row's words, as a card's row draws them: its icon (none at accessibility sizes), its title
 /// in `row` (17.6 Medium), wrapping, an optional detail beneath it in `note` and `soft`, an
-/// optional value in `row` and `soft` (the notification place's), then its end's chevron or arrow
+/// optional value in `row` and `soft` (where you are's town), then its end's chevron or arrow
 /// in `affordance`, hidden from VoiceOver. The value is trailing, after the title's column and
-/// wrapping, or at accessibility sizes under the title, so neither squeezes the other. Laid out
-/// by its button's style (`SheetRowStyle`).
+/// wrapping, or at accessibility sizes under the title, so neither squeezes the other; it is
+/// hidden from VoiceOver too, as each row that shows one gives it as its accessibility value,
+/// which VoiceOver would otherwise read twice. Laid out by its button's style (`SheetRowStyle`).
 struct RowLabel: View {
   let title: String
   let detail: String?
@@ -390,12 +388,14 @@ struct RowLabel: View {
     .foregroundStyle(tokens.ink)
   }
 
-  /// The value's words: `row`, in `soft`, wrapping whole.
+  /// The value's words: `row`, in `soft`, wrapping whole; the row's accessibility value says
+  /// them.
   private func valueText(_ value: String) -> some View {
     Text(verbatim: value)
       .brandFont(.row)
       .foregroundStyle(tokens.soft)
       .fixedSize(horizontal: false, vertical: true)
+      .accessibilityHidden(true)
   }
 }
 

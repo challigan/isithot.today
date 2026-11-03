@@ -64,8 +64,9 @@ public enum DeepLink {
   /// opens on the place's view for the time of day (`view` nil). `placeNow` gives the place's
   /// date and time now, as `PlaceTime.local(_:in:)` gives it in the place's zone (client
   /// `placeToday`, of which only the date is read), or nil when the app can't tell (it has no
-  /// answer there yet), and the notification is then taken as current. A payload that is
-  /// malformed, or for another topic or no chosen place, is nil: the app opens as usual.
+  /// answer there yet), and the notification is then taken as current. Where you are comes as
+  /// its cell, from the phone or from the connection alike. A payload that is malformed, for
+  /// another topic, or for approximate IP location (no place), is nil: the app opens as usual.
   ///
   /// `payload` is the notification's `userInfo`, or any JSON object as `JSONSerialization` reads
   /// it: `topic`, `kind`, `date`, `view`, `place` (the place's today query) and `name`.
@@ -76,7 +77,8 @@ public enum DeepLink {
       let day = (fields["date"] as? String).flatMap(calendarDay),
       let place = fields["place"] as? String,
       let found = Target(query: place),
-      AlertSync.placeAllowed(found)
+      // The server writes a place or a point into a payload, never approximate IP location.
+      found != .ip
     else { return nil }
     var target = found
     // A city's query has no name, but the notification has.

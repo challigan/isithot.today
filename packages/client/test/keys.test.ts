@@ -13,8 +13,8 @@ describe('keys', () => {
     expect(APP_KEYS).toEqual({
       recent: 'recent.v1',
       savedPlaces: 'savedPlaces.v1',
-      alerts: 'alerts.v1',
-      alertSync: 'alertSync.v1',
+      alerts: 'alerts.v2',
+      alertSync: 'alertSync.v2',
       lastView: 'ui.lastView',
       card: 'ui.alertCard',
       lastInterstitial: 'ads.lastInterstitial',
@@ -22,6 +22,15 @@ describe('keys', () => {
     expect(STORE_VERSION).toBe(1);
     const all = [...Object.values(APP_GROUP_KEYS), ...Object.values(APP_KEYS)];
     expect(new Set(all).size).toBe(all.length);
+  });
+
+  it("move the notifications' to new names, so 8.1's are ignored, not read as 8.4's", () => {
+    // 8.1 kept a place chosen on screen; 8.4 keeps the phone's last cell and the bells, and the
+    // server's set. Nothing is migrated: an 8.1 install starts with notifications off.
+    expect([APP_KEYS.alerts, APP_KEYS.alertSync]).toEqual(['alerts.v2', 'alertSync.v2']);
+    const all: string[] = [...Object.values(APP_GROUP_KEYS), ...Object.values(APP_KEYS)];
+    expect(all).not.toContain('alerts.v1');
+    expect(all).not.toContain('alertSync.v1');
   });
 });
 

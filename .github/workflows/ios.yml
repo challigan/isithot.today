@@ -9,7 +9,7 @@ name: iOS
 # beside that, an unsigned Release archive for iPhones gets the release job's archive checks
 # (scripts/check-archive.sh), and the StoreKit test plan runs on an iOS 26.2 simulator, where
 # StoreKit Test works (the storekit job). No job needs a secret. Runs only when something the app
-# is built, generated or checked from changes (the same paths twice).
+# is built, generated or checked from changes (the same paths twice), and when started by hand.
 on:
   push:
     branches: [main]
@@ -52,6 +52,21 @@ on:
       - scripts/make-text-fonts.py
       - apps/web/src/fonts/bricolage-answer.woff2
       - .github/workflows/ios*.yml
+  # An iteration run (phase 8.4a): Actions → iOS → Run workflow, on a pull request's branch, with
+  # `only` naming the tests to run (ci/test.sh's ONLY_TESTING), so a macOS round on a few failing
+  # tests needn't wait for the whole UI plan. Each plan runs only the named tests of its own, a
+  # plan with none of them isn't run, and the banner step, which needs NotificationPermissionTests
+  # to have allowed notifications, is left out. With `only` empty it is a whole run. Pull-request
+  # and merge runs always run every plan whole.
+  workflow_dispatch:
+    inputs:
+      only:
+        description: >-
+          Only these tests, as Target/Class or Target/Class/method, separated by commas
+          (WillItSnowUITests/NotificationsTests/testWhereYouAre). Empty runs every plan whole.
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -107,7 +122,12 @@ jobs:
     # put at about 56 minutes in all. PR #43's first run with them took 85 (run 41350233287: the
     # simulator's boot 4.5, the UI plan 70.7), 5 short of the 90 this was, so a slower runner
     # would have been cut off before its results. 120 leaves more than half an hour; a public
-    # repository's macOS minutes cost nothing.
+    # repository's macOS minutes cost nothing. Phase 8.4a adds no UI test and takes two of the
+    # card's four audit cases away (the card that asked for a place at approximate location has
+    # gone; the one card is audited on leeds-dry's middle page at Large and AX3), so its UI plan
+    # should be a few minutes shorter; its pull request records the plan's minutes before and
+    # after (the timings step's), against a budget of 75 for the UI plan. An iteration run
+    # (`only`, above) takes the setup and the build, about 15 minutes, and its tests.
     timeout-minutes: 120
     # The attachments' artefact ID, set only when they were uploaded. The runner evaluates job
     # outputs after the last step whatever the result, so failed tests still set it.
@@ -189,19 +209,28 @@ jobs:
       - name: Build for testing
         id: build
         run: apps/ios/ci/test.sh build "${{ steps.simulator.outputs.udid }}"
+      # ONLY_TESTING, here and in the UI and StoreKit steps, is an iteration run's `only` and
+      # empty on every other run, so pull-request and merge runs run each plan whole.
       - name: Unit tests
         id: unit
+        env:
+          ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only || '' }}
         run: apps/ios/ci/test.sh Unit "${{ steps.simulator.outputs.udid }}"
       # Run even when the unit tests fail, so one round trip shows both.
       - name: UI tests
         id: ui
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only || '' }}
         run: apps/ios/ci/test.sh UI "${{ steps.simulator.outputs.udid }}"
       # On the UI plan's simulator, with the app it installed: NotificationPermissionTests allowed
       # notifications there at the real prompt, which simctl can't do. Before the upload below,
-      # which takes the attachments once, so the banners reach the contact sheet.
+      # which takes the attachments once, so the banners reach the contact sheet. Not on an
+      # iteration run that names tests (`only`), whose plan may not have allowed them.
       - name: Notification banner (simctl push)
-        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.ui.outcome != 'skipped' }}
+        if: >-
+          ${{ !cancelled() && steps.build.outcome == 'success' && steps.ui.outcome != 'skipped'
+          && !(github.event_name == 'workflow_dispatch' && inputs.only != '') }}
         run: apps/ios/ci/push.sh "${{ steps.simulator.outputs.udid }}"
       - name: Release build has no debug hooks
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -320,6 +349,8 @@ jobs:
       - name: Build for testing
         run: apps/ios/ci/test.sh build "${{ steps.simulator.outputs.udid }}"
       - name: StoreKit tests
+        env:
+          ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only || '' }}
         run: apps/ios/ci/test.sh StoreKit "${{ steps.simulator.outputs.udid }}"
       - name: Upload the result bundles
         if: ${{ !cancelled() && steps.simulator.outcome == 'success' }}

@@ -1,0 +1,37 @@
+{
+  "_fixture": {
+    "request": "PUT /api/v1/devices",
+    "body": {
+      "v": 2,
+      "app": "snow",
+      "platform": "ios",
+      "env": "sandbox",
+      "token": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "units": "c",
+      "appVersion": "1.0 (42)",
+      "alerts": {
+        "snow": {
+          "evening": true,
+          "morning": false,
+          "possible": false
+        }
+      },
+      "here": {
+        "source": "ip"
+      },
+      "saved": []
+    },
+    "geo": {
+      "city": "Newcastle upon Tyne",
+      "country": "GB",
+      "region": "England",
+      "lat": 54.9881,
+      "lon": -1.6194
+    },
+    "now": "2026-12-01T13:05:00.000Z",
+    "note": "put-here-ip’s set again 60 minutes later, as the app sends it on becoming active while where you are is approximate: the server locates the connection afresh, now in Newcastle upon Tyne as Netlify says, and where you are moves to that cell, which the server names Newcastle."
+  },
+  "status": 200,
+  "retryAfter": null,
+  "text": "{\"id\":\"b8465956ef925aabc7c87a9e561f462d\",\"deviceTz\":null,\"here\":{\"name\":\"Newcastle\",\"timezone\":\"Europe/London\",\"query\":\"lat=55&lon=-1.6&source=device\",\"country\":\"GB\",\"follows\":\"ip\"},\"saved\":[],\"refused\":[],\"alerts\":{\"snow\":{\"evening\":true,\"morning\":false,\"possible\":false}},\"seenAt\":\"2026-12-01T13:05:00.000Z\"}"
+}

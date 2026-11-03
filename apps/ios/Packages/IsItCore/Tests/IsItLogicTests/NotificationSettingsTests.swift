@@ -4,32 +4,36 @@ import IsItModel
 import IsItTestSupport
 import Testing
 
-/// Leeds, a city page, and Durham.
-private let leeds = Target.city(slug: "leeds-gb", name: "Leeds")
-private let durham = Target.city(slug: "durham-gb", name: "Durham")
+/// The phone's own cell in Leeds, as `AlertSync.here` gives it.
+private let leedsCell = HerePlace.device(Target.Coordinates(source: .device, lat: 53.8, lon: -1.55))
 
-/// The phone's own point in Leeds, on the forecast grid.
-private let leedsCell = Target.device(lat: 53.8, lon: -1.55)
-
-/// The places on screen the tests show: Leeds's page, the phone's point in Leeds, approximate IP
-/// location (named by its answer), Durham's page and Reykjavík's.
-private let onLeeds = OnScreen(target: leeds, name: "Leeds", country: "GB", units: .c)
-private let onCell = OnScreen(target: leedsCell, name: "Leeds", country: "GB", units: .c)
-private let onIP = OnScreen(target: .ip, name: "Leeds", country: "GB", units: .c)
-private let onDurham = OnScreen(target: durham, name: "Durham", country: "GB", units: .c)
-private let onReykjavik = OnScreen(
-  target: .city(slug: "reykjavik-is", name: "Reykjavík"), name: "Reykjavík", country: "IS",
-  units: .c)
-
-/// Notifications with `prefs` on and `place` kept, in `permission`, with `registration`.
+/// Notifications with `prefs` on, where you are `here` (refused when `refused`), in
+/// `permission` and location `access`, with `registration`.
 private func state(
-  _ prefs: AlertPrefs = AlertPrefs(), place: AlertPlace? = nil,
-  permission: AlertSync.Permission = .authorized, registration: AlertRegistration? = nil
+  _ prefs: AlertPrefs = AlertPrefs(), here: HerePlace = .ip, refused: Bool = false,
+  permission: AlertSync.Permission = .authorized,
+  access: AlertSync.LocationAccess = .notDetermined, registration: AlertRegistration? = nil
 ) -> NotificationsState {
   NotificationsState(
-    settings: AlertSettings(prefs: prefs, place: place), permission: permission,
+    settings: AlertSettings(prefs: prefs, here: here.cell), permission: permission,
+    locationAccess: access, here: HereState(place: here, refused: refused),
     registration: registration)
 }
+
+/// `record` with its answer's `here` replaced: none, or one of another name or country.
+private func answer(_ record: AlertRegistration, here: DeviceResponse.Here?)
+  -> AlertRegistration
+{
+  var changed = record
+  let response = record.response
+  changed.response = DeviceResponse(
+    id: response.id, deviceTz: response.deviceTz, here: here, saved: response.saved,
+    refused: response.refused, alerts: response.alerts, seenAt: response.seenAt)
+  return changed
+}
+
+/// The evening on.
+private let evening = AlertPrefs(evening: true)
 
 extension NotificationSettings {
   /// The switches, in order.
@@ -42,9 +46,14 @@ extension NotificationSettings {
     items.compactMap { if case .row(let row) = $0 { row } else { nil } }
   }
 
-  /// The place row.
-  var placeRow: PlaceRow? {
-    items.lazy.compactMap { if case .place(let row) = $0 { row } else { nil } }.first
+  /// The "Where you are" row.
+  var hereRow: HereRow? {
+    items.lazy.compactMap { if case .here(let row) = $0 { row } else { nil } }.first
+  }
+
+  /// The lines among the items.
+  var lines: [Line] {
+    items.compactMap { if case .line(let line) = $0 { line } else { nil } }
   }
 
   /// Each item's identifier, in order.
@@ -52,7 +61,8 @@ extension NotificationSettings {
     items.map {
       switch $0 {
       case .toggle(let row): row.id
-      case .place(let row): row.id
+      case .line(let line): line.id
+      case .here(let row): row.id
       case .row(let row): row.id
       }
     }
@@ -64,7 +74,8 @@ extension NotificationSettings {
     for item in items {
       switch item {
       case .toggle(let row): all += [row.title, row.note]
-      case .place(let row): all += [row.title, row.value, row.note].compactMap { $0 }
+      case .line(let line): all.append(line.text)
+      case .here(let row): all += [row.title, row.value, row.note].compactMap { $0 }
       case .row(let row): all += [row.title, row.detail].compactMap { $0 }
       }
     }
@@ -75,54 +86,47 @@ extension NotificationSettings {
 extension NotificationPlacePage {
   /// Every string the page shows.
   var words: [String] {
-    [title] + choices.flatMap { [$0.title, $0.note].compactMap { $0 } }
-      + [problem?.text, openSettings?.title].compactMap { $0 }
+    [title, about.text, place.title, place.note] + [place.value].compactMap { $0 }
+      + [useMyLocation?.title, problem?.text, openSettings?.title].compactMap { $0 }
+  }
+
+  /// Every identifier on the page, in order.
+  var ids: [String] {
+    [about.id, place.id] + [useMyLocation?.id, problem?.id, openSettings?.id].compactMap { $0 }
   }
 }
 
-/// Settings → Notifications and the place page (section 12.1), as plain values.
+/// Settings → Notifications and the "Where you are" page (design 2.1, 2.4), as plain values.
 @Suite("Settings → Notifications, as plain values")
 struct NotificationSettingsTests {
-  @Test("at approximate location with nothing kept: the line, Use my location and Search only")
-  func theGateAtApproximateLocation() {
-    let section = NotificationSettings(state(), onScreen: onIP)
+  @Test("approximate location needs no place first: the switches, the kept line and the row")
+  func noGate() throws {
+    let section = NotificationSettings(state())
     #expect(section.heading == "Notifications")
-    #expect(section.notice?.id == "notify-notice")
-    #expect(section.notice?.text == AppCopy.needsPlace)
-    #expect(
-      section.notice?.text
-        == "Choose a place for notifications: use your location or search for a town.")
-    #expect(
-      section.items == [
-        .row(
-          SettingsScreen.Row(
-            id: "notify-use-my-location", title: "Use my location",
-            action: .notification(.useMyLocation), icon: .useMyLocation)),
-        .row(
-          SettingsScreen.Row(
-            id: "notify-search", title: "Search", action: .notification(.search), icon: .search)),
-      ])
-    #expect(section.switches.isEmpty)
+    #expect(section.notice == nil)
+    #expect(section.ids == ["notify-evening", "notify-morning", "notify-here-kept", "notify-here"])
     #expect(section.status == nil)
     #expect(section.footer.id == "notify-footer")
     #expect(section.footer.text == AppCopy.notifyFooter)
     #expect(section.warnings == nil)
-    // Denied changes nothing here: there is no place to turn anything on for.
-    #expect(NotificationSettings(state(permission: .denied), onScreen: onIP) == section)
-  }
-
-  @Test("a place already kept needs no gate, at approximate location too")
-  func aKeptPlaceNeedsNoGate() {
-    let section = NotificationSettings(
-      state(place: .chosen(leeds, name: "Leeds")), onScreen: onIP)
-    #expect(section.notice == nil)
-    #expect(section.ids == ["notify-evening", "notify-morning", "notify-place"])
-    #expect(section.placeRow?.value == "Leeds")
+    let kept = try #require(section.lines.first)
+    #expect(kept.id == "notify-here-kept")
+    #expect(
+      kept.text
+        == "Uses your location if you share it, otherwise a rough place from your internet "
+        + "connection, which we keep while notifications are on.")
+    #expect(kept.text == AppCopy.notifyHereKept)
+    // The phone's cell, or location access never asked or refused, changes nothing here.
+    for access in AlertSync.LocationAccess.allCases {
+      for here in [HerePlace.ip, leedsCell] {
+        #expect(NotificationSettings(state(here: here, access: access)).ids == section.ids)
+      }
+    }
   }
 
   @Test("the switches: evening and morning, then possible only while one of them is on")
-  func theSwitchesAndTheirNotes() {
-    let off = NotificationSettings(state(), onScreen: onLeeds)
+  func theSwitchesAndTheirNotes() throws {
+    let off = NotificationSettings(state())
     #expect(off.switches.map(\.id) == ["notify-evening", "notify-morning"])
     #expect(off.switches.map(\.kind) == [.evening, .morning])
     #expect(off.switches.map(\.title) == ["Evening before (about 6pm)", "On the day (about 7am)"])
@@ -131,34 +135,32 @@ struct NotificationSettingsTests {
     #expect(off.switches.map(\.icon) == [.evening, .morning])
     #expect(off.switches.map(\.isOn) == [false, false])
     // "Possible" kept on alone (as no rule leaves it) still counts as off.
-    let alone = NotificationSettings(state(AlertPrefs(possible: true)), onScreen: onLeeds)
+    let alone = NotificationSettings(state(AlertPrefs(possible: true)))
     #expect(alone.switches.map(\.id) == ["notify-evening", "notify-morning"])
 
-    let evening = NotificationSettings(
-      state(AlertPrefs(evening: true), place: .chosen(leeds, name: "Leeds")), onScreen: onLeeds)
-    #expect(evening.switches.map(\.id) == ["notify-evening", "notify-morning", "notify-possible"])
-    #expect(evening.switches.map(\.isOn) == [true, false, false])
-    let possible = evening.switches[2]
+    let on = NotificationSettings(state(evening))
+    #expect(on.switches.map(\.id) == ["notify-evening", "notify-morning", "notify-possible"])
+    #expect(on.switches.map(\.isOn) == [true, false, false])
+    let possible = try #require(on.switches.dropFirst(2).first)
     #expect(possible.kind == .possible)
     #expect(possible.title == "Also when snow is possible")
     #expect(possible.note == "When some forecasts expect snow, but not most.")
     #expect(possible.icon == .possible)
-    let all = NotificationSettings(
-      state(AlertPrefs(evening: true, morning: true, possible: true)), onScreen: onLeeds)
+    let all = NotificationSettings(state(AlertPrefs(evening: true, morning: true, possible: true)))
     #expect(all.switches.map(\.isOn) == [true, true, true])
-    let morning = NotificationSettings(state(AlertPrefs(morning: true)), onScreen: onLeeds)
+    let morning = NotificationSettings(state(AlertPrefs(morning: true)))
     #expect(morning.switches.map(\.isOn) == [false, true, false])
-    // The place, then the test, follow the switches.
+    // Under the switches, the kept line, the row, then the test.
     #expect(
-      evening.ids == [
-        "notify-evening", "notify-morning", "notify-possible", "notify-place", "notify-test",
+      on.ids == [
+        "notify-evening", "notify-morning", "notify-possible", "notify-here-kept", "notify-here",
+        "notify-test",
       ])
   }
 
   @Test("refused in Settings: the line, Open Settings first, then the switches, all off")
   func deniedSaysSo() throws {
-    let section = NotificationSettings(
-      state(place: .chosen(leeds, name: "Leeds"), permission: .denied), onScreen: onLeeds)
+    let section = NotificationSettings(state(permission: .denied))
     #expect(section.notice?.id == "notify-notice")
     #expect(section.notice?.text == "Notifications are off for this app in Settings.")
     let first = try #require(section.rows.first)
@@ -168,65 +170,123 @@ struct NotificationSettingsTests {
           id: "notify-open-settings", title: "Open Settings",
           action: .notification(.openNotificationSettings), icon: .openSettings))
     #expect(
-      section.ids == ["notify-open-settings", "notify-evening", "notify-morning", "notify-place"])
+      section.ids == [
+        "notify-open-settings", "notify-evening", "notify-morning", "notify-here-kept",
+        "notify-here",
+      ])
     #expect(section.switches.allSatisfy { !$0.isOn })
     for permission in [AlertSync.Permission.authorized, .provisional, .notDetermined] {
-      let other = NotificationSettings(
-        state(place: .chosen(leeds, name: "Leeds"), permission: permission), onScreen: onLeeds)
+      let other = NotificationSettings(state(permission: permission))
       #expect(other.notice == nil, "\(permission)")
       #expect(!other.ids.contains("notify-open-settings"), "\(permission)")
     }
   }
 
-  @Test("the place row: the chosen place's name, the registration's, or Your location")
-  func thePlaceRow() throws {
-    let chosen = try #require(
-      NotificationSettings(state(place: .chosen(leeds, name: "Leeds")), onScreen: onDurham)
-        .placeRow)
-    #expect(chosen.id == "notify-place")
-    #expect(chosen.title == "Place")
-    #expect(chosen.value == "Leeds")
-    #expect(chosen.note == nil)
-    #expect(chosen.icon == .notificationPlace)
-    // Chosen before the screen had a name for it: the server's name, for that place only.
-    let leedsRecord = try registration("put-leeds")
-    let unnamed = AlertPlace.chosen(.city(slug: "leeds-gb"), name: "")
+  @Test("the row before an answer: where you are and how it is found, with no town")
+  func theRowBeforeAnAnswer() throws {
+    let approximate = try #require(NotificationSettings(state(evening)).hereRow)
+    #expect(approximate.id == "notify-here")
+    #expect(approximate.title == "Where you are")
+    #expect(approximate.title == AppCopy.notifyHere)
+    #expect(approximate.value == nil)
+    #expect(approximate.note == "Approximate, from your internet connection")
+    #expect(approximate.icon == .notificationPlace)
+    let phone = try #require(NotificationSettings(state(evening, here: leedsCell)).hereRow)
+    #expect(phone.value == nil)
+    #expect(phone.note == "Your location")
+    #expect(phone.note == CoreCopy.yourLocation)
+  }
+
+  @Test("the row after an answer: the server's town, for the kind of place it was about")
+  func theRowAfterAnAnswer() throws {
+    func row(_ here: HerePlace, _ name: String) throws -> NotificationSettings.HereRow {
+      try #require(
+        NotificationSettings(state(evening, here: here, registration: try registration(name)))
+          .hereRow)
+    }
+    #expect(try row(.ip, "put-here-ip").value == "Leeds")
+    #expect(try row(.ip, "put-here-ip").note == "Approximate, from your internet connection")
+    #expect(try row(leedsCell, "put-here-device").value == "Leeds")
+    #expect(try row(leedsCell, "put-here-device").note == "Your location")
+    // An hour later the connection is in Newcastle.
+    #expect(try row(.ip, "put-here-refresh").value == "Newcastle")
+    // An answer about the other kind names no town: access withdrawn since, or given since.
+    #expect(try row(.ip, "put-here-device").value == nil)
+    #expect(try row(.ip, "put-here-device").note == "Approximate, from your internet connection")
+    #expect(try row(leedsCell, "put-here-ip").value == nil)
+    #expect(try row(leedsCell, "put-here-ip").note == "Your location")
+  }
+
+  @Test("a point with no town near shows no value, never core's Your location as a town")
+  func anUnnamedPlace() throws {
+    let far = answer(
+      try registration("put-here-device"),
+      here: DeviceResponse.Here(
+        name: "Your location", timezone: "Etc/GMT+2", query: "lat=0&lon=-30&source=device",
+        country: nil, follows: .device))
+    let cell = HerePlace.device(Target.Coordinates(source: .device, lat: 0, lon: -30))
+    let row = try #require(
+      NotificationSettings(state(evening, here: cell, registration: far)).hereRow)
+    #expect(row.value == nil)
+    #expect(row.note == "Your location")
+  }
+
+  @Test("Not found yet only once the server found no place: here null, or its refusal")
+  func notFoundYet() throws {
+    let nowhere = answer(try registration("put-here-ip"), here: nil)
+    let unlocated = try #require(
+      NotificationSettings(state(evening, registration: nowhere)).hereRow)
+    #expect(unlocated.value == nil)
+    #expect(unlocated.note == "Not found yet")
+    #expect(unlocated.note == AppCopy.notifyHereUnknown)
+    let refused = try #require(NotificationSettings(state(evening, refused: true)).hereRow)
+    #expect(refused.value == nil)
+    #expect(refused.note == "Not found yet")
+    // The phone's cell is the phone's location whatever the server said before.
+    let phone = try #require(
+      NotificationSettings(state(evening, here: leedsCell, refused: true, registration: nowhere))
+        .hereRow)
+    #expect(phone.note == "Your location")
+    // Before any answer, with nothing refused, approximate.
+    #expect(NotificationSettings(state(evening)).hereRow?.note == AppCopy.notifyHereApprox)
+  }
+
+  @Test("with both switches off nothing is sent, so the row shows the kind alone, no town")
+  func offShowsTheKindAlone() throws {
+    let kept = try registration("put-here-ip")
+    let off = try #require(NotificationSettings(state(registration: kept)).hereRow)
+    #expect(off.value == nil)
+    #expect(off.note == "Approximate, from your internet connection")
+    let refusedOff = try #require(
+      NotificationSettings(state(refused: true, registration: answer(kept, here: nil))).hereRow)
+    #expect(refusedOff.value == nil)
+    #expect(refusedOff.note == "Approximate, from your internet connection")
+    let phoneOff = try #require(
+      NotificationSettings(
+        state(here: leedsCell, registration: try registration("put-here-device"))
+      )
+      .hereRow)
+    #expect(phoneOff.value == nil)
+    #expect(phoneOff.note == "Your location")
+    // "Possible" alone switches nothing on.
     #expect(
-      NotificationSettings(state(place: unnamed, registration: leedsRecord), onScreen: onDurham)
-        .placeRow?.value == "Leeds")
-    #expect(
-      NotificationSettings(state(place: unnamed), onScreen: onDurham).placeRow?.value == nil)
-    let durhamRecord = try registration("put-durham")
-    #expect(
-      NotificationSettings(state(place: unnamed, registration: durhamRecord), onScreen: onDurham)
-        .placeRow?.value == nil)
-    let follows = try #require(
-      NotificationSettings(state(place: .follows(leedsCell)), onScreen: onDurham).placeRow)
-    #expect(follows.value == "Your location")
-    #expect(follows.value == CoreCopy.yourLocation)
-    #expect(follows.note == "Follows your location each time you open the app.")
-    // Before any is kept: the place on screen, as the first switch would keep it.
-    #expect(NotificationSettings(state(), onScreen: onLeeds).placeRow?.value == "Leeds")
-    #expect(NotificationSettings(state(), onScreen: onCell).placeRow?.value == "Your location")
-    let nameless = OnScreen(target: .city(slug: "leeds-gb"), name: nil, country: nil, units: nil)
-    #expect(NotificationSettings(state(), onScreen: nameless).placeRow?.value == nil)
+      NotificationSettings(state(AlertPrefs(possible: true), registration: kept)).hereRow?.value
+        == nil)
   }
 
   @Test("the test row, while a notification is on: its outcome in words, busy while sending")
   func theTestRowWhileOn() throws {
-    let off = NotificationSettings(state(place: .chosen(leeds, name: "Leeds")), onScreen: onLeeds)
+    let off = NotificationSettings(state())
     #expect(!off.ids.contains("notify-test"))
-    let possibleAlone = NotificationSettings(
-      state(AlertPrefs(possible: true), place: .chosen(leeds, name: "Leeds")), onScreen: onLeeds)
+    let possibleAlone = NotificationSettings(state(AlertPrefs(possible: true)))
     #expect(!possibleAlone.ids.contains("notify-test"))
 
-    func row(_ test: NotificationsState.Test, _ prefs: AlertPrefs = AlertPrefs(evening: true))
-      throws -> SettingsScreen.Row
+    func row(_ test: NotificationsState.Test, _ prefs: AlertPrefs = evening) throws
+      -> SettingsScreen.Row
     {
-      var shown = state(prefs, place: .chosen(leeds, name: "Leeds"))
+      var shown = state(prefs)
       shown.test = test
-      let section = NotificationSettings(shown, onScreen: onLeeds)
-      return try #require(section.rows.first { $0.id == "notify-test" })
+      return try #require(NotificationSettings(shown).rows.first { $0.id == "notify-test" })
     }
     #expect(
       try row(.idle)
@@ -236,8 +296,8 @@ struct NotificationSettingsTests {
     #expect(try row(.idle, AlertPrefs(morning: true)).id == "notify-test")
     #expect(try row(.sending).busy)
     #expect(try row(.sending).detail == nil)
-    #expect(try !row(.done(.sent)).busy)
-    #expect(try row(.done(.sent)).detail == "Sent. It should arrive in a few seconds.")
+    #expect(try !row(.done(.sent(count: 1))).busy)
+    #expect(try row(.done(.sent(count: 1))).detail == "Sent. It should arrive in a few seconds.")
     #expect(
       try row(.done(.dryRun)).detail
         == "Our server isn't sending notifications yet, so nothing was sent.")
@@ -253,207 +313,212 @@ struct NotificationSettingsTests {
     }
   }
 
-  @Test("the status line: a change not saved, or the server's own words for a place")
+  @Test("the status line: a change not saved, or the server's own words for where you are")
   func theStatusLine() {
-    var shown = state(AlertPrefs(evening: true), place: .chosen(leeds, name: "Leeds"))
-    #expect(NotificationSettings(shown, onScreen: onLeeds).status == nil)
+    var shown = state(evening)
+    #expect(NotificationSettings(shown).status == nil)
     shown.status = .notSaved
-    let notSaved = NotificationSettings(shown, onScreen: onLeeds).status
+    let notSaved = NotificationSettings(shown).status
     #expect(notSaved?.id == "notify-status")
     #expect(
       notSaved?.text
         == "Couldn't save your notification choices. The app will try again when you next open it.")
-    shown.status = .placeRefused("There is no page for that place.")
-    #expect(
-      NotificationSettings(shown, onScreen: onLeeds).status?.text
-        == "There is no page for that place.")
+    let words =
+      "We couldn't tell where you are from your internet connection. Try again later, or use "
+      + "your location."
+    shown.status = .placeRefused(words)
+    #expect(NotificationSettings(shown).status?.text == words)
     shown.status = .ok
-    #expect(NotificationSettings(shown, onScreen: onLeeds).status == nil)
+    #expect(NotificationSettings(shown).status == nil)
   }
 
-  @Test("the Met Office's warnings, for a UK place only")
+  @Test("the Met Office's warnings while where you are is in the UK, by the server's country")
   func theMetOfficeLinkForUKPlaces() throws {
-    let uk = try #require(
-      NotificationSettings(state(place: .chosen(leeds, name: "Leeds")), onScreen: onReykjavik)
-        .warnings)
+    let leeds = try registration("put-here-ip")
+    let uk = try #require(NotificationSettings(state(evening, registration: leeds)).warnings)
     let url = try #require(
       URL(string: "https://weather.metoffice.gov.uk/warnings-and-advice/uk-warnings"))
     #expect(
       uk
         == SettingsScreen.Row(
           id: "notify-warnings", title: "Met Office warnings", action: .open(url), icon: .warnings))
-    // Before any is kept, the place on screen's.
-    #expect(NotificationSettings(state(), onScreen: onLeeds).warnings == uk)
-    let reykjavik = AlertPlace.chosen(.city(slug: "reykjavik-is"), name: "Reykjavík")
-    #expect(NotificationSettings(state(place: reykjavik), onScreen: onLeeds).warnings == nil)
-    #expect(NotificationSettings(state(), onScreen: onReykjavik).warnings == nil)
-    // The phone's cell: the answer on that cell says the country.
     #expect(
-      NotificationSettings(state(place: .follows(leedsCell)), onScreen: onCell).warnings == uk)
+      NotificationSettings(
+        state(evening, here: leedsCell, registration: try registration("put-here-device"))
+      ).warnings == uk)
+    // Whatever kind of place the answer was about: its country is where the phone is.
     #expect(
-      NotificationSettings(state(place: .follows(leedsCell)), onScreen: onLeeds).warnings == nil)
+      NotificationSettings(state(evening, here: leedsCell, registration: leeds)).warnings == uk)
+    let reykjavik = answer(
+      leeds,
+      here: DeviceResponse.Here(
+        name: "Reykjavík", timezone: "Atlantic/Reykjavik",
+        query: "lat=64.15&lon=-21.95&source=device",
+        country: "IS", follows: .ip))
+    #expect(NotificationSettings(state(evening, registration: reykjavik)).warnings == nil)
+    let far = answer(
+      leeds,
+      here: DeviceResponse.Here(
+        name: "Your location", timezone: "Etc/GMT+2", query: "lat=0&lon=-30&source=device",
+        country: nil, follows: .ip))
+    #expect(NotificationSettings(state(evening, registration: far)).warnings == nil)
+    // No answer, no place in it, or nothing on: no link.
+    #expect(NotificationSettings(state(evening)).warnings == nil)
+    #expect(
+      NotificationSettings(state(evening, registration: answer(leeds, here: nil))).warnings == nil)
+    #expect(NotificationSettings(state(registration: leeds)).warnings == nil)
   }
 
-  @Test("the place page: the kept place, the place on screen, and the phone's location")
-  func thePlacePage() throws {
-    let fresh = NotificationPlacePage(state(), onScreen: onLeeds)
-    #expect(fresh.title == "Notification place")
-    #expect(fresh.choices.map(\.id) == ["notify-place-on-screen", "notify-place-my-location"])
-    let onScreen = fresh.choices[0]
-    #expect(onScreen.title == "Use the place on screen: Leeds")
-    #expect(onScreen.note == nil)
-    #expect(onScreen.icon == .onScreenPlace)
-    #expect(onScreen.selected)
-    #expect(!onScreen.busy)
-    #expect(onScreen.choice == .onScreen(leeds, name: "Leeds"))
-    let myLocation = fresh.choices[1]
-    #expect(myLocation.title == "Use my location")
-    #expect(myLocation.note == "Follows your location each time you open the app.")
-    #expect(myLocation.icon == .myLocation)
-    #expect(!myLocation.selected)
-    #expect(!myLocation.busy)
-    #expect(myLocation.choice == .myLocation)
-    #expect(fresh.problem == nil)
-    #expect(fresh.openSettings == nil)
-
-    let keptHere = NotificationPlacePage(
-      state(place: .chosen(leeds, name: "Leeds")), onScreen: onLeeds)
-    #expect(keptHere.choices.map(\.id) == ["notify-place-on-screen", "notify-place-my-location"])
-    #expect(keptHere.choices.map(\.selected) == [true, false])
-
-    let keptElsewhere = NotificationPlacePage(
-      state(place: .chosen(leeds, name: "Leeds")), onScreen: onDurham)
+  @Test("the page: how where you are is found, the place now, and Use my location until allowed")
+  func thePage() throws {
+    let page = NotificationPlacePage(state())
+    #expect(page.title == "Where you are")
+    #expect(page.title == AppCopy.notifyPlaceTitle)
+    #expect(page.about.id == "notify-place-about")
     #expect(
-      keptElsewhere.choices.map(\.id) == [
-        "notify-place-kept", "notify-place-on-screen", "notify-place-my-location",
-      ])
+      page.about.text
+        == "Notifications for where you are use your location if you share it with the app, "
+        + "otherwise a rough place from your internet connection. It's updated when you open the "
+        + "app, at most once an hour, and kept only while notifications are on.")
+    #expect(page.place.id == "notify-place-here")
+    #expect(page.place.title == "Where you are")
+    #expect(page.place.value == nil)
+    #expect(page.place.note == "Approximate, from your internet connection")
+    #expect(page.place.icon == .notificationPlace)
+    // Location access never asked: Use my location, which asks at the tap.
     #expect(
-      keptElsewhere.choices.map(\.title) == [
-        "Leeds", "Use the place on screen: Durham", "Use my location",
-      ])
-    #expect(keptElsewhere.choices.map(\.selected) == [true, false, false])
-    #expect(
-      keptElsewhere.choices.map(\.choice) == [
-        .kept, .onScreen(durham, name: "Durham"), .myLocation,
-      ])
-    #expect(keptElsewhere.choices[0].icon == .notificationPlace)
-    #expect(keptElsewhere.choices[0].note == nil)
-    // A kept place with no name of its own takes the server's.
-    let unnamed = NotificationPlacePage(
-      state(
-        place: .chosen(.city(slug: "leeds-gb"), name: ""),
-        registration: try registration("put-leeds")),
-      onScreen: onDurham)
-    #expect(unnamed.choices.first?.title == "Leeds")
-
-    let follows = NotificationPlacePage(state(place: .follows(leedsCell)), onScreen: onDurham)
-    #expect(follows.choices.map(\.selected) == [false, true])
-    // The phone's point on screen, before any is kept, is followed.
-    #expect(
-      NotificationPlacePage(state(), onScreen: onCell).choices.map(\.id) == [
-        "notify-place-my-location"
-      ])
-    #expect(NotificationPlacePage(state(), onScreen: onCell).choices.map(\.selected) == [true])
-    // Approximate location is never a place to choose; nor a city with no name yet.
-    #expect(
-      NotificationPlacePage(state(), onScreen: onIP).choices.map(\.id) == [
-        "notify-place-my-location"
-      ])
-    #expect(NotificationPlacePage(state(), onScreen: onIP).choices.map(\.selected) == [false])
-    let nameless = OnScreen(target: .city(slug: "leeds-gb"), name: nil, country: nil, units: nil)
-    #expect(
-      NotificationPlacePage(state(), onScreen: nameless).choices.map(\.id) == [
-        "notify-place-my-location"
-      ])
-    // A searched place on screen can be chosen.
-    let biel = Target.coords(
-      Target.Coordinates(source: .search, lat: 47.15, lon: 7.25, name: "Biel/Bienne"))
-    let onBiel = OnScreen(target: biel, name: "Biel/Bienne", country: "CH", units: .c)
-    #expect(
-      NotificationPlacePage(state(), onScreen: onBiel).choices.first?.choice
-        == .onScreen(biel, name: "Biel/Bienne"))
-
-    var locating = state(place: .chosen(leeds, name: "Leeds"))
+      page.useMyLocation
+        == SettingsScreen.Row(
+          id: "notify-place-my-location", title: "Use my location",
+          action: .notification(.useMyLocation), icon: .myLocation))
+    #expect(page.problem == nil)
+    #expect(page.openSettings == nil)
+    var locating = state()
     locating.locating = true
-    let busy = NotificationPlacePage(locating, onScreen: onLeeds)
-    #expect(busy.choices.map(\.busy) == [false, true])
+    #expect(NotificationPlacePage(locating).useMyLocation?.busy == true)
+    // The page's row says what Settings' says, after an answer too.
+    for (here, name) in [(HerePlace.ip, "put-here-ip"), (leedsCell, "put-here-device")] {
+      let shown = state(evening, here: here, access: .granted, registration: try registration(name))
+      let row = try #require(NotificationSettings(shown).hereRow)
+      let placed = NotificationPlacePage(shown).place
+      #expect(placed.value == row.value)
+      #expect(placed.value == "Leeds")
+      #expect(placed.note == row.note)
+    }
   }
 
-  @Test("the place page's problems: location off, with Open Settings; no fix, without")
-  func thePlacePageProblems() {
-    var denied = state()
-    denied.placeProblem = .locationDenied
-    let off = NotificationPlacePage(denied, onScreen: onLeeds)
-    #expect(off.problem?.id == "notify-place-problem")
-    #expect(off.problem?.text == "Location access is off for this app in Settings.")
+  @Test("allowed, nothing to do; refused, the line and Open Settings")
+  func thePageByAccess() throws {
+    let allowed = NotificationPlacePage(state(evening, here: leedsCell, access: .granted))
+    #expect(allowed.place.note == "Your location")
+    #expect(allowed.useMyLocation == nil)
+    #expect(allowed.problem == nil)
+    #expect(allowed.openSettings == nil)
+    #expect(allowed.ids == ["notify-place-about", "notify-place-here"])
+    // Allowed with no fix yet: approximate, and still nothing to do.
+    #expect(NotificationPlacePage(state(evening, access: .granted)).useMyLocation == nil)
+
+    let refused = NotificationPlacePage(state(evening, access: .denied))
+    #expect(refused.useMyLocation == nil)
+    #expect(refused.problem?.id == "notify-place-problem")
+    #expect(refused.problem?.text == "Location access is off for this app in Settings.")
+    #expect(refused.problem?.text == AppCopy.notifyLocationDenied)
     #expect(
-      off.openSettings
+      refused.openSettings
         == SettingsScreen.Row(
           id: "notify-place-open-settings", title: "Open Settings",
           action: .notification(.openLocationSettings), icon: .openSettings))
-    var unavailable = state()
-    unavailable.placeProblem = .locationUnavailable
-    let none = NotificationPlacePage(unavailable, onScreen: onLeeds)
-    #expect(none.problem?.id == "notify-place-problem")
     #expect(
-      none.problem?.text == "Couldn't find your location. Try again, or use the place on screen.")
-    #expect(none.openSettings == nil)
+      refused.ids == [
+        "notify-place-about", "notify-place-here", "notify-place-problem",
+        "notify-place-open-settings",
+      ])
   }
 
-  @Test("no fix with no place on screen to choose: try again, and nothing more")
-  func noFixWithoutThePlaceOnScreen() throws {
-    var unavailable = state()
-    unavailable.placeProblem = .locationUnavailable
-    // The phone's own point and approximate location are never offered, nor a place unnamed.
-    let unnamed = OnScreen(target: durham, name: nil, country: "GB", units: .c)
-    for screen in [onCell, onIP, unnamed] {
-      let page = NotificationPlacePage(unavailable, onScreen: screen)
-      #expect(!page.choices.contains { $0.id == "notify-place-on-screen" }, "\(screen)")
+  @Test("no fix at the tap: try again, with Use my location still there")
+  func noFix() throws {
+    for access in [AlertSync.LocationAccess.granted, .notDetermined] {
+      var unavailable = state(access: access)
+      unavailable.locationUnavailable = true
+      let page = NotificationPlacePage(unavailable)
+      #expect(page.useMyLocation?.id == "notify-place-my-location", "\(access)")
       #expect(page.problem?.id == "notify-place-problem")
-      #expect(page.problem?.text == "Couldn't find your location. Try again.", "\(screen)")
-      #expect(page.problem?.text == AppCopy.notifyLocationTryAgain)
+      #expect(page.problem?.text == "Couldn't find your location. Try again.")
+      #expect(page.problem?.text == AppCopy.notifyLocationUnavailable)
       #expect(page.openSettings == nil)
+      #expect(
+        page.ids == [
+          "notify-place-about", "notify-place-here", "notify-place-my-location",
+          "notify-place-problem",
+        ])
     }
+    // Refused since: the refusal's line, not the fix's.
+    var refused = state(access: .denied)
+    refused.locationUnavailable = true
+    let page = NotificationPlacePage(refused)
+    #expect(page.problem?.text == AppCopy.notifyLocationDenied)
+    #expect(page.useMyLocation == nil)
+    #expect(page.openSettings?.id == "notify-place-open-settings")
+  }
+
+  @Test("Use my location stays, busy, while it finds the phone, though access is allowed by then")
+  func findingThePhone() throws {
+    // Allowed at the prompt, or tried again after no fix (which clears that line first): the
+    // fix is still to come, so the row that was tapped stays, taking no tap, until it does.
+    var finding = state(access: .granted)
+    finding.locating = true
+    let page = NotificationPlacePage(finding)
+    #expect(
+      page.useMyLocation
+        == SettingsScreen.Row(
+          id: "notify-place-my-location", title: "Use my location",
+          action: .notification(.useMyLocation), icon: .myLocation, busy: true))
+    #expect(page.problem == nil)
+    #expect(
+      page.ids == ["notify-place-about", "notify-place-here", "notify-place-my-location"])
+    // Found: nothing left to do.
+    finding.locating = false
+    #expect(NotificationPlacePage(finding).useMyLocation == nil)
   }
 
   @Test("every word in every state is about snow, in British English, with an id each")
   func snowOnlyBritish() throws {
-    let records = [nil, try registration("put-leeds"), try registration("put-device")]
-    let places: [AlertPlace?] = [
-      nil, .chosen(leeds, name: "Leeds"), .chosen(.city(slug: "leeds-gb"), name: ""),
-      .follows(leedsCell),
+    let records = [
+      nil, try registration("put-here-ip"), try registration("put-here-device"),
+      try registration("put-here-refresh"), answer(try registration("put-here-ip"), here: nil),
     ]
     let prefs = [
       AlertPrefs(), AlertPrefs(evening: true), AlertPrefs(morning: true, possible: true),
     ]
     let tests: [NotificationsState.Test] =
-      [.idle, .sending] + AlertSync.TestOutcome.allCases.map { .done($0) }
+      [.idle, .sending, .done(.sent(count: 1)), .done(.sent(count: 2))]
+      + [.dryRun, .limited, .quiet, .notRegistered, .failed].map { .done($0) }
     let statuses: [NotificationsState.Status] = [.ok, .notSaved, .placeRefused("Words.")]
-    let problems: [NotificationsState.PlaceProblem?] = [
-      nil, .locationDenied, .locationUnavailable,
-    ]
     var count = 0
     for permission in AlertSync.Permission.allCases {
-      for place in places {
-        for on in prefs {
-          for record in records {
-            for screen in [onLeeds, onCell, onIP, onDurham, onReykjavik] {
+      for access in AlertSync.LocationAccess.allCases {
+        for here in [HerePlace.ip, leedsCell] {
+          for on in prefs {
+            for record in records {
               // Each result in turn, so every one meets every kind of place and permission.
-              var shown = state(on, place: place, permission: permission, registration: record)
+              var shown = state(
+                on, here: here, refused: count % 3 == 0, permission: permission, access: access,
+                registration: record)
               shown.test = tests[count % tests.count]
               shown.status = statuses[count % statuses.count]
-              shown.placeProblem = problems[count % problems.count]
-              shown.locating = count % 2 == 0
+              shown.locationUnavailable = count % 2 == 0
+              shown.locating = count % 4 == 1
               count += 1
-              let section = NotificationSettings(shown, onScreen: screen)
-              let page = NotificationPlacePage(shown, onScreen: screen)
+              let section = NotificationSettings(shown)
+              let page = NotificationPlacePage(shown)
               for word in section.words + page.words {
                 #expect(otherTopic(in: word) == nil, "\(word)")
                 #expect(!word.isEmpty)
                 #expect(!word.lowercased().contains("alert"), "\(word)")
+                #expect(!word.lowercased().contains("place on screen"), "\(word)")
               }
               #expect(Set(section.ids).count == section.ids.count)
-              #expect(Set(page.choices.map(\.id)).count == page.choices.count)
+              #expect(Set(page.ids).count == page.ids.count)
             }
           }
         }

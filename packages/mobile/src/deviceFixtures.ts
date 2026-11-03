@@ -1,10 +1,16 @@
 /**
- * The devices fixtures (iOS notifications, phase 8.1): the real devices handlers' replies to the
- * app's requests (`PUT` and `DELETE /api/v1/devices`, `POST /api/v1/devices/test`), on synthetic
- * forecasts and a store in memory at a fixed moment, with Apple played by a stand-in that answers
+ * The devices fixtures (iOS notifications, phases 8.1 and 8.4a): the real devices handlers'
+ * replies to the app's requests (`PUT` and `DELETE /api/v1/devices`, `POST /api/v1/devices/test`),
+ * on synthetic forecasts and a store in memory at a fixed moment, with Netlify's geo for the
+ * request's connection where the fixture gives one, and Apple played by a stand-in that answers
  * as each fixture says. IsItCore's tests read each reply through the ports of client `syncReply`
  * and `testOutcome`, and the app's Debug builds answer the devices calls with them. Then the
  * notification payloads, what a phone receives, from the server's own `alertPush`.
+ *
+ * 8.1's registration for Leeds (`put-leeds`, a version 1 body, one place), which the delete, the
+ * tests and the two 429s are made after, is kept exactly as 8.1 wrote it, and so are they; 8.1's
+ * other version 1 PUTs went in phase 8.4a, as nothing reads them. 8.4a's come after them, each a
+ * whole set as 8.4's app sends it (version 2): where you are, and no saved place.
  *
  * Nothing secret is in them. The APNs key is a throwaway one made for each run, which no reply
  * carries, and the device token is one no phone has. Nothing here touches the disk:
@@ -13,9 +19,11 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { ALERTS, collapseId, expiresAt, snowAlert, type TodayResponse } from '@isithot/core';
 import {
+  deviceTarget,
+  herePlace,
   registrationBody,
   type AlertPrefs,
-  type PlaceTarget,
+  type HerePlace,
   type RegistrationBody,
 } from '@isithot/client';
 import { createSyntheticFetch, type FetchLike } from '@isithot/providers';
@@ -30,7 +38,10 @@ import {
   handleDeviceTest,
   handleRateLimited,
   type ApnsSender,
+  type DevicePlace,
+  type DevicePutBody,
   type DevicesPlatform,
+  type VisitorGeo,
 } from '@isithot/server';
 import { FIXTURES, fixedAt, relabelZone, type FixtureSpec } from './fixtures';
 
@@ -44,7 +55,12 @@ export type DeviceRequestLine =
 /** A request as the app sends it: the method and path, and the JSON body. */
 export interface DeviceRequest {
   request: DeviceRequestLine;
-  body: RegistrationBody | { app: 'snow'; token: string };
+  body: RegistrationBody | DevicePutBody | { app: 'snow'; token: string };
+  /**
+   * Where Netlify places the request's connection (its `context.geo`, as the function passes
+   * it): where you are when a version 2 body leaves it to the server. None if not given.
+   */
+  geo?: VisitorGeo;
   /** When it is made, ISO 8601 UTC: by default the moment of the fixture it comes before. */
   now?: string;
 }
@@ -68,9 +84,18 @@ export interface DeviceFixtureSpec extends DeviceRequest {
   zone?: string;
 }
 
-/** A devices fixture as its file has it: what was asked, then the reply as the server sent it. */
+/**
+ * A devices fixture as its file has it: what was asked, from where (only when the fixture gives
+ * a geo), when and why, then the reply as the server sent it.
+ */
 export interface DeviceFixture {
-  _fixture: { request: DeviceRequestLine; body: DeviceRequest['body']; now: string; note: string };
+  _fixture: {
+    request: DeviceRequestLine;
+    body: DeviceRequest['body'];
+    geo?: VisitorGeo;
+    now: string;
+    note: string;
+  };
   status: number;
   /** The reply's `Retry-After` header, or null. */
   retryAfter: string | null;
@@ -86,25 +111,66 @@ function answer(name: string): FixtureSpec {
 }
 
 const LEEDS_DRY = answer('leeds-dry').now;
-const KATHMANDU = answer('kathmandu-0545');
 const EVENING: AlertPrefs = { evening: true, morning: false, possible: false };
 
 /**
- * The app's PUT for `place`, as client `registrationBody` makes it: from the sandbox, in °C, with
- * the evening switched on.
+ * 8.1's builds' PUT for `place`, version 1 (no `v`, one place), as 8.1's client
+ * `registrationBody` made it: from the sandbox, in °C, with the evening switched on. The server
+ * answers it until those builds expire; 8.4's app sends version 2 (`putHere`).
  */
-const put = (place: PlaceTarget): DeviceRequest => ({
+const put = (place: DevicePlace): DeviceRequest => ({
+  request: 'PUT /api/v1/devices',
+  body: {
+    app: 'snow',
+    platform: 'ios',
+    env: 'sandbox',
+    token: DEVICE_TOKEN,
+    place,
+    units: 'c',
+    alerts: { snow: { ...EVENING } },
+    appVersion: '1.0 (42)',
+  },
+});
+const PUT_LEEDS = put({ place: 'leeds-gb' });
+
+/**
+ * 8.4's PUT for where you are, as client `registrationBody` makes it (version 2): from the
+ * sandbox, in °C, with the evening switched on, and no saved place; from a connection Netlify
+ * places at `geo`, if given.
+ */
+const putHere = (here: HerePlace, geo?: VisitorGeo): DeviceRequest => ({
   request: 'PUT /api/v1/devices',
   body: registrationBody({
     token: DEVICE_TOKEN,
     env: 'sandbox',
-    place,
+    here,
     units: 'c',
     prefs: EVENING,
     appVersion: '1.0 (42)',
   }),
+  ...(geo ? { geo } : {}),
 });
-const PUT_LEEDS = put({ kind: 'city', slug: 'leeds-gb' });
+/** Where you are without the phone's location, as client `herePlace` has it: approximate. */
+const APPROXIMATE = herePlace({ access: 'denied', fix: null, kept: null });
+/** The phone's own location in Leeds, allowed, with a fix there, as `herePlace` has it. */
+const LEEDS_FIX = herePlace({ access: 'granted', fix: deviceTarget(53.8, -1.55), kept: null });
+/** The first launch at approximate location: the screen the app shows, and Netlify's Leeds. */
+const IP_FIRST = answer('ip-first-launch');
+if (!IP_FIRST.geo) throw new Error('ip-first-launch has no geo');
+/** Netlify's geo for a connection in Newcastle upon Tyne. */
+const NEWCASTLE: VisitorGeo = {
+  city: 'Newcastle upon Tyne',
+  country: 'GB',
+  region: 'England',
+  lat: 54.9881,
+  lon: -1.6194,
+};
+/** Netlify's geo for a connection it places in the UK, but in no town. */
+const UK_ONLY: VisitorGeo = { country: 'GB' };
+const PUT_HERE_IP = putHere(APPROXIMATE, IP_FIRST.geo);
+const PUT_HERE_DEVICE = putHere(LEEDS_FIX);
+const later = (at: string, minutes: number): string =>
+  new Date(Date.parse(at) + minutes * 60_000).toISOString();
 const IDENTITY = { app: 'snow', token: DEVICE_TOKEN } as const;
 const TEST: DeviceRequest = { request: 'POST /api/v1/devices/test', body: IDENTITY };
 
@@ -118,47 +184,6 @@ export const DEVICE_FIXTURES: readonly DeviceFixtureSpec[] = [
       'The first registration, for Leeds, a city page, with the evening switched on, at ' +
       'leeds-dry’s moment (9:05am on 1 December): the ID Your privacy shows, the place’s name, ' +
       'zone and query, and the switches the server holds.',
-  },
-  {
-    name: 'put-durham',
-    ...put({ kind: 'city', slug: 'durham-gb' }),
-    now: answer('durham-tomorrow').now,
-    note:
-      'Durham, at durham-tomorrow’s moment (6:05pm on 16 December), the evening before the snow ' +
-      'its notification is about (Payloads/durham-evening.json).',
-  },
-  {
-    name: 'put-device',
-    ...put({ kind: 'coords', source: 'device', lat: 53.8, lon: -1.55 }),
-    now: LEEDS_DRY,
-    note:
-      'The phone’s own location in Leeds, on the 0.05° grid as the app sends it: the server ' +
-      'names the cell itself, and the place follows the phone.',
-  },
-  {
-    name: 'put-kathmandu',
-    ...put({
-      kind: 'coords',
-      source: 'search',
-      lat: 27.7,
-      lon: 85.3,
-      name: 'Kathmandu',
-      country: 'NP',
-    }),
-    now: KATHMANDU.now,
-    zone: KATHMANDU.zone,
-    note:
-      'A searched place with no city page, Kathmandu, as choosing search-kathmandu’s result ' +
-      'sends it: its point, name and country. Its zone is the place’s own (UTC+5:45), as ' +
-      'kathmandu-0545 has it.',
-  },
-  {
-    name: 'put-bad-place',
-    ...put({ kind: 'city', slug: 'nowhere-xx' }),
-    now: LEEDS_DRY,
-    note:
-      'A city page that doesn’t exist: 400 bad_location, in the server’s own words, which the ' +
-      'app shows under the place.',
   },
   {
     name: 'put-twice',
@@ -251,6 +276,50 @@ export const DEVICE_FIXTURES: readonly DeviceFixtureSpec[] = [
       'put-leeds’s PUT answered by Netlify’s rate limit, before the handler: 429 rate_limited, ' +
       'with a minute in Retry-After. A test send gets the same reply.',
   },
+  // 8.4a: each a whole set, as 8.4's app sends it, where you are and no saved place.
+  {
+    name: 'put-here-ip',
+    ...PUT_HERE_IP,
+    now: IP_FIRST.now,
+    note:
+      'Where you are, without the phone’s location: the app sends no place, and the server ' +
+      'locates the connection itself, in Leeds as Netlify says (as ip-first-launch’s platform ' +
+      'does), keeping its 0.05° cell, at ip-first-launch’s moment (12:05pm on 1 December). The ' +
+      'set the app keeps: where you are, its zone and country, what it follows (the ' +
+      'connection), and no saved place.',
+  },
+  {
+    name: 'put-here-device',
+    ...PUT_HERE_DEVICE,
+    now: LEEDS_DRY,
+    note:
+      'Where you are from the phone’s own location in Leeds, on the 0.05° grid as the app sends ' +
+      'it, at leeds-dry’s moment: the server names the cell itself, and where you are follows ' +
+      'the phone.',
+  },
+  {
+    name: 'put-here-refresh',
+    ...putHere(APPROXIMATE, NEWCASTLE),
+    now: later(IP_FIRST.now, ALERTS.hereRefreshMinutes),
+    before: [{ ...PUT_HERE_IP, now: IP_FIRST.now }],
+    note:
+      `put-here-ip’s set again ${ALERTS.hereRefreshMinutes} minutes later, as the app sends it ` +
+      'on becoming active while where you are is approximate: the server locates the ' +
+      'connection afresh, now in Newcastle upon Tyne as Netlify says, and where you are moves ' +
+      'to that cell, which the server names Newcastle.',
+  },
+  {
+    name: 'put-unlocated',
+    ...putHere(APPROXIMATE, UK_ONLY),
+    now: later(LEEDS_DRY, 60),
+    before: [{ ...PUT_HERE_DEVICE, now: LEEDS_DRY }],
+    note:
+      'An hour after put-here-device, with location access turned off, the app sends where you ' +
+      'are as approximate, and Netlify places the connection in the UK but in no town: the ' +
+      'server deletes the phone’s location, has nothing left to keep, forgets the set and ' +
+      'answers 400 bad_location in its own words, which the app shows. The Debug builds answer ' +
+      'this to a set no other fixture has.',
+  },
 ];
 
 const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
@@ -295,6 +364,7 @@ function ask(
     deployContext: 'production',
     store,
     connect: apple(spec),
+    geo: asked.geo ?? null,
   };
   platform.deps = fixedAt(at, fetch, cache)(platform);
   const [method, path] = asked.request.split(' ');
@@ -311,10 +381,13 @@ function ask(
 
 /**
  * The server's reply to `spec`'s request, after its `before` requests, with `_fixture` first.
- * Each fixture has a store and a cache of its own, so none depends on one made before it.
+ * Each fixture has a store and a cache of its own, so none depends on one made before it; a test
+ * may pass the store, to see what the requests left in it.
  */
-export async function makeDeviceFixture(spec: DeviceFixtureSpec): Promise<DeviceFixture> {
-  const store = new MemoryAlertStore();
+export async function makeDeviceFixture(
+  spec: DeviceFixtureSpec,
+  store: MemoryAlertStore = new MemoryAlertStore(),
+): Promise<DeviceFixture> {
   const cache = new MemoryKV();
   for (const asked of spec.before ?? []) {
     const res = await ask(spec, asked, store, cache);
@@ -326,7 +399,13 @@ export async function makeDeviceFixture(spec: DeviceFixtureSpec): Promise<Device
   }
   const res = spec.limited ? handleRateLimited() : await ask(spec, spec, store, cache);
   return {
-    _fixture: { request: spec.request, body: spec.body, now: spec.now, note: spec.note },
+    _fixture: {
+      request: spec.request,
+      body: spec.body,
+      ...(spec.geo ? { geo: spec.geo } : {}),
+      now: spec.now,
+      note: spec.note,
+    },
     status: res.status,
     retryAfter: res.headers.get('retry-after'),
     text: await res.text(),
@@ -349,8 +428,9 @@ export const PAYLOAD_FILES: readonly string[] = [
 ];
 
 /**
- * What a phone receives (the server's `alertPush`'s `payload`) for put-durham's registration and
- * the evening notification core's `snowAlert` makes from `durham`, durham-tomorrow's answer:
+ * What a phone receives (the server's `alertPush`'s `payload`) for a registration of Durham's
+ * city page, the place durham-tomorrow is about, under its query and name as the server stores
+ * them, and the evening notification core's `snowAlert` makes from `durham`, that answer:
  * - `durham-evening.json`: that payload, about the 17th;
  * - `durham-old.json`: the same about the 10th, long past, which opens on the default view;
  * - `malformed.json`: the same about 30 February, not a date, which routes nowhere;

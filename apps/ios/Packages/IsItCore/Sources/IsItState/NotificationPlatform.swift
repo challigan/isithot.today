@@ -17,16 +17,16 @@ public protocol NotificationPlatform: AnyObject {
   func register()
 }
 
-/// `alerts.v1`, `alertSync.v1` and `ui.alertCard` (spec 9.6), in the app's own defaults, which
-/// only `NotificationsModel` writes: `NotificationDefaults` (IsItNotifications) in the app;
-/// `MemoryNotificationStore` in the tests.
+/// `alerts.v2`, `alertSync.v2` and `ui.alertCard` (spec 9.6, design 4.2), in the app's own
+/// defaults, which only `NotificationsModel` writes: `NotificationDefaults` (IsItNotifications) in
+/// the app; `MemoryNotificationStore` in the tests.
 public protocol NotificationStore: Sendable {
-  /// `alerts.v1`, or every switch off and no place when there is none to read.
+  /// `alerts.v2`, or every switch off and nothing kept when there is none to read.
   func loadSettings() -> AlertSettings
   func saveSettings(_ settings: AlertSettings)
-  /// `alertSync.v1`, or nil.
+  /// `alertSync.v2`, or nil.
   func loadRegistration() -> AlertRegistration?
-  /// Keeps `registration` in `alertSync.v1`; nil removes it.
+  /// Keeps `registration` in `alertSync.v2`; nil removes it.
   func saveRegistration(_ registration: AlertRegistration?)
   /// `ui.alertCard`: whether the Today card has gone for good.
   func loadCardDismissed() -> Bool

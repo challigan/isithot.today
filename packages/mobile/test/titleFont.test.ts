@@ -12,7 +12,7 @@ import { cmapCodePoints } from './fontTables';
  * digits, a little punctuation and the space (`make-answer-font.py`). A title with any other
  * character would draw it in the system's font, mid-word. These are every title the app sets in
  * it: Settings, its three pages, each notice's name, the mail fallback's two, and the page
- * Settings → Notifications opens to choose the notification place.
+ * Settings → Notifications opens for where you are.
  */
 const TITLES = [
   APP_COPY.settings,
@@ -54,7 +54,7 @@ describe("the titles, in the answer's face", () => {
       'Google User Messaging Platform SDK',
       'Report an ad',
       'Contact us',
-      'Notification place',
+      'Where you are',
     ]);
   });
 

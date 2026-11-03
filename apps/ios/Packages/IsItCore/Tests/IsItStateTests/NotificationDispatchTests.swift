@@ -5,6 +5,12 @@ import IsItState
 import IsItTestSupport
 import Testing
 
+/// Durham as the server stores it in a device's set (a saved place, phase 8.4b), in its own zone:
+/// how a registration tells the router Durham's date.
+private let savedDurham = DeviceResponse.Saved(
+  pid: "0123456789ab", name: "Durham", timezone: "Europe/London", query: "place=durham-gb",
+  country: "GB")
+
 /// Each event the system gives, to the models (iOS build spec, section 12.3), with an app and a
 /// notifications model on one fake server and one clock.
 @MainActor
@@ -59,7 +65,7 @@ struct NotificationDispatchTests {
   func anOldTapOpensOnTheDefaultView() async throws {
     let now = try fixtureNow("durham-tomorrow")
     let (app, notifications) = models(
-      now: now, registration: try registration("put-durham", at: now),
+      now: now, registration: try registration(at: now, saved: [savedDurham]),
       replies: [
         try FakeTransport.fixture("leeds-dry"), try FakeTransport.fixture("durham-tomorrow"),
       ])
@@ -76,17 +82,20 @@ struct NotificationDispatchTests {
     #expect(app.model.view == .now)
   }
 
-  @Test("the registration's zone tells the place's date, ahead of the answer on screen's")
+  @Test("a registered place's zone tells the place's date, ahead of the answer on screen's")
   func theRegistrationsZoneDecides() async throws {
     // Noon on 17 December: the 17th in Durham, the 18th at UTC+14.
     let now = Date(epochMs: 1_797_508_800_000)
     let payload = try Fixtures.payload("durham-evening")
+    // Durham as the server stored it in the set, in another zone.
+    let saved = DeviceResponse.Saved(
+      pid: savedDurham.pid, name: savedDurham.name, timezone: "Pacific/Kiritimati",
+      query: savedDurham.query, country: savedDurham.country)
     var routes: [DeepLink.Route?] = []
     for registered in [false, true] {
       let (app, notifications) = models(
         now: now, place: durham,
-        registration: registered
-          ? try registration("put-durham", at: now, timezone: "Pacific/Kiritimati") : nil,
+        registration: registered ? try registration(at: now, saved: [saved]) : nil,
         replies: [try FakeTransport.fixture("durham-tomorrow")])
       await app.model.launch()
       await NotificationDispatch.handle(
@@ -136,8 +145,8 @@ struct NotificationDispatchTests {
   func tokenAndSettings() async throws {
     let now = try devicesMoment()
     let (app, notifications) = models(
-      now: now, settings: eveningInLeeds,
-      replies: [try FakeTransport.fixture("leeds-dry"), try deviceReply("put-leeds")])
+      now: now, settings: eveningOn,
+      replies: [try FakeTransport.fixture("leeds-dry"), try deviceReply("put-here-ip")])
     await app.model.launch()
     notifications.model.screenChanged(target: leedsCity, units: .c)
     await notifications.model.synced()

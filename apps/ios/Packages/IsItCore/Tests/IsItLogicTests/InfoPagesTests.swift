@@ -143,14 +143,17 @@ struct InfoPagesTests {
           + "recent and saved places, your notification choices and the last forecast on your "
           + "iPhone.",
         "Only while notifications are on, we keep your device's notification token, an ID made "
-          + "from it, the place, its time zone, your units and which notifications you chose, "
-          + "with a few details such as the app's version and when it last checked in. We delete "
-          + "them when you turn notifications off in the app, when Apple tells us the app is no "
-          + "longer installed, or about 90 days after you last open it. If you turn notifications "
-          + "off in your iPhone's Settings instead, we delete them the next time you open the app. "
-          + "For a few days after each notification and each test, and after some forecast checks "
-          + "that found nothing to send, we also keep a note of it, even once the rest is deleted. "
-          + "It holds no token or place.",
+          + "from it, the place you get notifications for and its time zone, your units and which "
+          + "notifications you chose, with a few details such as the app's version and when it "
+          + "last checked in. The place is where you are (your location rounded to about 5 km or, "
+          + "if you haven't shared it, a rough place our server estimates from your internet "
+          + "connection, updated when you open the app, at most once an hour). We delete them "
+          + "when you turn notifications off in the app, when Apple tells us the app is no longer "
+          + "installed, or about 90 days after you last open it. If you turn notifications off in "
+          + "your iPhone's Settings instead, we delete them the next time you open the app. For a "
+          + "few days after each notification and each test, and after some forecast checks that "
+          + "found nothing to send, we also keep a note of it, even once the rest is deleted. It "
+          + "holds no token or place.",
         "In the free version, Google shows the ads and may collect device and usage data. The "
           + "app keeps when it last showed a full-screen ad, so it shows one at most every 5 "
           + "minutes.",
@@ -183,43 +186,61 @@ struct InfoPagesTests {
 
   @Test("what is kept for notifications shows, with the delete button, only with lines to show")
   func kept() throws {
-    let page = YourPrivacy(
-      adsOn: false, privacyChoices: false,
-      kept: ["ID 3f9c1a2b", "Leeds, Europe/London", "cm", "Evening before"])
+    let lines = ["ID 3f9c1a2b", "Where you are: Leeds, Europe/London", "Snow units: cm"]
+    let page = YourPrivacy(adsOn: false, privacyChoices: false, kept: lines)
     let kept = try #require(page.kept)
     #expect(kept.heading == "What we keep for notifications")
-    #expect(kept.lines == ["ID 3f9c1a2b", "Leeds, Europe/London", "cm", "Evening before"])
+    #expect(kept.lines == lines)
     #expect(kept.delete == "Turn off notifications and delete my data")
     for line in YourPrivacy(adsOn: true, privacyChoices: true).lines {
       #expect(otherTopic(in: line) == nil, "\(line)")
     }
   }
 
-  @Test("the kept lines are the last registration's: the ID, the place, the units, the switches")
+  @Test("the kept lines are the last set's: the ID, where you are, the units, the switches")
   func keptLines() throws {
-    let leeds = try registration("put-leeds")
-    let id = try deviceResponse("put-leeds").id
+    let leeds = try registration("put-here-ip")
+    let id = try deviceResponse("put-here-ip").id
     #expect(
       YourPrivacy.keptLines(leeds) == [
-        "ID " + id.prefix(8), "Leeds, Europe/London", "Snow units: cm",
+        "ID " + id.prefix(8), "Where you are: Leeds, Europe/London", "Snow units: cm",
         "Evening before (about 6pm)",
       ])
     #expect(YourPrivacy.keptLines(leeds)?.first == "ID b8465956")
-    #expect(YourPrivacy.keptLines(try registration("put-leeds", units: .f))?[2] == "Snow units: in")
     #expect(
-      YourPrivacy.keptLines(try registration("put-kathmandu"))?[1] == "Kathmandu, Asia/Kathmandu")
+      YourPrivacy.keptLines(try registration("put-here-ip", units: .f))?.dropFirst(2).first
+        == "Snow units: in")
+    // The phone's location, and the connection an hour later in Newcastle.
+    #expect(
+      YourPrivacy.keptLines(try registration("put-here-device"))?.dropFirst().first
+        == "Where you are: Leeds, Europe/London")
+    #expect(
+      YourPrivacy.keptLines(try registration("put-here-refresh"))?.dropFirst().first
+        == "Where you are: Newcastle, Europe/London")
     #expect(YourPrivacy.keptLines(nil) == nil)
+  }
+
+  @Test("no where-you-are line while the server has no free place")
+  func keptWithoutAFreePlace() throws {
+    var kept = try registration("put-here-ip")
+    let response = kept.response
+    kept.response = DeviceResponse(
+      id: response.id, here: nil, alerts: response.alerts, seenAt: response.seenAt)
+    #expect(
+      YourPrivacy.keptLines(kept) == [
+        "ID b8465956", "Snow units: cm", "Evening before (about 6pm)",
+      ])
   }
 
   @Test("each switch the server holds on is a kept line, in Settings' words and order")
   func keptSwitches() throws {
-    let leeds = try registration("put-leeds")
+    let leeds = try registration("put-here-ip")
     func lines(_ snow: AlertPrefs) throws -> [String] {
-      let response = DeviceResponse(
-        id: leeds.response.id, place: leeds.response.place,
-        alerts: RegistrationBody.Alerts(snow: snow), seenAt: leeds.response.seenAt)
+      let response = leeds.response
       var kept = leeds
-      kept.response = response
+      kept.response = DeviceResponse(
+        id: response.id, here: response.here, alerts: RegistrationBody.Alerts(snow: snow),
+        seenAt: response.seenAt)
       return Array(try #require(YourPrivacy.keptLines(kept)).dropFirst(3))
     }
     #expect(

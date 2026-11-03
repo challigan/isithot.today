@@ -202,10 +202,11 @@ public protocol AppHooks: Sendable {
   func stopAds() async
   /// Step 6 (phase 8.1): the notifications' start, then their sync (section 12.2). The app hands
   /// it to `NotificationsModel.screenChanged(target:units:)`, which returns at once, as the ads'
-  /// start does, so a pending route never waits on a request. Also called when the picker
-  /// chooses a place (section 10.3) and when the units change, so a notification place that
-  /// follows the device's location follows it and the registration carries the units; a chosen
-  /// notification place never follows browsing.
+  /// start does, so a pending route never waits on a request. Also called for every new place
+  /// on screen after it (one the picker or a route chooses, one under "Nearby:", a city gone for
+  /// approximate location), so the Today card shows only where you are and a point of the
+  /// phone's the picker found can move it, and when the units change, which the registration
+  /// carries; where you are never follows browsing.
   func syncAlerts(target: Target, units: Units?) async
   /// Step 7 (phases 6 to 8): every route, once AppModel has followed it. A widget's view and a
   /// notification's place are AppModel's own, on screen before this is called; `.upgrade`

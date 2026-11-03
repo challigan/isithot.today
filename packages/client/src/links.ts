@@ -4,7 +4,6 @@
  * Swift: `IsItLogic/DeepLink.swift`, checked against the golden vectors in `links.json`.
  */
 import { VIEWS, type View } from '@isithot/core';
-import { alertPlaceAllowed } from './alerts';
 import { targetFromQuery, type PlaceTarget, type Target } from './target';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -67,9 +66,10 @@ export function routeLink(route: Route): string | null {
  * still today or tomorrow there: after 6pm the middle view reads Tomorrow and after midnight
  * Today, either way that day. Once the day has passed it opens on the place's view for the time
  * of day ('default'). `placeToday` gives the place's date now (YYYY-MM-DD), or null when the app
- * can't tell (it has no answer there yet), and the notification is then taken as current. A
- * payload that is malformed, or for another topic or no chosen place, is null: the app opens as
- * usual.
+ * can't tell (it has no answer there yet), and the notification is then taken as current. Where
+ * you are comes as its cell, from the phone or from the connection alike. A payload that is
+ * malformed, for another topic, or for approximate IP location (no place), is null: the app opens
+ * as usual.
  */
 export function notificationRoute(
   payload: unknown,
@@ -81,7 +81,8 @@ export function notificationRoute(
   const day = calendarDay(date);
   if (topic !== 'snow' || !shown || day === null || typeof place !== 'string') return null;
   const found = targetFromQuery(place);
-  if (!alertPlaceAllowed(found)) return null;
+  // The server writes a place or a point into a payload, never approximate IP location.
+  if (found === null || found.kind === 'ip') return null;
   // A city's query has no name, but the notification has.
   const target =
     found.kind === 'city' && typeof name === 'string' && name ? { ...found, name } : found;

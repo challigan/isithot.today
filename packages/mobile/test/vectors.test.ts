@@ -21,15 +21,15 @@ import {
   PLACES,
   addRecent,
   alertAction,
-  alertPlaceAllowed,
   canSave,
   choosePlace,
   dayUntil,
   deviceTarget,
   fingerprint,
-  firstAlertPlace,
-  followLocation,
   freshQuery,
+  hereKind,
+  hereName,
+  herePlace,
   hold,
   hourUntil,
   isSaved,
@@ -41,6 +41,7 @@ import {
   pickHour,
   registrationBody,
   removeRecent,
+  replyZones,
   resultDetail,
   routeLink,
   savePlace,
@@ -132,14 +133,15 @@ const replay: Record<string, (i: In) => unknown> = {
   widgetEntries: (i) => widgetEntries(i.fixture === null ? null : res(i), i),
   widgetReuses: (i) => widgetReuses(savedOf(i), i),
   widgetFallsBack: (i) => widgetFallsBack(savedOf(i), i),
-  alertPlaceAllowed: (i) => alertPlaceAllowed(i.target),
+  herePlace: (i) => herePlace({ access: i.access, fix: i.fix, kept: i.kept }),
   registrationBody: (i) => registrationBody(i),
   fingerprint: (i) => fingerprint(i.body),
   alertAction: (i) => alertAction(i),
-  firstAlertPlace: (i) => firstAlertPlace(i.onScreen, i.name),
-  followLocation: (i) => followLocation(i.place, i.fix),
   setAlert: (i) => setAlert(i.prefs, i.which, i.on),
   syncReply: (i) => syncReply(i.status, i.text, i.retryAfter),
+  hereKind: (i) => hereKind({ here: i.here, reply: i.reply, refused: i.refused }),
+  hereName: (i) => hereName({ here: i.here, reply: i.reply }),
+  replyZones: (i) => replyZones(i.reply),
   testOutcome: (i) => testOutcome(i.status, i.text),
   parseDeepLink: (i) => parseDeepLink(i.url),
   notificationRoute: (i) => notificationRoute(i.payload, () => i.placeToday),
@@ -724,34 +726,86 @@ describe('the cases cover what section 7.4 asks for', () => {
     expect(durham(18, 5).slot).toBe('Tomorrow');
   });
 
-  it('alerts: every outcome of section 6.6’s rules', () => {
-    const outs = new Set(casesFor('alerts', 'alertAction').map((c) => c.out));
-    expect(outs).toEqual(new Set(['put', 'delete', 'none', 'needsPlace', 'needsToken']));
-    expect(new Set(casesFor('alerts', 'alertPlaceAllowed').map((c) => c.out))).toEqual(
-      new Set([true, false]),
+  it('alerts: every outcome of the notifications’ rules', () => {
+    const hour = 60 * MINUTE;
+    // Where you are: every location access, with each kind of fix and each kept cell.
+    const here = casesFor('alerts', 'herePlace');
+    const accesses = ['granted', 'denied', 'notDetermined'];
+    expect(new Set(here.map((c) => (c.in as In).access))).toEqual(new Set(accesses));
+    const fixes = new Set(here.map((c) => JSON.stringify((c.in as In).fix)));
+    const kept = new Set(here.map((c) => JSON.stringify((c.in as In).kept)));
+    expect(here).toHaveLength(accesses.length * fixes.size * kept.size);
+    expect(new Set(here.map((c) => (c.in as In).fix?.kind ?? null))).toEqual(
+      new Set([null, 'coords', 'city', 'ip']),
     );
-    // A searched place with an empty name, and one with none: the registration names neither.
-    const unnamed = casesFor('alerts', 'registrationBody').filter(
-      (c) => (c.in as In).place.source === 'search' && !(c.in as In).place.name,
+    expect(new Set(here.map((c) => (c.out as any).kind))).toEqual(new Set(['device', 'ip']));
+    for (const c of here.filter((c) => (c.in as In).access !== 'granted')) {
+      expect(c.out, JSON.stringify(c.in)).toEqual({ kind: 'ip' });
+    }
+    // A fix wins over the kept cell, which stands in without one; neither without access.
+    const granted = here.filter((c) => (c.in as In).access === 'granted');
+    expect(new Set(granted.map((c) => JSON.stringify((c.out as any).target ?? null))).size).toBe(4);
+    // The body: approximate and the phone's cell, never a saved place in 8.4a.
+    const bodies = casesFor('alerts', 'registrationBody').map((c) => c.out as any);
+    expect(new Set(bodies.map((b) => b.here.source))).toEqual(new Set(['ip', 'device']));
+    expect(bodies.every((b) => b.v === 2 && Array.isArray(b.saved) && !b.saved.length)).toBe(true);
+    expect(bodies.some((b) => b.here.source === 'device' && 'name' in b.here)).toBe(false);
+    // What to do: every action; the hourly refresh while approximate, and the refused set.
+    const actions = casesFor('alerts', 'alertAction');
+    expect(new Set(actions.map((c) => c.out))).toEqual(
+      new Set(['put', 'delete', 'none', 'needsToken']),
     );
-    expect(new Set(unnamed.map((c) => (c.in as In).place.name))).toEqual(new Set(['', undefined]));
-    expect(unnamed.every((c) => !('name' in (c.out as any).place))).toBe(true);
-    // The notification place: none for IP, chosen under a name or none, the phone's followed.
-    const first = casesFor('alerts', 'firstAlertPlace').map((c) => c.out as any);
-    expect(first).toContainEqual(null);
-    expect(new Set(first.filter(Boolean).map((p) => p.follows))).toEqual(new Set([true, false]));
-    expect(new Set(first.filter((p) => p && !p.follows).map((p) => p.name))).toEqual(
-      new Set(['', 'Leeds']),
+    // Registered and nothing changed: approximate again on becoming active an hour or more
+    // after it was sent; either kind again once a week; otherwise nothing.
+    const week = 7 * 24 * 60 * MINUTE;
+    const live = actions.filter((c) => {
+      const i = c.in as In;
+      return (
+        (i.prefs.evening || i.prefs.morning) &&
+        i.permission !== 'denied' &&
+        i.token &&
+        i.last &&
+        !i.refused &&
+        fingerprint(registrationBody(i)) === i.last.fingerprint
+      );
+    });
+    const gap = (c: VectorCase) => (c.in as In).activeAt - (c.in as In).last.at;
+    const age = (c: VectorCase) => (c.in as In).now - (c.in as In).last.at;
+    const ipAt = (c: VectorCase) => (c.in as In).here.kind === 'ip';
+    for (const c of live) {
+      const due = age(c) >= week || (ipAt(c) && gap(c) >= hour);
+      expect(c.out, JSON.stringify(c.in)).toBe(due ? 'put' : 'none');
+    }
+    expect(live.filter((c) => ipAt(c) && gap(c) >= hour && age(c) < week).length).toBeGreaterThan(
+      2,
     );
-    // Followed to another cell, and left as it was for every other fix.
-    const follow = casesFor('alerts', 'followLocation');
-    const moved = follow.filter(
-      (c) => JSON.stringify(c.out) !== JSON.stringify((c.in as In).place),
+    expect(live.some((c) => ipAt(c) && gap(c) < hour && age(c) >= hour)).toBe(true);
+    expect(live.some((c) => !ipAt(c) && gap(c) >= hour && age(c) < week)).toBe(true);
+    const refused = actions.filter((c) => (c.in as In).refused);
+    expect(new Set(refused.map((c) => c.out))).toEqual(
+      new Set(['none', 'put', 'delete', 'needsToken']),
     );
-    expect(moved.map((c) => (c.out as any).target)).toEqual([
-      { kind: 'coords', source: 'device', lat: 53.85, lon: -1.55 },
-    ]);
-    expect(follow.length).toBeGreaterThan(moved.length);
+    // Refused, with the last registration that very set and due again (the hourly refresh, the
+    // heartbeat): nothing while the refusal is since the app became active, then it goes.
+    const refusedDue = refused.filter((c) => {
+      const i = c.in as In;
+      return (
+        (i.prefs.evening || i.prefs.morning) &&
+        i.permission !== 'denied' &&
+        i.token &&
+        i.last &&
+        fingerprint(registrationBody(i)) === i.last.fingerprint &&
+        i.refused.fingerprint === i.last.fingerprint &&
+        (age(c) >= week || (ipAt(c) && gap(c) >= hour))
+      );
+    });
+    const since = (c: VectorCase) => (c.in as In).refused.at >= (c.in as In).activeAt;
+    const waiting = refusedDue.filter(since);
+    expect(new Set(waiting.map((c) => c.out))).toEqual(new Set(['none']));
+    expect(waiting.some((c) => age(c) >= week)).toBe(true);
+    expect(waiting.some((c) => age(c) < week)).toBe(true);
+    const activeAgain = refusedDue.filter((c) => !since(c));
+    expect(new Set(activeAgain.map((c) => c.out))).toEqual(new Set(['put']));
     // Every switch, both ways, from every state; "possible" alone refused.
     const switches = casesFor('alerts', 'setAlert');
     expect(switches).toHaveLength(6 * 3 * 2);
@@ -764,19 +818,76 @@ describe('the cases cover what section 7.4 asks for', () => {
           !(c.out as any).evening,
       ),
     ).toBe(true);
-    // What every reply to a sync and to a test means.
-    expect(new Set(casesFor('alerts', 'syncReply').map((c) => (c.out as any).kind))).toEqual(
+    // What every reply to a sync means: the set as stored, approximate, the phone's, none, with
+    // saved places and refused ones; 8.1's reply is a failure.
+    const syncs = casesFor('alerts', 'syncReply');
+    expect(new Set(syncs.map((c) => (c.out as any).kind))).toEqual(
       new Set(['stored', 'forgotten', 'retry', 'placeRefused', 'failed']),
     );
+    const stored = syncs.filter((c) => (c.out as any).kind === 'stored').map((c) => c.out as any);
+    expect(new Set(stored.map((o) => o.reply.here?.follows ?? null))).toEqual(
+      new Set(['ip', 'device', null]),
+    );
+    expect(stored.some((o) => o.reply.saved.length && o.reply.refused.length)).toBe(true);
+    expect(
+      syncs.some((c) => {
+        const body = JSON.parse((c.in as In).text || 'null');
+        return body && 'place' in body && (c.out as any).kind === 'failed';
+      }),
+    ).toBe(true);
+    // A place's country: null is read (the phone far from any town); left out, the reply fails,
+    // where the same reply with `country: null` put back reads, for where you are and a saved place.
+    expect(
+      stored.some((o) => o.reply.here?.follows === 'device' && o.reply.here.country === null),
+    ).toBe(true);
+    const isRecord = (v: unknown): v is Record<string, unknown> =>
+      typeof v === 'object' && v !== null && !Array.isArray(v);
+    const withCountry = (place: unknown) =>
+      isRecord(place) && !('country' in place) ? { ...place, country: null } : place;
+    const countryLeftOut = syncs.flatMap((c) => {
+      const i = c.in as In;
+      if (i.status !== 200 || (c.out as any).kind !== 'failed') return [];
+      let body: unknown;
+      try {
+        body = JSON.parse(i.text);
+      } catch {
+        return [];
+      }
+      if (!isRecord(body)) return [];
+      const filled = {
+        ...body,
+        here: withCountry(body.here),
+        saved: Array.isArray(body.saved) ? body.saved.map(withCountry) : body.saved,
+      };
+      if (syncReply(200, JSON.stringify(filled), null).kind !== 'stored') return [];
+      return [withCountry(body.here) === body.here ? 'saved' : 'here'];
+    });
+    expect(new Set(countryLeftOut)).toEqual(new Set(['here', 'saved']));
     expect(
       new Set(
-        casesFor('alerts', 'syncReply')
+        syncs
           .filter((c) => (c.out as any).kind === 'retry')
           .map((c) => (c.out as any).afterSeconds),
       ),
     ).toEqual(new Set([42, 999999, 7, 50, 60]));
-    expect(new Set(casesFor('alerts', 'testOutcome').map((c) => c.out))).toEqual(
+    // Settings' row: each kind, a town and none.
+    expect(new Set(casesFor('alerts', 'hereKind').map((c) => c.out))).toEqual(
+      new Set(['device', 'ip', 'unknown']),
+    );
+    expect(new Set(casesFor('alerts', 'hereName').map((c) => c.out))).toEqual(
+      new Set(['Leeds', null]),
+    );
+    // The router's zones: every place's, and none.
+    const zones = casesFor('alerts', 'replyZones').map((c) => Object.keys(c.out as object).length);
+    expect(Math.min(...zones)).toBe(0);
+    expect(Math.max(...zones)).toBeGreaterThanOrEqual(3);
+    // What every reply to a test means, and how many were sent.
+    const tests = casesFor('alerts', 'testOutcome').map((c) => c.out as any);
+    expect(new Set(tests.map((o) => o.kind))).toEqual(
       new Set(['sent', 'dryRun', 'limited', 'quiet', 'notRegistered', 'failed']),
+    );
+    expect(new Set(tests.filter((o) => o.kind === 'sent').map((o) => o.count))).toEqual(
+      new Set([1, 2]),
     );
   });
 

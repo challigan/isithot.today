@@ -85,6 +85,17 @@ describe('constantsSwift', () => {
     );
     expect(members(swift, 'Alerts')).toEqual([
       `public static let heartbeatDays = ${ALERTS.heartbeatDays}`,
+      `public static let hereRefreshMinutes = ${ALERTS.hereRefreshMinutes}`,
+    ]);
+  });
+
+  it('writes how often the app registers again, for where you are too (phase 8.4a)', () => {
+    // Client `alertAction` puts again after `heartbeatDays`, and, while where you are is
+    // approximate, on becoming active `hereRefreshMinutes` after the last put (design decision
+    // 3); the Swift port reads both from here.
+    expect(members(swift, 'Alerts')).toEqual([
+      'public static let heartbeatDays = 7',
+      'public static let hereRefreshMinutes = 60',
     ]);
   });
 

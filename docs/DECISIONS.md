@@ -8258,6 +8258,302 @@ excepted; each is fixed where it starts.
   included; that "Your privacy, registered", which this run never reached, passes; and the job's
   time.
 
+## The iPhone app's notifications where you are (phase 8.4a)
+
+Carl's decision of Sun 1 Nov: the free notification follows where you are, the phone's location
+if it is shared, otherwise the town its internet connection is in, and every other place (the
+bells on saved places, phase 8.4b) needs the one-off purchase. His answers that evening were to
+build it as designed and that 1.0 waits for the bells, so 8.4a and 8.4b are two pull requests for
+review size and for macOS rounds, not two releases. This is 8.4a, the app's first half, on the
+server half merged before it ("Notifications: several places on one phone", above), which answers
+its version 2 body. It supersedes, in "The iPhone app's notifications (phases 8.1 and 8.2)", the
+intro's "notifications free for everyone" (free for where you are), decision 11 (the place, chosen
+or following), 15's gate (no switches at approximate location), 16 (a UK place by its slug or the
+screen), 17's kinds (a place on screen, approximate location) and 18's place line; and the
+approximate gate of spec 10.5 and 12.1. `apps/ios/README.md` ("Phase 8.4a: notifications where
+you are") lists the types, keys and hooks; this records why they are as they are, and where the
+build differs from the design it was built from.
+
+**What changed for the user against 8.1.**
+
+- Turning a switch on always works, at approximate location too. 8.1 showed no switch there, only
+  "Choose a place for notifications: use your location or search for a town." with "Use my
+  location" and "Search".
+- The place is never the one on screen. 8.1 took the place on screen at the first switch, kept it
+  fixed (a holiday town checked once stayed the notification place), or followed the phone only
+  when the screen had shown it.
+- Settings → Notifications says how where you are was found ("Your location", "Approximate, from
+  your internet connection" or "Not found yet") and names the town the server gave, under a line
+  that says what is kept and for how long. Its "Where you are" page says how where you are is found
+  and offers "Use my location" while location was never asked; nothing is chosen there.
+- The Today card shows only where you are (the phone's own point, or approximate location), never
+  on a city's or a searched place's page, with the line that says what is kept, and once it is on,
+  "…likely near Leeds…".
+- Your privacy says "Where you are: Leeds, Europe/London" where 8.1 said "Leeds, Europe/London".
+- An 8.1 install updated to an 8.4 build starts with notifications off (decision 28, below).
+
+**The decisions** this phase implements (the design's numbering, which the code's comments and
+tests follow; the server's are in its section). Where you are:
+
+1. **What where you are is.** The phone's 0.05° cell while location access is allowed and the app
+   has a fix, else approximate: the town the server locates from the registration's own
+   connection. Never a place chosen on screen. The client rule `herePlace({ access, fix, kept })`
+   decides it (ported as `AlertSync.here(access:fix:kept:)`): the phone's cell with access granted
+   and a fix this launch, else the cell kept from an earlier launch, else approximate; a fix that
+   isn't the phone's own is ignored.
+
+How it moves, and when it can't be found:
+
+3. **How often it moves.** A fix at the start and at each return to the app, only while access is
+   already allowed, never asking; and a fix whenever the screen shows a point of the phone's in
+   another cell than where you are, which the fix, not the point, decides. While where
+   you are is approximate, the app registers again on becoming active an hour or more after the
+   last PUT (`Constants.Alerts.hereRefreshMinutes`, 60; client `alertAction`), as the server
+   locates the connection afresh at every PUT; otherwise the weekly heartbeat. No Always
+   permission and no background location.
+4. **Location revoked or never given.** Where you are falls back to approximate at the next sync:
+   the kept cell (`alerts.v2.here`) and this launch's fix are dropped once access reads as not
+   allowed, so the PUT says `{ source: 'ip' }` and the server deletes the stored point. Settings
+   says "Approximate, from your internet connection". The notification never asks for location;
+   "Use my location" on the "Where you are" page asks only at its tap.
+5. **The connection can't be located** (the app's half). The server forgets the whole set and
+   answers 400 `bad_location` in its own words; the app clears its registration, keeps the switches
+   on, shows the words in the status line (8.1's `placeRefused`), the row says "Not found yet", and
+   it doesn't send the same set again until the set changes or the app becomes active again
+   (client `alertAction`'s refused set, `AlertSync.action(…refused:activeAt:…)`).
+
+What shows:
+
+12. **No "where you are" switch** in 1.0. While a switch is on, where you are is included.
+13. **Settings → Notifications** (8.4a's part): the switches; under them the line that says what is
+    kept (`notify-here-kept`); "Where you are" (`notify-here`), its town and kind, pushing the
+    "Where you are" page; the test; the status line; the footer (8.1's). The gate and the
+    place-on-screen choice go. "Saved places" is 8.4b's row.
+
+And what is kept:
+
+16. **Your privacy** (8.4a's part): "Where you are: Leeds, Europe/London" (`keptHere`), none while
+    the server has no place for where you are. The saved places' lines and "Your iPhone's time
+    zone" are 8.4b's.
+
+Taps:
+
+24. **The payload's route** is unchanged: an approximate free place is stored as its rounded point,
+    which `notificationRoute` takes as a device place, so a tap opens that cell under its name.
+    `notificationRoute` now refuses an IP target itself (`alertPlaceAllowed` has gone), and the
+    router's zones come from every place in the set (`replyZones`, design 4.8).
+
+The keys, and the order of the work:
+
+28. **New keys, no migration.** `alerts.v2` (`{ v: 2, prefs, here?: { lat, lon }, bells: [] }`) and
+    `alertSync.v2` (the version 2 reply). Another version, 8.1's included, reads as "off, nothing
+    kept", as `keys.ts` already said of any other version, so an 8.1 TestFlight install updated to
+    an 8.4 build starts with notifications off and can't delete 8.1's record. So that no 8.1 record
+    goes on notifying for 90 days, Carl turns notifications off and deletes his data on the 8.1
+    build before merging 8.4a (docs/SETUP.md, "Where you are (phase 8.4a)"). `bells` is in the
+    shape now, always empty, so 8.4b doesn't change it.
+29. **How it sits.** The server pull request first (merged, above), then 8.4a, then 8.4b stacked on
+    it. Nothing was added to 8.1/8.2's pull request.
+
+What the design's three reviews added:
+
+35. **The Today card** shows only while the screen shows where you are: approximate location, or
+    the phone's point in where you are's cell (`NotificationCard.showsHere(_:here:)`, which the
+    model keeps in step with the place on screen and where you are), with the kept line under its
+    offer
+    (`card-kept`), and once the server has answered, the Done line names the town
+    (`cardOnNamed`), so a wrong approximate place (a mobile network's gateway in another city, a
+    VPN) shows to someone who never opens Settings. Its offer is "Get a notification the evening
+    before snow is likely where you are." 8.1's kinds for a place on screen and for approximate
+    location go; the refused kind and the card's going for good (17) stand.
+
+And, from the same reviews:
+
+39. **TypeScript for the presenters' choices.** `hereKind` and `hereName` are client rules with
+    vectors, ported, so Settings' kind and town are decided in no Swift alone: "Not found yet" only
+    after a 400 or a reply with `here: null`, and a name the server couldn't give (core's "Your
+    location") is never shown as a town.
+
+And the app's own parts of the design: the version 2 body with `saved: []` and no `deviceTz`
+(`registrationBody`, `AlertSync.body`); `needsPlace` gone from `alertAction`, as there is always a
+place; the version 2 reply read field by field, a version 1 reply failing (`syncReply`); the
+Debug stub's whole-set fixtures and `-location ask:` (design 4.9: no new hook name, so no Release
+stub and no `check-archive.sh` change); and the UI tests re-pointed with none added, with an
+`only` input for iteration runs (design 4.11, below).
+
+**Where the build differs from its design.**
+
+- **The delete forgets the phone's cell too.** "Turn off notifications and delete my data" forgets
+  `alerts.v2.here` and this launch's fix, as 8.1's forgot its place. The next fix brings the cell
+  back.
+- **Every switch off clears a refusal.** With no switch on there is no set, so nothing waits;
+  turning a switch on again sends the set at once, rather than waiting for the next return.
+- **Fixes with notifications off.** A fix is taken at the start and on each return whenever access
+  is allowed, every switch off included (design 2.1 says "whenever access is allowed"), so
+  Settings' row says "Your location" rather than "Approximate…" before anything is on.
+- **The "Where you are" page goes back by itself** once a tap of its "Use my location" has changed
+  where you are, as 8.1's page went back after a choice, and not as soon as access is allowed:
+  `useMyLocation()` reads access before the fix arrives, and going back then would hide a "no fix"
+  line. A problem that comes after a tap is said to VoiceOver once; the card's "Done" line is said
+  once, and the town that comes into it later is shown, not said again.
+- **A point of the phone's on screen is never a fix.** The design counts "the screen showing the
+  phone's own point" as a moment where you are moves (2.1, decision 3), but such a point need not
+  be fresh: a Recent row keeps the phone's point from an earlier "Use my location" (Leeds, opened
+  from Lapland to check home), and a notification for the approximate place opens the server's
+  town as a device point (decision 24). Taken as a fix, either would register a place chosen on
+  screen, against decision 1, and stand until the next return. So the point is only a moment: in
+  another cell than where you are, the model reads location access again (the picker may just
+  have been allowed it) and takes its own fix, which decides; in where you are's cell, nothing.
+  The start takes no fix when the screen shows the phone's point in the cell kept (launch step
+  4's), and one otherwise. The card follows the same rule: an older point of the phone's isn't
+  where you are, so its page shows no card (review 1, finding 2; review 2, finding 2).
+- **Syncs wait for a fix.** A fix is out for a moment at the start and on each return, and
+  registering (`registerForRemoteNotifications`) brings the token meanwhile; its sync sent where
+  you are from before the fix, the heartbeat after a week away or the hourly refresh after location
+  was allowed in iOS Settings, and the fix's own PUT then met the server's one write a minute (429,
+  up to 60 s, lost if the app closed first). Now every sync asked for while a fix is out waits for
+  it (`fixFirst`), so a return sends one PUT, with the fix's place (review 2, finding 1).
+- **Every new place on screen reaches the notifications.** 8.1's card read the place on screen
+  live; 8.4a's reads `showsHere`, which only `screenChanged` sets, and a place under "Nearby:" or a
+  city gone for approximate location never called it, so the card stayed on Bradford's page opened
+  from approximate location, offering "where you are" (review 1, finding 1). `AppModel.select(_:)`
+  now tells the notifications before the answer comes (so the card never flashes on the new
+  page), `choose` no longer does it twice, and `failed` tells them of the fall back to approximate
+  location after the launch (launch step 6 does during it). `AppModel.swift` and the hook's comment
+  in `AppEnvironment.swift` are 8.4b's files in the design's work packages (WP-B4); 8.4a changes
+  them for this alone.
+- **"Use my location" stays while it looks.** Once access is allowed at the prompt, or on a second
+  try after no fix, the row stayed only for `.notDetermined` or a failed fix, so it went before the
+  fix came and VoiceOver's focus with it; it now stays, busy, while `locating` (review 3, finding
+  5).
+- **The town is said once.** `RowLabel` hides the drawn value from VoiceOver, since each row that
+  shows one, Settings' "Where you are" and its page's line, gives it as the accessibility value
+  (review 3, finding 6).
+- **The picker request stays.** `HomeView` still opens the picker on
+  `NotificationsModel.pickerRequests`, which nothing in 8.4a sends: 8.4b's "Saved places" row uses
+  it (decision 13).
+- **The Debug stub.** `-devices` reads each fixture's status and body version before its body, so
+  8.1's version 1 PUTs left (`put-leeds` and `put-twice`, kept byte for byte) are passed over, and
+  matches by set in name order, so an approximate body gets `put-here-ip` (Leeds) and the cell 53.8,
+  -1.55 `put-here-device`. 8.1's other version 1 PUTs (`put-durham`, `put-device`, `put-kathmandu`,
+  `put-bad-place`) went at the integration, as nothing read them. `unlocated` goes beside the test's
+  names (`-devices unlocated,gone`). The default push token is `put-here-ip`'s.
+- **The UI tests.** Every NotificationsTests launch stands in for Core Location with access never
+  asked (`-location ask:53.8,-1.55`), where the design named it only for `testWhereYouAre`: every
+  launch now reads location access, so where you are must not depend on what the simulator's own
+  location settings say. `testTurningOnAtApproximateLocation` audits Settings with nothing on (the
+  first launch's screen, which no other audit covers since the gate went) and checks the row,
+  "Approximate, from your internet connection" with "Leeds", once on; the "on" screen is
+  `testTurningOnRegistersAndYourPrivacyShowsIt`'s audit, as before, so the plan has as many Settings
+  audits as 8.1's. `testWhereYouAre` turns the evening on first, so the phone's set
+  (`put-here-device`) is registered and the row's town checked, and reads that the page has gone
+  only once the row has changed, as Settings may keep the row in the tree under the page. The two
+  card tests are on leeds-dry's middle page: at approximate location (no `-place`) for the card, and
+  with Leeds chosen for none, the same page with only the place choice changed;
+  `testTheCardOnlyWhereYouAre` replaces `testTheCardAtApproximateLocation` and keeps its "Not now"
+  over a relaunch. `testTurningOnRegistersAndYourPrivacyShowsIt` audits Settings "on" before it
+  sends the test, not after: on PR #43's run the footer under the test row began 3 points above the
+  content's foot at Settings' top, and the kept line now pushes both further down, so the test row's
+  tap scrolls Settings, which is never audited scrolled (`expectSettingsAtItsTop`). So no Settings
+  audit sees the test's result line now. In `HomeAuditTests` the leeds-dry card cases stay, launched
+  without `-place` (at approximate location, where the card now is), and the first launch's go: the
+  design's "the approximate card cases go; the offer card at Large and AX3, existing cases
+  re-pointed". The Met Office's row shows only while a notification is on (by the country of the
+  server's answer, design 2.4), so `testTurningOnRegistersAndYourPrivacyShowsIt` turns the evening
+  on again after the delete and waits for Leeds before it taps the row; and SettingsTests' privacy
+  lines are the regenerated words (review 3, findings 1 and 2). Every wait reads snapshots
+  (`readElement`; "What PR #46's first macOS run showed"): no predicate in an `XCTWaiter` and no
+  `waitForNonExistence`.
+- **The `only` input** (design 4.11). `ci/test.sh` reads `ONLY_TESTING`, which `ios.yml` sets only
+  on a `workflow_dispatch` run, so pull-request and merge runs always run every plan whole. Each
+  plan takes the named tests of its own targets, read from its `.xctestplan`; a plan with none of
+  them says "not run" and runs nothing; a name that isn't Target/Class[/method], or names no plan's
+  target, stops the step before anything runs; and a name of the plan's own that ran no test (a
+  misspelt class or method, which xcodebuild runs as nothing and passes) fails the step once the
+  plan has run, naming it (`xcresult-summary.mjs ran`, from the plan's test tree), so a misspelt
+  name never passes (review 3, finding 4). The banner step is left out on such a run, as it needs
+  NotificationPermissionTests to have allowed notifications.
+- **Docs.** The review note's notifications paragraph (docs/SETUP.md) loses the gate's sentence
+  now, rather than waiting for 8.4b's note for the purchase and notifications together.
+- **Left as it is:** `NotificationDefaults.swift`'s comment still names `alerts.v1` and
+  `alertSync.v1`; its code reads and writes through `Keys.App`, whose values are the new names.
+
+**Checked on Linux.**
+
+- **TypeScript first** (4ad134e): the client rules, the copy and constants, the vectors and four
+  device fixtures made by the server's version 2 handler; the server's contract test sends every
+  body the client makes to that handler and reads each reply back.
+- **IsItCore** in Docker (`isithot-swift:6.3.3`): 697 tests in 102 suites pass, every vector of
+  `alerts.json` among them. `NotificationsModel`'s new tests were written against stubs of its new
+  API first and failed there (26 tests, 93 issues), then passed on the code. The reviews' fixes
+  were written test first too: a token, a heartbeat or a refresh while a held fix is out (one PUT,
+  with the fix's cell), an older point of the phone's and a notification's point (no fix of
+  their own), the card's rule, a place under "Nearby:" and a gone city telling the notifications,
+  and the busy "Use my location"; each failed for its reason before the code (ten tests, 23
+  issues; the card's rule first at compile time, for its new `here:`), and the IsItState suites
+  passed five runs in a row after it.
+- **Against stubs** (session scratchpad: here-typecheck): IsItUI's new and changed views, the app's
+  files and the Unit plan's NotificationTests type-check in Debug and Release against the real
+  IsItCore; the four new NotificationTests pass in a scratch package on Linux against the real
+  `NotificationDefaults`, and each of three planted breakages of saving and deleting fails them. The
+  UI tests compile against the XCUITest stubs (here-uicheck), whose 108 checks pass, among them a
+  new one of `waitForHere` (the note in the label, the town the value, the last read in a failure);
+  two planted mistakes in the UI tests (a misspelt argument, the removed card helper) fail to
+  compile there.
+- **The `only` input:** `ci/test.sh` against stand-ins for `xcodebuild` and `xcrun`, 17 cases
+  (unset and empty run the whole plan; names in the plan become `-only-testing:`; a plan with none
+  isn't run; a bad or unknown name stops; a build ignores it; a misspelt class, or a misspelt
+  method beside a good name, fails the step naming it), of which the script before the change
+  failed all 11 that name tests; `xcresult-summary.mjs`'s `ran` is Vitest's
+  (scripts/test/xcresult-summary.test.mjs), written first; shellcheck and actionlint clean
+  (actionlint's only remark is its own list not knowing the `macos-26` runner, as before).
+- `swift format lint --strict` over every Swift file.
+
+**Known risks.**
+
+1. **`workflow_dispatch` before the merge.** GitHub documents that a workflow started by hand must
+   be on the default branch. Main's `ios.yml` has no such trigger until 8.4a merges, so an
+   iteration run on 8.4a's branch may be refused; the first try shows it. If it is, 8.4a's rounds
+   run the whole plan and 8.4b's use `only`.
+2. **NotificationPermissionTests and the simulator's location.** It meets the real notification
+   prompt, but since review 3 (finding 3) it stands in for Core Location with access off
+   (`-location denied`): `ci/simulator.sh` grants the app location, the start now takes a fix
+   while access is allowed, and a simulated fix would register a cell no fixture holds, which the
+   stub answers with 400, keeping nothing. Off, where you are is approximate (`put-here-ip`).
+3. **Approximate location on a mobile network** may name a town far from the phone (risk 4 of the
+   design); the card's Done line and Settings name it, so it shows. Only Carl's phone tells how
+   often.
+4. **Swift without a compiler.** IsItUI's new page and card line and the app compile only on macOS;
+   the harness type-checks the rest.
+
+**For the next macOS run to show** (what nothing on Linux can):
+
+1. That everything compiles against the real SDKs with no new warning, and the Unit plan's four
+   new `NotificationTests` pass on the device.
+2. The "Where you are" page's layout and its audit at its top; the kept line among the switches and
+   Settings audited off at approximate location; the card's kept line at Large and AX3
+   (`HomeAuditTests`' two card cases).
+3. That the card shows on leeds-dry's page at approximate location and not with Leeds chosen.
+4. That "Use my location" under `-location ask:` asks once, takes the fix, and the page goes back
+   to Settings by itself, whose row reads "Your location" and "Leeds" (`put-here-device` through
+   the stub).
+5. That the card's "Done" line comes to name Leeds, and the VoiceOver lines are said once (by
+   listening, on a phone, rather than by a test).
+6. The UI plan's minutes before and after, against its budget of 75, for the pull request and the
+   job's timing comment; and whether an iteration run can be started on the branch (risk 1).
+
+**What only Carl's phone shows:** a real approximate place from a mobile network and from Wi-Fi,
+the town it names, "Allow Once" expiring, location set back to Never turning the row back to
+"Approximate…", and a notification for where you are arriving and opening its place
+(docs/SETUP.md, "Where you are (phase 8.4a)").
+
+**Spec points superseded,** in one place: 10.2 item 5 (the card's kinds: where you are only, with
+the kept line, and the town in its Done line); 10.5 and 12.1's approximate gate (no gate: where you
+are is always a place); 12.1's notification place (where you are, never chosen) and its page ("Where
+you are": how it is found and "Use my location"); 12.2's place in the body (version 2, `saved: []`)
+and its heartbeat (with the hourly refresh while approximate); 9.6's keys (`alerts.v2`,
+`alertSync.v2`); and 10.6's place line ("Where you are: …").
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,
