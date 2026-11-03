@@ -9020,6 +9020,64 @@ ID. It is in the edge function's `excludedPath`, so all four domains serve the o
 each app's listing can name its own site (`netlify/test/route.test.ts`; `e2e/domains.spec.ts`
 checks it answers `text/plain` on all four hosts).
 
+## The screen audits in a job of their own
+
+`.github/workflows/ios.yml`, `apps/ios/ci/test.sh`, `apps/ios/ci/xcresult-summary.mjs`.
+
+**Why.** Phase 8.4a set the UI plan a budget of 75 minutes. Phase 8.4b's first macOS run
+(41639537407, PR #54) took 78.4 for it, and 103 for the `ios` job, out of 120. That was 76.4
+minutes of tests against main's 61.7 on ea85d4d (41560397107). About 6 of the extra minutes were
+8.4b's own tests (NotificationsTests +216 s, PickerTests +137 s). The rest was the runner:
+`HomeAuditTests` alone went from 1,683 s to 2,004 s with no change to it. The screen audits are
+the plan's longest class by far (33.4 of its 76.4 minutes), so they now run beside it rather
+than after it.
+
+**How.**
+
+- **One plan, two jobs.** `ci/test.sh UI` runs the UI plan with
+  `-skip-testing:WillItSnowUITests/HomeAuditTests`. `ci/test.sh Audit`, the new `audits` job,
+  runs the same plan with `-only-testing:` for that class, into `Audit.xcresult` and
+  `attachments/Audit`. The class is named once, as `AUDITS` in `test.sh`.
+  - No new test plan, so Xcode's UI plan still runs every UI test on a Mac.
+  - xcodebuild's filters, not a plan file's selection, so the split is in one script and its
+    tests.
+- **A rename can't pass silently.** xcodebuild runs a filter that names nothing as nothing, and
+  passes. So a whole `Audit` run fails unless a test of `AUDITS` ran (`xcresult-summary.mjs
+split`, in the same way as `ran` for an iteration run's names). If the class were renamed, `UI`
+  would run it (its skip would name nothing) and `Audit` would fail, saying so.
+- **Iteration runs** (`only`). Names in `AUDITS` go to the `audits` job, and every other UI test's
+  to `ios`. A job with none of them says "not run", as a plan does.
+- **The audits job is the `ios` job's setup:** the same Xcode, caches, iPhone 17 simulator and
+  build, then the audits.
+  - It takes no Unit plan, banner or Release check; those stay in `ios`.
+  - Its limit is 90 minutes: setup and build took 15 on that run, the audits 33.4, so about 50
+    with more than half an hour to spare.
+  - The `ios` job keeps 120 and should now take about 70 (the plan without the audits, about 43).
+- **The audit call times** (`timings`) and the cancelled touches (`cancels`) come from both
+  jobs: the screen audits' times from `audits`, and those of the sheets and the picker
+  (`auditAccessibility` in NotificationsTests, PickerTests, SettingsTests and UpgradeTests) from
+  `ios`. The review screenshot comes from `ios` (UpgradeTests).
+- **The contact sheet** waits for both jobs. It downloads whichever uploaded attachments into
+  one folder, and runs unless neither did. It sorts every attachment by name across folders, so
+  the sheet is as it was.
+
+**What it costs.** A second macOS runner per run, and a second build (about 5 minutes) and
+simulator boot. Both are free on a public repository, and the jobs run side by side, so a run
+reports sooner.
+
+**Checked on Linux.** `scripts/test/test-sh.test.mjs` runs `test.sh` against stand-ins for
+xcodebuild and xcresulttool:
+
+- each mode's filters and result bundle;
+- an `Audit` run that ran none of the audits fails, though xcodebuild passed;
+- xcodebuild's own failure is kept;
+- an iteration run's names go to the job each belongs to, a job with none of them runs nothing,
+  and a misspelt audit fails;
+- the Unit and StoreKit plans are as they were.
+
+The new tests fail against main's `test.sh`. The macOS run on this change is the first real
+check, and its pull request records both jobs' minutes.
+
 ## Credits and licences
 
 - **Credits follow each source's licence.** Open-Meteo's licence asks for a "Weather data by

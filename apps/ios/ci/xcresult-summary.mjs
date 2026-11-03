@@ -10,6 +10,7 @@
  *   node xcresult-summary.mjs cancels <attachments folder>
  *   node xcresult-summary.mjs attachment <attachments folder> <name>
  *   node xcresult-summary.mjs ran <plan> <tests.json> <name>...
+ *   node xcresult-summary.mjs split <plan> <tests.json> <name>
  *
  * The JSON is `xcrun xcresulttool get build-results`, `get test-results summary` and
  * `get test-results tests` (Xcode 16 and later). A field that isn't there is left out, never
@@ -24,7 +25,9 @@
  * (`app-upgrade`, the review screenshot), as the export names each file by a UUID. `ran` checks
  * that each test an iteration run named (ci/test.sh's ONLY_TESTING) ran in the plan: it prints
  * nothing when each did, and otherwise says which didn't and exits 1, as xcodebuild runs a
- * misspelt class or method as nothing and passes.
+ * misspelt class or method as nothing and passes. `split` checks in the same way that a test of
+ * the class a job of its own takes from a plan (ci/test.sh's `Audit`, the UI plan's AUDITS) ran:
+ * a whole run that names a renamed class would otherwise pass with nothing run.
  */
 import { readFileSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
@@ -182,6 +185,26 @@ export function ranSummary(plan, tests, names) {
     text:
       `### ${plan}: no test ran for ${missing.join(', ')}, though named (\`only\`): a misspelt ` +
       'class or method, which xcodebuild runs as nothing\n',
+  };
+}
+
+/**
+ * What `split` says of a job's run of the class it takes from a plan (ci/test.sh's `Audit`):
+ * nothing when a test of it ran, else that none did; and whether the step should pass.
+ */
+export function splitSummary(plan, tests, name) {
+  if (!tests) {
+    return {
+      ok: false,
+      text: `### ${plan}: no test tree, so whether ${name} ran couldn’t be checked (see the log)\n`,
+    };
+  }
+  if (!notRun(tests, [name]).length) return { ok: true, text: '' };
+  return {
+    ok: false,
+    text:
+      `### ${plan}: no test of ${name} ran: renamed or moved? xcodebuild runs a name it can’t ` +
+      'find as nothing (ci/test.sh’s AUDITS)\n',
   };
 }
 
@@ -381,6 +404,10 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     process.stdout.write(text);
     // Not process.exit: on macOS a pipe's writes are asynchronous, and exiting could lose them.
     if (!ok) process.exitCode = 1;
+  } else if (kind === 'split' && args.length === 3) {
+    const { ok, text } = splitSummary(args[0], readJson(args[1]), args[2]);
+    process.stdout.write(text);
+    if (!ok) process.exitCode = 1;
   } else if (kind === 'attachment' && args.length === 2) {
     const file = attachmentFile(args[0], args[1]);
     if (!file) {
@@ -392,7 +419,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     console.error(
       'usage: xcresult-summary.mjs build <json> | tests <plan> <summary> <tests> | ' +
         'timings <attachments> | cancels <attachments> | attachment <attachments> <name> | ' +
-        'ran <plan> <tests> <name>...',
+        'ran <plan> <tests> <name>... | split <plan> <tests> <name>',
     );
     process.exit(2);
   }

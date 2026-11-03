@@ -6,7 +6,8 @@ name: iOS
 # build for the iPhone 17 simulator, the Unit and UI test plans run, simctl push shows a
 # notification's banner over the app and on the Home Screen, a Release build is checked for debug
 # hooks, and the screens, widgets and banners are tiled into a contact sheet;
-# beside that, an unsigned Release archive for iPhones gets the release job's archive checks
+# beside that, the UI plan's screen audits run on a simulator of their own (the audits job), an
+# unsigned Release archive for iPhones gets the release job's archive checks
 # (scripts/check-archive.sh), and the StoreKit test plan runs on an iOS 26.2 simulator, where
 # StoreKit Test works (the storekit job). No job needs a secret. Runs only when something the app
 # is built, generated or checked from changes (the same paths twice), and when started by hand.
@@ -54,10 +55,11 @@ on:
       - .github/workflows/ios*.yml
   # An iteration run (phase 8.4a): Actions → iOS → Run workflow, on a pull request's branch, with
   # `only` naming the tests to run (ci/test.sh's ONLY_TESTING), so a macOS round on a few failing
-  # tests needn't wait for the whole UI plan. Each plan runs only the named tests of its own, a
-  # plan with none of them isn't run, and the banner step, which needs NotificationPermissionTests
-  # to have allowed notifications, is left out. With `only` empty it is a whole run. Pull-request
-  # and merge runs always run every plan whole.
+  # tests needn't wait for the whole UI plan. Each plan runs only the named tests of its own (the
+  # audits job those of HomeAuditTests, the ios job the UI plan's others), a plan with none of
+  # them isn't run, and the banner step, which needs NotificationPermissionTests to have allowed
+  # notifications, is left out. With `only` empty it is a whole run. Pull-request and merge runs
+  # always run every plan whole.
   workflow_dispatch:
     inputs:
       only:
@@ -112,6 +114,12 @@ jobs:
     # Pinned: never macos-latest, which moves, and never -xlarge, which is billed even on a
     # public repo.
     runs-on: macos-26
+    # Since phase 8.4b's first run took 103 minutes (run 41639537407: the simulator's boot 10, the
+    # UI plan 78.4, past its budget of 75, below), the screen audits, HomeAuditTests, 33.4 of the
+    # plan's minutes there, run in a job of their own beside this one (audits, below), and the UI
+    # plan here runs without them: about 45 minutes, the job about 70. The history below is the
+    # whole plan's.
+    #
     # The UI plan's audits take every screenful of eighteen pages, and two tests wait two
     # minutes for a running clock, on a runner whose simulator alone has taken six minutes to
     # boot: room for a slow first run to report its results rather than be cancelled. Phase
@@ -216,7 +224,8 @@ jobs:
         env:
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only || '' }}
         run: apps/ios/ci/test.sh Unit "${{ steps.simulator.outputs.udid }}"
-      # Run even when the unit tests fail, so one round trip shows both.
+      # Run even when the unit tests fail, so one round trip shows both. Every UI test but the
+      # screen audits, HomeAuditTests, which the audits job runs beside this one (ci/test.sh).
       - name: UI tests
         id: ui
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -255,6 +264,87 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-attachments
+          path: apps/ios/build/attachments
+          if-no-files-found: warn
+          retention-days: 5
+
+  # The UI plan's screen audits, HomeAuditTests (ci/test.sh Audit): every screenful of the home
+  # screen's pages at Large and AX3, audited, measured and attached for the contact sheet. A job
+  # of its own beside ios, as they took 33.4 of the UI plan's 78.4 minutes on phase 8.4b's first
+  # run (41639537407) and the plan was past its budget of 75. The ios job's setup, then its own
+  # simulator, build and run, on the same Xcode and simulator, so a screen audits as it would in
+  # that job.
+  audits:
+    name: Screen audits on the iPhone simulator
+    needs: [generated, swift-linux]
+    runs-on: macos-26
+    # Setup and the build took 15 minutes on that run, 10 of them the simulator's boot, and the
+    # audits 33.4 (28 on main's ea85d4d): about 50 in all. 90 leaves more than half an hour, so a
+    # slow runner reports its results and uploads its attachments, which a job cut off by its
+    # limit doesn't. An iteration run (`only`) that names no audit builds, then runs none.
+    timeout-minutes: 90
+    # As the ios job's: the attachments' artefact ID, set only when they were uploaded.
+    outputs:
+      attachments: ${{ steps.attachments.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 26.6
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version
+      # The ios job's caches, under the same keys.
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: apps/ios/.spm
+          key: spm-${{ runner.os }}-xcode26.6-${{ hashFiles('apps/ios/Package.resolved') }}
+      - name: Cache XcodeGen
+        uses: actions/cache@v4
+        with:
+          path: ~/.xcodegen/2.46.0
+          key: xcodegen-2.46.0-4d9e34b6-${{ runner.os }}
+      - name: Generate the project
+        run: apps/ios/ci/xcodegen.sh
+      # Exactly the versions in Package.resolved, as the ios job resolves them; that job keeps
+      # what Xcode writes when the committed file can't be used.
+      - name: Resolve packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project apps/ios/WillItSnow.xcodeproj -scheme WillItSnow \
+            -clonedSourcePackagesDirPath apps/ios/.spm -onlyUsePackageVersionsFromResolvedFile
+      # Assigned first, so that a failure in simulator.sh fails this step, not the next one.
+      - name: Boot the iPhone 17 simulator
+        id: simulator
+        run: |
+          udid="$(apps/ios/ci/simulator.sh)"
+          if [ -z "$udid" ]; then
+            echo "::error::simulator.sh printed no UDID"
+            exit 1
+          fi
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: Build for testing
+        id: build
+        run: apps/ios/ci/test.sh build "${{ steps.simulator.outputs.udid }}"
+      - name: Screen audits
+        env:
+          ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only || '' }}
+        run: apps/ios/ci/test.sh Audit "${{ steps.simulator.outputs.udid }}"
+      - name: Upload the result bundles
+        if: ${{ !cancelled() && steps.simulator.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: audits-results
+          path: |
+            apps/ios/build/*.xcresult
+            apps/ios/build/*.json
+          if-no-files-found: warn
+          retention-days: 5
+      - name: Upload the attachments
+        id: attachments
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: audits-attachments
           path: apps/ios/build/attachments
           if-no-files-found: warn
           retention-days: 5
@@ -369,11 +459,11 @@ jobs:
 
   contact-sheet:
     name: Contact sheet
-    needs: ios
-    # Also after failed tests: a failing screen is the one most worth seeing. Skipped when ios
-    # uploaded no attachments (it failed before its tests ran, or no test attached any), so the
-    # only red job is the one to read.
-    if: ${{ !cancelled() && needs.ios.outputs.attachments }}
+    needs: [ios, audits]
+    # Also after failed tests: a failing screen is the one most worth seeing. Skipped when neither
+    # ios nor audits uploaded attachments (each failed before its tests ran, or no test attached
+    # any), so the only red jobs are the ones to read; with one job's, the sheet has those.
+    if: ${{ !cancelled() && (needs.ios.outputs.attachments || needs.audits.outputs.attachments) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -384,13 +474,22 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v4
+      # Both into one folder: ios's Unit, UI, Push and review, and audits' Audit. The sheet sorts
+      # every attachment by name, whichever folder it is in, so the audited pages keep their order.
+      - if: ${{ needs.ios.outputs.attachments }}
+        uses: actions/download-artifact@v4
         with:
           name: ios-attachments
           path: attachments
+      - if: ${{ needs.audits.outputs.attachments }}
+        uses: actions/download-artifact@v4
+        with:
+          name: audits-attachments
+          path: attachments
       - name: Tile the attachments
         run: |
-          node apps/ios/ci/contact-sheet.mjs attachments/Unit attachments/UI attachments/Push \
+          node apps/ios/ci/contact-sheet.mjs attachments/Unit attachments/UI attachments/Audit \
+            attachments/Push \
             --out contact-sheet.png --title "will it snow? ${GITHUB_SHA::7} run ${GITHUB_RUN_NUMBER}"
       - uses: actions/upload-artifact@v4
         with:

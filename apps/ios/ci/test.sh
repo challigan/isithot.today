@@ -2,38 +2,49 @@
 # Builds the app for testing, or runs one test plan, on the simulator simulator.sh booted (iOS
 # build spec, section 18.1). Then writes what happened to the GitHub step summary: the counts,
 # and each error or failing test with its file and line (ci/xcresult-summary.mjs). A test plan's
-# attachments are exported for the contact sheet, and the UI plan's audit calls' times read from
-# them: the slowest, and every call that didn't finish in time; so is every touch the system
-# cancelled in the app (`gesture-cancelled`), a tap played again among them; its upgrade sheet's
-# screenshot, App Review's (docs/SETUP.md), is copied to review/app-upgrade.png beside them. The
-# StoreKit plan, on the iOS 26.2 simulator (simulator.sh 26.2), runs with test timeouts on and 60
-# seconds for each test (XCTest rounds an allowance up to whole minutes, so none is shorter), so a
-# purchase sheet that hangs (FB22836426) fails its test rather than the job (ios.yml's storekit
-# job budgets for all 18 hanging).
+# attachments are exported for the contact sheet. The audit calls' times are read from `UI`'s and
+# `Audit`'s (below): the slowest, and every call that didn't finish in time; so is every touch the
+# system cancelled in the app (`gesture-cancelled`), a tap played again among them; and the
+# upgrade sheet's screenshot, App Review's (docs/SETUP.md), is copied from `UI`'s to
+# review/app-upgrade.png beside them. The StoreKit plan, on the iOS 26.2 simulator
+# (simulator.sh 26.2), runs with test timeouts on and 60 seconds for each test (XCTest rounds an
+# allowance up to whole minutes, so none is shorter), so a purchase sheet that hangs (FB22836426)
+# fails its test rather than the job (ios.yml's storekit job budgets for all 18 hanging).
+#
+# The UI plan runs in two jobs that start together (ios.yml's ios and audits), as its screen
+# audits took 33 of its 76 minutes on PR #54's first run: `UI` runs the plan without them
+# (-skip-testing:), and `Audit` runs only them, from the same plan (-only-testing:), so Xcode's
+# own plan still holds every UI test. They are AUDITS, below. `Audit` fails, saying so, when no
+# test of AUDITS ran (the class renamed or moved, which xcodebuild runs as nothing and passes;
+# xcresult-summary.mjs `split`).
 #
 # ONLY_TESTING, set only by an iteration run (ios.yml's `only` input, phase 8.4a), names the tests
 # to run as xcodebuild does, Target/Class or Target/Class/method, separated by commas or spaces
 # (WillItSnowUITests/NotificationsTests/testWhereYouAre). A plan then runs only the named tests
 # whose target is one of its own, each passed as -only-testing:, and a plan with none of them
 # isn't run and says so; a build builds everything. A name that isn't Target/Class[/method], or
-# whose target is in no plan, stops the script before anything runs; and a name of the plan's
-# own that ran no test (a misspelt class or method, which xcodebuild runs as nothing and passes)
-# fails the step once the plan has run, saying which (xcresult-summary.mjs `ran`), so a misspelt
-# name never passes. Unset or empty, as on every pull-request and merge run, the whole plan runs.
+# whose target is in no plan, stops the script before anything runs; a name in AUDITS is `Audit`'s
+# and every other UI test's is `UI`'s; and a name of the plan's own that ran no test (a misspelt
+# class or method, which xcodebuild runs as nothing and passes) fails the step once the plan has
+# run, saying which (xcresult-summary.mjs `ran`), so a misspelt name never passes. Unset or empty,
+# as on every pull-request and merge run, the whole plan runs (for `UI` and `Audit`, their part).
 #
 #   apps/ios/ci/test.sh build <UDID>      build-for-testing        -> build/Build.xcresult
 #   apps/ios/ci/test.sh Unit <UDID>       the Unit test plan       -> build/Unit.xcresult, build/attachments/Unit
-#   apps/ios/ci/test.sh UI <UDID>         the UI test plan         -> build/UI.xcresult, build/attachments/UI
-#                                                                     and build/attachments/review
+#   apps/ios/ci/test.sh UI <UDID>         the UI test plan but     -> build/UI.xcresult, build/attachments/UI
+#                                         AUDITS                      and build/attachments/review
+#   apps/ios/ci/test.sh Audit <UDID>      the UI plan's AUDITS     -> build/Audit.xcresult, build/attachments/Audit
 #   apps/ios/ci/test.sh StoreKit <UDID>   the StoreKit test plan   -> build/StoreKit.xcresult, build/attachments/StoreKit
 #
 # Exits with xcodebuild's status, whatever the summary makes of it.
 set -euo pipefail
 
-what="${1:?build, Unit, UI or StoreKit}"
+what="${1:?build, Unit, UI, Audit or StoreKit}"
 udid="${2:?the simulator UDID simulator.sh printed}"
 ios="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 build="$ios/build"
+# The screen audits (UITests/HomeAuditTests.swift), which `Audit` runs and `UI` leaves out.
+AUDITS=WillItSnowUITests/HomeAuditTests
 
 case "$what" in
   build)
@@ -42,15 +53,22 @@ case "$what" in
     ;;
   Unit | UI)
     name="$what"
-    action=(test-without-building -testPlan "$what" -parallel-testing-enabled NO)
+    plan="$what"
+    action=(test-without-building -testPlan "$plan" -parallel-testing-enabled NO)
+    ;;
+  Audit)
+    name="$what"
+    plan=UI
+    action=(test-without-building -testPlan "$plan" -parallel-testing-enabled NO)
     ;;
   StoreKit)
     name="$what"
+    plan="$what"
     action=(test-without-building -testPlan "$what" -parallel-testing-enabled NO
       -test-timeouts-enabled YES -default-test-execution-time-allowance 60)
     ;;
   *)
-    echo "test.sh: $what is not build, Unit, UI or StoreKit" >&2
+    echo "test.sh: $what is not build, Unit, UI, Audit or StoreKit" >&2
     exit 2
     ;;
 esac
@@ -67,6 +85,11 @@ plan_targets() {
     .testTargets) console.log(t.target.name)' "$ios/TestPlans/$1.xctestplan"
 }
 
+# Whether the test named $1 (Target/Class[/method]) is in AUDITS: `Audit`'s, not `UI`'s.
+in_audits() {
+  [[ $1 == "$AUDITS" || $1 == "$AUDITS"/* ]]
+}
+
 # ONLY_TESTING's names (above), and those in this plan as -only-testing: arguments.
 tests=()
 if [ "$what" != build ]; then
@@ -77,7 +100,7 @@ if [ "$what" != build ]; then
 fi
 only=()
 if [ ${#tests[@]} -gt 0 ]; then
-  mine="$(plan_targets "$what")"
+  mine="$(plan_targets "$plan")"
   every="$(plan_targets Unit && plan_targets UI && plan_targets StoreKit)"
   for test in "${tests[@]}"; do
     if ! [[ $test =~ ^[A-Za-z0-9_]+/[A-Za-z0-9_]+(/[A-Za-z0-9_]+)?$ ]]; then
@@ -91,7 +114,10 @@ if [ ${#tests[@]} -gt 0 ]; then
         "(${every//$'\n'/, })" >&2
       exit 2
     fi
-    if grep -qxF "$target" <<<"$mine"; then only+=("-only-testing:$test"); fi
+    if ! grep -qxF "$target" <<<"$mine"; then continue; fi
+    if [ "$what" = UI ] && in_audits "$test"; then continue; fi
+    if [ "$what" = Audit ] && ! in_audits "$test"; then continue; fi
+    only+=("-only-testing:$test")
   done
   if [ ${#only[@]} -eq 0 ]; then
     echo "### $what: not run (ONLY_TESTING names none of its tests: ${tests[*]})" | report
@@ -99,6 +125,10 @@ if [ ${#tests[@]} -gt 0 ]; then
   fi
   echo "### $what: only ${only[*]#-only-testing:}" | report
   action+=("${only[@]}")
+elif [ "$what" = UI ]; then
+  action+=("-skip-testing:$AUDITS")
+elif [ "$what" = Audit ]; then
+  action+=("-only-testing:$AUDITS")
 fi
 
 result="$build/$name.xcresult"
@@ -143,17 +173,25 @@ else
     "$build/$name.tests.json" "${only[@]#-only-testing:}" | report; then
     if [ "$status" -eq 0 ]; then status=1; fi
   fi
+  # A whole run of AUDITS ran a test of it, or the step fails, whatever xcodebuild said.
+  if [ "$what" = Audit ] && [ ${#only[@]} -eq 0 ] && ! node "$ios/ci/xcresult-summary.mjs" split \
+    "$name" "$build/$name.tests.json" "$AUDITS" | report; then
+    if [ "$status" -eq 0 ]; then status=1; fi
+  fi
   rm -rf "$build/attachments/$name"
   mkdir -p "$build/attachments/$name"
   xcrun xcresulttool export attachments --path "$result" --output-path "$build/attachments/$name" ||
     echo "test.sh: no attachments exported from $name" >&2
-  if [ "$what" = UI ]; then
+  if [ "$what" = UI ] || [ "$what" = Audit ]; then
+    # The audit calls' times: the screen audits' in `Audit`, the sheets' and the picker's in `UI`.
     node "$ios/ci/xcresult-summary.mjs" timings "$build/attachments/$name" | report ||
       echo "test.sh: no audit times" >&2
     # Every touch the system cancelled, a tap played again among them, which a passing test
     # wouldn't otherwise show.
     node "$ios/ci/xcresult-summary.mjs" cancels "$build/attachments/$name" | report ||
       echo "test.sh: no list of cancelled touches" >&2
+  fi
+  if [ "$what" = UI ]; then
     # The upgrade sheet's screenshot for App Review (docs/SETUP.md, "The app's purchase"), as
     # review/app-upgrade.png in the attachments: the export names each file by a UUID.
     review="$build/attachments/review"

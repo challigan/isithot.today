@@ -2298,21 +2298,23 @@ full-screen ad: choose places on a later launch.
 
 ## CI (`.github/workflows/ios.yml`)
 
-| Job             | Runs on                     | What it proves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| --------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `generated`     | ubuntu                      | `pnpm mobile:check`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `swift-linux`   | ubuntu, `swift:6.3.3-noble` | every Swift file lints; IsItCore's tests pass (with `tzdata`), the vector guard included: every vector file checked by its port (above)                                                                                                                                                                                                                                                                                                                                                                    |
-| `ios`           | `macos-26`, Xcode 26.6      | the project generates; packages resolve to the pins; the app, widget and tests build for the iPhone 17 simulator (iOS 26.5), with the icon and glyph catalogues; the Unit and UI plans pass, with the Unit plan's widget snapshots; after the UI plan, `ci/push.sh` shows the notification banner over the app and on the Home Screen (`simctl push`); a Release build has no debug hooks, no fixtures, no StoreKit configuration and no StoreKitTest, and no ads, location or purchase code in the widget |
-| `archive-check` | `macos-26`, Xcode 26.6      | an unsigned Release archive for iPhones builds and passes `scripts/check-archive.sh` with ads test: the release job's archive checks, on every pull request, with no key                                                                                                                                                                                                                                                                                                                                   |
-| `storekit`      | `macos-26`, Xcode 26.6      | the StoreKit plan passes on an iPhone 17 simulator with iOS 26.2 (downloaded if the runner lacks it), each test allowed 60 seconds, within 60 minutes; beside `ios`, not after its UI plan, which already takes most of that job's 120                                                                                                                                                                                                                                                                     |
-| `contact-sheet` | ubuntu                      | tiles every attached screen and widget, and push.sh's two banner screenshots, into one PNG, whenever `ios` uploaded attachments (failed tests included); skipped when `ios` failed before its tests ran                                                                                                                                                                                                                                                                                                    |
+| Job             | Runs on                     | What it proves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| --------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generated`     | ubuntu                      | `pnpm mobile:check`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `swift-linux`   | ubuntu, `swift:6.3.3-noble` | every Swift file lints; IsItCore's tests pass (with `tzdata`), the vector guard included: every vector file checked by its port (above)                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `ios`           | `macos-26`, Xcode 26.6      | the project generates; packages resolve to the pins; the app, widget and tests build for the iPhone 17 simulator (iOS 26.5), with the icon and glyph catalogues; the Unit plan passes, with its widget snapshots, and the UI plan but its screen audits (`ci/test.sh UI`); after the UI plan, `ci/push.sh` shows the notification banner over the app and on the Home Screen (`simctl push`); a Release build has no debug hooks, no fixtures, no StoreKit configuration and no StoreKitTest, and no ads, location or purchase code in the widget |
+| `audits`        | `macos-26`, Xcode 26.6      | the UI plan's screen audits, `HomeAuditTests`, pass (`ci/test.sh Audit`), on an iPhone 17 simulator of their own, built as `ios` builds, within 90 minutes; beside `ios` since phase 8.4b's first run, where they took 33.4 of the UI plan's 78.4 minutes; a run where none of them ran fails (`xcresult-summary.mjs split`)                                                                                                                                                                                                                      |
+| `archive-check` | `macos-26`, Xcode 26.6      | an unsigned Release archive for iPhones builds and passes `scripts/check-archive.sh` with ads test: the release job's archive checks, on every pull request, with no key                                                                                                                                                                                                                                                                                                                                                                          |
+| `storekit`      | `macos-26`, Xcode 26.6      | the StoreKit plan passes on an iPhone 17 simulator with iOS 26.2 (downloaded if the runner lacks it), each test allowed 60 seconds, within 60 minutes; beside `ios`, not after its UI plan, which already takes most of that job's 120                                                                                                                                                                                                                                                                                                            |
+| `contact-sheet` | ubuntu                      | tiles every attached screen and widget, `audits`' among them, and push.sh's two banner screenshots, into one PNG, whenever `ios` or `audits` uploaded attachments (failed tests included); skipped when both failed before their tests ran                                                                                                                                                                                                                                                                                                        |
 
 **Iteration runs** (phase 8.4a): Actions → iOS → **Run workflow**, on a pull request's branch,
 with `only` naming the tests to run as xcodebuild names them, Target/Class or Target/Class/method,
 separated by commas (`WillItSnowUITests/NotificationsTests/testWhereYouAre,
 WillItSnowUITests/HomeAuditTests/testLeedsDryWithTheNotificationCardAtAX3`). `ci/test.sh` reads it
-as `ONLY_TESTING`: each plan runs only the named tests of its own targets (`-only-testing:`), a
-plan with none of them says "not run" and runs nothing, and a name that isn't Target/Class[/method]
+as `ONLY_TESTING`: each plan runs only the named tests of its own targets (`-only-testing:`;
+the `audits` job those in `HomeAuditTests`, the `ios` job the UI plan's others), a plan with none
+of them says "not run" and runs nothing, and a name that isn't Target/Class[/method]
 or names no plan's target stops the step, and a name of a plan's own that ran no test (a misspelt
 class or method, which xcodebuild runs as nothing and passes) fails it once the plan has run,
 naming it (`xcresult-summary.mjs ran`), so a misspelt name never passes.
@@ -2326,12 +2328,15 @@ first try shows whether it is.
 
 No job needs a secret. The `ios` job pins `macos-26` (never `macos-latest`, never `-xlarge`) and
 selects Xcode 26.6 explicitly. It may run for 120 minutes: PR #43's first run, with the widgets
-and the notifications, took 85 of the 90 it had. It caches `apps/ios/.spm` (the package
+and the notifications, took 85 of the 90 it had, and phase 8.4b's first took 103, before the
+screen audits had their own job (`audits`, 90 minutes; docs/DECISIONS.md, "The screen audits in a
+job of their own"). It caches `apps/ios/.spm` (the package
 checkouts and Google's binary SDKs) on the hash of `Package.resolved`, and the XcodeGen zip,
 whose SHA-256 is checked on every run. It uploads, for five days:
 
 - `ios-results`: `Build.xcresult`, `Unit.xcresult`, `UI.xcresult`, and the JSON xcresulttool
   read from them;
+- `audits-results` (the `audits` job's): `Build.xcresult`, `Audit.xcresult` and their JSON;
 - `storekit-results` (the `storekit` job's): `Build.xcresult`, `StoreKit.xcresult` and their
   JSON;
 - `ios-attachments`: the PNGs the tests attached, as `xcresulttool export attachments` writes
@@ -2341,13 +2346,16 @@ whose SHA-256 is checked on every run. It uploads, for five days:
   `Push/`, the notification banner over the app and on the Home Screen (`ci/push.sh`,
   `notification-banner-app.png` and `notification-banner-home.png`), with the simulator's log of
   the step (`simulator.log`) and the app's standard output (`app-stdout.txt`);
+- `audits-attachments` (the `audits` job's): `Audit/`, the screen audits' PNGs and their audit
+  calls' times, as `ios-attachments` has the other plans' and the rest of the UI plan's;
 - `contact-sheet`: `contact-sheet.png`, every attachment at true size (a third of the 3x pixels),
   named underneath;
 - `package-resolved`: only when the committed file can't be used (below).
 
 Each step's outcome goes to the run's summary page and to the job log: the build's errors and
 warnings with file and line, each test plan's counts and every failure with its file and line,
-the UI plan's audit calls' times, read from its attachments (the ten slowest and every call that
+each UI job's audit calls' times (`ios`'s for the sheets and the picker, `audits`' for the
+screen audits), read from its attachments (the ten slowest and every call that
 timed out, with the time a timeout took, which says roughly how long XCTest's deadline is), and
 every touch the system cancelled in the app, with its test and what was played again
 (`ci/test.sh`, using `ci/xcresult-summary.mjs`), the notification banner (`ci/push.sh`: shown,
