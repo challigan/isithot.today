@@ -17,17 +17,18 @@ import XCTest
 /// leeds-dry's middle page launched with one (`-purchase bought`), at Large and at AX3, where its
 /// words wrap; no other launch here has the row. So is the notifications card (item 5), which
 /// `-uitest` hides from every other launch, so that their screens are as they were: shown
-/// (`-alertCard shown`) on leeds-dry's middle page with Leeds kept as the place (`-place`), the
-/// card for the place on screen, and on picker-first-launch's, on approximate location, the card
-/// that asks for a place.
+/// (`-alertCard shown`) on leeds-dry's middle page, launched as every leeds-dry case here is, with
+/// no place chosen, so at approximate location: the screen shows where you are, the card's only
+/// screen since phase 8.4a, and the card offers notifications for where you are, with the line
+/// that says what is kept (design 2.6).
 ///
 /// The attachments are named so that the contact sheet, which tiles them in their names' order
 /// (`ci/contact-sheet.mjs`), shows them fixture by fixture, Large then AX3, each page in the
 /// switcher's order, top to bottom: `home-<fixture>-1-large-1-now-01`, `…-1-large-1-now-02`, …,
 /// `…-1-large-2-today-01` (or `-2-tomorrow-01`), …, `…-1-large-3-this-week-01`, …, then
 /// `home-<fixture>-2-ax3-1-now-01` and so on; the row's after leeds-dry's own, as
-/// `home-leeds-dry-upgrade-1-large-2-today-01` and so on, and the cards' as
-/// `home-leeds-dry-card-…` and `home-first-launch-card-…`.
+/// `home-leeds-dry-upgrade-1-large-2-today-01` and so on, and the card's as
+/// `home-leeds-dry-card-…`.
 ///
 /// Every issue an audit finds fails the test, but for the exceptions in `exceptions`, each with
 /// why it isn't a fault to fix in the app. An element of the page is judged on a screenful that
@@ -83,22 +84,12 @@ final class HomeAuditTests: XCTestCase {
 
   @MainActor
   func testLeedsDryWithTheNotificationCardAtLarge() throws {
-    try auditTheChosenCard(at: .large)
+    try auditTheCard(at: .large)
   }
 
   @MainActor
   func testLeedsDryWithTheNotificationCardAtAX3() throws {
-    try auditTheChosenCard(at: .ax3)
-  }
-
-  @MainActor
-  func testFirstLaunchWithTheNotificationCardAtLarge() throws {
-    try auditTheApproximateCard(at: .large)
-  }
-
-  @MainActor
-  func testFirstLaunchWithTheNotificationCardAtAX3() throws {
-    try auditTheApproximateCard(at: .ax3)
+    try auditTheCard(at: .ax3)
   }
 
   /// leeds-dry's middle page, the one page with the upgrade row, launched with a product for sale
@@ -112,27 +103,19 @@ final class HomeAuditTests: XCTestCase {
       as: "leeds-dry-upgrade", showing: "upgrade-row")
   }
 
-  /// leeds-dry's middle page with the notifications card (`-alertCard shown`) for Leeds, kept as
-  /// the place (`-place`), so the card offers "Turn on" and "Not now"; attached as
-  /// `home-leeds-dry-card-…`. The card comes once the notifications' state is read, which the
-  /// audit waits for.
+  /// leeds-dry's middle page with the notifications card (`-alertCard shown`), at approximate
+  /// location (no place chosen, so the screen shows where you are), so the card offers
+  /// notifications for where you are: its line, the line that says what is kept, "Turn on" and
+  /// "Not now"; attached as `home-leeds-dry-card-…`. The card comes once the notifications' state
+  /// is read, which the audit waits for. A chosen city's page has no card (NotificationsTests'
+  /// `testTheCardOnlyWhereYouAre`). The card that says notifications are off and the one that
+  /// says they are on are the same view with other words, no kept line and fewer buttons:
+  /// NotificationsTests attaches the one that says they are on.
   @MainActor
-  private func auditTheChosenCard(at size: TextSize) throws {
+  private func auditTheCard(at size: TextSize) throws {
     try audit(
-      "leeds-dry", at: size, extra: ["-alertCard", "shown", "-place", "place=leeds-gb"],
-      pages: ["today"], as: "leeds-dry-card", showing: "notification-card")
-  }
-
-  /// picker-first-launch's middle page, the first launch on approximate location (the
-  /// ip-first-launch fixture at 12:05), with the card that asks for a place: "Use my location",
-  /// "Search" and "Not now"; attached as `home-first-launch-card-…`. The card that says
-  /// notifications are off and the one that says they are on are the same view with other words
-  /// and fewer buttons: NotificationsTests attaches the one that says they are on.
-  @MainActor
-  private func auditTheApproximateCard(at size: TextSize) throws {
-    try audit(
-      "picker-first-launch", at: size, extra: ["-alertCard", "shown"], pages: ["today"],
-      as: "first-launch-card", showing: "notification-card")
+      "leeds-dry", at: size, extra: ["-alertCard", "shown"], pages: ["today"],
+      as: "leeds-dry-card", showing: "notification-card")
   }
 
   /// An issue the audit raises that isn't a fault to fix in the app, and why: which kind, and

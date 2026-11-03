@@ -21,11 +21,9 @@ import UIKit
 /// the gear, Settings (section 10.4, `SettingsSheet`). The third, the upgrade sheet (section
 /// 10.5, `UpgradeSheet`), opens from the middle page's upgrade row in the free version, and from
 /// `willitsnow://upgrade`. Settings also opens from `willitsnow://settings/notifications` and iOS
-/// Settings' link to the app's notification settings, and the picker from Settings →
-/// Notifications' "Use my location" and "Search" and the notifications card's two. In the free
-/// version, once the ads are on, the home banner's band sits under the pager and each page ends
-/// with its ad box, and a place chosen in the picker the place pill opened may show the
-/// full-screen ad (`AdsModel`).
+/// Settings' link to the app's notification settings. In the free version, once the ads are on,
+/// the home banner's band sits under the pager and each page ends with its ad box, and a place
+/// chosen in the picker the place pill opened may show the full-screen ad (`AdsModel`).
 struct HomeView: View {
   let model: AppModel
   /// The free version's ads.
@@ -95,7 +93,9 @@ struct HomeView: View {
     .onChange(of: notifications.settingsRequests) { _, _ in
       present(.settings)
     }
-    // Settings → Notifications' "Use my location" or "Search".
+    // The notifications asking for the picker (`NotificationsModel.requestPicker(locating:)`):
+    // nothing in Settings does since phase 8.4a took the gate's "Use my location" and "Search"
+    // away; phase 8.4b's "Saved places" row is to (design decision 13).
     .onChange(of: notifications.pickerRequests) { _, _ in
       present(.picker(PickerRequest(locating: notifications.pickerLocating)))
     }
@@ -192,10 +192,12 @@ extension Optional where Wrapped == HomeSheet {
 /// covers the pages: then nothing is said, then or once it closes, as the pages are out of the
 /// accessibility tree under it (the 6pm flip, or a quiet refresh's new answer, behind Settings).
 ///
-/// The notifications card (section 10.2, item 5) and the upgrade row (item 6) are on the middle
-/// page alone, under Today and Tomorrow alike, only on a page with an answer, as the box is, the
-/// card above the row: the card while `NotificationCard` offers one (never once put away or a
-/// notification is on), the row only in the free version once StoreKit has given the price it
+/// The notifications card (section 10.2, item 5; design 2.6) and the upgrade row (item 6) are on
+/// the middle page alone, under Today and Tomorrow alike, only on a page with an answer, as the
+/// box is, the card above the row: the card while `NotificationCard` offers one, which is only
+/// while the model says the screen shows where you are (approximate location, or the phone's
+/// point in where you are's cell; never a city's or a searched place's page, nor an older point
+/// of the phone's), and never once put away or a notification is on; the row only in the free version once StoreKit has given the price it
 /// names (`UpgradePage.homeRow`). They sit between the page's body and its footer, and the box
 /// after the footer's links, so neither is ever beside or over an ad.
 ///
@@ -228,7 +230,7 @@ private struct HomeContent: View {
     let theme = PageTheme(shown.palette)
     let adsShown = !model.unlocked && ads.phase == .on
     let upgrade = UpgradePage.homeRow(unlocked: model.unlocked, purchase: purchases.state)
-    let card = NotificationCard.card(notifications.state, onScreen: model.onScreen)
+    let card = NotificationCard.card(notifications.state)
     HomeShell(
       topBar: model.topBar, theme: theme, actions: actions, fades: DebugHooks.themeFades()
     ) {
@@ -312,20 +314,15 @@ private struct HomeContent: View {
   }
 
   /// What the notifications card's buttons do: "Turn on" turns the evening notification on for
-  /// the place on screen (asking for permission); "Not now" puts the card away for good; "Use my
-  /// location" and "Search" open the picker, as the top bar's do; "Open Settings" opens the
-  /// app's notification settings in iOS Settings.
+  /// where you are (asking for permission); "Not now" puts the card away for good; "Open
+  /// Settings" opens the app's notification settings in iOS Settings.
   private func act(_ action: NotificationCard.Action) {
     switch action {
     case .turnOn:
-      let onScreen = model.onScreen
-      Task { await notifications.turnOnFromCard(onScreen: onScreen) }
+      let notifications = notifications
+      Task { await notifications.turnOnFromCard() }
     case .notNow:
       notifications.dismissCard()
-    case .useMyLocation:
-      open(.picker(PickerRequest(locating: true)))
-    case .search:
-      open(.picker(PickerRequest(locating: false)))
     case .openSettings:
       if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
         openURL(url)
@@ -352,12 +349,5 @@ private struct HomeContent: View {
         Task { await model.select(.city(slug: city.slug, name: city.name)) }
       }
     )
-  }
-}
-
-extension AppModel {
-  /// The place on screen as the notifications take it: its target, name, country and units.
-  var onScreen: OnScreen {
-    OnScreen(target: target, name: placeName, country: response?.location.country, units: units)
   }
 }

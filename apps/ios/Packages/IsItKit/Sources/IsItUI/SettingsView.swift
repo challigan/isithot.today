@@ -7,22 +7,22 @@ import UIKit
 /// iPhone app in the website's look", step 6): the website's content pages' palette, fixed and
 /// the same in both appearances, with the title on the page; the snow units on a card with the
 /// website's cm | in pill; Notifications (section 12.1, `NotificationsSection`), its switches
-/// drawn by the app as the units are, with the place, which pushes the notification place's
-/// page, the test, and for a UK place the Met Office's warnings; the upgrade card, with no
+/// drawn by the app as the units are, with "Where you are", which pushes its page, the test,
+/// and while where you are is in the UK the Met Office's warnings; the upgrade card, with no
 /// heading: the upgrade row in the free version
 /// (its price once StoreKit has one), or the thanks once owned, then Restore purchase with its
 /// result; the privacy rows, Report an ad in the free version, About and Help, as rows with icons
 /// on plum cards under their headings; and the version. A page that scrolls (`SheetPage`), not a
 /// `Form`, whose cells the audit failed on PR #33's runs though they grew; section 10.4's order
 /// and contents are kept, its native form and Dark Mode are not. Pages open on the sheet's own
-/// stack (the notification place, the upgrade page, Your privacy, How it works, Credits and
+/// stack ("Where you are", the upgrade page, Your privacy, How it works, Credits and
 /// licences), so the upgrade page is never a sheet over a sheet; willitsnow.today's pages open in Safari and the emails in
 /// the mail app, through `openURL`, and with no mail app the fallback sheet says where to write.
 /// Everything shown is the presenters'. Nothing is announced here: the Restore purchase row that
 /// was tapped says its result (`RestoreRow`), and the upgrade page its outcome.
 public struct SettingsView: View {
   let screen: SettingsScreen
-  /// Settings → Notifications, and the notification place's page, which its place row pushes.
+  /// Settings → Notifications, and the "Where you are" page, which its row pushes.
   let notifications: NotificationSettings
   let notificationPlace: NotificationPlacePage
   let privacy: YourPrivacy

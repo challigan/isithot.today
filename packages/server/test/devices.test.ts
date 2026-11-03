@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setEnvironmentContext } from '@netlify/blobs';
 import { BlobsServer } from '@netlify/blobs/server';
-import { ALERTS } from '@isithot/core';
+import { ALERTS, COPY } from '@isithot/core';
 import { createSyntheticFetch, type FetchLike } from '@isithot/providers';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
@@ -21,13 +21,20 @@ import {
   PLACES,
   alertAction,
   deviceTarget,
+  fingerprint,
+  hereKind,
+  hereName,
+  herePlace,
   notificationRoute,
   registrationBody,
-  searchTarget,
+  replyZones,
   syncReply,
+  targetFromQuery,
   targetKey,
   testOutcome,
   type AlertPrefs,
+  type DeviceReply,
+  type HerePlace,
   type PlaceTarget,
   type RegistrationBody,
 } from '../../client/src';
@@ -807,9 +814,11 @@ describe('PUT /api/v1/devices: handling', () => {
         prefs,
         permission: 'authorized',
         token: t,
-        place: { kind: 'city', slug: 'leeds-gb' },
+        here: { kind: 'ip' },
         units: 'c',
         last: { fingerprint: 'x', at: SNOWY },
+        refused: null,
+        activeAt: SNOWY,
         now: SNOWY,
         env: 'sandbox',
         appVersion: '1.0 (112)',
@@ -2235,48 +2244,101 @@ describe('DELETE /api/v1/devices: a set', () => {
 
 // ---- The client's bodies ----
 
-describe("the contract with packages/client's registrationBody", () => {
-  const hexham = searchTarget({
-    name: 'Hexham',
-    region: 'England',
-    country: 'GB',
-    countryName: 'United Kingdom',
-    lat: 54.97,
-    lon: -2.1,
-    geonameId: 2647007,
-    elevation: 50,
+/** Where you are as the app sends it without the phone's location: for the server to locate. */
+const APPROXIMATE: HerePlace = herePlace({ access: 'denied', fix: null, kept: null });
+/** The server's words when it can't tell where the connection is, which the app shows. */
+const NOT_LOCATED =
+  "We couldn't tell where you are from your internet connection. Try again later, or use your location.";
+
+/** 8.4a's body, as client `registrationBody` makes it: where you are, and no saved place. */
+function appBody(o: {
+  token: string;
+  here?: HerePlace;
+  prefs?: AlertPrefs;
+  units?: 'c' | 'f';
+  env?: 'sandbox' | 'production';
+}): RegistrationBody {
+  return registrationBody({
+    token: o.token,
+    env: o.env ?? 'sandbox',
+    here: o.here ?? APPROXIMATE,
+    units: o.units ?? 'c',
+    prefs: o.prefs ?? EVENING,
+    appVersion: '1.0 (130)',
   });
-  const targets: Array<[string, PlaceTarget]> = [
-    ['a city', { kind: 'city', slug: 'leeds-gb', name: 'Leeds' }],
+}
+
+/** A tap on a notification for `record`'s place, as the client routes it. */
+const tapped = (record: DeviceRecord) =>
+  notificationRoute(
+    {
+      topic: 'snow',
+      kind: 'evening',
+      date: '2026-11-12',
+      view: 'today',
+      place: record.query,
+      name: record.name,
+    },
+    () => null,
+  );
+
+describe("the contract with packages/client's registrationBody", () => {
+  /**
+   * Where you are, as client `herePlace` finds it from the phone's location access, its fix and
+   * the cell kept from an earlier one, beside where Netlify places the request's connection.
+   */
+  const heres: Array<[string, HerePlace, VisitorGeo | null]> = [
+    ['approximate, location access denied, the connection in Leeds', APPROXIMATE, LEEDS_GEO],
     [
-      'a searched city, which the search gives as its page',
-      searchTarget({
-        name: 'Durham',
-        region: 'England',
-        country: 'GB',
-        countryName: 'United Kingdom',
-        lat: 54.7768,
-        lon: -1.5757,
-        slug: 'durham-gb',
-        geonameId: 2650628,
+      'approximate, location never asked for, the connection in New York',
+      herePlace({ access: 'notDetermined', fix: null, kept: null }),
+      NEW_YORK_GEO,
+    ],
+    [
+      'approximate, location allowed but no fix yet and none kept',
+      herePlace({ access: 'granted', fix: null, kept: null }),
+      NEWCASTLE_GEO,
+    ],
+    [
+      'approximate, a kept cell once access is withdrawn',
+      herePlace({
+        access: 'denied',
+        fix: deviceTarget(54.8, -1.6),
+        kept: { lat: 54.8, lon: -1.6 },
       }),
-    ],
-    ['a searched place with everything the search knew', hexham],
-    [
-      'a searched place without a height',
-      { kind: 'coords', source: 'search', lat: 54.95, lon: -2.1, name: 'Hexham', country: 'GB' },
+      LEEDS_GEO,
     ],
     [
-      'an unnamed searched place',
-      { kind: 'coords', source: 'search', lat: 54.95, lon: -2.1, region: null },
+      "the phone's fix, with no connection the server can place",
+      herePlace({ access: 'granted', fix: deviceTarget(53.81, -1.56), kept: null }),
+      null,
     ],
     [
-      'an unnamed searched place with no town near',
-      { kind: 'coords', source: 'search', lat: 1, lon: 2 },
+      "the phone's cell kept from an earlier fix",
+      herePlace({ access: 'granted', fix: null, kept: { lat: 54.77, lon: -1.57 } }),
+      LEEDS_GEO,
     ],
-    ['a device location', deviceTarget(53.81, -1.56)],
-    ['a named device location', { ...deviceTarget(54.81, -1.59), name: 'Durham' }],
-    ['a device location in another zone', deviceTarget(40.71, -74.01)],
+    [
+      'a fix with a name, of which only the point goes',
+      herePlace({
+        access: 'granted',
+        fix: { ...deviceTarget(54.81, -1.59), name: 'Durham', country: 'GB' },
+        kept: null,
+      }),
+      null,
+    ],
+    [
+      "the phone in another zone than its connection's",
+      herePlace({ access: 'granted', fix: deviceTarget(40.71, -74.01), kept: null }),
+      LEEDS_GEO,
+    ],
+    [
+      // Perth: its zone (UTC+8 from the synthetic source) is no saved place's in these tests, so
+      // the log check below can still look for theirs.
+      'the phone south of the equator and east of Greenwich',
+      herePlace({ access: 'granted', fix: deviceTarget(-31.95, 115.86), kept: null }),
+      null,
+    ],
   ];
   const switches: AlertPrefs[] = [
     { evening: true, morning: false, possible: false },
@@ -2287,51 +2349,221 @@ describe("the contract with packages/client's registrationBody", () => {
     { evening: true, morning: true, possible: true },
   ];
 
-  it.each(targets)('takes every body the app makes for %s', async (_name, target) => {
-    const w = world();
+  it('makes each kind of where you are that the cases need', () => {
+    expect(heres.map(([, here]) => here.kind)).toEqual([
+      'ip',
+      'ip',
+      'ip',
+      'ip',
+      'device',
+      'device',
+      'device',
+      'device',
+      'device',
+    ]);
+  });
+
+  it.each(heres)('takes every body the app makes for %s', async (_name, here, geo) => {
+    const w = world({ geo });
+    // The cell the set's free place is: the phone's own, or the connection's town's on the grid.
+    const cell = here.kind === 'device' ? here.target : deviceTarget(geo!.lat!, geo!.lon!);
     let n = 0;
     for (const prefs of switches) {
       for (const units of ['c', 'f'] as const) {
         const env = n % 2 ? 'production' : 'sandbox';
         const t = token('ee', n++);
-        const sent: RegistrationBody = registrationBody({
-          token: t,
-          env,
-          place: target,
-          units,
-          prefs,
-          appVersion: '1.0 (112)',
-        });
-        expect(Buffer.byteLength(JSON.stringify(sent))).toBeLessThan(DEVICE_LIMITS.bodyBytes / 2);
-        const r = await put(w, sent);
+        const sent = appBody({ token: t, here, prefs, units, env });
+        // Where you are, and nothing else: the phone's point alone, or no place at all.
+        expect(sent).toMatchObject({ v: 2, saved: [] });
+        expect(sent).not.toHaveProperty('deviceTz');
+        expect(Object.keys(sent.here)).toEqual(
+          here.kind === 'ip' ? ['source'] : ['lat', 'lon', 'source'],
+        );
+        expect(Buffer.byteLength(JSON.stringify(sent))).toBeLessThan(DEVICE_LIMITS.bodyBytes / 8);
+        const r = await put2(w, sent);
         expect(r.status).toBe(200);
         const text = await r.text();
-        const reply = JSON.parse(text) as {
-          place: { query: string; timezone: string; name: string };
-        };
+        const reply = JSON.parse(text) as Reply2;
         // What the app keeps of it: the whole reply.
         expect(syncReply(r.status, text, r.headers.get('retry-after'))).toEqual({
           kind: 'stored',
           reply,
         });
-        const stored = await record(w, reply.place.timezone, t);
-        expect(stored).toMatchObject({ env, units, alerts: { snow: prefs }, token: t });
-        // A tap on its notification opens the app's own place.
-        const route = notificationRoute(
-          {
-            topic: 'snow',
-            kind: 'evening',
-            date: '2026-11-12',
-            view: 'today',
-            place: stored!.query,
-            name: stored!.name,
-          },
-          () => null,
+        expect(reply).toMatchObject({
+          id: idOf(t),
+          deviceTz: null,
+          saved: [],
+          refused: [],
+          alerts: { snow: prefs },
+        });
+        const found = reply.here!;
+        expect(found.follows).toBe(here.kind);
+        expect(targetKey(targetFromQuery(found.query)!)).toBe(targetKey(cell));
+        // What Settings' row and the card make of it, and the zone a tap opens its day by.
+        const kept = reply as DeviceReply;
+        expect(hereKind({ here, reply: kept, refused: false })).toBe(here.kind);
+        expect(hereName({ here, reply: kept })).toBe(
+          found.name === COPY.yourLocation ? null : found.name,
         );
+        expect(replyZones(kept)).toEqual({ [targetKey(cell)]: found.timezone });
+        const stored = await record(w, found.timezone, t);
+        expect(stored).toMatchObject({
+          env,
+          units,
+          alerts: { snow: prefs },
+          token: t,
+          query: found.query,
+          name: found.name,
+          follows: here.kind,
+        });
+        // A tap on its notification opens where you are: the cell, under the server's name.
+        const route = tapped(stored!);
         expect(route).toMatchObject({ kind: 'place', view: 'today' });
-        expect(targetKey((route as { target: PlaceTarget }).target)).toBe(targetKey(target));
+        expect(targetKey((route as { target: PlaceTarget }).target)).toBe(targetKey(cell));
       }
     }
+  });
+
+  it("is refused in words the app shows when the connection can't be placed, until it can be", async () => {
+    const geos: Array<VisitorGeo | null> = [
+      null,
+      { country: 'GB' },
+      { country: 'GB', lat: 53.7965, lon: -1.5478 },
+    ];
+    for (const [i, geo] of geos.entries()) {
+      const w = world({ geo });
+      const t = token('ee', 100 + i);
+      const sent = appBody({ token: t });
+      const r = await put2(w, sent);
+      expect(r.status).toBe(400);
+      expect(syncReply(r.status, await r.text(), r.headers.get('retry-after'))).toEqual({
+        kind: 'placeRefused',
+        message: NOT_LOCATED,
+      });
+      expect(keysFor(w, t)).toEqual([]);
+      // Settings: "Not found yet". The app doesn't send the same set again in this visit.
+      expect(hereKind({ here: APPROXIMATE, reply: null, refused: true })).toBe('unknown');
+      const refused = { fingerprint: fingerprint(sent), at: SNOWY };
+      const action = (activeAt: number) =>
+        alertAction({
+          prefs: EVENING,
+          permission: 'authorized',
+          token: t,
+          here: APPROXIMATE,
+          units: 'c',
+          last: null,
+          refused,
+          activeAt,
+          now: SNOWY + HOUR,
+          env: 'sandbox',
+          appVersion: '1.0 (130)',
+        });
+      expect(action(SNOWY - MINUTE)).toBe('none');
+      // Once it becomes active again it does, and the server places a connection in Leeds.
+      expect(action(SNOWY + HOUR)).toBe('put');
+      w.at(SNOWY + HOUR);
+      w.platform.geo = LEEDS_GEO;
+      const again = await put2(w, sent);
+      expect(again.status).toBe(200);
+      expect((await reply2(again)).here).toMatchObject({ query: LEEDS_CELL, follows: 'ip' });
+    }
+  });
+
+  it('takes the phone far from any town, which has no name or country the app keeps', async () => {
+    // Mid-Atlantic: core names the cell "Your location", and it has no country.
+    const w = world();
+    const t = token('ee', 130);
+    const here = herePlace({ access: 'granted', fix: deviceTarget(0, -30), kept: null });
+    const r = await put2(w, appBody({ token: t, here }));
+    expect(r.status).toBe(200);
+    const text = await r.text();
+    const reply = JSON.parse(text) as Reply2;
+    expect(reply.here).toMatchObject({
+      name: COPY.yourLocation,
+      country: null,
+      follows: 'device',
+    });
+    expect(syncReply(r.status, text, r.headers.get('retry-after'))).toEqual({
+      kind: 'stored',
+      reply,
+    });
+    const kept = reply as DeviceReply;
+    expect(hereKind({ here, reply: kept, refused: false })).toBe('device');
+    expect(hereName({ here, reply: kept })).toBeNull();
+  });
+
+  it("takes the change from the phone's location to approximate, and keeps no point after it", async () => {
+    const w = world({ geo: NEW_YORK_GEO });
+    const t = token('ee', 110);
+    const fix = deviceTarget(53.81, -1.56);
+    const shared = herePlace({ access: 'granted', fix, kept: null });
+    expect((await put2(w, appBody({ token: t, here: shared }))).status).toBe(200);
+    expect(await record(w, 'Europe/London', t)).toMatchObject({
+      query: LEEDS_CELL,
+      follows: 'device',
+    });
+    // Location access withdrawn: the kept cell goes, and the app sends approximate.
+    const withdrawn = herePlace({ access: 'denied', fix, kept: { lat: fix.lat, lon: fix.lon } });
+    expect(withdrawn).toEqual({ kind: 'ip' });
+    w.at(SNOWY + 2 * MINUTE);
+    const moved = await put2(w, appBody({ token: t, here: withdrawn }));
+    expect(moved.status).toBe(200);
+    const reply = await reply2(moved);
+    expect(reply.here).toMatchObject({ name: 'New York', follows: 'ip' });
+    expect(reply.here!.timezone).not.toBe('Europe/London');
+    expect(hereKind({ here: withdrawn, reply: reply as DeviceReply, refused: false })).toBe('ip');
+    expect(await record(w, 'Europe/London', t)).toBeNull();
+    // And with a connection the server can't place, nothing at all is kept.
+    const u = token('ee', 111);
+    const v = world();
+    await put2(v, appBody({ token: u, here: shared }));
+    v.at(SNOWY + 2 * MINUTE);
+    const lost = await put2(v, appBody({ token: u, here: withdrawn }));
+    expect(lost.status).toBe(400);
+    expect(keysFor(v, u)).toEqual([]);
+  });
+
+  it('takes the hourly refresh while approximate, and locates the connection afresh', async () => {
+    const w = world({ geo: LEEDS_GEO });
+    const t = token('ee', 120);
+    const sent = appBody({ token: t });
+    expect((await put2(w, sent)).status).toBe(200);
+    const last = { fingerprint: fingerprint(sent), at: SNOWY };
+    const action = (here: HerePlace, activeAt: number) =>
+      alertAction({
+        prefs: EVENING,
+        permission: 'authorized',
+        token: t,
+        here,
+        units: 'c',
+        last:
+          here.kind === 'ip'
+            ? last
+            : { ...last, fingerprint: fingerprint(appBody({ token: t, here })) },
+        refused: null,
+        activeAt,
+        now: activeAt,
+        env: 'sandbox',
+        appVersion: '1.0 (130)',
+      });
+    const refresh = ALERTS.hereRefreshMinutes * MINUTE;
+    expect(action(APPROXIMATE, SNOWY + refresh - 1)).toBe('none');
+    expect(action(APPROXIMATE, SNOWY + refresh)).toBe('put');
+    // The phone's own cell waits for the week's heartbeat instead.
+    const shared = herePlace({ access: 'granted', fix: deviceTarget(53.81, -1.56), kept: null });
+    expect(action(shared, SNOWY + refresh)).toBe('none');
+    // The server takes it, as a minute has long passed, and follows the connection, now in
+    // Newcastle.
+    w.at(SNOWY + refresh);
+    w.platform.geo = NEWCASTLE_GEO;
+    const r = await put2(w, sent);
+    expect(r.status).toBe(200);
+    const reply = await reply2(r);
+    const newcastle = deviceTarget(NEWCASTLE_GEO.lat!, NEWCASTLE_GEO.lon!);
+    expect(targetKey(targetFromQuery(reply.here!.query)!)).toBe(targetKey(newcastle));
+    expect(reply.here).toMatchObject({ timezone: 'Europe/London', follows: 'ip' });
+    expect(reply.seenAt).toBe(iso(SNOWY + refresh));
+    expect(hereName({ here: APPROXIMATE, reply: reply as DeviceReply })).toBe(reply.here!.name);
   });
 });
 
@@ -2341,59 +2573,119 @@ describe("the contract with packages/client's syncReply and testOutcome", () => 
     syncReply(r.status, await r.text(), r.headers.get('retry-after'));
   const tested = async (r: Response) => testOutcome(r.status, await r.text());
 
-  it('forgets the registration with the evening and the morning off, and on a DELETE', async () => {
-    const w = world();
+  it('forgets the set with the evening and the morning off, and on a DELETE', async () => {
+    const w = world({ geo: LEEDS_GEO });
     const t = token('aa', 900);
-    expect(await synced(await put(w, body({ token: t })))).toMatchObject({ kind: 'stored' });
+    expect(await synced(await put2(w, appBody({ token: t })))).toMatchObject({ kind: 'stored' });
     w.at(SNOWY + 2 * MINUTE);
     const off = { evening: false, morning: false, possible: true };
-    expect(await synced(await put(w, body({ token: t, alerts: { snow: off } })))).toEqual({
+    expect(await synced(await put2(w, appBody({ token: t, prefs: off })))).toEqual({
       kind: 'forgotten',
     });
+    expect(keysFor(w, t)).toEqual([]);
     expect(await synced(await del(w, { app: 'snow', token: t }))).toEqual({ kind: 'forgotten' });
   });
 
   it("retries a second PUT within a minute after the server's Retry-After", async () => {
-    const w = world();
+    const w = world({ geo: LEEDS_GEO });
     const t = token('aa', 901);
-    await put(w, body({ token: t }));
+    await put2(w, appBody({ token: t }));
     w.at(SNOWY + 10_000);
-    const r = await put(w, body({ token: t, units: 'f' }));
+    const r = await put2(w, appBody({ token: t, units: 'f' }));
     expect(r.headers.get('retry-after')).toBe('50');
     expect(await synced(r)).toEqual({ kind: 'retry', afterSeconds: 50 });
   });
 
-  it("shows the server's words for a place it can't find, and fails other refusals", async () => {
+  it("retries saved places held back by the cap on new places after the server's Retry-After", async () => {
+    const w = world({ geo: LEEDS_GEO });
+    const t = token('aa', 902);
+    const four = [DURHAM, HELSINKI, TOKYO, REYKJAVIK];
+    expect(four.length).toBe(ALERTS.newPlacesPerPut + 1);
+    const r = await put2(w, { ...appBody({ token: t }), deviceTz: 'Europe/London', saved: four });
+    expect(r.status).toBe(429);
+    expect(await synced(r)).toEqual({ kind: 'retry', afterSeconds: 60 });
+  });
+
+  it("shows the server's words when it can't tell where you are, and fails other refusals", async () => {
     const w = world();
-    const r = await put(w, body({ token: token('aa', 902), place: { place: 'nowhere-xx' } }));
+    const r = await put2(w, appBody({ token: token('aa', 903) }));
     expect(r.status).toBe(400);
-    expect(await synced(r)).toEqual({
-      kind: 'placeRefused',
-      message: 'There is no page for that place.',
+    expect(await synced(r)).toEqual({ kind: 'placeRefused', message: NOT_LOCATED });
+    const fine = appBody({ token: token('aa', 904) });
+    for (const refused of [
+      { ...fine, token: 'zz' },
+      { ...fine, v: 3 },
+      { ...fine, here: { place: 'leeds-gb' } },
+      { ...fine, here: { lat: 53.8, lon: -1.55, source: 'ip' } },
+      { ...fine, saved: [{ lat: 53.8, lon: -1.55, source: 'device' }] },
+    ]) {
+      const no = await put2(w, refused);
+      expect(no.status).toBe(400);
+      expect((await errorOf(no.clone())).code).toBe('bad_request');
+      expect(await synced(no)).toEqual({ kind: 'failed' });
+    }
+    expect(await synced(await put2(w, '{"app":'))).toEqual({ kind: 'failed' });
+    // A forecast that fails is no refusal of the place: the app tries again later.
+    const down = world({
+      geo: LEEDS_GEO,
+      fetch: (synthetic) => async (url, init) =>
+        new URL(url).pathname.endsWith('/forecast')
+          ? new Response('down', { status: 500 })
+          : synthetic(url, init),
     });
-    expect(await synced(await put(w, body({ token: 'zz' })))).toEqual({ kind: 'failed' });
-    expect(await synced(await put(w, '{"app":'))).toEqual({ kind: 'failed' });
+    const failed = await put2(down, appBody({ token: token('aa', 905) }));
+    expect(failed.status).toBe(503);
+    expect(await synced(failed)).toEqual({ kind: 'failed' });
+  });
+
+  it('reads every place of a set as the server stored it, and the saved places it dropped', async () => {
+    const w = world();
+    const t = token('aa', 906);
+    const here = herePlace({ access: 'granted', fix: deviceTarget(53.81, -1.56), kept: null });
+    const sent = {
+      ...appBody({ token: t, here }),
+      deviceTz: 'Europe/London',
+      saved: [DURHAM, KATHMANDU, { place: 'nowhere-xx' }],
+    };
+    const r = await put2(w, sent);
+    expect(r.status).toBe(200);
+    const text = await r.text();
+    const reply = JSON.parse(text) as Reply2;
+    expect(syncReply(200, text, null)).toEqual({ kind: 'stored', reply });
+    expect(reply.deviceTz).toBe('Europe/London');
+    expect(reply.saved.map((s) => s.query)).toEqual(['place=durham-gb', KATHMANDU_QUERY]);
+    expect(reply.refused).toEqual([{ index: 2, code: 'not_found' }]);
+    expect(replyZones(reply as DeviceReply)).toEqual({
+      'device:53.8,-1.55': 'Europe/London',
+      'city:durham-gb': 'Europe/London',
+      'search:27.7,85.3': reply.saved[1]!.timezone,
+    });
+    expect(hereKind({ here, reply: reply as DeviceReply, refused: false })).toBe('device');
   });
 
   it("takes Netlify's limiter's 429 as a minute's wait for a sync, and a failed test", async () => {
     expect(await synced(handleRateLimited())).toEqual({ kind: 'retry', afterSeconds: 60 });
-    expect(await tested(handleRateLimited())).toBe('failed');
+    expect(await tested(handleRateLimited())).toEqual({ kind: 'failed' });
   });
 
-  it("names every answer of the test's", async () => {
-    const { w, fake } = await withApple({
-      b7: { status: 400, body: { reason: 'BadDeviceToken' } },
-      b8: { status: 400, body: { reason: 'BadExpirationDate' } },
-      b9: { status: 503, body: { reason: 'ServiceUnavailable' } },
-    });
+  it("names every answer of the test's, and how many were sent", async () => {
+    const { w, fake } = await withApple(
+      {
+        b7: { status: 400, body: { reason: 'BadDeviceToken' } },
+        b8: { status: 400, body: { reason: 'BadExpirationDate' } },
+        b9: { status: 503, body: { reason: 'ServiceUnavailable' } },
+      },
+      { geo: LEEDS_GEO },
+    );
     const test = async (t: string) => tested(await sendTest(w, { app: 'snow', token: t }));
+    const one = { kind: 'sent', count: 1 };
     const sent = token('aa', 910);
-    await put(w, body({ token: sent }));
-    expect(await test(sent)).toBe('sent');
-    expect(await test(sent)).toBe('sent');
-    expect(await test(sent)).toBe('sent');
-    expect(await test(sent)).toBe('limited');
-    expect(await test(token('aa', 911))).toBe('notRegistered');
+    await put2(w, appBody({ token: sent }));
+    expect(await test(sent)).toEqual(one);
+    expect(await test(sent)).toEqual(one);
+    expect(await test(sent)).toEqual(one);
+    expect(await test(sent)).toEqual({ kind: 'limited' });
+    expect(await test(token('aa', 911))).toEqual({ kind: 'notRegistered' });
     // Apple refusing the device, refusing the push (502), and unable to take it (503).
     for (const [script, status, outcome] of [
       ['b7', 404, 'notRegistered'],
@@ -2401,21 +2693,28 @@ describe("the contract with packages/client's syncReply and testOutcome", () => 
       ['b9', 503, 'failed'],
     ] as const) {
       const t = token(script, 912);
-      await put(w, body({ token: t }));
+      await put2(w, appBody({ token: t }));
       const r = await sendTest(w, { app: 'snow', token: t });
       expect(r.status, script).toBe(status);
-      expect(await tested(r), script).toBe(outcome);
+      expect(await tested(r), script).toEqual({ kind: outcome });
     }
     expect(fake.seen).toHaveLength(6);
+    // Two at once, where you are and a saved place: the server says how many.
+    const two = token('aa', 915);
+    await put2(w, { ...appBody({ token: two }), deviceTz: 'Europe/London', saved: [DURHAM] });
+    expect(await test(two)).toEqual({ kind: 'sent', count: 2 });
+    expect(fake.seen).toHaveLength(8);
     w.at(Date.UTC(2026, 10, 11, 23, 30));
     const late = token('aa', 913);
-    await put(w, body({ token: late }));
-    expect(await test(late)).toBe('quiet');
+    await put2(w, appBody({ token: late }));
+    expect(await test(late)).toEqual({ kind: 'quiet' });
 
-    const dry = await withApple({}, { settings: { ALERTS_DRY_RUN: undefined } });
+    const dry = await withApple({}, { geo: LEEDS_GEO, settings: { ALERTS_DRY_RUN: undefined } });
     const t = token('aa', 914);
-    await put(dry.w, body({ token: t }));
-    expect(await tested(await sendTest(dry.w, { app: 'snow', token: t }))).toBe('dryRun');
+    await put2(dry.w, appBody({ token: t }));
+    expect(await tested(await sendTest(dry.w, { app: 'snow', token: t }))).toEqual({
+      kind: 'dryRun',
+    });
   });
 });
 

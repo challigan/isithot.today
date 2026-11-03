@@ -16,8 +16,8 @@ public enum Keys {
   public enum App {
     public static let recent = "recent.v1"
     public static let savedPlaces = "savedPlaces.v1"
-    public static let alerts = "alerts.v1"
-    public static let alertSync = "alertSync.v1"
+    public static let alerts = "alerts.v2"
+    public static let alertSync = "alertSync.v2"
     public static let lastView = "ui.lastView"
     public static let card = "ui.alertCard"
     public static let lastInterstitial = "ads.lastInterstitial"

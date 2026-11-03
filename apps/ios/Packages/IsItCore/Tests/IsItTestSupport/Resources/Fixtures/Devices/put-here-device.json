@@ -1,0 +1,32 @@
+{
+  "_fixture": {
+    "request": "PUT /api/v1/devices",
+    "body": {
+      "v": 2,
+      "app": "snow",
+      "platform": "ios",
+      "env": "sandbox",
+      "token": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "units": "c",
+      "appVersion": "1.0 (42)",
+      "alerts": {
+        "snow": {
+          "evening": true,
+          "morning": false,
+          "possible": false
+        }
+      },
+      "here": {
+        "lat": 53.8,
+        "lon": -1.55,
+        "source": "device"
+      },
+      "saved": []
+    },
+    "now": "2026-12-01T09:05:00.000Z",
+    "note": "Where you are from the phone’s own location in Leeds, on the 0.05° grid as the app sends it, at leeds-dry’s moment: the server names the cell itself, and where you are follows the phone."
+  },
+  "status": 200,
+  "retryAfter": null,
+  "text": "{\"id\":\"b8465956ef925aabc7c87a9e561f462d\",\"deviceTz\":null,\"here\":{\"name\":\"Leeds\",\"timezone\":\"Europe/London\",\"query\":\"lat=53.8&lon=-1.55&source=device\",\"country\":\"GB\",\"follows\":\"device\"},\"saved\":[],\"refused\":[],\"alerts\":{\"snow\":{\"evening\":true,\"morning\":false,\"possible\":false}},\"seenAt\":\"2026-12-01T09:05:00.000Z\"}"
+}

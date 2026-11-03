@@ -23,6 +23,9 @@ struct ConstantsTests {
     #expect(Constants.Widget.reuseMinutes == 60)
     #expect(Constants.Widget.retryMinutes == 60)
     #expect(Constants.Alerts.heartbeatDays == 7)
+    // While where you are is approximate, the app registers again on becoming active, at most
+    // once an hour (phase 8.4a).
+    #expect(Constants.Alerts.hereRefreshMinutes == 60)
   }
 
   @Test("snow's judging, as Double")
@@ -87,6 +90,9 @@ struct KeysTests {
     #expect(Keys.AppGroup.today == "today.v1.json")
     #expect(Keys.App.lastView == "ui.lastView")
     #expect(Keys.App.card == "ui.alertCard")
+    // Version 2's, where you are (phase 8.4a): 8.1's alerts.v1 and alertSync.v1 are never read.
+    #expect(Keys.App.alerts == "alerts.v2")
+    #expect(Keys.App.alertSync == "alertSync.v2")
     #expect(Keys.App.lastInterstitial == "ads.lastInterstitial")
     #expect(Keys.storeVersion == 1)
   }

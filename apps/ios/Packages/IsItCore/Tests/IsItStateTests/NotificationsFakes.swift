@@ -30,28 +30,37 @@ func sentBody(_ name: String) throws -> RegistrationBody {
   return try JSONDecoder().decode(RegistrationBody.self, from: body)
 }
 
-/// The token every devices fixture registers with (`put-leeds`'s): the tests type none.
+/// The token every devices fixture registers with (`put-here-ip`'s): the tests type none.
 func fixtureToken() throws -> String {
-  try sentBody("put-leeds").token
+  try sentBody("put-here-ip").token
 }
 
-/// The server's record in a PUT fixture's 200 reply, in another zone when `timezone` says.
-func deviceResponse(_ name: String, timezone: String? = nil) throws -> DeviceResponse {
+/// The set in a PUT fixture's 200 reply, where you are in another zone when `timezone` says, and
+/// with `saved` after any the server stored: phase 8.4a's fixtures have none, so a test that
+/// needs a saved place's zone (the router's) adds one.
+func deviceResponse(
+  _ name: String, timezone: String? = nil, saved: [DeviceResponse.Saved] = []
+) throws -> DeviceResponse {
   let reply = try JSONDecoder().decode(DeviceResponse.self, from: Fixtures.deviceInfo(name).reply)
-  guard let timezone else { return reply }
-  let place = DeviceResponse.Place(
-    name: reply.place.name, timezone: timezone, query: reply.place.query)
-  return DeviceResponse(id: reply.id, place: place, alerts: reply.alerts, seenAt: reply.seenAt)
+  let here = reply.here.map {
+    DeviceResponse.Here(
+      name: $0.name, timezone: timezone ?? $0.timezone, query: $0.query, country: $0.country,
+      follows: $0.follows)
+  }
+  return DeviceResponse(
+    id: reply.id, deviceTz: reply.deviceTz, here: here, saved: reply.saved + saved,
+    refused: reply.refused, alerts: reply.alerts, seenAt: reply.seenAt)
 }
 
-/// `alertSync.v1` as the model keeps it after the PUT in fixture `name` was answered at `at`.
+/// `alertSync.v2` as the model keeps it after the PUT in fixture `name` was answered at `at`.
 func registration(
-  _ name: String = "put-leeds", at: Date, timezone: String? = nil
+  _ name: String = "put-here-ip", at: Date, timezone: String? = nil,
+  saved: [DeviceResponse.Saved] = []
 ) throws -> AlertRegistration {
   let body = try sentBody(name)
   return AlertRegistration(
     fingerprint: AlertSync.fingerprint(body), at: at, token: body.token, env: body.env,
-    units: body.units, response: try deviceResponse(name, timezone: timezone))
+    units: body.units, response: try deviceResponse(name, timezone: timezone, saved: saved))
 }
 
 /// One devices call as the server saw it: its method, its path and its body as `sortedJSON`.
@@ -278,11 +287,21 @@ func devicesMoment() throws -> Date {
   try fixtureNow("leeds-dry")
 }
 
-/// The place on screen as Settings and the card give it.
-func onScreen(_ target: Target, units: Units? = .c, country: String? = "GB") -> OnScreen {
-  OnScreen(target: target, name: target.ownName, country: country, units: units)
+/// Evening on, and nothing kept for where you are: what put-here-ip registers while location
+/// access isn't allowed.
+let eveningOn = AlertSettings(prefs: AlertPrefs(evening: true))
+
+/// The phone's own point in Leeds (put-here-device's), and the next cell north.
+let phoneInLeeds = Target.device(lat: 53.8, lon: -1.55)
+let phoneFurtherNorth = Target.device(lat: 53.9, lon: -1.55)
+
+/// The cell `alerts.v2` keeps for a device point.
+func cell(_ target: Target) -> KeptCell? {
+  guard case .coords(let point) = target else { return nil }
+  return KeptCell(lat: point.lat, lon: point.lon)
 }
 
-/// Evening on, for Leeds, chosen: what put-leeds registers.
-let eveningInLeeds = AlertSettings(
-  prefs: AlertPrefs(evening: true), place: .chosen(leedsCity, name: "Leeds"))
+/// Evening on, for the phone's cell at `target`, kept: what put-here-device registers.
+func eveningAt(_ target: Target) -> AlertSettings {
+  AlertSettings(prefs: AlertPrefs(evening: true), here: cell(target))
+}

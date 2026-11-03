@@ -103,6 +103,18 @@ describe('notificationRoute', () => {
     expect(notificationRoute(device, on('2026-12-01'))).not.toHaveProperty('target.name');
   });
 
+  it('opens where you are as its cell, found from the phone or from the connection', () => {
+    // The server keeps an approximate free place as its rounded point, as it keeps the phone's
+    // (design 8.4 decision 24): the tap opens that cell with no name, as the payload's isn't
+    // kept for a point; its forecast names it, as it names the phone's own.
+    const here = { ...payload, place: 'lat=53.8&lon=-1.55&source=device', name: 'Leeds' };
+    expect(notificationRoute(here, on('2026-12-01'))).toEqual({
+      kind: 'place',
+      target: { kind: 'coords', source: 'device', lat: 53.8, lon: -1.55 },
+      view: 'today',
+    });
+  });
+
   it('keeps a city without a name when the notification has none', () => {
     for (const name of [undefined, '', 42]) {
       expect(notificationRoute({ ...payload, name }, on('2026-12-01'))).toMatchObject({
@@ -114,7 +126,7 @@ describe('notificationRoute', () => {
     }
   });
 
-  it('is null for a payload that is malformed, for another topic, or for no chosen place', () => {
+  it('is null for a payload that is malformed, for another topic, or for IP location', () => {
     for (const bad of [
       null,
       undefined,
@@ -130,6 +142,7 @@ describe('notificationRoute', () => {
       { ...payload, view: 'tomorrow' },
       { ...payload, view: undefined },
       { ...payload, place: 42 },
+      // Approximate IP location, which the server never writes into a payload.
       { ...payload, place: '' },
       { ...payload, place: 'units=c' },
       { ...payload, place: 'place=' },
