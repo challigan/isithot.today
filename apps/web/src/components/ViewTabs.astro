@@ -2,7 +2,8 @@
 /**
  * Now | Today | This week. The tab of the start view is selected on load: Today, or Now in the
  * evening, when the middle tab reads "Tomorrow" (core `defaultView`, `viewLabel`). Tapping a tab
- * or swiping the views moves the thumb; scripts/views.ts keeps the two in step.
+ * or swiping the views moves the thumb; scripts/views.ts keeps the two in step. The labels go in
+ * with set:text, as in Today.astro.
  */
 import { COPY, VIEWS, viewLabel, type View } from '@isithot/core';
 
@@ -29,8 +30,7 @@ const pos = start === 'today' ? undefined : `--pos:${VIEWS.indexOf(start)}`;
       aria-selected={view === start ? 'true' : 'false'}
       tabindex={view === start ? 0 : -1}
       data-view={view}
-    >
-      {viewLabel(view, tomorrow)}
-    </button>
+      set:text={viewLabel(view, tomorrow)}
+    />
   ))}
 </div>
