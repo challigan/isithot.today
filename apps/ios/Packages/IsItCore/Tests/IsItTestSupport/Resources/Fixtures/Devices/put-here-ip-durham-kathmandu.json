@@ -1,0 +1,52 @@
+{
+  "_fixture": {
+    "request": "PUT /api/v1/devices",
+    "body": {
+      "v": 2,
+      "app": "snow",
+      "platform": "ios",
+      "env": "sandbox",
+      "token": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "units": "c",
+      "appVersion": "1.0 (42)",
+      "deviceTz": "Europe/London",
+      "alerts": {
+        "snow": {
+          "evening": true,
+          "morning": false,
+          "possible": false
+        }
+      },
+      "here": {
+        "source": "ip"
+      },
+      "saved": [
+        {
+          "place": "durham-gb"
+        },
+        {
+          "lat": 27.7,
+          "lon": 85.3,
+          "source": "search",
+          "name": "Kathmandu",
+          "region": "Bagmati Province",
+          "country": "NP",
+          "geonameId": 1283240,
+          "elevation": 50
+        }
+      ]
+    },
+    "geo": {
+      "city": "Leeds",
+      "country": "GB",
+      "region": "England",
+      "lat": 53.7965,
+      "lon": -1.5478
+    },
+    "now": "2026-12-01T12:05:00.000Z",
+    "note": "Both bells on, Durham saved first: the reply names the saved places in the body’s order, each by its pid and in its own zone, as Your privacy lists them."
+  },
+  "status": 200,
+  "retryAfter": null,
+  "text": "{\"id\":\"b8465956ef925aabc7c87a9e561f462d\",\"deviceTz\":\"Europe/London\",\"here\":{\"name\":\"Leeds\",\"timezone\":\"Europe/London\",\"query\":\"lat=53.8&lon=-1.55&source=device\",\"country\":\"GB\",\"follows\":\"ip\"},\"saved\":[{\"pid\":\"883bf8d96e0f\",\"name\":\"Durham\",\"timezone\":\"Europe/London\",\"query\":\"place=durham-gb\",\"country\":\"GB\"},{\"pid\":\"e67567d88865\",\"name\":\"Kathmandu\",\"timezone\":\"Asia/Kathmandu\",\"query\":\"lat=27.7&lon=85.3&name=Kathmandu&region=Bagmati+Province&country=NP&geonameId=1283240&elevation=50&source=search\",\"country\":\"NP\"}],\"refused\":[],\"alerts\":{\"snow\":{\"evening\":true,\"morning\":false,\"possible\":false}},\"seenAt\":\"2026-12-01T12:05:00.000Z\"}"
+}

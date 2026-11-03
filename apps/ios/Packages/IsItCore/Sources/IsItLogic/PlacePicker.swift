@@ -6,7 +6,10 @@ import IsItModel
 /// label, "Use my location" first, then the search's line and its results, or with nothing
 /// typed, the saved places under "Saved" and the recent places under "Recent". Every place but
 /// the phone's own point has a star that saves or removes it (`Star`), with the words VoiceOver
-/// reads and is told. IsItUI draws it; the app's model says what each row does.
+/// reads and is told. Every saved place, a saved row or a saved result, has a bell beside its
+/// star that turns its notifications on and off, with the one-off purchase (`Bell`, phase 8.4b,
+/// design 2.2), and the line under the saved places says what a star and a bell do (design 2.3).
+/// IsItUI draws it; the app's model says what each row does.
 public struct PlacePicker: Sendable, Equatable {
   /// "Search for a place".
   public let title: String
@@ -28,11 +31,20 @@ public struct PlacePicker: Sendable, Equatable {
   public let savedHeading: String?
   /// The saved places, in the order saved, with nothing typed.
   public let saved: [SavedRow]
-  /// "Tap the star beside a place to save it here.", with nothing typed and none saved.
-  public let savedHint: String?
   /// "You can save up to 10 places. Remove one to save another.", with nothing typed and the
-  /// list full: the empty stars are gone then, and this says why.
+  /// list full: the empty stars are gone then, and this says why (`saved-full`). It comes before
+  /// `savedLine`.
   public let savedFull: String?
+  /// The line under the saved places with nothing typed (`saved-line`), what a star and a bell
+  /// do, by the client's rule (`savedLines`): with none saved, how to save a place and what a
+  /// saved place can have, free or paid; with places saved, how a bell works, with the purchase
+  /// when it isn't owned; none once owned with a bell on. Nil while typing.
+  public let savedLine: String?
+  /// "Notifications are off for this app in Settings." with "Open Settings" (`bell-open-settings`),
+  /// once a bell's tap met notifications denied in iOS Settings (`bellDenied`), under the saved
+  /// places, or the results while typing, as a saved result's bell can meet it too; nil
+  /// otherwise.
+  public let bellDenied: BellDenied?
   /// "Recent", over the recent places, shown only with nothing typed and some to show.
   public let recentHeading: String?
   /// The recent places that aren't saved (`SavedPlaces.shownRecent`), newest first, with nothing
@@ -79,13 +91,15 @@ public struct PlacePicker: Sendable, Equatable {
       self.announcement = announcement
     }
 
-    /// The star of the place named `name`, saved or not.
-    init(name: String, saved: Bool) {
+    /// The star of the place named `name`, saved or not; `rung` when it is saved and its bell
+    /// shows on, so unsaving it turns its notifications off too, and VoiceOver is told so.
+    init(name: String, saved: Bool, rung: Bool = false) {
       if saved {
         self.init(
           saved: true,
           label: AppCopy.unsavePlace(place: name),
-          announcement: AppCopy.placeUnsaved(place: name)
+          announcement: rung
+            ? AppCopy.placeUnsavedBellOff(place: name) : AppCopy.placeUnsaved(place: name)
         )
       } else {
         self.init(
@@ -110,6 +124,9 @@ public struct PlacePicker: Sendable, Equatable {
     public let value: String?
     /// Its star, nil when the saved places are full and it isn't one of them.
     public let star: Star?
+    /// Its bell, beside its star, while it is a saved place (phase 8.4b); nil otherwise. Its
+    /// label is the row's one press-and-hold item and VoiceOver action.
+    public let bell: Bell?
   }
 
   /// A saved place, by its name, with its line beneath when it has one.
@@ -121,6 +138,95 @@ public struct PlacePicker: Sendable, Equatable {
     public let place: SavedPlace
     /// Its filled star, which removes it.
     public let star: Star
+    /// Its bell, beside its star (phase 8.4b). Its label is the row's second press-and-hold item
+    /// and VoiceOver action, after the star's Remove.
+    public let bell: Bell
+  }
+
+  /// A saved place's bell (design 2.2), beside its star, 8 points from it: `bell`, `bell.fill`
+  /// while on, and `bell` with a small `lock.fill` badge while locked. What a tap does is the
+  /// model's (`toggleBell`); what VoiceOver is told comes with its outcome, not from here.
+  public struct Bell: Sendable, Equatable {
+    /// The saved place it is for: a tap turns its notifications on or off, or, locked, opens the
+    /// purchase.
+    public let place: SavedPlace
+    /// Locked without the purchase; on while its bell is on and something can be sent; otherwise
+    /// off (`AlertSync.bellState`).
+    public let state: AlertSync.BellState
+    /// What a tap does, as VoiceOver reads it and a row's press-and-hold menu shows it: "Turn on
+    /// notifications for Kathmandu", "Turn off notifications for Kathmandu", or "Turn on
+    /// notifications for Kathmandu, with the one-off purchase".
+    public let label: String
+
+    public init(place: SavedPlace, state: AlertSync.BellState, label: String) {
+      self.place = place
+      self.state = state
+      self.label = label
+    }
+
+    /// The bell of `place`, named `name` as its row shows it, in `state`.
+    init(place: SavedPlace, name: String, state: AlertSync.BellState) {
+      let label =
+        switch state {
+        case .locked: AppCopy.bellLocked(place: name)
+        case .off: AppCopy.bellOn(place: name)
+        case .on: AppCopy.bellOff(place: name)
+        }
+      self.init(place: place, state: state, label: label)
+    }
+
+    /// The small lock drawn on the bell while it is locked, so the gate shows before the tap;
+    /// hidden from VoiceOver, whose label says it.
+    public var badge: Bool { state == .locked }
+  }
+
+  /// The line a bell's tap shows while notifications are off for the app in iOS Settings, and
+  /// its button.
+  public struct BellDenied: Sendable, Equatable {
+    /// "Notifications are off for this app in Settings."
+    public let text: String
+    /// "Open Settings", which opens the app's page in Settings.
+    public let openSettings: String
+
+    public init(text: String, openSettings: String) {
+      self.text = text
+      self.openSettings = openSettings
+    }
+  }
+
+  /// A line under the search screen's saved places (client `SavedLine`), by its copy key:
+  /// `savedFull` says the list is full; the rest say what a bell does, with the purchase where it
+  /// is needed.
+  public enum SavedLine: String, Codable, Sendable, CaseIterable {
+    case savedFull, savedLineNoneFree, savedLineNonePaid, bellHint, bellHintLocked
+
+    /// Its words: `savedFull` with `SavedPlaces.max`.
+    public var text: String {
+      switch self {
+      case .savedFull: AppCopy.savedFull(max: String(SavedPlaces.max))
+      case .savedLineNoneFree: AppCopy.savedLineNoneFree
+      case .savedLineNonePaid: AppCopy.savedLineNonePaid
+      case .bellHint: AppCopy.bellHint
+      case .bellHintLocked: AppCopy.bellHintLocked
+      }
+    }
+  }
+
+  /// The search screen's lines under its saved places, with nothing typed, one per state (client
+  /// `savedLines`, design 2.3): with nothing saved, how to save a place and what a saved place
+  /// can have (`savedLineNoneFree` without the purchase, `savedLineNonePaid` with it); with
+  /// places saved, `savedFull` first once there are `SavedPlaces.max`, then how a bell works,
+  /// with the purchase (`bellHintLocked`, whatever the bells) or, with it, until a bell shows on
+  /// (`bellHint`; `anyBellOn` is a saved place's `AlertSync.bellState` being `on`).
+  public static func savedLines(savedCount: Int, unlocked: Bool, anyBellOn: Bool) -> [SavedLine] {
+    if savedCount < 1 { return [unlocked ? .savedLineNonePaid : .savedLineNoneFree] }
+    var lines: [SavedLine] = savedCount >= SavedPlaces.max ? [.savedFull] : []
+    if !unlocked {
+      lines.append(.bellHintLocked)
+    } else if !anyBellOn {
+      lines.append(.bellHint)
+    }
+    return lines
   }
 
   /// A recent place, by its name, with its line beneath when it has one.
@@ -138,8 +244,16 @@ public struct PlacePicker: Sendable, Equatable {
   }
 
   /// The picker with its search at `search`, its location fix at `location`, and its saved and
-  /// recent places, `lists`.
-  public init(search: PlaceSearchState, location: LocationState, lists: PlaceLists) {
+  /// recent places, `lists`; the bells with the one-off purchase owned (`unlocked`), those of
+  /// `bells` (`alerts.v2`'s, by `Target.key`) on, and something can be sent (`active`,
+  /// `AlertSync.active`: a switch on and notifications not denied); `bellDenied` once a bell's
+  /// tap met notifications denied in iOS Settings. Without them: free, every bell locked.
+  public init(
+    search: PlaceSearchState, location: LocationState, lists: PlaceLists, unlocked: Bool = false,
+    bells: [String] = [], active: Bool = false, bellDenied: Bool = false
+  ) {
+    self.bellDenied =
+      bellDenied ? BellDenied(text: AppCopy.notifyDenied, openSettings: AppCopy.openSettings) : nil
     title = CoreCopy.searchLabel
     close = CoreCopy.close
     prompt = CoreCopy.searchPlaceholder
@@ -165,21 +279,31 @@ public struct PlacePicker: Sendable, Equatable {
       shown = []
     }
     let saved = lists.saved
+    let rung = Set(bells.map { Array($0.utf8) })
+    // Each saved place's bell as it shows, by its key.
+    let state = { (place: SavedPlace) in
+      AlertSync.bellState(
+        on: rung.contains(Array(place.target.key.utf8)), unlocked: unlocked, active: active)
+    }
     results = shown.enumerated().map { index, result in
-      let isSaved = SavedPlaces.isSaved(Target(search: result), in: saved)
+      let target = Target(search: result)
+      let key = Array(target.key.utf8)
+      let place = saved.first { $0.target.key.utf8.elementsEqual(key) }
+      let bell = place.map { Bell(place: $0, name: result.name, state: state($0)) }
       return ResultRow(
         id: index,
         name: result.name,
         detail: PlaceSearch.line(result),
         result: result,
-        value: isSaved ? AppCopy.saved : nil,
-        star: Self.star(for: Target(search: result), name: result.name, saved: saved)
+        value: place == nil ? nil : AppCopy.saved,
+        star: Self.star(for: target, name: result.name, saved: saved, rung: bell?.state == .on),
+        bell: bell
       )
     }
     guard case .empty = search else {
       savedHeading = nil
       self.saved = []
-      savedHint = nil
+      savedLine = nil
       savedFull = nil
       recentHeading = nil
       recents = []
@@ -187,17 +311,21 @@ public struct PlacePicker: Sendable, Equatable {
     }
     savedHeading = AppCopy.saved
     self.saved = saved.map { place in
-      SavedRow(
+      let bell = Bell(place: place, name: place.name, state: state(place))
+      return SavedRow(
         id: place.target.key,
         name: place.name,
         detail: Self.line(place.detail),
         place: place,
-        star: Star(name: place.name, saved: true)
+        star: Star(name: place.name, saved: true, rung: bell.state == .on),
+        bell: bell
       )
     }
-    savedHint = saved.isEmpty ? AppCopy.savedHint : nil
-    savedFull =
-      saved.count >= SavedPlaces.max ? AppCopy.savedFull(max: String(SavedPlaces.max)) : nil
+    let lines = Self.savedLines(
+      savedCount: saved.count, unlocked: unlocked,
+      anyBellOn: self.saved.contains { $0.bell.state == .on })
+    savedFull = lines.contains(.savedFull) ? PlacePicker.SavedLine.savedFull.text : nil
+    savedLine = lines.last { $0 != .savedFull }?.text
     let shownRecent = SavedPlaces.shownRecent(lists)
     recentHeading = shownRecent.isEmpty ? nil : AppCopy.recent
     recents = shownRecent.map { place in
@@ -213,9 +341,11 @@ public struct PlacePicker: Sendable, Equatable {
   }
 
   /// The star of `target`'s place, named `name`: filled when it is saved, empty when it can be,
-  /// and none otherwise (the phone's own point, or a full list).
-  private static func star(for target: Target, name: String, saved: [SavedPlace]) -> Star? {
-    if SavedPlaces.isSaved(target, in: saved) { return Star(name: name, saved: true) }
+  /// and none otherwise (the phone's own point, or a full list). `rung` when its bell shows on.
+  private static func star(
+    for target: Target, name: String, saved: [SavedPlace], rung: Bool = false
+  ) -> Star? {
+    if SavedPlaces.isSaved(target, in: saved) { return Star(name: name, saved: true, rung: rung) }
     return SavedPlaces.canSave(target, in: saved) ? Star(name: name, saved: false) : nil
   }
 

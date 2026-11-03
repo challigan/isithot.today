@@ -32,7 +32,8 @@ private let products: [PurchaseState.Product] = [
 /// The icons of Settings → Notifications and its "Where you are" page, drawn between the units
 /// and the upgrade card rather than as one of `sections` (NotificationSettingsTests).
 private let notificationIcons: Set<SettingsScreen.Icon> = [
-  .evening, .morning, .possible, .notificationPlace, .test, .openSettings, .warnings, .myLocation,
+  .evening, .morning, .possible, .notificationPlace, .savedPlaces, .test, .openSettings, .warnings,
+  .myLocation,
 ]
 
 @Suite("Settings, as plain values")
@@ -61,7 +62,7 @@ struct SettingsScreenTests {
     #expect(screen.sections.map(\.heading) == [nil, "Privacy", nil, "About", "Help"])
     #expect(
       screen.sections.map { $0.rows.map(\.title) } == [
-        ["Remove ads and add widgets · £1.99", "Restore purchase"],
+        ["No ads, widgets and more · £1.99", "Restore purchase"],
         ["Your privacy", "Privacy policy"],
         ["Report an ad"],
         ["How it works", "Credits and licences", "Terms"],
@@ -105,7 +106,9 @@ struct SettingsScreenTests {
     #expect(!screen.sections.flatMap(\.rows).contains { $0.action == .reportAd })
     #expect(
       try upgradeRows(screen) == [
-        "thanks, Thank you. Ads are off and widgets are on.", "restore, Restore purchase",
+        "thanks, Thank you. Ads are off, widgets are on and you can turn on notifications for "
+          + "saved places.",
+        "restore, Restore purchase",
       ])
     let upgrade = try #require(screen.sections.first).rows
     #expect(upgrade.map(\.action) == [.note, .restore])
@@ -127,7 +130,7 @@ struct SettingsScreenTests {
         version: version)
       #expect(
         try upgradeRows(screen) == [
-          "upgrade, Remove ads and add widgets", "restore, Restore purchase",
+          "upgrade, No ads, widgets and more", "restore, Restore purchase",
         ],
         "\(product)")
       let row = try #require(screen.sections.first?.rows.first)
@@ -221,6 +224,7 @@ struct SettingsScreenTests {
         case .toggle(let row): row.icon
         case .line: nil
         case .here(let row): row.icon
+        case .savedRow(let row): row.icon
         case .row(let row): row.icon
         }
       } + [section.warnings?.icon].compactMap { $0 }
@@ -228,12 +232,13 @@ struct SettingsScreenTests {
     func icons(_ page: NotificationPlacePage) -> [SettingsScreen.Icon] {
       [page.place.icon] + [page.useMyLocation?.icon, page.openSettings?.icon].compactMap { $0 }
     }
-    let section = icons(NotificationSettings(denied))
+    let section = icons(NotificationSettings(denied, unlocked: false))
     let asking = icons(NotificationPlacePage(NotificationsState(locationAccess: .notDetermined)))
     let refused = icons(NotificationPlacePage(NotificationsState(locationAccess: .denied)))
     #expect(
       section == [
-        .openSettings, .evening, .morning, .possible, .notificationPlace, .test, .warnings,
+        .openSettings, .evening, .morning, .possible, .notificationPlace, .savedPlaces, .test,
+        .warnings,
       ])
     #expect(asking == [.notificationPlace, .myLocation])
     #expect(refused == [.notificationPlace, .openSettings])

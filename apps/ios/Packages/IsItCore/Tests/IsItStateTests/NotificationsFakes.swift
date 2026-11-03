@@ -235,7 +235,8 @@ func located(_ target: Target) -> LocationFix {
 /// A notifications model with fakes for everything, as a test sets them up: the server
 /// (`FakeTransport`, which a test can share with an app `Harness`), a clock at `now`, the three
 /// keys in memory, the system's notifications and the phone's location, in the sandbox, as
-/// version "1.0 (42)".
+/// version "1.0 (42)", on a phone in `deviceZone` (the devices fixtures' Europe/London) until a
+/// test moves it (`zone`).
 @MainActor
 struct NotificationsHarness {
   let transport: FakeTransport
@@ -243,6 +244,8 @@ struct NotificationsHarness {
   let store: MemoryNotificationStore
   let platform: FakeNotificationPlatform
   let location: FakeLocation
+  /// The phone's own zone, as iOS names it: what `TimeZone.current.identifier` gives in the app.
+  let zone: Locked<String>
   let model: NotificationsModel
 
   init(
@@ -257,9 +260,12 @@ struct NotificationsHarness {
     transport: FakeTransport? = nil,
     clock: TestClock? = nil,
     env: RegistrationBody.Env = .sandbox,
-    appVersion: String = "1.0 (42)"
+    appVersion: String = "1.0 (42)",
+    deviceZone: String = "Europe/London"
   ) {
     self.transport = transport ?? FakeTransport(replies)
+    let zone = Locked(deviceZone)
+    self.zone = zone
     self.clock = clock ?? TestClock(now)
     store = MemoryNotificationStore(
       settings: settings, registration: registration, cardDismissed: cardDismissed)
@@ -272,7 +278,8 @@ struct NotificationsHarness {
       location: location,
       clock: self.clock,
       env: env,
-      appVersion: appVersion
+      appVersion: appVersion,
+      deviceZone: { zone.read { $0 } }
     )
   }
 
@@ -304,4 +311,108 @@ func cell(_ target: Target) -> KeptCell? {
 /// Evening on, for the phone's cell at `target`, kept: what put-here-device registers.
 func eveningAt(_ target: Target) -> AlertSettings {
   AlertSettings(prefs: AlertPrefs(evening: true), here: cell(target))
+}
+
+// MARK: - The saved places' bells (phase 8.4b)
+
+/// Durham's city page, saved: put-here-ip-durham's saved place, `{ "place": "durham-gb" }`.
+let durhamSaved = SavedPlace(target: durham, name: "Durham", detail: "England, United Kingdom")
+
+/// Kathmandu as the picker saves search-kathmandu's result: a searched point with everything the
+/// search said of it, put-here-ip-kathmandu's saved place.
+func kathmanduSaved() throws -> SavedPlace {
+  let result = try #require(try found("search-kathmandu").first)
+  return SavedPlace(
+    target: Target(search: result), name: result.name, detail: PlaceSearch.line(result))
+}
+
+/// A saved city page by its slug, for the sets of more places.
+func savedCity(_ slug: String, _ name: String) -> SavedPlace {
+  SavedPlace(target: .city(slug: slug, name: name), name: name)
+}
+
+/// `alerts.v2` with the evening on and the bells of `places` on, approximate.
+func eveningWithBells(_ places: [SavedPlace]) -> AlertSettings {
+  AlertSettings(prefs: AlertPrefs(evening: true), bells: places.map(\.target.key))
+}
+
+/// The app's hooks as LiveHooks hands them to the notifications (phase 8.4b): each place on
+/// screen, the saved places and the purchase, to `notifications`; the rest does nothing.
+struct NotificationHooks: AppHooks {
+  let notifications: NotificationsModel
+
+  func startEntitlementCheck() {}
+
+  func entitlement() async -> Bool? { nil }
+
+  func startAds() async {}
+
+  func stopAds() async {}
+
+  func syncAlerts(target: Target, units: Units?) async {
+    await notifications.screenChanged(target: target, units: units)
+  }
+
+  func handle(_ route: DeepLink.Route) async {}
+
+  @MainActor func savedChanged(_ saved: [SavedPlace]) {
+    notifications.savedChanged(saved)
+  }
+
+  @MainActor func unlockedChanged(_ owned: Bool) {
+    notifications.unlockedChanged(owned)
+  }
+}
+
+/// The notifications' bells as the picker's tests have them answer (`PickerBells`): the bells on,
+/// whether anything can be sent, and whether notifications are denied, as a test sets them; each
+/// tap noted (the place's key, and whether the purchase was owned) and answered with the next of
+/// `results`, the last standing once the others are used up. A tap held (`hold()`, before it is
+/// made) waits until the test releases it.
+@MainActor
+final class FakeBells: PickerBells {
+  var bells: [String]
+  var active: Bool
+  var permissionDenied: Bool
+  var results: [BellResult]
+  /// The taps, in order: the place's key, then "unlocked" or "locked".
+  private(set) var taps: [String] = []
+  private var gate: Gate?
+
+  init(
+    bells: [String] = [], active: Bool = true, permissionDenied: Bool = false,
+    results: [BellResult] = [.on]
+  ) {
+    self.bells = bells
+    self.active = active
+    self.permissionDenied = permissionDenied
+    self.results = results
+  }
+
+  /// Holds the next tap until `release()`.
+  func hold() {
+    gate = Gate()
+  }
+
+  func release() {
+    gate?.open()
+  }
+
+  func toggleBell(_ place: SavedPlace, unlocked: Bool) async -> BellResult {
+    taps.append(place.target.key + (unlocked ? " unlocked" : " locked"))
+    let result = results.count > 1 ? results.removeFirst() : results[0]
+    await gate?.wait()
+    return result
+  }
+}
+
+/// What a test hears announced to VoiceOver, in order: the picker's announcer.
+@MainActor
+final class HeardAnnouncements {
+  private(set) var said: [String] = []
+
+  /// The announcer to hand the picker.
+  var announce: @MainActor (String) -> Void {
+    { [weak self] text in self?.said.append(text) }
+  }
 }

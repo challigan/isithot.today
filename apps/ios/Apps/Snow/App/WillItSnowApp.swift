@@ -24,7 +24,10 @@ import SwiftUI
 /// each time the app becomes active. What the system says about them (the token, a notification
 /// shown or tapped, iOS Settings' link) comes through the app delegate (`AppDelegate`) to
 /// `NotificationInbox.shared`, which keeps it until this attaches its handler, so a tap that
-/// launched the app is followed as a link is, once the launch has finished.
+/// launched the app is followed as a link is, once the launch has finished. The saved places'
+/// bells (phase 8.4b) follow the saved places and the purchase, which the model hands the
+/// notifications through its hooks (`LiveHooks`): the purchase as step 5 hears it and at each
+/// change `PurchaseModel` tells it, so both models hear every change from one place.
 @main
 struct WillItSnowApp: App {
   /// The centre's delegate and the push token's callbacks; the only adaptor.

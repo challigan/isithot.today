@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setEnvironmentContext } from '@netlify/blobs';
 import { BlobsServer } from '@netlify/blobs/server';
-import { ALERTS, COPY } from '@isithot/core';
+import { ALERTS, COPY, type SearchResult } from '@isithot/core';
 import { createSyntheticFetch, type FetchLike } from '@isithot/providers';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
@@ -25,18 +25,28 @@ import {
   hereKind,
   hereName,
   herePlace,
+  keptBells,
   notificationRoute,
+  ownsSaved,
   registrationBody,
   replyZones,
+  savePlace,
+  savedForBody,
+  searchTarget,
   syncReply,
+  tapBell,
   targetFromQuery,
   targetKey,
   testOutcome,
+  unsavePlace,
   type AlertPrefs,
   type DeviceReply,
   type HerePlace,
+  type PlaceLists,
   type PlaceTarget,
   type RegistrationBody,
+  type SavedPlace,
+  type SavedTarget,
 } from '../../client/src';
 import {
   CITIES,
@@ -2250,13 +2260,18 @@ const APPROXIMATE: HerePlace = herePlace({ access: 'denied', fix: null, kept: nu
 const NOT_LOCATED =
   "We couldn't tell where you are from your internet connection. Try again later, or use your location.";
 
-/** 8.4a's body, as client `registrationBody` makes it: where you are, and no saved place. */
+/**
+ * The app's body, as client `registrationBody` makes it: where you are, and the saved places
+ * whose bells are on with the phone's zone (phase 8.4b; none by default, as 8.4a's).
+ */
 function appBody(o: {
   token: string;
   here?: HerePlace;
   prefs?: AlertPrefs;
   units?: 'c' | 'f';
   env?: 'sandbox' | 'production';
+  saved?: readonly SavedTarget[];
+  deviceTz?: string | null;
 }): RegistrationBody {
   return registrationBody({
     token: o.token,
@@ -2265,6 +2280,8 @@ function appBody(o: {
     units: o.units ?? 'c',
     prefs: o.prefs ?? EVENING,
     appVersion: '1.0 (130)',
+    saved: o.saved ?? [],
+    deviceTz: o.deviceTz ?? null,
   });
 }
 
@@ -2564,6 +2581,385 @@ describe("the contract with packages/client's registrationBody", () => {
     expect(reply.here).toMatchObject({ timezone: 'Europe/London', follows: 'ip' });
     expect(reply.seenAt).toBe(iso(SNOWY + refresh));
     expect(hereName({ here: APPROXIMATE, reply: reply as DeviceReply })).toBe(reply.here!.name);
+  });
+});
+
+describe("the contract with packages/client's saved places and bells (phase 8.4b)", () => {
+  /** A result of `/api/v1/search`, with what it leaves out left out. */
+  const result = (
+    r: Pick<SearchResult, 'name' | 'lat' | 'lon'> & Partial<SearchResult>,
+  ): SearchResult => ({ region: null, country: null, countryName: null, ...r });
+  /** A place saved from the picker's search, as client `searchTarget` and `savePlace` keep it. */
+  const saving = (r: SearchResult, name = r.name): SavedPlace => ({
+    target: searchTarget(r),
+    name,
+  });
+  const DURHAM_PAGE = saving(result(CITIES.find((c) => c.slug === 'durham-gb')!));
+  const KATHMANDU_FOUND = saving(
+    result({
+      name: 'Kathmandu',
+      region: 'Bagmati Province',
+      country: 'NP',
+      countryName: 'Nepal',
+      lat: 27.702,
+      lon: 85.321,
+      geonameId: 1283240,
+      elevation: 50,
+    }),
+  );
+  /** A name and a point, south of the equator and west of Greenwich, and no country. */
+  const NAME_ONLY = saving(result({ name: 'Ushuaia', lat: -54.81, lon: -68.31 }));
+  /** A point saved with no words at all: the server names it from the nearest town. */
+  const BARE: SavedPlace = {
+    target: { kind: 'coords', source: 'search', lat: 60.4, lon: 5.3 },
+    name: 'Bergen',
+  };
+  /**
+   * Words JSON escapes (quotes, a backslash, a control character), and some it writes as they
+   * are.
+   */
+  const AWKWARD = saving(
+    result({
+      name: 'Lac "Bleu" / \\ Ü 😀\u0001',
+      region: 'Otago & Southland',
+      country: 'NZ',
+      lat: -45.05,
+      lon: 168.65,
+    }),
+    'Lac Bleu',
+  );
+  const keysOf = (places: readonly SavedPlace[]): string[] =>
+    places.map((p) => targetKey(p.target));
+  /** Where each saved place of a reply is, by the key its bell has (`targetKey`). */
+  const keysIn = (reply: Reply2): string[] =>
+    reply.saved.map((s) => targetKey(targetFromQuery(s.query)!));
+
+  /**
+   * The bells and switches once each of `places`' bells is tapped in turn, with the purchase and
+   * notifications allowed (client `tapBell`).
+   */
+  function ringEach(places: readonly SavedPlace[], prefs: AlertPrefs = EVENING) {
+    const savedKeys = keysOf(places);
+    let bells: string[] = [];
+    let now = prefs;
+    for (const key of savedKeys) {
+      const tap = tapBell({
+        key,
+        bells,
+        savedKeys,
+        prefs: now,
+        unlocked: true,
+        permission: 'authorized',
+      });
+      if (tap.kind !== 'on' && tap.kind !== 'onWithHere') throw new Error(`${key}: ${tap.kind}`);
+      bells = tap.bells;
+      now = tap.prefs;
+    }
+    return { bells, prefs: now };
+  }
+
+  /**
+   * What the app sends for `places` with `bells` on, as its sync does (`ownsSaved`,
+   * `savedForBody`).
+   */
+  const setFor = (
+    t: string,
+    places: readonly SavedPlace[],
+    bells: readonly string[],
+    o: { owns?: boolean; prefs?: AlertPrefs; deviceTz?: string } = {},
+  ): RegistrationBody =>
+    appBody({
+      token: t,
+      prefs: o.prefs ?? EVENING,
+      saved: savedForBody(places, bells, o.owns ?? true),
+      deviceTz: o.deviceTz ?? 'Europe/London',
+    });
+
+  /** A zone as the server's ICU names it. */
+  const icuZone = (zone: string): string =>
+    new Intl.DateTimeFormat('en', { timeZone: zone }).resolvedOptions().timeZone;
+
+  const sets: Array<[string, SavedPlace[], string]> = [
+    ['a city page', [DURHAM_PAGE], 'Europe/London'],
+    ['a searched place with every word', [KATHMANDU_FOUND], 'Asia/Kathmandu'],
+    ['a name and a point', [NAME_ONLY], 'America/Argentina/Ushuaia'],
+    ['a point alone', [BARE], 'Europe/Oslo'],
+    ['words JSON escapes', [AWKWARD], 'Pacific/Auckland'],
+    ['three at once, a city page first', [DURHAM_PAGE, KATHMANDU_FOUND, AWKWARD], 'Europe/London'],
+  ];
+
+  it.each(sets)(
+    'takes %s with its bell on, and its reply names each place by its bell',
+    async (_name, places, zone) => {
+      const w = world({ geo: LEEDS_GEO });
+      const t = token(
+        'ef',
+        sets.findIndex(([name]) => name === _name),
+      );
+      const { bells, prefs } = ringEach(places);
+      expect(bells).toEqual(keysOf(places));
+      const sent = setFor(t, places, bells, { prefs, deviceTz: zone });
+      expect(sent.saved).toHaveLength(places.length);
+      expect(sent.deviceTz).toBe(zone);
+      expect(Buffer.byteLength(JSON.stringify(sent))).toBeLessThan(DEVICE_LIMITS.bodyBytes / 4);
+      const r = await put2(w, sent);
+      expect(r.status).toBe(200);
+      const text = await r.text();
+      const reply = JSON.parse(text) as Reply2;
+      expect(syncReply(r.status, text, r.headers.get('retry-after'))).toEqual({
+        kind: 'stored',
+        reply,
+      });
+      // The server keeps the phone's zone as its own ICU names it (`checkDeviceTz`), which for
+      // some zones is an older name than iOS gives (Asia/Katmandu for Asia/Kathmandu, in Node 22):
+      // Your privacy shows the server's, and the app never compares it with its own, or it would
+      // send the set again at every sync.
+      const kept = icuZone(zone);
+      expect(reply).toMatchObject({ deviceTz: kept, refused: [], alerts: { snow: prefs } });
+      expect(reply.here).toMatchObject({ follows: 'ip' });
+      // Each saved place, in the body's order, under its bell's key, so the router's zones and
+      // Your privacy's lines are the bells' places.
+      expect(keysIn(reply)).toEqual(bells);
+      const zones = replyZones(reply as DeviceReply);
+      for (const [i, key] of bells.entries()) expect(zones[key]).toBe(reply.saved[i]!.timezone);
+      // Before StoreKit answers at the next launch, the bells are the phone's (decision 15).
+      expect(ownsSaved(null, reply as DeviceReply)).toBe(true);
+      // Each saved place's record keeps the phone's zone, and a tap on its notification opens it;
+      // where you are's keeps no zone of the phone's.
+      for (const [i, s] of reply.saved.entries()) {
+        const stored = await savedRecord(w, s.timezone, t, s.pid);
+        expect(stored).toMatchObject({ query: s.query, deviceTz: kept, alerts: { snow: prefs } });
+        const route = tapped(stored!);
+        expect(route).toMatchObject({ kind: 'place', view: 'today' });
+        expect(targetKey((route as { target: PlaceTarget }).target)).toBe(bells[i]);
+      }
+      const free = await w.store.get<DeviceRecord>(regKey(reply.here!.timezone, 'snow', idOf(t)));
+      expect(free).not.toBeNull();
+      expect(free).not.toHaveProperty('deviceTz');
+    },
+  );
+
+  it('takes a first bell with every switch off, which turns the evening on for where you are too', async () => {
+    const w = world({ geo: LEEDS_GEO });
+    const t = token('ef', 20);
+    const off: AlertPrefs = { evening: false, morning: false, possible: true };
+    const { bells, prefs } = ringEach([DURHAM_PAGE], off);
+    expect(prefs).toEqual({ evening: true, morning: false, possible: true });
+    const r = await put2(w, setFor(t, [DURHAM_PAGE], bells, { prefs }));
+    expect(r.status).toBe(200);
+    const reply = await reply2(r);
+    expect(reply.alerts.snow).toEqual(prefs);
+    expect(reply.here).toMatchObject({ follows: 'ip', timezone: 'Europe/London' });
+    expect(keysIn(reply)).toEqual(bells);
+  });
+
+  it('takes ten bells on at once, as after a restore, three new places a minute as the server asks', async () => {
+    const w = world({ geo: LEEDS_GEO });
+    const t = token('ef', 30);
+    const towns = CITIES.filter((c) => c.slug !== 'leeds-gb')
+      .slice(0, PLACES.savedMax + 1)
+      .map((c) => saving(result(c)));
+    let lists: PlaceLists = { saved: [], recent: [] };
+    for (const town of towns) lists = savePlace(lists, town);
+    expect(lists.saved).toHaveLength(PLACES.savedMax);
+    const { bells } = ringEach(lists.saved);
+    const sent = setFor(t, lists.saved, bells);
+    expect(sent.saved).toHaveLength(ALERTS.savedPlacesMax);
+    let at = SNOWY;
+    const outcomes: Array<ReturnType<typeof syncReply>> = [];
+    for (let i = 0; i < 10; i++) {
+      w.at(at);
+      const r = await put2(w, sent);
+      const outcome = syncReply(r.status, await r.text(), r.headers.get('retry-after'));
+      outcomes.push(outcome);
+      if (outcome.kind !== 'retry') break;
+      at += outcome.afterSeconds * 1000;
+    }
+    // 3, 3, 3 and 1: about three minutes (decision 20).
+    const puts = Math.ceil(ALERTS.savedPlacesMax / ALERTS.newPlacesPerPut);
+    expect(outcomes.map((o) => o.kind)).toEqual([...Array(puts - 1).fill('retry'), 'stored']);
+    expect(outcomes[0]).toEqual({ kind: 'retry', afterSeconds: 60 });
+    expect(at - SNOWY).toBe((puts - 1) * 60_000);
+    const stored = outcomes.at(-1) as { kind: 'stored'; reply: Reply2 };
+    expect(keysIn(stored.reply)).toEqual(bells);
+  });
+
+  it('sends the largest set it can make within the body limit', async () => {
+    const w = world({ geo: LEEDS_GEO });
+    // Eleven searched places with 80-character names and regions, 3 bytes each in UTF-8.
+    const far = Array.from({ length: PLACES.savedMax + 1 }, (_, i) =>
+      saving(
+        result({
+          name: `${'雪'.repeat(78)}${String(i).padStart(2, '0')}`,
+          region: '雪'.repeat(80),
+          country: 'JP',
+          countryName: 'Japan',
+          lat: 43.05 + i * 0.1,
+          lon: 141.35,
+          geonameId: 2128295,
+          elevation: 1000 + i,
+        }),
+      ),
+    );
+    const sent = setFor(token('ef', 40), far, keysOf(far));
+    expect(sent.saved).toHaveLength(ALERTS.savedPlacesMax);
+    const bytes = Buffer.byteLength(JSON.stringify(sent));
+    expect(bytes).toBeGreaterThan(DEVICE_LIMITS.bodyBytes / 2);
+    expect(bytes).toBeLessThan(DEVICE_LIMITS.bodyBytes);
+    // Read whole: the cap on new places answers it, not the body limit (413).
+    const r = await put2(w, sent);
+    expect(r.status).toBe(429);
+    expect(syncReply(r.status, await r.text(), r.headers.get('retry-after'))).toEqual({
+      kind: 'retry',
+      afterSeconds: 60,
+    });
+  });
+
+  it('leaves the saved places out after a refund, which the server deletes, and sends them again after a restore', async () => {
+    const w = world({ geo: LEEDS_GEO });
+    const t = token('ef', 50);
+    const places = [DURHAM_PAGE, KATHMANDU_FOUND];
+    const { bells } = ringEach(places);
+    const bought = setFor(t, places, bells, { owns: ownsSaved(true, null) });
+    const first = await reply2(await put2(w, bought));
+    expect(keysIn(first)).toEqual(bells);
+    const sync = (o: { saved: readonly SavedTarget[]; at: number; activeAt: number }) =>
+      alertAction({
+        prefs: EVENING,
+        permission: 'authorized',
+        token: t,
+        here: APPROXIMATE,
+        units: 'c',
+        last: { fingerprint: fingerprint(bought), at: SNOWY },
+        refused: null,
+        activeAt: o.activeAt,
+        now: o.at,
+        env: 'sandbox',
+        appVersion: '1.0 (130)',
+        saved: o.saved,
+        deviceTz: 'Europe/London',
+      });
+    // The next launch, before StoreKit answers: the same set, so nothing is sent.
+    const launch = savedForBody(places, bells, ownsSaved(null, first as DeviceReply));
+    expect(sync({ saved: launch, at: SNOWY + 30 * MINUTE, activeAt: SNOWY + 30 * MINUTE })).toBe(
+      'none',
+    );
+    // A refund: the bells are kept, locked, and the set leaves the saved places and the zone out.
+    expect(keptBells(bells, keysOf(places))).toEqual(bells);
+    const refunded = setFor(t, places, bells, { owns: ownsSaved(false, first as DeviceReply) });
+    expect(refunded).toMatchObject({ saved: [] });
+    expect(refunded).not.toHaveProperty('deviceTz');
+    const none = savedForBody(places, bells, ownsSaved(false, first as DeviceReply));
+    expect(sync({ saved: none, at: SNOWY + 2 * MINUTE, activeAt: SNOWY })).toBe('put');
+    w.at(SNOWY + 2 * MINUTE);
+    const r = await put2(w, refunded);
+    expect(r.status).toBe(200);
+    const text = await r.text();
+    const after = JSON.parse(text) as Reply2;
+    expect(syncReply(200, text, null)).toEqual({ kind: 'stored', reply: after });
+    expect(after).toMatchObject({ deviceTz: null, saved: [] });
+    expect(ownsSaved(null, after as DeviceReply)).toBe(false);
+    for (const s of first.saved) expect(await savedRecord(w, s.timezone, t, s.pid)).toBeNull();
+    expect(keysFor(w, t)).toEqual([
+      idsKey('snow', idOf(t)),
+      regKey('Europe/London', 'snow', idOf(t)),
+    ]);
+    // A restore: the bells kept come back.
+    w.at(SNOWY + 4 * MINUTE);
+    const restored = await put2(
+      w,
+      setFor(t, places, bells, { owns: ownsSaved(true, after as DeviceReply) }),
+    );
+    expect(restored.status).toBe(200);
+    expect(keysIn(await reply2(restored))).toEqual(bells);
+  });
+
+  it("drops an unsaved place's bell, and the next set deletes its record and keeps the rest", async () => {
+    const w = world({ geo: LEEDS_GEO });
+    const t = token('ef', 60);
+    const places = [DURHAM_PAGE, KATHMANDU_FOUND];
+    const { bells } = ringEach(places);
+    const before = await reply2(await put2(w, setFor(t, places, bells)));
+    const left = unsavePlace({ saved: places, recent: [] }, KATHMANDU_FOUND.target).saved;
+    const still = keptBells(bells, keysOf(left));
+    expect(still).toEqual([targetKey(DURHAM_PAGE.target)]);
+    w.at(SNOWY + 2 * MINUTE);
+    const r = await put2(w, setFor(t, left, still));
+    expect(r.status).toBe(200);
+    const after = await reply2(r);
+    expect(after.saved).toEqual([before.saved[0]]);
+    const [, kathmandu] = before.saved;
+    expect(await savedRecord(w, kathmandu!.timezone, t, kathmandu!.pid)).toBeNull();
+  });
+
+  it('deletes the whole set with every switch off, whatever bells are on', async () => {
+    const w = world({ geo: LEEDS_GEO });
+    const t = token('ef', 70);
+    const { bells } = ringEach([DURHAM_PAGE]);
+    const sent = setFor(t, [DURHAM_PAGE], bells);
+    expect((await put2(w, sent)).status).toBe(200);
+    const off: AlertPrefs = { evening: false, morning: false, possible: true };
+    const action = alertAction({
+      prefs: off,
+      permission: 'authorized',
+      token: t,
+      here: APPROXIMATE,
+      units: 'c',
+      last: { fingerprint: fingerprint(sent), at: SNOWY },
+      refused: null,
+      activeAt: SNOWY,
+      now: SNOWY + MINUTE,
+      env: 'sandbox',
+      appVersion: '1.0 (130)',
+      saved: savedForBody([DURHAM_PAGE], bells, true),
+      deviceTz: 'Europe/London',
+    });
+    expect(action).toBe('delete');
+    const r = await del(w, { app: 'snow', token: t });
+    expect(syncReply(r.status, await r.text(), null)).toEqual({ kind: 'forgotten' });
+    expect(keysFor(w, t)).toEqual([]);
+  });
+
+  it('leaves out only the places the server would refuse the whole set for', async () => {
+    const w = world({ geo: LEEDS_GEO });
+    // The phone's own point can't be saved, and savedForBody would leave it out if it were.
+    const phone: SavedPlace = { target: deviceTarget(53.81, -1.56), name: 'Leeds' };
+    expect(savePlace({ saved: [], recent: [] }, phone).saved).toEqual([]);
+    const offEarth: SavedPlace = {
+      target: { kind: 'coords', source: 'search', lat: 95, lon: 0, name: 'Nowhere' },
+      name: 'Nowhere',
+    };
+    const blank: SavedPlace = { target: { kind: 'city', slug: '  ' }, name: 'Blank' };
+    for (const odd of [phone, offEarth, blank]) {
+      const places = [odd, DURHAM_PAGE];
+      expect(savedForBody(places, keysOf(places), true)).toEqual([DURHAM_PAGE.target]);
+    }
+    let at = SNOWY;
+    for (const [i, odd] of [offEarth, blank].entries()) {
+      const t = token('ef', 80 + i);
+      const places = [odd, DURHAM_PAGE];
+      // Sent as it is, it would cost the whole set: Durham, and where you are with it.
+      w.at(at);
+      const raw = await put2(
+        w,
+        appBody({
+          token: t,
+          saved: places.map((p) => p.target as SavedTarget),
+          deviceTz: 'Europe/London',
+        }),
+      );
+      expect(raw.status).toBe(400);
+      expect((await errorOf(raw.clone())).code).toBe('bad_request');
+      expect(syncReply(raw.status, await raw.text(), null)).toEqual({ kind: 'failed' });
+      expect(keysFor(w, t)).toEqual([]);
+      // Left out, the rest is kept.
+      at += 2 * MINUTE;
+      w.at(at);
+      const r = await put2(w, setFor(t, places, keysOf(places)));
+      expect(r.status).toBe(200);
+      expect(keysIn(await reply2(r))).toEqual([targetKey(DURHAM_PAGE.target)]);
+      at += 2 * MINUTE;
+    }
   });
 });
 

@@ -29,7 +29,7 @@ public enum AppCopy {
   public static let search = "Search"
 
   public static func upgradeRow(price: String) -> String {
-    "No ads, plus widgets for your home and lock screen · \(price)"
+    "No ads, widgets and notifications for saved places · \(price)"
   }
 
   public static func headingLabel(place: String, question: String, answer: String) -> String {
@@ -77,7 +77,6 @@ public enum AppCopy {
 
   public static let recent = "Recent"
   public static let saved = "Saved"
-  public static let savedHint = "Tap the star beside a place to save it here."
 
   public static func savedFull(max: String) -> String {
     "You can save up to \(max) places. Remove one to save another."
@@ -105,21 +104,60 @@ public enum AppCopy {
     "\(place) deleted from recent places."
   }
 
+  public static func bellOn(place: String) -> String {
+    "Turn on notifications for \(place)"
+  }
+
+  public static func bellOff(place: String) -> String {
+    "Turn off notifications for \(place)"
+  }
+
+  public static func bellLocked(place: String) -> String {
+    "Turn on notifications for \(place), with the one-off purchase"
+  }
+
+  public static func bellTurnedOn(place: String) -> String {
+    "Notifications on for \(place)."
+  }
+
+  public static func bellTurnedOnWithHere(place: String) -> String {
+    "Evening notifications on for \(place) and where you are."
+  }
+
+  public static func bellTurnedOff(place: String) -> String {
+    "Notifications off for \(place)."
+  }
+
+  public static func placeUnsavedBellOff(place: String) -> String {
+    "\(place) removed from saved places. Its notifications are off."
+  }
+
+  public static let savedLineNoneFree =
+    "Tap the star beside a place to save it. Saved places can have notifications with the one-off purchase."
+  public static let savedLineNonePaid =
+    "Tap the star beside a place to save it, then tap its bell to get notifications."
+  public static let bellHintLocked =
+    "Tap a place's bell to get notifications for it, with the one-off purchase."
+  public static let bellHint = "Tap a place's bell to get notifications for it."
   public static let clearSearch = "Clear search"
   public static let searchOffline = "You're offline. Connect to the internet to search."
   public static let locationUnavailable = "Couldn't find your location. Search for a place instead."
   public static let locationPurpose =
     "Your location shows whether it will snow where you are. It is rounded to about 5 km before it leaves your phone. If notifications are on, that rounded location is kept, and updated when you open the app, so we can tell you when snow is likely where you are."
-  public static let upgradeTitle = "Remove ads and add widgets"
+  public static let upgradeTitle = "No ads, widgets and more"
 
   public static func upgradeSettings(price: String) -> String {
-    "Remove ads and add widgets · \(price)"
+    "No ads, widgets and more · \(price)"
   }
 
+  public static let upgradeNoAds = "No ads in the app"
+  public static let upgradeWidgets = "Widgets for your home screen and lock screen"
+  public static let upgradeSavedNotifications = "Notifications for your saved places"
   public static let upgradeBody =
-    "A one-off purchase. No ads in the app, and widgets for your home screen and lock screen. Notifications and everything else stay free."
+    "A one-off purchase. Notifications for where you are, and everything else, stay free."
   public static let familySharing = "Shared with your family through Family Sharing."
-  public static let thanks = "Thank you. Ads are off and widgets are on."
+  public static let thanks =
+    "Thank you. Ads are off, widgets are on and you can turn on notifications for saved places."
   public static let pending = "Waiting for approval."
   public static let restore = "Restore purchase"
   public static let restored = "Purchase restored."
@@ -129,7 +167,7 @@ public enum AppCopy {
     "Buy for \(price)"
   }
 
-  public static let upgradeDescription = "No ads, plus home and lock screen widgets"
+  public static let upgradeDescription = "No ads, widgets and saved-place notifications"
   public static let upgradeUnavailable = "The purchase isn't available right now. Try again later."
   public static let purchasesOff = "In-app purchases are turned off on this iPhone."
   public static let unitsFootnote = "Temperatures follow: cm with °C, inches with °F."
@@ -151,17 +189,29 @@ public enum AppCopy {
   public static let notifyPlaceMyLocation = "Use my location"
   public static let notifyLocationDenied = "Location access is off for this app in Settings."
   public static let notifyLocationUnavailable = "Couldn't find your location. Try again."
+  public static let notifySaved = "Saved places"
+  public static let notifySavedLocked = "With the one-off purchase"
+
+  public static func notifySavedOn(count: String) -> String {
+    "\(count) on"
+  }
+
+  public static let notifySavedOff = "Off"
   public static let sendTest = "Send a test notification"
   public static let testSent = "Sent. It should arrive in a few seconds."
+
+  public static func testSentCount(count: String) -> String {
+    "Sent \(count) test notifications. They should arrive in a few seconds."
+  }
+
   public static let testLimited = "You can send 3 test notifications an hour. Try again later."
   public static let testFailed = "Couldn't send a test notification. Try again later."
   public static let testDryRun = "Our server isn't sending notifications yet, so nothing was sent."
-  public static let testQuiet =
-    "Nothing is sent from 9pm to 7am at the place. Try again after 7am there."
+  public static let testQuiet = "Nothing is sent from 9pm to 7am. Try again after 7am."
   public static let notifyNotSaved =
     "Couldn't save your notification choices. The app will try again when you next open it."
   public static let notifyFooter =
-    "These are forecasts, not official warnings. Times are at the place. Open the app at least every few months to keep notifications on."
+    "These are forecasts, not official warnings. Times are at each place. From 9pm to 7am on your iPhone, notifications for saved places arrive silently. Open the app at least every few months to keep notifications on."
   public static let notifyDenied = "Notifications are off for this app in Settings."
   public static let openSettings = "Open Settings"
   public static let cardOn =
@@ -180,7 +230,7 @@ public enum AppCopy {
   public static let privacyForecast =
     "To get the forecast, the app sends the place (a town, or your location rounded to about 5 km) and your units to our server. Until you choose a place, our server estimates a rough one from your internet connection. Place names you search for go to Open-Meteo, our forecast provider, to find matching places. The app keeps your place, units, recent and saved places, your notification choices and the last forecast on your iPhone."
   public static let privacyNotifications =
-    "Only while notifications are on, we keep your device's notification token, an ID made from it, the place you get notifications for and its time zone, your units and which notifications you chose, with a few details such as the app's version and when it last checked in. The place is where you are (your location rounded to about 5 km or, if you haven't shared it, a rough place our server estimates from your internet connection, updated when you open the app, at most once an hour). We delete them when you turn notifications off in the app, when Apple tells us the app is no longer installed, or about 90 days after you last open it. If you turn notifications off in your iPhone's Settings instead, we delete them the next time you open the app. For a few days after each notification and each test, and after some forecast checks that found nothing to send, we also keep a note of it, even once the rest is deleted. It holds no token or place."
+    "Only while notifications are on, we keep your device's notification token, an ID made from it, the places you get notifications for and their time zones, your units and which notifications you chose, with a few details such as the app's version and when it last checked in. The places are where you are (your location rounded to about 5 km or, if you haven't shared it, a rough place our server estimates from your internet connection, updated when you open the app, at most once an hour) and any saved places you turned notifications on for; while you have those, we also keep your iPhone's time zone. We delete them when you turn notifications off in the app, when Apple tells us the app is no longer installed, or about 90 days after you last open it. If you turn notifications off in your iPhone's Settings instead, we delete them the next time you open the app. For a few days after each notification and each test, and after some forecast checks that found nothing to send, we also keep a note of it, even once the rest is deleted. It holds no token or place."
   public static let privacyAds =
     "In the free version, Google shows the ads and may collect device and usage data. The app keeps when it last showed a full-screen ad, so it shows one at most every 5 minutes."
   public static let seePrivacyChoices = "See Privacy choices."
@@ -201,13 +251,17 @@ public enum AppCopy {
     "\(place), \(zone)"
   }
 
+  public static func keptDeviceZone(zone: String) -> String {
+    "Your iPhone's time zone: \(zone)"
+  }
+
   public static func keptUnits(label: String, units: String) -> String {
     "\(label): \(units)"
   }
 
   public static let deleteMyData = "Turn off notifications and delete my data"
   public static let deleteDone =
-    "Notifications are off. We've deleted your notification token, place, units and choices."
+    "Notifications are off. We've deleted your notification token, places, units and choices."
   public static let deleteNotYet =
     "Couldn't reach our server, so nothing is deleted yet. The app will try again when you next open it."
   public static let advertisement = "Advertisement"

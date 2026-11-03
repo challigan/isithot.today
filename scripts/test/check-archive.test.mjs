@@ -191,6 +191,8 @@ const ALERT_CARD_CODE = [0xd28c25a0, 0xf2acad80, 0xf2ce8e40, 0xf2ec2860, 0xd28c8
 const DEVICES_CODE = [0xd28c85a0, 0xf2aecca0, 0xf2cc6d20, 0xf2ee6ca0, 0xd2fd0001];
 // "-place" (6 bytes) built in x0 in three moves, as "-route" is above.
 const PLACE_CODE = [0xd28e05a0, 0xf2ac2d80, 0xf2ccac60];
+// "-saved" (6 bytes) built in x0 in three moves, as "-place" is.
+const SAVED_CODE = [0xd28e65a0, 0xf2aecc20, 0xf2cc8ca0];
 
 /**
  * A privacy manifest that collects `types` (NSPrivacyCollectedDataType…), each as the app's own
@@ -372,7 +374,7 @@ describe('an archive that passes', () => {
         '',
         '- WillItSnow 1.0 (101)',
         `- ads test: Google's demo units (${DEMO_APP})`,
-        "- checked: privacy manifests and what they collect, the icon, the four fonts, the widget's glyphs and origin, 27 debug hooks in both binaries, the push environment, the ad units and SKAdNetworkItems, the widget's links, versions, encryption, fixtures, StoreKit configurations and StoreKitTest",
+        "- checked: privacy manifests and what they collect, the icon, the four fonts, the widget's glyphs and origin, 28 debug hooks in both binaries, the push environment, the ad units and SKAdNetworkItems, the widget's links, versions, encryption, fixtures, StoreKit configurations and StoreKitTest",
         '',
       ].join('\n'),
     );
@@ -410,6 +412,7 @@ describe('an archive that passes', () => {
           'the-notifications-page',
           'my-place',
           'all-devices',
+          'the-saved-places',
         ]),
       },
     });
@@ -722,6 +725,7 @@ describe('an archive that fails', () => {
     ['-devices', DEVICES_CODE],
     ['-alertCard', ALERT_CARD_CODE],
     ['-place', PLACE_CODE],
+    ['-saved', SAVED_CODE],
   ])(
     "fails on the notifications tests' launch argument %s as a short Swift literal",
     (hook, code) => {

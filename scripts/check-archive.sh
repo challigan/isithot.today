@@ -73,7 +73,7 @@ WORD_HOOKS=(-route)
 # for inside longer strings, so matched only as whole short literals.
 LITERAL_HOOKS=(
   -now -clock -unlocked -noads -resetStore -network -location -purchase -restore
-  -notifications -pushToken -devices -alertCard -place
+  -notifications -pushToken -devices -alertCard -place -saved
 )
 
 PLUTIL="${PLUTIL:-plutil}"

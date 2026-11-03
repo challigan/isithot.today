@@ -3,8 +3,9 @@ import IsItModel
 import SwiftUI
 import UIKit
 
-/// What the place picker asks the app to do (iOS build spec, section 10.3). The picker keeps no
-/// state of its own but the search box's text, which the app's model holds through `text`.
+/// What the place picker asks the app to do (iOS build spec, section 10.3; design 2.2). The picker
+/// keeps no state of its own but the search box's text, which the app's model holds through
+/// `text`, and which bell to give VoiceOver's focus back to once the purchase it opened closes.
 public struct PlacePickerActions {
   /// The keyboard's Search key: the first result.
   public var submit: () -> Void
@@ -12,6 +13,9 @@ public struct PlacePickerActions {
   public var useMyLocation: () -> Void
   /// "Open Settings", while location access is off: the app's page in Settings.
   public var openSettings: () -> Void
+  /// "Open Settings" under a bell's tap that met notifications off for the app (phase 8.4b,
+  /// `bell-open-settings`): the app's notification settings in Settings.
+  public var openNotificationSettings: () -> Void
   /// A search result.
   public var choose: (SearchResult) -> Void
   /// A recent place.
@@ -27,6 +31,9 @@ public struct PlacePickerActions {
   public var unsave: (Target) -> Void
   /// "Delete" in a recent place's menu: it is forgotten.
   public var deleteRecent: (RecentPlace) -> Void
+  /// A saved place's bell, or its label in the place's menu (phase 8.4b): its notifications on or
+  /// off, or, without the purchase, the purchase's page over the picker. Nothing is chosen.
+  public var toggleBell: (SavedPlace) -> Void
   /// Close.
   public var close: () -> Void
 
@@ -34,6 +41,7 @@ public struct PlacePickerActions {
     submit: @escaping () -> Void,
     useMyLocation: @escaping () -> Void,
     openSettings: @escaping () -> Void,
+    openNotificationSettings: @escaping () -> Void,
     choose: @escaping (SearchResult) -> Void,
     chooseRecent: @escaping (RecentPlace) -> Void,
     chooseSaved: @escaping (SavedPlace) -> Void,
@@ -41,11 +49,13 @@ public struct PlacePickerActions {
     saveRecent: @escaping (RecentPlace) -> Void,
     unsave: @escaping (Target) -> Void,
     deleteRecent: @escaping (RecentPlace) -> Void,
+    toggleBell: @escaping (SavedPlace) -> Void,
     close: @escaping () -> Void
   ) {
     self.submit = submit
     self.useMyLocation = useMyLocation
     self.openSettings = openSettings
+    self.openNotificationSettings = openNotificationSettings
     self.choose = choose
     self.chooseRecent = chooseRecent
     self.chooseSaved = chooseSaved
@@ -53,6 +63,7 @@ public struct PlacePickerActions {
     self.saveRecent = saveRecent
     self.unsave = unsave
     self.deleteRecent = deleteRecent
+    self.toggleBell = toggleBell
     self.close = close
   }
 }
@@ -64,7 +75,14 @@ public struct PlacePickerActions {
 /// row with its Close pill (`SheetHeader`) and the search box (`SearchBox`) stay put; beneath them
 /// a page of rows scrolls: "Use my location", the search's line or its results, or with nothing
 /// typed, the saved places under "Saved" and the recent places under "Recent", each place with
-/// its star (PickerChrome.swift).
+/// its star (PickerChrome.swift), and each saved place, a saved row or a saved result, with its
+/// bell beside the star (phase 8.4b, design 2.2); then under the saved places the line that says
+/// what a star and a bell do (`saved-line`, design 2.3), and once a bell's tap met notifications
+/// off for the app, that line with Open Settings (`bell-denied`, `bell-open-settings`).
+///
+/// A locked bell asks the app for the purchase's page, which it opens over the picker
+/// (`purchaseOpen`); once that closes, VoiceOver's focus goes back to the bell that opened it,
+/// which the app's model has turned on meanwhile if the purchase was made there (decision 8).
 ///
 /// A `ScrollView` and a `VStack`, every row made at once, not a `List`: a lazy container's text
 /// was "partially unsupported" by the audit's Dynamic Type check though it grew (PR #33's runs),
@@ -79,16 +97,25 @@ public struct PlacePickerView: View {
   let picker: PlacePicker
   @Binding var text: String
   let theme: PageTheme
+  /// Whether the purchase's page is open over the picker, which a locked bell opened.
+  let purchaseOpen: Bool
   let actions: PlacePickerActions
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  /// The bell VoiceOver's focus is on, or is to go to, by its identifier.
+  @AccessibilityFocusState private var focusedBell: String?
+  /// The identifier of the locked bell last tapped, whose purchase's page may be open: focus goes
+  /// back to it as that page closes.
+  @State private var lockedBell: String?
 
   public init(
-    picker: PlacePicker, text: Binding<String>, theme: PageTheme, actions: PlacePickerActions
+    picker: PlacePicker, text: Binding<String>, theme: PageTheme, purchaseOpen: Bool = false,
+    actions: PlacePickerActions
   ) {
     self.picker = picker
     _text = text
     self.theme = theme
+    self.purchaseOpen = purchaseOpen
     self.actions = actions
   }
 
@@ -109,6 +136,13 @@ public struct PlacePickerView: View {
       // up on PR #33's macOS run. The rows bounce however few they are, so the drag is a scroll.
       .scrollDismissesKeyboard(.immediately)
       .scrollBounceBehavior(.always)
+    }
+    // The purchase's page has closed over the picker: VoiceOver's focus goes back to the bell
+    // that opened it, which says what a tap now does.
+    .onChange(of: purchaseOpen) { wasOpen, open in
+      guard wasOpen, !open, let bell = lockedBell else { return }
+      lockedBell = nil
+      focusedBell = bell
     }
     .padding(.horizontal, 16)
     .padding(.top, 12)
@@ -151,7 +185,20 @@ public struct PlacePickerView: View {
     }
   }
 
-  /// "Use my location", then the search's line, its results, or the saved and recent places.
+  /// What a tap on `bell`, on the row identified as `row`, or its menu item, does: asks the app,
+  /// which turns its notifications on or off, or, locked, opens the purchase's page over the
+  /// picker, remembering the bell for the focus to come back to. Nothing is announced here: the
+  /// app's model says what the tap came to once it knows (`BellButton`).
+  private func tapping(_ bell: PlacePicker.Bell, row: String) -> () -> Void {
+    {
+      if bell.state == .locked { lockedBell = PlaceRow.bellIdentifier(row) }
+      actions.toggleBell(bell.place)
+    }
+  }
+
+  /// "Use my location", then the search's line, its results, or the saved and recent places;
+  /// then, once a bell's tap met notifications off, that line, under the results while typing
+  /// and under the saved places' lines otherwise.
   private var rows: some View {
     VStack(alignment: .leading, spacing: 0) {
       locationRows
@@ -159,14 +206,20 @@ public struct PlacePickerView: View {
         PickerLine(text: status, identifier: "search-status")
       }
       ForEach(picker.results) { row in
+        let identifier = "result-\(row.id)"
         PlaceRow(
           name: row.name,
           detail: row.detail,
           value: row.value,
-          identifier: "result-\(row.id)",
+          identifier: identifier,
+          bell: row.bell,
           star: row.star,
-          menu: [],
+          // A saved result's one item, its bell's; none for any other.
+          menu: row.bell.map { [RowAction(label: $0.label, run: tapping($0, row: identifier))] }
+            ?? [],
+          bellFocus: $focusedBell,
           choose: { actions.choose(row.result) },
+          toggleBell: { if let bell = row.bell { tapping(bell, row: identifier)() } },
           toggleStar: {
             // In place: the sheet stays open on the same results.
             if row.star?.saved == true {
@@ -178,6 +231,7 @@ public struct PlacePickerView: View {
         )
       }
       savedRows
+      bellDeniedRows
       recentRows
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -222,29 +276,54 @@ public struct PlacePickerView: View {
   }
 
   /// With nothing typed, "Saved" and the saved places, each removed by its filled star or its
-  /// menu; the hint with none saved, and the line once the list is full.
+  /// menu's first item, and each with its bell, its menu's second item; the line once the list is
+  /// full, then the line that says what a star and a bell do (design 2.3), whichever there are.
   @ViewBuilder private var savedRows: some View {
     if let heading = picker.savedHeading {
       PickerHeading(text: heading, identifier: "saved-heading")
     }
     ForEach(picker.saved) { row in
+      let identifier = "saved-\(row.id)"
       let remove = { moving { actions.unsave(row.place.target) } }
+      let bell = tapping(row.bell, row: identifier)
       PlaceRow(
         name: row.name,
         detail: row.detail,
         value: nil,
-        identifier: "saved-\(row.id)",
+        identifier: identifier,
+        bell: row.bell,
         star: row.star,
-        menu: [RowAction(label: row.star.label, run: announcing(row.star.announcement, remove))],
+        menu: [
+          RowAction(label: row.star.label, run: announcing(row.star.announcement, remove)),
+          RowAction(label: row.bell.label, run: bell),
+        ],
+        bellFocus: $focusedBell,
         choose: { actions.chooseSaved(row.place) },
+        toggleBell: bell,
         toggleStar: remove
       )
     }
-    if let hint = picker.savedHint {
-      PickerLine(text: hint, identifier: "saved-hint")
-    }
     if let full = picker.savedFull {
       PickerLine(text: full, identifier: "saved-full")
+    }
+    if let line = picker.savedLine {
+      PickerLine(text: line, identifier: "saved-line")
+    }
+  }
+
+  /// Once a bell's tap met notifications off for the app in iOS Settings: "Notifications are off
+  /// for this app in Settings.", then "Open Settings", drawn as the location's is, which opens
+  /// the app's notification settings.
+  @ViewBuilder private var bellDeniedRows: some View {
+    if let denied = picker.bellDenied {
+      PickerLine(text: denied.text, identifier: "bell-denied")
+      WordsButton(action: actions.openNotificationSettings) {
+        Text(verbatim: denied.openSettings)
+          .underline()
+          .brandFont(.labelStrong)
+      }
+      .accessibilityIdentifier("bell-open-settings")
+      .padding(.horizontal, 8)
     }
   }
 
@@ -268,6 +347,7 @@ public struct PlacePickerView: View {
         menu: row.star.map {
           [RowAction(label: $0.label, run: announcing($0.announcement, save)), delete]
         } ?? [delete],
+        bellFocus: $focusedBell,
         choose: { actions.chooseRecent(row.place) },
         toggleStar: save
       )
@@ -294,7 +374,8 @@ private struct PickerHeading: View {
 }
 
 /// A line of words in place of rows, the website's `.status`: the search's line, the location's,
-/// the saved places' hint and full line.
+/// the saved places' full line and their line (`saved-line`), and a bell's tap's with
+/// notifications off.
 private struct PickerLine: View {
   let text: String
   let identifier: String

@@ -74,6 +74,13 @@ describe('what the app reads for its notifications', () => {
         message:
           "We couldn't tell where you are from your internet connection. Try again later, or use your location.",
       },
+      // 8.4b's sets with saved places, a gone city page among them, and the cap on new places.
+      'put-here-ip-durham': stored('put-here-ip-durham'),
+      'put-here-ip-kathmandu': stored('put-here-ip-kathmandu'),
+      'put-here-ip-durham-kathmandu': stored('put-here-ip-durham-kathmandu'),
+      'put-refused': stored('put-refused'),
+      'put-capped': { kind: 'retry', afterSeconds: 60 },
+      'test-sent-two': { kind: 'sent', count: 2 },
     };
     expect(Object.keys(outcomes)).toEqual(DEVICE_FIXTURES.map((s) => s.name));
     for (const [name, outcome] of Object.entries(outcomes)) {
@@ -90,6 +97,19 @@ describe('what the app reads for its notifications', () => {
     expect((outcomes['put-here-ip'] as { reply: unknown }).reply).toEqual(
       JSON.parse(onDisk('put-here-ip').text),
     );
+    // A gone city page is kept in the reply's refused list, by its index in the body.
+    expect((outcomes['put-refused'] as { reply: DeviceReply }).reply.refused).toEqual([
+      { index: 0, code: 'not_found' },
+    ]);
+  });
+
+  it("gives the router each saved place's zone, by its place, where you are first", () => {
+    const reply = JSON.parse(onDisk('put-here-ip-durham-kathmandu').text) as DeviceReply;
+    expect(replyZones(reply)).toEqual({
+      'device:53.8,-1.55': 'Europe/London',
+      'city:durham-gb': 'Europe/London',
+      'search:27.7,85.3': 'Asia/Kathmandu',
+    });
   });
 
   it("gives Settings' row, the card and the router what each set says of where you are", () => {

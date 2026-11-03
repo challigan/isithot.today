@@ -2,14 +2,22 @@ import { describe, expect, it } from 'vitest';
 import { ALERTS, COPY } from '@isithot/core';
 import {
   alertAction,
+  alertsActive,
+  bellState,
   fingerprint,
   hereKind,
   hereName,
   herePlace,
+  keptBells,
+  ownsSaved,
   registrationBody,
   replyZones,
+  savedForBody,
+  savedLines,
   setAlert,
+  setBell,
   syncReply,
+  tapBell,
   testOutcome,
   type AlertPrefs,
   type AlertSwitch,
@@ -18,18 +26,66 @@ import {
   type LocationAccess,
   type Permission,
   type RegistrationBody,
+  type SavedTarget,
 } from '../src/alerts';
-import { CLIENT } from '../src/config';
-import { deviceTarget, type Target } from '../src/target';
+import { CLIENT, PLACES } from '../src/config';
+import type { SavedPlace } from '../src/saved';
+import { deviceTarget, targetKey, type Target } from '../src/target';
 
 const MINUTE = 60 * 1000;
 const DAY = 24 * 60 * MINUTE;
 const TOKEN = 'a1b2'.repeat(16);
 const evening: AlertPrefs = { evening: true, morning: false, possible: false };
+const off: AlertPrefs = { evening: false, morning: false, possible: false };
+const PERMISSIONS: Permission[] = ['authorized', 'provisional', 'denied', 'notDetermined'];
 const ip: HerePlace = { kind: 'ip' };
 const leedsCell: HerePlace = { kind: 'device', target: deviceTarget(53.8, -1.55) };
 
-const body = (here: HerePlace = ip, prefs = evening) =>
+// Saved places as the picker keeps them: a city page, and searched places with and without
+// their words.
+const savedDurham: SavedPlace = {
+  target: { kind: 'city', slug: 'durham-gb', name: 'Durham' },
+  name: 'Durham',
+  detail: 'England, United Kingdom',
+};
+const savedKathmandu: SavedPlace = {
+  target: {
+    kind: 'coords',
+    source: 'search',
+    lat: 27.7,
+    lon: 85.3,
+    name: 'Kathmandu',
+    region: 'Bagmati Province',
+    country: 'NP',
+    geonameId: 1283240,
+    elevation: 1337,
+  },
+  name: 'Kathmandu',
+  detail: 'Nepal',
+};
+const savedRovaniemi: SavedPlace = {
+  target: { kind: 'coords', source: 'search', lat: 66.5, lon: 25.7, name: 'Rovaniemi' },
+  name: 'Rovaniemi',
+};
+const DURHAM = targetKey(savedDurham.target);
+const KATHMANDU = targetKey(savedKathmandu.target);
+const ROVANIEMI = targetKey(savedRovaniemi.target);
+/** `count` saved city pages, Town 0 onwards. */
+const towns = (count: number): SavedPlace[] =>
+  Array.from({ length: count }, (_, i) => ({
+    target: { kind: 'city', slug: `town-${i}-gb` },
+    name: `Town ${i}`,
+  }));
+const keysOf = (saved: readonly SavedPlace[]) => saved.map((s) => targetKey(s.target));
+/** A saved place's target as the body takes it: `savedForBody` gives only these. */
+const asSent = (s: SavedPlace) => s.target as SavedTarget;
+
+const body = (
+  here: HerePlace = ip,
+  prefs = evening,
+  saved?: readonly SavedTarget[],
+  deviceTz?: string | null,
+) =>
   registrationBody({
     token: TOKEN,
     env: 'production',
@@ -37,6 +93,8 @@ const body = (here: HerePlace = ip, prefs = evening) =>
     units: 'c',
     prefs,
     appVersion: '1.0 (112)',
+    ...(saved ? { saved } : {}),
+    ...(deviceTz !== undefined ? { deviceTz } : {}),
   });
 
 describe('herePlace', () => {
@@ -152,6 +210,66 @@ describe('registrationBody', () => {
       snow: { evening: false, morning: true, possible: true },
     });
   });
+
+  it('sends the saved places given, in order: a city by its page, a searched place by its point', () => {
+    const b = body(ip, evening, [asSent(savedKathmandu), asSent(savedDurham)], 'Europe/London');
+    expect(b.saved).toEqual([
+      {
+        lat: 27.7,
+        lon: 85.3,
+        source: 'search',
+        name: 'Kathmandu',
+        region: 'Bagmati Province',
+        country: 'NP',
+        geonameId: 1283240,
+        elevation: 1337,
+      },
+      { place: 'durham-gb' },
+    ]);
+    // A city page is its slug alone, as the today query names it; the server finds the rest.
+    expect(JSON.stringify(b.saved[1])).toBe('{"place":"durham-gb"}');
+  });
+
+  it("leaves out a searched place's words it doesn't have, as the today query does", () => {
+    const bare: SavedTarget = { kind: 'coords', source: 'search', lat: -33.85, lon: 151.2 };
+    const sparse = {
+      kind: 'coords',
+      source: 'search',
+      lat: 66.5,
+      lon: 25.7,
+      name: '',
+      region: null,
+      country: null,
+      geonameId: 0,
+      elevation: 0,
+    } as SavedTarget;
+    expect(JSON.stringify(body(ip, evening, [bare, sparse], 'Europe/London').saved)).toBe(
+      '[{"lat":-33.85,"lon":151.2,"source":"search"},' +
+        '{"lat":66.5,"lon":25.7,"source":"search","elevation":0}]',
+    );
+  });
+
+  it("sends the phone's own zone, and only with a saved place", () => {
+    const one = [asSent(savedDurham)];
+    expect(body(ip, evening, one, 'Asia/Kathmandu').deviceTz).toBe('Asia/Kathmandu');
+    // No saved place, none given, or an empty one: no zone at all.
+    for (const [saved, deviceTz] of [
+      [[], 'Europe/London'],
+      [undefined, 'Europe/London'],
+      [one, null],
+      [one, ''],
+      [one, undefined],
+    ] as const) {
+      expect('deviceTz' in body(ip, evening, saved, deviceTz), String(deviceTz)).toBe(false);
+    }
+  });
+
+  it('sends up to ten, the most a device may have', () => {
+    const ten = towns(10).map(asSent);
+    const b = body(leedsCell, evening, ten, 'Europe/London');
+    expect(b.saved).toEqual(ten.map((t) => ({ place: (t as { slug: string }).slug })));
+    expect(b.here).toEqual({ lat: 53.8, lon: -1.55, source: 'device' });
+  });
 });
 
 describe('fingerprint', () => {
@@ -185,6 +303,23 @@ describe('fingerprint', () => {
     const there: HerePlace = { kind: 'device', target: deviceTarget(53.85, -1.55) };
     expect(fingerprint(body(there))).not.toBe(fingerprint(body(leedsCell)));
   });
+
+  it("changes with each saved place, their order and the phone's zone while one is sent", () => {
+    const durham = asSent(savedDurham);
+    const kathmandu = asSent(savedKathmandu);
+    const prints = [
+      body(ip, evening, [durham], 'Europe/London'),
+      body(ip, evening, [kathmandu], 'Europe/London'),
+      body(ip, evening, [durham, kathmandu], 'Europe/London'),
+      body(ip, evening, [kathmandu, durham], 'Europe/London'),
+      body(ip, evening, [durham], 'America/Vancouver'),
+      body(),
+    ].map(fingerprint);
+    expect(new Set(prints).size).toBe(prints.length);
+    expect(prints[0]).toContain('"deviceTz":"Europe/London",');
+    // Without a saved place the zone isn't sent, so it changes nothing.
+    expect(fingerprint(body(ip, evening, [], 'America/Vancouver'))).toBe(fingerprint(body()));
+  });
 });
 
 describe('alertAction', () => {
@@ -212,7 +347,6 @@ describe('alertAction', () => {
     here: leedsCell,
     last: { fingerprint: fingerprint(body(leedsCell)), at: now - ago },
   });
-  const off = { evening: false, morning: false, possible: false };
 
   it('deletes the registration when every switch is off, if there is one', () => {
     expect(alertAction({ ...state, prefs: off })).toBe('delete');
@@ -226,6 +360,21 @@ describe('alertAction', () => {
     expect(alertAction({ ...state, permission: 'denied' })).toBe('delete');
     expect(alertAction({ ...state, permission: 'denied', last: null })).toBe('none');
     expect(alertAction({ ...state, permission: 'denied', token: null })).toBe('delete');
+  });
+
+  it('deletes a set the server may hold though no reply to it was kept', () => {
+    // A 429 for the places new to the set comes after the server stored where you are and the
+    // first three, a 503 after it stored the rest, and a reply lost may follow a set stored.
+    const unconfirmed = { ...state, last: null, unconfirmed: true };
+    expect(alertAction({ ...unconfirmed, prefs: off })).toBe('delete');
+    expect(alertAction({ ...unconfirmed, prefs: { ...off, possible: true } })).toBe('delete');
+    expect(alertAction({ ...unconfirmed, permission: 'denied' })).toBe('delete');
+    expect(alertAction({ ...unconfirmed, prefs: off, token: null })).toBe('delete');
+    expect(alertAction({ ...unconfirmed, prefs: off, unconfirmed: false })).toBe('none');
+    // While a switch is on it is sent again, as when nothing was sent.
+    expect(alertAction(unconfirmed)).toBe('put');
+    expect(alertAction({ ...unconfirmed, token: null })).toBe('needsToken');
+    expect(alertAction({ ...state, unconfirmed: true })).toBe('none');
   });
 
   it('never needs a place, as where you are is always one: it waits for the push token', () => {
@@ -305,6 +454,60 @@ describe('alertAction', () => {
   it('treats a permission not yet asked, or quiet, like a granted one', () => {
     expect(alertAction({ ...state, permission: 'notDetermined' })).toBe('none');
     expect(alertAction({ ...state, permission: 'provisional', last: null })).toBe('put');
+  });
+
+  // The saved places with a bell on, as `savedForBody` gives them, and the phone's zone.
+  const durham = asSent(savedDurham);
+  const kathmandu = asSent(savedKathmandu);
+  const belled = { ...state, saved: [durham, kathmandu], deviceTz: 'Europe/London' };
+  const sentBelled = {
+    fingerprint: fingerprint(body(ip, evening, belled.saved, belled.deviceTz)),
+    at: now - 30 * MINUTE,
+  };
+
+  it('sends the set again when its saved places change: a bell, an unsave, a refund, a restore', () => {
+    expect(alertAction({ ...belled, last: sentBelled })).toBe('none');
+    // The first bells, and a restore after a refund.
+    expect(alertAction({ ...belled, last: sent })).toBe('put');
+    // A bell off, or its place unsaved.
+    expect(alertAction({ ...belled, saved: [kathmandu], last: sentBelled })).toBe('put');
+    // A refund, or Family Sharing ending: no saved place is sent, whatever bells are kept.
+    expect(alertAction({ ...belled, saved: [], last: sentBelled })).toBe('put');
+    expect(alertAction({ ...state, last: sentBelled })).toBe('put');
+  });
+
+  it("sends the phone's new zone while a saved place is sent, and never for it alone", () => {
+    expect(alertAction({ ...belled, deviceTz: 'America/Vancouver', last: sentBelled })).toBe('put');
+    expect(alertAction({ ...state, deviceTz: 'America/Vancouver' })).toBe('none');
+    expect(alertAction({ ...state, saved: [], deviceTz: 'America/Vancouver' })).toBe('none');
+  });
+
+  it('deletes the whole set with every switch off or notifications denied, whatever the bells', () => {
+    // One set of switches for every place: the bells are kept, and sent again with a switch.
+    expect(alertAction({ ...belled, prefs: off, last: sentBelled })).toBe('delete');
+    expect(alertAction({ ...belled, prefs: { ...off, possible: true }, last: sentBelled })).toBe(
+      'delete',
+    );
+    expect(alertAction({ ...belled, permission: 'denied', last: sentBelled })).toBe('delete');
+    expect(alertAction({ ...belled, prefs: off, last: null })).toBe('none');
+    // Four bells back at once with nothing kept: the server stored where you are and three of
+    // them before its 429, so turning every switch off then deletes them.
+    expect(alertAction({ ...belled, prefs: off, last: null, unconfirmed: true })).toBe('delete');
+  });
+
+  it('refreshes where you are as ever with saved places: hourly while approximate, else weekly', () => {
+    const at = (here: HerePlace, ago: number) => ({
+      ...belled,
+      here,
+      last: {
+        fingerprint: fingerprint(body(here, evening, belled.saved, belled.deviceTz)),
+        at: now - ago,
+      },
+    });
+    expect(alertAction(at(ip, hour - 1))).toBe('none');
+    expect(alertAction(at(ip, hour))).toBe('put');
+    expect(alertAction(at(leedsCell, hour))).toBe('none');
+    expect(alertAction(at(leedsCell, week))).toBe('put');
   });
 });
 
@@ -698,5 +901,349 @@ describe('testOutcome', () => {
     }
     expect(testOutcome(503, error('push_unavailable'))).toEqual(failed);
     expect(testOutcome(502, error('push_refused'))).toEqual(failed);
+  });
+});
+
+describe('alertsActive', () => {
+  it('is whether anything can be sent: the evening or the morning on, and not denied', () => {
+    const on: AlertPrefs[] = [
+      evening,
+      { evening: false, morning: true, possible: true },
+      { evening: true, morning: true, possible: false },
+    ];
+    for (const prefs of on) {
+      for (const permission of PERMISSIONS) {
+        expect(alertsActive(prefs, permission), permission).toBe(permission !== 'denied');
+      }
+    }
+    // "Also when snow is possible" alone switches nothing on.
+    for (const prefs of [off, { ...off, possible: true }]) {
+      for (const permission of PERMISSIONS) expect(alertsActive(prefs, permission)).toBe(false);
+    }
+  });
+
+  it('is what alertAction sends by: off, the set is deleted, whatever else there is', () => {
+    const last = { fingerprint: fingerprint(body()), at: 0 };
+    for (const prefs of [off, evening]) {
+      for (const permission of PERMISSIONS) {
+        const action = alertAction({
+          prefs,
+          permission,
+          token: TOKEN,
+          here: ip,
+          units: 'c',
+          last,
+          refused: null,
+          activeAt: 0,
+          now: 0,
+          env: 'production',
+          appVersion: '1.0 (112)',
+        });
+        expect(action === 'delete', `${JSON.stringify(prefs)} ${permission}`).toBe(
+          !alertsActive(prefs, permission),
+        );
+      }
+    }
+  });
+});
+
+describe('bellState', () => {
+  it('is locked without the one-off purchase, whatever the bell and the switches', () => {
+    for (const on of [true, false]) {
+      for (const active of [true, false]) {
+        expect(bellState({ on, unlocked: false, active })).toBe('locked');
+      }
+    }
+  });
+
+  it('is on with the purchase, the bell on and something that can be sent', () => {
+    expect(bellState({ on: true, unlocked: true, active: true })).toBe('on');
+  });
+
+  it('is off with the bell off, and while nothing can be sent, the bell kept underneath', () => {
+    expect(bellState({ on: false, unlocked: true, active: true })).toBe('off');
+    expect(bellState({ on: true, unlocked: true, active: false })).toBe('off');
+    expect(bellState({ on: false, unlocked: true, active: false })).toBe('off');
+  });
+});
+
+describe('setBell', () => {
+  const savedKeys = [DURHAM, KATHMANDU, ROVANIEMI];
+
+  it("turns a saved place's bell on and off, the bells in saved order", () => {
+    expect(setBell([], KATHMANDU, true, savedKeys)).toEqual([KATHMANDU]);
+    expect(setBell([ROVANIEMI], DURHAM, true, savedKeys)).toEqual([DURHAM, ROVANIEMI]);
+    expect(setBell([ROVANIEMI, DURHAM], KATHMANDU, true, savedKeys)).toEqual(savedKeys);
+    expect(setBell([DURHAM, ROVANIEMI], DURHAM, false, savedKeys)).toEqual([ROVANIEMI]);
+    expect(setBell([KATHMANDU], KATHMANDU, false, savedKeys)).toEqual([]);
+  });
+
+  it('leaves a bell already as asked as it is, and keeps each once', () => {
+    expect(setBell([KATHMANDU], KATHMANDU, true, savedKeys)).toEqual([KATHMANDU]);
+    expect(setBell([], KATHMANDU, false, savedKeys)).toEqual([]);
+    expect(setBell([DURHAM, DURHAM], KATHMANDU, true, [...savedKeys, DURHAM])).toEqual([
+      DURHAM,
+      KATHMANDU,
+    ]);
+  });
+
+  it('gives a bell only to a saved place, and drops any other', () => {
+    expect(setBell([], 'city:york-gb', true, savedKeys)).toEqual([]);
+    expect(setBell(['city:york-gb', DURHAM], KATHMANDU, true, savedKeys)).toEqual([
+      DURHAM,
+      KATHMANDU,
+    ]);
+    expect(setBell([DURHAM], DURHAM, true, [])).toEqual([]);
+  });
+
+  it('has room for every saved place, and never more than the server takes', () => {
+    expect(ALERTS.savedPlacesMax).toBe(PLACES.savedMax);
+    const ten = keysOf(towns(10));
+    let bells: string[] = [];
+    for (const key of ten) bells = setBell(bells, key, true, ten);
+    expect(bells).toEqual(ten);
+    // Eleven saved, as a lenient read might give: the first ten in saved order.
+    const eleven = keysOf(towns(11));
+    expect(setBell(ten, eleven[10]!, true, eleven)).toEqual(ten);
+    expect(setBell(eleven, eleven[0]!, false, eleven)).toEqual(eleven.slice(1));
+  });
+
+  it('gives a new list, and leaves the lists it was given alone', () => {
+    const bells = [DURHAM];
+    const keys = [...savedKeys];
+    expect(setBell(bells, DURHAM, true, keys)).not.toBe(bells);
+    expect(setBell(bells, KATHMANDU, true, keys)).toEqual([DURHAM, KATHMANDU]);
+    expect(bells).toEqual([DURHAM]);
+    expect(keys).toEqual(savedKeys);
+  });
+});
+
+describe('keptBells', () => {
+  const savedKeys = [DURHAM, KATHMANDU, ROVANIEMI];
+
+  it('drops the bells of places no longer saved, the rest in saved order', () => {
+    expect(keptBells([ROVANIEMI, DURHAM], savedKeys)).toEqual([DURHAM, ROVANIEMI]);
+    expect(keptBells([ROVANIEMI, DURHAM, KATHMANDU], [DURHAM, ROVANIEMI])).toEqual([
+      DURHAM,
+      ROVANIEMI,
+    ]);
+    expect(keptBells([DURHAM], [KATHMANDU])).toEqual([]);
+    expect(keptBells([], savedKeys)).toEqual([]);
+    expect(keptBells(savedKeys, [])).toEqual([]);
+  });
+
+  it('keeps each once, and at most the server takes', () => {
+    expect(keptBells([DURHAM, DURHAM, 'city:york-gb'], savedKeys)).toEqual([DURHAM]);
+    const eleven = keysOf(towns(11));
+    expect(keptBells(eleven, eleven)).toEqual(eleven.slice(0, 10));
+  });
+});
+
+describe('ownsSaved', () => {
+  const withSaved: DeviceReply = { ...reply, deviceTz: 'Europe/London', saved: [durham] };
+
+  it('is the purchase, once StoreKit has said, whatever was last registered', () => {
+    for (const last of [null, reply, withSaved]) {
+      expect(ownsSaved(true, last)).toBe(true);
+      expect(ownsSaved(false, last)).toBe(false);
+    }
+  });
+
+  it('until then, whether the last registration had saved places, so a launch keeps them', () => {
+    expect(ownsSaved(null, withSaved)).toBe(true);
+    expect(ownsSaved(null, { ...withSaved, here: null })).toBe(true);
+    expect(ownsSaved(null, reply)).toBe(false);
+    expect(ownsSaved(null, null)).toBe(false);
+  });
+});
+
+describe('savedForBody', () => {
+  const saved = [savedDurham, savedKathmandu, savedRovaniemi];
+
+  it('gives the targets of the saved places with a bell on, in saved order', () => {
+    expect(savedForBody(saved, [ROVANIEMI, DURHAM], true)).toEqual([
+      savedDurham.target,
+      savedRovaniemi.target,
+    ]);
+    expect(savedForBody(saved, keysOf(saved), true)).toEqual(saved.map((s) => s.target));
+    expect(savedForBody(saved, [], true)).toEqual([]);
+    expect(savedForBody([], [DURHAM], true)).toEqual([]);
+    // A bell whose place isn't saved sends nothing.
+    expect(savedForBody([savedDurham], [KATHMANDU], true)).toEqual([]);
+  });
+
+  it('gives none without the purchase, the bells kept for a restore', () => {
+    const bells = [DURHAM, KATHMANDU];
+    expect(savedForBody(saved, bells, false)).toEqual([]);
+    expect(bells).toEqual([DURHAM, KATHMANDU]);
+    expect(savedForBody(saved, bells, true)).toHaveLength(2);
+  });
+
+  it('leaves out a place the server would refuse the whole set for', () => {
+    const odd: SavedPlace[] = [
+      // The phone's own point, a searched point not on Earth, a city with no slug.
+      { target: deviceTarget(53.8, -1.55), name: 'Leeds' },
+      { target: { kind: 'coords', source: 'search', lat: 95, lon: 0, name: 'Nowhere' }, name: 'X' },
+      { target: { kind: 'coords', source: 'search', lat: 0, lon: Number.NaN }, name: 'Y' },
+      { target: { kind: 'city', slug: '' }, name: 'Empty' },
+      { target: { kind: 'city', slug: '  ' }, name: 'Blank' },
+    ];
+    const all = [...odd, savedDurham];
+    expect(savedForBody(all, keysOf(all), true)).toEqual([savedDurham.target]);
+  });
+
+  it('gives each place once, and at most the ten the server takes', () => {
+    expect(savedForBody([savedDurham, savedDurham], [DURHAM], true)).toEqual([savedDurham.target]);
+    const eleven = towns(11);
+    expect(savedForBody(eleven, keysOf(eleven), true)).toEqual(
+      eleven.slice(0, 10).map((s) => s.target),
+    );
+    // The ten are counted after what is left out.
+    const leeds: SavedPlace = { target: deviceTarget(53.8, -1.55), name: 'Leeds' };
+    const ten = [leeds, ...towns(10)];
+    expect(savedForBody(ten, keysOf(ten), true)).toEqual(towns(10).map((s) => s.target));
+  });
+
+  it('makes a body the server takes whole', () => {
+    const sent = savedForBody(saved, keysOf(saved), true);
+    expect(body(ip, evening, sent, 'Europe/London').saved).toEqual([
+      { place: 'durham-gb' },
+      {
+        lat: 27.7,
+        lon: 85.3,
+        source: 'search',
+        name: 'Kathmandu',
+        region: 'Bagmati Province',
+        country: 'NP',
+        geonameId: 1283240,
+        elevation: 1337,
+      },
+      { lat: 66.5, lon: 25.7, source: 'search', name: 'Rovaniemi' },
+    ]);
+  });
+});
+
+describe('tapBell', () => {
+  const savedKeys = [DURHAM, KATHMANDU];
+  const tap = {
+    key: KATHMANDU,
+    bells: [] as string[],
+    savedKeys,
+    prefs: evening,
+    unlocked: true,
+    permission: 'authorized' as Permission,
+  };
+
+  it('opens the purchase without it, changing nothing', () => {
+    for (const permission of PERMISSIONS) {
+      for (const bells of [[], [KATHMANDU]]) {
+        for (const prefs of [evening, off]) {
+          expect(tapBell({ ...tap, unlocked: false, permission, bells, prefs })).toEqual({
+            kind: 'needsPurchase',
+          });
+        }
+      }
+    }
+  });
+
+  it('turns a bell on for that place, the switches as they are', () => {
+    expect(tapBell(tap)).toEqual({ kind: 'on', bells: [KATHMANDU], prefs: evening });
+    const morning = { evening: false, morning: true, possible: true };
+    expect(tapBell({ ...tap, bells: [DURHAM], prefs: morning, permission: 'provisional' })).toEqual(
+      { kind: 'on', bells: [DURHAM, KATHMANDU], prefs: morning },
+    );
+  });
+
+  it('turns the evening on with a bell while every switch is off, for where you are too', () => {
+    expect(tapBell({ ...tap, prefs: off })).toEqual({
+      kind: 'onWithHere',
+      bells: [KATHMANDU],
+      prefs: evening,
+    });
+    // A bell kept on shows off while nothing can be sent: a tap brings it back with the evening.
+    expect(tapBell({ ...tap, prefs: off, bells: [KATHMANDU, DURHAM] })).toEqual({
+      kind: 'onWithHere',
+      bells: [DURHAM, KATHMANDU],
+      prefs: evening,
+    });
+    expect(tapBell({ ...tap, prefs: { ...off, possible: true } })).toEqual({
+      kind: 'onWithHere',
+      bells: [KATHMANDU],
+      prefs: setAlert({ ...off, possible: true }, 'evening', true),
+    });
+  });
+
+  it('turns a bell that shows on off, the switches as they are', () => {
+    expect(tapBell({ ...tap, bells: [DURHAM, KATHMANDU] })).toEqual({
+      kind: 'off',
+      bells: [DURHAM],
+    });
+    expect(tapBell({ ...tap, bells: [KATHMANDU], permission: 'provisional' })).toEqual({
+      kind: 'off',
+      bells: [],
+    });
+  });
+
+  it('asks for permission first when never asked, and says so when it is off in Settings', () => {
+    for (const prefs of [evening, off]) {
+      expect(tapBell({ ...tap, prefs: { ...prefs }, permission: 'notDetermined' })).toEqual({
+        kind: 'needsPermission',
+      });
+    }
+    expect(tapBell({ ...tap, permission: 'denied' })).toEqual({ kind: 'denied' });
+    // Denied, every bell shows off, so a tap on one kept on says so too, changing nothing.
+    expect(tapBell({ ...tap, permission: 'denied', bells: [KATHMANDU] })).toEqual({
+      kind: 'denied',
+    });
+    expect(tapBell({ ...tap, permission: 'denied', prefs: off })).toEqual({ kind: 'denied' });
+  });
+
+  it('has no bell for a place that is not saved: off, the bells as kept', () => {
+    expect(tapBell({ ...tap, key: 'city:york-gb', bells: ['city:york-gb', DURHAM] })).toEqual({
+      kind: 'off',
+      bells: [DURHAM],
+    });
+    expect(tapBell({ ...tap, key: 'city:york-gb', prefs: off, permission: 'denied' })).toEqual({
+      kind: 'off',
+      bells: [],
+    });
+  });
+
+  it('gives new lists and switches, and leaves the ones it was given alone', () => {
+    const bells = [DURHAM];
+    const prefs = { ...off };
+    const result = tapBell({ ...tap, bells, prefs });
+    expect(result).toEqual({ kind: 'onWithHere', bells: [DURHAM, KATHMANDU], prefs: evening });
+    expect(bells).toEqual([DURHAM]);
+    expect(prefs).toEqual(off);
+  });
+});
+
+describe('savedLines', () => {
+  const lines = (savedCount: number, unlocked: boolean, anyBellOn = false) =>
+    savedLines({ savedCount, unlocked, anyBellOn });
+
+  it('with nothing saved, says how to save a place, and what saved places can have', () => {
+    expect(lines(0, false)).toEqual(['savedLineNoneFree']);
+    expect(lines(0, true)).toEqual(['savedLineNonePaid']);
+  });
+
+  it('with places saved, says how a bell works: with the purchase, or until one is on', () => {
+    for (const count of [1, PLACES.savedMax - 1]) {
+      expect(lines(count, false)).toEqual(['bellHintLocked']);
+      expect(lines(count, false, true)).toEqual(['bellHintLocked']);
+      expect(lines(count, true)).toEqual(['bellHint']);
+      expect(lines(count, true, true)).toEqual([]);
+    }
+  });
+
+  it('with the list full, says so first', () => {
+    expect(PLACES.savedMax).toBe(10);
+    for (const count of [10, 11]) {
+      expect(lines(count, false)).toEqual(['savedFull', 'bellHintLocked']);
+      expect(lines(count, false, true)).toEqual(['savedFull', 'bellHintLocked']);
+      expect(lines(count, true)).toEqual(['savedFull', 'bellHint']);
+      expect(lines(count, true, true)).toEqual(['savedFull']);
+    }
   });
 });

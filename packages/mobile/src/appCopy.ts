@@ -30,7 +30,7 @@ export const APP_COPY = {
   turnOn: 'Turn on',
   notNow: 'Not now',
   search: 'Search',
-  upgradeRow: 'No ads, plus widgets for your home and lock screen · {price}',
+  upgradeRow: 'No ads, widgets and notifications for saved places · {price}',
   // The page's question and answer as VoiceOver reads them, one heading with the place (10.2,
   // 16), and a row of the model list under the strip (10.2).
   headingLabel: '{place}. {question} {answer}',
@@ -59,13 +59,12 @@ export const APP_COPY = {
   // fix that found nothing with permission given: neither blames the forecasts.
   recent: 'Recent',
   // Saved places, above Recent with nothing typed: the heading (also a saved result's value, as
-  // VoiceOver reads the row), the line with none saved yet, and the line once the list is full,
-  // `max` being client `PLACES.savedMax`. A star saves or removes the place beside it: its
-  // VoiceOver label, the same words in a row's press-and-hold menu, and what VoiceOver is told
-  // after a tap. Recent's own menu forgets a place (`deleteRecent`), and VoiceOver is told so
-  // (`placeDeleted`), as after a star: the row leaves the list with the focus on it.
+  // VoiceOver reads the row), and the line once the list is full, `max` being client
+  // `PLACES.savedMax`. A star saves or removes the place beside it: its VoiceOver label, the same
+  // words in a row's press-and-hold menu, and what VoiceOver is told after a tap. Recent's own
+  // menu forgets a place (`deleteRecent`), and VoiceOver is told so (`placeDeleted`), as after a
+  // star: the row leaves the list with the focus on it.
   saved: 'Saved',
-  savedHint: 'Tap the star beside a place to save it here.',
   savedFull: 'You can save up to {max} places. Remove one to save another.',
   savePlace: 'Save {place}',
   unsavePlace: 'Remove {place} from saved places',
@@ -73,6 +72,30 @@ export const APP_COPY = {
   placeUnsaved: '{place} removed from saved places.',
   deleteRecent: 'Delete',
   placeDeleted: '{place} deleted from recent places.',
+  // A saved place's bell (phase 8.4b), beside its star on every saved row and saved result: its
+  // VoiceOver label by what a tap does (client `bellState`: off, on, or locked without the
+  // purchase, whose tap opens the upgrade page), also the row's press-and-hold item; then what
+  // VoiceOver is told once the tap's outcome is known: on, on with the evening switch it turned
+  // on (for where you are too, as every switch is), or off; when notifications are denied in
+  // iPhone Settings, none of these but 8.1's `notifyDenied` with Open Settings. Unsaving a place
+  // whose bell was on says so after the star's words.
+  bellOn: 'Turn on notifications for {place}',
+  bellOff: 'Turn off notifications for {place}',
+  bellLocked: 'Turn on notifications for {place}, with the one-off purchase',
+  bellTurnedOn: 'Notifications on for {place}.',
+  bellTurnedOnWithHere: 'Evening notifications on for {place} and where you are.',
+  bellTurnedOff: 'Notifications off for {place}.',
+  placeUnsavedBellOff: '{place} removed from saved places. Its notifications are off.',
+  // The line under the Saved rows with nothing typed, one for each state (client `savedLines`):
+  // nothing saved, free or paid; places saved but no bell on, free or paid; none while paid with
+  // a bell on. Once the list is full, `savedFull` comes first.
+  savedLineNoneFree:
+    'Tap the star beside a place to save it. Saved places can have notifications with the ' +
+    'one-off purchase.',
+  savedLineNonePaid:
+    'Tap the star beside a place to save it, then tap its bell to get notifications.',
+  bellHintLocked: "Tap a place's bell to get notifications for it, with the one-off purchase.",
+  bellHint: "Tap a place's bell to get notifications for it.",
   // The search box is the app's own, not the system's search (`.searchable`), whose clear
   // button, about 20 points square, the accessibility audit failed as too small to tap on PR
   // #33's second macOS run, and which SwiftUI doesn't let the app change: this is its own clear
@@ -91,14 +114,18 @@ export const APP_COPY = {
 
   // Upgrade (10.4, 10.5). The title is also the Settings row until StoreKit gives a price, and
   // the purchase's display name in App Store Connect and Snow.storekit: 30 characters at most
-  // (section 13).
-  upgradeTitle: 'Remove ads and add widgets',
-  upgradeSettings: 'Remove ads and add widgets · {price}',
+  // (section 13). Since phase 8.4b it names saved places' notifications too (Carl's option (a)):
+  // the page shows the three benefits, each a line, before its body.
+  upgradeTitle: 'No ads, widgets and more',
+  upgradeSettings: 'No ads, widgets and more · {price}',
+  upgradeNoAds: 'No ads in the app',
+  upgradeWidgets: 'Widgets for your home screen and lock screen',
+  upgradeSavedNotifications: 'Notifications for your saved places',
   upgradeBody:
-    'A one-off purchase. No ads in the app, and widgets for your home screen and lock screen. ' +
-    'Notifications and everything else stay free.',
+    'A one-off purchase. Notifications for where you are, and everything else, stay free.',
   familySharing: 'Shared with your family through Family Sharing.',
-  thanks: 'Thank you. Ads are off and widgets are on.',
+  thanks:
+    'Thank you. Ads are off, widgets are on and you can turn on notifications for saved places.',
   pending: 'Waiting for approval.',
   restore: 'Restore purchase',
   restored: 'Purchase restored.',
@@ -107,7 +134,7 @@ export const APP_COPY = {
   buy: 'Buy for {price}',
   // The purchase's description in App Store Connect and Snow.storekit: 45 characters at most,
   // with no full stop (section 13). The app never shows it.
-  upgradeDescription: 'No ads, plus home and lock screen widgets',
+  upgradeDescription: 'No ads, widgets and saved-place notifications',
   // What the upgrade page says instead of the button when StoreKit has no product to sell
   // (`Product.products(for:)` answered nothing or failed: offline, or the App Store has nothing
   // for sale yet, as before the Paid Apps Agreement is Active or while the purchase isn't
@@ -149,20 +176,36 @@ export const APP_COPY = {
   notifyPlaceMyLocation: 'Use my location',
   notifyLocationDenied: 'Location access is off for this app in Settings.',
   notifyLocationUnavailable: "Couldn't find your location. Try again.",
+  // Saved places' row (phase 8.4b, `notify-saved`), under "Where you are": without the purchase
+  // it says what it takes and opens the upgrade page; with it, how many bells are on, `count`,
+  // or none, and opens the search screen, where the bells are.
+  notifySaved: 'Saved places',
+  notifySavedLocked: 'With the one-off purchase',
+  notifySavedOn: '{count} on',
+  notifySavedOff: 'Off',
   sendTest: 'Send a test notification',
+  // One test, or, with a saved place's bell on, the server's two (where you are, and the saved
+  // place last saved with its bell on): its reply's `count` (client `testOutcome`).
   testSent: 'Sent. It should arrive in a few seconds.',
+  testSentCount: 'Sent {count} test notifications. They should arrive in a few seconds.',
   testLimited: 'You can send 3 test notifications an hour. Try again later.',
   testFailed: "Couldn't send a test notification. Try again later.",
   // The test's other answers: the server's dry run, which sends nothing (section 8.8's second
-  // state), and its quiet hours, the 409's own words (server devices.ts, core `ALERTS.quiet`).
+  // state), and its quiet hours (the 409, core `ALERTS.quiet`), which the server judges on the
+  // iPhone while a saved place's bell is on and at where you are otherwise (devices.ts), so the
+  // line names neither.
   testDryRun: "Our server isn't sending notifications yet, so nothing was sent.",
-  testQuiet: 'Nothing is sent from 9pm to 7am at the place. Try again after 7am there.',
+  testQuiet: 'Nothing is sent from 9pm to 7am. Try again after 7am.',
   // The section's line when a change didn't reach the server and the app will send it again.
   notifyNotSaved:
     "Couldn't save your notification choices. The app will try again when you next open it.",
+  // Settings' footer under the notifications. The windows are at each place; during the iPhone's
+  // night (core `ALERTS.quiet`, on the phone's clock) a saved place's notification comes
+  // `passive`, with no sound (phase 8.4b).
   notifyFooter:
-    'These are forecasts, not official warnings. Times are at the place. Open the app at least ' +
-    'every few months to keep notifications on.',
+    'These are forecasts, not official warnings. Times are at each place. From 9pm to 7am on ' +
+    'your iPhone, notifications for saved places arrive silently. Open the app at least every ' +
+    'few months to keep notifications on.',
   notifyDenied: 'Notifications are off for this app in Settings.',
   openSettings: 'Open Settings',
   // The Today card once its "Turn on" has turned the evening's notifications on, for the rest of
@@ -184,13 +227,14 @@ export const APP_COPY = {
   // apps", PrivacyBody.astro), as the notifications server stores and deletes it
   // (packages/server devices.ts). The forecast: a town, or a location rounded to about 5 km;
   // until a place is chosen, a rough one from the connection. Notifications, for where you are
-  // (phase 8.4a; saved places and the iPhone's time zone come in 8.4b): the phone's location
-  // rounded to about 5 km while it is shared, else a rough place the server finds from the
-  // connection of each registration (the place is kept, never the IP address); the token with an
-  // ID made from it, the place and its zone, the units, the switches, and a few details more (the
-  // app's version, when it last checked in), deleted when notifications go off in the app, when
-  // Apple says the app is gone, or about 90 days after the app was last opened (it checks in at
-  // most hourly while where you are is approximate, client `alertAction` with core
+  // (phase 8.4a) and the saved places whose bells are on (8.4b): where you are is the phone's
+  // location rounded to about 5 km while it is shared, else a rough place the server finds from
+  // the connection of each registration (the place is kept, never the IP address); the token with
+  // an ID made from it, every place and its zone, the iPhone's zone while a saved place is among
+  // them (only a saved place's record keeps it), the units, the switches, and a few details more
+  // (the app's version, when it last checked in), deleted when notifications go off in the app,
+  // when Apple says the app is gone, or about 90 days after the app was last opened (it checks in
+  // at most hourly while where you are is approximate, client `alertAction` with core
   // `ALERTS.hereRefreshMinutes`, and otherwise at most weekly, `ALERTS.heartbeatDays`), and after
   // notifications go off in iPhone Settings, at the next open; the run's and the test button's
   // notes, keyed by the ID with no token or place, go a few days later, at the run's cleanup:
@@ -218,16 +262,17 @@ export const APP_COPY = {
     'saved places, your notification choices and the last forecast on your iPhone.',
   privacyNotifications:
     "Only while notifications are on, we keep your device's notification token, an ID made from " +
-    'it, the place you get notifications for and its time zone, your units and which ' +
+    'it, the places you get notifications for and their time zones, your units and which ' +
     "notifications you chose, with a few details such as the app's version and when it last " +
-    'checked in. The place is where you are (your location rounded to about 5 km or, if you ' +
+    'checked in. The places are where you are (your location rounded to about 5 km or, if you ' +
     "haven't shared it, a rough place our server estimates from your internet connection, " +
-    'updated when you open the app, at most once an hour). We delete them when you turn ' +
-    'notifications off in the app, when Apple tells us the app is no longer installed, or about ' +
-    "90 days after you last open it. If you turn notifications off in your iPhone's Settings " +
-    'instead, we delete them the next time you open the app. For a few days after each ' +
-    'notification and each test, and after some forecast checks that found nothing to send, we ' +
-    'also keep a note of it, even once the rest is deleted. It holds no token or place.',
+    'updated when you open the app, at most once an hour) and any saved places you turned ' +
+    "notifications on for; while you have those, we also keep your iPhone's time zone. We delete " +
+    'them when you turn notifications off in the app, when Apple tells us the app is no longer ' +
+    'installed, or about 90 days after you last open it. If you turn notifications off in your ' +
+    "iPhone's Settings instead, we delete them the next time you open the app. For a few days " +
+    'after each notification and each test, and after some forecast checks that found nothing to ' +
+    'send, we also keep a note of it, even once the rest is deleted. It holds no token or place.',
   privacyAds:
     'In the free version, Google shows the ads and may collect device and usage data. The app ' +
     'keeps when it last showed a full-screen ad, so it shows one at most every 5 minutes.',
@@ -238,19 +283,21 @@ export const APP_COPY = {
   privacyAccounts: 'There are no accounts.',
   keptForNotifications: 'What we keep for notifications',
   // Its lines while registered, first on the page: the ID's first 8 characters; where you are
-  // with its time zone as the server named them, while the server has a place for it; a saved
-  // place with its zone (phase 8.4b); the units ("Snow units: cm", core's label and unit); then
-  // each switch on in its Settings words.
+  // with its time zone as the server named them, while the server has a place for it; each saved
+  // place with its zone, in the reply's order, and the iPhone's zone, only while there is one
+  // (phase 8.4b); the units ("Snow units: cm", core's label and unit); then each switch on in its
+  // Settings words.
   keptID: 'ID {id}',
   keptHere: 'Where you are: {place}, {zone}',
   keptPlace: '{place}, {zone}',
+  keptDeviceZone: "Your iPhone's time zone: {zone}",
   keptUnits: '{label}: {units}',
   deleteMyData: 'Turn off notifications and delete my data',
-  // What the button did. The server deletes the record, not the notes keyed by its ID that
-  // `privacyNotifications` says stay a few days, so the line names only what went; offline, the
-  // next sync deletes.
+  // What the button did. The server deletes every place's record, not the notes keyed by its ID
+  // that `privacyNotifications` says stay a few days, so the line names only what went; offline,
+  // the next sync deletes.
   deleteDone:
-    "Notifications are off. We've deleted your notification token, place, units and choices.",
+    "Notifications are off. We've deleted your notification token, places, units and choices.",
   deleteNotYet:
     "Couldn't reach our server, so nothing is deleted yet. The app will try again when you next " +
     'open it.',

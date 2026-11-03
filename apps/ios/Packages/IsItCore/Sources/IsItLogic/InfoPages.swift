@@ -116,8 +116,8 @@ public struct YourPrivacy: Sendable, Equatable {
   public struct Kept: Sendable, Equatable {
     /// "What we keep for notifications"
     public let heading: String
-    /// "ID b8465956", "Where you are: Leeds, Europe/London", "Snow units: cm", "Evening before
-    /// (about 6pm)"
+    /// "ID b8465956", "Where you are: Leeds, Europe/London", "Durham, Europe/London", "Your
+    /// iPhone's time zone: Europe/London", "Snow units: cm", "Evening before (about 6pm)"
     public let lines: [String]
     /// "Turn off notifications and delete my data"
     public let delete: String
@@ -161,14 +161,20 @@ public struct YourPrivacy: Sendable, Equatable {
 
   /// What the server keeps for notifications, as the last PUT it answered (`alertSync.v2`) says
   /// (design 2.8): the ID's first 8 digits; where you are, its name and time zone, while the
-  /// server has a place for it; the snow units it was sent in ("Snow units: cm"); then each switch
-  /// it holds on, in Settings' words and order. Nil while not registered.
+  /// server has a place for it; each saved place it keeps (those with their bell on), its name
+  /// and time zone, in the reply's order, and the iPhone's own time zone, only while there is
+  /// one (phase 8.4b); the snow units it was sent in ("Snow units: cm"); then each switch it holds
+  /// on, in Settings' words and order. Nil while not registered.
   public static func keptLines(_ registration: AlertRegistration?) -> [String]? {
     guard let registration else { return nil }
     let response = registration.response
     var lines = [AppCopy.keptID(id: String(response.id.prefix(8)))]
     if let here = response.here {
       lines.append(AppCopy.keptHere(place: here.name, zone: here.timezone))
+    }
+    lines += response.saved.map { AppCopy.keptPlace(place: $0.name, zone: $0.timezone) }
+    if !response.saved.isEmpty, let zone = response.deviceTz {
+      lines.append(AppCopy.keptDeviceZone(zone: zone))
     }
     lines.append(
       AppCopy.keptUnits(

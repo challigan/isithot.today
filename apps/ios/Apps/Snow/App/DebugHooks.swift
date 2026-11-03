@@ -19,7 +19,9 @@ import os
 /// Phase 8.1's hooks stand in for the system's notifications (`-notifications`, `-pushToken`),
 /// the devices calls (`-devices`), the card's being put away under `-uitest` (`-alertCard`), the
 /// place a test launches on (`-place`) and a notification's tap (`-route`); phase 8.4a's
-/// `-location ask:<lat>,<lon>` stands in for location access asked for at a tap.
+/// `-location ask:<lat>,<lon>` stands in for location access asked for at a tap; phase 8.4b's
+/// `-saved` keeps the saved places a test launches with, and `-devices sent2` answers the test
+/// with two notifications, where you are's and a saved place's.
 @MainActor
 enum DebugHooks {
   #if DEBUG
@@ -39,7 +41,9 @@ enum DebugHooks {
     /// only `PurchaseModel` writes, and which nothing reads under StoreKit's stand-in
     /// (`standsInForStoreKit`), as every UI test runs. Then `-place <query>` keeps that place
     /// (`Target(query:)`, a city's or a searched place's) as the one to launch on; a query that is
-    /// no place, or approximate location's, stops the app.
+    /// no place, or approximate location's, stops the app. And `-saved <query>[,<query>…]` keeps
+    /// those places as the saved places, in that order, in place of any kept (`savedPlaces.v1`,
+    /// phase 8.4b), so a test launches with a saved place's bell to tap (`savedPlaces(_:)`).
     static func prepare(
       store: SharedStore?,
       arguments: [String] = ProcessInfo.processInfo.arguments
@@ -70,6 +74,71 @@ enum DebugHooks {
         guard let store else { fatalError("-place: there is no store to keep \(query) in") }
         store.savePlace(target)
       }
+      if let text = value(after: "-saved", in: arguments) {
+        SavedPlaceDefaults().saveSavedPlaces(savedPlaces(text))
+      }
+    }
+
+    /// `-saved`'s places, in its order: each query a place's (`Target(query:)`), a searched place
+    /// by its point and the words its query carries, named by its `name`, or a city by its slug
+    /// (`place=durham-gb`), named by the query's `name` when it has one (`place=york-gb&name=York`)
+    /// and otherwise as the bundled answer for that city's page names it (`cityName(_:)`), kept
+    /// with its name as the picker keeps a city it saves; none with a line beneath. A query that is
+    /// no place, approximate location's or the phone's own point (which are never saved), a place
+    /// with no name, a place twice, or more than `SavedPlaces.max` of them, stops the app, so a
+    /// test can't pass on the wrong list.
+    private static func savedPlaces(_ text: String) -> [SavedPlace] {
+      var saved: [SavedPlace] = []
+      for query in text.split(separator: ",").map(String.init) {
+        guard let target = Target(query: query), SavedPlaces.canSave(target, in: saved) else {
+          fatalError("-saved: \(query) isn't a place that can be saved after the ones before it")
+        }
+        switch target {
+        case .city(let slug, _):
+          let name = queryName(query) ?? cityName(slug)
+          saved.append(SavedPlace(target: .city(slug: slug, name: name), name: name))
+        case .coords(let place):
+          guard let name = place.name, !name.isEmpty else {
+            fatalError("-saved: \(query) has no name")
+          }
+          saved.append(SavedPlace(target: target, name: name))
+        case .ip:
+          fatalError("-saved: \(query) is approximate location's")
+        }
+      }
+      return saved
+    }
+
+    /// The `name` a query carries, percent-decoded; nil without one, or with an empty one.
+    private nonisolated static func queryName(_ query: String) -> String? {
+      var parts = URLComponents()
+      parts.percentEncodedQuery = query
+      guard let name = parts.queryItems?.first(where: { $0.name == "name" })?.value,
+        !name.isEmpty
+      else { return nil }
+      return name
+    }
+
+    /// The name the bundled answer for `slug`'s city page gives it (`location.name`), from the
+    /// first fixture, by name, whose query is that page's. None stops the app.
+    private nonisolated static func cityName(_ slug: String) -> String {
+      let folder = Bundle.main.url(forResource: "Fixtures", withExtension: nil)
+      let urls =
+        folder.flatMap {
+          try? FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil)
+        } ?? []
+      let answers = urls.filter { $0.pathExtension == "json" }
+        .sorted { $0.lastPathComponent < $1.lastPathComponent }
+      for url in answers {
+        guard let data = try? Data(contentsOf: url),
+          let note = try? JSONDecoder().decode(FixtureNote.self, from: data),
+          case .city(let page, _)? = Target(query: note.note.query),
+          page.utf8.elementsEqual(slug.utf8),
+          let answer = try? JSONDecoder().decode(FixtureLocation.self, from: data)
+        else { continue }
+        return answer.location.name
+      }
+      fatalError("-saved: no fixture answers place=\(slug) to name it by")
     }
 
     /// The server the app asks instead of willitsnow.today's, from the fixtures `pnpm
@@ -1158,19 +1227,26 @@ enum DebugHooks {
     }
   }
 
-  /// `-devices sent|dryrun|limited|quiet|gone|down[,…]|unlocated|offline`: the server's devices
-  /// calls, under `-fixture` (`FixtureTransport.send`) and `-network` (`URLProtocolStub`), from
-  /// `Fixtures/Devices`, which the server's own code wrote:
+  /// `-devices sent|sent2|dryrun|limited|quiet|gone|down[,…]|unlocated|offline`: the server's
+  /// devices calls, under `-fixture` (`FixtureTransport.send`) and `-network` (`URLProtocolStub`),
+  /// from `Fixtures/Devices`, which the server's own code wrote:
   /// - `PUT /api/v1/devices` (version 2, design 4.9): with evening and morning off, 204, as the
   ///   server forgets the device; else the reply of the version 2 `put-*` fixture the server
   ///   answered with 200 whose set is the request's (where you are as sent, approximate or the
-  ///   phone's cell, and the saved places), with the switches the request sent, as the server
-  ///   echoes them, 200; for any other set, `put-unlocated`'s 400, as the server answers a set it
+  ///   phone's cell, and the saved places, cities by their slugs and searched places by their
+  ///   points and words; phase 8.4b's carry the phone's zone, `deviceTz`, and `put-refused` a
+  ///   gone city's index in `refused`), with the switches the request sent, as the server echoes
+  ///   them, 200; for the set of a version 2 `put-*` fixture the server answered with 429
+  ///   (`put-capped`: four saved places new to the set at once, one more than it adds a PUT), that
+  ///   429 with its `Retry-After`, each time it is sent, as no fixture holds the set the server
+  ///   stores after it; for any other set, `put-unlocated`'s 400, as the server answers a set it
   ///   can't locate. Each fixture is a whole set, so no reply is put together here. Under
   ///   `unlocated`, every PUT has that 400;
   /// - `DELETE /api/v1/devices`: 204;
   /// - `POST /api/v1/devices/test`: the `test-*` fixture of each of `-devices`' other names in
-  ///   turn, the last repeating (`sent` by default), with its `Retry-After`;
+  ///   turn, the last repeating (`sent` by default), with its `Retry-After`; `sent2` is
+  ///   `test-sent-two`, two tests sent (`{ sent: true, count: 2 }`: where you are's, and a saved
+  ///   place's with its bell on);
   /// - `offline`: every devices call fails with no connection.
   /// A name with no fixture stops the app.
   private final class DevicesStub: @unchecked Sendable {
@@ -1197,6 +1273,8 @@ enum DebugHooks {
     private let refusesAll: Bool
     /// Each set registered with 200, and the server's reply for it, in the fixtures' order.
     private let sets: [(set: PlaceSet, reply: DeviceResponse)]
+    /// Each set the server answered with 429, and that answer, in the fixtures' order.
+    private let capped: [(set: PlaceSet, fixture: DevicesFixture<RegistrationBody>)]
     /// The server's 400 for a set it can't locate.
     private let unlocated: DevicesFixture<RegistrationBody>
     private let lock = NSLock()
@@ -1210,22 +1288,33 @@ enum DebugHooks {
       refusesAll = names.contains("unlocated")
       let testNames = names.filter { $0 != "unlocated" }
       tests = (offline ? [] : testNames.isEmpty ? ["sent"] : testNames).map { name in
-        guard ["sent", "dryrun", "limited", "quiet", "gone", "down"].contains(name) else {
+        guard let fixture = Self.testFixtures.first(where: { $0.name == name })?.fixture else {
           fatalError(
-            "-devices: \(name) isn't sent, dryrun, limited, quiet, gone, down, unlocated "
+            "-devices: \(name) isn't sent, sent2, dryrun, limited, quiet, gone, down, unlocated "
               + "or offline")
         }
-        return DebugHooks.devicesFixture("test-\(name)", body: TokenBody.self)
+        return DebugHooks.devicesFixture(fixture, body: TokenBody.self)
       }
-      sets = Self.registered().map { fixture in
+      let puts = Self.registered()
+      sets = puts.filter { $0.status == 200 }.map { fixture in
         guard
           let reply = try? JSONDecoder().decode(DeviceResponse.self, from: Data(fixture.text.utf8))
         else { fatalError("A put fixture's reply doesn't decode") }
         let body = fixture.note.body
         return (PlaceSet(here: body.here, saved: body.saved), reply)
       }
+      capped = puts.filter { $0.status == 429 }.map { fixture in
+        (PlaceSet(here: fixture.note.body.here, saved: fixture.note.body.saved), fixture)
+      }
       unlocated = DebugHooks.devicesFixture("put-unlocated", body: RegistrationBody.self)
     }
+
+    /// The test sends' fixtures by their names in `-devices`.
+    private static let testFixtures: [(name: String, fixture: String)] = [
+      ("sent", "test-sent"), ("sent2", "test-sent-two"), ("dryrun", "test-dryrun"),
+      ("limited", "test-limited"), ("quiet", "test-quiet"), ("gone", "test-gone"),
+      ("down", "test-down"),
+    ]
 
     /// Whether `url` is a devices call.
     static func handles(_ url: URL) -> Bool {
@@ -1249,7 +1338,8 @@ enum DebugHooks {
       }
     }
 
-    /// A PUT's reply: forgotten with no switch on, the set's record, or the set refused.
+    /// A PUT's reply: forgotten with no switch on, the set's record, the cap's 429, or the set
+    /// refused.
     private func registered(_ body: Data?) -> Reply {
       guard let body, let sent = try? JSONDecoder().decode(RegistrationBody.self, from: body),
         sent.v == RegistrationBody.version
@@ -1258,6 +1348,10 @@ enum DebugHooks {
         return .answer(status: 204, body: Data(), retryAfter: nil)
       }
       let set = PlaceSet(here: sent.here, saved: sent.saved)
+      if !refusesAll, let limit = capped.first(where: { $0.set == set })?.fixture {
+        return .answer(
+          status: limit.status, body: Data(limit.text.utf8), retryAfter: limit.retryAfter)
+      }
       guard !refusesAll, let found = sets.first(where: { $0.set == set })?.reply,
         let echoed = try? JSONEncoder().encode(
           DeviceResponse(
@@ -1280,8 +1374,8 @@ enum DebugHooks {
       }
     }
 
-    /// The version 2 `put-*` fixtures the server answered with 200, each a whole set's
-    /// registration, by name.
+    /// The version 2 `put-*` fixtures the server answered with 200 (a set stored) or 429 (the cap
+    /// on new places), each a whole set's registration, by name.
     private static func registered() -> [DevicesFixture<RegistrationBody>] {
       let folder = Bundle.main.url(forResource: "Fixtures", withExtension: nil)?
         .appendingPathComponent("Devices", isDirectory: true)
@@ -1295,7 +1389,8 @@ enum DebugHooks {
           guard let data = try? Data(contentsOf: url),
             let header = try? JSONDecoder().decode(FixtureVersion.self, from: data)
           else { fatalError("Fixtures/Devices/\(url.lastPathComponent) doesn't decode") }
-          return header.status == 200 && header.note.body.v == RegistrationBody.version
+          return [200, 429].contains(header.status)
+            && header.note.body.v == RegistrationBody.version
         }
         .map {
           DebugHooks.devicesFixture(
@@ -1394,6 +1489,15 @@ enum DebugHooks {
     enum CodingKeys: String, CodingKey {
       case note = "_fixture"
     }
+  }
+
+  /// An answer fixture's place, as far as its name ("Durham"), for `-saved`'s cities.
+  private struct FixtureLocation: Decodable {
+    struct Location: Decodable {
+      let name: String
+    }
+
+    let location: Location
   }
 
   /// What `-openURLs` shows (`debugRecorder()`): the last web page or email the app would have

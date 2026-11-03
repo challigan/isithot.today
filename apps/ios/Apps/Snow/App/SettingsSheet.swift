@@ -15,11 +15,11 @@ import UIKit
 /// presents it, under the Debug recorder as it does the picker, so iOS Settings' pages and the
 /// Met Office's are recorded as every other link is.
 ///
-/// The upgrade card comes first: "Remove ads and add widgets", with StoreKit's price once it has
-/// given one, pushes the upgrade page onto Settings' own stack (no sheet over a sheet), or the
-/// thanks once the purchase is owned; then Restore purchase, always, its result beneath it. The
-/// product is asked for again as Settings appears, so a launch offline is put right later, and a
-/// failure's line and the restore result go as it closes.
+/// The upgrade card comes first: the purchase's name (`AppCopy.upgradeSettings`), with StoreKit's
+/// price once it has given one, pushes the upgrade page onto Settings' own stack (no sheet over a
+/// sheet), or the thanks once the purchase is owned; then Restore purchase, always, its result
+/// beneath it. The product is asked for again as Settings appears, so a launch offline is put
+/// right later, and a failure's line and the restore result go as it closes.
 ///
 /// "Privacy choices" shows in the free version while Google's consent says its privacy options
 /// form is required (`AdsModel.privacyChoices`), opens that form, and Your privacy points to it
@@ -30,12 +30,15 @@ import UIKit
 /// Notifications (section 12.1; design 2.4) sit between the units and the upgrade card: the
 /// switches, which need no place first, as where you are is always one; the line that says what
 /// is kept for it; "Where you are", whose page (design 2.1) this builds from the model in its body
-/// too, so the pushed page follows the model; and the test. That page's "Use my location" asks
-/// the model, which asks for location access at the tap and finds the phone. The permission is
-/// read again as Settings or that page appears, and the test's result, the page's problem and the
-/// delete's line go as Settings closes. While registered, Your privacy shows what the server
-/// keeps for them first, from `alertSync.v2`, with "Turn off notifications and delete my data"
-/// (phase 8.2; design 2.8).
+/// too, so the pushed page follows the model; "Saved places" (phase 8.4b, decision 13), which with
+/// the purchase (the model's `unlocked`, as the upgrade card's) asks the model for the picker,
+/// where the bells are (Settings closes and the picker opens, `HomeView`), and without it pushes
+/// the upgrade page; and the test. That page's "Use my
+/// location" asks the model, which asks for location access at the tap and finds the phone. The
+/// permission is read again as Settings or that page appears, and the test's result, the page's
+/// problem and the delete's line go as Settings closes. While registered, Your privacy shows what
+/// the server keeps for them first, from `alertSync.v2`, with "Turn off notifications and delete my
+/// data" (phase 8.2; design 2.8).
 struct SettingsSheet: View {
   let model: AppModel
   /// The free version's ads.
@@ -62,7 +65,7 @@ struct SettingsSheet: View {
         purchase: purchases.state,
         version: AppBundle.version
       ),
-      notifications: NotificationSettings(state),
+      notifications: NotificationSettings(state, unlocked: model.unlocked),
       notificationPlace: NotificationPlacePage(state),
       privacy: YourPrivacy(
         adsOn: !model.unlocked,
@@ -105,8 +108,9 @@ struct SettingsSheet: View {
 
   /// A row of Settings → Notifications or of its "Where you are" page: the test; "Use my
   /// location", which asks for location access at the tap and finds the phone for where you are;
-  /// iOS Settings' page for the app's notifications, or for its location access (through the
-  /// environment's `openURL`, so a Debug build's recorder records both).
+  /// "Saved places", the picker, where the saved places' bells are; iOS Settings' page for the
+  /// app's notifications, or for its location access (through the environment's `openURL`, so a
+  /// Debug build's recorder records both).
   private func perform(_ action: SettingsScreen.NotificationAction) {
     let notifications = notifications
     switch action {
@@ -114,6 +118,8 @@ struct SettingsSheet: View {
       Task { await notifications.sendTest() }
     case .useMyLocation:
       Task { await notifications.useMyLocation() }
+    case .savedPlaces:
+      notifications.requestPicker(locating: false)
     case .openNotificationSettings:
       open(UIApplication.openNotificationSettingsURLString)
     case .openLocationSettings:

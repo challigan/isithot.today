@@ -333,9 +333,9 @@ preview's store is new with every deploy, so the settings go in before the previ
    the one before, **Publish deploy**.
 
 3. **By Thu 12 Nov:** it is already fully on. Press **Send a test notification** in the current
-   TestFlight build; it must arrive before submission. The review notes should say that nothing
-   is sent from 9pm to 7am at the chosen place, test notifications included (their notifications
-   paragraph is in "The app's notifications (phases 8.1 and 8.2)", below).
+   TestFlight build; it must arrive before submission. The review note says when nothing is sent
+   (it is in "Saved places' notifications (phase 8.4b)", below, one note for the purchase and
+   notifications together).
 4. **Release day:** delete `ALERTS_FORCE_IDS` and redeploy. The log line no longer says
    `forced`.
 
@@ -419,34 +419,20 @@ keys), a profile made by hand, or anything in GitHub.
    - **Where you are in the UK** shows **Met Office warnings** at the foot of Notifications, which
      opens Safari.
    - **Delete:** Your privacy → **Turn off notifications and delete my data** says "Notifications
-     are off. We've deleted your notification token, place, units and choices.", and the log says
-     `devices: deleted`.
-   - **Quiet hours:** from 9pm to 7am at the place, the test says "Nothing is sent from 9pm to 7am
-     at the place. Try again after 7am there."
+     are off. We've deleted your notification token, places, units and choices." (8.1's build says
+     "place"), and the log says `devices: deleted`.
+   - **Quiet hours:** from 9pm to 7am on your iPhone, the test says "Nothing is sent from 9pm to
+     7am. Try again after 7am." (Builds from 8.4b on judge it by your iPhone's clock; 8.1's build
+     says "at the place" and judges it there.)
 7. **App Store Connect (C22, by Fri 13 Nov).**
    - **App Privacy:** under Identifiers, **Device ID** gets the purpose **App Functionality** (the
      push token): linked to the user, not used for tracking, beside Coarse Location. If Device ID
      is already there for Google's ads (Third-Party Advertising), tick App Functionality on that
      same entry: App Store Connect keeps one entry for each kind of data, with its purposes
      ticked, so Device ID is then linked overall.
-   - **Review notes:** the notifications paragraph, beside the purchase's (phase 9.2 puts the
-     whole note in the listing's files):
-
-     > Notifications are optional and off by default; the app works fully without them. The free
-     > notification is for where you are: your location if you share it, otherwise an
-     > approximate place from your internet connection. To try it, tap the gear (Settings), then
-     > turn on "Evening before (about 6pm)", allow notifications, and tap "Send a test
-     > notification". It arrives within a minute. Tests aren't sent from 9pm to 7am where you
-     > are, and at most three times an hour. Real notifications are sent only when snow is likely
-     > where you are: about 6pm the evening before, and about 7am on the day. Tapping one opens
-     > that place's forecast. They never carry promotions. Settings, then Your privacy, shows
-     > what we keep for notifications, and "Turn off notifications and delete my data" removes
-     > it.
-
-     This is phase 8.4a's note, which took away the step of choosing a place. Version 1.0 waits
-     for the bells (phase 8.4b), so the note you submit with 1.0 is 8.4b's, one note for the
-     purchase and notifications together, which replaces this one. Type this one only for a
-     TestFlight build that goes to review before 8.4b is merged, if there is one.
+   - **Review notes:** one note for the purchase and notifications together, which replaces the
+     notifications paragraph that was here, the purchase's and the widgets': it is in "Saved
+     places' notifications (phase 8.4b)", below, step 6.
 
 8. **C20 (Thu 12 Nov):** rollout step 3 above. Notifications are already fully on since C18
    (`ALERTS_ENABLED` = `true` and `ALERTS_DRY_RUN` = `false` in Production), so there is nothing to
@@ -501,17 +487,141 @@ The new build keeps its notification settings under new names, so it can't see o
      and once on Wi-Fi, an hour or more apart: the town may change with the connection. Tell me if
      either is far from where you are.
 
+### Saved places' notifications (phase 8.4b)
+
+From phase 8.4b, each saved place has a bell beside its star. With the one-off purchase, the bell
+turns on notifications for that place, the evening before and on the day, as for where you are.
+Without it, the bell has a small lock and opens the purchase. The purchase is renamed **No ads,
+widgets and more** to say so. Notifications for where you are stay free. Version 1.0 waits for
+this phase. Nothing in Netlify changes: the server for several places is already merged.
+
+1. **Merge 8.4b** ("Notifications for saved places (phase 8.4b)") once its checks are green
+   (target Tue 10 Nov). There is nothing to set in Netlify for it.
+2. **App Store Connect, the purchase's words (5 minutes).** **Apps** → **willitsnow.today** →
+   under **Monetization**, **In-App Purchases** → **Snow unlock** → **App Store Localization**,
+   English (U.K.):
+   - **Display Name:** No ads, widgets and more
+   - **Description:** No ads, widgets and saved-place notifications
+
+   Type them exactly, with no full stop: the app and its tests use the same words. Press **Save**.
+   If the purchase's status says **Ready for Review**, it has been added to the 1.0 draft and the
+   words are locked: on the 1.0 page, remove Snow unlock from **In-App Purchases and
+   Subscriptions**, change the words, then add it back. While it says **Prepare for Submission**,
+   the words can be changed straight away. TestFlight shows the new name within about an hour.
+
+3. **The review screenshot.** On GitHub open **Actions**, then **iOS** on the left, then the latest
+   run on `main` with 8.4b in it, and under **Artifacts** download **ios-attachments**. The
+   screenshot is `review/app-upgrade.png`: the upgrade sheet with its three lines (no ads, widgets,
+   notifications for saved places). In App Store Connect, **Snow unlock** → **Review Information**
+   → **Screenshot**: upload it in the old one's place, then **Save**.
+4. **A TestFlight build:** GitHub → **Actions** → **iOS release** → **Run workflow** → `testflight`
+   → approve the `testflight` environment when asked, then wait for TestFlight to show the build
+   (Apple's processing can take an hour).
+5. **The checks (about 30 minutes, beside C19, on Tue 10 Nov or Wed 11 Nov, between 7am and 7pm
+   UK time).** If one shows something else, tell me what it said, with a screenshot.
+   - **The locked bell.** You bought the purchase in an earlier build, so on your own Apple
+     Account the bell is already unlocked. To see the lock and buy from the bell, use the Sandbox
+     tester (below, "The app's purchase", step 6) and clear its purchase history first; otherwise
+     go on to the next check. Tap the place name at the top, search **Rovaniemi** and tap the
+     star: a bell with a small lock appears beside it. Tap the bell: the purchase page opens over
+     the search screen. **Buy** (TestFlight buys in Apple's test environment, so nothing is
+     charged), then close the page: the bell fills by itself, and the search screen is still open.
+   - **With the purchase.** Search **Rovaniemi**, tap the star, then the bell. If you have never
+     allowed notifications for this build, **Allow**. The bell fills. If every notification was
+     off, "Evening before (about 6pm)" comes on with it, for where you are too.
+   - **Settings → Notifications** shows **Saved places** with "1 on". Tap it: Settings closes and
+     the search screen opens, with Rovaniemi's bell filled.
+   - **Two tests.** Settings → **Send a test notification**: it says "Sent 2 test notifications.
+     They should arrive in a few seconds.", and two arrive, in two stacks. Tapping Rovaniemi's
+     opens Rovaniemi.
+   - **Your privacy** lists "Rovaniemi, Europe/Helsinki" and "Your iPhone's time zone:
+     Europe/London" under "Where you are". Now unstar Rovaniemi (VoiceOver, if it is on, says
+     "Rovaniemi removed from saved places. Its notifications are off."). After a minute, Your
+     privacy no longer lists Rovaniemi or your iPhone's time zone.
+   - **Delete:** Your privacy → **Turn off notifications and delete my data** says
+     "Notifications are off. We've deleted your notification token, places, units and choices."
+   - **The purchase's words.** Settings shows "Thank you. Ads are off, widgets are on and you can
+     turn on notifications for saved places."
+   - **Optional, the night.** A saved place's notification between 9pm and 7am on your iPhone
+     arrives without a sound, straight into Notification Centre. You will only see this if snow is
+     likely at a saved place in the evening or the morning there while it is night here, so
+     skipping it is fine.
+6. **By Fri 13 Nov (C22): the review note, the listing and one decision.**
+   - **The review note:** paste this into **Snow unlock** → **Review Information** → **Review
+     Notes**, and into the 1.0 version's **App Review Information** → **Notes**. It replaces the
+     purchase's note (step 3 of "The app's purchase"), the widgets' (step 4 of "The app's widgets")
+     and the notifications' (step 7 of "The app's notifications"):
+
+     > Notifications are optional and off by default; the app works fully without them. The free
+     > notification is for where you are: your location if you share it, otherwise an approximate
+     > place from your internet connection. To try it, tap the gear (Settings), then turn on
+     > "Evening before (about 6pm)", allow notifications, and tap "Send a test notification". It
+     > arrives within a minute.
+     >
+     > The purchase, No ads, widgets and more (£1.99, non-consumable, Family Sharing), unlocks
+     > three things: no ads, the Snow forecast widget for the home screen and lock screen, and
+     > notifications for saved places. To buy it, tap the gear, then No ads, widgets and more, then
+     > Buy; it is also the row at the end of the middle page. To try saved-place notifications,
+     > tap the place name at the top, search for a town (for example Denver), tap the star beside
+     > it, then the bell beside the star. Before the purchase the bell opens the purchase page;
+     > after buying there, the bell turns on. "Send a test notification" in Settings then sends two
+     > tests: one for where you are and one for the saved place. Restore purchase is in Settings.
+     > If the App Store doesn't answer, Settings still shows the purchase without a price, and its
+     > page says it isn't available right now.
+     >
+     > Tests aren't sent from 9pm to 7am on your iPhone, and at most three times an hour. Real
+     > notifications are sent only when snow is likely at a place: about 6pm the evening before and
+     > about 7am on the day, at the place's time; from 9pm to 7am on your iPhone, those for saved
+     > places arrive silently. Tapping one opens that place's forecast. Notifications never carry
+     > promotions. Settings, then Your privacy, shows what we keep, and "Turn off notifications and
+     > delete my data" removes it.
+
+   - **The listing** (the version's page, with the rest of C22). Replace whole blocks:
+     - **Promotional text:** where it says "where you choose", the sentence becomes "Plus a
+       notification the evening before snow is likely where you are."
+     - **Description, the Notifications part,** becomes:
+
+       > Notifications
+       > • The evening before: about 6pm, when snow is likely tomorrow.
+       > • On the day: about 7am, when snow is likely today.
+       > • Free for where you are, using your location or a rough place from your internet
+       > connection. Only when most forecasts expect snow, unless you also ask about days when
+       > snow is possible.
+       > • With the one-off purchase, the same for up to 10 saved places, such as somewhere you're
+       > going.
+
+     - **Description, the paragraph after Widgets,** becomes: "Free, with ads. A one-off purchase
+       removes the ads, adds the widgets and adds notifications for up to 10 saved places, the
+       evening before and on the day. Everything else, including notifications for where you are,
+       is free. No account needed." (App Review 2.3.2: the listing must say what the purchase
+       adds.)
+   - **The decision, by Fri 13 Nov: made-up registrations.** The server takes notifications for
+     where you are and up to 10 saved places from any phone, trusting the app's purchase check, as
+     the ads and widgets already do. Someone could send made-up registrations and fill a time
+     zone's notification run; the server's limits slow that down but don't stop it. The choice:
+     add Apple's App Attest or DeviceCheck before launch (about two days' work, and the release
+     moves), or launch with the limits and decide again for 1.0.1 once there are numbers (step 8).
+     I recommend the second. Tell me which.
+7. **App Privacy:** nothing new. Coarse Location and Device ID are already there from earlier
+   steps.
+8. **Each month after launch (5 minutes).** Netlify → **Logs** → **Functions** → `alerts-run`:
+   once a day its line says `alerts-run: cleanup: <n> devices with saved places`. App Store
+   Connect → **Sales and Trends**: the units of Snow unlock so far. One purchase covers up to six
+   devices with Family Sharing, so if the devices are more than 6 × the units + 10, tell me: the
+   next step is for the server to check the purchase itself.
+
 ### The app's purchase (C2, C9, C16)
 
-The iPhone app sells one thing, once: **Remove ads and add widgets**, £1.99. It takes every ad away
-straight after the purchase, and from phase 7.2 it turns the widgets on. You have made the purchase
+The iPhone app sells one thing, once: **No ads, widgets and more**, £1.99 ("Remove ads and add
+widgets" until phase 8.4b). It takes every ad away straight after the purchase, from phase 7.2 it
+turns the widgets on, and from phase 8.4b it unlocks notifications for saved places. You have made the purchase
 in App Store Connect (C9); these steps check it, finish it, send it to review with the app and try
 it on your phone. StoreKit needs nothing in GitHub or Netlify: no secret and no variable.
 
 1. **The agreement (C2).** In App Store Connect, open **Business**, then **Agreements**. The
    **Paid Apps Agreement** must say **Active**, with its tax and banking information complete.
    Until it is Active the App Store sells nothing to the app, not even in TestFlight: the app
-   shows no price, Settings' "Remove ads and add widgets" opens a page that says "The purchase
+   shows no price, Settings' "No ads, widgets and more" opens a page that says "The purchase
    isn't available right now. Try again later.", and Restore purchase still shows. If it isn't
    Active by **Mon 2 Nov**, tell me: I'll build a switch that can leave the purchase and the
    widgets out. Version 1.0 goes without them only if the agreement is still not Active on
@@ -527,9 +637,11 @@ it on your phone. StoreKit needs nothing in GitHub or Netlify: no secret and no 
    - **Price Schedule:** £1.99, with the United Kingdom as the base country or region, and every
      other one priced from it.
    - **Availability:** every country or region the app is in: all but mainland China (Q11).
-   - **App Store Localization**, English (U.K.): **Display Name** "Remove ads and add widgets",
-     and **Description** "No ads, plus home and lock screen widgets" (exactly, with no full stop:
-     the app's tests hold the same words).
+   - **App Store Localization**, English (U.K.): **Display Name** "No ads, widgets and more",
+     and **Description** "No ads, widgets and saved-place notifications" (exactly, with no full
+     stop: the app's tests hold the same words). These are phase 8.4b's words; until it is merged
+     the app and its tests still say "Remove ads and add widgets" and "No ads, plus home and lock
+     screen widgets" ("Saved places' notifications (phase 8.4b)", above, step 2).
    - **Family Sharing:** turned on (**Turn On**, if it isn't yet). Once on it can't be turned off,
      which is what you chose (Q4).
 
@@ -537,38 +649,38 @@ it on your phone. StoreKit needs nothing in GitHub or Netlify: no secret and no 
    think App Store Connect is the one that is right.
 
 3. **Review Information**, further down the same page:
-   - **Screenshot:** the upgrade sheet with its price, which the app's tests take. On GitHub open
-     **Actions**, then **iOS** on the left, then the latest run with 7.1 in it (on `main` once it is
-     merged), and under **Artifacts** download **ios-attachments**. The screenshot is
+   - **Screenshot:** the upgrade sheet with its price, which the app's tests take (since phase
+     8.4b, with its three lines: take it from a run with 8.4b in it, "Saved places'
+     notifications (phase 8.4b)", above, step 3). On GitHub open **Actions**, then **iOS** on the
+     left, then the latest run on `main`, and under **Artifacts** download **ios-attachments**. The screenshot is
      `review/app-upgrade.png` in it (not one from the `UI` folder, whose files are named by
      codes): 1206 × 2622 pixels, the whole iPhone 17 screen. Upload that. When phase 7.3 makes a
      new one, with the widgets on the sheet, upload it in this one's place. GitHub keeps artefacts
      for 5 days, and runs happen only when the app's files change: if it has gone, open that run,
      press **Re-run all jobs**, and take it from the run that makes.
-   - **Review Notes:** paste this:
+   - **Review Notes:** the note for the purchase and notifications together, in "Saved places'
+     notifications (phase 8.4b)", above, step 6. It replaces the note that was here, which named
+     only the ads and the widgets.
 
-     > Unlocks two things: no ads in the app, and the Snow forecast widget for the home screen
-     > and lock screen. To buy it, tap the gear at the top right of the app (Settings), then
-     > Remove ads and add widgets, then Buy. It is also the row at the end of the middle page
-     > (Today, or Tomorrow after 6pm). Restore purchase is in Settings, beneath it. If the App
-     > Store doesn't answer, Settings still shows Remove ads and add widgets, without a price,
-     > and its page says the purchase isn't available right now.
-
-   Press **Save**. The purchase's status then changes from **Missing Metadata** to **Ready to
-   Submit**.
+   Press **Save**. The purchase's status is then **Prepare for Submission**: it has all it needs,
+   and isn't in a submission yet.
 
 4. **With version 1.0 (C24).** A first in-app purchase goes to App Review with a version of the
    app, never on its own. On the version's page (**Apps**, **willitsnow.today**, then **1.0**
    under **iOS App**), find **In-App Purchases and Subscriptions**, add **Snow unlock** there,
    then submit the version as usual (spec section 21.4). App Review then sees the two together.
+   Once added, its status is **Ready for Review**, and its name and description can't be changed
+   until it is taken out of the draft again, so type 8.4b's words first.
 
 5. **On your iPhone, from TestFlight**, once a build with 7.1 in it has reached you:
-   1. Open the app, tap the gear, then **Remove ads and add widgets · £1.99**, then **Buy for
-      £1.99**, and confirm on Apple's own sheet. A TestFlight build buys in Apple's test
+   1. Open the app, tap the gear, then **No ads, widgets and more · £1.99** (**Remove ads and add
+      widgets · £1.99** in a build before 8.4b), then **Buy for £1.99**, and confirm on Apple's
+      own sheet. A TestFlight build buys in Apple's test
       environment with your own Apple Account, so nothing is charged and you need no Sandbox
       tester, unless you want to buy again (step 6). The ads go at once: the band under the
       pages, the ad at the end of each page, and no more full-screen ads. The page and Settings
-      then say "Thank you. Ads are off and widgets are on."
+      then say "Thank you. Ads are off, widgets are on and you can turn on notifications for saved
+      places." ("Thank you. Ads are off and widgets are on." before 8.4b).
    2. If there is no price, and the page says the purchase isn't available right now, the App
       Store has nothing to sell the app yet. Check that the agreement is Active (step 1), and
       that the purchase has its price and its English (U.K.) name (step 2); it doesn't need to be
@@ -615,7 +727,7 @@ it on your phone. StoreKit needs nothing in GitHub or Netlify: no secret and no 
 The widget, **Snow forecast**, comes with the purchase: a small and a medium one for the Home
 Screen, and a round, a rectangular and an inline one for the Lock Screen. No new secret, variable,
 capability, identifier or profile is needed anywhere; in App Store Connect only the review note and
-the description change (step 4). The widget's App ID with its App Group (C8) and the purchase (C9)
+the listing's description change (step 4). The widget's App ID with its App Group (C8) and the purchase (C9)
 already exist, and the release job's cloud signing makes the widget's profile as it does the app's.
 
 1. **Check the widget's App ID once.** In the Apple Developer site, open **Certificates,
@@ -681,15 +793,10 @@ already exist, and the release job's cloud signing makes the widget's profile as
    If anything shows something else, send me a screenshot and what it said.
 
 4. **App Review** (with C22: the version's **App Review Information**, and the listing's files).
-   Add this to the review notes:
-
-   > The Snow forecast widget comes with the one-off purchase, Remove ads and add widgets. To add
-   > it, touch and hold the Home Screen, tap Edit, then Add Widget, search for "will it snow" and
-   > choose Snow forecast; or add it to the Lock Screen. Before the purchase, the widget says
-   > "Open the app to turn on widgets." and shows no price; tapping it opens the purchase in the
-   > app.
-
-   The App Store description must also say the widgets come with the purchase (App Review 2.3.2).
+   The review note is the one for the purchase and notifications together ("Saved places'
+   notifications (phase 8.4b)", above, step 6), which names the widget among what the purchase
+   unlocks; it replaces the widgets' own note that was here. The App Store description must also
+   say the widgets come with the purchase (App Review 2.3.2), as that step's listing does.
 
 5. **Netlify:** nothing new. The weekly look at function invocations (C17) now includes the
    widgets' requests, besides the app's: for each widget on each phone, once every 4 hours while

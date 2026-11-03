@@ -212,6 +212,18 @@ public protocol AppHooks: Sendable {
   /// notification's place are AppModel's own, on screen before this is called; `.upgrade`
   /// (phase 7.1) and `.settings` (phase 8.1) open their sheets here.
   func handle(_ route: DeepLink.Route) async
+  /// Phase 8.4b: the saved places, in saved order, once as step 1 reads them and again after
+  /// each change kept (a star, Remove). The app hands them to
+  /// `NotificationsModel.savedChanged(_:)`, whose bells follow them: an unsaved place's bell goes
+  /// and its record with the next sync. On the main actor and at once, so the bells never lag a
+  /// star, and the notifications know the saved places before anything starts them.
+  @MainActor func savedChanged(_ saved: [SavedPlace])
+  /// Phase 8.4b: whether the purchase is owned, once StoreKit has said: step 5's answer, and each
+  /// change `PurchaseModel` tells after it (`AppModel.purchaseChanged(owned:)`), the same answer
+  /// again included. The app hands it to `NotificationsModel.unlockedChanged(_:)`, which sends
+  /// the saved places' bells only with the purchase; until the first, it sends them as the last
+  /// registration had them (design decision 15).
+  @MainActor func unlockedChanged(_ owned: Bool)
 }
 
 /// The later phases' steps, before those phases: each does nothing.
@@ -235,6 +247,12 @@ public struct NoHooks: AppHooks {
 
   /// Phases 6 and 8 route.
   public func handle(_ route: DeepLink.Route) async {}
+
+  /// Phase 8.4b's notifications hear the saved places.
+  @MainActor public func savedChanged(_ saved: [SavedPlace]) {}
+
+  /// Phase 8.4b's notifications hear the purchase.
+  @MainActor public func unlockedChanged(_ owned: Bool) {}
 }
 
 /// What is stored, kept in memory only: for a build that can't open its App Group (nothing is

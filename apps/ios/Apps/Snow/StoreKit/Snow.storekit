@@ -20,8 +20,8 @@
       "internalID" : "6B2D4F18",
       "localizations" : [
         {
-          "description" : "No ads, plus home and lock screen widgets",
-          "displayName" : "Remove ads and add widgets",
+          "description" : "No ads, widgets and saved-place notifications",
+          "displayName" : "No ads, widgets and more",
           "locale" : "en_GB"
         }
       ],

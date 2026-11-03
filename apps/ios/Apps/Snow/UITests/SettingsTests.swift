@@ -8,7 +8,7 @@ import XCTest
 /// no word naming another app, website or weather type. Each screen is audited for
 /// accessibility and attached for the contact sheet. Every launch starts from a clean store.
 /// Settings opens on its upgrade card, which StoreKit's stand-in fills with no product for sale
-/// (no `-purchase`): "Remove ads and add widgets" with no price, then Restore purchase. The
+/// (no `-purchase`): "No ads, widgets and more" with no price, then Restore purchase. The
 /// audits and the snow-only check read them with the rest; what they do is UpgradeTests'.
 /// Each page is known by its title on the page (`page-title`, `page(titled:in:)`), the website's
 /// h1, since the navigation bar draws none (IsItUI's `SheetPage`).
@@ -221,11 +221,13 @@ final class SettingsTests: XCTestCase {
         + "recent and saved places, your notification choices and the last forecast on your "
         + "iPhone.",
       "Only while notifications are on, we keep your device's notification token, an ID made from "
-        + "it, the place you get notifications for and its time zone, your units and which "
+        + "it, the places you get notifications for and their time zones, your units and which "
         + "notifications you chose, with a few details such as the app's version and when it last "
-        + "checked in. The place is where you are (your location rounded to about 5 km or, if you "
-        + "haven't shared it, a rough place our server estimates from your internet connection, "
-        + "updated when you open the app, at most once an hour). We delete them when you turn "
+        + "checked in. The places are where you are (your location rounded to about 5 km or, if "
+        + "you haven't shared it, a rough place our server estimates from your internet "
+        + "connection, updated when you open the app, at most once an hour) and any saved places "
+        + "you turned notifications on for; while you have those, we also keep your iPhone's time "
+        + "zone. We delete them when you turn "
         + "notifications off in the app, when Apple tells us the app is no longer installed, or "
         + "about 90 days after you last open it. If you turn notifications off in your iPhone's "
         + "Settings instead, we delete them the next time you open the app. For a few days after "

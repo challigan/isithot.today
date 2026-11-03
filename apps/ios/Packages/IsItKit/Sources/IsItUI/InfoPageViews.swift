@@ -156,8 +156,10 @@ struct NoticeView: View {
 /// "Your privacy" (section 10.6). While registered for notifications, what the server keeps for
 /// them comes first, under the title (decision 18): its heading (`kept-heading`), the kept lines
 /// on a card, a line to a row (`kept-line-<n>`), as many as `alertSync.v2`'s answer gives (its
-/// ID, "Where you are: Leeds, Europe/London" while the server has a place for where you are, the
-/// units, each switch on; design 2.8), and the button that deletes it (`delete-my-data`), so the
+/// ID, "Where you are: Leeds, Europe/London" while the server has a place for where you are, each
+/// saved place with its bell on, "Durham, Europe/London", and while there is one "Your iPhone's
+/// time zone: Europe/London" (phase 8.4b), the units, each switch on; design 2.8), and the button
+/// that deletes it, the bells' places too (`delete-my-data`), so the
 /// page's audit at its top sees the block whole. Once that button is
 /// tapped, what it did shows where the block was, on a reading card (`delete-status`), and is
 /// said to VoiceOver once when it comes. Then the plain lines on a reading card, each its own

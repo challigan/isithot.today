@@ -91,7 +91,9 @@ public final class AppModel {
 
   /// Step 1: reads what was stored, and paints the saved answer at once, in the view for the
   /// time of day, when it is for the place and still has an hour to show (`Launch.plan`);
-  /// otherwise the loading state. Nothing is fetched until `launch()`.
+  /// otherwise the loading state; and tells the notifications the saved places
+  /// (`hooks.savedChanged`, phase 8.4b), before anything can start them. Nothing is fetched until
+  /// `launch()`.
   public init(environment: AppEnvironment) {
     self.environment = environment
     let store = environment.store
@@ -110,6 +112,7 @@ public final class AppModel {
     opened = plan.paint != nil
     recents = environment.recents.loadRecents()
     saved = environment.saved.loadSavedPlaces()
+    environment.hooks.savedChanged(saved)
   }
 
   // MARK: - What the views call
@@ -120,9 +123,9 @@ public final class AppModel {
   /// location fix when permission is already granted, never asking (`fixMoved(from:)`), and
   /// fetches again only when the place's 0.05° cell changed and the place is still the one the
   /// fix was for, so a place chosen meanwhile stands; step 5 takes the check's answer, unless
-  /// `PurchaseModel` has told a newer one meanwhile, and starts the ads only when not unlocked
-  /// (phase 8); step 6 syncs the notifications (phase 8); step 7 handles a pending route (phases
-  /// 6 and 8).
+  /// `PurchaseModel` has told a newer one meanwhile, tells the notifications it
+  /// (`hooks.unlockedChanged`, phase 8.4b), and starts the ads only when not unlocked (phase 8);
+  /// step 6 syncs the notifications (phase 8); step 7 handles a pending route (phases 6 and 8).
   public func launch() async {
     guard !launched else { return }
     launched = true
@@ -142,7 +145,10 @@ public final class AppModel {
         await load(.plain)
       }
     }
-    if let owned = await hooks.entitlement(), !purchaseHeard { unlocked = owned }
+    if let owned = await hooks.entitlement(), !purchaseHeard {
+      unlocked = owned
+      hooks.unlockedChanged(owned)
+    }
     if !unlocked {
       adsStarted = true
       await hooks.startAds()
@@ -265,9 +271,13 @@ public final class AppModel {
   /// keeps it. Owned once step 5 has started the ads, they stop for good this launch
   /// (`hooks.stopAds()`); owned before step 5, step 5 doesn't start them, and nothing is stopped.
   /// No longer owned mid-session, nothing starts: the ads start at the next launch (spec 13);
-  /// before step 5, step 5 starts them, as in any free launch, whatever was heard before.
+  /// before step 5, step 5 starts them, as in any free launch, whatever was heard before. Each
+  /// answer goes to the notifications (`hooks.unlockedChanged`, phase 8.4b), the same one again
+  /// too: they hear StoreKit only from here, and until they do they keep the saved places' bells
+  /// as the last registration had them.
   public func purchaseChanged(owned: Bool) async {
     purchaseHeard = true
+    environment.hooks.unlockedChanged(owned)
     guard owned != unlocked else { return }
     unlocked = owned
     if owned, adsStarted { await environment.hooks.stopAds() }
@@ -276,9 +286,16 @@ public final class AppModel {
   // MARK: - The place picker
 
   /// A picker over this model (section 10.3), with the model's client, its pause after typing
-  /// timed by the environment's `waits`: the sheet makes one each time it opens.
-  public func makePicker() -> PlacePickerModel {
-    PlacePickerModel(app: self, client: environment.client, clock: environment.waits)
+  /// timed by the environment's `waits`: the sheet makes one each time it opens. Its saved
+  /// places' bells (phase 8.4b) are `bells`' (the notifications'), shown with this model's
+  /// purchase, and each tap's outcome is said through `announce` (VoiceOver's announcement in the
+  /// app); without `bells`, every bell is the purchase's alone and a tap does nothing.
+  public func makePicker(
+    bells: (any PickerBells)? = nil, announce: @escaping @MainActor (String) -> Void = { _ in }
+  ) -> PlacePickerModel {
+    PlacePickerModel(
+      app: self, client: environment.client, clock: environment.waits, bells: bells,
+      announce: announce)
   }
 
   /// Chooses `target` as the place, as the picker does (section 10.3): it is kept in
@@ -361,11 +378,14 @@ public final class AppModel {
 
   /// Keeps `lists`, writing each that changed whole: the saved places first, then the recent
   /// places. A write cut short between the two leaves a place in both, which the picker shows once,
-  /// under "Saved" (`SavedPlaces.shownRecent`), until the next change to Recent drops it.
+  /// under "Saved" (`SavedPlaces.shownRecent`), until the next change to Recent drops it. New
+  /// saved places go to the notifications once written (`hooks.savedChanged`, phase 8.4b), so an
+  /// unsaved place's bell goes with its star.
   private func keepLists(_ lists: PlaceLists) {
     if lists.saved != saved {
       saved = lists.saved
       environment.saved.saveSavedPlaces(lists.saved)
+      environment.hooks.savedChanged(lists.saved)
     }
     if lists.recent != recents { saveRecents(lists.recent) }
   }

@@ -29,8 +29,8 @@ const SNOW_STOREKIT = `{
       "internalID" : "6B2D4F18",
       "localizations" : [
         {
-          "description" : "No ads, plus home and lock screen widgets",
-          "displayName" : "Remove ads and add widgets",
+          "description" : "No ads, widgets and saved-place notifications",
+          "displayName" : "No ads, widgets and more",
           "locale" : "en_GB"
         }
       ],
@@ -123,6 +123,16 @@ describe('storeKitJson', () => {
         locale: 'en_GB',
       },
     ]);
+  });
+
+  it("sells it under Carl's words, option (a): saved places' notifications named (phase 8.4b)", () => {
+    // Apple's purchase sheet, Ask to Buy and purchase history show the display name, so it says
+    // there is more than the ads and widgets (design decision 17, 2.10).
+    expect(file.products[0]!.localizations[0]).toEqual({
+      description: 'No ads, widgets and saved-place notifications',
+      displayName: 'No ads, widgets and more',
+      locale: 'en_GB',
+    });
   });
 
   it("sells it in the UK storefront, with none of the editor's test settings on", () => {

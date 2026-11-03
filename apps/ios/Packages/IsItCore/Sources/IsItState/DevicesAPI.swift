@@ -7,9 +7,13 @@ import IsItModel
 /// (`AlertSync.syncReply`, `AlertSync.testOutcome`). No answer at all is a failure: nothing is
 /// thrown, and nothing is logged, so neither the token nor the place goes anywhere else.
 extension APIClient {
-  /// `PUT /api/v1/devices` with `body` (section 8.2).
+  /// `PUT /api/v1/devices` with `body` (section 8.2), as the client writes it
+  /// (`RegistrationBody.json`): its keys in the client's order, and a "/" as it is, where
+  /// `JSONEncoder` would write "\/" (a saved place's zone, the phone's zone, a place's name).
   public func registerDevice(_ body: RegistrationBody) async -> AlertSync.SyncReply {
-    guard let response = await send(.put, path: Self.devicesPath, body) else { return .failed }
+    guard let response = await send(.put, path: Self.devicesPath, json: body.json) else {
+      return .failed
+    }
     return AlertSync.syncReply(
       status: response.status, body: response.body, retryAfter: response.retryAfter)
   }
@@ -60,9 +64,13 @@ extension APIClient {
   {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
-    guard let json = try? encoder.encode(body),
-      let request = deviceRequest(method, path: path, body: json)
-    else { return nil }
+    guard let json = try? encoder.encode(body) else { return nil }
+    return await send(method, path: path, json: json)
+  }
+
+  /// Sends `json` as it is; nil when the request couldn't be made or no answer came.
+  private func send(_ method: HTTPMethod, path: String, json: Data) async -> HTTPResponse? {
+    guard let request = deviceRequest(method, path: path, body: json) else { return nil }
     return try? await transport.send(request)
   }
 }

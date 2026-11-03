@@ -143,11 +143,13 @@ struct InfoPagesTests {
           + "recent and saved places, your notification choices and the last forecast on your "
           + "iPhone.",
         "Only while notifications are on, we keep your device's notification token, an ID made "
-          + "from it, the place you get notifications for and its time zone, your units and which "
-          + "notifications you chose, with a few details such as the app's version and when it "
-          + "last checked in. The place is where you are (your location rounded to about 5 km or, "
-          + "if you haven't shared it, a rough place our server estimates from your internet "
-          + "connection, updated when you open the app, at most once an hour). We delete them "
+          + "from it, the places you get notifications for and their time zones, your units and "
+          + "which notifications you chose, with a few details such as the app's version and when "
+          + "it last checked in. The places are where you are (your location rounded to about 5 km "
+          + "or, if you haven't shared it, a rough place our server estimates from your internet "
+          + "connection, updated when you open the app, at most once an hour) and any saved "
+          + "places you turned notifications on for; while you have those, we also keep your "
+          + "iPhone's time zone. We delete them "
           + "when you turn notifications off in the app, when Apple tells us the app is no longer "
           + "installed, or about 90 days after you last open it. If you turn notifications off in "
           + "your iPhone's Settings instead, we delete them the next time you open the app. For a "
@@ -220,6 +222,46 @@ struct InfoPagesTests {
     #expect(YourPrivacy.keptLines(nil) == nil)
   }
 
+  @Test("each saved place with its bell on, in the reply's order, then the iPhone's zone (8.4b)")
+  func keptSavedPlaces() throws {
+    #expect(
+      YourPrivacy.keptLines(try registration("put-here-ip-durham-kathmandu")) == [
+        "ID b8465956", "Where you are: Leeds, Europe/London", "Durham, Europe/London",
+        "Kathmandu, Asia/Kathmandu", "Your iPhone's time zone: Europe/London", "Snow units: cm",
+        "Evening before (about 6pm)",
+      ])
+    #expect(
+      YourPrivacy.keptLines(try registration("put-here-ip-kathmandu"))?.dropFirst(2).prefix(2)
+        == ["Kathmandu, Asia/Kathmandu", "Your iPhone's time zone: Europe/London"])
+    // A gone city page the server refused isn't kept, so isn't listed.
+    #expect(
+      YourPrivacy.keptLines(try registration("put-refused"))?.dropFirst(2).prefix(2)
+        == ["Durham, Europe/London", "Your iPhone's time zone: Europe/London"])
+    // The phone's zone only with a saved place, whatever the reply says of it.
+    var noSaved = try registration("put-here-ip-durham")
+    let response = noSaved.response
+    noSaved.response = DeviceResponse(
+      id: response.id, deviceTz: "Europe/London", here: response.here, saved: [],
+      alerts: response.alerts, seenAt: response.seenAt)
+    #expect(
+      YourPrivacy.keptLines(noSaved) == YourPrivacy.keptLines(try registration("put-here-ip")))
+    // With no free place, the saved places still show.
+    var away = try registration("put-here-ip-durham")
+    away.response = DeviceResponse(
+      id: response.id, deviceTz: response.deviceTz, here: nil, saved: response.saved,
+      alerts: response.alerts, seenAt: response.seenAt)
+    #expect(
+      YourPrivacy.keptLines(away) == [
+        "ID b8465956", "Durham, Europe/London", "Your iPhone's time zone: Europe/London",
+        "Snow units: cm", "Evening before (about 6pm)",
+      ])
+    for line in try #require(
+      YourPrivacy.keptLines(try registration("put-here-ip-durham-kathmandu")))
+    {
+      #expect(otherTopic(in: line) == nil, "\(line)")
+    }
+  }
+
   @Test("no where-you-are line while the server has no free place")
   func keptWithoutAFreePlace() throws {
     var kept = try registration("put-here-ip")
@@ -263,7 +305,7 @@ struct InfoPagesTests {
   func deleteStatus() {
     #expect(
       YourPrivacy.deleteStatus(.done)
-        == "Notifications are off. We've deleted your notification token, place, units and "
+        == "Notifications are off. We've deleted your notification token, places, units and "
         + "choices.")
     #expect(
       YourPrivacy.deleteStatus(.notYet)
