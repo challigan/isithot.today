@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// The place picker (iOS build spec, sections 10.3 and 17.2), over the app's own client and
@@ -11,6 +12,10 @@ import XCTest
 /// recent and saved places too) unless a test relaunches on purpose. The picker is a page of rows
 /// in the website's look (IsItUI's PlacePickerView): a place's star saves or removes it, and a
 /// row's press-and-hold menu holds the same and Delete, since the rows aren't a `List` to swipe.
+/// Every saved place has a bell beside its star (phase 8.4b, design 2.2): locked without the
+/// one-off purchase, whose page it opens over the picker, and with it, its notifications on or
+/// off; the line under the saved places says what a star and a bell do (`saved-line`, design
+/// 2.3). `-saved` launches with saved places, after `-resetStore`.
 final class PickerTests: XCTestCase {
   /// How many pickers the app's readout had counted (`debug-pickers`) before `openPicker` last
   /// tapped the place button, for `pickerCloses(in:after:within:)`.
@@ -141,11 +146,14 @@ final class PickerTests: XCTestCase {
 
   /// A result's star saves it in place: the sheet stays open on the same results and nothing is
   /// chosen. The place is then under Saved, not Recent, kept across launches, and chosen from
-  /// there, staying under Saved.
+  /// there, staying under Saved. Before it, with nothing saved in the free version, the line
+  /// under Saved says how to save a place and that a saved place can have notifications with the
+  /// purchase (design 2.3).
   @MainActor
   func testSavingAResult() throws {
     let first = launch(["-resetStore", "-network", "ip-first-launch,leeds-dry"])
     let field = openPicker(in: first)
+    wait(for: "saved-line", .staticText, in: first, label: Copy.noneSavedFree)
     field.typeText("Leeds")
     let star = first.buttons["star-result-0"]
     XCTAssertTrue(star.waitForExistence(timeout: 10), "No star beside Leeds")
@@ -189,8 +197,9 @@ final class PickerTests: XCTestCase {
   }
 
   /// A recent place's star moves it to Saved, and the saved place's star brings it back to the
-  /// top of Recent, with the hint under Saved again; saved again, its press-and-hold menu
-  /// removes it too.
+  /// top of Recent; saved again, its press-and-hold menu removes it too. The line under Saved
+  /// follows, in the free version: how to save a place with none saved, and with Leeds saved,
+  /// that its bell needs the purchase (design 2.3).
   @MainActor
   func testSavingARecentAndRemovingIt() throws {
     let app = launch(["-resetStore", "-network", "ip-first-launch,leeds-dry"])
@@ -201,9 +210,7 @@ final class PickerTests: XCTestCase {
     wait(for: "place", .button, in: app, label: "Place: Leeds. Change place.")
 
     _ = openPicker(in: app, focusing: false)
-    let hint = app.staticTexts["saved-hint"]
-    XCTAssertTrue(hint.waitForExistence(timeout: 10), "No hint under Saved")
-    XCTAssertEqual(hint.label, "Tap the star beside a place to save it here.")
+    wait(for: "saved-line", .staticText, in: app, label: Copy.noneSavedFree)
     let recentStar = app.buttons["star-recent-city:leeds-gb"]
     XCTAssertEqual(recentStar.label, "Save Leeds")
     watchedTap(
@@ -213,9 +220,9 @@ final class PickerTests: XCTestCase {
     XCTAssertTrue(
       saved.waitForExistence(timeout: 10), "Leeds didn't move to Saved; \(app.cancelsReport)")
     waitUntilGone("recent-heading", .staticText, in: app, "Recent, with its only place saved")
-    XCTAssertFalse(hint.exists, "The hint, with a place saved")
+    wait(for: "saved-line", .staticText, in: app, label: Copy.bellHintLocked)
 
-    // Removed by its star: back under Recent, the hint under Saved again.
+    // Removed by its star: back under Recent, the line for none saved under Saved again.
     let savedStar = app.buttons["star-saved-city:leeds-gb"]
     XCTAssertEqual(savedStar.label, "Remove Leeds from saved places")
     watchedTap(
@@ -224,7 +231,7 @@ final class PickerTests: XCTestCase {
     let recent = app.buttons["recent-city:leeds-gb"]
     XCTAssertTrue(
       recent.waitForExistence(timeout: 10), "Leeds isn't back under Recent; \(app.cancelsReport)")
-    XCTAssertTrue(hint.waitForExistence(timeout: 5), "No hint once nothing is saved")
+    wait(for: "saved-line", .staticText, in: app, label: Copy.noneSavedFree)
     XCTAssertFalse(saved.exists, "Leeds is still saved")
 
     // Saved again, then removed from its press-and-hold menu.
@@ -242,6 +249,96 @@ final class PickerTests: XCTestCase {
     waitUntilGone("saved-city:leeds-gb", .button, in: app, "Leeds is still saved")
     XCTAssertTrue(
       recent.waitForExistence(timeout: 10), "Leeds isn't back under Recent; \(app.cancelsReport)")
+  }
+
+  /// A saved place's bell, from the purchase to notifications off for the app (phase 8.4b; design
+  /// 2.2 and 2.3, decisions 6 to 11). In the free version, with the purchase for sale (`-purchase
+  /// bought`): Kathmandu, searched for and starred, has a bell beside its star, locked, which its
+  /// label says ("…, with the one-off purchase"; the lock drawn on it is hidden from VoiceOver,
+  /// and so from XCUITest). Its tap opens the purchase's page over the picker, not over the home
+  /// screen; bought there and closed, the bell has turned on by itself, the stand-in allowing
+  /// notifications at the prompt and "Evening before" turned on with it, as every switch was off
+  /// (`put-here-ip-kathmandu`), and the picker is still on the results. Under Saved, its row's
+  /// bell is on and there is no line under the saved places; turned off, the line says what a
+  /// bell does; unsaved, the line says how to save a place, and that its bell gets notifications.
+  /// Then a launch that owns the purchase (`-unlocked 1`) with Kathmandu saved and notifications
+  /// off for the app in iOS Settings (`-notifications denied`): the bell shows off, and its tap
+  /// says notifications are off for the app, with Open Settings, which asks for the app's
+  /// notification settings (read from the Debug recorder, `-openURLs record`).
+  @MainActor
+  func testTheBellJourney() throws {
+    let app = launch([
+      "-resetStore", "-network", "ip-first-launch", "-location", "denied", "-purchase", "bought",
+    ])
+    let field = openPicker(in: app)
+    field.typeText("Kathmandu")
+    let star = app.buttons["star-result-0"]
+    XCTAssertTrue(star.waitForExistence(timeout: 10), "No star beside Kathmandu")
+    tapStar("star-result-0", in: app, until: "Remove Kathmandu from saved places")
+    wait(for: "bell-result-0", .button, in: app, label: Copy.bellLocked("Kathmandu"))
+    attachScreen(of: app, named: "picker-bell-locked")
+    // Locked: the purchase's page, over the picker.
+    let locked = app.buttons["bell-result-0"]
+    watchedTap(
+      "bell-result-0", in: app, until: { app.showsPage(titled: Copy.upgradeTitle) },
+      { locked.tap() })
+    let buy = app.buttons["buy"]
+    XCTAssertTrue(
+      buy.waitForExistence(timeout: 10),
+      "No Buy on the purchase's page over the picker; \(app.cancelsReport)")
+    watchedTap("buy", in: app, until: { ElementRead(app, "upgrade-outcome").found }, { buy.tap() })
+    wait(for: "upgrade-outcome", .any, in: app, label: Copy.thanks)
+    let close = app.buttons["close-upgrade"]
+    watchedTap(
+      "close-upgrade", in: app, until: { app.lacksPage(titled: Copy.upgradeTitle) },
+      { close.tap() })
+    // Bought and closed: the bell it opened from is on, and the picker still on the results.
+    wait(for: "bell-result-0", .button, in: app, label: Copy.bellOff("Kathmandu"))
+    XCTAssertTrue(searchField(in: app).exists, "The purchase closed the picker")
+
+    clearTheSearch(in: app)
+    let id = "saved-search:27.7,85.3"
+    XCTAssertTrue(
+      app.buttons[id].waitForExistence(timeout: 10),
+      "Kathmandu isn't under Saved; \(app.cancelsReport)")
+    wait(for: "bell-" + id, .button, in: app, label: Copy.bellOff("Kathmandu"))
+    waitUntilGone("saved-line", .staticText, in: app, "The line under Saved, with a bell on")
+    tapBell("bell-" + id, in: app, until: Copy.bellOn("Kathmandu"))
+    wait(for: "bell-" + id, .button, in: app, label: Copy.bellOn("Kathmandu"))
+    wait(for: "saved-line", .staticText, in: app, label: Copy.bellHint)
+    let savedStar = app.buttons["star-" + id]
+    watchedTap("star-" + id, in: app, until: { gone(id, in: app) }, { savedStar.tap() })
+    waitUntilGone(id, .button, in: app, "Kathmandu is still saved")
+    wait(for: "saved-line", .staticText, in: app, label: Copy.noneSavedPaid)
+    app.terminate()
+
+    let denied = launch([
+      "-resetStore", "-network", "ip-first-launch", "-location", "denied", "-unlocked", "1",
+      "-saved", Self.kathmandu, "-notifications", "denied", "-openURLs", "record",
+    ])
+    _ = openPicker(in: denied, focusing: false)
+    XCTAssertTrue(
+      denied.buttons[id].waitForExistence(timeout: 10), "Kathmandu isn't saved (-saved)")
+    wait(for: "bell-" + id, .button, in: denied, label: Copy.bellOn("Kathmandu"))
+    let bell = denied.buttons["bell-" + id]
+    watchedTap(
+      "bell-" + id, in: denied, until: { found("bell-denied", in: denied) }, { bell.tap() })
+    wait(for: "bell-denied", .staticText, in: denied, label: Copy.notifyDenied)
+    wait(for: "bell-open-settings", .button, in: denied, label: Copy.openSettings)
+    wait(for: "bell-" + id, .button, in: denied, label: Copy.bellOn("Kathmandu"))
+    attachScreen(of: denied, named: "picker-bell-denied")
+    let open = denied.buttons["bell-open-settings"]
+    watchedTap(
+      "bell-open-settings", in: denied, until: { notificationSettingsAsked(in: denied) },
+      { open.tap() })
+    let asked = readElement(
+      "debug-opened", .staticText, in: denied, within: 10,
+      "to hold the app's notification settings"
+    ) { $0.one && $0.value == UIApplication.openNotificationSettingsURLString }
+    if let failure = asked {
+      XCTFail(
+        "debug-opened never held \(UIApplication.openNotificationSettingsURLString): \(failure)")
+    }
   }
 
   /// With location access off, "Use my location" says so, with Open Settings, and the search
@@ -362,15 +459,19 @@ final class PickerTests: XCTestCase {
   }
 
   /// The picker passes the audit with saved and recent places, at Large and at AX3: Kathmandu
-  /// saved from a search, Leeds a recent place, location access off, and the keyboard down.
+  /// saved from a search, its bell locked beside its star (phase 8.4b), Leeds a recent place,
+  /// location access off, and the keyboard down. At AX3 a saved row's bell and star are on their
+  /// own line under its name (design 2.2).
   @MainActor
   func testSavedPlacesAccessibilityAudit() throws {
     try auditSavedPlaces(at: .large, named: "picker-saved")
   }
 
+  /// At AX3, then one launch at AX5 (`checkTheBellRowAtAX5`).
   @MainActor
   func testSavedPlacesAccessibilityAuditAtAX3() throws {
     try auditSavedPlaces(at: .ax3, named: "picker-saved-ax3")
+    try checkTheBellRowAtAX5()
   }
 
   /// On a dark band (`aberdeen-snow`, the snow band, light ink on deep purple), the picker
@@ -396,6 +497,86 @@ final class PickerTests: XCTestCase {
   }
 
   // MARK: - Helpers
+
+  /// The search screen's words for the bells and the line under Saved (phase 8.4b), as
+  /// packages/mobile's `APP_COPY` words them (AppCopy.swift), and the purchase's page's: typed
+  /// here, as the other suites type theirs, since the UI tests link none of the app's modules.
+  private enum Copy {
+    static let noneSavedFree =
+      "Tap the star beside a place to save it. Saved places can have notifications with the "
+      + "one-off purchase."
+    static let noneSavedPaid =
+      "Tap the star beside a place to save it, then tap its bell to get notifications."
+    static let bellHintLocked =
+      "Tap a place's bell to get notifications for it, with the one-off purchase."
+    static let bellHint = "Tap a place's bell to get notifications for it."
+    static let notifyDenied = "Notifications are off for this app in Settings."
+    static let openSettings = "Open Settings"
+    static let upgradeTitle = "No ads, widgets and more"
+    static let thanks =
+      "Thank you. Ads are off, widgets are on and you can turn on notifications for saved places."
+
+    /// A bell's label as it shows: locked, off (a tap turns it on), and on (a tap turns it off).
+    static func bellLocked(_ place: String) -> String {
+      "Turn on notifications for \(place), with the one-off purchase"
+    }
+
+    static func bellOn(_ place: String) -> String { "Turn on notifications for \(place)" }
+    static func bellOff(_ place: String) -> String { "Turn off notifications for \(place)" }
+  }
+
+  /// Kathmandu as `search-kathmandu`'s result has it, for `-saved`: the query the picker's star
+  /// saves, so its set is `put-here-ip-kathmandu`'s.
+  private static let kathmandu =
+    "lat=27.7&lon=85.3&source=search&name=Kathmandu&region=Bagmati%20Province&country=NP"
+    + "&geonameId=1283240&elevation=50"
+
+  /// Rovaniemi, a searched place with a long name, for `-saved`.
+  private static let rovaniemi = "lat=66.5&lon=25.73&source=search&name=Rovaniemi&country=FI"
+
+  /// AX5, the largest accessibility text size, which `TextSize` has no case for.
+  private static let ax5 = [
+    "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
+  ]
+
+  /// One launch at AX5 with Rovaniemi saved, its bell locked: the row's bell and star on their
+  /// own line under the name (design 2.2), so "Rovaniemi" isn't cut mid-word. Attached as
+  /// `picker-saved-ax5` for the contact sheet, then the audit's clipped-text check alone, run as
+  /// every audit's calls are (`runAudit`, again once on the same screen should it not finish in
+  /// time); its other kinds are the AX3 audit's. Fails listing each issue.
+  @MainActor
+  private func checkTheBellRowAtAX5() throws {
+    let app = launch(
+      [
+        "-resetStore", "-network", "ip-first-launch", "-location", "denied", "-saved",
+        Self.rovaniemi,
+      ] + Self.ax5)
+    _ = openPicker(in: app, focusing: false)
+    let id = "saved-search:66.5,25.73"
+    XCTAssertTrue(
+      app.buttons[id].waitForExistence(timeout: 10), "Rovaniemi isn't saved (-saved)")
+    wait(for: "bell-" + id, .button, in: app, label: Copy.bellLocked("Rovaniemi"))
+    attachScreen(of: app, named: "picker-saved-ax5")
+    let times = AuditTimes()
+    defer { attachText(times.text, as: "audit-the-picker-at-ax5-times") }
+    let audited = ScreenLayout(app)
+    let issues = try runAudit(
+      of: app, for: .textClipped, at: "the picker at AX5", timing: times,
+      onTimeout: .runAgain {
+        guard app.state == .runningForeground else {
+          return "the app isn't in the foreground (state \(app.state.rawValue))"
+        }
+        return ScreenLayout.change(from: audited, to: ScreenLayout(app))
+      })
+    let found = issues.map {
+      "\($0.auditType.names): \($0.compactDescription) (\(describeElement($0.element))): "
+        + $0.detailedDescription
+    }
+    XCTAssertTrue(
+      found.isEmpty,
+      "\(found.count) clipped-text issues on the picker at AX5:\n"
+        + found.joined(separator: "\n"))
+  }
 
   /// Saves Kathmandu from a search and chooses Leeds, a recent place, at `size`, with location
   /// access off and its line and Open Settings showing, then audits the picker with the
@@ -527,6 +708,18 @@ final class PickerTests: XCTestCase {
     watchedTap(id, in: app, until: turned) { star.tap() }
   }
 
+  /// Taps the bell identified `id`, watched (`watchedTap`) until it reads `label`, what its tap
+  /// does next: "Turn on notifications for Kathmandu" once off, "Turn off …" once on.
+  @MainActor
+  private func tapBell(_ id: String, in app: XCUIApplication, until label: String) {
+    let bell = app.buttons[id]
+    let turned = { () -> Bool in
+      let read = ElementRead(app, id, .button)
+      return read.one && read.label == label
+    }
+    watchedTap(id, in: app, until: turned) { bell.tap() }
+  }
+
   /// Taps the search box's clear button, watched (`watchedTap`) until it has gone, as it goes
   /// with the text it clears.
   @MainActor
@@ -586,6 +779,15 @@ final class PickerTests: XCTestCase {
     asksForSettings(ElementRead(app, "debug-opened", .staticText))
   }
 
+  /// Whether one read of the app finds the recorder's line holding the app's notification
+  /// settings (`UIApplication.openNotificationSettingsURLString`), as a bell's Open Settings asks
+  /// for them: never the app's settings page alone, which the location's Open Settings asks for.
+  @MainActor
+  private func notificationSettingsAsked(in app: XCUIApplication) -> Bool {
+    let read = ElementRead(app, "debug-opened", .staticText)
+    return read.one && read.value == UIApplication.openNotificationSettingsURLString
+  }
+
   /// The picker's search box (`place-search`), whatever type XCUITest gives it: a text field
   /// marked as a search field, the app's own since the system's search went.
   @MainActor
@@ -613,11 +815,13 @@ final class PickerTests: XCTestCase {
     }
   }
 
-  /// Waits up to 15 seconds until the one element identified `id` of `type` reads `label`, read
-  /// from snapshots (`readElement`, by `readUntil`'s rules, as the heading is); fails, stopping
-  /// the test, with what the last read found, never a fresh read. Not a predicate in a waiter,
-  /// whose evaluation a busy simulator can stretch past the deadline, a verdict then made on no
-  /// read (docs/DECISIONS.md, "What PR #46's first macOS run showed").
+  /// Waits up to 15 seconds until the element identified `id` reads `label`: of a `type`, the
+  /// only one; of any type (the purchase's line, whatever type XCUITest gives it), the first, as
+  /// UpgradeTests reads it. Read from snapshots (`readElement`, by `readUntil`'s rules, as the
+  /// heading is); fails, stopping the test, with what the last read found, never a fresh read.
+  /// Not a predicate in a waiter, whose evaluation a busy simulator can stretch past the
+  /// deadline, a verdict then made on no read (docs/DECISIONS.md, "What PR #46's first macOS run
+  /// showed").
   @MainActor
   private func wait(
     for id: String,
@@ -626,7 +830,7 @@ final class PickerTests: XCTestCase {
     label: String
   ) {
     let read = readElement(id, type, in: app, within: 15, "to read \"\(label)\"") {
-      $0.one && $0.label == label
+      (type == .any ? $0.found : $0.one) && $0.label == label
     }
     if let failure = read {
       XCTFail("\(id) never read \"\(label)\": \(failure)")

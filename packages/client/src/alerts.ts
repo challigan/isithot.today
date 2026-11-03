@@ -1,15 +1,17 @@
 /**
  * Keeping the server's record of an app's notifications in step with the app (`PUT` and `DELETE`
- * on `/api/v1/devices`, version 2): where you are, the free place, and what to send for it;
- * whether anything needs sending at all; and what the server's replies mean, a test
- * notification's (`POST /api/v1/devices/test`) too. The app keeps the switches and the phone's
- * last cell in `alerts.v2`, and the last registration the server took in `alertSync.v2`.
+ * on `/api/v1/devices`, version 2): where you are, the free place, and what to send for it; the
+ * saved places' bells, which the one-off purchase unlocks (phase 8.4b), and which of them are
+ * sent; whether anything needs sending at all; and what the server's replies mean, a test
+ * notification's (`POST /api/v1/devices/test`) too. The app keeps the switches, the phone's last
+ * cell and the bells in `alerts.v2`, and the last registration the server took in `alertSync.v2`.
  *
  * Swift: `IsItLogic/AlertSync.swift`, `AlertSettings.swift` and `DeviceReplies.swift`, checked
  * against the golden vectors in `alerts.json`.
  */
 import { ALERTS, COPY, isValidLatLon, type Units } from '@isithot/core';
-import { CLIENT } from './config';
+import { CLIENT, PLACES } from './config';
+import type { SavedPlace } from './saved';
 import { deviceTarget, targetFromQuery, targetKey, type CoordsTarget, type Target } from './target';
 
 const MINUTE = 60 * 1000;
@@ -65,6 +67,12 @@ export function herePlace(o: {
 /** Where you are as a registration names it: for the server to locate, or the phone's point. */
 export type HereBody = { source: 'ip' } | { lat: number; lon: number; source: 'device' };
 
+/**
+ * A saved place as a registration may send it: a city page or a searched place, never the phone's
+ * own point (`savedForBody` gives only these).
+ */
+export type SavedTarget = Extract<Target, { kind: 'city' }> | (CoordsTarget & { source: 'search' });
+
 /** A saved place as a registration names it, in a form `/api/v1/today` takes too. */
 export type SavedBody =
   | { place: string }
@@ -88,8 +96,11 @@ export interface RegistrationBody {
   token: string;
   units: Units;
   appVersion: string;
+  /** The phone's own zone, only with a saved place: the server sends those silently at night. */
+  deviceTz?: string;
   alerts: { snow: AlertPrefs };
   here: HereBody;
+  /** At most `ALERTS.savedPlacesMax`, in saved order. */
   saved: SavedBody[];
 }
 
@@ -101,7 +112,26 @@ function hereBody(here: HerePlace): HereBody {
   return { lat: here.target.lat, lon: here.target.lon, source: 'device' };
 }
 
-/** The registration: the switches for where you are, and no saved place. */
+/**
+ * A saved place as the today query names it (`todayQuery`), with the same fields: a city by its
+ * slug alone, a searched place by its point and the words it has.
+ */
+function savedBody(t: SavedTarget): SavedBody {
+  if (t.kind === 'city') return { place: t.slug };
+  const p: Extract<SavedBody, { source: 'search' }> = { lat: t.lat, lon: t.lon, source: 'search' };
+  if (t.name) p.name = t.name;
+  if (t.region) p.region = t.region;
+  if (t.country) p.country = t.country;
+  if (t.geonameId) p.geonameId = t.geonameId;
+  if (t.elevation !== undefined) p.elevation = t.elevation;
+  return p;
+}
+
+/**
+ * The registration, the device's whole set: the switches, which are one set for every place;
+ * where you are; and the saved places with a bell on (`savedForBody`, none by default), in that
+ * order, with the phone's own zone (`deviceTz`, as iOS names it) only while there is one.
+ */
 export function registrationBody(o: {
   token: string;
   env: PushEnv;
@@ -109,7 +139,10 @@ export function registrationBody(o: {
   units: Units;
   prefs: AlertPrefs;
   appVersion: string;
+  saved?: readonly SavedTarget[];
+  deviceTz?: string | null;
 }): RegistrationBody {
+  const saved = (o.saved ?? []).map(savedBody);
   return {
     v: 2,
     app: 'snow',
@@ -118,11 +151,12 @@ export function registrationBody(o: {
     token: o.token,
     units: o.units,
     appVersion: o.appVersion,
+    ...(saved.length && o.deviceTz ? { deviceTz: o.deviceTz } : {}),
     alerts: {
       snow: { evening: o.prefs.evening, morning: o.prefs.morning, possible: o.prefs.possible },
     },
     here: hereBody(o.here),
-    saved: [],
+    saved,
   };
 }
 
@@ -150,14 +184,31 @@ export interface Sent {
 }
 
 /**
- * What to do about the server's record, in order: delete it (if there is one) when no
- * notification is switched on or the permission is denied ("also when snow is possible" only
- * widens the other two, so alone it switches nothing on); wait for the push token; nothing while
- * the server has refused this very registration (`refused`, a 400: it couldn't tell where you
- * are) and the app hasn't become active since; otherwise send it when it has changed since `last`
- * was sent, when `ALERTS.heartbeatDays` have passed since, or, while where you are is approximate,
- * when the app became active (`activeAt`) `ALERTS.hereRefreshMinutes` or more after it: the
- * server locates the connection afresh at each registration.
+ * Whether anything can be sent: the evening or the morning switched on ("also when snow is
+ * possible" only widens the other two, so alone it switches nothing on), and the permission not
+ * denied. The switches are one set for every place, where you are and each saved place alike, so
+ * without them the set is deleted however many bells are on (`alertAction`), and every bell shows
+ * off (`bellState`'s `active`), kept for when a switch comes back.
+ */
+export function alertsActive(prefs: AlertPrefs, permission: Permission): boolean {
+  return (prefs.evening || prefs.morning) && permission !== 'denied';
+}
+
+/**
+ * What to do about the server's record, in order: delete it (if there is one, or may be) when
+ * nothing can be sent (`alertsActive`), whatever bells are on; wait for the push token; nothing
+ * while the server has refused this very registration (`refused`, a 400: it couldn't tell where
+ * you are) and the app hasn't become active since; otherwise send it when it has changed since
+ * `last` was sent (a switch, the units, where you are, a saved place with a bell on, or the
+ * phone's zone while one is sent), when `ALERTS.heartbeatDays` have passed since, or, while where
+ * you are is approximate, when the app became active (`activeAt`) `ALERTS.hereRefreshMinutes` or
+ * more after it: the server locates the connection afresh at each registration. `saved` and
+ * `deviceTz` are `registrationBody`'s, as `savedForBody` gives them: a refund sends none, so the
+ * set changes and the server deletes the saved places. `unconfirmed` is a set sent since `last`
+ * that the server may hold though no reply to it was kept: a 429 for the places new to the set
+ * comes after the server stored where you are and the first `ALERTS.newPlacesPerPut`, a 503 after
+ * it stored the rest, and a reply lost may follow a set stored; with nothing to send it is
+ * deleted as `last` would be.
  */
 export function alertAction(o: {
   prefs: AlertPrefs;
@@ -171,10 +222,11 @@ export function alertAction(o: {
   now: number;
   env: PushEnv;
   appVersion: string;
+  saved?: readonly SavedTarget[];
+  deviceTz?: string | null;
+  unconfirmed?: boolean;
 }): AlertAction {
-  if ((!o.prefs.evening && !o.prefs.morning) || o.permission === 'denied') {
-    return o.last ? 'delete' : 'none';
-  }
+  if (!alertsActive(o.prefs, o.permission)) return o.last || o.unconfirmed ? 'delete' : 'none';
   if (!o.token) return 'needsToken';
   const said = fingerprint(
     registrationBody({
@@ -184,6 +236,8 @@ export function alertAction(o: {
       units: o.units,
       prefs: o.prefs,
       appVersion: o.appVersion,
+      saved: o.saved ?? [],
+      deviceTz: o.deviceTz ?? null,
     }),
   );
   if (o.refused && o.refused.fingerprint === said && o.refused.at >= o.activeAt) return 'none';
@@ -211,6 +265,182 @@ export function setAlert(prefs: AlertPrefs, which: AlertSwitch, on: boolean): Al
   next[which] = on;
   if (!next.evening && !next.morning) next.possible = false;
   return next;
+}
+
+// ---- The saved places' bells (phase 8.4b) ----
+//
+// A bell is a saved place's notifications, kept by the place's `targetKey` in `alerts.v2`'s
+// `bells`, never on the saved place itself. The one-off purchase unlocks them; where you are needs
+// none. The switches stay one set for every place.
+
+/** How a saved place's bell shows: locked without the purchase, else off or on. */
+export type BellState = 'locked' | 'off' | 'on';
+
+/**
+ * A saved place's bell: locked without the one-off purchase (a tap opens it), whatever else;
+ * on while its bell is on (`on`) and something can be sent (`active`, `alertsActive`); otherwise
+ * off. While nothing can be sent (every switch off, or notifications denied in iOS Settings)
+ * every bell shows off, and the bells on are kept underneath.
+ */
+export function bellState(o: { on: boolean; unlocked: boolean; active: boolean }): BellState {
+  if (!o.unlocked) return 'locked';
+  return o.on && o.active ? 'on' : 'off';
+}
+
+/**
+ * The keys of `savedKeys` that are in `on`, in saved order, each once, and at most
+ * `ALERTS.savedPlacesMax` (as many as can be saved, `PLACES.savedMax`): the first in saved order.
+ */
+function inSavedOrder(on: ReadonlySet<string>, savedKeys: readonly string[]): string[] {
+  const kept: string[] = [];
+  for (const key of savedKeys) {
+    if (kept.length >= ALERTS.savedPlacesMax) break;
+    if (on.has(key) && !kept.includes(key)) kept.push(key);
+  }
+  return kept;
+}
+
+/**
+ * The bells once `key`'s is turned on or off: only saved places have one (`savedKeys`, each a
+ * saved place's `targetKey`, in saved order), so a key that isn't saved changes nothing and any
+ * bell of a place no longer saved goes; in saved order, each once, at most
+ * `ALERTS.savedPlacesMax`. A new list.
+ */
+export function setBell(
+  bells: readonly string[],
+  key: string,
+  on: boolean,
+  savedKeys: readonly string[],
+): string[] {
+  const next = new Set(bells);
+  if (on) next.add(key);
+  else next.delete(key);
+  return inSavedOrder(next, savedKeys);
+}
+
+/**
+ * The bells of places still saved, in saved order, each once, at most `ALERTS.savedPlacesMax`:
+ * after an unsave, or a lenient read of `alerts.v2`. A refund keeps them (`savedForBody` sends
+ * none), so a restore brings them back.
+ */
+export function keptBells(bells: readonly string[], savedKeys: readonly string[]): string[] {
+  return inSavedOrder(new Set(bells), savedKeys);
+}
+
+/**
+ * Whether the saved places' bells are the phone's to send: the purchase, once StoreKit has said
+ * (`unlocked`); until then (null, at launch), whether the last registration the server took had
+ * saved places, so a launch never deletes them and adds them again while the kept purchase and
+ * StoreKit disagree for a moment.
+ */
+export function ownsSaved(unlocked: boolean | null, last: DeviceReply | null): boolean {
+  return unlocked ?? (last !== null && last.saved.length > 0);
+}
+
+/** A saved place as the server takes it in `saved`: a city with a slug, a searched point on Earth. */
+function sendable(t: SavedPlace['target']): SavedTarget | null {
+  if (t.kind === 'city') return t.slug.trim() ? t : null;
+  return t.source === 'search' && isValidLatLon(t.lat, t.lon) ? (t as SavedTarget) : null;
+}
+
+/**
+ * The saved places a registration sends: none unless `owns` (`ownsSaved`); else the targets of
+ * those with a bell on, in saved order, each place once, at most `ALERTS.savedPlacesMax`. A place
+ * the server would refuse the whole set for (the phone's own point, a point not on Earth, a city
+ * with no slug, none of which can be saved) is left out.
+ */
+export function savedForBody(
+  saved: readonly SavedPlace[],
+  bells: readonly string[],
+  owns: boolean,
+): SavedTarget[] {
+  if (!owns) return [];
+  const on = new Set(bells);
+  const sent = new Set<string>();
+  const targets: SavedTarget[] = [];
+  for (const place of saved) {
+    if (targets.length >= ALERTS.savedPlacesMax) break;
+    const key = targetKey(place.target);
+    const target = sendable(place.target);
+    if (!target || !on.has(key) || sent.has(key)) continue;
+    sent.add(key);
+    targets.push(target);
+  }
+  return targets;
+}
+
+/**
+ * What a tap on a saved place's bell does. `on` and `onWithHere` give the bells and the switches
+ * to keep (then register); `onWithHere` when the tap turned "Evening before" on as well, as every
+ * switch was off, which is for where you are too, so the app says so. `off` gives the bells.
+ * `needsPurchase`, `needsPermission` and `denied` change nothing: the upgrade sheet opens; the app
+ * asks for notifications (the system's prompt) and taps again with the answer; or it shows that
+ * notifications are off for the app in Settings.
+ */
+export type BellTap =
+  | { kind: 'needsPurchase' }
+  | { kind: 'needsPermission' }
+  | { kind: 'denied' }
+  | { kind: 'on' | 'onWithHere'; bells: string[]; prefs: AlertPrefs }
+  | { kind: 'off'; bells: string[] };
+
+/**
+ * A tap on `key`'s bell, in order: without the purchase, `needsPurchase`; a place that isn't
+ * saved has no bell (`off`, the bells as kept); a bell that shows on (`bellState`) turns off, the
+ * switches as they are; otherwise it turns on, once the permission allows it (`denied` when it is
+ * denied, `needsPermission` when never asked), and with every switch off "Evening before" turns
+ * on with it (`onWithHere`). The switches are one set for every place: a bell kept on while they
+ * were off shows off, and a tap brings it back with the evening.
+ */
+export function tapBell(o: {
+  key: string;
+  bells: readonly string[];
+  savedKeys: readonly string[];
+  prefs: AlertPrefs;
+  unlocked: boolean;
+  permission: Permission;
+}): BellTap {
+  if (!o.unlocked) return { kind: 'needsPurchase' };
+  if (!o.savedKeys.includes(o.key)) return { kind: 'off', bells: keptBells(o.bells, o.savedKeys) };
+  const active = alertsActive(o.prefs, o.permission);
+  if (bellState({ on: o.bells.includes(o.key), unlocked: true, active }) === 'on') {
+    return { kind: 'off', bells: setBell(o.bells, o.key, false, o.savedKeys) };
+  }
+  if (o.permission === 'denied') return { kind: 'denied' };
+  if (o.permission === 'notDetermined') return { kind: 'needsPermission' };
+  const bells = setBell(o.bells, o.key, true, o.savedKeys);
+  if (o.prefs.evening || o.prefs.morning) {
+    const { evening, morning, possible } = o.prefs;
+    return { kind: 'on', bells, prefs: { evening, morning, possible } };
+  }
+  return { kind: 'onWithHere', bells, prefs: setAlert(o.prefs, 'evening', true) };
+}
+
+/**
+ * A line under the search screen's saved places, by its copy key (`APP_COPY`): `savedFull` says
+ * the list is full; the rest say what a bell does, with the purchase where it is needed.
+ */
+export type SavedLine =
+  'savedFull' | 'savedLineNoneFree' | 'savedLineNonePaid' | 'bellHint' | 'bellHintLocked';
+
+/**
+ * The search screen's lines under its saved places, with nothing typed, one per state (design
+ * 2.3): with nothing saved, how to save a place and what a saved place can have
+ * (`savedLineNoneFree` without the purchase, `savedLineNonePaid` with it); with places saved,
+ * `savedFull` first once there are `PLACES.savedMax`, then how a bell works, with the purchase
+ * (`bellHintLocked`, whatever the bells) or, with it, until a bell shows on (`bellHint`;
+ * `anyBellOn` is a saved place's `bellState` being `on`).
+ */
+export function savedLines(o: {
+  savedCount: number;
+  unlocked: boolean;
+  anyBellOn: boolean;
+}): SavedLine[] {
+  if (o.savedCount < 1) return [o.unlocked ? 'savedLineNonePaid' : 'savedLineNoneFree'];
+  const lines: SavedLine[] = o.savedCount >= PLACES.savedMax ? ['savedFull'] : [];
+  if (!o.unlocked) lines.push('bellHintLocked');
+  else if (!o.anyBellOn) lines.push('bellHint');
+  return lines;
 }
 
 /** One of the set's places as the server's answer names it. */

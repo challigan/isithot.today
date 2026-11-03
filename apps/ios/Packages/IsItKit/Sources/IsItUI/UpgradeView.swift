@@ -2,15 +2,18 @@ import IsItLogic
 import SwiftUI
 import UIKit
 
-/// The upgrade page (spec 10.5) in Settings' look, on the content surface, every part one the
-/// audits already pass in Settings and the mail fallback: the title on the page; what the
-/// purchase is, and Family Sharing once the product says it is shared, on a reading card; then
+/// The upgrade page (spec 10.5, design 2.10) in Settings' look, on the content surface, every part
+/// one the audits already pass in Settings and the mail fallback: the title on the page; on a
+/// reading card, what the purchase brings, a line each beside a checkmark VoiceOver doesn't read
+/// (`upgrade-benefit-1` to `-3`: no ads, widgets, notifications for saved places), then what the
+/// purchase is, and Family Sharing once the product says it is shared; then
 /// what can be done: a spinner while StoreKit hasn't answered, "Buy for £1.99" as the primary
 /// pill (ink, its words in the pill colour, as "Copy address"), a card saying why it can't be
 /// bought, or, once owned, nothing; the last outcome on a card, the thanks beside a seal; and
 /// Restore purchase as a row of a card, as in Settings, its result beneath it. No price is typed
 /// anywhere: it is StoreKit's, in `UpgradePage`. Settings pushes it on its own stack; the home
-/// row and `willitsnow://upgrade` open it as a sheet of its own (`UpgradeSheetView`).
+/// row, `willitsnow://upgrade` and a saved place's locked bell in the picker open it as a sheet
+/// of its own (`UpgradeSheetView`).
 ///
 /// The page asks for the product again as it appears, and lets a failure's line and the restore
 /// result go as it leaves (`UpgradeActions`). Its outcome is announced here, as it changes: one
@@ -33,6 +36,16 @@ struct UpgradeView: View {
   var body: some View {
     SheetPage(title: page.title) {
       ReadingCard {
+        ForEach(Array(page.benefits.enumerated()), id: \.offset) { index, benefit in
+          HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: "checkmark")
+              .font(.body)
+              .accessibilityHidden(true)
+            Text(verbatim: benefit)
+              .paragraph()
+              .accessibilityIdentifier("upgrade-benefit-\(index + 1)")
+          }
+        }
         Text(verbatim: page.body)
           .paragraph()
           .accessibilityIdentifier("upgrade-body")
@@ -172,10 +185,10 @@ struct RestoreRow: View {
   }
 }
 
-/// The upgrade page as a sheet of its own, from the home row and `willitsnow://upgrade`: the page
-/// on its own stack, with Close at the top right (`close-upgrade`), at full height as the mail
-/// fallback is. Settings pushes the same page on its own stack instead, so the page is never a
-/// sheet over a sheet.
+/// The upgrade page as a sheet of its own, from the home row, `willitsnow://upgrade` and a saved
+/// place's locked bell (over the picker, phase 8.4b): the page on its own stack, with Close at the
+/// top right (`close-upgrade`), at full height as the mail fallback is. Settings pushes the same
+/// page on its own stack instead, so the page is never a sheet over Settings' sheet.
 public struct UpgradeSheetView: View {
   let page: UpgradePage
   let actions: UpgradeActions

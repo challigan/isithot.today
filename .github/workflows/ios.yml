@@ -134,8 +134,11 @@ jobs:
     # card's four audit cases away (the card that asked for a place at approximate location has
     # gone; the one card is audited on leeds-dry's middle page at Large and AX3), so its UI plan
     # should be a few minutes shorter; its pull request records the plan's minutes before and
-    # after (the timings step's), against a budget of 75 for the UI plan. An iteration run
-    # (`only`, above) takes the setup and the build, about 15 minutes, and its tests.
+    # after (the timings step's), against a budget of 75 for the UI plan. Phase 8.4b adds two UI
+    # tests (PickerTests' bell journey, two launches, and NotificationsTests' saved places) and
+    # one AX5 launch to the picker's AX3 audit test, about 2 to 3 minutes at 44 s a test; its pull
+    # request records the plan's minutes before and after too. An iteration run (`only`, above)
+    # takes the setup and the build, about 15 minutes, and its tests.
     timeout-minutes: 120
     # The attachments' artefact ID, set only when they were uploaded. The runner evaluates job
     # outputs after the last step whatever the result, so failed tests still set it.

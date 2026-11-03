@@ -29,6 +29,16 @@ import Observation
 /// once, at its `Retry-After`. While where you are is approximate, the set is sent again on
 /// becoming active an hour after the last (`AlertSync.action`); a set the server couldn't place
 /// waits until it changes or the app becomes active again.
+///
+/// The saved places' bells (phase 8.4b, design 4.6): `alerts.v2` keeps them by the place's
+/// `Target.key`, in saved order; the app tells the model the saved places and StoreKit's answer
+/// about the one-off purchase (`savedChanged`, `unlockedChanged`); a tap goes through the client's
+/// rule (`toggleBell`, `AlertSync.tapBell`). The set sends those with a bell on only with the
+/// purchase (before StoreKit has said, as the last registration had them), with the phone's own
+/// zone. The switches are one set for every place: with every switch off, or notifications
+/// denied, the set is deleted and the bells kept underneath, shown off; after a refund they are
+/// kept, locked, and sent again on a restore; an unsaved place's bell goes, and comes back if it
+/// is saved again before the app closes. The picker shows and taps them (`PickerBells`).
 @MainActor
 @Observable
 public final class NotificationsModel {
@@ -51,6 +61,9 @@ public final class NotificationsModel {
   @ObservationIgnored private let clock: any AppClock
   @ObservationIgnored private let env: RegistrationBody.Env
   @ObservationIgnored private let appVersion: String
+  /// The phone's own zone as iOS names it, `TimeZone.current.identifier` in the app: read at each
+  /// sync, so a phone that has travelled sends its new zone (phase 8.4b).
+  @ObservationIgnored private let deviceZone: @Sendable () -> String
   /// The place on screen, as last given.
   @ObservationIgnored private var target: Target?
   /// The units every request asks in, as last given: nil before the first answer chose them.
@@ -71,6 +84,13 @@ public final class NotificationsModel {
   /// The set the server last refused (400 `bad_location`), and when: until it stores one, or
   /// every switch goes off.
   @ObservationIgnored private var refused: AlertSync.Sent?
+  /// The token of a set sent that the server may hold though no reply to it was kept: a 429 for
+  /// the places new to the set comes after the server stored where you are and the first three
+  /// (decision 20), a 503 after it stored the rest (decision 32), and a reply lost may follow a
+  /// set stored. With nothing to send, the DELETE goes to it when no registration is kept
+  /// (`AlertSync.action`'s `unconfirmed`); nil again once a reply says what the server holds. In
+  /// memory only: a relaunch with a switch on sends the set again.
+  @ObservationIgnored private var unconfirmed: String?
   /// The start, once begun: whatever needs it waits for it.
   @ObservationIgnored private var starting: Task<Void, Never>?
   /// Whether the start has read and applied the permission: nothing is synced before.
@@ -82,10 +102,16 @@ public final class NotificationsModel {
   @ObservationIgnored private var retryWork: ScheduledWork?
   /// The first switch's turning on, while its prompt is out.
   @ObservationIgnored private var turningOn: Task<Bool, Never>?
+  /// A bell's prompt for the permission, while it is out: one for every tap meanwhile.
+  @ObservationIgnored private var asking: Task<Void, Never>?
+  /// The bells an unsaving dropped this session, by key (design decision 7): the place saved
+  /// again before the app closes gets its bell back. In memory only.
+  @ObservationIgnored private var unsavedBells: [String] = []
 
-  /// A model over what `store` keeps. Nothing is asked of the system until the start: the
-  /// permission and location access are `.notDetermined` until they are read, and where you are
-  /// approximate.
+  /// A model over what `store` keeps, on a phone in `deviceZone`'s zone. Nothing is asked of the
+  /// system until the start: the permission and location access are `.notDetermined` until they
+  /// are read, and where you are approximate. The saved places and the purchase come from the
+  /// app (`savedChanged`, `unlockedChanged`).
   public init(
     platform: any NotificationPlatform,
     store: any NotificationStore,
@@ -93,8 +119,10 @@ public final class NotificationsModel {
     location: any LocationService,
     clock: any AppClock,
     env: RegistrationBody.Env,
-    appVersion: String
+    appVersion: String,
+    deviceZone: @escaping @Sendable () -> String = { TimeZone.current.identifier }
   ) {
+    self.deviceZone = deviceZone
     self.platform = platform
     self.store = store
     self.client = client
@@ -175,6 +203,7 @@ public final class NotificationsModel {
   public func setSwitch(_ which: AlertSwitch, on: Bool) async {
     await ensureStarted()
     if let turningOn { _ = await turningOn.value }
+    if let asking { await asking.value }
     let prefs = state.settings.prefs
     guard which != .possible, on, !prefs.evening, !prefs.morning else {
       keep(AlertSync.setting(prefs, which, on: on))
@@ -245,6 +274,135 @@ public final class NotificationsModel {
     if state.delete == .done || state.delete == .notYet { state.delete = .idle }
   }
 
+  // MARK: - The saved places' bells (phase 8.4b)
+
+  /// The saved places, in saved order, as the app keeps them (`AppHooks.savedChanged`): once at
+  /// the start, then after each star or Remove. The registration sends those with a bell on; a
+  /// place no longer saved loses its bell (`AlertSync.keptBells`), remembered for the session, so
+  /// the place saved again before the app closes gets it back (design decision 7), and its record
+  /// goes with the next sync, which follows.
+  public func savedChanged(_ saved: [SavedPlace]) {
+    let before = state.saved.map(\.target.key)
+    let keys = saved.map(\.target.key)
+    if state.saved != saved { state.saved = saved }
+    let kept = state.settings.bells
+    var next = kept
+    for key in keys where !Self.has(before, key) && Self.has(unsavedBells, key) {
+      next = AlertSync.settingBell(next, key, on: true, savedKeys: keys)
+      unsavedBells.removeAll { $0.utf8.elementsEqual(key.utf8) }
+    }
+    next = AlertSync.keptBells(next, savedKeys: keys)
+    for key in kept where !Self.has(next, key) && !Self.has(unsavedBells, key) {
+      unsavedBells.append(key)
+    }
+    keep(bells: next)
+    sync()
+  }
+
+  /// StoreKit's answer about the one-off purchase (`AppHooks.unlockedChanged`): step 5's, then
+  /// each one after it. With it the bells are sent; without it (a refund, Family Sharing ended)
+  /// none is, so the server deletes the saved places' records, and the bells are kept, locked,
+  /// for a restore (design 2.7). The same answer again changes nothing.
+  public func unlockedChanged(_ owned: Bool) {
+    guard state.unlocked != owned else { return }
+    state.unlocked = owned
+    sync()
+  }
+
+  /// A tap on a saved place's bell, shown with the purchase `unlocked` or not (client `tapBell`):
+  /// without it, `.needsPurchase`, and nothing else is done or asked. With it, a bell that shows on
+  /// turns off; otherwise it turns on, once the permission allows it: the system's prompt when
+  /// never asked (one for every tap meanwhile, and after the first switch's own), `.denied` when
+  /// denied or refused; with every switch off, "Evening before" turns on with it, for where you
+  /// are too (`.onWithHere`), as the first switch does: the app registers and the card goes for
+  /// good. A tap that waited for a prompt keeps what it meant at the tap: it never turns off a
+  /// bell another tap turned on meanwhile. Then a sync. A place that isn't saved has no bell:
+  /// `.off`, and nothing changes.
+  public func toggleBell(_ place: SavedPlace, unlocked: Bool) async -> BellResult {
+    guard unlocked else { return .needsPurchase }
+    let key = place.target.key
+    guard Self.has(state.saved.map(\.target.key), key) else { return .off }
+    let turningOff = showsOn(key)
+    await ensureStarted()
+    if let turningOn { _ = await turningOn.value }
+    if let asking { await asking.value }
+    var tap = tapBell(key)
+    if tap == .needsPermission {
+      await askOnce()
+      tap = tapBell(key)
+      // Never answered: as refused.
+      if tap == .needsPermission { state.permission = .denied }
+    }
+    switch tap {
+    case .needsPurchase:
+      return .needsPurchase
+    case .needsPermission, .denied:
+      return .denied
+    case .off(let bells):
+      // On already: another tap turned it on while this one waited.
+      if !turningOff, Self.has(self.bells, key) { return .on }
+      keep(bells: bells)
+      sync()
+      return .off
+    case .on(let bells, _):
+      guard !turningOff else { return .off }
+      keep(bells: bells)
+      sync()
+      return .on
+    case .onWithHere(let bells, let prefs):
+      guard !turningOff else { return .off }
+      state.settings.prefs = prefs
+      keep(bells: bells, saving: true)
+      dismissCardForGood()
+      platform.register()
+      sync()
+      return .onWithHere
+    }
+  }
+
+  /// The saved places' bells that are on, by `Target.key`, in saved order (`alerts.v2`'s): kept
+  /// while nothing can be sent, and without the purchase.
+  public var bells: [String] { state.settings.bells }
+
+  /// Whether anything can be sent (`AlertSync.active`): a switch on and notifications not
+  /// denied. Otherwise every bell shows off.
+  public var active: Bool {
+    AlertSync.active(prefs: state.settings.prefs, permission: state.permission)
+  }
+
+  /// Whether notifications are off for the app in iOS Settings: a bell's tap then says so.
+  public var permissionDenied: Bool { state.permission == .denied }
+
+  /// `key`'s bell as the picker shows it with the purchase: on while it is on and something can
+  /// be sent.
+  private func showsOn(_ key: String) -> Bool {
+    AlertSync.bellState(on: Self.has(bells, key), unlocked: true, active: active) == .on
+  }
+
+  /// A tap on `key`'s bell with the purchase, as the state now stands (client `tapBell`).
+  private func tapBell(_ key: String) -> AlertSync.BellTap {
+    AlertSync.tapBell(
+      key: key, bells: state.settings.bells, savedKeys: state.saved.map(\.target.key),
+      prefs: state.settings.prefs, unlocked: true, permission: state.permission)
+  }
+
+  /// The system's prompt for a bell, once for every tap meanwhile, and the permission read again.
+  private func askOnce() async {
+    if let asking { return await asking.value }
+    let prompt = Task {
+      _ = await platform.requestPermission()
+      await readPermission()
+    }
+    asking = prompt
+    await prompt.value
+    asking = nil
+  }
+
+  /// Whether `keys` holds `key`, byte for byte, as JavaScript compares strings.
+  private static func has(_ keys: [String], _ key: String) -> Bool {
+    keys.contains { $0.utf8.elementsEqual(key.utf8) }
+  }
+
   // MARK: - The card
 
   /// The card's "Turn on": the evening notification for where you are, as the first switch turns
@@ -253,6 +411,7 @@ public final class NotificationsModel {
   public func turnOnFromCard() async {
     await ensureStarted()
     if let turningOn { _ = await turningOn.value }
+    if let asking { await asking.value }
     if await turnOn(.evening) {
       state.cardTurnedOn = true
     } else {
@@ -270,21 +429,22 @@ public final class NotificationsModel {
   /// "Turn off notifications and delete my data": every switch off, the phone's cell forgotten
   /// (the next fix brings it back while location is allowed), the card put away (one this
   /// session's "Turn on" made say it was done too), and the server's set deleted with the token
-  /// last sent. Done once it is deleted; not yet when the delete didn't reach the server, which a
-  /// later sync then does, making it done. No confirmation: turning notifications on again undoes
-  /// it.
+  /// last sent, or the one a set the server may hold was sent with. Done once it is deleted; not
+  /// yet when the delete didn't reach the server, which a later sync then does, making it done.
+  /// No confirmation: turning notifications on again undoes it.
   public func deleteMyData() async {
     await ensureStarted()
     state.delete = .deleting
     state.settings = AlertSettings()
     store.saveSettings(state.settings)
+    unsavedBells = []
     fix = nil
     placeHere()
     dismissCardForGood()
     state.cardTurnedOn = false
     sync()
     await synced()
-    state.delete = state.registration == nil ? .done : .notYet
+    state.delete = state.registration == nil && unconfirmed == nil ? .done : .notYet
   }
 
   // MARK: - Links
@@ -487,6 +647,17 @@ public final class NotificationsModel {
     if syncing { sync() }
   }
 
+  /// Keeps `bells` in `alerts.v2` when they differ, byte for byte, from those kept, or always
+  /// when `saving` (another change to the settings comes with them).
+  private func keep(bells: [String], saving: Bool = false) {
+    let same =
+      bells.count == state.settings.bells.count
+      && zip(bells, state.settings.bells).allSatisfy { $0.utf8.elementsEqual($1.utf8) }
+    guard !same || saving else { return }
+    state.settings.bells = bells
+    store.saveSettings(state.settings)
+  }
+
   /// Keeps `registration` in `alertSync.v2`, or removes it with nil.
   private func keep(registration: AlertRegistration?) {
     state.registration = registration
@@ -519,9 +690,14 @@ public final class NotificationsModel {
     }
   }
 
-  /// One sync (`AlertSync.action`): nothing, a DELETE with the token last sent, or a PUT of the
-  /// set (where you are, and no saved place) with this launch's, each reply kept as it says. The
-  /// retry waiting is dropped, as this is it.
+  /// One sync (`AlertSync.action`): nothing, a DELETE with the token last sent (or, with none
+  /// kept, the one a set the server may hold went with), or a PUT of the set with this launch's,
+  /// each reply kept as it says. The set is where you are and the saved
+  /// places with a bell on (`AlertSync.savedForBody`), those only with the purchase
+  /// (`AlertSync.ownsSaved`: before StoreKit has said, as the last registration had them), with
+  /// the phone's zone while there is one. The reply's own name for that zone is never compared
+  /// with the phone's: the server keeps it as ICU names it. The retry waiting is dropped, as this
+  /// is it.
   private func syncOnce() async {
     retryWork?.cancel()
     retryWork = nil
@@ -529,6 +705,9 @@ public final class NotificationsModel {
     let here = state.here.place
     let registration = state.registration
     let units = self.units ?? registration?.units
+    let owns = AlertSync.ownsSaved(unlocked: state.unlocked, last: registration?.response)
+    let saved = AlertSync.savedForBody(state.saved, bells: settings.bells, owns: owns)
+    let deviceTz = deviceZone()
     let action = AlertSync.action(
       prefs: settings.prefs,
       permission: state.permission,
@@ -540,7 +719,10 @@ public final class NotificationsModel {
       activeAt: activeAt,
       now: clock.now,
       env: env,
-      appVersion: appVersion
+      appVersion: appVersion,
+      saved: saved,
+      deviceTz: deviceTz,
+      unconfirmed: unconfirmed != nil
     )
     switch action {
     case .none, .needsToken:
@@ -552,19 +734,20 @@ public final class NotificationsModel {
       }
       if refused == nil { state.status = .ok }
     case .delete:
-      guard let registration else { return }
-      deleted(await client.forgetDevice(token: registration.token))
+      guard let token = registration?.token ?? unconfirmed else { return }
+      deleted(await client.forgetDevice(token: token))
     case .put:
       // The units come with the first answer: a later `screenChanged` brings them.
       guard let units, let token else { return }
       let body = AlertSync.body(
         token: token, env: env, here: here, units: units, prefs: settings.prefs,
-        appVersion: appVersion)
+        appVersion: appVersion, saved: saved, deviceTz: deviceTz)
       let fingerprint = AlertSync.fingerprint(body)
       let sentAt = clock.now
       switch await client.registerDevice(body) {
       case .stored(let response):
         refused = nil
+        unconfirmed = nil
         state.here.refused = false
         keep(
           registration: AlertRegistration(
@@ -572,19 +755,27 @@ public final class NotificationsModel {
             units: units, response: response))
         state.status = .ok
       case .forgotten:
+        unconfirmed = nil
         keep(registration: nil)
         state.status = .ok
       case .retry(let seconds):
+        // The server may have stored part of the set: where you are and the first three places
+        // new to it, before a 429 for the rest.
+        unconfirmed = token
         retry(after: seconds)
       case .placeRefused(let message):
         // The server couldn't tell where you are, and has forgotten the set: so does the
         // phone, keeping the switches; the same set waits (`AlertSync.action`).
+        unconfirmed = nil
         refused = AlertSync.Sent(fingerprint: fingerprint, at: Date(epochMs: clock.now.epochMs))
         state.here.refused = true
         keep(registration: nil)
         state.status = .placeRefused(message)
       case .failed:
-        // A change the server didn't take says so; a heartbeat or a refresh alone says nothing.
+        // The server may hold the set all the same: a 503 comes after it stored all but the
+        // places it couldn't look up, and a reply lost may follow a set stored. A change the
+        // server didn't take says so; a heartbeat or a refresh alone says nothing.
+        unconfirmed = token
         let same = registration.map { $0.fingerprint.utf8.elementsEqual(fingerprint.utf8) }
         if same != true { state.status = .notSaved }
       }
@@ -596,6 +787,7 @@ public final class NotificationsModel {
   private func deleted(_ reply: AlertSync.SyncReply) {
     switch reply {
     case .forgotten, .stored:
+      unconfirmed = nil
       keep(registration: nil)
       state.status = .ok
       if state.delete == .notYet { state.delete = .done }
@@ -615,3 +807,5 @@ public final class NotificationsModel {
     }
   }
 }
+
+extension NotificationsModel: PickerBells {}

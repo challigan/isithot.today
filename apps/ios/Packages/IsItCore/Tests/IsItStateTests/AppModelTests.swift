@@ -1276,3 +1276,87 @@ struct AppModelPurchaseTests {
     #expect(h.hooks.calls.contains("startAds"))
   }
 }
+
+/// What the app hands the notifications for the saved places' bells (phase 8.4b, design 4.6):
+/// the saved places as step 1 reads them and after each change kept, and the purchase from step
+/// 5's answer on, so the bells follow a star, a refund and a restore.
+@MainActor
+@Suite("The saved places and the purchase, to the notifications")
+struct AppModelNotificationHookTests {
+  let york = SavedPlace(target: .city(slug: "york-gb", name: "York"), name: "York")
+  let durhamRecent = RecentPlace(target: durham, name: "Durham")
+
+  @Test("the saved places as step 1 reads them, before anything else, and after each change kept")
+  func theSavedPlaces() async throws {
+    let h = Harness(
+      now: try fixtureNow("leeds-dry"), store: .init(units: .c),
+      replies: [try searchReply("search-leeds"), try FakeTransport.fixture("leeds-dry")],
+      recents: [durhamRecent], saved: [york])
+    #expect(h.hooks.told == ["saved [city:york-gb]"])
+    #expect(h.hooks.calls.isEmpty)
+    let picker = h.model.makePicker()
+    // A recent place's star, then a result's.
+    picker.save(durhamRecent)
+    picker.type("Leeds")
+    await h.clock.runNext()
+    picker.save(try #require(picker.content.results.first).result)
+    // A filled star.
+    picker.unsave(york.target)
+    #expect(
+      h.hooks.told == [
+        "saved [city:york-gb]", "saved [city:york-gb city:durham-gb]",
+        "saved [city:york-gb city:durham-gb city:leeds-gb]",
+        "saved [city:durham-gb city:leeds-gb]",
+      ])
+    #expect(h.saved.loadSavedPlaces().map(\.target.key) == ["city:durham-gb", "city:leeds-gb"])
+    // What changes no saved place tells nothing: a recent place deleted, a saved place chosen, a
+    // place that can't be saved (saved already).
+    picker.remove(try #require(h.model.recents.first))
+    h.model.save(SavedPlace(target: durham, name: "Durham"))
+    await picker.choose(saved: try #require(h.model.saved.first))
+    #expect(h.hooks.told.filter { $0.hasPrefix("saved") }.count == 4)
+  }
+
+  @Test("the purchase as step 5 hears it, before step 6, and each answer heard after it")
+  func thePurchase() async throws {
+    let saved = try savedAberdeen()
+    let h = Harness(
+      now: later(saved.savedAt, minutes: 1),
+      store: .init(place: aberdeen, units: .c, today: saved),
+      replies: [try FakeTransport.fixture("aberdeen-snow")], hooks: RecordingHooks(owned: true))
+    await h.model.launch()
+    #expect(h.hooks.told == ["saved []", "unlocked true", "syncAlerts city:aberdeen-gb c"])
+    // A refund, and the same answer again: each told, for the notifications to judge.
+    await h.model.purchaseChanged(owned: false)
+    await h.model.purchaseChanged(owned: false)
+    #expect(Array(h.hooks.told.dropFirst(3)) == ["unlocked false", "unlocked false"])
+  }
+
+  @Test("no answer at step 5 tells nothing: the notifications keep the last set's saved places")
+  func noAnswerAtStepFive() async throws {
+    let saved = try savedAberdeen()
+    let h = Harness(
+      now: later(saved.savedAt, minutes: 1),
+      store: .init(place: aberdeen, units: .c, unlocked: true, today: saved),
+      replies: [try FakeTransport.fixture("aberdeen-snow")], hooks: RecordingHooks(owned: nil))
+    await h.model.launch()
+    #expect(h.hooks.told == ["saved []", "syncAlerts city:aberdeen-gb c"])
+  }
+
+  @Test("a purchase heard while step 5 waits is told once, and step 5's older answer isn't")
+  func aPurchaseHeardWhileStepFiveWaits() async throws {
+    let saved = try savedAberdeen()
+    let h = Harness(
+      now: later(saved.savedAt, minutes: 1),
+      store: .init(place: aberdeen, units: .c, today: saved),
+      replies: [try FakeTransport.fixture("aberdeen-snow")],
+      hooks: RecordingHooks(owned: false, holdingEntitlement: true))
+    let launch = Task { await h.model.launch() }
+    try #require(
+      await yieldUntil { h.hooks.calls.contains("entitlement") }, "step 5 was never reached")
+    await h.model.purchaseChanged(owned: true)
+    h.hooks.releaseEntitlement()
+    await launch.value
+    #expect(h.hooks.told == ["saved []", "unlocked true", "syncAlerts city:aberdeen-gb c"])
+  }
+}

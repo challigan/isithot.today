@@ -26,6 +26,10 @@ struct ConstantsTests {
     // While where you are is approximate, the app registers again on becoming active, at most
     // once an hour (phase 8.4a).
     #expect(Constants.Alerts.hereRefreshMinutes == 60)
+    // A registration has notifications for at most as many saved places as can be saved (phase
+    // 8.4b): the bells and the server's cap agree.
+    #expect(Constants.Alerts.savedPlacesMax == 10)
+    #expect(Constants.Alerts.savedPlacesMax == Constants.Places.savedMax)
   }
 
   @Test("snow's judging, as Double")

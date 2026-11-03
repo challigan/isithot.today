@@ -1,8 +1,9 @@
 import Foundation
 import IsItModel
 
-/// The upgrade page (spec 10.5): the title, what the purchase is, Family Sharing, then what can
-/// be done (the Buy button with the price, a line saying why not, or nothing once owned), the last
+/// The upgrade page (spec 10.5, design 2.10): the title, the three benefits (no ads, widgets,
+/// notifications for saved places), what the purchase is, Family Sharing, then what can be done
+/// (the Buy button with the price, a line saying why not, or nothing once owned), the last
 /// outcome, and Restore purchase with its result. Nothing names another app, website or weather
 /// type. The live widget previews (7.3) go between the body and the buying.
 public struct UpgradePage: Sendable, Equatable {
@@ -17,9 +18,13 @@ public struct UpgradePage: Sendable, Equatable {
     case none
   }
 
-  /// "Remove ads and add widgets"
+  /// "No ads, widgets and more": also the purchase's display name in App Store Connect.
   public let title: String
-  /// `AppCopy.upgradeBody`
+  /// What the purchase brings, a line each, before the body, each beside a checkmark hidden from
+  /// VoiceOver (`upgrade-benefit-1` to `-3`): "No ads in the app", "Widgets for your home screen
+  /// and lock screen", "Notifications for your saved places". The same bought or not.
+  public let benefits: [String]
+  /// "A one-off purchase. Notifications for where you are, and everything else, stay free."
   public let body: String
   /// "Shared with your family through Family Sharing.", when the product says it is shared
   /// (`Product.isFamilyShareable`); nil until StoreKit has said.
@@ -36,6 +41,7 @@ public struct UpgradePage: Sendable, Equatable {
   /// The page for the purchase as `PurchaseModel` keeps it, owned when `unlocked`.
   public init(unlocked: Bool, purchase: PurchaseState) {
     title = AppCopy.upgradeTitle
+    benefits = [AppCopy.upgradeNoAds, AppCopy.upgradeWidgets, AppCopy.upgradeSavedNotifications]
     body = AppCopy.upgradeBody
     if case .ready(_, familyShareable: true) = purchase.product {
       familySharing = AppCopy.familySharing
@@ -83,7 +89,7 @@ public struct UpgradePage: Sendable, Equatable {
   }
 
   /// The home row at the end of the middle page (spec 10.2, item 6): in the free version, once
-  /// StoreKit has a price, "No ads, plus widgets for your home and lock screen · £1.99"; nil
+  /// StoreKit has a price, "No ads, widgets and notifications for saved places · £1.99"; nil
   /// otherwise (loading, unavailable, blocked, owned).
   public static func homeRow(unlocked: Bool, purchase: PurchaseState) -> String? {
     guard !unlocked, case .ready(let price, _) = purchase.product else { return nil }

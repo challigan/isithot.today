@@ -296,12 +296,23 @@ describe('APP_COPY', () => {
       placeSaved: ['place'],
       placeUnsaved: ['place'],
       placeDeleted: ['place'],
+      // A saved place's bell (phase 8.4b): its labels, and what VoiceOver is told after a tap.
+      bellOn: ['place'],
+      bellOff: ['place'],
+      bellLocked: ['place'],
+      bellTurnedOn: ['place'],
+      bellTurnedOnWithHere: ['place'],
+      bellTurnedOff: ['place'],
+      placeUnsavedBellOff: ['place'],
       upgradeSettings: ['price'],
       buy: ['price'],
+      notifySavedOn: ['count'],
+      testSentCount: ['count'],
       cardOnNamed: ['place'],
       keptID: ['id'],
       keptHere: ['place', 'zone'],
       keptPlace: ['place', 'zone'],
+      keptDeviceZone: ['zone'],
       keptUnits: ['label', 'units'],
       reportAdSubject: ['version'],
       reportAdMail: ['time', 'place'],
@@ -335,16 +346,22 @@ describe('APP_COPY', () => {
     expect(APP_COPY.upgradeTitle.length).toBeLessThanOrEqual(30);
     expect(APP_COPY.upgradeDescription.length).toBeLessThanOrEqual(45);
     expect(APP_COPY.upgradeDescription).not.toContain('.');
-    expect(APP_COPY.upgradeDescription).toBe('No ads, plus home and lock screen widgets');
+    // Carl's option (a), phase 8.4b (design decision 17): the purchase names saved places'
+    // notifications, at App Store Connect's limits to the character.
+    expect(APP_COPY.upgradeTitle).toBe('No ads, widgets and more');
+    expect(APP_COPY.upgradeDescription).toBe('No ads, widgets and saved-place notifications');
+    expect([APP_COPY.upgradeTitle.length, APP_COPY.upgradeDescription.length]).toEqual([24, 45]);
     expect(APP_COPY.buy).toBe('Buy for {price}');
-    // The ads are three placements, not a banner, and nothing promises another app.
+    // The ads are three placements, not a banner, and nothing promises another app. The upgrade
+    // page's three benefits come before its body, as the page shows them (design 2.10).
     const named = [
       ...['buy', 'familySharing', 'thanks', 'pending', 'restore', 'restored'],
       ...['nothingToRestore', 'purchasesOff'],
     ];
     const upgrade = entries.filter(([key]) => key.startsWith('upgrade') || named.includes(key));
     expect(upgrade.map(([key]) => key)).toEqual([
-      ...['upgradeRow', 'upgradeTitle', 'upgradeSettings', 'upgradeBody', 'familySharing'],
+      ...['upgradeRow', 'upgradeTitle', 'upgradeSettings', 'upgradeNoAds', 'upgradeWidgets'],
+      ...['upgradeSavedNotifications', 'upgradeBody', 'familySharing'],
       ...['thanks', 'pending', 'restore', 'restored', 'nothingToRestore', 'buy'],
       ...['upgradeDescription', 'upgradeUnavailable', 'purchasesOff'],
     ]);
@@ -370,14 +387,17 @@ describe('APP_COPY', () => {
 
   it('words the notifications as section 12 and the server do', () => {
     // The server's limit on tests, and its quiet hours as its 409 words them (devices.ts's
-    // `hourName`: 21 is "9pm", 7 is "7am").
+    // `hourName`: 21 is "9pm", 7 is "7am"). Since phase 8.4b the server judges a test by the
+    // phone's clock while a saved place has notifications ("on your iPhone"), and at where you
+    // are otherwise ("at the place"), so the app's line names neither (design 4.3, decision 25).
     expect(APP_COPY.testLimited).toContain(`${ALERTS.testPerHour} test notifications`);
     const hourName = (h: number) => `${h % 12 || 12}${h < 12 ? 'am' : 'pm'}`;
     const [from, to] = [hourName(ALERTS.quiet.from), hourName(ALERTS.quiet.to)];
     expect([from, to]).toEqual(['9pm', '7am']);
     expect(APP_COPY.testQuiet).toBe(
-      `Nothing is sent from ${from} to ${to} at the place. Try again after ${to} there.`,
+      `Nothing is sent from ${from} to ${to}. Try again after ${to}.`,
     );
+    expect(APP_COPY.testQuiet).not.toMatch(/at the place|there\.|iPhone/);
     expect(APP_COPY.testQuiet).toContain(`after ${to}`);
     // What iPhone Settings has turned off, in the app's own words for itself.
     for (const key of ['notifyDenied', 'notifyLocationDenied'] as const) {
@@ -408,8 +428,9 @@ describe('APP_COPY', () => {
     expect(fill(APP_COPY.keptUnits, { label: COPY.snowUnitsLabel, units: UNIT_NAMES.snow.c })).toBe(
       'Snow units: cm',
     );
+    // Every place goes with the delete, saved places' too (phase 8.4b, design 2.8).
     expect(APP_COPY.deleteDone).toBe(
-      "Notifications are off. We've deleted your notification token, place, units and choices.",
+      "Notifications are off. We've deleted your notification token, places, units and choices.",
     );
     expect(APP_COPY.deleteNotYet).toBe(
       "Couldn't reach our server, so nothing is deleted yet. The app will try again when you " +
@@ -555,25 +576,6 @@ describe('the notifications where you are (phase 8.4a)', () => {
     expect(APP_COPY.keptHere.startsWith(`${APP_COPY.notifyHere}: `)).toBe(true);
   });
 
-  it('says what the server keeps for where you are, without saved places yet (design 3.11)', () => {
-    // 8.4a's words: 8.4b adds the saved places and the iPhone's time zone.
-    expect(APP_COPY.privacyNotifications).toBe(
-      "Only while notifications are on, we keep your device's notification token, an ID made " +
-        'from it, the place you get notifications for and its time zone, your units and which ' +
-        "notifications you chose, with a few details such as the app's version and when it last " +
-        'checked in. The place is where you are (your location rounded to about 5 km or, if you ' +
-        "haven't shared it, a rough place our server estimates from your internet connection, " +
-        'updated when you open the app, at most once an hour). We delete them when you turn ' +
-        'notifications off in the app, when Apple tells us the app is no longer installed, or ' +
-        "about 90 days after you last open it. If you turn notifications off in your iPhone's " +
-        'Settings instead, we delete them the next time you open the app. For a few days after ' +
-        'each notification and each test, and after some forecast checks that found nothing to ' +
-        'send, we also keep a note of it, even once the rest is deleted. It holds no token or ' +
-        'place.',
-    );
-    expect(APP_COPY.privacyNotifications).not.toMatch(/saved|time zone: |iPhone's time zone/);
-  });
-
   it('says "location" only for the phone’s own, and "place" for the rest', () => {
     // "Your location", "that rounded location": the phone's. A rough place from the connection is
     // a place (`appCopy.ts`'s rule, design's house rules).
@@ -582,6 +584,185 @@ describe('the notifications where you are (phase 8.4a)', () => {
       expect(rest, key).not.toMatch(/\blocation/i);
     }
     expect(APP_COPY.notifyHereApprox).not.toMatch(/location/i);
+  });
+});
+
+describe('the notifications for saved places (phase 8.4b)', () => {
+  /** Every string 8.4b adds or rewords, for the guards that hold them all. */
+  const SAVED = [
+    ...['bellOn', 'bellOff', 'bellLocked', 'bellTurnedOn', 'bellTurnedOnWithHere'],
+    ...['bellTurnedOff', 'placeUnsavedBellOff', 'savedLineNoneFree', 'savedLineNonePaid'],
+    ...['bellHint', 'bellHintLocked', 'notifySaved', 'notifySavedLocked', 'notifySavedOn'],
+    ...['notifySavedOff', 'testSentCount', 'testQuiet', 'notifyFooter', 'keptDeviceZone'],
+    ...['privacyNotifications', 'deleteDone', 'upgradeTitle', 'upgradeSettings', 'upgradeRow'],
+    ...['upgradeNoAds', 'upgradeWidgets', 'upgradeSavedNotifications', 'upgradeBody', 'thanks'],
+    'upgradeDescription',
+  ] as const;
+  /** The search screen's lines under the Saved rows, one for each state (client `savedLines`). */
+  const LINES = ['savedLineNoneFree', 'savedLineNonePaid', 'bellHintLocked', 'bellHint'] as const;
+  const kathmandu = { place: 'Kathmandu' };
+
+  it('labels the bell by what a tap does, the locked one naming the purchase (design 2.2)', () => {
+    expect(fill(APP_COPY.bellOn, kathmandu)).toBe('Turn on notifications for Kathmandu');
+    expect(fill(APP_COPY.bellOff, kathmandu)).toBe('Turn off notifications for Kathmandu');
+    expect(fill(APP_COPY.bellLocked, kathmandu)).toBe(
+      'Turn on notifications for Kathmandu, with the one-off purchase',
+    );
+    // The locked bell says what the free one does, then what it takes.
+    expect(APP_COPY.bellLocked.startsWith(`${APP_COPY.bellOn}, `)).toBe(true);
+    // Labels, as the star's are: no full stop.
+    for (const key of ['bellOn', 'bellOff', 'bellLocked'] as const) {
+      expect(APP_COPY[key].endsWith('.'), key).toBe(false);
+    }
+  });
+
+  it('tells VoiceOver what a tap did, once it has (design 2.2, decision 11)', () => {
+    expect(fill(APP_COPY.bellTurnedOn, kathmandu)).toBe('Notifications on for Kathmandu.');
+    expect(fill(APP_COPY.bellTurnedOff, kathmandu)).toBe('Notifications off for Kathmandu.');
+    // A first bell with both switches off turns the evening on, for where you are too.
+    expect(fill(APP_COPY.bellTurnedOnWithHere, kathmandu)).toBe(
+      'Evening notifications on for Kathmandu and where you are.',
+    );
+    expect(APP_COPY.bellTurnedOnWithHere).toContain(` ${APP_COPY.notifyHere.toLowerCase()}.`);
+    // Denied in iPhone Settings, a bell's tap shows 8.1's line, with Open Settings.
+    expect(APP_COPY.notifyDenied).toBe('Notifications are off for this app in Settings.');
+    expect(APP_COPY.openSettings).toBe('Open Settings');
+    // Unsaving a place whose bell was on: the star's words, then what went with it.
+    expect(fill(APP_COPY.placeUnsavedBellOff, kathmandu)).toBe(
+      'Kathmandu removed from saved places. Its notifications are off.',
+    );
+    expect(APP_COPY.placeUnsavedBellOff.startsWith(`${APP_COPY.placeUnsaved} `)).toBe(true);
+  });
+
+  it('has one line on the search screen for each state, savedHint’s place (design 2.3)', () => {
+    expect(APP_COPY.savedLineNoneFree).toBe(
+      'Tap the star beside a place to save it. Saved places can have notifications with the ' +
+        'one-off purchase.',
+    );
+    expect(APP_COPY.savedLineNonePaid).toBe(
+      'Tap the star beside a place to save it, then tap its bell to get notifications.',
+    );
+    expect(APP_COPY.bellHintLocked).toBe(
+      "Tap a place's bell to get notifications for it, with the one-off purchase.",
+    );
+    expect(APP_COPY.bellHint).toBe("Tap a place's bell to get notifications for it.");
+    // savedLines picks one of these, or none (paid, with a bell on); savedHint has gone, and the
+    // full list keeps savedFull, before the line.
+    expect(APP_COPY).not.toHaveProperty('savedHint');
+    expect(fill(APP_COPY.savedFull, { max: String(PLACES.savedMax) })).toBe(
+      'You can save up to 10 places. Remove one to save another.',
+    );
+    // The free lines name the purchase, never a price; the paid ones don't name it.
+    for (const key of LINES) expect(APP_COPY[key], key).not.toMatch(/£|price|\{/);
+    for (const key of ['savedLineNoneFree', 'bellHintLocked'] as const) {
+      expect(APP_COPY[key], key).toContain('the one-off purchase');
+    }
+    for (const key of ['savedLineNonePaid', 'bellHint'] as const) {
+      expect(APP_COPY[key], key).not.toMatch(/purchase/);
+    }
+    expect(APP_COPY.bellHintLocked.startsWith(APP_COPY.bellHint.replace(/\.$/, ', '))).toBe(true);
+  });
+
+  it('names Settings’ row for saved places, free and paid (design 2.4, decision 13)', () => {
+    expect(APP_COPY.notifySaved).toBe('Saved places');
+    expect(APP_COPY.notifySavedLocked).toBe('With the one-off purchase');
+    expect(fill(APP_COPY.notifySavedOn, { count: '2' })).toBe('2 on');
+    expect(APP_COPY.notifySavedOff).toBe('Off');
+  });
+
+  it('says how many tests went when the server sent two (decision 25)', () => {
+    expect(fill(APP_COPY.testSentCount, { count: '2' })).toBe(
+      'Sent 2 test notifications. They should arrive in a few seconds.',
+    );
+    // One test keeps 8.1's line.
+    expect(APP_COPY.testSent).toBe('Sent. It should arrive in a few seconds.');
+  });
+
+  it('says in Settings’ footer that saved places arrive silently in the phone’s night (design 2.4)', () => {
+    // The phone's night is the sender's quiet hours on the iPhone (decision 21): from 9pm, and
+    // until 7am, which the hours' names give as the 409's words do.
+    const hourName = (h: number) => `${h % 12 || 12}${h < 12 ? 'am' : 'pm'}`;
+    const night = `From ${hourName(ALERTS.quiet.from)} to ${hourName(ALERTS.quiet.to)}`;
+    expect(APP_COPY.notifyFooter).toBe(
+      'These are forecasts, not official warnings. Times are at each place. ' +
+        `${night} on your iPhone, notifications for saved places arrive silently. ` +
+        'Open the app at least every few months to keep notifications on.',
+    );
+    expect(night).toBe('From 9pm to 7am');
+  });
+
+  it('lists each saved place and the iPhone’s time zone in Your privacy (design 2.8)', () => {
+    expect(fill(APP_COPY.keptPlace, { place: 'Kathmandu', zone: 'Asia/Kathmandu' })).toBe(
+      'Kathmandu, Asia/Kathmandu',
+    );
+    expect(fill(APP_COPY.keptDeviceZone, { zone: 'Europe/London' })).toBe(
+      "Your iPhone's time zone: Europe/London",
+    );
+    expect(APP_COPY.deleteDone).toBe(
+      "Notifications are off. We've deleted your notification token, places, units and choices.",
+    );
+  });
+
+  it('says what the server keeps for where you are and for saved places (design 3.11)', () => {
+    expect(APP_COPY.privacyNotifications).toBe(
+      "Only while notifications are on, we keep your device's notification token, an ID made " +
+        'from it, the places you get notifications for and their time zones, your units and ' +
+        "which notifications you chose, with a few details such as the app's version and when it " +
+        'last checked in. The places are where you are (your location rounded to about 5 km or, ' +
+        "if you haven't shared it, a rough place our server estimates from your internet " +
+        'connection, updated when you open the app, at most once an hour) and any saved places ' +
+        "you turned notifications on for; while you have those, we also keep your iPhone's time " +
+        'zone. We delete them when you turn notifications off in the app, when Apple tells us the ' +
+        'app is no longer installed, or about 90 days after you last open it. If you turn ' +
+        "notifications off in your iPhone's Settings instead, we delete them the next time you " +
+        'open the app. For a few days after each notification and each test, and after some ' +
+        'forecast checks that found nothing to send, we also keep a note of it, even once the ' +
+        'rest is deleted. It holds no token or place.',
+    );
+  });
+
+  it('words the purchase as Carl chose, option (a) (decision 17, design 2.10)', () => {
+    const price = { price: '£1.99' };
+    expect(fill(APP_COPY.upgradeSettings, price)).toBe('No ads, widgets and more · £1.99');
+    expect(APP_COPY.upgradeSettings.startsWith(`${APP_COPY.upgradeTitle} · `)).toBe(true);
+    expect(fill(APP_COPY.upgradeRow, price)).toBe(
+      'No ads, widgets and notifications for saved places · £1.99',
+    );
+    // The page's three benefits, then its body, whose last sentence is now true.
+    expect([
+      APP_COPY.upgradeNoAds,
+      APP_COPY.upgradeWidgets,
+      APP_COPY.upgradeSavedNotifications,
+    ]).toEqual([
+      'No ads in the app',
+      'Widgets for your home screen and lock screen',
+      'Notifications for your saved places',
+    ]);
+    expect(APP_COPY.upgradeBody).toBe(
+      'A one-off purchase. Notifications for where you are, and everything else, stay free.',
+    );
+    expect(APP_COPY.thanks).toBe(
+      'Thank you. Ads are off, widgets are on and you can turn on notifications for saved places.',
+    );
+    // App Store Connect's display name and description, as Snow.storekit has them.
+    expect(APP_COPY.upgradeTitle).toBe('No ads, widgets and more');
+    expect(APP_COPY.upgradeDescription).toBe('No ads, widgets and saved-place notifications');
+    // No option (b) anywhere (Carl's answer 2).
+    for (const [key, text] of Object.entries(APP_COPY)) {
+      expect(text, key).not.toMatch(
+        /Remove ads and add widgets|plus (home and lock screen )?widgets/,
+      );
+    }
+  });
+
+  it('says "notification" and "place", never "alert" or "location"', () => {
+    for (const key of SAVED) {
+      // "Your location" is the phone's own, where you are's in the privacy text.
+      const rest = APP_COPY[key].replace(/\byour location\b/g, '');
+      expect(rest, key).not.toMatch(/\balert|\blocation|starred|favourite/i);
+      if (key !== 'notifyFooter') expect(rest, key).not.toMatch(/warning|danger/i);
+    }
+    expect(APP_COPY.privacyNotifications.match(/\blocation\b/g)).toHaveLength(1);
   });
 });
 
@@ -641,8 +822,13 @@ describe('appCopySwift', () => {
     );
     expect(swift).toContain(
       '\n\n  public static func upgradeRow(price: String) -> String {\n' +
-        '    "No ads, plus widgets for your home and lock screen · \\(price)"\n  }\n\n',
+        '    "No ads, widgets and notifications for saved places · \\(price)"\n  }\n\n',
     );
+    expect(appCopyMember('notifySavedOn', APP_COPY.notifySavedOn)).toEqual([
+      '  public static func notifySavedOn(count: String) -> String {',
+      '    "\\(count) on"',
+      '  }',
+    ]);
   });
 
   it('escapes apostrophes, quotes, $ and backslashes as Swift needs', () => {
@@ -720,7 +906,9 @@ describe('the picker’s strings', () => {
 
   it('words saved places beside Recent, the limit from PLACES', () => {
     expect(APP_COPY.saved).toBe('Saved');
-    expect(APP_COPY.savedHint).toBe('Tap the star beside a place to save it here.');
+    // The line with none saved yet is phase 8.4b's, one for each state (`the notifications for
+    // saved places`), not savedHint's.
+    expect(APP_COPY).not.toHaveProperty('savedHint');
     expect(fill(APP_COPY.savedFull, { max: String(PLACES.savedMax) })).toBe(
       'You can save up to 10 places. Remove one to save another.',
     );

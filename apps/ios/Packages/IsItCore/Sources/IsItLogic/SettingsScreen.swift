@@ -3,7 +3,8 @@ import IsItModel
 
 /// A page Settings opens on its own navigation stack (sections 10.4 and 10.6).
 public enum SettingsPage: String, Sendable, Hashable, CaseIterable {
-  /// The upgrade page (`UpgradePage`), pushed from the upgrade row.
+  /// The upgrade page (`UpgradePage`), pushed from the upgrade row, and from Settings →
+  /// Notifications' "Saved places" without the purchase (phase 8.4b).
   case upgrade
   case yourPrivacy
   case howItWorks
@@ -18,11 +19,11 @@ public enum SettingsPage: String, Sendable, Hashable, CaseIterable {
 /// 1. Units: "Snow units", cm | in, and the footnote;
 /// 2. Notifications (section 12.1): `NotificationSettings`, drawn between the units and the
 ///    upgrade card; not one of `sections`;
-/// 3. Upgrade: in the free version, "Remove ads and add widgets · £1.99" once StoreKit has a
-///    price, and "Remove ads and add widgets" without one until then (no price StoreKit didn't
-///    give, and the purchase is always there to find), either opening the upgrade page, which
-///    says why it can't sell; once owned, "Thank you. Ads are off and widgets are on."; and
-///    "Restore purchase", always, its result beneath it (section 10.4). A card with no heading,
+/// 3. Upgrade: in the free version, "No ads, widgets and more · £1.99" once StoreKit has a price,
+///    and "No ads, widgets and more" without one until then (no price StoreKit didn't give, and
+///    the purchase is always there to find), either opening the upgrade page, which says why it
+///    can't sell; once owned, the thanks (`AppCopy.thanks`); and "Restore purchase", always, its
+///    result beneath it (section 10.4). The words are all `AppCopy`'s. A card with no heading,
 ///    as Report an ad's;
 /// 4. Privacy: "Privacy choices" (only while the ads are on and Google's consent says the form
 ///    is required, which phase 8's ads report), "Your privacy", "Privacy policy";
@@ -90,6 +91,8 @@ public struct SettingsScreen: Sendable, Equatable {
     case warnings
     /// The "Where you are" page's "Use my location".
     case myLocation
+    /// Settings → Notifications' "Saved places", the bells' row (phase 8.4b).
+    case savedPlaces
   }
 
   /// What a row does when tapped.
@@ -125,6 +128,10 @@ public struct SettingsScreen: Sendable, Equatable {
     case openNotificationSettings
     /// "Open Settings" while location access is off for the app: its settings.
     case openLocationSettings
+    /// "Saved places" with the purchase: the search screen, where each saved place's bell is
+    /// (`NotificationsModel.requestPicker(locating: false)`, phase 8.4b). Without the purchase the
+    /// row opens the upgrade page instead (`.page(.upgrade)`).
+    case savedPlaces
   }
 
   public struct Row: Sendable, Equatable, Identifiable {

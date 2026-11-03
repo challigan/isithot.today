@@ -24,9 +24,11 @@ final class UpgradeTests: XCTestCase {
 
   /// With the product for sale (`-purchase bought`): the home row, with StoreKit's price, above
   /// the middle page's footer and within the page's width; the sheet it opens, audited, with what
-  /// the purchase is, Family Sharing, Buy with the price and Restore purchase; Buy, then the
-  /// thanks and no Buy, audited again; and once the sheet is closed, no home row, and Settings'
-  /// card the thanks and Restore purchase, with no upgrade row and no Report an ad.
+  /// the purchase brings, a line each (no ads, widgets, notifications for saved places; phase
+  /// 8.4b, design 2.10), what the purchase is, Family Sharing, Buy with the price and Restore
+  /// purchase; Buy, then the thanks and no Buy, audited again; and once the sheet is closed, no
+  /// home row, and Settings' card the thanks and Restore purchase, with no upgrade row and no
+  /// Report an ad.
   @MainActor
   func testTheRowThePageAndBuying() throws {
     let app = try launch(["-purchase", "bought"])
@@ -45,6 +47,10 @@ final class UpgradeTests: XCTestCase {
       "The row at \(frame) runs on outside the page at \(shown)")
     watchedTap("upgrade-row", in: app, until: { app.showsPage(titled: Copy.title) }, { row.tap() })
     try page(titled: Copy.title, in: app)
+    for (index, benefit) in Copy.benefits.enumerated() {
+      XCTAssertEqual(app.find("upgrade-benefit-\(index + 1)").label, benefit)
+    }
+    XCTAssertFalse(app.find("upgrade-benefit-4").exists, "A benefit line too many")
     XCTAssertEqual(app.find("upgrade-body").label, Copy.body)
     XCTAssertEqual(app.find("family-sharing").label, Copy.familySharing)
     XCTAssertEqual(app.buttons["buy"].label, Copy.buy)
@@ -235,18 +241,24 @@ final class UpgradeTests: XCTestCase {
 
   /// What the rows, the page and the results say, as packages/mobile's `APP_COPY` words them
   /// (AppCopy.swift), with the stand-in's price (`Constants.Purchase.displayPrice`): typed here,
-  /// as SettingsTests types Settings', since the UI tests link none of the app's modules.
+  /// as SettingsTests types Settings', since the UI tests link none of the app's modules. Phase
+  /// 8.4b's words (Carl's option (a)): the title is also the purchase's display name in App Store
+  /// Connect, and the benefits come before the body.
   private enum Copy {
-    static let row = "No ads, plus widgets for your home and lock screen · £1.99"
-    static let title = "Remove ads and add widgets"
-    static let settingsRow = "Remove ads and add widgets · £1.99"
+    static let row = "No ads, widgets and notifications for saved places · £1.99"
+    static let title = "No ads, widgets and more"
+    static let settingsRow = "No ads, widgets and more · £1.99"
+    static let benefits = [
+      "No ads in the app", "Widgets for your home screen and lock screen",
+      "Notifications for your saved places",
+    ]
     static let body =
-      "A one-off purchase. No ads in the app, and widgets for your home screen and lock screen. "
-      + "Notifications and everything else stay free."
+      "A one-off purchase. Notifications for where you are, and everything else, stay free."
     static let familySharing = "Shared with your family through Family Sharing."
     static let buy = "Buy for £1.99"
     static let restore = "Restore purchase"
-    static let thanks = "Thank you. Ads are off and widgets are on."
+    static let thanks =
+      "Thank you. Ads are off, widgets are on and you can turn on notifications for saved places."
     static let pending = "Waiting for approval."
     static let restored = "Purchase restored."
     static let nothingToRestore = "No purchase found for this Apple Account."

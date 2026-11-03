@@ -86,6 +86,7 @@ describe('constantsSwift', () => {
     expect(members(swift, 'Alerts')).toEqual([
       `public static let heartbeatDays = ${ALERTS.heartbeatDays}`,
       `public static let hereRefreshMinutes = ${ALERTS.hereRefreshMinutes}`,
+      `public static let savedPlacesMax = ${ALERTS.savedPlacesMax}`,
     ]);
   });
 
@@ -93,9 +94,21 @@ describe('constantsSwift', () => {
     // Client `alertAction` puts again after `heartbeatDays`, and, while where you are is
     // approximate, on becoming active `hereRefreshMinutes` after the last put (design decision
     // 3); the Swift port reads both from here.
+    expect(members(swift, 'Alerts').slice(0, 2)).toEqual([
+      'public static let heartbeatDays = 7',
+      'public static let hereRefreshMinutes = 60',
+    ]);
+  });
+
+  it('writes how many saved places can have notifications, as many as can be saved (phase 8.4b)', () => {
+    // The bells' cap: the server takes at most `ALERTS.savedPlacesMax` saved places a device
+    // (design decision 20), held equal to the picker's `PLACES.savedMax` here, where core and the
+    // client meet (the server doesn't import the client), so every saved place can have a bell.
+    expect(ALERTS.savedPlacesMax).toBe(PLACES.savedMax);
     expect(members(swift, 'Alerts')).toEqual([
       'public static let heartbeatDays = 7',
       'public static let hereRefreshMinutes = 60',
+      'public static let savedPlacesMax = 10',
     ]);
   });
 

@@ -244,10 +244,13 @@ final class Gate: Sendable {
 /// permission is `access` (granted unless said), and after `requestAccess()`, `answer`; its fix
 /// is at `moved`'s coordinates, or none without. With `holdingFix`, the fix waits until the test
 /// releases it (`releaseFix()`); with `holdingEntitlement`, so does step 5's answer
-/// (`releaseEntitlement()`), so a test can act while step 5 waits.
+/// (`releaseEntitlement()`), so a test can act while step 5 waits. What the app hands the
+/// notifications (the saved places, the purchase and each place on screen, phase 8.4b) is noted
+/// apart, in `told`, so the steps' own order reads as it did before.
 final class RecordingHooks: AppHooks, LocationService {
   private struct Record {
     var calls: [String] = []
+    var told: [String] = []
     var routes: [DeepLink.Route] = []
     var owned: Bool?
     var moved: Target?
@@ -284,6 +287,9 @@ final class RecordingHooks: AppHooks, LocationService {
   }
 
   var calls: [String] { state.read(\.calls) }
+  /// What the notifications were told, in order, as LiveHooks hands it to them: "saved [keys]",
+  /// "unlocked true", and "syncAlerts key units" as in `calls`.
+  var told: [String] { state.read(\.told) }
   /// The routes handled, in order.
   var routes: [DeepLink.Route] { state.read(\.routes) }
 
@@ -324,7 +330,20 @@ final class RecordingHooks: AppHooks, LocationService {
   func stopAds() async { note("stopAds") }
 
   func syncAlerts(target: Target, units: Units?) async {
-    note("syncAlerts \(target.key) \(units?.rawValue ?? "none")")
+    let call = "syncAlerts \(target.key) \(units?.rawValue ?? "none")"
+    state.change {
+      $0.calls.append(call)
+      $0.told.append(call)
+    }
+  }
+
+  @MainActor func savedChanged(_ saved: [SavedPlace]) {
+    let keys = saved.map(\.target.key).joined(separator: " ")
+    state.change { $0.told.append("saved [\(keys)]") }
+  }
+
+  @MainActor func unlockedChanged(_ owned: Bool) {
+    state.change { $0.told.append("unlocked \(owned)") }
   }
 
   func handle(_ route: DeepLink.Route) async {

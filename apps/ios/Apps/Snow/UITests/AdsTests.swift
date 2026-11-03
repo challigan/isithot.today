@@ -161,7 +161,8 @@ final class AdsTests: XCTestCase {
         "No Buy on the upgrade page Settings' upgrade row opened; \(app.cancelsReport)")
     }
     watchedTap("buy", in: app, until: { ElementRead(app, "upgrade-outcome").found }, { buy.tap() })
-    let thanks = "Thank you. Ads are off and widgets are on."
+    let thanks =
+      "Thank you. Ads are off, widgets are on and you can turn on notifications for saved places."
     let outcome = readElement("upgrade-outcome", in: app, within: 10, "to read the thanks") {
       $0.found && $0.label == thanks
     }

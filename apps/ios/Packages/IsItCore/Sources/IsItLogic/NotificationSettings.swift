@@ -3,7 +3,8 @@ import IsItModel
 
 /// What the app's notifications are doing, as the views show them (`NotificationsModel.state`):
 /// what `alerts.v2` and `alertSync.v2` keep, the permission and location access, where you are,
-/// and what this session's taps came to.
+/// the saved places and the purchase their bells need (phase 8.4b), and what this session's taps
+/// came to.
 public struct NotificationsState: Sendable, Equatable {
   /// "Send a test notification": not tapped, under way, or its outcome.
   public enum Test: Sendable, Equatable {
@@ -32,6 +33,12 @@ public struct NotificationsState: Sendable, Equatable {
   public var here: HereState
   /// The server's record, as the last PUT it answered made it; nil while none is kept.
   public var registration: AlertRegistration?
+  /// The saved places, in saved order (phase 8.4b): their bells are `settings.bells`.
+  public var saved: [SavedPlace]
+  /// Whether the one-off purchase is owned, as StoreKit last said; nil until it has said this
+  /// launch, when the set is sent as the last registration had it (`AlertSync.ownsSaved`,
+  /// decision 15). For what is sent only: the views show the app's purchase.
+  public var unlocked: Bool?
   public var test: Test
   public var status: Status
   /// This session's "Use my location" on the "Where you are" page found no fix, though location
@@ -56,6 +63,8 @@ public struct NotificationsState: Sendable, Equatable {
     locationAccess: AlertSync.LocationAccess = .notDetermined,
     here: HereState = HereState(),
     registration: AlertRegistration? = nil,
+    saved: [SavedPlace] = [],
+    unlocked: Bool? = nil,
     showsHere: Bool = false,
     cardDismissed: Bool = false
   ) {
@@ -64,6 +73,8 @@ public struct NotificationsState: Sendable, Equatable {
     self.locationAccess = locationAccess
     self.here = here
     self.registration = registration
+    self.saved = saved
+    self.unlocked = unlocked
     test = .idle
     status = .ok
     locationUnavailable = false
@@ -100,10 +111,12 @@ public struct HereState: Sendable, Equatable {
 /// - The switches: the evening before, on the day, and "Also when snow is possible" only while
 ///   one of them is on. Turning one on needs no place first: where you are is always one.
 /// - Under them, what is kept for where you are; then "Where you are", its town and how it was
-///   found, which pushes its page; while a notification is on, "Send a test notification", its
-///   outcome beneath it; and the status line.
-/// - Always the footer, and "Met Office warnings" in Safari while where you are, as the server
-///   stored it, is in the UK.
+///   found, which pushes its page; "Saved places" (phase 8.4b), how many bells are on, opening
+///   the search screen where they are, or without the purchase what it takes, opening its page;
+///   while a notification is on, "Send a test notification", its outcome beneath it (one test, or
+///   two with a saved place's bell on); and the status line.
+/// - Always the footer, and "Met Office warnings" in Safari while where you are, or a saved place
+///   with its bell on, is in the UK, as the server's answer says of each place.
 ///
 /// Nothing here names another app, website or weather type.
 public struct NotificationSettings: Sendable, Equatable {
@@ -137,11 +150,41 @@ public struct NotificationSettings: Sendable, Equatable {
     public let icon: SettingsScreen.Icon
   }
 
+  /// "Saved places" (phase 8.4b, `notify-saved`), under "Where you are": one row for every saved
+  /// place's bell, which are in the search screen, not here (no switch per place).
+  public struct SavedRow: Sendable, Equatable {
+    /// "notify-saved"
+    public let id: String
+    /// "Saved places"
+    public let title: String
+    /// With the purchase, how many bells show on, "2 on", or "Off"; without it, "With the
+    /// one-off purchase".
+    public let value: String
+    /// With the purchase, the search screen (`.notification(.savedPlaces)`); without it, the
+    /// upgrade page on Settings' own stack (`.page(.upgrade)`).
+    public let action: SettingsScreen.Action
+    /// `.savedPlaces`
+    public let icon: SettingsScreen.Icon
+
+    public init(
+      id: String, title: String, value: String, action: SettingsScreen.Action,
+      icon: SettingsScreen.Icon
+    ) {
+      self.id = id
+      self.title = title
+      self.value = value
+      self.action = action
+      self.icon = icon
+    }
+  }
+
   public enum Item: Sendable, Equatable {
     case toggle(Switch)
     /// "notify-here-kept": what is kept for where you are, and for how long.
     case line(Line)
     case here(HereRow)
+    /// "notify-saved": the saved places' bells (phase 8.4b).
+    case savedRow(SavedRow)
     /// A row that acts: Open Settings, the test (its outcome its detail, busy while sending).
     case row(SettingsScreen.Row)
   }
@@ -161,11 +204,14 @@ public struct NotificationSettings: Sendable, Equatable {
   public let status: Line?
   /// "notify-footer": these are forecasts, not official warnings.
   public let footer: Line
-  /// "notify-warnings": the Met Office's warnings page, while where you are is in the UK.
+  /// "notify-warnings": the Met Office's warnings page, while where you are, or a saved place with
+  /// its bell on, is in the UK.
   public let warnings: SettingsScreen.Row?
 
-  /// The section for `state`.
-  public init(_ state: NotificationsState) {
+  /// The section for `state`, with the one-off purchase as the rest of Settings shows it
+  /// (`unlocked`, the app's: `unlock.v1` until StoreKit answers), so "Saved places" agrees with
+  /// the upgrade card, the upgrade page it pushes and the search screen's bells.
+  public init(_ state: NotificationsState, unlocked: Bool) {
     heading = AppCopy.notifications
     footer = Line(id: "notify-footer", text: AppCopy.notifyFooter)
     var items: [Item] = []
@@ -185,6 +231,7 @@ public struct NotificationSettings: Sendable, Equatable {
     if state.settings.anyOn { items.append(.toggle(Self.toggle(.possible, isOn: prefs.possible))) }
     items.append(.line(Line(id: "notify-here-kept", text: AppCopy.notifyHereKept)))
     items.append(.here(Self.hereRow(state, id: "notify-here")))
+    items.append(.savedRow(Self.savedRow(state, unlocked: unlocked)))
     if state.settings.anyOn {
       items.append(
         .row(
@@ -198,8 +245,11 @@ public struct NotificationSettings: Sendable, Equatable {
     case .notSaved: status = Line(id: "notify-status", text: AppCopy.notifyNotSaved)
     case .placeRefused(let text): status = Line(id: "notify-status", text: text)
     }
-    let country = Self.answer(state)?.here?.country
-    if country?.utf8.elementsEqual("GB".utf8) == true,
+    // Every place of the server's answer, where you are and each saved place with its bell on,
+    // by the country the server gave it.
+    let answer = Self.answer(state)
+    let countries = [answer?.here?.country] + (answer?.saved.map(\.country) ?? [])
+    if countries.contains(where: { $0?.utf8.elementsEqual("GB".utf8) == true }),
       let url = URL(string: Constants.Outbound.metOfficeWarnings)
     {
       warnings = SettingsScreen.Row(
@@ -235,6 +285,26 @@ public struct NotificationSettings: Sendable, Equatable {
       icon: .notificationPlace)
   }
 
+  /// "Saved places": without the purchase (`unlocked`, as the rest of Settings and the search
+  /// screen show it), what it takes, opening the upgrade page; with it, how many saved places'
+  /// bells show on (`AlertSync.bellState`: none while nothing can be sent), or "Off", opening the
+  /// search screen. What is sent before StoreKit answers (`AlertSync.ownsSaved`) is the sync's
+  /// alone: a row that said otherwise would push a page that thanks for the purchase.
+  static func savedRow(_ state: NotificationsState, unlocked: Bool) -> SavedRow {
+    guard unlocked else {
+      return SavedRow(
+        id: "notify-saved", title: AppCopy.notifySaved, value: AppCopy.notifySavedLocked,
+        action: .page(.upgrade), icon: .savedPlaces)
+    }
+    let active = AlertSync.active(prefs: state.settings.prefs, permission: state.permission)
+    let bells = AlertSync.keptBells(state.settings.bells, savedKeys: state.saved.map(\.target.key))
+    let on = active ? bells.count : 0
+    return SavedRow(
+      id: "notify-saved", title: AppCopy.notifySaved,
+      value: on > 0 ? AppCopy.notifySavedOn(count: String(on)) : AppCopy.notifySavedOff,
+      action: .notification(.savedPlaces), icon: .savedPlaces)
+  }
+
   /// The switch for `kind`, in its Settings words.
   private static func toggle(_ kind: AlertSwitch, isOn: Bool) -> Switch {
     switch kind {
@@ -253,11 +323,13 @@ public struct NotificationSettings: Sendable, Equatable {
     }
   }
 
-  /// The test's outcome in words, beneath its row: nil before it, and while it is under way.
-  /// A record the server no longer has fails alike, as the model registers again.
+  /// The test's outcome in words, beneath its row: nil before it, and while it is under way; one
+  /// test sent, or the server's two (where you are, and a saved place with its bell on). A
+  /// record the server no longer has fails alike, as the model registers again.
   private static func outcome(_ test: NotificationsState.Test) -> String? {
     switch test {
     case .idle, .sending: nil
+    case .done(.sent(let count)) where count > 1: AppCopy.testSentCount(count: String(count))
     case .done(.sent): AppCopy.testSent
     case .done(.dryRun): AppCopy.testDryRun
     case .done(.limited): AppCopy.testLimited

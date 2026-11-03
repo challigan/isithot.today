@@ -141,13 +141,85 @@ struct AppCopyTests {
     #expect(AppCopy.notifyLocationUnavailable == "Couldn't find your location. Try again.")
     #expect(
       AppCopy.testDryRun == "Our server isn't sending notifications yet, so nothing was sent.")
-    #expect(
-      AppCopy.testQuiet
-        == "Nothing is sent from 9pm to 7am at the place. Try again after 7am there.")
+    #expect(AppCopy.testQuiet == "Nothing is sent from 9pm to 7am. Try again after 7am.")
     #expect(
       AppCopy.notifyNotSaved
         == "Couldn't save your notification choices. The app will try again when you next open it.")
     #expect(AppCopy.cardOn.hasPrefix("Done. You'll get a notification the evening before snow"))
+  }
+
+  @Test("the saved places' bells: their labels, what VoiceOver is told, the search screen's lines")
+  func bells() {
+    #expect(AppCopy.bellOn(place: "Kathmandu") == "Turn on notifications for Kathmandu")
+    #expect(AppCopy.bellOff(place: "Kathmandu") == "Turn off notifications for Kathmandu")
+    #expect(
+      AppCopy.bellLocked(place: "Kathmandu")
+        == "Turn on notifications for Kathmandu, with the one-off purchase")
+    #expect(AppCopy.bellTurnedOn(place: "Kathmandu") == "Notifications on for Kathmandu.")
+    #expect(
+      AppCopy.bellTurnedOnWithHere(place: "Kathmandu")
+        == "Evening notifications on for Kathmandu and where you are.")
+    #expect(AppCopy.bellTurnedOff(place: "Kathmandu") == "Notifications off for Kathmandu.")
+    #expect(
+      AppCopy.placeUnsavedBellOff(place: "Kathmandu")
+        == "Kathmandu removed from saved places. Its notifications are off.")
+    #expect(
+      AppCopy.savedLineNoneFree
+        == "Tap the star beside a place to save it. Saved places can have notifications with the "
+        + "one-off purchase.")
+    #expect(
+      AppCopy.savedLineNonePaid
+        == "Tap the star beside a place to save it, then tap its bell to get notifications.")
+    #expect(
+      AppCopy.bellHintLocked
+        == "Tap a place's bell to get notifications for it, with the one-off purchase.")
+    #expect(AppCopy.bellHint == "Tap a place's bell to get notifications for it.")
+  }
+
+  @Test("Settings' saved places, the two tests, the footer and what Your privacy keeps (8.4b)")
+  func savedPlacesNotifications() {
+    #expect(AppCopy.notifySaved == "Saved places")
+    #expect(AppCopy.notifySavedLocked == "With the one-off purchase")
+    #expect(AppCopy.notifySavedOn(count: "2") == "2 on")
+    #expect(AppCopy.notifySavedOff == "Off")
+    #expect(
+      AppCopy.testSentCount(count: "2")
+        == "Sent 2 test notifications. They should arrive in a few seconds.")
+    #expect(
+      AppCopy.notifyFooter
+        == "These are forecasts, not official warnings. Times are at each place. From 9pm to 7am "
+        + "on your iPhone, notifications for saved places arrive silently. Open the app at least "
+        + "every few months to keep notifications on.")
+    #expect(
+      AppCopy.keptDeviceZone(zone: "Europe/London") == "Your iPhone's time zone: Europe/London")
+    #expect(
+      AppCopy.deleteDone
+        == "Notifications are off. We've deleted your notification token, places, units and "
+        + "choices.")
+    #expect(AppCopy.privacyNotifications.contains("any saved places you turned notifications on"))
+    #expect(AppCopy.privacyNotifications.contains("we also keep your iPhone's time zone"))
+  }
+
+  @Test("the purchase's words (Carl's option (a)), within App Store Connect's limits")
+  func purchaseWords() {
+    #expect(AppCopy.upgradeTitle == "No ads, widgets and more")
+    #expect(AppCopy.upgradeTitle.count <= 30)
+    #expect(AppCopy.upgradeDescription == "No ads, widgets and saved-place notifications")
+    #expect(AppCopy.upgradeDescription.count <= 45)
+    #expect(!AppCopy.upgradeDescription.hasSuffix("."))
+    #expect(AppCopy.upgradeSettings(price: "£1.99") == "No ads, widgets and more · £1.99")
+    #expect(
+      [AppCopy.upgradeNoAds, AppCopy.upgradeWidgets, AppCopy.upgradeSavedNotifications] == [
+        "No ads in the app", "Widgets for your home screen and lock screen",
+        "Notifications for your saved places",
+      ])
+    #expect(
+      AppCopy.upgradeBody
+        == "A one-off purchase. Notifications for where you are, and everything else, stay free.")
+    #expect(
+      AppCopy.thanks
+        == "Thank you. Ads are off, widgets are on and you can turn on notifications for saved "
+        + "places.")
   }
 
   @Test("where you are: Settings' row, its page and the card (phase 8.4a)")
@@ -195,7 +267,7 @@ struct AppCopyTests {
     #expect(AppCopy.placeButtonLabel(place: "Leeds") == "Place: Leeds. Change place.")
     #expect(
       AppCopy.upgradeRow(price: "£1.99")
-        == "No ads, plus widgets for your home and lock screen · £1.99")
+        == "No ads, widgets and notifications for saved places · £1.99")
     #expect(AppCopy.version(version: "1.0", build: "112") == "Version 1.0 (112)")
     #expect(AppCopy.buy(price: "£1.99") == "Buy for £1.99")
     #expect(AppCopy.agreementShort(snowy: "5", total: "6") == "5 of 6 forecasts")

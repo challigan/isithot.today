@@ -11,7 +11,8 @@
  * when core or the client adds a key, and stops the generator if the new value isn't a whole
  * number, so a Swift type is chosen for it rather than guessed. `ALERTS` is not written whole: it
  * holds the notifications run's windows, quiet hours and budgets too, and the app needs only
- * `heartbeatDays` and `hereRefreshMinutes`, when it registers again (client `alertAction`).
+ * `heartbeatDays` and `hereRefreshMinutes`, when it registers again (client `alertAction`), and
+ * `savedPlacesMax`, the most saved places with bells on that a registration may carry (phase 8.4b).
  */
 import {
   AHEAD,
@@ -141,12 +142,14 @@ export function constantsSwift(): string {
     ...group(
       [
         'Core `ALERTS`: how often an app registers for notifications again while it is used, days,',
-        'and, while where you are is approximate, on becoming active, minutes.',
+        'and, while where you are is approximate, on becoming active, minutes; and the most saved',
+        'places a registration may have notifications for, as many as can be saved.',
       ],
       'Alerts',
       ints('    ', {
         heartbeatDays: ALERTS.heartbeatDays,
         hereRefreshMinutes: ALERTS.hereRefreshMinutes,
+        savedPlacesMax: ALERTS.savedPlacesMax,
       }),
     ),
     ...group(

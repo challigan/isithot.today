@@ -661,9 +661,13 @@ struct PlacePickerSavedTests {
     #expect(h.recents.loadRecents() == h.model.recents)
     #expect(!picker.finished)
     #expect(h.transport.requests.count == 1)
-    // Cleared, the box shows Saved with its hint, and Leeds under Recent.
+    // Cleared, the box shows Saved with its line, and Leeds under Recent: none saved, and
+    // without the purchase, what a saved place can have with it.
     picker.type("")
-    #expect(picker.content.savedHint == "Tap the star beside a place to save it here.")
+    #expect(
+      picker.content.savedLine
+        == "Tap the star beside a place to save it. Saved places can have notifications with the "
+        + "one-off purchase.")
     #expect(picker.content.recents.map(\.id) == ["city:leeds-gb"])
   }
 
@@ -819,5 +823,202 @@ struct PlacePickerSavedTests {
     #expect(next.recents.isEmpty)
     #expect(
       next.makePicker().content.saved.map(\.detail) == [england, "Bagmati Province, Nepal", nil])
+  }
+}
+
+/// The saved places' bells in the picker (phase 8.4b, design 2.2 and 4.6): each bell as the
+/// purchase and the notifications have it, a tap's outcome said to VoiceOver once it is known,
+/// the purchase a locked bell opens and the bell turning on by itself once it is bought, and the
+/// line for notifications denied.
+@MainActor
+@Suite("The bells in the picker", .timeLimit(.minutes(1)))
+struct PlacePickerBellTests {
+  /// An app with Durham saved, the purchase `unlocked` as `unlock.v1` says, and a picker over
+  /// `bells`, whose announcements `heard` hears.
+  func picker(
+    unlocked: Bool, bells: FakeBells, heard: HeardAnnouncements = HeardAnnouncements(),
+    saved: [SavedPlace] = [durhamSaved],
+    replies: [FakeTransport.Reply] = [.failure(.notConnectedToInternet)]
+  ) throws -> (Harness, PlacePickerModel) {
+    let h = Harness(
+      now: try fixtureNow("leeds-dry"), store: .init(units: .c, unlocked: unlocked),
+      replies: replies, saved: saved)
+    return (h, h.model.makePicker(bells: bells, announce: heard.announce))
+  }
+
+  @Test("each bell as the purchase and the notifications have it, saved rows and results alike")
+  func theBells() async throws {
+    let rung = FakeBells(bells: ["city:durham-gb"])
+    let (_, free) = try picker(unlocked: false, bells: rung)
+    #expect(free.content.saved.first?.bell.state == .locked)
+    #expect(free.content.savedLine == AppCopy.bellHintLocked)
+    let (_, paid) = try picker(unlocked: true, bells: rung)
+    #expect(paid.content.saved.first?.bell.state == .on)
+    #expect(paid.content.saved.first?.bell.label == "Turn off notifications for Durham")
+    #expect(paid.content.savedLine == nil)
+    // Nothing can be sent: shown off, kept underneath.
+    rung.active = false
+    #expect(paid.content.saved.first?.bell.state == .off)
+    #expect(paid.content.savedLine == AppCopy.bellHint)
+    // A saved place found by a search has its bell too.
+    let leeds = SavedPlace(target: leedsCity, name: "Leeds", detail: "England, United Kingdom")
+    let (h, searching) = try picker(
+      unlocked: true, bells: FakeBells(bells: ["city:leeds-gb"]), saved: [leeds],
+      replies: [try searchReply("search-leeds")])
+    searching.type("Leeds")
+    await h.clock.runNext()
+    #expect(searching.content.results.first?.bell?.state == .on)
+    #expect(searching.content.results.first?.bell?.place == leeds)
+    // Without the notifications, every bell is the purchase's alone.
+    let bare = Harness(
+      now: try fixtureNow("leeds-dry"), store: .init(unlocked: true),
+      replies: [.failure(.notConnectedToInternet)], saved: [durhamSaved]
+    ).model.makePicker()
+    #expect(bare.content.saved.first?.bell.state == .off)
+    #expect(await bare.toggleBell(durhamSaved) == nil)
+  }
+
+  @Test("each outcome is said once it is known: on, on with the evening, off, denied")
+  func eachOutcomeIsSaid() async throws {
+    let bells = FakeBells(results: [.on, .onWithHere, .off, .denied])
+    let heard = HeardAnnouncements()
+    let (_, picker) = try picker(unlocked: true, bells: bells, heard: heard)
+    for _ in 0..<4 { _ = await picker.toggleBell(durhamSaved) }
+    #expect(
+      heard.said == [
+        "Notifications on for Durham.", "Evening notifications on for Durham and where you are.",
+        "Notifications off for Durham.", "Notifications are off for this app in Settings.",
+      ])
+    #expect(bells.taps == Array(repeating: "city:durham-gb unlocked", count: 4))
+    #expect(picker.purchasing == nil)
+  }
+
+  @Test("the outcome is said after the tap's work, not at the tap")
+  func saidAfterTheWork() async throws {
+    let bells = FakeBells(results: [.onWithHere])
+    let heard = HeardAnnouncements()
+    let (_, picker) = try picker(unlocked: true, bells: bells, heard: heard)
+    bells.hold()
+    let tapping = Task { await picker.toggleBell(durhamSaved) }
+    #expect(await yieldUntil { bells.taps.count == 1 }, "the tap never reached the bells")
+    for _ in 0..<100 { await Task.yield() }
+    #expect(heard.said.isEmpty)
+    bells.release()
+    #expect(await tapping.value == .onWithHere)
+    #expect(heard.said == ["Evening notifications on for Durham and where you are."])
+  }
+
+  @Test("denied: the line and Open Settings under the saved places, until allowed again")
+  func theDeniedLine() async throws {
+    let bells = FakeBells(active: false, permissionDenied: true, results: [.denied, .on])
+    let (_, picker) = try picker(unlocked: true, bells: bells)
+    #expect(picker.content.bellDenied == nil)
+    #expect(await picker.toggleBell(durhamSaved) == .denied)
+    #expect(
+      picker.content.bellDenied
+        == PlacePicker.BellDenied(
+          text: "Notifications are off for this app in Settings.", openSettings: "Open Settings"))
+    // Allowed in iOS Settings, and back: the line goes.
+    bells.permissionDenied = false
+    #expect(picker.content.bellDenied == nil)
+    // A tap that turns a bell on puts it away for good.
+    bells.permissionDenied = true
+    #expect(await picker.toggleBell(durhamSaved) == .on)
+    #expect(picker.content.bellDenied == nil)
+  }
+
+  @Test("a locked bell opens the purchase, says nothing, and turns on by itself once it's bought")
+  func theLockedBellsPurchase() async throws {
+    let bells = FakeBells(results: [.needsPurchase, .onWithHere])
+    let heard = HeardAnnouncements()
+    let (_, picker) = try picker(unlocked: false, bells: bells, heard: heard)
+    #expect(await picker.toggleBell(durhamSaved) == .needsPurchase)
+    #expect(picker.purchasing == durhamSaved)
+    #expect(heard.said.isEmpty)
+    #expect(!picker.finished)
+    await picker.purchaseSheetClosed(unlocked: true)
+    #expect(picker.purchasing == nil)
+    #expect(bells.taps == ["city:durham-gb locked", "city:durham-gb unlocked"])
+    #expect(heard.said == ["Evening notifications on for Durham and where you are."])
+    #expect(!picker.finished)
+  }
+
+  @Test("the purchase sheet closed without buying turns nothing on")
+  func closedWithoutBuying() async throws {
+    let bells = FakeBells(results: [.needsPurchase])
+    let heard = HeardAnnouncements()
+    let (_, picker) = try picker(unlocked: false, bells: bells, heard: heard)
+    _ = await picker.toggleBell(durhamSaved)
+    await picker.purchaseSheetClosed(unlocked: false)
+    #expect(picker.purchasing == nil)
+    #expect(bells.taps == ["city:durham-gb locked"])
+    #expect(heard.said.isEmpty)
+    // A sheet closed that no bell opened turns nothing on either.
+    await picker.purchaseSheetClosed(unlocked: true)
+    #expect(bells.taps.count == 1)
+  }
+
+  @Test("bought, with the bell already on underneath (a restore), it stays on and says so")
+  func boughtWithTheBellAlreadyOn() async throws {
+    let bells = FakeBells(bells: ["city:durham-gb"], results: [.needsPurchase, .off])
+    let heard = HeardAnnouncements()
+    let (_, picker) = try picker(unlocked: false, bells: bells, heard: heard)
+    _ = await picker.toggleBell(durhamSaved)
+    await picker.purchaseSheetClosed(unlocked: true)
+    #expect(bells.taps == ["city:durham-gb locked"])
+    #expect(heard.said == ["Notifications on for Durham."])
+  }
+
+  @Test("a place unsaved while its purchase was open gets no bell")
+  func unsavedWhileBuying() async throws {
+    let bells = FakeBells(results: [.needsPurchase])
+    let (h, picker) = try picker(unlocked: false, bells: bells)
+    _ = await picker.toggleBell(durhamSaved)
+    picker.unsave(durham)
+    #expect(h.model.saved.isEmpty)
+    await picker.purchaseSheetClosed(unlocked: true)
+    #expect(bells.taps.count == 1)
+  }
+
+  @Test("with the notifications: a bell rung, its star unsaves it and says so, and saved again")
+  func withTheNotifications() async throws {
+    let now = try devicesMoment()
+    let notifications = NotificationsHarness(
+      now: now, settings: eveningOn, registration: try registration(at: now),
+      location: FakeLocation(access: .denied),
+      replies: [
+        try deviceReply("put-here-ip-durham"), try deviceReply("put-here-ip"),
+        try deviceReply("put-here-ip-durham"),
+      ])
+    let app = Harness(
+      now: now, store: .init(units: .c, unlocked: true),
+      replies: [.failure(.notConnectedToInternet)],
+      appHooks: NotificationHooks(notifications: notifications.model), saved: [durhamSaved])
+    notifications.model.unlockedChanged(true)
+    notifications.model.tokenArrived(try fixtureToken())
+    notifications.model.screenChanged(target: .ip, units: .c)
+    await notifications.model.synced()
+    #expect(notifications.model.state.saved == [durhamSaved])
+    let heard = HeardAnnouncements()
+    let picker = app.model.makePicker(bells: notifications.model, announce: heard.announce)
+    #expect(picker.content.saved.first?.bell.state == .off)
+    #expect(await picker.toggleBell(durhamSaved) == .on)
+    #expect(heard.said == ["Notifications on for Durham."])
+    let row = try #require(picker.content.saved.first)
+    #expect(row.bell.state == .on)
+    #expect(row.star.announcement == "Durham removed from saved places. Its notifications are off.")
+    await notifications.model.synced()
+    #expect(try notifications.requests.last?.body == deviceSentJSON("put-here-ip-durham"))
+    // Its star: unsaved, and its record goes with the next set.
+    picker.unsave(durham)
+    #expect(notifications.model.bells.isEmpty)
+    await notifications.model.synced()
+    #expect(try notifications.requests.last?.body == deviceSentJSON("put-here-ip"))
+    // Saved again from Recent before the app closes: its bell is back.
+    picker.save(try #require(picker.content.recents.first).place)
+    #expect(picker.content.saved.first?.bell.state == .on)
+    await notifications.model.synced()
+    #expect(try notifications.requests.count == 3)
+    #expect(try notifications.requests.last?.body == deviceSentJSON("put-here-ip-durham"))
   }
 }

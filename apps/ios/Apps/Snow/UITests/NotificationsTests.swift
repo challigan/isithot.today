@@ -2,16 +2,20 @@ import UIKit
 import XCTest
 
 /// Notifications in the app (iOS build spec, sections 10.2 item 5, 10.6 and 12; phase 8.4a's
-/// design, 2.1 to 2.8): Settings → Notifications turned on at approximate location, where you are
-/// then the town the server located from the connection; its switches, "Where you are", the test
-/// and each result it can come to; a change that couldn't be saved; a permission refused at the
-/// switch, and one turned off in iOS Settings before the next launch; the "Where you are" page and
-/// its "Use my location"; what Your privacy shows as kept while registered, and "Turn off
-/// notifications and delete my data"; the Today card where you are, turned on and put away, and
-/// none on a chosen city's page; a notification's route; and the link to Settings →
-/// Notifications. Each launch is `-uitest`, with the ads off (`-noads 1`), the clock fixed at its
-/// fixture's moment and the Debug recorder on (`-openURLs record`, DebugHooks.swift), from a clean
-/// store unless a test relaunches on purpose; the place chosen, when one is, is Leeds (`leeds`).
+/// design, 2.1 to 2.8, and phase 8.4b's, 2.2 to 2.8): Settings → Notifications turned on at
+/// approximate location, where you are then the town the server located from the connection; its
+/// switches, "Where you are", "Saved places" both ways, the test and each result it can come to,
+/// two tests with a saved place's bell on among them; a change that couldn't be saved; a
+/// permission refused at the switch, and one turned off in iOS Settings before the next launch;
+/// the "Where you are" page and its "Use my location"; a saved place's bell turned on from the
+/// search screen "Saved places" opens; what Your privacy shows as kept while registered, a saved
+/// place and the iPhone's time zone among it, and "Turn off notifications and delete my data"; the
+/// Today card where you are, turned on and put away, and none on a chosen city's page; a
+/// notification's route; and the link to Settings → Notifications. Each launch is `-uitest`, with
+/// the ads off (`-noads 1`), the clock fixed at its fixture's moment and the Debug recorder on
+/// (`-openURLs record`, DebugHooks.swift), from a clean store unless a test relaunches on
+/// purpose; the place chosen, when one is, is Leeds (`leeds`); the saved places, when there are
+/// any, are `-saved`'s.
 ///
 /// Nothing here meets a system alert: the notifications' stand-in, every UI test's under
 /// `-uitest`, asks the real centre nothing (`-notifications` says what the permission is, or what
@@ -21,8 +25,9 @@ import XCTest
 /// that tap, whatever the simulator's own location settings say. NotificationPermissionTests
 /// meets the real prompt. The server's devices calls are the stub's (`-devices`), answered from
 /// the fixtures the server's own code wrote, each a whole set (`put-here-ip`, Leeds located from
-/// the connection; `put-here-device`, the phone's cell at 53.8, -1.55, also Leeds), so no request
-/// leaves the phone. Each step waits for
+/// the connection; `put-here-device`, the phone's cell at 53.8, -1.55, also Leeds;
+/// `put-here-ip-durham`, Leeds and Durham with its bell on), so no request leaves the phone. Each
+/// step waits for
 /// what the app shows, never a sleep: a switch's value (`isOn`), a line's words, the test row's
 /// result, the kept block; and the picker by the app's own readout (`pickerOpens`), not by
 /// XCUITest's tree, which lags the screen. Every tap whose result can be read is watched, as
@@ -68,9 +73,10 @@ final class NotificationsTests: XCTestCase {
   /// that says what is kept, and "Where you are", which says it is approximate, with no town
   /// while nothing is on. Turned on, it asks for no location (the stand-in would allow it, and
   /// the row would then say "Your location"), and the row names the town the server located from
-  /// the connection, Leeds (`put-here-ip`). Your privacy then shows where you are among what is
-  /// kept. Settings is audited off, as the first launch shows it; on is
-  /// `testTurningOnRegistersAndYourPrivacyShowsIt`'s audit.
+  /// the connection, Leeds (`put-here-ip`). "Saved places", without the purchase, says what it
+  /// takes and pushes the purchase's page on Settings' own stack (phase 8.4b, decision 13). Your
+  /// privacy then shows where you are among what is kept. Settings is audited off, as the first
+  /// launch shows it; on is `testTurningOnRegistersAndYourPrivacyShowsIt`'s audit.
   @MainActor
   func testTurningOnAtApproximateLocation() throws {
     let app = launch(["-fixture", "ip-first-launch", "-notifications", "allow"])
@@ -84,6 +90,11 @@ final class NotificationsTests: XCTestCase {
     try turnOnTheEvening(in: app)
     try waitForHere(in: app, note: Copy.approximate, town: "Leeds")
     try waitFor("notify-here-kept", in: app, label: Copy.hereKept)
+    try waitFor("notify-saved", in: app, value: Copy.savedLocked)
+    try tap("notify-saved", in: app) { app.showsPage(titled: Copy.upgradeTitle) }
+    try page(titled: Copy.upgradeTitle, in: app)
+    back(in: app) { app.lacksPage(titled: Copy.upgradeTitle) }
+    try page(titled: "Settings", in: app)
 
     try openYourPrivacy(in: app)
     try waitFor("kept-heading", in: app, label: Copy.kept)
@@ -197,8 +208,9 @@ final class NotificationsTests: XCTestCase {
   }
 
   /// Each answer to "Send a test notification", in turn, in its own words: one too many this
-  /// hour, quiet hours at the place, the server not sending yet, and a record the server no
-  /// longer has, which says the test failed and registers afresh.
+  /// hour, quiet hours (on the iPhone's clock since phase 8.4b, decision 25), the server not
+  /// sending yet, and a record the server no longer has, which says the test failed and registers
+  /// afresh.
   @MainActor
   func testEveryTestResult() throws {
     let app = launch(
@@ -259,6 +271,70 @@ final class NotificationsTests: XCTestCase {
       XCTFail("The Where you are page is still there once it follows the phone: \(still)")
     }
     try page(titled: "Settings", in: app)
+  }
+
+  /// Saved places with the one-off purchase (phase 8.4b; design 2.2 to 2.4 and 2.8, decisions 11,
+  /// 13, 16 and 25): Durham saved (`-saved place=durham-gb`), the purchase owned (`-unlocked 1`),
+  /// every switch off. "Saved places" says "Off" and opens the search screen, Settings closing
+  /// first, where Durham's bell is off under the line that says what a bell does. Its tap turns
+  /// Durham's notifications on, and "Evening before" with them, which is for where you are too,
+  /// as every switch was off (`put-here-ip-durham`); the line goes, and the search screen is
+  /// audited with the bell on, at Large. Back in Settings the evening is on and "Saved places"
+  /// says "1 on"; the test sends two, where you are's and Durham's (`-devices sent2`,
+  /// `test-sent-two`); Your privacy lists Durham in its zone and the iPhone's time zone, kept only
+  /// with a saved place; and "Turn off notifications and delete my data" takes them all, the bell
+  /// with them, so "Saved places" says "Off" again.
+  @MainActor
+  func testSavedPlacesPaid() throws {
+    let app = launch(
+      Self.leeds + ["-unlocked", "1", "-saved", "place=durham-gb", "-devices", "sent2"])
+    try openSettings(app)
+    try waitFor("notify-saved", in: app, value: Copy.savedOff)
+    let shown = app.pickersShown ?? 0
+    // Watched until Settings has gone, as the row closes it before the picker opens over the
+    // home screen (`HomeView.present`), or the picker is open: neither while Settings is there.
+    try tap("notify-saved", in: app) {
+      app.lacksPage(titled: "Settings") || self.pickerOpen(in: app, after: shown) == true
+    }
+    try expectThePicker(in: app, after: shown, "after tapping Saved places")
+    let bell = "bell-saved-city:durham-gb"
+    try waitFor(bell, .button, in: app, label: Copy.bellOn)
+    try waitFor("saved-line", in: app, label: Copy.bellHint)
+    let durham = app.buttons[bell]
+    // Watched until the bell says a tap now turns it off, which only this tap brings.
+    watchedTap(bell, in: app, until: { says(bell, Copy.bellOff, in: app) }, { durham.tap() })
+    try waitFor(bell, .button, in: app, label: Copy.bellOff)
+    if let still = gone("saved-line", in: app) {
+      XCTFail("The line under the saved places, with a bell on: \(still)")
+    }
+    attach(app, as: "app-picker-bell-on")
+    try auditAccessibility(
+      of: app, on: "the picker, with a saved place's bell on",
+      surface: try HomeScreen.named("leeds-dry").picker())
+    try closeThePicker(in: app, after: shown)
+
+    try openSettings(app)
+    try expectSwitch(app.find("notify-evening"), on: true)
+    try waitFor("notify-saved", in: app, value: Copy.savedOne)
+    try tap("notify-test", in: app) { holds("notify-test", Copy.testSentTwo, in: app) }
+    try waitFor("notify-test", in: app, value: Copy.testSentTwo)
+
+    try openYourPrivacy(in: app)
+    try waitFor("kept-line-2", in: app, label: Copy.keptDurham)
+    XCTAssertEqual(app.find("kept-line-1").label, Copy.keptHere)
+    XCTAssertEqual(app.find("kept-line-3").label, Copy.keptDeviceZone)
+    XCTAssertEqual(app.find("kept-line-4").label, Copy.keptUnits)
+    XCTAssertEqual(app.find("kept-line-5").label, Copy.evening)
+    XCTAssertFalse(app.find("kept-line-6").exists, "A kept line too many")
+    try tap("delete-my-data", in: app) { says("delete-status", Copy.deleteDone, in: app) }
+    try waitFor("delete-status", in: app, label: Copy.deleteDone)
+    if let still = gone("kept-line-0", in: app) {
+      XCTFail("The kept block is still there once deleted: \(still)")
+    }
+    back(in: app) { app.lacksPage(titled: "Your privacy") }
+    try page(titled: "Settings", in: app)
+    try expectSwitch(app.find("notify-evening"), on: false)
+    try waitFor("notify-saved", in: app, value: Copy.savedOff)
   }
 
   /// The Today card where you are: leeds-dry's middle page at approximate location, no place
@@ -353,10 +429,11 @@ final class NotificationsTests: XCTestCase {
 
   // MARK: - Helpers
 
-  /// What Settings → Notifications, the "Where you are" page, Your privacy and the card say, as
-  /// packages/mobile's `APP_COPY` and core word them (AppCopy.swift, CoreCopy.swift), with the
-  /// town the devices fixtures name, and the Met Office's page (`Constants.Outbound`): typed
-  /// here, as SettingsTests types Settings', since the UI tests link none of the app's modules.
+  /// What Settings → Notifications, the "Where you are" page, the search screen's bells and
+  /// line, Your privacy and the card say, as packages/mobile's `APP_COPY` and core word them
+  /// (AppCopy.swift, CoreCopy.swift), with the towns and zones the devices fixtures name, and the
+  /// Met Office's page (`Constants.Outbound`): typed here, as SettingsTests types Settings', since
+  /// the UI tests link none of the app's modules.
   private enum Copy {
     static let hereKept =
       "Uses your location if you share it, otherwise a rough place from your internet "
@@ -372,18 +449,27 @@ final class NotificationsTests: XCTestCase {
     static let notifyDenied = "Notifications are off for this app in Settings."
     static let testSent = "Sent. It should arrive in a few seconds."
     static let testLimited = "You can send 3 test notifications an hour. Try again later."
-    static let testQuiet =
-      "Nothing is sent from 9pm to 7am at the place. Try again after 7am there."
+    static let testSentTwo = "Sent 2 test notifications. They should arrive in a few seconds."
+    static let testQuiet = "Nothing is sent from 9pm to 7am. Try again after 7am."
     static let testDryRun = "Our server isn't sending notifications yet, so nothing was sent."
     static let testFailed = "Couldn't send a test notification. Try again later."
     static let notSaved =
       "Couldn't save your notification choices. The app will try again when you next open it."
     static let kept = "What we keep for notifications"
     static let keptHere = "Where you are: Leeds, Europe/London"
+    static let keptDurham = "Durham, Europe/London"
+    static let keptDeviceZone = "Your iPhone's time zone: Europe/London"
     static let keptUnits = "Snow units: cm"
     static let evening = "Evening before (about 6pm)"
     static let deleteDone =
-      "Notifications are off. We've deleted your notification token, place, units and choices."
+      "Notifications are off. We've deleted your notification token, places, units and choices."
+    static let savedLocked = "With the one-off purchase"
+    static let savedOff = "Off"
+    static let savedOne = "1 on"
+    static let upgradeTitle = "No ads, widgets and more"
+    static let bellOn = "Turn on notifications for Durham"
+    static let bellOff = "Turn off notifications for Durham"
+    static let bellHint = "Tap a place's bell to get notifications for it."
     static let cardOffer = "Get a notification the evening before snow is likely where you are."
     static let cardOnNearLeeds =
       "Done. You'll get a notification the evening before snow is likely near Leeds. You can "

@@ -5,9 +5,11 @@ import SwiftUI
 /// own parts: its heading (`notifications-heading`), then one card holding, in order, the notice
 /// (that notifications are off for the app), the items (Open Settings while they are; each
 /// switch; the line that says what is kept for where you are (`notify-here-kept`); "Where you
-/// are", its town and how it was found, which pushes its page (`notify-here`); and the test with
-/// its result), the status line, the footer, and while where you are is in the UK "Met Office
-/// warnings", which opens in Safari. Every line that can wrap is on the card, never the page.
+/// are", its town and how it was found, which pushes its page (`notify-here`); "Saved places",
+/// how many saved places' bells are on, which opens the search screen where the bells are, or
+/// without the purchase what it takes, which pushes the purchase's page (`notify-saved`, phase
+/// 8.4b); and the test with its result), the status line, the footer, and while where you are or
+/// a saved place with its bell on is in the UK "Met Office warnings", which opens in Safari. Every line that can wrap is on the card, never the page.
 /// Everything shown is `NotificationSettings`'; the views keep no state, and hand each tap to the
 /// model (`NotificationActions`). The permission is read again as the section appears, so a
 /// change made in iOS Settings shows when Settings opens.
@@ -53,7 +55,8 @@ struct NotificationsSection: View {
     .task { actions.appeared() }
   }
 
-  /// An item as its kind has it: a switch, the kept line, "Where you are", or a row that acts.
+  /// An item as its kind has it: a switch, the kept line, "Where you are", "Saved places", or a
+  /// row that acts.
   @ViewBuilder private func itemView(_ item: NotificationSettings.Item) -> some View {
     switch item {
     case .toggle(let row):
@@ -62,6 +65,8 @@ struct NotificationsSection: View {
       CardFootnote(line: line)
     case .here(let row):
       HereRowView(row: row)
+    case .savedRow(let row):
+      SavedRowView(row: row, perform: actions.perform)
     case .row(let row):
       actionRow(row)
     }
@@ -98,10 +103,12 @@ struct NotificationsSection: View {
     }
   }
 
-  /// Open Settings leaves the app (an arrow out); the rest stay in it (no end).
+  /// Open Settings leaves the app (an arrow out); "Saved places" opens the search screen (a
+  /// chevron, as `SavedRowView` draws it); the rest stay where they are (no end).
   private static func end(of action: SettingsScreen.NotificationAction) -> RowEnd {
     switch action {
     case .openNotificationSettings, .openLocationSettings: .leaves
+    case .savedPlaces: .page
     case .sendTest, .useMyLocation: .none
     }
   }
@@ -143,6 +150,44 @@ struct HereRowView: View {
   }
 }
 
+/// "Saved places" (`notify-saved`, phase 8.4b; design 2.4, decision 13): its title, its value
+/// ("2 on", "Off", or "With the one-off purchase") and a chevron. With the purchase it opens the
+/// search screen, where each saved place's bell is (Settings closes, then the picker opens:
+/// `.notification(.savedPlaces)`); without it, it pushes the purchase's page on Settings' stack, as
+/// the upgrade row does (`.page(.upgrade)`). The value is its accessibility value alone
+/// (`RowLabel` hides the drawn one), which the UI tests read, so VoiceOver says it once.
+struct SavedRowView: View {
+  let row: NotificationSettings.SavedRow
+  let perform: (SettingsScreen.NotificationAction) -> Void
+
+  var body: some View {
+    link
+      .buttonStyle(SheetRowStyle())
+      .accessibilityValue(Text(verbatim: row.value))
+      .accessibilityIdentifier(row.id)
+  }
+
+  /// The row as its action has it: a page pushed on Settings' stack, or the model asked.
+  @ViewBuilder private var link: some View {
+    switch row.action {
+    case .page(let page):
+      NavigationLink(value: page) { label }
+    case .notification(let action):
+      Button {
+        perform(action)
+      } label: {
+        label
+      }
+    default:
+      label
+    }
+  }
+
+  private var label: some View {
+    RowLabel(title: row.title, icon: row.icon, end: .page, value: row.value)
+  }
+}
+
 /// A line of words on a card (the kept line among the items, the status line, the footer), as
 /// the units' footnote is: `note` in `soft`, wrapping, 18 in from the card's sides.
 private struct CardFootnote: View {
@@ -169,6 +214,7 @@ extension NotificationSettings.Item {
     case .toggle(let row): row.id
     case .line(let line): line.id
     case .here(let row): row.id
+    case .savedRow(let row): row.id
     case .row(let row): row.id
     }
   }

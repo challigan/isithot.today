@@ -246,9 +246,16 @@ struct AlertRecordsTests {
       "put-unlocated": .placeRefused(
         message: "We couldn't tell where you are from your internet connection. Try again "
           + "later, or use your location."),
+      // 8.4b's: saved places' bells, a gone city page, and the cap on new places.
+      "put-here-ip-durham": .stored(try deviceResponse("put-here-ip-durham")),
+      "put-here-ip-kathmandu": .stored(try deviceResponse("put-here-ip-kathmandu")),
+      "put-here-ip-durham-kathmandu": .stored(try deviceResponse("put-here-ip-durham-kathmandu")),
+      "put-refused": .stored(try deviceResponse("put-refused")),
+      "put-capped": .retry(afterSeconds: 60),
     ]
     let tests: [String: AlertSync.TestOutcome] = [
-      "test-sent": .sent(count: 1), "test-dryrun": .dryRun, "test-limited": .limited,
+      "test-sent": .sent(count: 1), "test-sent-two": .sent(count: 2), "test-dryrun": .dryRun,
+      "test-limited": .limited,
       "test-quiet": .quiet, "test-gone": .notRegistered, "test-unregistered": .notRegistered,
       "test-down": .failed,
     ]
@@ -269,7 +276,10 @@ struct AlertRecordsTests {
     let limited = try Fixtures.deviceInfo("rate-limited")
     #expect(AlertSync.testOutcome(status: limited.status, body: limited.reply) == .failed)
     // Each set the app keeps is the server's reply, whole: written back, it reads the same.
-    for name in ["put-here-ip", "put-here-device", "put-here-refresh"] {
+    for name in [
+      "put-here-ip", "put-here-device", "put-here-refresh", "put-here-ip-durham",
+      "put-here-ip-kathmandu", "put-here-ip-durham-kathmandu", "put-refused",
+    ] {
       let response = try deviceResponse(name)
       let written = try JSONEncoder().encode(response)
       #expect(try JSONDecoder().decode(DeviceResponse.self, from: written) == response)

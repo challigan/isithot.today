@@ -8810,6 +8810,290 @@ you are": how it is found and "Use my location"); 12.2's place in the body (vers
 and its heartbeat (with the hourly refresh while approximate); 9.6's keys (`alerts.v2`,
 `alertSync.v2`); and 10.6's place line ("Where you are: …").
 
+## The iPhone app's notifications for saved places (phase 8.4b)
+
+Carl's request of Sun 1 Nov: notifications for other places as a premium feature, set up from the
+saved places, a bell beside a starred place's star, and words on the search screen that say so;
+the free notification follows where you are (phase 8.4a, above). His answers that evening were to
+build it as designed, the purchase's words option (a), and that 1.0 waits for the bells. This is
+8.4b, the app's second half, stacked on 8.4a and on the server half merged before both, whose
+version 2 body already takes saved places. It supersedes "Saved places (the iPhone app)"'s "Free,
+like Recent: the upgrade stays "no ads, plus widgets"" (saving stays free; notifications for a
+saved place need the purchase); in "The purchase in the iPhone app (phase 7.1)", the product's
+name, "Remove ads and add widgets", and the words of the home row, Settings' row, the page and the
+thanks; in "The iPhone app in the website's look", step 5's picker identifiers (`saved-hint` has
+gone for `saved-line`); 8.4a's decision 28's "`bells` … always empty"; and spec 13's product
+words, 10.3's picker, 12.1's Settings, 10.6's Your privacy and 20's listing (below, "Spec points
+superseded"). `apps/ios/README.md` ("Phase 8.4b: notifications for saved places") lists the types,
+words, fixtures and hooks; this records why they are as they are, and where the build differs from
+the design it was built from.
+
+**What changed for the user against 8.4a.**
+
+- A saved place, under Saved or as a saved search result, has a bell beside its star. Without the
+  purchase it has a small lock, and its tap opens the purchase's page over the search screen;
+  bought there, the bell turns on by itself. With the purchase the bell turns that place's
+  notifications on and off: the evening before and on the day, at the place's time, with the same
+  switches as where you are.
+- The search screen's line under Saved says what a star and a bell do, in each state; "Tap the
+  star beside a place to save it here." has gone.
+- Settings → Notifications has "Saved places": "With the one-off purchase", opening the
+  purchase's page, or "2 on" or "Off", opening the search screen.
+- The test sends two with a saved place's bell on, "Sent 2 test notifications. They should arrive
+  in a few seconds.", and quiet hours are the iPhone's: "Nothing is sent from 9pm to 7am. Try again
+  after 7am." The footer says saved places' notifications arrive silently from 9pm to 7am on the
+  iPhone.
+- Your privacy lists each saved place the server keeps, in its zone, and "Your iPhone's time zone"
+  while there is one. The delete says "…token, places, units and choices."
+- The purchase is "No ads, widgets and more"; its page lists what it brings, a line each, and
+  "A one-off purchase. Notifications for where you are, and everything else, stay free."; the
+  home row says "No ads, widgets and notifications for saved places · £1.99"; the thanks says
+  "…and you can turn on notifications for saved places."
+
+**The decisions** this phase implements (the design's numbering, which the code's comments and
+tests follow; the server's are in its section). The bell:
+
+6. **Premium places.** A bell beside the star on every row whose star is filled: Saved rows and
+   saved results, up to `Constants.Alerts.savedPlacesMax` (10, held equal to `PLACES.savedMax` by
+   a test), so "tap the star, then the bell beside it" works in the results where the star was
+   tapped. Never on a Recent row or "Use my location", so where you are never has one. Free, the
+   bell opens the purchase; paid, it turns the place's notifications on and off.
+7. **Where a bell is kept.** In `alerts.v2`'s `bells`, by the place's `targetKey`, in saved
+   order, never on `SavedPlace`, which an unsave rebuilds. Unsaving drops the bell
+   (`AlertSync.keptBells`) and the next sync deletes its record; saving it again before the app is
+   closed brings the bell back (the model remembers, in memory only); after that a place saved
+   starts with its bell off.
+8. **The locked bell** opens the upgrade page as a sheet over the search screen (in
+   `PickerSheet`), not 8.1's close-then-open, which would drop the buyer on the home screen. When
+   that sheet closes with the purchase owned, the bell it came from turns on by itself (asking for
+   notifications if they were never asked), that is announced, and VoiceOver's focus goes back to
+   it. A bell never sets `finished`, so it never brings the full-screen ad.
+9. **The bell's look and VoiceOver.** `bell`, `bell.fill` while on, and `bell` with a small
+   `lock.fill` while locked, hidden from VoiceOver and inside the 44-point frame, so the gate shows
+   before the tap (App Review 2.3.2's "clearly indicate"). In ink, the star's size, 8 points from
+   it; at accessibility text sizes a row with a bell moves its bell and star to their own line
+   under the name. Labels say what a tap does ("Turn on notifications for Kathmandu", "Turn off
+   …", "Turn on …, with the one-off purchase"), and are a saved row's second menu item and a saved
+   result's only one. The outcome is announced by `PlacePickerModel` once it is known (on, on with
+   the evening, off, the denied line; nothing as the purchase opens), never by the button at the
+   tap.
+10. **The search screen's lines**, one per state, chosen by the client rule `savedLines` (39):
+    nothing saved, free or paid; places saved, free, or paid with no bell on; none paid with a bell
+    on; `savedFull` first once there are ten.
+
+The switches:
+
+11. **One set of switches for every place.** A first bell with every switch off turns "Evening
+    before" on and says so ("Evening notifications on for Kathmandu and where you are."). While
+    nothing can be sent (every switch off, or notifications denied in iOS Settings) every bell
+    shows off, kept underneath; a tap then turns the evening on, or with notifications denied
+    shows "Notifications are off for this app in Settings." with Open Settings
+    (`bell-open-settings`).
+
+Settings, the purchase heard, and before it is:
+
+13. **Settings → Notifications** (8.4b's part): one "Saved places" row (`notify-saved`): free,
+    "With the one-off purchase", pushing the upgrade page on Settings' own stack; paid, "{count}
+    on" or "Off", opening the search screen through `requestPicker(locating: false)`, Settings
+    closing first. Free or paid as the rest of Settings and the search screen show the purchase
+    (below, "Where the build differs"). No per-place switches. "Met Office warnings" shows while where you are or a
+    saved place with its bell on is in the UK, by the country the server gave each.
+14. **A refund, or Family Sharing ending.** `NotificationsModel` now hears the purchase
+    (`unlockedChanged`): the bells lock but stay kept, and the next PUT leaves the saved places
+    out, so the server deletes their records first. A restore or a new share puts them back.
+15. **Before StoreKit answers at launch** the bells are sent if the last reply had saved places
+    (`AlertSync.ownsSaved(unlocked: nil, last:)`), so a launch never deletes and adds them again
+    while `unlock.v1` and StoreKit disagree for a moment.
+
+What is kept:
+
+16. **Your privacy** (8.4b's part): one line per saved place the server keeps, in the reply's
+    order ("Durham, Europe/London"), and "Your iPhone's time zone: Europe/London" only with one.
+    The delete is one DELETE for every place, and clears the bells too.
+
+The purchase's words:
+
+17. **The purchase's words**, Carl's option (a), in the app, Snow.storekit and App Store Connect:
+    "No ads, widgets and more" (24 characters of 30) and "No ads, widgets and saved-place
+    notifications" (45 of 45, no full stop); the upgrade page's three benefit lines before the
+    body, each beside a checkmark VoiceOver doesn't read.
+
+What is sent:
+
+20. **Limits**, the app's half: at most ten bells; at most three places new to the set a PUT, the
+    server's 429 then retried after its `Retry-After`, as 8.1's sync is, so ten bells restored
+    take about three minutes. The server stores the first three before that 429, so the app
+    treats the set as one it may hold (below, "Where the build differs").
+21. **The phone's zone** (`deviceTz`) goes in the body only with a saved place, from a seam
+    (`TimeZone.current.identifier`), and is never compared with the reply's, which the server keeps
+    as its ICU names it (Asia/Katmandu for Asia/Kathmandu): comparing would send again for ever.
+
+The test:
+
+25. **The test** asks as before; the reply's `count` words it (`testSentCount` for two).
+
+Where the purchase shows, and where it doesn't:
+
+30. **No marketing in notifications**: the upsell is in the app alone, the locked bell, the search
+    screen's lines and Settings' locked row.
+31. **The purchase stays independent:** buyable and restorable with notifications off or denied
+    and location never shared. No bell asks for location.
+
+And, from the design's reviews:
+
+39. **TypeScript for the presenters' choices**: `savedLines` with vectors, as `hereKind` was for
+    8.4a, beside `bellState`, `setBell`, `keptBells`, `ownsSaved`, `savedForBody`, `tapBell` and
+    `alertsActive`, all ported against `alerts.json`.
+
+**Where the build differs from its design.**
+
+- **A set the server may hold is deleted like one it holds** (review 2, finding 1). The cap's 429
+  comes after the server has stored where you are and the first three places new to the set
+  (decision 20), a 503 after it stored the rest (decision 32), and a reply lost may follow a set
+  stored. With no registration kept, as after every switch was off with four bells or more kept,
+  8.1's rule sent nothing when every switch went off again, or notifications were denied, within
+  the retry's minute: `alertAction` deleted only a set it had a reply for, so the server kept the
+  token and the places, notifying for up to 90 days (and `deleteMyData` called done with nothing
+  sent, though Your privacy offers the delete only while a registration is kept). The client rule now takes `unconfirmed`, a set sent that the server may hold
+  though no reply to it was kept, and deletes it as it would `last` (TypeScript first, with
+  vectors, ported as `AlertSync.action(…unconfirmed:)`). `NotificationsModel` keeps that set's
+  token in memory after a 429 or a failure, until a reply says what the server holds (stored,
+  forgotten, refused, or a DELETE answered); the DELETE goes to the registration's token, or
+  else to it; and the delete is done only once it is clear. In memory only: a relaunch with a
+  switch on sends the set again, which a reply then settles. Left as it was: a set sent with a
+  new token whose reply was lost, while the registration kept names the old one, is deleted by
+  the old token only, as 8.1 already leaves an old token's records for Apple's refusal to end.
+- **"Saved places" shows the purchase the rest of Settings shows** (review 2, finding 2). It
+  decided free or paid by `ownsSaved`, which before StoreKit answers at launch follows the last
+  reply's saved places, while the upgrade card, the upgrade page it pushes and the search
+  screen's bells follow `AppModel.unlocked` (`unlock.v1` until then). A buyer whose last reply
+  had no saved place saw "With the one-off purchase" push a page that thanked them for it. The
+  row now takes the app's purchase (`NotificationSettings(_:unlocked:)`); `ownsSaved` decides only
+  what is sent (decision 15).
+- **The purchase reaches the notifications through `AppModel`.** The design had `WillItSnowApp`
+  tell both `model.purchaseChanged` and `notifications.unlockedChanged`. `AppModel` now tells them
+  itself, through two new hooks (`AppHooks.unlockedChanged(_:)` at launch step 5 and on every
+  `purchaseChanged`, and `AppHooks.savedChanged(_:)` at step 1 and after each change of the saved
+  places kept), which `LiveHooks` forwards; the direct call as well would have told them twice. The
+  same answer again changes nothing.
+- **The PUT sends the body's own bytes.** `DevicesAPI` encoded the body again with
+  `JSONEncoder`, which writes "Europe/London" as `Europe\/London`, so with `deviceTz` the bytes
+  sent were not the bytes fingerprinted (WP-B4's first run: 315 bytes against 314). It now sends
+  `body.json`, the client's exact bytes.
+- **A tap that waits keeps what it meant.** Two taps while the prompt is out ask once; on the first
+  run the tap that waited turned off the bell the other had just turned on. A waiting tap now keeps
+  what it meant at the moment of the tap.
+- **Only a row with a bell stacks** at accessibility sizes; a row with a star alone keeps the
+  layout the audits already pass. One layout or the other (`AnyLayout`), never two views, so the
+  buttons and VoiceOver's focus keep their identity as the size changes.
+- **Open Settings under the denied line** opens the app's notification settings (a new
+  `openNotificationSettings` action), not the app's settings page, which the location's Open
+  Settings opens.
+- **"Saved places" says its value once.** It is the row's accessibility value alone, as the
+  "Where you are" row's town is (`RowLabel` hides the drawn value).
+- **The lock is read from the label.** The badge is hidden from VoiceOver (9), and so from
+  XCUITest's tree: the UI tests read a locked bell by its label.
+- **The Debug hooks.** `-saved` names a city by the query's `&name=` or else by the bundled answer
+  for its page, and stops the app on anything it can't keep as the picker would. The searched
+  place's query must be the one `search-kathmandu`'s result saves (with its region, `geonameId`
+  and elevation): `kathmandu-0545`'s shorter query is another set, which the stub answers with
+  the 400. The stub answers `put-capped`'s set with its 429 every time, as no fixture holds what
+  the server stores after it; the sets in between have no fixture either.
+- **The UI tests.** `PickerTests.testTheBellJourney` launches with `-location denied`, so where you
+  are is approximate whatever the simulator's own settings, and the set is
+  `put-here-ip-kathmandu`'s; it buys from the result's bell, where the star was tapped, and turns
+  the bell off and unsaves under Saved. `NotificationsTests.testSavedPlacesPaid` opens the search
+  screen from Settings' "Saved places", checking that row's paid action as well, and turns
+  Durham's bell on there, since `-saved` keeps places, not bells: every switch off, it turns the
+  evening on with it. The free row's value and the page it pushes are checked in
+  `testTurningOnAtApproximateLocation`, the first launch's Settings, which the design left to
+  Linux. The AX5 launch is in `testSavedPlacesAccessibilityAuditAtAX3`, as designed, with
+  Rovaniemi saved, its screenshot (`picker-saved-ax5`) and only the clipped-text kind of the
+  audit, through `runAudit`, so a timed-out call runs again as every sheet's does; AX5 is passed
+  as its launch argument, as `TextSize` (HomeScreens.swift) has no AX5 case and isn't this work
+  package's file. `SettingsTests.testYourPrivacy` pins the new `privacyNotifications`, which the
+  TypeScript layer's list of Swift to change left out; SettingsTests.swift isn't in the design's
+  work package either. Net, the UI plan has two tests more, as designed.
+- **Docs.** The review note for 1.0 is one note for the purchase and notifications, which replaces
+  the purchase's, the widgets' and 8.4a's notifications paragraph in docs/SETUP.md; the
+  purchase's statuses there are Apple's ("Prepare for Submission", "Ready for Review").
+
+**Checked on Linux.**
+
+- **TypeScript first** (bde603a): the eight client rules and the body's `saved` and `deviceTz`,
+  with vectors in `alerts.json`; the copy, constants and Snow.storekit; six device fixtures and two
+  payloads made by the server's handler from a fixed salt; the server's contract test sends every
+  set the client makes for saved places and reads each reply back.
+- **IsItCore** in Docker (`isithot-swift:6.3.3`): 759 tests in 110 suites pass, every vector of
+  `alerts.json` among them. The new tests were written first, against stubs of the new API:
+  IsItLogic's run of 311 tests failed there with 211 issues, then passed on the ports; in
+  IsItState 35 tests failed with 128 issues, then all passed, five runs in a row. The reviews'
+  two fixes were written test first too: `alertAction`'s `unconfirmed` failed its two Vitest
+  tests, then the six new vectors failed the Swift port (`.none` for `.delete`) and the four new
+  model tests failed with seven issues (no DELETE, the delete done at once), before the code; and
+  the "Saved places" row's test, against the new parameter not yet used, failed with seven
+  issues, both ways round.
+- **Against stubs** (session scratchpad: saved-typecheck): IsItUI's new and changed views and the
+  app's files type-check in Debug and Release against the real IsItCore; no new user-facing
+  literal is in Swift. The UI tests compile against the XCUITest stubs (saved-uicheck), whose 155
+  checks pass, the 143 before this phase among them, and 12 new ones of the `done` conditions the
+  new watched taps were given (`BellTapCheck`): each unmet by what is in the tree before its tap
+  (the locked bell, Settings' upgrade row reading the purchase's name, a bell reading the other
+  way, the recorder holding the location's settings page) and by an app that can't be read, and
+  met once its tap's work shows; a first tap the system cancelled played once more, and one the
+  app had, with the count rising for another touch, never again; and the suites' copies give their
+  taps exactly these. Three planted mistakes (Open Settings' URL judged by its prefix, the bell's
+  `done` without its label, "Saved places" given another condition) each fail them. SettingsTests'
+  Your privacy words failed `TapCheck`'s run of its test methods until that fake was brought to
+  8.4b's words, as `ElementCheck`'s thanks was.
+- **Hooks:** `scripts/check-archive.sh` looks for `-saved` in both binaries (28 hooks); its
+  test and `swiftLiterals.test.ts` pass. `swift format lint --strict` passes on every Swift file.
+
+**Known risks.**
+
+1. **A sheet over the full-screen picker.** The purchase's page is presented from inside the
+   picker's cover; SwiftUI's presentation and XCUITest's tree under the cover are the first
+   macOS run's to show. Under the cover the readouts, `debug-cancels` among them, may not be read,
+   so a tap there isn't watched ("What main's run on 1d643d3 showed", "Where the watch is weaker
+   than it looks").
+2. **AX5.** No UI test has launched at AX5 before: the top bar and the place button there are the
+   first run's to show.
+3. **The stacked row** at AX3 and AX5, and the lock inside the 44-point frame, are proved only by
+   the audits and the screenshots.
+4. **CI time.** Two tests and one launch more, about 2 to 3 minutes at 44 s a test, against the UI
+   plan's budget of 75.
+5. **Made-up registrations** (the server's junk item): Carl's App Attest decision by Fri 13 Nov
+   (docs/SETUP.md, "Saved places' notifications (phase 8.4b)", step 6).
+6. **Swift without a compiler.** IsItUI and the app compile only on macOS; the harness type-checks
+   them.
+
+**For the next macOS run to show** (what nothing on Linux can):
+
+1. That everything compiles against the real SDKs with no new warning.
+2. The bell's look and its lock at Large, AX3 and AX5, the stacked row, and the audits of the
+   search screen with a locked bell (Large, AX3) and with a bell on (`testSavedPlacesPaid`).
+3. The purchase's page over the search screen, the bell turning on as it closes, and the search
+   screen still on its results.
+4. Settings' "Saved places" both ways, the two tests' line, and Your privacy's saved place and
+   time zone, through the stub's `put-here-ip-durham` and `test-sent-two`.
+5. The denied line and its Open Settings recording the app's notification settings.
+6. `app-upgrade`, App Review's screenshot, with the benefit lines.
+7. The UI plan's minutes before and after, against its budget of 75, for the pull request and the
+   job's timing comment.
+
+**What only Carl's phone shows:** a sandbox purchase from the bell; VoiceOver's focus coming back
+to the bell and what it is told; two notifications in two stacks, each opening its place; a saved
+place's notification arriving silently in the night; and the purchase's new words in App Store
+Connect and TestFlight (docs/SETUP.md, "Saved places' notifications (phase 8.4b)").
+
+**Spec points superseded,** in one place: 13's product words (the name, the description, the home
+row and the thanks) and 10.5's page (its benefit lines); 10.3's picker (a bell on each saved place,
+the line under Saved for its hint, the purchase's page over the picker); 12.1's Settings ("Saved
+places"); 12.2's body (the saved places with a bell on, and `deviceTz` with one); 10.6's Your
+privacy (the saved places and the iPhone's zone); 9.6's `alerts.v2` (`bells` filled); and 20's
+listing (the promotional text's "where you choose", the Notifications bullets and the paragraph
+after Widgets, docs/SETUP.md).
+
 ## API contract
 
 The spec's shape is implemented exactly. Additive fields: `days[].month`, `agreementText`,

@@ -89,10 +89,12 @@ public struct KeptCell: Codable, Sendable, Equatable {
 }
 
 /// `alerts.v2` (design 4.2): the switches, the phone's last cell for where you are, and the saved
-/// places' bells (phase 8.4b; none before), as the app keeps them, `{ "v": 2, "prefs", "here"?,
-/// "bells" }`. Read leniently: a `here` that isn't a cell on Earth, and a bell that isn't text,
-/// are dropped, and the rest kept. Nothing stored, another version (8.1's `alerts.v1` is never
-/// read), or switches that don't read are every switch off and nothing kept.
+/// places' bells (phase 8.4b), as the app keeps them, `{ "v": 2, "prefs", "here"?, "bells" }`.
+/// Read leniently: a `here` that isn't a cell on Earth, and a bell that isn't text, are dropped,
+/// and the rest kept; a bell whose place is no longer saved goes once the saved places are known
+/// (`AlertSync.keptBells`), as the codec doesn't know them. Nothing stored, another version (8.1's
+/// `alerts.v1` is never read), or switches that don't read are every switch off and nothing
+/// kept. Its shape is 8.4a's: 8.4b only fills `bells`.
 public struct AlertSettings: Sendable, Equatable {
   /// The version this app writes and reads.
   public static let version = 2
@@ -101,7 +103,9 @@ public struct AlertSettings: Sendable, Equatable {
   public var prefs: AlertPrefs
   /// The phone's last cell, only while location access is allowed (`HerePlace.cell`).
   public var here: KeptCell?
-  /// The saved places with notifications on, by `Target.key`, in saved order (phase 8.4b).
+  /// The saved places with notifications on, by `Target.key`, in saved order, at most
+  /// `Constants.Alerts.savedPlacesMax` (phase 8.4b): `AlertSync.settingBell` and `.keptBells`
+  /// make them. Kept while nothing can be sent, and after a refund, so they come back.
   public var bells: [String]
 
   public init(prefs: AlertPrefs = AlertPrefs(), here: KeptCell? = nil, bells: [String] = []) {
@@ -228,5 +232,167 @@ extension AlertSync {
     }
     if !next.evening, !next.morning { next.possible = false }
     return next
+  }
+}
+
+// MARK: - The saved places' bells (phase 8.4b)
+//
+// A bell is a saved place's notifications, kept by the place's `Target.key` in `alerts.v2`'s
+// `bells`, never on the saved place itself. The one-off purchase unlocks them; where you are needs
+// none. The switches stay one set for every place. Keys are compared byte for byte throughout,
+// as JavaScript compares strings, where Swift's `==` would take canonically equivalent text as
+// the same.
+
+extension AlertSync {
+  /// How a saved place's bell shows (client `BellState`): locked without the purchase, else off
+  /// or on.
+  public enum BellState: String, Codable, Sendable, CaseIterable {
+    /// Without the one-off purchase: a tap opens it.
+    case locked
+    /// With it, the bell off, or nothing can be sent: a tap turns it on.
+    case off
+    /// With it, the bell on and something can be sent: a tap turns it off.
+    case on
+  }
+
+  /// What a tap on a saved place's bell does (client `BellTap`). `on` and `onWithHere` give the
+  /// bells and the switches to keep (then register); `onWithHere` when the tap turned "Evening
+  /// before" on as well, as every switch was off, which is for where you are too, so the app says
+  /// so. `off` gives the bells. `needsPurchase`, `needsPermission` and `denied` change nothing:
+  /// the upgrade sheet opens; the app asks for notifications (the system's prompt) and taps again
+  /// with the answer; or it shows that notifications are off for the app in Settings. As the
+  /// client's JSON, `{ "kind", "bells"?, "prefs"? }`.
+  public enum BellTap: Sendable, Equatable {
+    case needsPurchase
+    case needsPermission
+    case denied
+    case on(bells: [String], prefs: AlertPrefs)
+    case onWithHere(bells: [String], prefs: AlertPrefs)
+    case off(bells: [String])
+  }
+
+  /// A saved place's bell (client `bellState`): locked without the one-off purchase (a tap opens
+  /// it), whatever else; on while its bell is on (`on`) and something can be sent (`active`,
+  /// `AlertSync.active`); otherwise off. While nothing can be sent (every switch off, or
+  /// notifications denied in iOS Settings) every bell shows off, and the bells on are kept
+  /// underneath.
+  public static func bellState(on: Bool, unlocked: Bool, active: Bool) -> BellState {
+    guard unlocked else { return .locked }
+    return on && active ? .on : .off
+  }
+
+  /// The bells once `key`'s is turned on or off (client `setBell`): only saved places have one
+  /// (`savedKeys`, each a saved place's `Target.key`, in saved order), so a key that isn't saved
+  /// changes nothing and any bell of a place no longer saved goes; in saved order, each once, at
+  /// most `Constants.Alerts.savedPlacesMax`.
+  public static func settingBell(_ bells: [String], _ key: String, on: Bool, savedKeys: [String])
+    -> [String]
+  {
+    var next = Set(bells.map { Array($0.utf8) })
+    if on {
+      next.insert(Array(key.utf8))
+    } else {
+      next.remove(Array(key.utf8))
+    }
+    return inSavedOrder(next, savedKeys: savedKeys)
+  }
+
+  /// The bells of places still saved (client `keptBells`), in saved order, each once, at most
+  /// `Constants.Alerts.savedPlacesMax`: after an unsave, or a lenient read of `alerts.v2`. A
+  /// refund keeps them (`savedForBody` sends none), so a restore brings them back.
+  public static func keptBells(_ bells: [String], savedKeys: [String]) -> [String] {
+    inSavedOrder(Set(bells.map { Array($0.utf8) }), savedKeys: savedKeys)
+  }
+
+  /// A tap on `key`'s bell (client `tapBell`), in order: without the purchase, `needsPurchase`; a
+  /// place that isn't saved has no bell (`off`, the bells as kept); a bell that shows on
+  /// (`bellState`) turns off, the switches as they are; otherwise it turns on, once the
+  /// permission allows it (`denied` when it is denied, `needsPermission` when never asked), and
+  /// with every switch off "Evening before" turns on with it (`onWithHere`). The switches are one
+  /// set for every place: a bell kept on while they were off shows off, and a tap brings it back
+  /// with the evening.
+  public static func tapBell(
+    key: String, bells: [String], savedKeys: [String], prefs: AlertPrefs, unlocked: Bool,
+    permission: Permission
+  ) -> BellTap {
+    guard unlocked else { return .needsPurchase }
+    let utf8 = Array(key.utf8)
+    guard savedKeys.contains(where: { $0.utf8.elementsEqual(utf8) }) else {
+      return .off(bells: keptBells(bells, savedKeys: savedKeys))
+    }
+    let on = bells.contains { $0.utf8.elementsEqual(utf8) }
+    let shown = bellState(
+      on: on, unlocked: true, active: active(prefs: prefs, permission: permission))
+    if shown == .on {
+      return .off(bells: settingBell(bells, key, on: false, savedKeys: savedKeys))
+    }
+    if permission == .denied { return .denied }
+    if permission == .notDetermined { return .needsPermission }
+    let next = settingBell(bells, key, on: true, savedKeys: savedKeys)
+    if prefs.evening || prefs.morning { return .on(bells: next, prefs: prefs) }
+    return .onWithHere(bells: next, prefs: setting(prefs, .evening, on: true))
+  }
+
+  /// The keys of `savedKeys` that are in `on`, in saved order, each once, and at most
+  /// `Constants.Alerts.savedPlacesMax` (as many as can be saved): the first in saved order.
+  private static func inSavedOrder(_ on: Set<[UInt8]>, savedKeys: [String]) -> [String] {
+    var kept: [String] = []
+    var seen: Set<[UInt8]> = []
+    for key in savedKeys {
+      if kept.count >= Constants.Alerts.savedPlacesMax { break }
+      let utf8 = Array(key.utf8)
+      if on.contains(utf8), seen.insert(utf8).inserted { kept.append(key) }
+    }
+    return kept
+  }
+}
+
+extension AlertSync.BellTap: Codable {
+  private enum CodingKeys: String, CodingKey {
+    case kind, bells, prefs
+  }
+
+  private enum Kind: String, Codable {
+    case needsPurchase, needsPermission, denied, on, onWithHere, off
+  }
+
+  /// The client's JSON: the kind, with the bells and the switches it carries.
+  public init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    switch try container.decode(Kind.self, forKey: .kind) {
+    case .needsPurchase: self = .needsPurchase
+    case .needsPermission: self = .needsPermission
+    case .denied: self = .denied
+    case .on:
+      self = .on(
+        bells: try container.decode([String].self, forKey: .bells),
+        prefs: try container.decode(AlertPrefs.self, forKey: .prefs))
+    case .onWithHere:
+      self = .onWithHere(
+        bells: try container.decode([String].self, forKey: .bells),
+        prefs: try container.decode(AlertPrefs.self, forKey: .prefs))
+    case .off:
+      self = .off(bells: try container.decode([String].self, forKey: .bells))
+    }
+  }
+
+  public func encode(to encoder: any Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    switch self {
+    case .needsPurchase: try container.encode(Kind.needsPurchase, forKey: .kind)
+    case .needsPermission: try container.encode(Kind.needsPermission, forKey: .kind)
+    case .denied: try container.encode(Kind.denied, forKey: .kind)
+    case .on(let bells, let prefs):
+      try container.encode(Kind.on, forKey: .kind)
+      try container.encode(bells, forKey: .bells)
+      try container.encode(prefs, forKey: .prefs)
+    case .onWithHere(let bells, let prefs):
+      try container.encode(Kind.onWithHere, forKey: .kind)
+      try container.encode(bells, forKey: .bells)
+      try container.encode(prefs, forKey: .prefs)
+    case .off(let bells):
+      try container.encode(Kind.off, forKey: .kind)
+      try container.encode(bells, forKey: .bells)
+    }
   }
 }

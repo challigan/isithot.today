@@ -20,8 +20,10 @@ import UIKit
 /// "Use my exact location" chip, the place picker, full screen (section 10.3, `PickerSheet`);
 /// the gear, Settings (section 10.4, `SettingsSheet`). The third, the upgrade sheet (section
 /// 10.5, `UpgradeSheet`), opens from the middle page's upgrade row in the free version, and from
-/// `willitsnow://upgrade`. Settings also opens from `willitsnow://settings/notifications` and iOS
-/// Settings' link to the app's notification settings. In the free version, once the ads are on,
+/// `willitsnow://upgrade`; a saved place's locked bell opens the same page over the picker
+/// instead (`PickerSheet`, phase 8.4b). Settings also opens from
+/// `willitsnow://settings/notifications` and iOS Settings' link to the app's notification
+/// settings, and Settings → Notifications' "Saved places" opens the picker, where the bells are. In the free version, once the ads are on,
 /// the home banner's band sits under the pager and each page ends with its ad box, and a place
 /// chosen in the picker the place pill opened may show the full-screen ad (`AdsModel`).
 struct HomeView: View {
@@ -71,8 +73,11 @@ struct HomeView: View {
     // "Search" to the picker, a link while the picker is open), the first closes and the second
     // opens once it has gone (`present(_:)`).
     .fullScreenCover(item: $sheet.picker, onDismiss: presentPending) { request in
-      PickerSheet(model: model, ads: ads, request: request)
-        .debugRecorder()
+      PickerSheet(
+        model: model, ads: ads, purchases: purchases, notifications: notifications,
+        request: request
+      )
+      .debugRecorder()
     }
     .sheet(item: $sheet.card, onDismiss: presentPending) { card in
       switch card {
@@ -94,8 +99,8 @@ struct HomeView: View {
       present(.settings)
     }
     // The notifications asking for the picker (`NotificationsModel.requestPicker(locating:)`):
-    // nothing in Settings does since phase 8.4a took the gate's "Use my location" and "Search"
-    // away; phase 8.4b's "Saved places" row is to (design decision 13).
+    // Settings → Notifications' "Saved places" with the purchase (phase 8.4b, design decision
+    // 13), which opens the picker where the saved places' bells are, once Settings has closed.
     .onChange(of: notifications.pickerRequests) { _, _ in
       present(.picker(PickerRequest(locating: notifications.pickerLocating)))
     }

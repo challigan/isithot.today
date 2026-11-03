@@ -58,11 +58,14 @@ enum PortedVectors {
     PortedVector("widget", by: "3.4: WidgetPlanner.entries", port: .widget),
 
     // client herePlace, registrationBody, fingerprint, alertAction, setAlert, syncReply,
-    // hereKind, hereName, replyZones, testOutcome (version 2, phase 8.4a)
+    // hereKind, hereName, replyZones, testOutcome (version 2, phase 8.4a); alertsActive,
+    // bellState, setBell, keptBells, ownsSaved, savedForBody, tapBell, savedLines (phase 8.4b)
     PortedVector(
       "alerts",
       by: "8.4a: AlertSync.here, .body, .fingerprint, .action, .setting, .syncReply, "
-        + ".hereKind, .hereName, .replyZones, .testOutcome",
+        + ".hereKind, .hereName, .replyZones, .testOutcome; 8.4b: AlertSync.active, "
+        + ".bellState, .settingBell, .keptBells, .ownsSaved, .savedForBody, .tapBell, "
+        + "PlacePicker.savedLines",
       port: .alerts),
 
     // client parseDeepLink, notificationRoute

@@ -21,6 +21,8 @@ import {
   PLACES,
   addRecent,
   alertAction,
+  alertsActive,
+  bellState,
   canSave,
   choosePlace,
   dayUntil,
@@ -33,10 +35,12 @@ import {
   hold,
   hourUntil,
   isSaved,
+  keptBells,
   middleDay,
   nextRefreshAt,
   notificationRoute,
   outOfDate,
+  ownsSaved,
   parseDeepLink,
   pickHour,
   registrationBody,
@@ -45,12 +49,16 @@ import {
   resultDetail,
   routeLink,
   savePlace,
+  savedForBody,
+  savedLines,
   searchInput,
   searchQuery,
   searchTarget,
   setAlert,
+  setBell,
   shownRecent,
   syncReply,
+  tapBell,
   targetFromQuery,
   targetKey,
   testOutcome,
@@ -143,6 +151,23 @@ const replay: Record<string, (i: In) => unknown> = {
   hereName: (i) => hereName({ here: i.here, reply: i.reply }),
   replyZones: (i) => replyZones(i.reply),
   testOutcome: (i) => testOutcome(i.status, i.text),
+  alertsActive: (i) => alertsActive(i.prefs, i.permission),
+  bellState: (i) => bellState({ on: i.on, unlocked: i.unlocked, active: i.active }),
+  setBell: (i) => setBell(i.bells, i.key, i.on, i.savedKeys),
+  keptBells: (i) => keptBells(i.bells, i.savedKeys),
+  ownsSaved: (i) => ownsSaved(i.unlocked, i.last),
+  savedForBody: (i) => savedForBody(i.saved, i.bells, i.owns),
+  tapBell: (i) =>
+    tapBell({
+      key: i.key,
+      bells: i.bells,
+      savedKeys: i.savedKeys,
+      prefs: i.prefs,
+      unlocked: i.unlocked,
+      permission: i.permission,
+    }),
+  savedLines: (i) =>
+    savedLines({ savedCount: i.savedCount, unlocked: i.unlocked, anyBellOn: i.anyBellOn }),
   parseDeepLink: (i) => parseDeepLink(i.url),
   notificationRoute: (i) => notificationRoute(i.payload, () => i.placeToday),
   routeLink: (i) => routeLink(i.route),
@@ -745,16 +770,51 @@ describe('the cases cover what section 7.4 asks for', () => {
     // A fix wins over the kept cell, which stands in without one; neither without access.
     const granted = here.filter((c) => (c.in as In).access === 'granted');
     expect(new Set(granted.map((c) => JSON.stringify((c.out as any).target ?? null))).size).toBe(4);
-    // The body: approximate and the phone's cell, never a saved place in 8.4a.
-    const bodies = casesFor('alerts', 'registrationBody').map((c) => c.out as any);
+    // The body: approximate and the phone's cell, with no saved place, one and ten (design 4.1),
+    // a city page by its slug and a searched place by its point, and the phone's zone only with
+    // a saved place: given with none, it is dropped; with some, sent when given.
+    const bodyCases = casesFor('alerts', 'registrationBody');
+    const bodies = bodyCases.map((c) => c.out as any);
     expect(new Set(bodies.map((b) => b.here.source))).toEqual(new Set(['ip', 'device']));
-    expect(bodies.every((b) => b.v === 2 && Array.isArray(b.saved) && !b.saved.length)).toBe(true);
+    expect(bodies.every((b) => b.v === 2 && Array.isArray(b.saved))).toBe(true);
     expect(bodies.some((b) => b.here.source === 'device' && 'name' in b.here)).toBe(false);
+    for (const count of [0, 1, 10]) {
+      for (const zone of [true, false]) {
+        expect(
+          bodies.some(
+            (b) => b.here.source === 'ip' && b.saved.length === count && 'deviceTz' in b === zone,
+          ),
+          `${count} saved, ${zone ? 'with' : 'without'} the zone`,
+        ).toBe(count > 0 || !zone);
+      }
+    }
+    for (const c of bodyCases) {
+      const i = c.in as In;
+      const zone = Boolean(i.saved?.length) && Boolean(i.deviceTz);
+      expect('deviceTz' in (c.out as any), JSON.stringify(i)).toBe(zone);
+    }
+    expect(bodyCases.some((c) => !(c.in as In).saved?.length && (c.in as In).deviceTz)).toBe(true);
+    const sentPlaces = bodies.flatMap((b) => b.saved);
+    expect(new Set(sentPlaces.map((p) => ('place' in p ? 'city' : p.source)))).toEqual(
+      new Set(['city', 'search']),
+    );
+    expect(sentPlaces.some((p) => p.source === 'search' && Object.keys(p).length === 3)).toBe(true);
     // What to do: every action; the hourly refresh while approximate, and the refused set.
     const actions = casesFor('alerts', 'alertAction');
     expect(new Set(actions.map((c) => c.out))).toEqual(
       new Set(['put', 'delete', 'none', 'needsToken']),
     );
+    // A set the server may hold though no reply to it was kept: deleted whenever nothing can be
+    // sent, with nothing kept too, saved places and all; otherwise as when nothing was kept.
+    const unconfirmed = actions.filter((c) => (c.in as In).unconfirmed);
+    const idle = (c: VectorCase) => !alertsActive((c.in as In).prefs, (c.in as In).permission);
+    expect(unconfirmed.filter(idle).length).toBeGreaterThan(4);
+    for (const c of unconfirmed.filter(idle)) expect(c.out, JSON.stringify(c.in)).toBe('delete');
+    expect(unconfirmed.some((c) => idle(c) && !(c.in as In).last && (c.in as In).saved)).toBe(true);
+    expect(new Set(unconfirmed.filter((c) => !idle(c)).map((c) => c.out))).toEqual(
+      new Set(['put', 'needsToken', 'none']),
+    );
+    expect(actions.some((c) => (c.in as In).unconfirmed === false && idle(c))).toBe(true);
     // Registered and nothing changed: approximate again on becoming active an hour or more
     // after it was sent; either kind again once a week; otherwise nothing.
     const week = 7 * 24 * 60 * MINUTE;
@@ -806,6 +866,32 @@ describe('the cases cover what section 7.4 asks for', () => {
     expect(waiting.some((c) => age(c) < week)).toBe(true);
     const activeAgain = refusedDue.filter((c) => !since(c));
     expect(new Set(activeAgain.map((c) => c.out))).toEqual(new Set(['put']));
+    // With saved places: each change to them, or to the phone's zone while one is sent, is a
+    // put; the same set nothing; and every switch off or the permission denied deletes the set
+    // (if one was sent, or one may be held) whatever is saved, as the switches are one set for
+    // every place.
+    const withSaved = actions.filter((c) => (c.in as In).saved?.length);
+    expect(new Set(withSaved.map((c) => c.out))).toEqual(new Set(['put', 'delete', 'none']));
+    for (const c of withSaved) {
+      const i = c.in as In;
+      if (!alertsActive(i.prefs, i.permission)) {
+        expect(c.out, JSON.stringify(i)).toBe(i.last || i.unconfirmed ? 'delete' : 'none');
+      }
+    }
+    /** How many saved places the last registration sent, by its fingerprint ('{}' for none). */
+    const savedSent = (c: VectorCase): number => {
+      try {
+        return JSON.parse((c.in as In).last?.fingerprint ?? '{}').saved?.length ?? 0;
+      } catch {
+        return 0;
+      }
+    };
+    expect(
+      actions.some((c) => !(c.in as In).saved?.length && savedSent(c) && c.out === 'put'),
+    ).toBe(true);
+    expect(
+      live.some((c) => (c.in as In).saved?.length && (c.in as In).deviceTz && c.out === 'none'),
+    ).toBe(true);
     // Every switch, both ways, from every state; "possible" alone refused.
     const switches = casesFor('alerts', 'setAlert');
     expect(switches).toHaveLength(6 * 3 * 2);
@@ -889,6 +975,85 @@ describe('the cases cover what section 7.4 asks for', () => {
     expect(new Set(tests.filter((o) => o.kind === 'sent').map((o) => o.count))).toEqual(
       new Set([1, 2]),
     );
+  });
+
+  it('alerts: every outcome of the saved places’ bells (8.4b)', () => {
+    const bool = [true, false];
+    // Whether anything can be sent: every set of switches with every permission.
+    const actives = casesFor('alerts', 'alertsActive');
+    expect(actives).toHaveLength(6 * 4);
+    expect(new Set(actives.map((c) => c.out))).toEqual(new Set(bool));
+    // A bell's state: every combination, `active` false included.
+    const states = casesFor('alerts', 'bellState');
+    expect(states).toHaveLength(8);
+    expect(states.filter((c) => c.out === 'on')).toHaveLength(1);
+    expect(new Set(states.map((c) => c.out))).toEqual(new Set(['locked', 'off', 'on']));
+    // The bells, set and kept: only saved places, in saved order, at most ten; the tenth bell,
+    // an eleventh refused, and a key that isn't saved.
+    const inOrder = (out: string[], savedKeys: string[]) =>
+      out.every(
+        (k, n) =>
+          savedKeys.includes(k) &&
+          (n === 0 || savedKeys.indexOf(out[n - 1]!) < savedKeys.indexOf(k)),
+      );
+    const bells = [...casesFor('alerts', 'setBell'), ...casesFor('alerts', 'keptBells')];
+    for (const c of bells) {
+      const out = c.out as string[];
+      expect(inOrder(out, (c.in as In).savedKeys), JSON.stringify(c.in)).toBe(true);
+      expect(out.length).toBeLessThanOrEqual(10);
+    }
+    const set = casesFor('alerts', 'setBell');
+    expect(set.some((c) => (c.out as string[]).length === 10 && (c.in as In).on)).toBe(true);
+    expect(
+      set.some((c) => (c.in as In).on && !(c.out as string[]).includes((c.in as In).key)),
+    ).toBe(true);
+    expect(set.some((c) => !(c.in as In).savedKeys.includes((c.in as In).key))).toBe(true);
+    expect(
+      casesFor('alerts', 'keptBells').some(
+        (c) => (c.out as string[]).length < new Set((c.in as In).bells).size,
+      ),
+    ).toBe(true);
+    // Who owns the bells: the purchase when known, else the last registration's saved places.
+    const owns = casesFor('alerts', 'ownsSaved');
+    expect(new Set(owns.map((c) => (c.in as In).unlocked))).toEqual(new Set([true, false, null]));
+    const unknown = owns.filter((c) => (c.in as In).unlocked === null);
+    expect(new Set(unknown.map((c) => c.out))).toEqual(new Set(bool));
+    // What is sent: none without the purchase; the belled places in saved order, ten at most,
+    // leaving out what the server would refuse the whole set for.
+    const sent = casesFor('alerts', 'savedForBody');
+    for (const c of sent.filter((c) => !(c.in as In).owns)) expect(c.out).toEqual([]);
+    expect(sent.some((c) => (c.in as In).owns && (c.out as any[]).length === 10)).toBe(true);
+    expect(sent.some((c) => (c.in as In).saved.length > 10)).toBe(true);
+    expect(
+      sent.some((c) => (c.in as In).saved.some((s: any) => s.target.source === 'device')),
+    ).toBe(true);
+    const sendable = (t: any) =>
+      t.kind === 'city' ? t.slug.trim() !== '' : t.source === 'search' && Math.abs(t.lat) <= 90;
+    for (const c of sent) expect((c.out as any[]).every(sendable), JSON.stringify(c.in)).toBe(true);
+    // A tap: every outcome.
+    expect(new Set(casesFor('alerts', 'tapBell').map((c) => (c.out as any).kind))).toEqual(
+      new Set(['needsPurchase', 'needsPermission', 'denied', 'on', 'onWithHere', 'off']),
+    );
+    // The search screen's lines: each row of design 2.3, free and paid.
+    const lines = casesFor('alerts', 'savedLines');
+    expect(new Set(lines.map((c) => JSON.stringify(c.out)))).toEqual(
+      new Set(
+        [
+          ['savedLineNoneFree'],
+          ['savedLineNonePaid'],
+          ['bellHintLocked'],
+          ['bellHint'],
+          [],
+          ['savedFull', 'bellHintLocked'],
+          ['savedFull', 'bellHint'],
+          ['savedFull'],
+        ].map((l) => JSON.stringify(l)),
+      ),
+    );
+    // Each is a line of the app's copy, which the presenter shows by that key.
+    for (const key of new Set(lines.flatMap((c) => c.out as string[]))) {
+      expect(APP_COPY, key).toHaveProperty(key);
+    }
   });
 
   it('links: every route, malformed payloads and past dates', () => {

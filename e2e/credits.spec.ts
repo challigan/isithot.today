@@ -31,7 +31,7 @@ const {
   widgetName,
   notifications,
   possible,
-  notifyPlaceMyLocation,
+  notifyHere,
   sendTest,
   yourPrivacy,
   deleteMyData,
@@ -172,7 +172,8 @@ test.describe('the legal pages', () => {
       // Every answer in full, with the app's own words (APP_COPY) and name, so a label renamed in
       // the app fails here.
       await expect(answer('Restoring a purchase')).toHaveText(
-        'The one-off purchase that removes the ads and adds the widgets belongs to your Apple Account. It normally comes back by itself on a new iPhone or after you reinstall the app. ' +
+        // Phase 8.4b: the purchase names saved places' notifications, as its display name does.
+        'The one-off purchase that removes the ads, adds the widgets and adds notifications for saved places belongs to your Apple Account. It normally comes back by itself on a new iPhone or after you reinstall the app. ' +
           `If it doesn't, open ${settings} in the app (the gear at the top right) and tap "${restore}". ` +
           "If no purchase is found, check that you're signed in with the Apple Account you bought it with. With Family Sharing, your family can restore it the same way.",
       );
@@ -187,25 +188,38 @@ test.describe('the legal pages', () => {
       await expect(answer("If a notification didn't come").locator('li')).toHaveText([
         "Snow wasn't likely enough. We send one only when most forecasts expect snow, " +
           `or when some do if you turned on "${possible}". Forecasts change, so a day that looked snowy may no longer be.`,
-        // The times the app's switches give.
+        // The times the app's switches give, at each place, one a day for each (design 2.9);
+        // and Apple keeps one notification for an app that is offline (decision 37).
         `It isn't time yet. The evening notification comes at ${timeOf(APP_COPY.evening)} and the morning one at ${timeOf(APP_COPY.morning)}, ` +
-          "in the place's own time, not your phone's. Each comes at most once a day. " +
-          'If your iPhone was off or offline, Apple keeps the evening one until 9pm and the morning one until 11am, then drops it.',
+          "in the place's own time, not your phone's. Each comes at most once a day for each place. " +
+          'If your iPhone was off or offline, Apple keeps the evening one until 9pm and the morning one until 11am, then drops it. ' +
+          'Apple keeps only one at a time, so with several places you may get only one of them.',
         // iPhone Settings, named as such: the app's own is "the app's Settings".
         `Notifications are off on your iPhone. In your iPhone's Settings → Notifications, check that "${APP_NAME}" is allowed to send them, and that no Focus is holding them back.`,
-        `It's for another place. Notifications are for the place in the app's ${notifyIn}, not the one on screen. ` +
-          `"${notifyPlaceMyLocation}" moves it only when you open the app.`,
+        // Since phase 8.4a the free notification follows where you are, never the place on
+        // screen, and Settings names it under its own row; since 8.4b saved places with a bell on
+        // have them too (decision 6), in Your privacy's words, so the line is true on its own.
+        "It's for another place. Notifications are for where you are and any saved places you turned them on for, " +
+          'not whichever place is on screen. ' +
+          'Where you are is your location if you share it with the app, otherwise a rough place from your internet connection. ' +
+          `It moves only when you open the app. The app's ${notifyIn} shows it, under "${notifyHere}".`,
+        // Phase 8.4b: every other place is a saved one, with the purchase, silent in the phone's
+        // night (design 2.10, decision 21).
+        "It's for a saved place. Notifications for saved places come with the one-off purchase, and each saved place's bell turns them on. " +
+          'From 9pm to 7am on your iPhone they arrive silently, in Notification Centre.',
         // About: 90 days from the app's last check-in, which can be up to a week before it was
         // last opened.
         "The app hasn't been opened for about three months. Notifications then stop. Opening the app starts them again.",
       ]);
       await expect(main.locator(`h2:text-is("If a notification didn't come") + ul + p`)).toHaveText(
+        // By the phone's clock with a saved place, at where you are without (decision 25).
         `"${sendTest}" in the app's ${notifyIn} checks that they reach your iPhone. ` +
-          'Tests, like notifications, are never sent between 9pm and 7am at the place, so try one in the daytime there.',
+          'Tests are never sent between 9pm and 7am, so try one in the daytime.',
       );
       await expect(answer('Turning notifications off and deleting your data')).toHaveText(
         `In the app, open ${settings} → ${yourPrivacy} and tap "${deleteMyData}". ` +
-          "That turns every notification off and deletes what we keep for them: your device's notification token and an ID made from it, the place, its time zone, your units, which notifications you chose, the app's version and whether it is a developer build, and when you turned notifications on and when the app last checked in with us. " +
+          // Every place, and the iPhone's zone a saved place's record keeps (design 2.8, 3.11).
+          "That turns every notification off and deletes what we keep for them: your device's notification token and an ID made from it, the places you get notifications for and their time zones, your iPhone's time zone if you had notifications on for a saved place, your units, which notifications you chose, the app's version and whether it is a developer build, and when you turned notifications on and when the app last checked in with us. " +
           'Our notes of notifications, tests and forecast checks, which hold no token or place, go a few days later. ' +
           'The same screen shows the ID and the main things we keep while notifications are on. ' +
           `Turning every notification off in the app's ${notifyIn} deletes it too. ` +
