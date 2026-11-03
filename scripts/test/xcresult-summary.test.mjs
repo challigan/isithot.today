@@ -684,6 +684,41 @@ describe('the command', () => {
     );
   });
 
+  // ci/test.sh's Audit: a whole run of the class it takes from the UI plan, which a rename would
+  // leave running nothing and passing.
+  it('fails a split run where no test of its class ran, and says so', () => {
+    const tree = write('split.json', JSON.stringify(UI_TESTS));
+    expect(run(['split', 'Audit', tree, 'WillItSnowUITests/NotificationsTests'])).toBe('');
+    const fail = (args) => {
+      try {
+        run(args);
+      } catch (error) {
+        return error;
+      }
+      return { status: 0, stdout: '' };
+    };
+    const renamed = fail(['split', 'Audit', tree, 'WillItSnowUITests/HomeAuditTests']);
+    expect(renamed.status).toBe(1);
+    expect(renamed.stdout).toBe(
+      '### Audit: no test of WillItSnowUITests/HomeAuditTests ran: renamed or moved? xcodebuild ' +
+        'runs a name it can’t find as nothing (ci/test.sh’s AUDITS)\n',
+    );
+    // A class of that name in another target is not it.
+    expect(fail(['split', 'Audit', tree, 'WillItSnowTests/NotificationsTests']).status).toBe(1);
+    const missing = fail([
+      'split',
+      'Audit',
+      join(dir, 'missing.json'),
+      'WillItSnowUITests/HomeAuditTests',
+    ]);
+    expect(missing.status).toBe(1);
+    expect(missing.stdout).toBe(
+      '### Audit: no test tree, so whether WillItSnowUITests/HomeAuditTests ran couldn’t be ' +
+        'checked (see the log)\n',
+    );
+    expect(fail(['split', 'Audit', tree]).status).toBe(2);
+  });
+
   it('explains its arguments', () => {
     let status = 0;
     try {
