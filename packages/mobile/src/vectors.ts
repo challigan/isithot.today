@@ -48,6 +48,8 @@ import {
   PLACES as PLACE_LISTS,
   addRecent,
   alertAction,
+  alertsActive,
+  bellState,
   canSave,
   choosePlace,
   dayUntil,
@@ -60,10 +62,12 @@ import {
   hold,
   hourUntil,
   isSaved,
+  keptBells,
   middleDay,
   nextRefreshAt,
   notificationRoute,
   outOfDate,
+  ownsSaved,
   parseDeepLink,
   pickHour,
   registrationBody,
@@ -72,12 +76,16 @@ import {
   resultDetail,
   routeLink,
   savePlace,
+  savedForBody,
+  savedLines,
   searchInput,
   searchQuery,
   searchTarget,
   setAlert,
+  setBell,
   shownRecent,
   syncReply,
+  tapBell,
   targetFromQuery,
   targetKey,
   testOutcome,
@@ -103,6 +111,7 @@ import {
   type Route,
   type SavedAnswer,
   type SavedPlace,
+  type SavedTarget,
   type Target,
   type WidgetEntry,
 } from '@isithot/client';
@@ -1555,6 +1564,75 @@ const KATHMANDU = {
   country: 'NP',
 };
 
+/**
+ * Saved places as the picker keeps them, for the bells (8.4b): a city page; a searched place
+ * with every word; one with none it can send (an empty name, no region or country, GeoNames id
+ * 0) but a height of 0; one with its point alone; one whose words JSON escapes, or writes as
+ * they are; and eleven towns, one more than a device may have.
+ */
+const SAVED_DURHAM: SavedPlace = {
+  target: { kind: 'city', slug: 'durham-gb', name: 'Durham' },
+  name: 'Durham',
+  detail: 'England, United Kingdom',
+};
+const SAVED_KATHMANDU: SavedPlace = {
+  target: {
+    kind: 'coords',
+    source: 'search',
+    lat: 27.7,
+    lon: 85.3,
+    name: 'Kathmandu',
+    region: 'Bagmati Province',
+    country: 'NP',
+    geonameId: 1283240,
+    elevation: 1337,
+  },
+  name: 'Kathmandu',
+  detail: 'Bagmati Province, Nepal',
+};
+const SAVED_SPARSE: SavedPlace = {
+  target: {
+    kind: 'coords',
+    source: 'search',
+    lat: 66.5,
+    lon: 25.7,
+    name: '',
+    region: null,
+    country: null,
+    geonameId: 0,
+    elevation: 0,
+  },
+  name: 'Rovaniemi',
+};
+const SAVED_BARE: SavedPlace = {
+  target: { kind: 'coords', source: 'search', lat: -33.85, lon: 151.2 },
+  name: 'Sydney',
+};
+const SAVED_AWKWARD: SavedPlace = {
+  target: {
+    kind: 'coords',
+    source: 'search',
+    lat: -45.05,
+    lon: 168.65,
+    name: 'Lac "Bleu" / \\ Ü 😀\u0001',
+    region: 'Otago & Southland',
+    country: 'NZ',
+  },
+  name: 'Lac Bleu',
+};
+const SAVED_TOWNS: readonly SavedPlace[] = Array.from({ length: 11 }, (_, i) => ({
+  target: { kind: 'city', slug: `town-${i}-gb` },
+  name: `Town ${i}`,
+}));
+/** What can't be saved, or sent: the phone's point, a point not on Earth, cities with no slug. */
+const SAVED_ODD: readonly SavedPlace[] = [
+  { target: deviceTarget(53.8, -1.55), name: 'Leeds' },
+  { target: { kind: 'coords', source: 'search', lat: 95, lon: 0, name: 'Nowhere' }, name: 'X' },
+  { target: { kind: 'city', slug: '' }, name: 'Empty' },
+  { target: { kind: 'city', slug: '  ' }, name: 'Blank' },
+];
+const keysOf = (saved: readonly SavedPlace[]): string[] => saved.map((s) => targetKey(s.target));
+
 function alertVectors(): VectorFile {
   const { cases, add } = collector();
   // Where you are: every location access, with every kind of fix and every kept cell.
@@ -1591,6 +1669,39 @@ function alertVectors(): VectorFile {
   const awkwardBody = registrationBody(awkward);
   add('registrationBody', awkward, awkwardBody);
   bodies.push(awkwardBody);
+  // With saved places (8.4b): none, one (a city page, a searched place), one of every kind and
+  // ten, with the phone's zone and without; a zone given with none, or empty, is never sent.
+  const sendAll = (saved: readonly SavedPlace[]) => savedForBody(saved, keysOf(saved), true);
+  const every = sendAll([SAVED_DURHAM, SAVED_KATHMANDU, SAVED_SPARSE, SAVED_BARE, SAVED_AWKWARD]);
+  const ten = sendAll(SAVED_TOWNS.slice(0, 10));
+  const sets: Array<[readonly SavedTarget[], string | null]> = [
+    [[], 'Europe/London'],
+    [sendAll([SAVED_DURHAM]), 'Europe/London'],
+    [sendAll([SAVED_DURHAM]), null],
+    [sendAll([SAVED_DURHAM]), ''],
+    [sendAll([SAVED_KATHMANDU]), 'Asia/Kathmandu'],
+    [every, 'Europe/London'],
+    [every, null],
+    [ten, 'Europe/London'],
+    [ten, null],
+  ];
+  for (const here of HERES.slice(0, 2)) {
+    for (const [saved, deviceTz] of sets) {
+      const input = {
+        token: 'a1b2c3d4e5f6',
+        env: 'production',
+        here,
+        units: 'c',
+        prefs: PREFS.both,
+        appVersion: '1.0 (42)',
+        saved,
+        deviceTz,
+      } as const;
+      const body = registrationBody(input);
+      add('registrationBody', input, body);
+      bodies.push(body);
+    }
+  }
   for (const body of bodies) add('fingerprint', { body }, fingerprint(body));
 
   const now = Date.parse('2026-12-16T18:05:00Z');
@@ -1617,7 +1728,11 @@ function alertVectors(): VectorFile {
   // Sent earlier in this visit, and the phone's cell yesterday: nothing due.
   const recent = sentIp(now - 30 * MINUTE);
   const action = (
-    change: Partial<typeof base> & { last: { fingerprint: string; at: number } | null },
+    change: Partial<typeof base> & {
+      last: { fingerprint: string; at: number } | null;
+      saved?: readonly SavedTarget[];
+      deviceTz?: string | null;
+    },
   ) => {
     const o = { ...base, now, ...change };
     add('alertAction', o, alertAction(o));
@@ -1684,6 +1799,51 @@ function alertVectors(): VectorFile {
   for (const permission of ['provisional', 'notDetermined'] as const) {
     action({ permission, last: recent });
     action({ permission, last: null });
+  }
+  // 9. Saved places with a bell on (8.4b), as savedForBody gives them, with the phone's zone.
+  const both = savedForBody(
+    [SAVED_DURHAM, SAVED_KATHMANDU],
+    keysOf([SAVED_DURHAM, SAVED_KATHMANDU]),
+    true,
+  );
+  const zone = 'Europe/London';
+  const sentSet = (here: HerePlace, saved: readonly SavedTarget[], deviceTz: string | null) =>
+    fingerprint(
+      registrationBody({
+        ...base,
+        token: base.token!,
+        here,
+        saved,
+        deviceTz,
+        appVersion: '1.0 (41)',
+      }),
+    );
+  const sentBoth = (at: number, here: HerePlace = ip) => ({
+    fingerprint: sentSet(here, both, zone),
+    at,
+  });
+  // The same set: nothing. The first bells, or a restore: send. A bell off, an unsave, a refund
+  // (none sent, whatever bells are kept), a zone gone: send.
+  action({ saved: both, deviceTz: zone, last: sentBoth(now - 30 * MINUTE) });
+  action({ saved: both, deviceTz: zone, last: recent });
+  action({ saved: both.slice(1), deviceTz: zone, last: sentBoth(now - 30 * MINUTE) });
+  action({ saved: [], deviceTz: zone, last: sentBoth(now - 30 * MINUTE) });
+  action({ last: sentBoth(now - 30 * MINUTE) });
+  action({ saved: both, deviceTz: null, last: sentBoth(now - 30 * MINUTE) });
+  // The phone's zone: sent again with a saved place, and never for itself alone.
+  action({ saved: both, deviceTz: 'America/Vancouver', last: sentBoth(now - 30 * MINUTE) });
+  action({ saved: [], deviceTz: 'America/Vancouver', last: recent });
+  // One set of switches for every place: every switch off or the permission denied deletes the
+  // whole set, whatever bells are on.
+  for (const prefs of [PREFS.off, PREFS.possibleOnly]) {
+    action({ prefs, saved: both, deviceTz: zone, last: sentBoth(now - 30 * MINUTE) });
+    action({ prefs, saved: both, deviceTz: zone, last: null });
+  }
+  action({ permission: 'denied', saved: both, deviceTz: zone, last: sentBoth(now - MINUTE) });
+  // Where you are, refreshed as ever: hourly while approximate, else weekly.
+  for (const gap of [refresh - 1, refresh, heartbeat]) {
+    action({ saved: both, deviceTz: zone, last: sentBoth(now - gap) });
+    action({ here: cell, saved: both, deviceTz: zone, last: sentBoth(now - gap, cell) });
   }
 
   for (const prefs of Object.values(PREFS)) {
@@ -1896,6 +2056,124 @@ function alertVectors(): VectorFile {
   for (const status of [200, 400, 413, 500, 502, 503, 0]) test(status, '{"sent":true}');
   test(503, error('push_unavailable', "Test notifications can't be sent just now."));
   test(502, error('push_refused', 'Apple refused the test notification.'));
+
+  // ---- The saved places' bells (8.4b) ----
+
+  // Whether anything can be sent: every set of switches, with every permission.
+  const permissions: readonly Permission[] = [
+    'authorized',
+    'provisional',
+    'denied',
+    'notDetermined',
+  ];
+  for (const prefs of Object.values(PREFS)) {
+    for (const permission of permissions) {
+      add('alertsActive', { prefs, permission }, alertsActive(prefs, permission));
+    }
+  }
+
+  // A bell's state: every combination.
+  for (const on of [true, false]) {
+    for (const unlocked of [true, false]) {
+      for (const active of [true, false]) {
+        add('bellState', { on, unlocked, active }, bellState({ on, unlocked, active }));
+      }
+    }
+  }
+
+  // The bells: on and off in saved order, already so, twice over, a key that isn't saved, bells
+  // of places no longer saved, the tenth, and an eleventh saved (a lenient read) refused.
+  const durham = targetKey(SAVED_DURHAM.target);
+  const kathmandu = targetKey(SAVED_KATHMANDU.target);
+  const sparse = targetKey(SAVED_SPARSE.target);
+  const york = 'city:york-gb';
+  const three = [durham, kathmandu, sparse];
+  const towns = keysOf(SAVED_TOWNS);
+  const bell = (bells: string[], key: string, on: boolean, savedKeys: string[]) =>
+    add('setBell', { bells, key, on, savedKeys }, setBell(bells, key, on, savedKeys));
+  bell([], kathmandu, true, three);
+  bell([sparse], durham, true, three);
+  bell([sparse, durham], kathmandu, true, three);
+  bell([durham, sparse], durham, false, three);
+  bell([kathmandu], kathmandu, false, three);
+  bell([kathmandu], kathmandu, true, three);
+  bell([], kathmandu, false, three);
+  bell([durham, durham], kathmandu, true, [...three, durham]);
+  bell([], york, true, three);
+  bell([york, durham], kathmandu, true, three);
+  bell([durham], durham, true, []);
+  bell(towns.slice(0, 9), towns[9]!, true, towns.slice(0, 10));
+  bell(towns.slice(0, 10), towns[10]!, true, towns);
+  bell(towns, towns[0]!, false, towns);
+  const kept = (bells: string[], savedKeys: string[]) =>
+    add('keptBells', { bells, savedKeys }, keptBells(bells, savedKeys));
+  kept([sparse, durham], three);
+  kept([sparse, durham, kathmandu], [durham, sparse]);
+  kept([durham], [kathmandu]);
+  kept([], three);
+  kept(three, []);
+  kept([durham, durham, york], three);
+  kept(towns, towns);
+
+  // Who owns the bells: the purchase once StoreKit has said, else the last registration's
+  // saved places (with where you are, without, none at all).
+  const lastSaved = { ...REPLY, deviceTz: 'Europe/London', saved: [DURHAM] };
+  for (const unlocked of [true, false, null]) {
+    for (const last of [null, REPLY, lastSaved, { ...lastSaved, here: null }]) {
+      add('ownsSaved', { unlocked, last }, ownsSaved(unlocked, last));
+    }
+  }
+
+  // What is sent: the belled places in saved order, none without the purchase, each once, ten at
+  // most, and nothing the server would refuse the whole set for.
+  const forBody = (saved: readonly SavedPlace[], bells: string[], owns: boolean) =>
+    add('savedForBody', { saved, bells, owns }, savedForBody(saved, bells, owns));
+  const kinds = [SAVED_DURHAM, SAVED_KATHMANDU, SAVED_SPARSE, SAVED_BARE, SAVED_AWKWARD];
+  for (const owns of [true, false]) {
+    forBody(kinds, [sparse, durham], owns);
+    forBody(kinds, keysOf(kinds), owns);
+  }
+  forBody(kinds, [], true);
+  forBody([], [durham], true);
+  forBody([SAVED_DURHAM], [kathmandu], true);
+  forBody([...SAVED_ODD, SAVED_DURHAM], keysOf([...SAVED_ODD, SAVED_DURHAM]), true);
+  forBody([SAVED_DURHAM, SAVED_DURHAM], [durham], true);
+  forBody(SAVED_TOWNS, towns, true);
+  forBody([SAVED_ODD[0]!, ...SAVED_TOWNS.slice(0, 10)], [...towns, keysOf(SAVED_ODD)[0]!], true);
+
+  // A tap on a bell: without the purchase; each permission, with bells off, on, others' on and
+  // one of a place no longer saved, and each set of switches; and a place that isn't saved.
+  const savedKeys = [durham, kathmandu];
+  const tap = (o: {
+    key: string;
+    bells: string[];
+    prefs: AlertPrefs;
+    unlocked: boolean;
+    permission: Permission;
+  }) => {
+    const input = { ...o, savedKeys };
+    add('tapBell', input, tapBell(input));
+  };
+  for (const permission of permissions) {
+    for (const bells of [[], [kathmandu], [durham, kathmandu], [york, durham]]) {
+      for (const prefs of [PREFS.both, PREFS.morning, PREFS.off, PREFS.possibleOnly]) {
+        tap({ key: kathmandu, bells, prefs, unlocked: true, permission });
+      }
+      tap({ key: kathmandu, bells, prefs: PREFS.evening, unlocked: false, permission });
+    }
+    tap({ key: york, bells: [york, durham], prefs: PREFS.both, unlocked: true, permission });
+  }
+
+  // The search screen's lines: nothing saved, some, one short of full, full, and more than full
+  // (a lenient read), free and paid, with a bell on and without.
+  for (const savedCount of [0, 1, PLACE_LISTS.savedMax - 1, PLACE_LISTS.savedMax, 11]) {
+    for (const unlocked of [false, true]) {
+      for (const anyBellOn of [false, true]) {
+        const input = { savedCount, unlocked, anyBellOn };
+        add('savedLines', input, savedLines(input));
+      }
+    }
+  }
   return vectorFile(
     [
       ['client', 'herePlace'],
@@ -1908,6 +2186,14 @@ function alertVectors(): VectorFile {
       ['client', 'hereName'],
       ['client', 'replyZones'],
       ['client', 'testOutcome'],
+      ['client', 'alertsActive'],
+      ['client', 'bellState'],
+      ['client', 'setBell'],
+      ['client', 'keptBells'],
+      ['client', 'ownsSaved'],
+      ['client', 'savedForBody'],
+      ['client', 'tapBell'],
+      ['client', 'savedLines'],
     ],
     cases,
   );

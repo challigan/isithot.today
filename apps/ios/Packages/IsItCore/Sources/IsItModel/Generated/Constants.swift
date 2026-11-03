@@ -40,10 +40,12 @@ public enum Constants {
   }
 
   /// Core `ALERTS`: how often an app registers for notifications again while it is used, days,
-  /// and, while where you are is approximate, on becoming active, minutes.
+  /// and, while where you are is approximate, on becoming active, minutes; and the most saved
+  /// places a registration may have notifications for, as many as can be saved.
   public enum Alerts {
     public static let heartbeatDays = 7
     public static let hereRefreshMinutes = 60
+    public static let savedPlacesMax = 10
   }
 
   /// Core `SNOW`: the share of forecasts that makes a day "Yes" (`likelyFrom`) and "Maybe"

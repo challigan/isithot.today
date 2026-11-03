@@ -1,0 +1,45 @@
+{
+  "_fixture": {
+    "request": "PUT /api/v1/devices",
+    "body": {
+      "v": 2,
+      "app": "snow",
+      "platform": "ios",
+      "env": "sandbox",
+      "token": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "units": "c",
+      "appVersion": "1.0 (42)",
+      "deviceTz": "Europe/London",
+      "alerts": {
+        "snow": {
+          "evening": true,
+          "morning": false,
+          "possible": false
+        }
+      },
+      "here": {
+        "source": "ip"
+      },
+      "saved": [
+        {
+          "place": "nowhere-xx"
+        },
+        {
+          "place": "durham-gb"
+        }
+      ]
+    },
+    "geo": {
+      "city": "Leeds",
+      "country": "GB",
+      "region": "England",
+      "lat": 53.7965,
+      "lon": -1.5478
+    },
+    "now": "2026-12-01T12:05:00.000Z",
+    "note": "A saved city page that has gone from the city list, saved before Durham: the server keeps the rest of the set and lists the gone one by its index in the body, not_found."
+  },
+  "status": 200,
+  "retryAfter": null,
+  "text": "{\"id\":\"b8465956ef925aabc7c87a9e561f462d\",\"deviceTz\":\"Europe/London\",\"here\":{\"name\":\"Leeds\",\"timezone\":\"Europe/London\",\"query\":\"lat=53.8&lon=-1.55&source=device\",\"country\":\"GB\",\"follows\":\"ip\"},\"saved\":[{\"pid\":\"883bf8d96e0f\",\"name\":\"Durham\",\"timezone\":\"Europe/London\",\"query\":\"place=durham-gb\",\"country\":\"GB\"}],\"refused\":[{\"index\":0,\"code\":\"not_found\"}],\"alerts\":{\"snow\":{\"evening\":true,\"morning\":false,\"possible\":false}},\"seenAt\":\"2026-12-01T12:05:00.000Z\"}"
+}

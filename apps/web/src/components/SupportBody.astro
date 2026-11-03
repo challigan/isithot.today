@@ -32,11 +32,11 @@ const { topic } = Astro.props;
 
   <h2>Restoring a purchase</h2>
   <p>
-    The one-off purchase that removes the ads and adds the widgets belongs to your Apple Account. It
-    normally comes back by itself on a new iPhone or after you reinstall the app. If it doesn't,
-    open Settings in the app (the gear at the top right) and tap "Restore purchase". If no purchase
-    is found, check that you're signed in with the Apple Account you bought it with. With Family
-    Sharing, your family can restore it the same way.
+    The one-off purchase that removes the ads, adds the widgets and adds notifications for saved
+    places belongs to your Apple Account. It normally comes back by itself on a new iPhone or after
+    you reinstall the app. If it doesn't, open Settings in the app (the gear at the top right) and
+    tap "Restore purchase". If no purchase is found, check that you're signed in with the Apple
+    Account you bought it with. With Family Sharing, your family can restore it the same way.
   </p>
 
   <h2>Adding a widget</h2>
@@ -59,8 +59,9 @@ const { topic } = Astro.props;
     <li>
       <strong>It isn't time yet.</strong> The evening notification comes at about 6pm and the
       morning one at about 7am, in the place's own time, not your phone's. Each comes at most once a
-      day. If your iPhone was off or offline, Apple keeps the evening one until 9pm and the morning
-      one until 11am, then drops it.
+      day for each place. If your iPhone was off or offline, Apple keeps the evening one until 9pm
+      and the morning one until 11am, then drops it. Apple keeps only one at a time, so with several
+      places you may get only one of them.
     </li>
     <li>
       <strong>Notifications are off on your iPhone.</strong> In your iPhone's Settings →
@@ -68,8 +69,16 @@ const { topic } = Astro.props;
       holding them back.
     </li>
     <li>
-      <strong>It's for another place.</strong> Notifications are for the place in the app's Settings
-      → Notifications, not the one on screen. "Use my location" moves it only when you open the app.
+      <strong>It's for another place.</strong> Notifications are for where you are and any saved
+      places you turned them on for, not whichever place is on screen. Where you are is your
+      location if you share it with the app, otherwise a rough place from your internet connection.
+      It moves only when you open the app. The app's Settings → Notifications shows it, under "Where
+      you are".
+    </li>
+    <li>
+      <strong>It's for a saved place.</strong> Notifications for saved places come with the one-off
+      purchase, and each saved place's bell turns them on. From 9pm to 7am on your iPhone they
+      arrive silently, in Notification Centre.
     </li>
     <li>
       <strong>The app hasn't been opened for about three months.</strong> Notifications then stop.
@@ -78,23 +87,23 @@ const { topic } = Astro.props;
   </ul>
   <p>
     "Send a test notification" in the app's Settings → Notifications checks that they reach your
-    iPhone. Tests, like notifications, are never sent between 9pm and 7am at the place, so try one
-    in the daytime there.
+    iPhone. Tests are never sent between 9pm and 7am, so try one in the daytime.
   </p>
 
   <h2>Turning notifications off and deleting your data</h2>
   <p>
     In the app, open Settings → Your privacy and tap "Turn off notifications and delete my data".
     That turns every notification off and deletes what we keep for them: your device's notification
-    token and an ID made from it, the place, its time zone, your units, which notifications you
-    chose, the app's version and whether it is a developer build, and when you turned notifications
-    on and when the app last checked in with us. Our notes of notifications, tests and forecast
-    checks, which hold no token or place, go a few days later. The same screen shows the ID and the
-    main things we keep while notifications are on. Turning every notification off in the app's
-    Settings → Notifications deletes it too. If you turn notifications off in your iPhone's Settings
-    instead, we delete it the next time you open the app. If you delete the app, we delete it when
-    Apple tells us the app is no longer installed. Either way, it goes once the app hasn't been
-    opened for about three months.
+    token and an ID made from it, the places you get notifications for and their time zones, your
+    iPhone's time zone if you had notifications on for a saved place, your units, which
+    notifications you chose, the app's version and whether it is a developer build, and when you
+    turned notifications on and when the app last checked in with us. Our notes of notifications,
+    tests and forecast checks, which hold no token or place, go a few days later. The same screen
+    shows the ID and the main things we keep while notifications are on. Turning every notification
+    off in the app's Settings → Notifications deletes it too. If you turn notifications off in your
+    iPhone's Settings instead, we delete it the next time you open the app. If you delete the app,
+    we delete it when Apple tells us the app is no longer installed. Either way, it goes once the
+    app hasn't been opened for about three months.
   </p>
 
   <h2>Privacy and terms</h2>

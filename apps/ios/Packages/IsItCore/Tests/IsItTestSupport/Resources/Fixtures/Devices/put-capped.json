@@ -1,0 +1,51 @@
+{
+  "_fixture": {
+    "request": "PUT /api/v1/devices",
+    "body": {
+      "v": 2,
+      "app": "snow",
+      "platform": "ios",
+      "env": "sandbox",
+      "token": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "units": "c",
+      "appVersion": "1.0 (42)",
+      "deviceTz": "Europe/London",
+      "alerts": {
+        "snow": {
+          "evening": true,
+          "morning": false,
+          "possible": false
+        }
+      },
+      "here": {
+        "source": "ip"
+      },
+      "saved": [
+        {
+          "place": "durham-gb"
+        },
+        {
+          "place": "york-gb"
+        },
+        {
+          "place": "aberdeen-gb"
+        },
+        {
+          "place": "edinburgh-gb"
+        }
+      ]
+    },
+    "geo": {
+      "city": "Leeds",
+      "country": "GB",
+      "region": "England",
+      "lat": 53.7965,
+      "lon": -1.5478
+    },
+    "now": "2026-12-01T12:05:00.000Z",
+    "note": "Four bells on at once, after a restore, one more than the 3 new places a registration may add: the server keeps where you are and the first three, and answers 429 rate_limited, with a minute in Retry-After, after which the app sends the set again."
+  },
+  "status": 429,
+  "retryAfter": "60",
+  "text": "{\"error\":{\"code\":\"rate_limited\",\"message\":\"Up to 3 new places are added at a time. Try again in a minute.\"}}"
+}

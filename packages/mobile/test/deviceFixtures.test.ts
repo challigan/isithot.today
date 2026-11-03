@@ -13,8 +13,10 @@ import {
   deviceTarget,
   herePlace,
   registrationBody,
+  searchTarget,
   type HerePlace,
   type RegistrationBody,
+  type SavedTarget,
 } from '@isithot/client';
 import {
   APNS_PAYLOAD_LIMIT,
@@ -22,12 +24,14 @@ import {
   MemoryAlertStore,
   alertPush,
   idsKey,
+  placeId,
   regKey,
   registrationId,
 } from '@isithot/server';
 import { APP_COPY } from '../src/appCopy';
 import {
   DEVICE_FIXTURES,
+  DEVICE_SALT,
   DEVICE_SETTINGS,
   DEVICE_TOKEN,
   PAYLOAD_FILES,
@@ -36,7 +40,14 @@ import {
   payloadFiles,
   type DeviceFixture,
 } from '../src/deviceFixtures';
-import { FIXTURES, fixtureJson, makeFixture, type Fixture } from '../src/fixtures';
+import {
+  FIXTURES,
+  SEARCH_FIXTURES,
+  fixtureJson,
+  makeFixture,
+  makeSearchFixture,
+  type Fixture,
+} from '../src/fixtures';
 
 const spec = (name: string) => DEVICE_FIXTURES.find((s) => s.name === name)!;
 const moment = (fixture: string) => FIXTURES.find((s) => s.name === fixture)!.now;
@@ -78,6 +89,13 @@ const TABLE: Record<string, [number, string | null, string | null]> = {
   'put-here-device': [200, null, null],
   'put-here-refresh': [200, null, null],
   'put-unlocated': [400, 'bad_location', null],
+  'put-here-ip-durham': [200, null, null],
+  'put-here-ip-kathmandu': [200, null, null],
+  'put-here-ip-durham-kathmandu': [200, null, null],
+  'put-refused': [200, null, null],
+  // A fourth place new to the set waits a minute (ALERTS.newPlacesPerPut).
+  'put-capped': [429, 'rate_limited', '60'],
+  'test-sent-two': [202, null, null],
 };
 
 /**
@@ -101,10 +119,27 @@ const AS_8_1_WROTE_THEM: Record<string, string> = {
   'malformed.json': '6ab9e33c9270e572d201161f30fa5c1fb699d0c703430c9645fd7733723ad7b2',
   'evening.apns': 'b87c65a73e17c4989506a34e986f8a270584fc50fb99f6e41e398fd4702323f7',
 };
+/** 8.4a's, which 8.4b never changes: their files' SHA-256, as 8.4a wrote them. */
+const AS_8_4A_WROTE_THEM: Record<string, string> = {
+  'put-here-ip': 'ebb83c765ac2b350a4275fd216ee6e638cbb61037b1243489f3d9f59ac32fcd0',
+  'put-here-device': '5b6e6b7f314fffd21982b0d4d5c7f4f1c35cd97733e5c1c7ae3bd799b8cd2db5',
+  'put-here-refresh': '07f980d851e0c83870e6b3ca7310368521c8f969454c5bd42686b4d5d0f02505',
+  'put-unlocated': '07f9fbf506292ed134bc85b9b1a525d8143a2908002ec10140963bcb212f66b8',
+};
 const sha256 = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 
-/** 8.4's version 2 fixtures: each a whole set, where you are and no saved place. */
-const SETS = ['put-here-ip', 'put-here-device', 'put-here-refresh', 'put-unlocated'];
+/** 8.4a's version 2 fixtures: each a whole set, where you are and no saved place. */
+const HERE_SETS = ['put-here-ip', 'put-here-device', 'put-here-refresh', 'put-unlocated'];
+/** 8.4b's: each a whole set with saved places, as the app sends it once a bell is on. */
+const SAVED_SETS = [
+  'put-here-ip-durham',
+  'put-here-ip-kathmandu',
+  'put-here-ip-durham-kathmandu',
+  'put-refused',
+  'put-capped',
+];
+/** Every fixture made by version 2 bodies, the test after one included. */
+const SETS = [...HERE_SETS, ...SAVED_SETS, 'test-sent-two'];
 const EVENING = { evening: true, morning: false, possible: false };
 /** The cell Netlify's town for a connection in Leeds is, and the phone's own there. */
 const LEEDS_CELL = 'lat=53.8&lon=-1.55&source=device';
@@ -210,11 +245,35 @@ describe('devices fixtures', () => {
     // The hourly refresh, and the set the server can't place, are the same set again.
     for (const name of ['put-here-refresh', 'put-unlocated'])
       expect(spec(name).body, name).toEqual(spec('put-here-ip').body);
-    for (const name of SETS) {
+    for (const name of HERE_SETS) {
       const b = spec(name).body as RegistrationBody;
       expect(b, name).toMatchObject({ v: 2, saved: [], alerts: { snow: EVENING } });
       expect(b, name).not.toHaveProperty('deviceTz');
     }
+    // 8.4b's: where you are and the switches as put-here-ip's, with the saved places whose bells
+    // are on, in saved order, and the phone's zone, sent only with a saved place.
+    for (const name of SAVED_SETS) {
+      const { saved, deviceTz, ...rest } = spec(name).body as RegistrationBody;
+      expect({ ...rest, saved: [] }, name).toEqual(sent(approximate));
+      expect(deviceTz, name).toBe('Europe/London');
+      expect(saved.length, name).toBeGreaterThan(0);
+      expect(spec(name).geo, name).toEqual(spec('put-here-ip').geo);
+    }
+    // Each as client `registrationBody` makes it from the saved places' targets.
+    const withSaved = (saved: SavedTarget[]): RegistrationBody =>
+      registrationBody({
+        token: DEVICE_TOKEN,
+        env: 'sandbox',
+        here: approximate,
+        units: 'c',
+        prefs: EVENING,
+        appVersion: '1.0 (42)',
+        saved,
+        deviceTz: 'Europe/London',
+      });
+    expect(spec('put-here-ip-durham').body).toEqual(
+      withSaved([{ kind: 'city', slug: 'durham-gb' }]),
+    );
     for (const name of ['put-here-ip', 'put-here-device', 'put-here-refresh']) {
       expect(body(name).alerts, name).toEqual({ snow: EVENING });
     }
@@ -341,6 +400,11 @@ describe('devices fixtures', () => {
       const text = name.includes('.') ? payloads.get(name)! : deviceFixtureJson(fixture(name));
       expect(sha256(text), name).toBe(hash);
     }
+    // 8.4a's sets, byte for byte, after them: 8.4b only adds.
+    expect(Object.keys(AS_8_4A_WROTE_THEM)).toEqual(HERE_SETS);
+    for (const [name, hash] of Object.entries(AS_8_4A_WROTE_THEM)) {
+      expect(sha256(deviceFixtureJson(fixture(name))), name).toBe(hash);
+    }
   });
 
   it("refuses a second write in a minute, in the server's words", () => {
@@ -351,6 +415,8 @@ describe('devices fixtures', () => {
 
   it('says whether a test was sent, or only logged in the dry run', () => {
     expect(body('test-sent')).toEqual({ sent: true });
+    // Where you are and the saved place with its bell on: two tests, so the server counts them.
+    expect(body('test-sent-two')).toEqual({ sent: true, count: 2 });
     expect(body('test-dryrun')).toEqual({ sent: false, dryRun: true });
     expect(spec('test-dryrun').dryRun).toBe(true);
     for (const s of DEVICE_FIXTURES)
@@ -362,7 +428,14 @@ describe('devices fixtures', () => {
       `That's ${ALERTS.testPerHour} test notifications this hour. Try again later.`,
     );
     expect(spec('test-limited').before).toHaveLength(1 + ALERTS.testPerHour);
-    expect(body('test-quiet').error.message).toBe(APP_COPY.testQuiet);
+    // 8.1's set has no saved place, so the server judges the hour at the place; the app's own
+    // line names no clock (phase 8.4b), as a saved place's are judged on the iPhone.
+    expect(body('test-quiet').error.message).toBe(
+      'Nothing is sent from 9pm to 7am at the place. Try again after 7am there.',
+    );
+    expect(
+      body('test-quiet').error.message.replace(' at the place', '').replace(' there', ''),
+    ).toBe(APP_COPY.testQuiet);
     expect(spec('test-quiet').now).toBe('2026-12-01T22:00:00.000Z');
     expect(body('test-gone').error.message).toBe(
       'Apple refused this device, so it is no longer registered.',
@@ -408,18 +481,181 @@ describe('devices fixtures', () => {
   });
 });
 
+describe('devices fixtures with saved places (phase 8.4b)', () => {
+  const id = registrationId('snow', DEVICE_TOKEN);
+  const leeds = {
+    name: 'Leeds',
+    timezone: 'Europe/London',
+    query: LEEDS_CELL,
+    country: 'GB',
+    follows: 'ip',
+  };
+  const DURHAM = {
+    name: 'Durham',
+    timezone: 'Europe/London',
+    query: 'place=durham-gb',
+    country: 'GB',
+  };
+  const KATHMANDU_QUERY =
+    'lat=27.7&lon=85.3&name=Kathmandu&region=Bagmati+Province&country=NP&geonameId=1283240' +
+    '&elevation=50&source=search';
+  const KATHMANDU = {
+    name: 'Kathmandu',
+    timezone: 'Asia/Kathmandu',
+    query: KATHMANDU_QUERY,
+    country: 'NP',
+  };
+  /** A saved place in a reply: its pid from the device's salt and its query, then the place. */
+  const savedReply = (place: { query: string }) => ({
+    pid: placeId(DEVICE_SALT, place.query),
+    ...place,
+  });
+  const saved = (name: string) => (spec(name).body as RegistrationBody).saved;
+
+  it('names the saved places as the app sends them: a city page, and a searched place whole', async () => {
+    expect(saved('put-here-ip-durham')).toEqual([{ place: 'durham-gb' }]);
+    // Kathmandu as choosing search-kathmandu's result saves it (client `searchTarget`): its point
+    // on the grid, and everything the result says of it.
+    const search = await makeSearchFixture(
+      SEARCH_FIXTURES.find((s) => s.name === 'search-kathmandu')!,
+    );
+    const { kind: _, ...target } = searchTarget(search.results[0]!);
+    expect(saved('put-here-ip-kathmandu')).toEqual([target]);
+    expect(saved('put-here-ip-kathmandu')).toEqual([
+      {
+        source: 'search',
+        lat: 27.7,
+        lon: 85.3,
+        name: 'Kathmandu',
+        region: 'Bagmati Province',
+        country: 'NP',
+        geonameId: 1283240,
+        elevation: 50,
+      },
+    ]);
+    // In saved order, most recently saved last.
+    expect(saved('put-here-ip-durham-kathmandu')).toEqual([
+      ...saved('put-here-ip-durham'),
+      ...saved('put-here-ip-kathmandu'),
+    ]);
+    // A city page that has gone from the city list, saved before Durham.
+    expect(saved('put-refused')).toEqual([{ place: 'nowhere-xx' }, { place: 'durham-gb' }]);
+    // Four places new to the set at once, one more than a registration may add.
+    expect(saved('put-capped')).toEqual(
+      ['durham-gb', 'york-gb', 'aberdeen-gb', 'edinburgh-gb'].map((place) => ({ place })),
+    );
+    expect(saved('put-capped')).toHaveLength(ALERTS.newPlacesPerPut + 1);
+    for (const name of SAVED_SETS) expect(spec(name).now, name).toBe(moment('ip-first-launch'));
+  });
+
+  it("answers each saved place by its pid, in the body's order, with its zone, and the phone's", () => {
+    const reply = (saved: object[], refused: object[] = []) => ({
+      id,
+      deviceTz: 'Europe/London',
+      here: leeds,
+      saved,
+      refused,
+      alerts: { snow: EVENING },
+      seenAt: moment('ip-first-launch'),
+    });
+    expect(body('put-here-ip-durham')).toEqual(reply([savedReply(DURHAM)]));
+    // Kathmandu in its own zone (UTC+5:45), where you are still in Leeds's.
+    expect(body('put-here-ip-kathmandu')).toEqual(reply([savedReply(KATHMANDU)]));
+    expect(body('put-here-ip-durham-kathmandu')).toEqual(
+      reply([savedReply(DURHAM), savedReply(KATHMANDU)]),
+    );
+    expect(Object.keys(body('put-here-ip-durham-kathmandu').saved[0])).toEqual([
+      'pid',
+      'name',
+      'timezone',
+      'query',
+      'country',
+    ]);
+    // A gone city page is dropped, listed by its index in the body; the rest is kept.
+    expect(body('put-refused')).toEqual(
+      reply([savedReply(DURHAM)], [{ index: 0, code: 'not_found' }]),
+    );
+    expect(spec('put-here-ip-kathmandu').zone).toEqual({
+      lat: 27.7,
+      lon: 85.3,
+      zone: 'Asia/Kathmandu',
+    });
+    expect(spec('put-here-ip-durham').zone).toBeUndefined();
+  });
+
+  it('keys each saved place by a pid from the salt the device keeps, the same in every run', async () => {
+    expect(DEVICE_SALT).toMatch(/^[0-9a-f]{32}$/);
+    const store = new MemoryAlertStore();
+    await makeDeviceFixture(spec('put-here-ip-durham-kathmandu'), store);
+    const [durham, kathmandu] = [DURHAM, KATHMANDU].map((p) => placeId(DEVICE_SALT, p.query));
+    expect(store.keys()).toEqual(
+      [
+        idsKey('snow', id),
+        regKey('Europe/London', 'snow', id),
+        regKey('Europe/London', 'snow', id, durham),
+        regKey('Asia/Kathmandu', 'snow', id, kathmandu),
+      ].sort(),
+    );
+    expect(await store.get(idsKey('snow', id))).toMatchObject({ v: 2, salt: DEVICE_SALT });
+    // Only a saved place's record keeps the phone's zone.
+    expect(await store.get(regKey('Asia/Kathmandu', 'snow', id, kathmandu))).toMatchObject({
+      slot: kathmandu,
+      deviceTz: 'Europe/London',
+      tz: 'Asia/Kathmandu',
+    });
+    expect(await store.get(regKey('Europe/London', 'snow', id))).not.toHaveProperty('deviceTz');
+    // A set with no saved place starts with no salt of the fixtures' own: 8.4a's stay as they were.
+    const here = new MemoryAlertStore();
+    await makeDeviceFixture(spec('put-here-ip'), here);
+    expect(await here.get(idsKey('snow', id))).not.toMatchObject({ salt: DEVICE_SALT });
+  });
+
+  it('adds three new places in one registration, and asks for the fourth a minute later', async () => {
+    expect(ALERTS.newPlacesPerPut).toBe(3);
+    expect(body('put-capped').error.message).toBe(
+      'Up to 3 new places are added at a time. Try again in a minute.',
+    );
+    const store = new MemoryAlertStore();
+    await makeDeviceFixture(spec('put-capped'), store);
+    const pid = (slug: string) => placeId(DEVICE_SALT, `place=${slug}`);
+    expect(store.keys().filter((k) => k.startsWith('reg/'))).toEqual(
+      [
+        regKey('Europe/London', 'snow', id),
+        ...['durham-gb', 'york-gb', 'aberdeen-gb'].map((slug) =>
+          regKey('Europe/London', 'snow', id, pid(slug)),
+        ),
+      ].sort(),
+    );
+  });
+
+  it('tests where you are and the saved place with its bell on, by the phone’s daytime', () => {
+    expect(spec('test-sent-two').body).toEqual({ app: 'snow', token: DEVICE_TOKEN });
+    expect(spec('test-sent-two').before).toEqual([
+      {
+        request: 'PUT /api/v1/devices',
+        body: spec('put-here-ip-durham').body,
+        geo: spec('put-here-ip-durham').geo,
+      },
+    ]);
+    // 12:05pm on the iPhone (Europe/London), outside the quiet hours.
+    expect(spec('test-sent-two').now).toBe(moment('ip-first-launch'));
+  });
+});
+
 describe('notification payloads', () => {
   const payload = (name: string): any => JSON.parse(payloads.get(name)!);
   const SNOW_APP_ID = /^SNOW_APP_ID = (\S+)$/m.exec(
     readFileSync(new URL('../../../apps/ios/Configs/Snow.xcconfig', import.meta.url), 'utf8'),
   )?.[1];
 
-  it('writes the three payloads and the simulator’s file, in that order', () => {
+  it('writes the three payloads and the simulator’s file, then a saved place’s two, in that order', () => {
     expect(PAYLOAD_FILES).toEqual([
       'durham-evening.json',
       'durham-old.json',
       'malformed.json',
       'evening.apns',
+      'durham-saved-evening.json',
+      'durham-saved-passive.json',
     ]);
     expect(payloadFiles(durham).map((f) => f.name)).toEqual(PAYLOAD_FILES);
     for (const contents of payloads.values()) {
@@ -466,6 +702,44 @@ describe('notification payloads', () => {
     expect(payload('durham-old.json')).toEqual({ ...evening, date: '2026-12-10' });
     expect(payload('malformed.json')).toEqual({ ...evening, date: '2026-02-30' });
     expect(Object.keys(payload('durham-old.json'))).toEqual(Object.keys(evening));
+  });
+
+  it('gives a saved place its own thread, and in the phone’s night no sound (phase 8.4b)', () => {
+    // Durham saved, as put-here-ip-durham registers it: the same place and words as
+    // durham-evening (synthetic data gives Kathmandu no snow from December to February, so its
+    // evening can't come from a real answer), in a thread of its own (decision 22).
+    const pid = body('put-here-ip-durham').saved[0].pid as string;
+    expect(pid).toBe(placeId(DEVICE_SALT, 'place=durham-gb'));
+    const evening = payload('durham-evening.json');
+    const saved = payload('durham-saved-evening.json');
+    expect(saved).toEqual({ ...evening, aps: { ...evening.aps, 'thread-id': `snow-${pid}` } });
+    expect(Object.keys(saved.aps)).toEqual(Object.keys(evening.aps));
+    expect(evening.aps['thread-id']).toBe('snow');
+    // During the iPhone's night (decision 21): passive, with no sound, to be seen in the morning.
+    const { sound: _, ...quiet } = saved.aps;
+    expect(payload('durham-saved-passive.json')).toEqual({
+      ...saved,
+      aps: { ...quiet, 'interruption-level': 'passive' },
+    });
+    expect(saved.aps['interruption-level']).toBe('active');
+    expect(saved.aps.sound).toBe('default');
+    // The push this generator makes them from collapses by the place too: core's `collapseId`
+    // with the fixture's pid (no fixture holds it, as it is a header; the run's own collapse ids
+    // for saved places are pinned in the server's alerts.test.ts).
+    const record = { app: 'snow', token: DEVICE_TOKEN, query: 'place=durham-gb', name: 'Durham' };
+    const alert = { title: saved.aps.alert.title, body: saved.aps.alert.body, relevance: 1 };
+    expect(
+      alertPush({
+        record,
+        alert,
+        topic: 'snow',
+        kind: 'evening',
+        date: saved.date,
+        collapseId: collapseId('snow', 'evening', saved.date, pid),
+        expiration: 0,
+        priority: 5,
+      }).collapseId,
+    ).toBe(`snow-evening-2026-12-17-${pid}`);
   });
 
   it("gives the simulator the app's bundle ID first, within Apple's limit, in snow's words", () => {
