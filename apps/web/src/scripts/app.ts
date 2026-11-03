@@ -295,10 +295,11 @@ function hushLive(): void {
 }
 
 /**
- * Puts `text` in an element, unless its words are there already. The server's markup holds them
- * with the template's spacing around them ("\n  Is it hot in Leeds today?\n"), which is no
- * change: written again, Today's live region would read out the same answer again, as it did at
- * the first answer asked for again after the page loaded, at the top of the hour.
+ * Puts `text` in an element, unless its words are there already: written again, Today's live
+ * region would read out the same answer again, as it did at the first answer asked for again
+ * after the page loaded, at the top of the hour. The server's markup holds exactly the words
+ * (set:text in the components, e2e/markup.spec.ts), so words left in place carry no spacing; the
+ * trim still covers a snapshot saved before that, with the template's spacing around them.
  */
 function setText(id: string, text: string): void {
   const el = $(id);

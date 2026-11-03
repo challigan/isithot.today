@@ -4,6 +4,10 @@
  * the UV index, on Wind the Met Office's warnings for a UK gale or storm, and model agreement.
  * Rendered on the server with data (city pages) or in its loading state (home page); the browser
  * script updates the same nodes. Its answer is the page's only h1 whichever view is on screen.
+ * The words the script puts in (scripts/app.ts `setText`) go in with set:text, so the markup
+ * holds exactly those words. As a child, Prettier puts them on a line of their own once the
+ * element's line is long, and the page would hold them with a space either side, which `setText`
+ * keeps when the words are the same.
  */
 import { COPY, type OutboundLink, type TodayDisplay } from '@isithot/core';
 import { glyphFor, listHtml, stripHtml } from '../lib/view';
@@ -58,34 +62,29 @@ const { models } = view;
    */}
   <div aria-live="polite" aria-atomic="true" id="live">
     <h1 class="heading" id="heading">
-      <span class="question" id="question">
-        {view.question}
-      </span>{' '}
-      <span class="answer" id="answer" data-long={view.answer.length > 4 ? '' : undefined}>
-        {view.answer}
-      </span>
+      <span class="question" id="question" set:text={view.question} />{' '}
+      <span
+        class="answer"
+        id="answer"
+        data-long={view.answer.length > 4 ? '' : undefined}
+        set:text={view.answer}
+      />
     </h1>
-    <p class="verdict hold" id="verdict">
-      {view.verdict}
-    </p>
+    <p class="verdict hold" id="verdict" set:text={view.verdict} />
   </div>
-  <p class="detail hold" id="detail">
-    {view.detail}
-  </p>
+  <p class="detail hold" id="detail" set:text={view.detail} />
   <UvLine id="uv" uv={view.uv} />
   <WarningsLine id="warnings" link={warnings} />
 
   <section class="models hold" id="models" aria-labelledby="models-h">
     <h2 id="models-h">
-      <span id="agree">{models.heading}</span>
+      <span id="agree" set:text={models.heading} />
     </h2>
-    <p class="sr-only" id="strip-summary">
-      {models.summary}
-    </p>
+    <p class="sr-only" id="strip-summary" set:text={models.summary} />
     <div class="strip" id="strip" aria-hidden="true" set:html={stripHtml(models)} />
     <div class="scale" aria-hidden="true">
-      <span id="smin">{models.min}</span>
-      <span id="smax">{models.max}</span>
+      <span id="smin" set:text={models.min} />
+      <span id="smax" set:text={models.max} />
     </div>
     <ul class="list" id="list" set:html={listHtml(models)} />
     <p class="limited" id="limited" hidden={!models.limited}>

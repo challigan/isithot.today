@@ -9090,13 +9090,27 @@ in Leeds today"), with pages that are plainly original, easy to browse and hones
 - **The same answer, asked for again, is not read out again** (after PR #46's Playwright run
   41423406938). Once the hour an answer holds for has passed, the minute tick asks again past the
   caches, and `setText` wrote Today's question, answer and verdict back in with the same words:
-  the server's markup holds them with the template's spacing around them, which never equalled
+  the server's markup held them with the template's spacing around them, which never equalled
   the words alone. A live region written to is read out, so the first answer asked for again
   after the page loaded read the same answer out again. `setText` now leaves words that are
   there already, spacing aside. The three-minute test had started the page at the real time, so
   one run at 09:58 UTC crossed 10:00 (Istanbul's noon in the synthetic data) and counted those
   3 writes; it now stays inside the hour, and a test of its own crosses it, with the server's
   answer again, and finds the region untouched (3 writes before the fix, none after).
+- **The server's markup holds exactly the words `setText` writes** (after PR #52's Playwright run
+  41540438751, job 125602917808, on code that PR does not touch). The phone's run of `home.spec.ts`
+  "answers from approximate location without asking for permission" failed on both tries: `#verdict`
+  read " It's warm, not hot. " where the test wants `/^It's /`. The components put each line's words
+  on a line of their own, which `compressHTML` leaves as a space either side. A home page is served
+  in its loading state, with the placeholder verdict "It's warm, not hot.", and when the visitor's
+  answer had the same verdict, `setText` (since the fix above) left it alone, spaces and all. The
+  approximate place moves with the hour (e2e/helpers.ts `ipPlaceAt`), so the desktop run just after
+  23:00 UTC passed, as had main and the other PRs. Every element `setText` writes into now takes its
+  words with `set:text`, as `Credit.astro` does, which Prettier cannot wrap onto a line of their own
+  (bar the Updated time, on a `prettier-ignore` line). `setText` keeps its trim, for a snapshot
+  saved before this. `e2e/markup.spec.ts` loads each site's home page and a city page by day and in
+  the evening without JavaScript and finds no space around those elements' words (14 a page on the
+  old markup); it checks its list against app.ts. Nothing on screen changed.
 - **Titles never carry the answer**, which went out of date in search results and contradicted
   the page after 6pm. City pages give the question and what the page offers: "Is it wet in
   Leeds today? Rain hour by hour from 8 forecasts | isitwet.today" (8 is `MODELS.length`).
