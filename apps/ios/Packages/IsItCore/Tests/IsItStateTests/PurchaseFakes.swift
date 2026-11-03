@@ -190,6 +190,10 @@ struct PurchaseHooks: AppHooks {
   func syncAlerts(target: Target, units: Units?) async { log.note("syncAlerts") }
 
   func handle(_ route: DeepLink.Route) async { log.note("handle") }
+
+  @MainActor func savedChanged(_ saved: [SavedPlace]) {}
+
+  @MainActor func unlockedChanged(_ owned: Bool) {}
 }
 
 /// A purchase model with a fake StoreKit, `unlock.v1` in memory (holding `stored`'s answer

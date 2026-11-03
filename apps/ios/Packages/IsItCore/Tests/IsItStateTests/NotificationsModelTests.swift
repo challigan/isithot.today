@@ -29,15 +29,17 @@ private func here(_ target: Target) -> HerePlace {
 }
 
 /// The PUT the model makes for `prefs` with where you are at `here`, with `token`, as
-/// `sortedJSON` writes it: evening on, approximate, unless said.
+/// `sortedJSON` writes it: evening on, approximate, unless said; with the saved places `saved`
+/// and the phone's zone `deviceTz` (phase 8.4b), none unless said.
 private func put(
   _ prefs: AlertPrefs = AlertPrefs(evening: true), at here: HerePlace = .ip, token: String,
-  units: Units = .c, env: RegistrationBody.Env = .sandbox, appVersion: String = "1.0 (42)"
+  units: Units = .c, env: RegistrationBody.Env = .sandbox, appVersion: String = "1.0 (42)",
+  saved: [SavedPlace] = [], deviceTz: String? = nil
 ) throws -> DeviceCall {
   let body = AlertSync.body(
-    token: token, env: env, here: here, units: units, prefs: prefs, appVersion: appVersion)
-  return DeviceCall(
-    method: .put, path: "/api/v1/devices", body: try sortedJSON(JSONEncoder().encode(body)))
+    token: token, env: env, here: here, units: units, prefs: prefs, appVersion: appVersion,
+    saved: saved.map(\.target), deviceTz: deviceTz)
+  return DeviceCall(method: .put, path: "/api/v1/devices", body: try sortedJSON(body.json))
 }
 
 /// The DELETE, or the test, for `token`.
@@ -1543,5 +1545,607 @@ struct NotificationCardAndPrivacyTests {
     #expect(h.model.state.locationAccess == .notDetermined)
     #expect(h.platform.calls.isEmpty)
     #expect(h.location.calls.isEmpty)
+  }
+}
+
+// MARK: - The saved places' bells (phase 8.4b)
+
+/// A devices fixture's 200 with the phone's zone as the server keeps it, `deviceTz`, in place of
+/// the fixture's: the server keeps the zone under the name ICU gives it, which need not be the
+/// one iOS sent (Asia/Katmandu for Asia/Kathmandu).
+private func deviceReply(_ name: String, keptZone deviceTz: String) throws -> FakeTransport.Reply {
+  let info = try Fixtures.deviceInfo(name)
+  var reply = try #require(try JSONSerialization.jsonObject(with: info.reply) as? [String: Any])
+  reply["deviceTz"] = deviceTz
+  let body = try JSONSerialization.data(withJSONObject: reply)
+  return .answer(HTTPResponse(status: info.status, body: body, retryAfter: info.retryAfter))
+}
+
+/// A notifications model kept as `settings` and `registration` say, with `saved` saved and,
+/// unless `unlocked` is nil, StoreKit's answer about the purchase heard; started on approximate
+/// location (location access off), and synced.
+@MainActor
+private func started(
+  now: Date, settings: AlertSettings = AlertSettings(), registration: AlertRegistration? = nil,
+  saved: [SavedPlace], unlocked: Bool? = true, permission: AlertSync.Permission = .authorized,
+  answer: Bool = true, replies: [FakeTransport.Reply] = [.failure(.notConnectedToInternet)],
+  token: Bool = true
+) async throws -> NotificationsHarness {
+  let h = NotificationsHarness(
+    now: now, settings: settings, registration: registration, permission: permission,
+    answer: answer, location: FakeLocation(access: .denied), replies: replies)
+  h.model.savedChanged(saved)
+  if let unlocked { h.model.unlockedChanged(unlocked) }
+  if token { h.model.tokenArrived(try fixtureToken()) }
+  h.model.screenChanged(target: .ip, units: .c)
+  await h.model.synced()
+  return h
+}
+
+@MainActor
+@Suite("The saved places' bells", .timeLimit(.minutes(1)))
+struct NotificationBellTests {
+  @Test("without the purchase a bell asks for it, and for nothing else")
+  func lockedNeedsThePurchase() async throws {
+    let h = try await started(
+      now: try devicesMoment(), saved: [durhamSaved], unlocked: false,
+      permission: .notDetermined)
+    #expect(await h.model.toggleBell(durhamSaved, unlocked: false) == .needsPurchase)
+    #expect(h.platform.requests == 0)
+    #expect(h.model.state.settings == AlertSettings())
+    #expect(h.store.loadSettings() == AlertSettings())
+    #expect(h.platform.registers == 0)
+    #expect(h.transport.requests.isEmpty)
+  }
+
+  @Test("a first bell asks, then turns the evening on with it: the place and the phone's zone go")
+  func aFirstBellAsksThenTurnsTheEveningOn() async throws {
+    let h = try await started(
+      now: try devicesMoment(), saved: [durhamSaved], permission: .notDetermined,
+      replies: [try deviceReply("put-here-ip-durham")], token: false)
+    #expect(await h.model.toggleBell(durhamSaved, unlocked: true) == .onWithHere)
+    #expect(h.platform.calls == ["permission", "request", "permission", "register"])
+    let kept = eveningWithBells([durhamSaved])
+    #expect(h.model.state.settings == kept)
+    #expect(h.store.loadSettings() == kept)
+    #expect(h.model.bells == ["city:durham-gb"])
+    #expect(h.model.active)
+    // It turned a switch on, which is for where you are too: the card goes, as at a first switch.
+    #expect(h.model.state.cardDismissed)
+    h.model.tokenArrived(try fixtureToken())
+    await h.model.synced()
+    #expect(
+      try h.requests == [
+        try put(token: fixtureToken(), saved: [durhamSaved], deviceTz: "Europe/London")
+      ])
+    #expect(try h.requests.first?.body == deviceSentJSON("put-here-ip-durham"))
+    #expect(h.model.state.registration?.response == (try deviceResponse("put-here-ip-durham")))
+    #expect(
+      h.model.state.registration?.fingerprint
+        == AlertSync.fingerprint(try sentBody("put-here-ip-durham")))
+  }
+
+  @Test("with a switch on a bell turns on alone, and off again, the phone's zone with it")
+  func aBellOnAndOff() async throws {
+    let now = try devicesMoment()
+    let h = try await started(
+      now: now, settings: eveningOn, registration: try registration(at: now),
+      saved: [durhamSaved, try kathmanduSaved()],
+      replies: [try deviceReply("put-here-ip-durham"), try deviceReply("put-here-ip")])
+    #expect(h.transport.requests.isEmpty)
+    #expect(await h.model.toggleBell(durhamSaved, unlocked: true) == .on)
+    #expect(h.platform.requests == 0)
+    #expect(h.store.loadSettings() == eveningWithBells([durhamSaved]))
+    await h.model.synced()
+    #expect(try h.requests.last?.body == deviceSentJSON("put-here-ip-durham"))
+    #expect(await h.model.toggleBell(durhamSaved, unlocked: true) == .off)
+    #expect(h.store.loadSettings() == eveningOn)
+    #expect(h.model.bells.isEmpty)
+    await h.model.synced()
+    // No saved place, no zone: the set is where you are's alone again.
+    #expect(try h.requests.count == 2)
+    #expect(try h.requests.last?.body == deviceSentJSON("put-here-ip"))
+    #expect(try h.requests.last == put(token: fixtureToken()))
+  }
+
+  @Test("bells go in saved order, whichever was rung first")
+  func bellsInSavedOrder() async throws {
+    let now = try devicesMoment()
+    let kathmandu = try kathmanduSaved()
+    let h = try await started(
+      now: now, settings: eveningOn, registration: try registration(at: now),
+      saved: [durhamSaved, kathmandu],
+      replies: [
+        try deviceReply("put-here-ip-kathmandu"), try deviceReply("put-here-ip-durham-kathmandu"),
+      ])
+    #expect(await h.model.toggleBell(kathmandu, unlocked: true) == .on)
+    await h.model.synced()
+    #expect(await h.model.toggleBell(durhamSaved, unlocked: true) == .on)
+    await h.model.synced()
+    #expect(h.model.bells == ["city:durham-gb", "search:27.7,85.3"])
+    #expect(
+      try h.requests.map(\.body) == [
+        try deviceSentJSON("put-here-ip-kathmandu"),
+        try deviceSentJSON("put-here-ip-durham-kathmandu"),
+      ])
+    #expect(
+      h.model.state.registration?.response
+        == (try deviceResponse("put-here-ip-durham-kathmandu")))
+  }
+
+  @Test("every switch off: the set is deleted, the bells kept and shown off; a tap brings evening")
+  func bellsKeptWhileNothingCanBeSent() async throws {
+    let now = try devicesMoment()
+    let h = try await started(
+      now: now, settings: eveningWithBells([durhamSaved]),
+      registration: try registration("put-here-ip-durham", at: now), saved: [durhamSaved],
+      replies: [try deviceReply("delete"), try deviceReply("put-here-ip-durham")])
+    #expect(h.transport.requests.isEmpty)
+    #expect(h.model.active)
+    await h.model.setSwitch(.evening, on: false)
+    await h.model.synced()
+    #expect(try h.requests == [try identity(.delete, token: fixtureToken())])
+    #expect(!h.model.active)
+    #expect(h.model.bells == ["city:durham-gb"])
+    #expect(h.store.loadSettings() == AlertSettings(bells: ["city:durham-gb"]))
+    // The picker shows it off, kept underneath.
+    let picker = PlacePicker(
+      search: .empty, location: .idle, lists: PlaceLists(saved: [durhamSaved], recent: []),
+      unlocked: true, bells: h.model.bells, active: h.model.active)
+    #expect(picker.saved.first?.bell.state == .off)
+    // Its tap turns the evening on again, for where you are too, and sends the bell.
+    #expect(await h.model.toggleBell(durhamSaved, unlocked: true) == .onWithHere)
+    await h.model.synced()
+    #expect(h.store.loadSettings() == eveningWithBells([durhamSaved]))
+    #expect(try h.requests.last?.body == deviceSentJSON("put-here-ip-durham"))
+  }
+
+  @Test("denied in iOS Settings: the bells kept and shown off, and a tap says so")
+  func deniedKeepsTheBells() async throws {
+    let now = try devicesMoment()
+    let h = try await started(
+      now: now, settings: eveningWithBells([durhamSaved]),
+      registration: try registration("put-here-ip-durham", at: now), saved: [durhamSaved],
+      permission: .denied, replies: [try deviceReply("delete")])
+    #expect(try h.requests == [try identity(.delete, token: fixtureToken())])
+    #expect(h.model.state.settings == AlertSettings(bells: ["city:durham-gb"]))
+    #expect(!h.model.active)
+    #expect(h.model.permissionDenied)
+    #expect(await h.model.toggleBell(durhamSaved, unlocked: true) == .denied)
+    #expect(h.model.state.settings == AlertSettings(bells: ["city:durham-gb"]))
+    #expect(h.platform.requests == 0)
+    #expect(try h.requests.count == 1)
+  }
+
+  @Test("a first bell whose prompt is refused is denied, and nothing turns on")
+  func aFirstBellRefused() async throws {
+    let h = try await started(
+      now: try devicesMoment(), saved: [durhamSaved], permission: .notDetermined, answer: false)
+    #expect(await h.model.toggleBell(durhamSaved, unlocked: true) == .denied)
+    #expect(h.platform.requests == 1)
+    #expect(h.model.state.settings == AlertSettings())
+    #expect(h.model.state.permission == .denied)
+    #expect(h.model.permissionDenied)
+    #expect(h.platform.registers == 0)
+    #expect(!h.model.state.cardDismissed)
+    #expect(h.transport.requests.isEmpty)
+  }
+
+  @Test("two taps while the prompt is out ask once, and the bell stays on")
+  func twoTapsAskOnce() async throws {
+    let h = try await started(
+      now: try devicesMoment(), saved: [durhamSaved], permission: .notDetermined)
+    h.platform.hold(.request, number: 1)
+    let first = Task { await h.model.toggleBell(durhamSaved, unlocked: true) }
+    #expect(await yieldUntil { h.platform.requests == 1 }, "the prompt never showed")
+    let second = Task { await h.model.toggleBell(durhamSaved, unlocked: true) }
+    for _ in 0..<100 { await Task.yield() }
+    h.platform.release(.request, number: 1)
+    let results = [await first.value, await second.value]
+    #expect(results.filter { $0 == .onWithHere }.count == 1, "\(results)")
+    #expect(results.allSatisfy { $0 == .on || $0 == .onWithHere }, "\(results)")
+    #expect(h.platform.requests == 1)
+    #expect(h.model.state.settings == eveningWithBells([durhamSaved]))
+  }
+
+  @Test("a bell waits for the first switch's prompt, and a switch for a bell's")
+  func aBellAndASwitchShareThePrompt() async throws {
+    let h = try await started(
+      now: try devicesMoment(), saved: [durhamSaved], permission: .notDetermined)
+    h.platform.hold(.request, number: 1)
+    let bell = Task { await h.model.toggleBell(durhamSaved, unlocked: true) }
+    #expect(await yieldUntil { h.platform.requests == 1 }, "the prompt never showed")
+    let morning = Task { await h.model.setSwitch(.morning, on: true) }
+    for _ in 0..<100 { await Task.yield() }
+    h.platform.release(.request, number: 1)
+    #expect(await bell.value == .onWithHere)
+    await morning.value
+    #expect(h.platform.requests == 1)
+    #expect(
+      h.model.state.settings
+        == AlertSettings(prefs: AlertPrefs(evening: true, morning: true), bells: ["city:durham-gb"])
+    )
+  }
+}
+
+@MainActor
+@Suite("The saved places and the bells", .timeLimit(.minutes(1)))
+struct NotificationSavedPlacesTests {
+  @Test("an unsaved place's bell goes, and its record with the next set")
+  func unsavingDropsTheBell() async throws {
+    let now = try devicesMoment()
+    let kathmandu = try kathmanduSaved()
+    let h = try await started(
+      now: now, settings: eveningWithBells([durhamSaved, kathmandu]),
+      registration: try registration("put-here-ip-durham-kathmandu", at: now),
+      saved: [durhamSaved, kathmandu], replies: [try deviceReply("put-here-ip-durham")])
+    #expect(h.transport.requests.isEmpty)
+    h.model.savedChanged([durhamSaved])
+    #expect(h.model.bells == ["city:durham-gb"])
+    #expect(h.store.loadSettings() == eveningWithBells([durhamSaved]))
+    #expect(h.model.state.saved == [durhamSaved])
+    await h.model.synced()
+    #expect(try h.requests.map(\.body) == [try deviceSentJSON("put-here-ip-durham")])
+  }
+
+  @Test("saved again this session, a place gets its bell back; one turned off first doesn't")
+  func savedAgainTheBellComesBack() async throws {
+    let now = try devicesMoment()
+    let kathmandu = try kathmanduSaved()
+    let h = try await started(
+      now: now, settings: eveningWithBells([durhamSaved, kathmandu]),
+      registration: try registration("put-here-ip-durham-kathmandu", at: now),
+      saved: [durhamSaved, kathmandu],
+      replies: [
+        try deviceReply("put-here-ip-durham"), try deviceReply("put-here-ip-durham-kathmandu"),
+        try deviceReply("put-here-ip-durham"), try deviceReply("put-here-ip"),
+      ])
+    h.model.savedChanged([durhamSaved])
+    await h.model.synced()
+    // Saved again, at the end, as a star saves it.
+    h.model.savedChanged([durhamSaved, kathmandu])
+    #expect(h.model.bells == ["city:durham-gb", "search:27.7,85.3"])
+    #expect(h.store.loadSettings() == eveningWithBells([durhamSaved, kathmandu]))
+    await h.model.synced()
+    #expect(try h.requests.last?.body == deviceSentJSON("put-here-ip-durham-kathmandu"))
+    // Once only: unsaved and saved again a second time, it comes back again.
+    h.model.savedChanged([durhamSaved])
+    h.model.savedChanged([durhamSaved, kathmandu])
+    #expect(h.model.bells == ["city:durham-gb", "search:27.7,85.3"])
+    // Turned off, then unsaved and saved again: it stays off.
+    #expect(await h.model.toggleBell(kathmandu, unlocked: true) == .off)
+    h.model.savedChanged([durhamSaved])
+    h.model.savedChanged([durhamSaved, kathmandu])
+    #expect(h.model.bells == ["city:durham-gb"])
+    // And a place saved for the first time starts with its bell off.
+    let york = savedCity("york-gb", "York")
+    h.model.savedChanged([durhamSaved, kathmandu, york])
+    #expect(h.model.bells == ["city:durham-gb"])
+    await h.model.synced()
+    #expect(try h.requests.last?.body == deviceSentJSON("put-here-ip-durham"))
+  }
+
+  @Test("a bell kept for a place no longer saved goes once the saved places are known, not before")
+  func aLenientReadDropsBellsOnceTheSavedPlacesAreKnown() async throws {
+    let york = savedCity("york-gb", "York")
+    let kept = eveningWithBells([durhamSaved, york])
+    let h = NotificationsHarness(now: try devicesMoment(), settings: kept)
+    #expect(h.model.bells == ["city:durham-gb", "city:york-gb"])
+    #expect(h.store.loadSettings() == kept)
+    h.model.savedChanged([durhamSaved])
+    #expect(h.model.bells == ["city:durham-gb"])
+    #expect(h.store.loadSettings() == eveningWithBells([durhamSaved]))
+  }
+
+  @Test("the delete clears every bell, and saving a place again brings none back")
+  func theDeleteClearsTheBells() async throws {
+    let now = try devicesMoment()
+    let h = try await started(
+      now: now, settings: eveningWithBells([durhamSaved]),
+      registration: try registration("put-here-ip-durham", at: now), saved: [durhamSaved],
+      replies: [try deviceReply("put-here-ip"), try deviceReply("delete")])
+    h.model.savedChanged([])
+    await h.model.synced()
+    await h.model.deleteMyData()
+    #expect(h.model.state.delete == .done)
+    #expect(h.store.loadSettings() == AlertSettings())
+    h.model.savedChanged([durhamSaved])
+    #expect(h.model.bells.isEmpty)
+    #expect(h.store.loadSettings() == AlertSettings())
+  }
+
+  @Test("the saved places and the purchase are the state's, for Settings' row")
+  func theStateHasThem() async throws {
+    let now = try devicesMoment()
+    let h = try await started(
+      now: now, settings: eveningWithBells([durhamSaved]),
+      registration: try registration("put-here-ip-durham", at: now), saved: [durhamSaved],
+      unlocked: nil)
+    #expect(h.model.state.saved == [durhamSaved])
+    #expect(h.model.state.unlocked == nil)
+    h.model.unlockedChanged(true)
+    #expect(h.model.state.unlocked == true)
+    let row = NotificationSettings(h.model.state, unlocked: true).items.compactMap { item in
+      if case .savedRow(let row) = item { row } else { nil }
+    }.first
+    #expect(row?.value == "1 on")
+  }
+}
+
+@MainActor
+@Suite("The bells and the purchase", .timeLimit(.minutes(1)))
+struct NotificationBellPurchaseTests {
+  @Test("a refund keeps the bells and sends none; a restore sends them again")
+  func aRefundThenARestore() async throws {
+    let now = try devicesMoment()
+    let h = try await started(
+      now: now, settings: eveningWithBells([durhamSaved]),
+      registration: try registration("put-here-ip-durham", at: now), saved: [durhamSaved],
+      replies: [try deviceReply("put-here-ip"), try deviceReply("put-here-ip-durham")])
+    #expect(h.transport.requests.isEmpty)
+    h.model.unlockedChanged(false)
+    await h.model.synced()
+    #expect(try h.requests == [try put(token: fixtureToken())])
+    #expect(try h.requests.last?.body == deviceSentJSON("put-here-ip"))
+    #expect(h.model.bells == ["city:durham-gb"])
+    #expect(h.store.loadSettings() == eveningWithBells([durhamSaved]))
+    // Locked now: Settings' row asks for the purchase.
+    #expect(h.model.state.unlocked == false)
+    h.model.unlockedChanged(true)
+    await h.model.synced()
+    #expect(try h.requests.count == 2)
+    #expect(try h.requests.last?.body == deviceSentJSON("put-here-ip-durham"))
+  }
+
+  @Test("before StoreKit answers, the saved places the last set had stay, and none is added")
+  func beforeStoreKitAnswers() async throws {
+    let now = try devicesMoment()
+    // The last set had Durham: it stays as it is, with nothing sent.
+    let kept = try await started(
+      now: now, settings: eveningWithBells([durhamSaved]),
+      registration: try registration("put-here-ip-durham", at: now), saved: [durhamSaved],
+      unlocked: nil)
+    #expect(kept.transport.requests.isEmpty)
+    // The last set had none: a bell turned on isn't sent until StoreKit says it's owned.
+    let none = try await started(
+      now: now, settings: eveningWithBells([durhamSaved]),
+      registration: try registration(at: now), saved: [durhamSaved], unlocked: nil,
+      replies: [try deviceReply("put-here-ip-durham")])
+    #expect(none.transport.requests.isEmpty)
+    none.model.unlockedChanged(true)
+    await none.model.synced()
+    #expect(try none.requests.map(\.body) == [try deviceSentJSON("put-here-ip-durham")])
+  }
+
+  @Test("StoreKit's answer heard again changes nothing")
+  func theSameAnswerAgain() async throws {
+    let now = try devicesMoment()
+    let h = try await started(
+      now: now, settings: eveningWithBells([durhamSaved]),
+      registration: try registration("put-here-ip-durham", at: now), saved: [durhamSaved])
+    h.model.unlockedChanged(true)
+    await h.model.synced()
+    #expect(h.transport.requests.isEmpty)
+  }
+
+  @Test("four bells back at once: the server keeps three, and the set is sent again when told")
+  func fourBellsAtOnceAreCapped() async throws {
+    let now = try devicesMoment()
+    let four = [
+      durhamSaved, savedCity("york-gb", "York"), savedCity("aberdeen-gb", "Aberdeen"),
+      savedCity("edinburgh-gb", "Edinburgh"),
+    ]
+    let h = try await started(
+      now: now, settings: eveningWithBells(four), registration: try registration(at: now),
+      saved: four, unlocked: false,
+      replies: [try deviceReply("put-capped"), try deviceReply("put-capped")])
+    #expect(h.transport.requests.isEmpty)
+    // A restore.
+    h.model.unlockedChanged(true)
+    await h.model.synced()
+    #expect(try h.requests.map(\.body) == [try deviceSentJSON("put-capped")])
+    #expect(h.clock.pending == [now.addingTimeInterval(60)])
+    #expect(h.model.state.status == .ok)
+    // Told again: tried again, as often as the server says.
+    #expect(await h.clock.runNext())
+    await h.model.synced()
+    #expect(try h.requests.count == 2)
+    #expect(try h.requests.last?.body == deviceSentJSON("put-capped"))
+    #expect(h.clock.pending == [now.addingTimeInterval(120)])
+  }
+}
+
+@MainActor
+@Suite("A set the server may hold though no reply to it was kept", .timeLimit(.minutes(1)))
+struct NotificationUnconfirmedSetTests {
+  /// Durham and three more cities, saved, with their bells on.
+  private let four = [
+    durhamSaved, savedCity("york-gb", "York"), savedCity("aberdeen-gb", "Aberdeen"),
+    savedCity("edinburgh-gb", "Edinburgh"),
+  ]
+
+  /// Every switch off and the set deleted, so `alertSync.v2` keeps nothing, with the four bells
+  /// kept; then the evening on, whose PUT the server answers with put-capped's 429, having stored
+  /// where you are and three of the four first (decision 20).
+  private func capped(then replies: [FakeTransport.Reply]) async throws -> NotificationsHarness {
+    let h = try await started(
+      now: try devicesMoment(), settings: AlertSettings(bells: four.map(\.target.key)),
+      saved: four, replies: [try deviceReply("put-capped")] + replies)
+    #expect(h.transport.requests.isEmpty)
+    await h.model.setSwitch(.evening, on: true)
+    await h.model.synced()
+    #expect(try h.requests.map(\.body) == [try deviceSentJSON("put-capped")])
+    #expect(h.model.state.registration == nil)
+    #expect(h.clock.pending.count == 1)
+    return h
+  }
+
+  @Test("capped with nothing kept, then every switch off: the set is deleted, and only once")
+  func cappedThenEverySwitchOff() async throws {
+    let h = try await capped(then: [try deviceReply("delete")])
+    await h.model.setSwitch(.evening, on: false)
+    await h.model.synced()
+    #expect(try Array(h.requests.dropFirst()) == [try identity(.delete, token: fixtureToken())])
+    #expect(h.clock.pending.isEmpty)
+    #expect(h.model.state.status == .ok)
+    // The bells stay, kept underneath; the DELETE was answered, so nothing more is sent.
+    #expect(h.model.bells == four.map(\.target.key))
+    await h.model.becameActive()
+    await h.model.synced()
+    #expect(try h.requests.count == 2)
+  }
+
+  @Test("capped with nothing kept, then notifications denied in iOS Settings: the return deletes")
+  func cappedThenDenied() async throws {
+    let h = try await capped(then: [try deviceReply("delete")])
+    h.platform.current = .denied
+    await h.model.becameActive()
+    await h.model.synced()
+    #expect(try Array(h.requests.dropFirst()) == [try identity(.delete, token: fixtureToken())])
+    #expect(h.clock.pending.isEmpty)
+  }
+
+  @Test("capped with nothing kept, then the delete: done only once the server has answered it")
+  func cappedThenDeleteMyData() async throws {
+    let h = try await capped(then: [.failure(.notConnectedToInternet), try deviceReply("delete")])
+    await h.model.deleteMyData()
+    #expect(h.model.state.delete == .notYet)
+    await h.model.becameActive()
+    await h.model.synced()
+    #expect(h.model.state.delete == .done)
+    #expect(try h.requests.map(\.method) == [.put, .delete, .delete])
+  }
+
+  @Test("a PUT with no answer, or a 503, and nothing kept: every switch off deletes the set")
+  func unansweredThenEverySwitchOff() async throws {
+    let replies: [FakeTransport.Reply] = [
+      .failure(.timedOut), .answer(HTTPResponse(status: 503, body: Data())),
+    ]
+    for reply in replies {
+      let h = NotificationsHarness(
+        now: try devicesMoment(), settings: eveningOn, replies: [reply, try deviceReply("delete")])
+      h.model.tokenArrived(try fixtureToken())
+      h.model.screenChanged(target: leedsCity, units: .c)
+      await h.model.synced()
+      #expect(h.model.state.registration == nil)
+      #expect(h.model.state.status == .notSaved)
+      await h.model.setSwitch(.evening, on: false)
+      await h.model.synced()
+      #expect(
+        try h.requests == [
+          try put(token: fixtureToken()), try identity(.delete, token: fixtureToken()),
+        ])
+      #expect(h.model.state.status == .ok)
+    }
+  }
+
+  @Test("a set the server then refused or forgot needs no DELETE: it holds nothing")
+  func refusedOrForgottenSinceNeedsNoDelete() async throws {
+    for answer in ["put-unlocated", "delete"] {
+      let h = NotificationsHarness(
+        now: try devicesMoment(), settings: eveningOn, location: FakeLocation(access: .denied),
+        replies: [.failure(.timedOut), try deviceReply(answer)])
+      h.model.tokenArrived(try fixtureToken())
+      h.model.screenChanged(target: .ip, units: .c)
+      await h.model.synced()
+      await h.model.becameActive()
+      await h.model.synced()
+      #expect(try h.requests.count == 2, "\(answer)")
+      await h.model.setSwitch(.evening, on: false)
+      await h.model.synced()
+      #expect(try h.requests.count == 2, "\(answer)")
+    }
+  }
+}
+
+@MainActor
+@Suite("The saved places' set and its reply", .timeLimit(.minutes(1)))
+struct NotificationSavedSetTests {
+  @Test("a phone in a new zone sends it, and the server's own name for it is never compared")
+  func thePhonesZone() async throws {
+    let now = try devicesMoment()
+    let h = try await started(
+      now: now, settings: eveningWithBells([durhamSaved]),
+      registration: try registration("put-here-ip-durham", at: now), saved: [durhamSaved],
+      replies: [try deviceReply("put-here-ip-durham", keptZone: "Asia/Katmandu")])
+    #expect(h.transport.requests.isEmpty)
+    // Flown to Kathmandu: the phone's zone changes, so the set is sent again on the return.
+    h.zone.change { $0 = "Asia/Kathmandu" }
+    await h.model.becameActive()
+    await h.model.synced()
+    #expect(
+      try h.requests == [
+        try put(token: fixtureToken(), saved: [durhamSaved], deviceTz: "Asia/Kathmandu")
+      ])
+    #expect(h.model.state.registration?.response.deviceTz == "Asia/Katmandu")
+    // The server keeps the zone as ICU names it: that is no change of the phone's.
+    await h.model.becameActive()
+    h.model.screenChanged(target: durham, units: .c)
+    await h.model.synced()
+    #expect(try h.requests.count == 1)
+  }
+
+  @Test("the phone's zone isn't sent without a saved place, nor without the purchase")
+  func noZoneWithoutASavedPlace() async throws {
+    let now = try devicesMoment()
+    let h = try await started(
+      now: now, settings: eveningOn, registration: try registration(at: now),
+      saved: [durhamSaved])
+    h.zone.change { $0 = "Asia/Kathmandu" }
+    await h.model.becameActive()
+    await h.model.synced()
+    #expect(h.transport.requests.isEmpty)
+  }
+
+  @Test("a gone city page is refused alone: the rest is kept, the reply lists it, nothing again")
+  func aGoneCityIsRefusedAlone() async throws {
+    let now = try devicesMoment()
+    let gone = savedCity("nowhere-xx", "Nowhere")
+    let h = try await started(
+      now: now, settings: eveningWithBells([gone, durhamSaved]),
+      registration: try registration(at: now), saved: [gone, durhamSaved],
+      replies: [try deviceReply("put-refused")])
+    #expect(try h.requests.map(\.body) == [try deviceSentJSON("put-refused")])
+    let response = h.model.state.registration?.response
+    #expect(response?.refused == [DeviceResponse.Refused(index: 0, code: "not_found")])
+    #expect(response?.saved.map(\.name) == ["Durham"])
+    #expect(h.model.state.status == .ok)
+    await h.model.becameActive()
+    await h.model.synced()
+    #expect(try h.requests.count == 1)
+  }
+
+  @Test("every saved place's zone for the router, and a saved place's notification opens there")
+  func savedPlacesZonesAndRoutes() async throws {
+    let now = try devicesMoment()
+    let h = NotificationsHarness(
+      now: now, registration: try registration("put-here-ip-durham-kathmandu", at: now))
+    #expect(
+      h.model.zones == [
+        "device:53.8,-1.55": "Europe/London", "city:durham-gb": "Europe/London",
+        "search:27.7,85.3": "Asia/Kathmandu",
+      ])
+    let evening = try fixtureNow("durham-tomorrow")
+    for name in ["durham-saved-evening", "durham-saved-passive"] {
+      let route = NotificationRouter.route(
+        json: try Fixtures.payload(name), now: evening, zones: h.model.zones)
+      #expect(route == .place(durham, view: .today), "\(name)")
+    }
+  }
+
+  @Test("a test with a saved place's bell on is two tests, and Settings says so")
+  func twoTests() async throws {
+    let now = try devicesMoment()
+    let h = try await started(
+      now: now, settings: eveningWithBells([durhamSaved]),
+      registration: try registration("put-here-ip-durham", at: now), saved: [durhamSaved],
+      replies: [try deviceReply("test-sent-two")])
+    await h.model.sendTest()
+    #expect(h.model.state.test == .done(.sent(count: 2)))
+    #expect(try h.requests == [try identity(.post, token: fixtureToken())])
+    let test = NotificationSettings(h.model.state, unlocked: true).items.compactMap { item in
+      if case .row(let row) = item, row.id == "notify-test" { row } else { nil }
+    }.first
+    #expect(test?.detail == AppCopy.testSentCount(count: "2"))
   }
 }

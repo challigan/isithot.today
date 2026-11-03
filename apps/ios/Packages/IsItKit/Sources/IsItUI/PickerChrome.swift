@@ -255,7 +255,8 @@ final class BoxField: UITextField {
 }
 
 /// An item of a row's press-and-hold menu, which is also one of its VoiceOver actions: "Save
-/// Leeds", "Remove Leeds from saved places" or "Delete".
+/// Leeds", "Remove Leeds from saved places", "Delete", or a saved place's bell ("Turn on
+/// notifications for Leeds").
 struct RowAction: Identifiable {
   let label: String
   /// Whether it forgets the place: drawn as the system draws a destructive item.
@@ -268,23 +269,37 @@ struct RowAction: Identifiable {
 /// A place in the picker, the website's flat row: the place as a button (its name in `label`, the
 /// line beneath in `note` and `soft`, read as one element, "Leeds, England, United Kingdom", with
 /// `value` after it), at least 44 tall, washed while pressed (`RowPressStyle`, corners of 9.6);
-/// and beside it, when the place has one, its star (`StarButton`). Each button has its own style,
-/// so a tap on the star never chooses the place. Press and hold the row for `menu`, whose items
-/// are its VoiceOver actions too: the picker is a page of rows made at once, not a `List`, so it
-/// has no swipes (DECISIONS, "The iPhone app in the website's look", step 5).
+/// and beside it, when the place has them, its bell (`BellButton`, a saved place's, phase 8.4b)
+/// and 8 points after it its star (`StarButton`). Each button has its own style, so a tap on the
+/// bell or the star never chooses the place. Press and hold the row for `menu`, whose items are
+/// its VoiceOver actions too: the picker is a page of rows made at once, not a `List`, so it has
+/// no swipes (DECISIONS, "The iPhone app in the website's look", step 5).
+///
+/// A row with a bell has two buttons beside its name, which at accessibility text sizes grow to
+/// about 104 points each at AX3 and 137 at AX5 and would leave the name a word or two a line: at
+/// those sizes its bell and star move to their own line under the name, at its trailing end where
+/// the star column is, each still at least 44 points (design 2.2). A row with a star alone keeps
+/// it beside the name at every size, as the audits have passed it.
 struct PlaceRow: View {
   let name: String
   let detail: String?
   let value: String?
   /// The row's identifier: `result-<i>`, `saved-<key>` or `recent-<key>`. Its star's is
-  /// `star-<identifier>`.
+  /// `star-<identifier>`, its bell's `bell-<identifier>` (`bellIdentifier(_:)`).
   let identifier: String
+  /// The saved place's bell, nil for any other place.
+  let bell: PlacePicker.Bell?
   let star: PlacePicker.Star?
   let menu: [RowAction]
+  /// Where VoiceOver's focus goes, by a bell's identifier (`PlacePickerView`): back to the bell
+  /// whose locked tap opened the purchase, once its sheet has closed.
+  let bellFocus: AccessibilityFocusState<String?>.Binding
   let choose: () -> Void
+  let toggleBell: () -> Void
   let toggleStar: () -> Void
 
   @SurfaceTokens private var tokens
+  @Environment(\.dynamicTypeSize) private var typeSize
 
   /// Spelt out, as `SearchBox`'s is.
   init(
@@ -292,47 +307,81 @@ struct PlaceRow: View {
     detail: String?,
     value: String?,
     identifier: String,
+    bell: PlacePicker.Bell? = nil,
     star: PlacePicker.Star?,
     menu: [RowAction],
+    bellFocus: AccessibilityFocusState<String?>.Binding,
     choose: @escaping () -> Void,
+    toggleBell: @escaping () -> Void = {},
     toggleStar: @escaping () -> Void
   ) {
     self.name = name
     self.detail = detail
     self.value = value
     self.identifier = identifier
+    self.bell = bell
     self.star = star
     self.menu = menu
+    self.bellFocus = bellFocus
     self.choose = choose
+    self.toggleBell = toggleBell
     self.toggleStar = toggleStar
   }
 
+  /// The identifier of the bell on the row identified as `row`: `bell-saved-<key>` or
+  /// `bell-result-<i>`.
+  static func bellIdentifier(_ row: String) -> String {
+    "bell-" + row
+  }
+
   var body: some View {
-    HStack(alignment: .center, spacing: 0) {
-      Button(action: choose) {
-        VStack(alignment: .leading, spacing: 2) {
-          Text(verbatim: name)
-            .brandFont(.label)
-          if let detail {
-            Text(verbatim: detail)
-              .brandFont(.note)
-              .foregroundStyle(tokens.soft)
+    // One layout or the other, never two views: the buttons keep their identity, and VoiceOver
+    // its focus, as the text size changes.
+    let stacked = bell != nil && typeSize.isAccessibilitySize
+    let layout =
+      stacked
+      ? AnyLayout(VStackLayout(alignment: .trailing, spacing: 0))
+      : AnyLayout(HStackLayout(alignment: .center, spacing: 0))
+    layout {
+      place
+      if bell != nil || star != nil {
+        HStack(alignment: .center, spacing: 8) {
+          if let bell {
+            BellButton(
+              bell: bell, identifier: Self.bellIdentifier(identifier), focus: bellFocus,
+              action: toggleBell)
+          }
+          if let star {
+            StarButton(star: star, identifier: "star-" + identifier, action: toggleStar)
           }
         }
-        .fixedSize(horizontal: false, vertical: true)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 10.4)
-        .frame(maxWidth: .infinity, minHeight: HitTarget.minimum, alignment: .leading)
-        .contentShape(Rectangle())
-      }
-      .buttonStyle(RowPressStyle(cornerRadius: 9.6))
-      .accessibilityValue(ifAny: value)
-      .accessibilityIdentifier(identifier)
-      .modifier(RowMenu(items: menu))
-      if let star {
-        StarButton(star: star, identifier: "star-" + identifier, action: toggleStar)
       }
     }
+  }
+
+  /// The place itself, the button that chooses it, filling the row's width but for its bell and
+  /// star.
+  private var place: some View {
+    Button(action: choose) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(verbatim: name)
+          .brandFont(.label)
+        if let detail {
+          Text(verbatim: detail)
+            .brandFont(.note)
+            .foregroundStyle(tokens.soft)
+        }
+      }
+      .fixedSize(horizontal: false, vertical: true)
+      .padding(.horizontal, 8)
+      .padding(.vertical, 10.4)
+      .frame(maxWidth: .infinity, minHeight: HitTarget.minimum, alignment: .leading)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(RowPressStyle(cornerRadius: 9.6))
+    .accessibilityValue(ifAny: value)
+    .accessibilityIdentifier(identifier)
+    .modifier(RowMenu(items: menu))
   }
 }
 
@@ -400,5 +449,59 @@ struct StarButton: View {
     .buttonStyle(RowPressStyle(cornerRadius: 9.6))
     .accessibilityLabel(Text(verbatim: star.label))
     .accessibilityIdentifier(identifier)
+  }
+}
+
+/// A saved place's bell (design 2.2, decision 9), the star's twin: `bell` while off, `bell.fill`
+/// while on, and `bell` with a small `lock.fill` at its foot's trailing corner while locked, so the
+/// purchase shows before the tap, in ink, sized by `.body` in a frame of at least 44 by 44 that
+/// grows with the text, washed while pressed. The badge is drawn inside that frame, and hidden
+/// from VoiceOver, whose label says what a tap does: "Turn on notifications for Kathmandu",
+/// "Turn off notifications for Kathmandu", or "Turn on notifications for Kathmandu, with the
+/// one-off purchase". Unlike the star, it posts nothing at the tap: what the tap came to (on, on
+/// with the evening switch, off, notifications off for the app, or nothing as the purchase opens)
+/// is announced by the picker's model once it is known (`PlacePickerModel.toggleBell`). VoiceOver's
+/// focus comes back to it when `focus` names it (`identifier`).
+struct BellButton: View {
+  let bell: PlacePicker.Bell
+  let identifier: String
+  let focus: AccessibilityFocusState<String?>.Binding
+  let action: () -> Void
+
+  @SurfaceTokens private var tokens
+  @ScaledMetric(relativeTo: .body) private var side: CGFloat = HitTarget.minimum
+  /// How far the lock sits out from the bell's foot, growing with the text as the bell does.
+  @ScaledMetric(relativeTo: .body) private var badgeOffset: CGFloat = 5
+
+  init(
+    bell: PlacePicker.Bell, identifier: String, focus: AccessibilityFocusState<String?>.Binding,
+    action: @escaping () -> Void
+  ) {
+    self.bell = bell
+    self.identifier = identifier
+    self.focus = focus
+    self.action = action
+  }
+
+  var body: some View {
+    Button(action: action) {
+      Image(systemName: bell.state == .on ? "bell.fill" : "bell")
+        .font(.body)
+        .overlay(alignment: .bottomTrailing) {
+          if bell.badge {
+            Image(systemName: "lock.fill")
+              .font(.caption2.weight(.bold))
+              .offset(x: badgeOffset, y: badgeOffset)
+              .accessibilityHidden(true)
+          }
+        }
+        .foregroundStyle(tokens.ink)
+        .frame(width: max(side, HitTarget.minimum), height: max(side, HitTarget.minimum))
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(RowPressStyle(cornerRadius: 9.6))
+    .accessibilityLabel(Text(verbatim: bell.label))
+    .accessibilityIdentifier(identifier)
+    .accessibilityFocused(focus, equals: identifier)
   }
 }

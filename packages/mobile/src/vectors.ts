@@ -1732,6 +1732,7 @@ function alertVectors(): VectorFile {
       last: { fingerprint: string; at: number } | null;
       saved?: readonly SavedTarget[];
       deviceTz?: string | null;
+      unconfirmed?: boolean;
     },
   ) => {
     const o = { ...base, now, ...change };
@@ -1793,14 +1794,25 @@ function alertVectors(): VectorFile {
   for (const last of [sentIp(now - 2 * HOUR), sentIp(now - heartbeat)]) {
     for (const activeAt of [now - 2 * MINUTE, now]) action({ refused: refusal, activeAt, last });
   }
-  // 8. Otherwise nothing: an app update alone is no reason to send it again.
+  // 8. A set sent that the server may hold though no reply to it was kept (a 429 for the places
+  // new to it, a 503, a reply lost): deleted with nothing to send, whatever else; sent again while
+  // a switch is on, as when nothing was sent.
+  for (const prefs of [PREFS.off, PREFS.possibleOnly]) {
+    for (const unconfirmed of [true, false]) action({ prefs, unconfirmed, last: null });
+  }
+  action({ permission: 'denied', unconfirmed: true, last: null });
+  action({ prefs: PREFS.off, token: null, unconfirmed: true, last: null });
+  action({ unconfirmed: true, last: null });
+  action({ token: null, unconfirmed: true, last: null });
+  action({ unconfirmed: true, last: recent });
+  // 9. Otherwise nothing: an app update alone is no reason to send it again.
   action({ last: recent });
   action({ appVersion: '1.1 (50)', last: recent });
   for (const permission of ['provisional', 'notDetermined'] as const) {
     action({ permission, last: recent });
     action({ permission, last: null });
   }
-  // 9. Saved places with a bell on (8.4b), as savedForBody gives them, with the phone's zone.
+  // 10. Saved places with a bell on (8.4b), as savedForBody gives them, with the phone's zone.
   const both = savedForBody(
     [SAVED_DURHAM, SAVED_KATHMANDU],
     keysOf([SAVED_DURHAM, SAVED_KATHMANDU]),
@@ -1838,6 +1850,9 @@ function alertVectors(): VectorFile {
   for (const prefs of [PREFS.off, PREFS.possibleOnly]) {
     action({ prefs, saved: both, deviceTz: zone, last: sentBoth(now - 30 * MINUTE) });
     action({ prefs, saved: both, deviceTz: zone, last: null });
+    // Bells back at once with nothing kept: the server stored where you are and the first three
+    // before its 429, so they are deleted too.
+    action({ prefs, saved: both, deviceTz: zone, unconfirmed: true, last: null });
   }
   action({ permission: 'denied', saved: both, deviceTz: zone, last: sentBoth(now - MINUTE) });
   // Where you are, refreshed as ever: hourly while approximate, else weekly.

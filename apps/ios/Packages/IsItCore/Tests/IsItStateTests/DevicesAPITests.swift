@@ -40,6 +40,7 @@ struct DevicesAPITests {
       ("put-leeds", .failed, nil),
       ("delete", .forgotten, nil),
       ("test-sent", nil, .sent(count: 1)),
+      ("test-sent-two", nil, .sent(count: 2)),
       ("test-dryrun", nil, .dryRun),
       ("test-limited", nil, .limited),
       ("test-quiet", nil, .quiet),
@@ -61,14 +62,41 @@ struct DevicesAPITests {
       request.headers == ["Accept": "application/json", "Content-Type": "application/json"])
     #expect(request.timeout == 12)
     #expect(try sortedJSON(request.body) == deviceSentJSON("put-here-ip"))
-    // Its keys sorted, so the same registration is always the same bytes: where you are for the
-    // server to locate, and no saved place.
+    // The client's own bytes (`RegistrationBody.json`), its keys in the client's order: where
+    // you are for the server to locate, and no saved place.
     #expect(
       request.body.flatMap { String(data: $0, encoding: .utf8) }
-        == #"{"alerts":{"snow":{"evening":true,"morning":false,"possible":false}},"#
-        + #""app":"snow","appVersion":"1.0 (42)","env":"sandbox","here":{"source":"ip"},"#
-        + #""platform":"ios","saved":[],"token":""# + (try token()) + #"","units":"c","v":2}"#)
+        == #"{"v":2,"app":"snow","platform":"ios","env":"sandbox","token":""# + (try token())
+        + #"","units":"c","appVersion":"1.0 (42)","#
+        + #""alerts":{"snow":{"evening":true,"morning":false,"possible":false}},"#
+        + #""here":{"source":"ip"},"saved":[]}"#)
     #expect(reply == .stored(try storedSet("put-here-ip")))
+  }
+
+  @Test("a set with saved places is sent as the client writes it: the zone's slash as it is")
+  func theSavedPlacesSets() async throws {
+    for name in ["put-here-ip-durham", "put-here-ip-kathmandu", "put-here-ip-durham-kathmandu"] {
+      let body = try sentBody(name)
+      let transport = FakeTransport([try deviceReply(name)])
+      let reply = await APIClient(transport: transport).registerDevice(body)
+      let sent = try #require(transport.requests.first?.body)
+      #expect(sent == body.json, "\(name)")
+      #expect(try sortedJSON(sent) == deviceSentJSON(name), "\(name)")
+      let text = String(decoding: sent, as: UTF8.self)
+      #expect(text.contains(#""appVersion":"1.0 (42)","deviceTz":"Europe/London","alerts":"#))
+      #expect(!text.contains(#"\/"#), "\(name)")
+      #expect(reply == .stored(try storedSet(name)), "\(name)")
+    }
+    // A gone city page refused alone, and the cap on new places.
+    let refused = FakeTransport([try deviceReply("put-refused")])
+    let kept = await APIClient(transport: refused).registerDevice(try sentBody("put-refused"))
+    #expect(kept == .stored(try storedSet("put-refused")))
+    #expect(
+      try storedSet("put-refused").refused == [DeviceResponse.Refused(index: 0, code: "not_found")])
+    let capped = FakeTransport([try deviceReply("put-capped")])
+    #expect(
+      await APIClient(transport: capped).registerDevice(try sentBody("put-capped"))
+        == .retry(afterSeconds: 60))
   }
 
   @Test("the phone's cell is sent as its point alone, and the connection's place each time")

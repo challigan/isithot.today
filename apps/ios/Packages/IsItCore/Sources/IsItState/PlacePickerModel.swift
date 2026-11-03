@@ -3,9 +3,44 @@ import IsItLogic
 import IsItModel
 import Observation
 
+/// What a tap on a saved place's bell came to (phase 8.4b, design 4.6), which the picker says to
+/// VoiceOver once it is known.
+public enum BellResult: Sendable, Equatable {
+  /// Without the one-off purchase: the upgrade sheet opens over the picker, and nothing is said.
+  case needsPurchase
+  /// The bell turned on: "Notifications on for Kathmandu."
+  case on
+  /// The bell turned on with "Evening before", as every switch was off, which is for where you
+  /// are too: "Evening notifications on for Kathmandu and where you are."
+  case onWithHere
+  /// The bell turned off: "Notifications off for Kathmandu."
+  case off
+  /// Notifications are off for the app in iOS Settings, or the prompt was refused: "Notifications
+  /// are off for this app in Settings.", with Open Settings under the saved places.
+  case denied
+}
+
+/// The saved places' bells, as the picker shows and taps them: `NotificationsModel`'s, a fake in
+/// the tests.
+@MainActor
+public protocol PickerBells: AnyObject {
+  /// The bells on, by the saved place's `Target.key`, in saved order (`alerts.v2`'s), kept while
+  /// nothing can be sent and without the purchase.
+  var bells: [String] { get }
+  /// Whether anything can be sent (`AlertSync.active`): otherwise every bell shows off.
+  var active: Bool { get }
+  /// Whether notifications are off for the app in iOS Settings.
+  var permissionDenied: Bool { get }
+  /// A tap on `place`'s bell, shown with the purchase `unlocked` or not, once its work is done.
+  func toggleBell(_ place: SavedPlace, unlocked: Bool) async -> BellResult
+}
+
 /// The place picker's state (iOS build spec, sections 4 and 10.3), for one showing of the sheet
-/// (`AppModel.makePicker()`): the search box's text and its search, the "Use my location" row,
-/// and whether a place was chosen, when the sheet closes. `content` is what IsItUI draws.
+/// (`AppModel.makePicker(bells:announce:)`): the search box's text and its search, the "Use my
+/// location" row, and whether a place was chosen, when the sheet closes; and each saved place's
+/// bell (phase 8.4b, design 2.2), as the purchase and the notifications have it, whose tap's
+/// outcome is said to VoiceOver once it is known, and whose purchase, when locked, opens over the
+/// picker. `content` is what IsItUI draws.
 ///
 /// The search waits for a pause in typing (`Constants.Search.debounceMs`, 250 ms, timed by
 /// `AppEnvironment.waits`) before it asks, from 2 letters (`PlaceSearch.input`); each keystroke
@@ -36,15 +71,91 @@ public final class PlacePickerModel {
   /// The newest search's request, while it is out.
   @ObservationIgnored private var request: Task<SearchResponse, any Error>?
 
-  init(app: AppModel, client: APIClient, clock: any AppClock) {
+  /// The saved place whose locked bell opened the purchase: the upgrade sheet shows over the
+  /// picker while it is set, and its bell turns on by itself when the sheet closes with the
+  /// purchase owned (`purchaseSheetClosed(unlocked:)`).
+  public private(set) var purchasing: SavedPlace?
+  /// Whether a bell's tap met notifications denied in iOS Settings this showing: its line shows
+  /// under the saved places while they still are.
+  private var bellMetDenied = false
+
+  /// The saved places' bells: the notifications'. Without them, each bell is the purchase's alone
+  /// and a tap does nothing.
+  @ObservationIgnored private let bells: (any PickerBells)?
+  /// Says a bell's outcome to VoiceOver.
+  @ObservationIgnored private let announce: @MainActor (String) -> Void
+
+  init(
+    app: AppModel, client: APIClient, clock: any AppClock, bells: (any PickerBells)?,
+    announce: @escaping @MainActor (String) -> Void
+  ) {
     self.app = app
     self.client = client
     self.clock = clock
+    self.bells = bells
+    self.announce = announce
   }
 
-  /// What the picker shows: the search, the location row, and the saved and recent places.
+  /// What the picker shows: the search, the location row, and the saved and recent places, each
+  /// saved place's bell as the purchase (`AppModel.unlocked`) and the notifications have it, and
+  /// the denied line once a bell's tap met it, while notifications are still denied.
   public var content: PlacePicker {
-    PlacePicker(search: search, location: location, lists: app.lists)
+    PlacePicker(
+      search: search, location: location, lists: app.lists, unlocked: app.unlocked,
+      bells: bells?.bells ?? [], active: bells?.active ?? false,
+      bellDenied: bellMetDenied && bells?.permissionDenied == true)
+  }
+
+  /// A tap on `place`'s bell: the notifications do its work (`PickerBells.toggleBell`), with the
+  /// purchase as the picker shows it, then its outcome is said to VoiceOver, in the place's name:
+  /// on, on with the evening, off, or denied, which also shows the denied line. Without the
+  /// purchase nothing is said: `purchasing` opens the upgrade sheet over the picker. Nil, doing
+  /// nothing, without the notifications. Never closes the sheet, so never shows an ad.
+  @discardableResult
+  public func toggleBell(_ place: SavedPlace) async -> BellResult? {
+    await toggle(place, unlocked: app.unlocked)
+  }
+
+  /// The upgrade sheet a locked bell opened has closed: with the purchase now `unlocked`, that
+  /// bell turns on by itself (asking for notifications if they were never asked), and its outcome
+  /// is said; one already on underneath (bells kept from before a refund) stays on, and is said to
+  /// be. Without the purchase, or for a place no longer saved, nothing.
+  public func purchaseSheetClosed(unlocked: Bool) async {
+    guard let place = purchasing else { return }
+    purchasing = nil
+    let key = place.target.key.utf8
+    guard unlocked, let bells, app.saved.contains(where: { $0.target.key.utf8.elementsEqual(key) })
+    else { return }
+    if bells.active, bells.bells.contains(where: { $0.utf8.elementsEqual(key) }) {
+      say(.on, for: place)
+      return
+    }
+    await toggle(place, unlocked: true)
+  }
+
+  /// A bell's tap with the purchase `unlocked` or not, and its outcome said.
+  @discardableResult
+  private func toggle(_ place: SavedPlace, unlocked: Bool) async -> BellResult? {
+    guard let bells else { return nil }
+    let result = await bells.toggleBell(place, unlocked: unlocked)
+    if result == .needsPurchase {
+      purchasing = place
+    } else {
+      bellMetDenied = result == .denied
+      say(result, for: place)
+    }
+    return result
+  }
+
+  /// Says `result` for `place` to VoiceOver (design 2.2); nothing for the purchase.
+  private func say(_ result: BellResult, for place: SavedPlace) {
+    switch result {
+    case .needsPurchase: return
+    case .on: announce(AppCopy.bellTurnedOn(place: place.name))
+    case .onWithHere: announce(AppCopy.bellTurnedOnWithHere(place: place.name))
+    case .off: announce(AppCopy.bellTurnedOff(place: place.name))
+    case .denied: announce(AppCopy.notifyDenied)
+    }
   }
 
   /// The search box now holds `text`: cancels the search before, and with 2 letters or more,

@@ -804,6 +804,17 @@ describe('the cases cover what section 7.4 asks for', () => {
     expect(new Set(actions.map((c) => c.out))).toEqual(
       new Set(['put', 'delete', 'none', 'needsToken']),
     );
+    // A set the server may hold though no reply to it was kept: deleted whenever nothing can be
+    // sent, with nothing kept too, saved places and all; otherwise as when nothing was kept.
+    const unconfirmed = actions.filter((c) => (c.in as In).unconfirmed);
+    const idle = (c: VectorCase) => !alertsActive((c.in as In).prefs, (c.in as In).permission);
+    expect(unconfirmed.filter(idle).length).toBeGreaterThan(4);
+    for (const c of unconfirmed.filter(idle)) expect(c.out, JSON.stringify(c.in)).toBe('delete');
+    expect(unconfirmed.some((c) => idle(c) && !(c.in as In).last && (c.in as In).saved)).toBe(true);
+    expect(new Set(unconfirmed.filter((c) => !idle(c)).map((c) => c.out))).toEqual(
+      new Set(['put', 'needsToken', 'none']),
+    );
+    expect(actions.some((c) => (c.in as In).unconfirmed === false && idle(c))).toBe(true);
     // Registered and nothing changed: approximate again on becoming active an hour or more
     // after it was sent; either kind again once a week; otherwise nothing.
     const week = 7 * 24 * 60 * MINUTE;
@@ -857,13 +868,14 @@ describe('the cases cover what section 7.4 asks for', () => {
     expect(new Set(activeAgain.map((c) => c.out))).toEqual(new Set(['put']));
     // With saved places: each change to them, or to the phone's zone while one is sent, is a
     // put; the same set nothing; and every switch off or the permission denied deletes the set
-    // (if one was sent) whatever is saved, as the switches are one set for every place.
+    // (if one was sent, or one may be held) whatever is saved, as the switches are one set for
+    // every place.
     const withSaved = actions.filter((c) => (c.in as In).saved?.length);
     expect(new Set(withSaved.map((c) => c.out))).toEqual(new Set(['put', 'delete', 'none']));
     for (const c of withSaved) {
       const i = c.in as In;
       if (!alertsActive(i.prefs, i.permission)) {
-        expect(c.out, JSON.stringify(i)).toBe(i.last ? 'delete' : 'none');
+        expect(c.out, JSON.stringify(i)).toBe(i.last || i.unconfirmed ? 'delete' : 'none');
       }
     }
     /** How many saved places the last registration sent, by its fingerprint ('{}' for none). */

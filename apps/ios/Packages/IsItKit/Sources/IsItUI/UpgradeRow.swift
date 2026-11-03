@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// The home row (spec 10.2, item 6): at the end of the middle page in the free version, once
-/// StoreKit has a price, "No ads, plus widgets for your home and lock screen · £1.99" beside
-/// sparkles VoiceOver doesn't read, opening the upgrade sheet. A wide pill, its words in ink on
+/// StoreKit has a price, "No ads, widgets and notifications for saved places · £1.99"
+/// (`AppCopy.upgradeRow`) beside sparkles VoiceOver doesn't read, opening the upgrade sheet. A wide pill, its words in ink on
 /// the page's opaque chip fill, as Retry's are (the page surface's `ink` and `chip`), so it wraps
 /// safely at every text size. Never beside or over an ad: it sits above the footer, and the ad
 /// box is after the footer's links. The words are IsItLogic's (`UpgradePage.homeRow`), and the

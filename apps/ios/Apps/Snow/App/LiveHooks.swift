@@ -10,7 +10,9 @@ import IsItState
 /// (`stopAds()`). Phase 7.1 fills steps 2 and 5's check and the upgrade route. Phase 8.1 fills
 /// step 6, the notifications (`NotificationsModel`), whose sync also follows a place chosen in
 /// the picker and a change of units, and returns at once too; and the route to Settings →
-/// Notifications.
+/// Notifications. Phase 8.4b tells the notifications the saved places, as step 1 reads them and
+/// after each change, and whether the purchase is owned, once StoreKit has said and at each change
+/// after, so the saved places' bells follow both (design 4.6, decisions 14 and 15).
 struct LiveHooks: AppHooks {
   let ads: AdsModel
   /// The purchase, whose listener and check start at step 2.
@@ -48,6 +50,17 @@ struct LiveHooks: AppHooks {
   /// in a task: this returns at once.
   func syncAlerts(target: Target, units: Units?) async {
     await notifications.screenChanged(target: target, units: units)
+  }
+
+  /// The saved places, in saved order, to the notifications, whose bells follow them.
+  @MainActor func savedChanged(_ saved: [SavedPlace]) {
+    notifications.savedChanged(saved)
+  }
+
+  /// Whether the purchase is owned, as StoreKit has said, to the notifications, which send the
+  /// saved places' bells only with it.
+  @MainActor func unlockedChanged(_ owned: Bool) {
+    notifications.unlockedChanged(owned)
   }
 
   /// `willitsnow://upgrade` (a locked widget, phase 7.2) opens the upgrade sheet;

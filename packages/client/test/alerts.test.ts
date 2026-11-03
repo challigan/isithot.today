@@ -362,6 +362,21 @@ describe('alertAction', () => {
     expect(alertAction({ ...state, permission: 'denied', token: null })).toBe('delete');
   });
 
+  it('deletes a set the server may hold though no reply to it was kept', () => {
+    // A 429 for the places new to the set comes after the server stored where you are and the
+    // first three, a 503 after it stored the rest, and a reply lost may follow a set stored.
+    const unconfirmed = { ...state, last: null, unconfirmed: true };
+    expect(alertAction({ ...unconfirmed, prefs: off })).toBe('delete');
+    expect(alertAction({ ...unconfirmed, prefs: { ...off, possible: true } })).toBe('delete');
+    expect(alertAction({ ...unconfirmed, permission: 'denied' })).toBe('delete');
+    expect(alertAction({ ...unconfirmed, prefs: off, token: null })).toBe('delete');
+    expect(alertAction({ ...unconfirmed, prefs: off, unconfirmed: false })).toBe('none');
+    // While a switch is on it is sent again, as when nothing was sent.
+    expect(alertAction(unconfirmed)).toBe('put');
+    expect(alertAction({ ...unconfirmed, token: null })).toBe('needsToken');
+    expect(alertAction({ ...state, unconfirmed: true })).toBe('none');
+  });
+
   it('never needs a place, as where you are is always one: it waits for the push token', () => {
     expect(alertAction({ ...state, token: null })).toBe('needsToken');
     expect(alertAction({ ...state, token: '' })).toBe('needsToken');
@@ -475,6 +490,9 @@ describe('alertAction', () => {
     );
     expect(alertAction({ ...belled, permission: 'denied', last: sentBelled })).toBe('delete');
     expect(alertAction({ ...belled, prefs: off, last: null })).toBe('none');
+    // Four bells back at once with nothing kept: the server stored where you are and three of
+    // them before its 429, so turning every switch off then deletes them.
+    expect(alertAction({ ...belled, prefs: off, last: null, unconfirmed: true })).toBe('delete');
   });
 
   it('refreshes where you are as ever with saved places: hourly while approximate, else weekly', () => {

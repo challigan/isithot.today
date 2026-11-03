@@ -10,7 +10,7 @@ private func ready(shared: Bool = true) -> PurchaseState.Product {
 
 /// Every string the page shows, and the home row's.
 private func allWords(_ page: UpgradePage, homeRow: String?) -> [String] {
-  var all = [page.title, page.body, page.restore.title, page.close]
+  var all = [page.title] + page.benefits + [page.body, page.restore.title, page.close]
   all += [page.familySharing, page.outcome, page.restore.detail, homeRow].compactMap { $0 }
   switch page.buying {
   case .button(let title, _), .line(let title): all.append(title)
@@ -27,8 +27,16 @@ struct UpgradePageTests {
   func freeWithAPrice() {
     let page = UpgradePage(unlocked: false, purchase: .init(product: ready()))
     #expect(page.title == AppCopy.upgradeTitle)
-    #expect(page.title == "Remove ads and add widgets")
+    #expect(page.title == "No ads, widgets and more")
+    #expect(
+      page.benefits == [
+        "No ads in the app", "Widgets for your home screen and lock screen",
+        "Notifications for your saved places",
+      ])
     #expect(page.body == AppCopy.upgradeBody)
+    #expect(
+      page.body
+        == "A one-off purchase. Notifications for where you are, and everything else, stay free.")
     #expect(page.familySharing == AppCopy.familySharing)
     #expect(page.buying == .button("Buy for £1.99", busy: false))
     #expect(page.outcome == nil)
@@ -39,6 +47,25 @@ struct UpgradePageTests {
     #expect(page.restore.detail == nil)
     #expect(!page.restore.busy)
     #expect(page.close == CoreCopy.close)
+  }
+
+  @Test("the three benefits come first, the same whatever StoreKit says, bought or not")
+  func benefitsAlways() {
+    let benefits = [
+      AppCopy.upgradeNoAds, AppCopy.upgradeWidgets, AppCopy.upgradeSavedNotifications,
+    ]
+    let products: [PurchaseState.Product] = [.loading, .unavailable, .blocked, ready()]
+    for unlocked in [false, true] {
+      for product in products {
+        let page = UpgradePage(unlocked: unlocked, purchase: .init(product: product))
+        #expect(page.benefits == benefits, "\(unlocked) \(product)")
+      }
+    }
+    // Owned, the thanks says what came with it.
+    #expect(
+      UpgradePage(unlocked: true, purchase: .init(product: ready())).outcome
+        == "Thank you. Ads are off, widgets are on and you can turn on notifications for saved "
+        + "places.")
   }
 
   @Test("a product not shared says nothing of Family Sharing")
@@ -128,6 +155,9 @@ struct UpgradePageTests {
     #expect(
       UpgradePage.homeRow(unlocked: false, purchase: .init(product: ready()))
         == AppCopy.upgradeRow(price: "£1.99"))
+    #expect(
+      UpgradePage.homeRow(unlocked: false, purchase: .init(product: ready()))
+        == "No ads, widgets and notifications for saved places · £1.99")
     #expect(UpgradePage.homeRow(unlocked: true, purchase: .init(product: ready())) == nil)
     for product in [PurchaseState.Product.loading, .unavailable, .blocked] {
       #expect(UpgradePage.homeRow(unlocked: false, purchase: .init(product: product)) == nil)

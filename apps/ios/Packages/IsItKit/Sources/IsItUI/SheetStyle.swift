@@ -299,6 +299,7 @@ extension SettingsScreen.Icon {
     case .openSettings: "gear"
     case .warnings: "arrow.up.right.square"
     case .myLocation: "location.circle"
+    case .savedPlaces: "star"
     }
   }
 }

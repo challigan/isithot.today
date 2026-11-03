@@ -195,16 +195,20 @@ export function alertsActive(prefs: AlertPrefs, permission: Permission): boolean
 }
 
 /**
- * What to do about the server's record, in order: delete it (if there is one) when nothing can
- * be sent (`alertsActive`), whatever bells are on; wait for the push token; nothing while the
- * server has refused this very registration (`refused`, a 400: it couldn't tell where you are)
- * and the app hasn't become active since; otherwise send it when it has changed since `last` was
- * sent (a switch, the units, where you are, a saved place with a bell on, or the phone's zone
- * while one is sent), when `ALERTS.heartbeatDays` have passed since, or, while where you are is
- * approximate, when the app became active (`activeAt`) `ALERTS.hereRefreshMinutes` or more after
- * it: the server locates the connection afresh at each registration. `saved` and `deviceTz` are
- * `registrationBody`'s, as `savedForBody` gives them: a refund sends none, so the set changes and
- * the server deletes the saved places.
+ * What to do about the server's record, in order: delete it (if there is one, or may be) when
+ * nothing can be sent (`alertsActive`), whatever bells are on; wait for the push token; nothing
+ * while the server has refused this very registration (`refused`, a 400: it couldn't tell where
+ * you are) and the app hasn't become active since; otherwise send it when it has changed since
+ * `last` was sent (a switch, the units, where you are, a saved place with a bell on, or the
+ * phone's zone while one is sent), when `ALERTS.heartbeatDays` have passed since, or, while where
+ * you are is approximate, when the app became active (`activeAt`) `ALERTS.hereRefreshMinutes` or
+ * more after it: the server locates the connection afresh at each registration. `saved` and
+ * `deviceTz` are `registrationBody`'s, as `savedForBody` gives them: a refund sends none, so the
+ * set changes and the server deletes the saved places. `unconfirmed` is a set sent since `last`
+ * that the server may hold though no reply to it was kept: a 429 for the places new to the set
+ * comes after the server stored where you are and the first `ALERTS.newPlacesPerPut`, a 503 after
+ * it stored the rest, and a reply lost may follow a set stored; with nothing to send it is
+ * deleted as `last` would be.
  */
 export function alertAction(o: {
   prefs: AlertPrefs;
@@ -220,8 +224,9 @@ export function alertAction(o: {
   appVersion: string;
   saved?: readonly SavedTarget[];
   deviceTz?: string | null;
+  unconfirmed?: boolean;
 }): AlertAction {
-  if (!alertsActive(o.prefs, o.permission)) return o.last ? 'delete' : 'none';
+  if (!alertsActive(o.prefs, o.permission)) return o.last || o.unconfirmed ? 'delete' : 'none';
   if (!o.token) return 'needsToken';
   const said = fingerprint(
     registrationBody({
