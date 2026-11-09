@@ -67,6 +67,7 @@ import {
   idsShards,
   judgedKey,
   judgedPrefix,
+  moveOldRegistrations,
   parseIdsKey,
   parseRegKey,
   redact,
@@ -235,7 +236,7 @@ const errorText = (err: unknown): string => (err instanceof Error ? err.message 
  */
 export function scrub(text: string): string {
   return redact(text)
-    .replace(/\breg\/v1\/[^/\s]+\/(?=[a-z]+\.[0-9a-f]{8}…\.[0-9a-f]{12}\b)/g, 'reg/v1/…/')
+    .replace(/\breg\/v1\/(?:[^/\s]+\/)+(?=[a-z]+\.[0-9a-f]{8}…\.[0-9a-f]{12}\b)/g, 'reg/v1/…/')
     .replace(/-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+/g, '<cell>')
     .replace(/\b(lat|lon|latitude|longitude|apikey)=[^&\s]*/gi, '$1=…');
 }
@@ -446,19 +447,41 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
    */
   const unclaimed: Entry[] = [];
 
+  /**
+   * Every zone with a registration, once the registrations still under keys from before
+   * `zoneSegment` are moved (`moveOldRegistrations`), and whether all of them were; null when
+   * a listing failed. A directory that is no zone (`zoneOfDirectory`) is never read as one.
+   */
+  const listZones = async (
+    more: () => boolean,
+  ): Promise<{ zones: string[]; complete: boolean } | null> => {
+    try {
+      let { directories } = await store.list(REG_PREFIX, { directories: true });
+      const old = directories.filter((directory) => zoneOfDirectory(directory) === null);
+      let complete = true;
+      if (old.length) {
+        const { moved, dropped, left } = await moveOldRegistrations(store, old, more);
+        if (moved + dropped + left) {
+          say(`alerts-run: old keys: ${moved} moved, ${dropped} dropped, ${left} left`);
+        }
+        complete = left === 0;
+        if (moved) ({ directories } = await store.list(REG_PREFIX, { directories: true }));
+      }
+      const zones = directories.map(zoneOfDirectory).filter((tz): tz is string => tz !== null);
+      return { zones, complete };
+    } catch {
+      return null;
+    }
+  };
+
   /** Steps 2 to 4: the due zones, and their due registrations. */
   const gather = async (): Promise<void> => {
     // 2. Every zone with a registration.
-    let directories: string[];
-    try {
-      ({ directories } = await store.list(REG_PREFIX, { directories: true }));
-    } catch {
-      return;
-    }
+    const withRegistrations = await listZones(budgetLeft);
+    if (!withRegistrations) return;
     // 3. Those in a window, with no done marker for it today (one listing per local date).
     const open: Zone[] = [];
-    for (const tz of directories.map(zoneOfDirectory)) {
-      if (tz === null) continue;
+    for (const tz of withRegistrations.zones) {
       const { kind, date } = alertWindows(tz, at);
       if (kind) {
         open.push({
@@ -537,7 +560,8 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
         zone.listed = new Set(keys);
         for (const key of keys) {
           const reg = registrationAt(key);
-          if (!reg) continue;
+          // Only the zone's own: a key further down is no registration of it.
+          if (!reg || reg.tz !== zone.tz) continue;
           const name = nameOf(reg);
           if (listed.judged.has(name)) continue;
           if (listed.claimed.has(name)) {
@@ -919,13 +943,10 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
    * finished all the same, its deletes done.
    */
   const walkZones = async (): Promise<{ devices: Set<string>; saved: Set<string> } | null> => {
-    let zoneList: string[];
-    try {
-      const { directories } = await store.list(REG_PREFIX, { directories: true });
-      zoneList = directories.map(zoneOfDirectory).filter((tz): tz is string => tz !== null);
-    } catch {
-      return null;
-    }
+    const listed = await listZones(() => clock() < pushDeadline);
+    // A record still under an old key would leave its ids entry looking empty.
+    if (!listed?.complete) return null;
+    const zoneList = listed.zones;
     const devices = new Set<string>();
     const saved = new Set<string>();
     let counted = true;

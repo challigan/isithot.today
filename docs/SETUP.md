@@ -270,7 +270,7 @@ preview's store is new with every deploy, so the settings go in before the previ
 
    It answers with the id, the place and its time zone. In the preview's Blobs store
    `isithot-alerts` (the deploy's own, never production's), the record should be in one folder
-   per zone, `reg/v1/Asia%2FTokyo/`: that settles whether Netlify keeps `%2F` in a key.
+   per zone, `reg/v1/Asia~Tokyo/`.
 
 3. On the preview's **Functions** page, choose `alerts-run` and press **Run now**. A preview's
    run is always dry, so the log shows the notification instead of sending it:
@@ -326,6 +326,17 @@ preview's store is new with every deploy, so the settings go in before the previ
    arrives within seconds. Netlify refused the **Functions** scope when they were set through its
    API (403), so they apply to all scopes. They are switches and an id prefix, not secrets, so
    nothing else changes.
+
+   **Mon 9 Nov: no 6pm notification.** The test arrived, but the 6pm one didn't: the run logged
+   `zones 1, records 0`. Netlify had split each registration's key at the zone's `/`, so the run
+   found no registrations (DECISIONS, "Zone keys Netlify can't split"). Merge the pull request
+   "Notifications: zone keys Netlify can't split". Netlify deploys it by itself; there is nothing
+   to set and no redeploy to start. Within 15 minutes, **Logs → Functions → alerts-run** shows a
+   line like `alerts-run: old keys: 2 moved, 0 dropped, 0 left` once, then the usual line with
+   `errors 0`. "Moved" counts each place of each phone registered so far; "dropped" counts those
+   of phones or places that had gone. Until that run, **Send a test notification** may say the
+   phone isn't registered. From then on, your phone gets a notification at about 6pm and about
+   7am for each place with notifications on, as above, and those runs' lines say `forced`.
 
    **Then, once that test has arrived (Wed 4 Nov): the server for several places, 10 minutes.**
    Merge the pull request "Notifications for several places on one phone (server)". Netlify

@@ -19,9 +19,11 @@ import {
   forgetDevice,
   forgetIdsLeft,
   idPrefix,
+  isOldRegKey,
   idsKey,
   jwtKey,
   keysOf,
+  moveOldRegistrations,
   newSalt,
   parseRegKey,
   placeId,
@@ -33,6 +35,7 @@ import {
   sentPrefix,
   testKey,
   zoneOfDirectory,
+  zoneSegment,
   type AlertStore,
   type BlobsStoreLike,
   type DeviceIdsEntry,
@@ -52,18 +55,19 @@ describe('keys', () => {
   });
 
   it('builds every key in the storage table, each zone one path segment', () => {
-    expect(regKey('Europe/London', 'snow', ID)).toBe(`reg/v1/Europe%2FLondon/snow.${ID}`);
+    expect(regKey('Europe/London', 'snow', ID)).toBe(`reg/v1/Europe~London/snow.${ID}`);
     expect(regKey('America/Argentina/Buenos_Aires', 'snow', ID)).toBe(
-      `reg/v1/America%2FArgentina%2FBuenos_Aires/snow.${ID}`,
+      `reg/v1/America~Argentina~Buenos_Aires/snow.${ID}`,
     );
-    expect(regZonePrefix('Asia/Kolkata')).toBe('reg/v1/Asia%2FKolkata/');
+    expect(regZonePrefix('Asia/Kolkata')).toBe('reg/v1/Asia~Kolkata/');
+    expect(regZonePrefix('UTC')).toBe('reg/v1/UTC/');
     expect(idsKey('snow', ID)).toBe(`ids/v1/snow.${ID}`);
     expect(sentKey('2026-12-01', 'snow', 'evening', 'snow', ID)).toBe(
       `sent/v1/2026-12-01/snow.evening/snow.${ID}`,
     );
     expect(sentPrefix('2026-12-01', 'snow', 'morning')).toBe('sent/v1/2026-12-01/snow.morning/');
     expect(doneKey('2026-12-01', 'evening', 'Europe/London')).toBe(
-      'done/v1/2026-12-01/evening/Europe%2FLondon',
+      'done/v1/2026-12-01/evening/Europe~London',
     );
     expect(donePrefix('2026-12-01')).toBe('done/v1/2026-12-01/');
     expect(jwtKey('production')).toBe('apns/v1/jwt/production');
@@ -78,16 +82,61 @@ describe('keys', () => {
     });
     expect(parseRegKey(`ids/v1/snow.${ID}`)).toBeNull();
     expect(parseRegKey(`reg/v1/%E0%A4%A/snow.${ID}`)).toBeNull();
-    expect(zoneOfDirectory('reg/v1/Europe%2FLondon')).toBe('Europe/London');
-    expect(zoneOfDirectory('reg/v1/Europe%2FLondon/')).toBe('Europe/London');
+    expect(zoneOfDirectory('reg/v1/Europe~London')).toBe('Europe/London');
+    expect(zoneOfDirectory('reg/v1/Europe~London/')).toBe('Europe/London');
+    expect(zoneOfDirectory('reg/v1/UTC')).toBe('UTC');
     expect(zoneOfDirectory('reg/v1/%E0%A4%A')).toBeNull();
     expect(zoneOfDirectory('sent/v1/2026-12-01')).toBeNull();
   });
 
+  it('writes a zone in characters no URL changes, and reads every zone back', () => {
+    expect(zoneSegment('Etc/GMT+5')).toBe('Etc~GMT.2B5');
+    expect(zoneSegment('+05:30')).toBe('.2B05.3A30');
+    expect(zoneSegment('a.b~c%d')).toBe('a.2Eb.7Ec.25d');
+    expect(zoneSegment('Zürich')).toBe('Z.C3.BCrich');
+    for (const tz of [...Intl.supportedValuesOf('timeZone'), 'Etc/GMT+5', '+05:30', 'UTC']) {
+      expect(zoneSegment(tz), tz).toMatch(/^[A-Za-z0-9_.~-]+$/);
+      expect(encodeURIComponent(zoneSegment(tz)), tz).toBe(zoneSegment(tz));
+      expect(zoneOfDirectory(regZonePrefix(tz)), tz).toBe(tz);
+      expect(parseRegKey(regKey(tz, 'snow', ID, PID))?.tz, tz).toBe(tz);
+    }
+    expect(parseRegKey(`reg/v1/Z.C3.BCrich/snow.${ID}`)?.tz).toBe('Zürich');
+  });
+
+  it('reads the keys from before, as an ids entry holds them and as Netlify lists them', () => {
+    const old: Record<string, { tz: string; pid?: string }> = {
+      // As an ids entry's `saved` holds them, and as Netlify's local server lists them.
+      [`reg/v1/Europe%2FLondon/snow.${ID}.${PID}`]: { tz: 'Europe/London', pid: PID },
+      [`reg/v1/Etc%2FGMT%2B5/snow.${ID}`]: { tz: 'Etc/GMT+5' },
+      // As Netlify's service keeps and lists them: the zone decoded, one segment a part.
+      [`reg/v1/Europe/London/snow.${ID}`]: { tz: 'Europe/London' },
+      [`reg/v1/America/Argentina/Buenos_Aires/snow.${ID}.${PID}`]: {
+        tz: 'America/Argentina/Buenos_Aires',
+        pid: PID,
+      },
+      [`reg/v1/Etc/GMT+5/snow.${ID}`]: { tz: 'Etc/GMT+5' },
+      [`reg/v1/+05:30/snow.${ID}`]: { tz: '+05:30' },
+    };
+    for (const [key, { tz, pid }] of Object.entries(old)) {
+      expect(parseRegKey(key), key).toEqual({ tz, app: 'snow', id: ID, ...(pid ? { pid } : {}) });
+      expect(isOldRegKey(key), key).toBe(true);
+    }
+    expect(isOldRegKey(regKey('Europe/London', 'snow', ID, PID))).toBe(false);
+    expect(isOldRegKey(regKey('UTC', 'snow', ID))).toBe(false);
+    expect(isOldRegKey(`reg/v1/UTC/snow.${ID}`)).toBe(false);
+    expect(isOldRegKey(`ids/v1/snow.${ID}`)).toBe(false);
+    expect(parseRegKey(`reg/v1/Europe//snow.${ID}`)).toBeNull();
+    expect(parseRegKey(`reg/v1//London/snow.${ID}`)).toBeNull();
+    // A directory of the keys from before is no zone, so never read as one: an unknown zone's
+    // windows would be UTC's.
+    expect(zoneOfDirectory('reg/v1/Europe')).toBeNull();
+    expect(zoneOfDirectory('reg/v1/America')).toBeNull();
+    expect(zoneOfDirectory('reg/v1/Europe%2FLondon')).toBeNull();
+    expect(zoneOfDirectory('reg/v1/Nowhere~Special')).toBeNull();
+  });
+
   it("builds a saved place's key, its pid after the id, and reads it back", () => {
-    expect(regKey('Europe/London', 'snow', ID, PID)).toBe(
-      `reg/v1/Europe%2FLondon/snow.${ID}.${PID}`,
-    );
+    expect(regKey('Europe/London', 'snow', ID, PID)).toBe(`reg/v1/Europe~London/snow.${ID}.${PID}`);
     expect(regKey('Europe/London', 'snow', ID, undefined)).toBe(
       regKey('Europe/London', 'snow', ID),
     );
@@ -106,7 +155,7 @@ describe('keys', () => {
   });
 
   it('refuses a key whose id is not 32 hex characters or whose pid is not 12', () => {
-    const london = 'reg/v1/Europe%2FLondon/snow.';
+    const london = 'reg/v1/Europe~London/snow.';
     for (const tail of [
       `${ID}.${PID}0`,
       `${ID}.${PID.slice(0, 8)}`,
@@ -137,9 +186,7 @@ describe('keys', () => {
   });
 
   it('redacts ids, device tokens and provider tokens for the log', () => {
-    expect(redact(`reg/v1/Europe%2FLondon/snow.${ID}`)).toBe(
-      'reg/v1/Europe%2FLondon/snow.815fd836…',
-    );
+    expect(redact(`reg/v1/Europe~London/snow.${ID}`)).toBe('reg/v1/Europe~London/snow.815fd836…');
     expect(redact(`device ${TOKEN}`)).toBe('device abababab…');
     expect(redact('token eyJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJUIn0.c2ln here')).toBe('token <jwt> here');
   });
@@ -210,13 +257,13 @@ describe('MemoryAlertStore', () => {
     expect(await store.list('reg/v1/', { directories: true })).toEqual({
       keys: ['reg/v1/stray'],
       directories: [
-        'reg/v1/America%2FArgentina%2FBuenos_Aires',
-        'reg/v1/Asia%2FKolkata',
-        'reg/v1/Europe%2FLondon',
+        'reg/v1/America~Argentina~Buenos_Aires',
+        'reg/v1/Asia~Kolkata',
+        'reg/v1/Europe~London',
       ],
     });
     expect(await store.list(regZonePrefix('Europe/London'), { directories: true })).toEqual({
-      keys: ['reg/v1/Europe%2FLondon/snow.a1', 'reg/v1/Europe%2FLondon/snow.b1'],
+      keys: ['reg/v1/Europe~London/snow.a1', 'reg/v1/Europe~London/snow.b1'],
       directories: [],
     });
     // The top level, and a prefix that stops inside a segment.
@@ -225,13 +272,36 @@ describe('MemoryAlertStore', () => {
       directories: ['ids', 'reg'],
     });
     expect((await store.list('reg/v1/E', { directories: true })).directories).toEqual([
-      'reg/v1/Europe%2FLondon',
+      'reg/v1/Europe~London',
     ]);
     expect((await store.list('reg/v1', { directories: true })).directories).toEqual(['reg/v1']);
     // Without directories: every key under the prefix.
     expect((await store.list('reg/v1/')).keys).toHaveLength(5);
     expect(await store.list('done/')).toEqual({ keys: [], directories: [] });
     expect(store.keys()).toEqual([...keys].sort());
+  });
+
+  it("decodes a key's path as Netlify's service does, but not a listing's prefix", async () => {
+    // The keys before decision "Zone keys Netlify can't split": three segments, not two.
+    const store = new MemoryAlertStore();
+    await store.set(`reg/v1/Europe%2FLondon/snow.${ID}`, { at: 1 });
+    expect(store.keys()).toEqual([`reg/v1/Europe/London/snow.${ID}`]);
+    expect(await store.get(`reg/v1/Europe%2FLondon/snow.${ID}`)).toEqual({ at: 1 });
+    expect(await store.get(`reg/v1/Europe/London/snow.${ID}`)).toEqual({ at: 1 });
+    expect(await store.list('reg/v1/', { directories: true })).toEqual({
+      keys: [],
+      directories: ['reg/v1/Europe'],
+    });
+    expect(await store.list('reg/v1/Europe%2FLondon/')).toEqual({ keys: [], directories: [] });
+    expect(await store.set(`reg/v1/Europe/London/snow.${ID}`, { at: 2 }, { onlyIfNew: true })).toBe(
+      false,
+    );
+    await store.delete(`reg/v1/Europe%2FLondon/snow.${ID}`);
+    expect(store.keys()).toEqual([]);
+    // Today's keys hold no escape, so they are kept as they are written.
+    await store.set(regKey('Etc/GMT+5', 'snow', ID, PID), {});
+    expect(store.keys()).toEqual([regKey('Etc/GMT+5', 'snow', ID, PID)]);
+    await expect(store.set('reg/v1/%E0%A4%A/x', {})).rejects.toThrow(/valid path/);
   });
 
   it('deletes, and deleting what is absent is fine', async () => {
@@ -325,7 +395,7 @@ describe('SafeAlertStore', () => {
     await expect(safe.list('')).rejects.toThrow('alert store: list (all): not an Error');
     expect(errors).toHaveLength(3);
     expect(errors[0]).toBe(
-      'alert store: get reg/v1/Europe%2FLondon/snow.815fd836…: Netlify Blobs has generated an internal error for abababab…',
+      'alert store: get reg/v1/Europe~London/snow.815fd836…: Netlify Blobs has generated an internal error for abababab…',
     );
     for (const line of errors) {
       expect(line).not.toContain(ID);
@@ -465,7 +535,7 @@ describe("createBlobsAlertStore, against Netlify's local Blobs server", () => {
     expect(await store.set(key, { id: ID })).toBe(true);
     expect(await store.get(key)).toEqual({ id: ID });
     expect((await store.list(REG_PREFIX, { directories: true })).directories).toContain(
-      'reg/v1/Europe%2FLondon',
+      'reg/v1/Europe~London',
     );
     await store.delete(key);
     expect(await store.get(key)).toBeNull();
@@ -477,7 +547,7 @@ describe("createBlobsAlertStore, against Netlify's local Blobs server", () => {
     expect(errors).toHaveLength(1);
   });
 
-  it('keeps Blobs semantics: onlyIfNew, %2F zones as one directory, prefixes, deletes', async () => {
+  it('keeps Blobs semantics: onlyIfNew, a zone as one directory, prefixes, deletes', async () => {
     context({ deployID: 'deploy2' });
     const store = createBlobsAlertStore(false);
     const claim = sentKey('2026-12-01', 'snow', 'evening', 'snow', ID);
@@ -493,8 +563,8 @@ describe("createBlobsAlertStore, against Netlify's local Blobs server", () => {
     const zones = await store.list(REG_PREFIX, { directories: true });
     expect(zones.keys).toEqual([]);
     expect(zones.directories.sort()).toEqual([
-      'reg/v1/America%2FArgentina%2FBuenos_Aires',
-      'reg/v1/Asia%2FKolkata',
+      'reg/v1/America~Argentina~Buenos_Aires',
+      'reg/v1/Asia~Kolkata',
     ]);
     expect(zones.directories.map(zoneOfDirectory)).toEqual([
       'America/Argentina/Buenos_Aires',
@@ -502,7 +572,7 @@ describe("createBlobsAlertStore, against Netlify's local Blobs server", () => {
     ]);
     const kolkata = await store.list(regZonePrefix('Asia/Kolkata'));
     expect(kolkata.keys.sort()).toEqual(
-      [`reg/v1/Asia%2FKolkata/snow.${b1}`, `reg/v1/Asia%2FKolkata/snow.${b2}`].sort(),
+      [`reg/v1/Asia~Kolkata/snow.${b1}`, `reg/v1/Asia~Kolkata/snow.${b2}`].sort(),
     );
     expect(kolkata.keys.map((key) => parseRegKey(key)?.tz)).toEqual([
       'Asia/Kolkata',
@@ -511,7 +581,7 @@ describe("createBlobsAlertStore, against Netlify's local Blobs server", () => {
     await store.delete(regKey('Asia/Kolkata', 'snow', b1!));
     await store.delete(regKey('Asia/Kolkata', 'snow', b1!));
     expect((await store.list(regZonePrefix('Asia/Kolkata'))).keys).toEqual([
-      `reg/v1/Asia%2FKolkata/snow.${b2}`,
+      `reg/v1/Asia~Kolkata/snow.${b2}`,
     ]);
   });
 
@@ -566,7 +636,7 @@ describe('placeId and newSalt', () => {
     expect(parseRegKey(regKey('Europe/London', 'snow', ID, pid))?.pid).toBe(pid);
     // A log keeps a pid whole (it is under 32 hex) and still cuts the id short.
     expect(redact(regKey('Europe/London', 'snow', ID, pid))).toBe(
-      `reg/v1/Europe%2FLondon/snow.815fd836….${pid}`,
+      `reg/v1/Europe~London/snow.815fd836….${pid}`,
     );
   });
 });
@@ -631,6 +701,17 @@ describe('keysOf', () => {
       london,
       regKey('Asia/Kolkata', 'snow', ID),
     ]);
+  });
+
+  it('names a key an entry holds in the form from before as regKey writes it now', () => {
+    const entry: DeviceIdsEntry = {
+      v: 2,
+      tz: 'Europe/London',
+      saved: [`reg/v1/Europe%2FLondon/snow.${ID}.${PID}`, durham],
+      leaving: [`reg/v1/Asia%2FKathmandu/snow.${ID}.6f5e4d3c2b1a`],
+      salt: newSalt(),
+    };
+    expect(keysOf(entry, 'snow', ID)).toEqual([london, durham, kathmandu]);
   });
 });
 
@@ -1000,5 +1081,185 @@ describe('forgetIdsLeft', () => {
     });
     await expect(forgetIdsLeft(store, 'snow', ID)).rejects.toThrow(AlertStoreError);
     expect(inner.keys()).toEqual([ids]);
+  });
+});
+
+describe('moveOldRegistrations', () => {
+  const OTHER = registrationId('snow', 'cd'.repeat(32));
+  /** How a key from before was kept by Netlify's service: its zone decoded. */
+  const before = (tz: string, id: string, pid?: string): string =>
+    `reg/v1/${tz}/snow.${id}${pid ? `.${pid}` : ''}`;
+  const oldDirectories = async (store: AlertStore) =>
+    (await store.list(REG_PREFIX, { directories: true })).directories.filter(
+      (directory) => zoneOfDirectory(directory) === null,
+    );
+
+  it("moves each record its device's ids entry names, and deletes the rest", async () => {
+    const store = new MemoryAlertStore();
+    // A phone as the devices handler wrote it before: its entry holding escaped keys.
+    await store.set(before('Europe/London', ID), { name: 'Leeds' });
+    await store.set(before('America/Argentina/Buenos_Aires', ID, PID), { name: 'Salta' });
+    await store.set(idsKey('snow', ID), {
+      v: 2,
+      tz: 'Europe/London',
+      saved: [`reg/v1/America%2FArgentina%2FBuenos_Aires/snow.${ID}.${PID}`],
+      salt: newSalt(),
+    } satisfies DeviceIdsEntry);
+    // A phone that has gone (no ids entry), and a saved place its phone has since removed.
+    await store.set(before('Europe/London', OTHER), { name: 'Gone' });
+    await store.set(before('Europe/London', ID, '6f5e4d3c2b1a'), { name: 'Removed' });
+    // Today's keys, and keys that are no registration of a zone the server knows: left alone.
+    await store.set(regKey('Asia/Kolkata', 'snow', OTHER), { name: 'Pune' });
+    await store.set(before('Nowhere/Special', ID), { name: 'Nowhere' });
+    await store.set('reg/v1/Europe/stray', {});
+
+    const directories = await oldDirectories(store);
+    expect(directories.sort()).toEqual(['reg/v1/America', 'reg/v1/Europe', 'reg/v1/Nowhere']);
+    expect(await moveOldRegistrations(store, directories)).toEqual({
+      moved: 2,
+      dropped: 2,
+      left: 0,
+    });
+    expect(store.keys().filter((key) => key.startsWith(REG_PREFIX))).toEqual(
+      [
+        regKey('America/Argentina/Buenos_Aires', 'snow', ID, PID),
+        regKey('Asia/Kolkata', 'snow', OTHER),
+        regKey('Europe/London', 'snow', ID),
+        before('Nowhere/Special', ID),
+        'reg/v1/Europe/stray',
+      ].sort(),
+    );
+    expect(await store.get(regKey('Europe/London', 'snow', ID))).toEqual({ name: 'Leeds' });
+    expect(await store.get(regKey('America/Argentina/Buenos_Aires', 'snow', ID, PID))).toEqual({
+      name: 'Salta',
+    });
+    // Nothing left to move.
+    expect(await moveOldRegistrations(store, await oldDirectories(store))).toEqual({
+      moved: 0,
+      dropped: 0,
+      left: 0,
+    });
+  });
+
+  it('keeps a record written at the new key since, and deletes the old one', async () => {
+    const store = new MemoryAlertStore();
+    await store.set(before('Europe/London', ID), { name: 'Old' });
+    await store.set(regKey('Europe/London', 'snow', ID), { name: 'New' });
+    await store.set(idsKey('snow', ID), { tz: 'Europe/London' });
+    expect(await moveOldRegistrations(store, ['reg/v1/Europe'])).toEqual({
+      moved: 0,
+      dropped: 1,
+      left: 0,
+    });
+    expect(store.keys()).toEqual([idsKey('snow', ID), regKey('Europe/London', 'snow', ID)]);
+    expect(await store.get(regKey('Europe/London', 'snow', ID))).toEqual({ name: 'New' });
+  });
+
+  it('deletes the new key again when the device deleted its entry while it was written', async () => {
+    const inner = new MemoryAlertStore();
+    await inner.set(before('Europe/London', ID), { name: 'Leeds' });
+    await inner.set(idsKey('snow', ID), { tz: 'Europe/London' });
+    const store: AlertStore = {
+      get: (key) => inner.get(key),
+      list: (prefix, options) => inner.list(prefix, options),
+      delete: (key) => inner.delete(key),
+      // A DELETE from the phone lands just as the record is written.
+      set: async (key, value, options) => {
+        const wrote = await inner.set(key, value, options);
+        if (key === regKey('Europe/London', 'snow', ID)) await inner.delete(idsKey('snow', ID));
+        return wrote;
+      },
+    };
+    expect(await moveOldRegistrations(store, ['reg/v1/Europe'])).toEqual({
+      moved: 0,
+      dropped: 1,
+      left: 0,
+    });
+    expect(inner.keys()).toEqual([]);
+  });
+
+  it('leaves a key whose call fails, or once told to stop, for the next run', async () => {
+    /** Two phones' old keys, and a view of them whose `fails` calls reject. */
+    const phones = async (fails: (op: string, key: string) => boolean = () => false) => {
+      const inner = new MemoryAlertStore();
+      await inner.set(before('Europe/London', ID), { name: 'Leeds' });
+      await inner.set(idsKey('snow', ID), { tz: 'Europe/London' });
+      await inner.set(before('Europe/Paris', OTHER), { name: 'Paris' });
+      await inner.set(idsKey('snow', OTHER), { tz: 'Europe/Paris' });
+      const down = () => Promise.reject(new Error('down'));
+      const store: AlertStore = {
+        get: (key) => (fails('get', key) ? down() : inner.get(key)),
+        set: (key, value, options) => (fails('set', key) ? down() : inner.set(key, value, options)),
+        list: (prefix, options) => (fails('list', prefix) ? down() : inner.list(prefix, options)),
+        delete: (key) => (fails('delete', key) ? down() : inner.delete(key)),
+      };
+      return { inner, store, kept: inner.keys() };
+    };
+
+    // Told to stop: nothing read or written.
+    const stopped = await phones();
+    expect(await moveOldRegistrations(stopped.store, ['reg/v1/Europe'], () => false)).toEqual({
+      moved: 0,
+      dropped: 0,
+      left: 2,
+    });
+    expect(stopped.inner.keys()).toEqual(stopped.kept);
+    // The directory's listing failing.
+    const unlisted = await phones((op) => op === 'list');
+    expect(await moveOldRegistrations(unlisted.store, ['reg/v1/Europe'])).toEqual({
+      moved: 0,
+      dropped: 0,
+      left: 1,
+    });
+    expect(unlisted.inner.keys()).toEqual(unlisted.kept);
+
+    // The ids entry, the old record or the new key failing: that key stays, the other phone moves.
+    const london = regKey('Europe/London', 'snow', ID);
+    for (const [op, key] of [
+      ['get', idsKey('snow', ID)],
+      ['get', before('Europe/London', ID)],
+      ['set', london],
+    ] as const) {
+      const one = await phones((o, k) => o === op && k === key);
+      expect(await moveOldRegistrations(one.store, ['reg/v1/Europe']), `${op} ${key}`).toEqual({
+        moved: 1,
+        dropped: 0,
+        left: 1,
+      });
+      expect(one.inner.keys(), `${op} ${key}`).toEqual(
+        [
+          before('Europe/London', ID),
+          idsKey('snow', ID),
+          idsKey('snow', OTHER),
+          regKey('Europe/Paris', 'snow', OTHER),
+        ].sort(),
+      );
+      // The next run moves it.
+      expect(await moveOldRegistrations(one.inner, ['reg/v1/Europe'])).toEqual({
+        moved: 1,
+        dropped: 0,
+        left: 0,
+      });
+      expect(await one.inner.get(london)).toEqual({ name: 'Leeds' });
+    }
+
+    // The old key's delete failing: written, but left; the next run deletes the old key.
+    const undeleted = await phones(
+      (op, key) => op === 'delete' && key === before('Europe/London', ID),
+    );
+    expect(await moveOldRegistrations(undeleted.store, ['reg/v1/Europe'])).toEqual({
+      moved: 1,
+      dropped: 0,
+      left: 1,
+    });
+    expect(await undeleted.inner.get(london)).toEqual({ name: 'Leeds' });
+    expect(await moveOldRegistrations(undeleted.inner, ['reg/v1/Europe'])).toEqual({
+      moved: 0,
+      dropped: 1,
+      left: 0,
+    });
+    expect(undeleted.inner.keys().filter((key) => key.startsWith(REG_PREFIX))).toEqual(
+      [london, regKey('Europe/Paris', 'snow', OTHER)].sort(),
+    );
   });
 });

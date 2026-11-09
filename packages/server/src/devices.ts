@@ -1456,9 +1456,10 @@ async function testPush(
 function lastSaved(stored: Stored): DeviceRecord | null {
   const named = isSet(stored.entry) && Array.isArray(stored.entry.saved) ? stored.entry.saved : [];
   for (const key of [...named].reverse()) {
-    const pid = typeof key === 'string' ? pidOf(key) : undefined;
-    const found = pid ? stored.saved.get(pid) : undefined;
-    if (found?.key === key) return found.record;
+    // As `regKey` writes it now, as `readStored`'s keys are (`keysOf`).
+    const reg = typeof key === 'string' ? parseRegKey(key) : null;
+    const found = reg?.pid ? stored.saved.get(reg.pid) : undefined;
+    if (reg && found?.key === regKey(reg.tz, reg.app, reg.id, reg.pid)) return found.record;
   }
   return null;
 }

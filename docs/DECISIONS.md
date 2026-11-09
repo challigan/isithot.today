@@ -1059,7 +1059,8 @@ The storage and sending half of the full job (iOS build spec, sections 8.3 and 8
   `test/v1/<id>/<yyyy-mm-ddThh>.<n>`, because one key an hour would allow one send an hour, not
   three, and a counter would be a read-modify-write. Unverified: that Netlify's service keeps
   `%2F` in a key as it is. Netlify's local server does (`Europe%2FLondon` is one directory); a
-  deploy preview check (register, then list `reg/v1/`) settles it.
+  deploy preview check (register, then list `reg/v1/`) settles it. (Settled on Mon 9 Nov: it
+  doesn't, so a zone is now written as `Europe~London`: "Zone keys Netlify can't split", below.)
 - **Deleting a registration re-reads it first.** A record written or refreshed since the run read
   it (a new `updatedAt` or `seenAt`) is kept, and the `ids` key goes only while it still names the
   same zone. (Since "Notifications: several places on one phone", the run and the sender forget
@@ -9362,6 +9363,84 @@ xcodebuild and xcresulttool:
 
 The new tests fail against main's `test.sh`. The macOS run on this change is the first real
 check, and its pull request records both jobs' minutes.
+
+## Zone keys Netlify can't split
+
+`packages/server/src/alertStore.ts`, `alerts.ts` and `devices.ts`.
+
+**Why.** Carl's phone got no notification at 6pm on Mon 9 Nov, though a test sent from the app
+arrived within seconds. The 18:00 run logged `alerts-run: zones 1, records 0, groups 0, fetches 0,
+sent 0, deleted 0, errors 0`.
+
+- The `@netlify/blobs` client (11.1.3) puts a key in the request's path as it is, and Netlify's
+  service decodes the path. So `reg/v1/Europe%2FLondon/snow.<id>` was kept as
+  `reg/v1/Europe/London/snow.<id>`: three segments, not two.
+- Listing `reg/v1/` by directory then gave `reg/v1/Europe`, read as a zone called "Europe". The
+  server doesn't know it, so its windows were UTC's, and 18:00 UTC is in the evening window:
+  `zones 1`.
+- Listing `reg/v1/Europe%2FLondon/` found nothing, because a listing's prefix goes in the query
+  and is matched as it is: `records 0`.
+- A get, set or delete names a key the same way every time, so registering and test sends
+  worked.
+- The tests ran against Netlify's local server, which keeps `%2F`, so they couldn't show it.
+  SETUP's deploy preview check would have, but it wasn't run.
+- The cleanup's walk of the zones split the same way, so it counted no devices with saved
+  places. Its sweep of ids entries deleted none wrongly: it reads each entry's keys again, by
+  get, before deleting.
+
+**How.**
+
+- **A zone in characters no URL changes** (`zoneSegment`), in `reg/` and `done/` keys alike.
+  - `/` is written as `~`. Any character but a letter, a digit, `_` or `-` is written as `.` and
+    two hex digits a byte.
+  - So `Europe/London` is `Europe~London`, `Etc/GMT+5` is `Etc~GMT.2B5`, and the offset zone
+    `+05:30`, which the server's ICU accepts, is `.2B05.3A30`.
+  - With no percent escape, a key is the same in the path, the store and a listing.
+- **The old forms are still read** (`parseRegKey`): the zone percent-escaped, as an ids entry's
+  `saved` and `leaving` hold it, or decoded, as Netlify keeps and lists it. `keysOf` gives every
+  key as `regKey` writes it now, so the devices handlers find a record whatever form its entry
+  was written in. `isOldRegKey` says which keys are in an old form.
+- **A directory that is no zone is never read as one** (`zoneOfDirectory`): only a zone the
+  server's ICU knows. An unknown zone is never taken as UTC.
+- **Each run moves the old keys first** (`moveOldRegistrations`, through the run's `listZones`,
+  which the gather and the cleanup's walk both use). It takes each key under a directory that is
+  no zone.
+  - A record moves only while its device's ids entry names its new key. It is written with
+    `onlyIfNew`, so a newer record stays.
+  - The entry is read again after the write. If the phone deleted itself meanwhile, the new key
+    is deleted too.
+  - The old key is deleted either way, so nothing a phone has deleted comes back.
+  - Keys of a zone the server doesn't know are left as they are.
+  - The run logs `alerts-run: old keys: N moved, M dropped, K left` when it did anything.
+  - The cleanup's count and its sweep of ids entries wait for a day with nothing left to move: a
+    record still under an old key would make its ids entry look empty.
+  - With nothing left to move, it costs no call: the run lists the zones anyway.
+- **The memory store decodes keys as Netlify does** (`keptAs`), so every run test now runs
+  against production's behaviour. On main's code, the first evening test then fails with
+  `zones 0, records 0`. The local-server tests stay, for what that server does.
+- **Two smaller fixes.** The test send's saved place (`lastSaved`) compares keys as `regKey`
+  writes them. `scrub` hides a saved place's zone in a key of either form.
+
+**After the deploy.** The next run, within 15 minutes, moves the registrations made before it.
+Until then, a test send may say the phone isn't registered.
+
+**Checked.** `alertStore.test.ts`:
+
+- every zone ICU lists, and the odd ones, round-trips through a key and a directory, in
+  characters `encodeURIComponent` leaves alone;
+- the old forms are read, and their directories are no zone;
+- the memory store decodes a key but not a listing's prefix;
+- `keysOf` names old keys in the new form;
+- the move: records named moved, others dropped, a newer record kept, a phone deleted
+  meanwhile, and each failing call or a stop leaving its key for the next run.
+
+`alerts.test.ts`:
+
+- a phone registered before is moved and sent its forced test and real notifications that
+  evening, and the next run has nothing to move;
+- a directory that is no zone isn't read as UTC at 18:05 UTC;
+- a day with a move left unfinished counts no devices and deletes no ids entry;
+- `scrub` with either form.
 
 ## Credits and licences
 

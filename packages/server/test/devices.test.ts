@@ -583,7 +583,7 @@ describe('PUT /api/v1/devices: handling', () => {
       alerts: { snow: EVENING },
       seenAt: at,
     });
-    expect(w.store.keys()).toEqual([idsKey('snow', id), `reg/v1/Europe%2FLondon/snow.${id}`]);
+    expect(w.store.keys()).toEqual([idsKey('snow', id), `reg/v1/Europe~London/snow.${id}`]);
     expect(await w.store.get(idsKey('snow', id))).toEqual({ tz: 'Europe/London' });
     const stored = await record(w, 'Europe/London', t);
     expect(stored).toEqual({
