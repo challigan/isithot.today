@@ -2489,6 +2489,14 @@ full-screen ad: choose places on a later launch.
 | `storekit`      | `macos-26`, Xcode 26.6      | the StoreKit plan passes on an iPhone 17 simulator with iOS 26.2 (downloaded if the runner lacks it), each test allowed 60 seconds, within 60 minutes; beside `ios`, not after its UI plan, which already takes most of that job's 120                                                                                                                                                                                                                                                                                                            |
 | `contact-sheet` | ubuntu                      | tiles every attached screen and widget, `audits`' among them, and push.sh's two banner screenshots, into one PNG, whenever `ios` or `audits` uploaded attachments (failed tests included); skipped when both failed before their tests ran                                                                                                                                                                                                                                                                                                        |
 
+**App Store screenshots** (`ios-screenshots.yml`, by hand and on a pull request that changes it
+or `ci/screenshots.mjs`): the setup and build of `ios` on an iPhone 17 Pro Max simulator
+(`SIM_DEVICE`, `ci/simulator.sh`), then the UI tests that attach the listing's seven screens;
+`ci/screenshots.mjs` copies them in order to the artefact `app-store-screenshots` and fails the
+job when one is missing or isn't 1320 × 2868, the App Store's 6.9-inch size. Those tests' own
+results don't decide the job, as a test written for the 6.3-inch screen may fail after it has
+attached its screen.
+
 **Iteration runs** (phase 8.4a): Actions → iOS → **Run workflow**, on a pull request's branch,
 with `only` naming the tests to run as xcodebuild names them, Target/Class or Target/Class/method,
 separated by commas (`WillItSnowUITests/NotificationsTests/testWhereYouAre,
