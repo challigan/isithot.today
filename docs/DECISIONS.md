@@ -8289,7 +8289,8 @@ its `onDismiss`.
    longer wait), never skipped. If simctl's PNGs carried changing metadata, the comparison would
    pass with no banner: look at both shots on the contact sheet.
 4. **The cold-start tap in SwiftUI** (one unanswered forum report). Carl's force-quit check settles
-   it; the fallback is recorded (README, "Settled", 8.1).
+   it; the fallback is recorded (README, "Settled", 8.1). Settled on 8 November: on Carl's iPhone,
+   with the TestFlight build of 3 November, the tap opened the place, so the fallback isn't needed.
 5. **No token on some devices** (iOS 26.5.2 reports, unconfirmed). "No token" rests quietly and
    registers again at every `.active`; Carl's TestFlight check shows it.
 6. **A Release build run from Xcode on a phone** says production with a sandbox token: APNs answers
