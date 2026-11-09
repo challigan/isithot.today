@@ -9403,28 +9403,34 @@ sent 0, deleted 0, errors 0`.
   written by before, which a get or a delete still reaches, whatever Netlify made of it.
 - **A directory that is no zone is never read as one** (`zoneOfDirectory`): only a zone the
   server's ICU knows. An unknown zone is never taken as UTC.
-- **The run reads a record under an old key where it is, and never moves one** (`listZones`).
-  - It lists each directory that is no zone, and takes each old key there of a zone the server
-    knows as a registration of that zone. It reads the record by `oldRegKey`.
-  - One moved by its phone between the listing and the read is read at its new key.
-  - A stale phone, or one Apple refuses, is forgotten in both forms (`forgetDevice` through
-    `forgetBoth`). The cleanup's sweep of ids entries looks for a record in both forms
-    (`forgetIdsLeft`).
-  - A listing that fails stops the run, as a failed listing of `reg/v1/` does.
-- **Only a phone's own requests move its records** (`takeRegistration`, from `readStored`). Each
-  record its ids entry names is moved to its new key before anything else reads it: written with
-  `onlyIfNew`, or over the new one when the old is newer by its stamp (written by a rolled-back
-  deploy), then the old deleted. So every PUT, DELETE and test send sees the phone's records as
-  before, and a DELETE deletes both forms.
-- **Why not have the run move them**, as the first version of this change did: a review found
-  that a run writing a record can bring back one a phone was deleting at the same moment.
+- **Nothing moves a record but a PUT, which writes it again anyway.**
+  - The run reads a record under an old key where it is (`listZones`). It lists each directory
+    that is no zone, takes each old key there of a zone the server knows as a registration of
+    that zone, and reads the record by `oldRegKey`. One a PUT wrote again between the listing and
+    the read is read at its new key. A listing that fails stops the run, as a failed listing of
+    `reg/v1/` does.
+  - The devices handlers read each record the ids entry names at its new key, or else at its old
+    one (`readRecordAt`, the old first: a PUT writes the new key before deleting the old, so one
+    of the two reads finds a record being written again). Reading writes nothing, so a test send
+    writes no record.
+  - A PUT writes every record it keeps at its new key (step 3, as it always has, with the set's
+    stamp), then deletes the old copy of each, and of each it drops or moves, where its read found
+    one (`Stored.old`), before the ids entry names what is there (step 5). A phone registered
+    after this change has no old copy, so its PUT makes no extra call.
+  - A DELETE deletes both forms of every key the ids entry names. A stale phone, or one Apple
+    refuses, is forgotten in both forms (`forgetDevice` through `forgetBoth`). The cleanup's sweep
+    of ids entries looks for a record in both forms (`forgetIdsLeft`).
+- **Why nothing else moves a record.** Two reviews of earlier versions of this change found that
+  a write outside a PUT can bring back a record a phone is deleting at the same moment.
   - The phone's handlers read the ids entry, delete the records, and delete or rewrite the entry
-    last. A run writing between those steps saw the entry still naming the record, so kept it.
-  - What it kept, nothing named: the run then notified a removed place, or a phone that had
-    turned notifications off, until it went stale 90 days later.
-  - A run that only reads can't do that. A phone's own requests already allow for each other:
-    deletes come while the old entry still names what goes ("The write order", decision 32), and
-    an overlapping registration's keys stay named.
+    last. The first version had the run move records: a run writing between those steps saw the
+    entry still naming the record, so kept it.
+  - The second had every request move its phone's records as it read them. A test send moving one
+    just after a DELETE had deleted both forms wrote it back, and a test send writes no ids entry.
+  - Either way, nothing named what was written: the run notified a removed place, or a phone that
+    had turned notifications off, until it went stale 90 days later, and no DELETE could reach it.
+  - A PUT's own write of a record is followed by its ids entry naming it, or by its delete, as
+    before this change ("The write order", decision 32), so a PUT can't leave one behind.
 - **The memory store decodes keys as Netlify does** (`keptAs`), so every run test now runs
   against production's behaviour. On main's code, the first evening test then fails with
   `zones 0, records 0`. The local-server tests stay, for what that server does.
@@ -9433,16 +9439,19 @@ sent 0, deleted 0, errors 0`.
 
 **After the deploy.** The next run (within 15 minutes) reads the registrations made before,
 where they are; nothing needs moving first, and test sends work throughout. Each phone's next
-request (opening the app, or changing a setting) moves its records. Once a day, the cleanup's
-line adds `; N registrations under old keys` while any are left. A phone that never calls in
-again goes stale after 90 days and is forgotten, so by about mid-February 2027 that count reaches
-0, and the code reading old keys can go.
+PUT (when a setting or a place changes, and at least every 7 days while the app is used:
+`heartbeatDays`) writes its records at their new keys. Once a day, the cleanup's line adds
+`; N registrations under old keys` while any are left. A phone that never registers again goes
+stale after 90 days and is forgotten, so by about mid-February 2027 that count reaches 0, and the
+code reading old keys can go.
 
-**Rollback.** Roll forward instead. Main's code reads `reg/v1/Europe~London` as a zone it doesn't
-know (so as UTC) and can't delete a record under a new key. A phone that called in after the
-deploy would get its notifications at UTC's times, and could not turn them off, until this change
-was deployed again. Records main writes meanwhile (under the old keys) are kept when it is: the
-newer of the two copies wins.
+**Rollback.** Don't: fix forward. Main's code reads `reg/v1/Europe~London` as a zone it doesn't
+know (so with UTC's times), and can't delete a record under a new key. So a phone that registered
+after the deploy would get its notifications at UTC's times during a rollback. If it turned them
+off then, the copy under its new key would stay, named by nothing, and be notified until it went
+stale, after the deploy too. A setting changed during a rollback is written under the old key;
+once this change is back, the run reads the copy under the new key while there is one, so the
+change counts only from the phone's next PUT.
 
 **Checked.** `alertStore.test.ts`:
 
@@ -9450,29 +9459,31 @@ newer of the two copies wins.
   characters `encodeURIComponent` leaves alone;
 - the old forms are read, and their directories are no zone;
 - the memory store decodes a key but not a listing's prefix;
-- `keysOf` names old keys in the new form, and `oldRegKey` gives them back;
-- `takeRegistration` moves once, keeps the newer of two copies, and keeps the old one when a call
-  fails;
-- `forgetDevice` forgets both forms, and keeps a phone rewritten since; `forgetIdsLeft` keeps an
-  entry whose record is under its old key.
+- `keysOf` names old keys in the new form, and `oldRegKey` and `withOldForms` give them back;
+- `forgetDevice` forgets both forms, and keeps a phone written again since; `forgetIdsLeft` keeps
+  an entry whose record is under its old key.
 
 `alerts.test.ts`:
 
-- phones registered before are sent their forced test and real notifications that evening,
-  saved places included, and the run writes no record;
-- one moved by its phone during the run is read at its new key;
+- phones registered before are sent their notifications that evening, and a saved place under
+  its old key is sent as a saved place, in its own thread; the run writes no record;
+- one written again by its phone during the run is read at its new key;
 - a stale phone under old keys is forgotten in full;
 - a directory that is no zone isn't read as UTC at 18:05 UTC;
 - a failed listing of an old directory stops the run;
 - the cleanup counts phones under old keys and says how many records are left there;
 - `scrub` with every form.
 
-`devices.test.ts`, each failing without the handlers' change:
+`devices.test.ts`, each failing on the handlers without this change:
 
-- a PUT moves the places it keeps and deletes the one it drops;
-- a version 1 phone's PUT moves its record;
+- a PUT writes the places it keeps at their new keys and deletes the one it drops, in both forms;
+- a version 1 phone's PUT does the same for its one record;
 - a DELETE removes both forms;
-- a test send reaches a phone registered before at once.
+- a test send reaches a phone registered before at once, and writes no record;
+- a test send overlapping a DELETE leaves nothing behind (it fails too on a read that moves a
+  record, as the second version's did);
+- whichever write of a PUT fails, a DELETE afterwards removes every copy in either form, as the
+  same test has long shown for today's keys.
 
 ## Credits and licences
 

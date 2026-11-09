@@ -454,8 +454,9 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
    * `zoneSegment` (DECISIONS, "Zone keys Netlify can't split"): each key under a directory that is
    * no zone (`zoneOfDirectory`), by its zone, as `regKey` names it now (`key`) and where it is kept
    * (`at`, `oldRegKey`'s form, the string it was written by). The run reads those where they are
-   * and never moves one: only a phone's own requests do (`takeRegistration`), from what its ids
-   * entry names. Keys of a zone the server doesn't know are left alone. Null when a listing failed.
+   * and never writes one: only the phone's next PUT does, at its new key, before it writes the ids
+   * entry naming it. Keys of a zone the server doesn't know are left alone. Null when a listing
+   * failed.
    */
   const listZones = async (): Promise<{
     zones: string[];

@@ -65,7 +65,7 @@ import {
   placeId,
   regKey,
   registrationId,
-  takeRegistration,
+  oldRegKey,
   withOldForms,
   type AlertStore,
   type DeviceApp,
@@ -683,20 +683,44 @@ interface Stored {
   saved: Map<string, { key: string; record: DeviceRecord }>;
   /** Every key the ids key names that holds anything, a record or not, in its order. */
   held: string[];
+  /**
+   * Each key the ids key names whose old form (`oldRegKey`) still holds a copy, from before
+   * `zoneSegment`: deleted with it, or once it is written again (`withOld`).
+   */
+  old: Set<string>;
+}
+
+/** The keys, each with its old form where `stored` found a copy there (`Stored.old`). */
+const withOld = (stored: Pick<Stored, 'old'>, keys: readonly string[]): string[] =>
+  keys.flatMap((key) => (stored.old.has(key) ? [key, oldRegKey(key)!] : [key]));
+
+/**
+ * A record by its key as `regKey` writes it now, or where it was kept before `zoneSegment`
+ * (`oldRegKey`) until a PUT writes it again: read, never moved, so a request that writes no ids
+ * entry (a test send) writes no record either. The old form first: a PUT writes the new key
+ * before deleting the old, so one of the two reads finds a record being rewritten.
+ */
+async function readRecordAt(
+  store: AlertStore,
+  key: string,
+): Promise<{ value: unknown; old: boolean }> {
+  const old = oldRegKey(key);
+  const before = old ? await store.get<unknown>(old) : null;
+  return { value: (await store.get<unknown>(key)) ?? before, old: before !== null };
 }
 
 /**
- * The ids key, then every record it names, at once, each moved first from its key's form before
- * `zoneSegment` if it is still there (`takeRegistration`), so what follows sees every record at
- * the key `regKey` writes now.
+ * The ids key, then every record it names, at once, each at its key as `regKey` writes it now,
+ * wherever it is kept (`readRecordAt`).
  */
 async function readStored(store: AlertStore, app: DeviceApp, id: string): Promise<Stored> {
   const entry = await store.get<unknown>(idsKey(app, id));
   const keys = keysOf(entry, app, id);
-  const values = await Promise.all(keys.map((key) => takeRegistration(store, key)));
-  const stored: Stored = { entry, free: null, saved: new Map(), held: [] };
+  const read = await Promise.all(keys.map((key) => readRecordAt(store, key)));
+  const stored: Stored = { entry, free: null, saved: new Map(), held: [], old: new Set() };
   keys.forEach((key, i) => {
-    const value = values[i];
+    const { value, old } = read[i]!;
+    if (old) stored.old.add(key);
     if (value === null || value === undefined) return;
     stored.held.push(key);
     if (!isRecord(value)) return;
@@ -742,11 +766,15 @@ const freeZones = (keys: readonly string[]): string[] =>
     return reg && !reg.pid ? [reg.tz] : [];
   });
 
-/** Writes a v1 body's record (steps 2 to 5 above); gives the zones it left. */
+/**
+ * Writes a v1 body's record (steps 2 to 5 above); gives the zones it left. `stored` says which
+ * keys still have a copy from before `zoneSegment` (`Stored.old`), deleted with them.
+ */
 async function saveRegistration(
   store: AlertStore,
   record: DeviceRecord,
   where: unknown,
+  stored: Pick<Stored, 'old'>,
 ): Promise<string[]> {
   const { app, id, tz } = record;
   const left = freeZones(keysOf(where, app, id)).filter((zone) => zone !== tz);
@@ -756,8 +784,16 @@ async function saveRegistration(
     const naming: DeviceIdsEntry = left.length ? { tz, from: left } : { tz };
     await store.set(idsKey(app, id), naming);
   }
-  await store.set(regKey(tz, app, id), record);
-  for (const zone of left) await store.delete(regKey(zone, app, id));
+  const own = regKey(tz, app, id);
+  await store.set(own, record);
+  // The zones left, and the old copy of the record just written, if there is one.
+  const stale = withOld(
+    stored,
+    left.map((zone) => regKey(zone, app, id)),
+  );
+  for (const key of stored.old.has(own) ? [...stale, oldRegKey(own)!] : stale) {
+    await store.delete(key);
+  }
   if (left.length) await store.set(idsKey(app, id), { tz } satisfies DeviceIdsEntry);
   return left;
 }
@@ -909,7 +945,7 @@ async function putPlace(r: Job, body: DevicePutBody, id: string): Promise<Respon
   holdBack(r, app, id, stored);
   const query = await canonicalQuery(body.place);
   const saved = stored.held.filter((key) => pidOf(key) !== undefined);
-  await eachAtOnce(saved, DEVICE_LIMITS.writesAtOnce, (key) => store.delete(key));
+  await eachAtOnce(withOld(stored, saved), DEVICE_LIMITS.writesAtOnce, (key) => store.delete(key));
   // The zone comes with the forecast (Open-Meteo's timezone=auto), normally a cache hit: the app
   // has just shown the place.
   const today = await getToday(new URLSearchParams(`${query}&units=${body.units}`), null, r.deps);
@@ -935,7 +971,7 @@ async function putPlace(r: Job, body: DevicePutBody, id: string): Promise<Respon
     seenAt: at,
   };
   if (body.appVersion) record.appVersion = body.appVersion;
-  const left = await saveRegistration(store, record, stored.entry);
+  const left = await saveRegistration(store, record, stored.entry, stored);
   r.log(
     left.length
       ? `devices: moved ${who(app, id)} to ${record.tz} from ${left.join(', ')}`
@@ -1113,7 +1149,8 @@ async function putSet(
     const pid = pidOf(key);
     return pid ? !pids.has(pid) || stored.saved.get(pid)?.key !== key : dropFree;
   });
-  await eachAtOnce(gone, DEVICE_LIMITS.writesAtOnce, (key) => store.delete(key));
+  // Each with its old copy, if it has one (`Stored.old`).
+  await eachAtOnce(withOld(stored, gone), DEVICE_LIMITS.writesAtOnce, (key) => store.delete(key));
   holdBack(r, app, id, stored);
   const removed = new Set(gone);
   const freeLeft = stored.held.filter((key) => !removed.has(key) && pidOf(key) === undefined);
@@ -1258,9 +1295,16 @@ async function putSet(
   await eachAtOnce(records, DEVICE_LIMITS.writesAtOnce, (record) =>
     store.set(keyOf(record), record),
   );
-  // 4. The free place's copies in zones it left, now that its successor is written.
+  // 4. The free place's copies in zones it left, now that its successor is written, and where
+  // each record written was kept before `zoneSegment` (DECISIONS, "Zone keys Netlify can't split").
   const moved = freeWritten ? freeLeft.filter((key) => key !== freeKey[0]) : [];
-  await eachAtOnce(moved, DEVICE_LIMITS.writesAtOnce, (key) => store.delete(key));
+  const before = records.flatMap((record) => {
+    const key = keyOf(record);
+    return stored.old.has(key) ? [oldRegKey(key)!] : [];
+  });
+  await eachAtOnce([...withOld(stored, moved), ...before], DEVICE_LIMITS.writesAtOnce, (key) =>
+    store.delete(key),
+  );
   // 5. The ids key naming what is there, timed for the minute's rule only once all of it is.
   // Always written, as the run may have forgotten the device meanwhile (`forgetDevice`); with
   // nothing there, deleted, if as this registration left it (never an entry another wrote), so

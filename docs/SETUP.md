@@ -335,7 +335,8 @@ preview's store is new with every deploy, so the settings go in before the previ
    notification at about 6pm and about 7am for each place with notifications on, as above, and
    those runs' lines say `forced`. **Send a test notification** keeps working throughout. Once a
    day, at 03:00 UTC, the cleanup's line adds `; N registrations under old keys` until every phone
-   has opened the app once since.
+   has registered again (when a setting or place changes, and at least weekly while the app is
+   used).
 
    **Then, once that test has arrived (Wed 4 Nov): the server for several places, 10 minutes.**
    Merge the pull request "Notifications for several places on one phone (server)". Netlify

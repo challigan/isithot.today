@@ -393,35 +393,6 @@ export function withOldForms(keys: readonly string[]): string[] {
   });
 }
 
-/** When a record was last written or seen, ms; 0 for anything else. */
-const stampOf = (value: unknown): number => {
-  if (!value || typeof value !== 'object') return 0;
-  const { seenAt, updatedAt } = value as Partial<RegistrationStamp>;
-  return Date.parse(seenAt ?? '') || Date.parse(updatedAt ?? '') || 0;
-};
-
-/**
- * The record at `key` (as `regKey` writes it now), once moved there from its form before
- * `zoneSegment` (`oldRegKey`) if one is still kept there: written with `onlyIfNew`, or over the
- * new one when the old is newer (written by a rolled-back deploy), then the old deleted. Null when
- * neither holds anything. Only a device's own requests move its records (the devices handlers'
- * `readStored`), each from what its ids entry names, so nothing the run does can bring back a
- * record a phone has deleted: the run reads an old record where it is.
- */
-export async function takeRegistration(store: AlertStore, key: string): Promise<unknown> {
-  const old = oldRegKey(key);
-  if (old) {
-    const before = await store.get<unknown>(old);
-    if (before !== null) {
-      const now = await store.get<unknown>(key);
-      if (now === null) await store.set(key, before, { onlyIfNew: true });
-      else if (stampOf(before) > stampOf(now)) await store.set(key, before);
-      await store.delete(old);
-    }
-  }
-  return store.get<unknown>(key);
-}
-
 /**
  * A saved place's pid: the first 12 hex characters of HMAC-SHA256 keyed with the device's salt
  * (`newSalt`, kept only in its ids entry) over the place's canonical query. Without the salt, no

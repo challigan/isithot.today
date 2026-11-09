@@ -33,7 +33,6 @@ import {
   registrationId,
   sentKey,
   sentPrefix,
-  takeRegistration,
   testKey,
   withOldForms,
   zoneOfDirectory,
@@ -1105,52 +1104,6 @@ describe('the keys from before zoneSegment', () => {
       OLD,
       regKey('UTC', 'snow', ID),
     ]);
-  });
-
-  it("moves a phone's record to its new key, and only once", async () => {
-    const store = new MemoryAlertStore();
-    await store.set(OLD, record('2026-11-01T08:00:00.000Z'));
-    expect(store.keys()).toEqual([`reg/v1/Europe/London/snow.${ID}`]);
-    expect(await takeRegistration(store, NEW)).toEqual(record('2026-11-01T08:00:00.000Z'));
-    expect(store.keys()).toEqual([NEW]);
-    expect(await takeRegistration(store, NEW)).toEqual(record('2026-11-01T08:00:00.000Z'));
-    expect(store.keys()).toEqual([NEW]);
-    // Nothing in either form: nothing written.
-    expect(await takeRegistration(store, regKey('Asia/Tokyo', 'snow', ID))).toBeNull();
-    expect(store.keys()).toEqual([NEW]);
-    // No old form at all.
-    await store.set(regKey('UTC', 'snow', ID), record('2026-11-02T08:00:00.000Z'));
-    expect(await takeRegistration(store, regKey('UTC', 'snow', ID))).toEqual(
-      record('2026-11-02T08:00:00.000Z'),
-    );
-  });
-
-  it('keeps the newer of the two when both are there, and deletes the old', async () => {
-    const store = new MemoryAlertStore();
-    await store.set(OLD, record('2026-11-01T08:00:00.000Z', 'old'));
-    await store.set(NEW, record('2026-11-02T08:00:00.000Z', 'new'));
-    expect(await takeRegistration(store, NEW)).toMatchObject({ name: 'new' });
-    expect(store.keys()).toEqual([NEW]);
-    // Written by a rolled-back deploy after the move: the old is newer.
-    await store.set(OLD, record('2026-11-03T08:00:00.000Z', 'rolled back'));
-    expect(await takeRegistration(store, NEW)).toMatchObject({ name: 'rolled back' });
-    expect(store.keys()).toEqual([NEW]);
-  });
-
-  it('rejects when a call fails, and leaves the old record where it is', async () => {
-    for (const failing of ['get', 'set', 'delete']) {
-      const inner = new MemoryAlertStore();
-      await inner.set(OLD, record('2026-11-01T08:00:00.000Z'));
-      const down = () => Promise.reject(new Error('down'));
-      const store: AlertStore = {
-        get: (key) => (failing === 'get' && key === NEW ? down() : inner.get(key)),
-        set: (key, value, options) => (failing === 'set' ? down() : inner.set(key, value, options)),
-        list: (prefix, options) => inner.list(prefix, options),
-        delete: (key) => (failing === 'delete' ? down() : inner.delete(key)),
-      };
-      await expect(takeRegistration(store, NEW), failing).rejects.toThrow('down');
-      expect(await inner.get(OLD), failing).not.toBeNull();
-    }
   });
 
   it('forgets a stale phone in either form, and keeps one rewritten since at its new key', async () => {

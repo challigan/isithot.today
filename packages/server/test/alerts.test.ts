@@ -28,7 +28,6 @@ import {
   runSummary,
   scrub,
   sentKey,
-  takeRegistration,
   type AlertRecord,
   type AlertStore,
   type ApnsEnv,
@@ -1984,19 +1983,27 @@ describe('runAlerts: the keys from before "Zone keys Netlify can\'t split"', () 
     const records = () => store.keys().filter((k) => /^(reg|ids)\//.test(k));
     const keptBefore = records();
     const lines: string[] = [];
-    // Carl's phone: a forced id, in a dry place, at 18:05 in London.
-    const forceIds = [leeds.id.slice(0, 8)];
+    // Carl's phone: a forced id, in a dry place, at 18:05 in London; Durham's is snowy.
+    const forceIds = [leeds.id, durham.id].map((id) => id.slice(0, 8));
     const first = await runAt(EVENING, { store, origin, lines, forceIds });
-    expect(first).toMatchObject({ zones: 1, records: 2, sent: 2, forced: 1, errors: 0, done: 1 });
+    expect(first).toMatchObject({ zones: 1, records: 2, sent: 2, forced: 2, errors: 0, done: 1 });
     expect(lines).toEqual([]);
     expect(devices(seen)).toEqual([leeds.token, durham.token].sort());
     // The run moves nothing: only a phone's own requests do.
     expect(records()).toEqual(keptBefore);
     expect(await store.get(doneKey('2026-10-18', 'evening', 'Europe/London'))).not.toBeNull();
     expect(await runAt(LATER, { store, origin, lines, forceIds })).toMatchObject({ sent: 0 });
-    // New York's evening, at its 18:05: the saved place under its old key is read too.
+    // New York's evening, at its 18:05: the saved place under its old key is sent as a saved
+    // place, in its own thread.
+    seen.length = 0;
     const evening = await runAt('2026-10-18T22:05:00Z', { store, origin, lines, forceIds });
-    expect(evening).toMatchObject({ zones: 1, records: 1, errors: 0 });
+    expect(evening).toMatchObject({ zones: 1, records: 1, sent: 1, errors: 0 });
+    expect(devices(seen)).toEqual([newYork.token]);
+    expect(JSON.parse(seen[0]!.body)).toMatchObject({
+      aps: { 'thread-id': `snow-${PIDS[0]}` },
+      name: 'New York',
+    });
+    expect(records()).toEqual(keptBefore);
   });
 
   it('reads one moved by its phone since the listing at its new key', async () => {
@@ -2005,12 +2012,13 @@ describe('runAlerts: the keys from before "Zone keys Netlify can\'t split"', () 
     const durham = registration(token('a0'));
     await before(inner, durham);
     await inner.set(idsKey('snow', durham.id), { tz: 'Europe/London' });
-    // The phone's request moves it just as the run reads the old key.
+    // The phone's PUT writes it at its new key, and deletes the old, just as the run reads it.
+    const move = async () => {
+      await inner.set(regKey('Europe/London', 'snow', durham.id), await inner.get(escaped(durham)));
+      await inner.delete(escaped(durham));
+    };
     const store = view(inner, {
-      before: (op, key) =>
-        op === 'get' && key === escaped(durham)
-          ? takeRegistration(inner, regKey('Europe/London', 'snow', durham.id))
-          : undefined,
+      before: (op, key) => (op === 'get' && key === escaped(durham) ? move() : undefined),
     });
     const run = await runAt(EVENING, { store, origin });
     expect(run).toMatchObject({ records: 1, sent: 1, errors: 0 });
