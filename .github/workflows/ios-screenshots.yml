@@ -1,0 +1,97 @@
+name: App Store screenshots
+
+# The App Store's 6.9-inch iPhone screenshots (1320 by 2868 pixels) of will it snow?, taken by the
+# app's own UI tests on an iPhone 17 Pro Max simulator, with the fixtures they launch: snow in
+# Aberdeen (Today, This week and Now), Durham's Tomorrow after 6pm, the picker with four saved
+# places and one bell on, Notifications in Settings and the one-off purchase. ci/screenshots.mjs picks those
+# screens from the attachments, in the App Store's order, and checks their size; the artefact
+# `app-store-screenshots` holds them for App Store Connect (docs/SETUP.md, "Before launch"). The
+# CI's own simulator is the 6.3-inch iPhone 17, whose 1206 by 2622 the App Store doesn't take for
+# its required size. Started by hand (Actions → App Store screenshots → Run workflow), and on a pull
+# request that changes this file or the script, so a change to either shows its screens.
+on:
+  pull_request:
+    paths:
+      - .github/workflows/ios-screenshots.yml
+      - apps/ios/ci/screenshots.mjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: App Store screenshots on the iPhone 17 Pro Max simulator
+    runs-on: macos-26
+    # Setup and the build take about 15 minutes, the tests about 15: 60 leaves room for a slow
+    # runner.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 26.6
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version
+      # ios.yml's caches, under the same keys.
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: apps/ios/.spm
+          key: spm-${{ runner.os }}-xcode26.6-${{ hashFiles('apps/ios/Package.resolved') }}
+      - name: Cache XcodeGen
+        uses: actions/cache@v4
+        with:
+          path: ~/.xcodegen/2.46.0
+          key: xcodegen-2.46.0-4d9e34b6-${{ runner.os }}
+      - name: Generate the project
+        run: apps/ios/ci/xcodegen.sh
+      - name: Resolve packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project apps/ios/WillItSnow.xcodeproj -scheme WillItSnow \
+            -clonedSourcePackagesDirPath apps/ios/.spm -onlyUsePackageVersionsFromResolvedFile
+      # Assigned first, so that a failure in simulator.sh fails this step, not the next one.
+      - name: Boot the iPhone 17 Pro Max simulator
+        id: simulator
+        env:
+          SIM_DEVICE: iPhone 17 Pro Max
+        run: |
+          udid="$(apps/ios/ci/simulator.sh)"
+          if [ -z "$udid" ]; then
+            echo "::error::simulator.sh printed no UDID"
+            exit 1
+          fi
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: Build for testing
+        run: apps/ios/ci/test.sh build "${{ steps.simulator.outputs.udid }}"
+      # The tests that attach the screens. NotificationsTests.testStoreScreens takes the picker
+      # and Settings without the tests' link recorder, whose lines the other NotificationsTests
+      # screens show. A test written for the 6.3-inch screen may fail here after attaching its
+      # screen, so this step doesn't decide the job: the next one does, on the screens themselves.
+      - name: Take the screens
+        continue-on-error: true
+        env:
+          ONLY_TESTING: >-
+            WillItSnowUITests/FixtureLaunchTests/testAberdeenSnow,
+            WillItSnowUITests/FixtureLaunchTests/testSwitcherAndSwipe,
+            WillItSnowUITests/FixtureLaunchTests/testDurhamTomorrow,
+            WillItSnowUITests/NotificationsTests/testStoreScreens,
+            WillItSnowUITests/UpgradeTests/testTheRowThePageAndBuying
+        run: apps/ios/ci/test.sh UI "${{ steps.simulator.outputs.udid }}"
+      - name: Pick the screenshots
+        run: |
+          set -o pipefail
+          node apps/ios/ci/screenshots.mjs apps/ios/build/attachments/UI apps/ios/build/screenshots |
+            tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Upload the screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-store-screenshots
+          path: apps/ios/build/screenshots
+          if-no-files-found: warn
+          retention-days: 14

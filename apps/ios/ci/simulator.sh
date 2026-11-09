@@ -11,6 +11,9 @@
 #
 # Usage: udid="$(apps/ios/ci/simulator.sh)"        iOS 26.5: the Unit and UI plans
 #        udid="$(apps/ios/ci/simulator.sh 26.2)"   iOS 26.2: the StoreKit plan
+#
+# SIM_DEVICE names the iPhone, "iPhone 17" unless set: "iPhone 17 Pro Max" for the App Store's
+# 6.9-inch screenshots (1320 by 2868 pixels; ios-screenshots.yml).
 set -euo pipefail
 
 version="${1:-26.5}"
@@ -25,9 +28,16 @@ case "$version" in
     exit 2
     ;;
 esac
-NAME="iPhone 17"
+NAME="${SIM_DEVICE:-iPhone 17}"
+case "$NAME" in
+  "iPhone 17" | "iPhone 17 Pro Max") ;;
+  *)
+    echo "simulator.sh: SIM_DEVICE is $NAME, not iPhone 17 or iPhone 17 Pro Max" >&2
+    exit 2
+    ;;
+esac
 RUNTIME="com.apple.CoreSimulator.SimRuntime.iOS-${version//./-}"
-DEVICE_TYPE=com.apple.CoreSimulator.SimDeviceType.iPhone-17
+DEVICE_TYPE="com.apple.CoreSimulator.SimDeviceType.${NAME// /-}"
 APP_ID=today.willitsnow.app
 
 # Whether the runner has the runtime, ready to use.
