@@ -2,8 +2,8 @@ name: App Store screenshots
 
 # The App Store's 6.9-inch iPhone screenshots (1320 by 2868 pixels) of will it snow?, taken by the
 # app's own UI tests on an iPhone 17 Pro Max simulator, with the fixtures they launch: snow in
-# Aberdeen (Today, This week and Now), Durham's Tomorrow after 6pm, the picker with a saved place's
-# bell on, Notifications in Settings and the one-off purchase. ci/screenshots.mjs picks those
+# Aberdeen (Today, This week and Now), Durham's Tomorrow after 6pm, the picker with four saved
+# places and one bell on, Notifications in Settings and the one-off purchase. ci/screenshots.mjs picks those
 # screens from the attachments, in the App Store's order, and checks their size; the artefact
 # `app-store-screenshots` holds them for App Store Connect (docs/SETUP.md, "Before launch"). The
 # CI's own simulator is the 6.3-inch iPhone 17, whose 1206 by 2622 the App Store doesn't take for
@@ -68,10 +68,10 @@ jobs:
           echo "udid=$udid" >> "$GITHUB_OUTPUT"
       - name: Build for testing
         run: apps/ios/ci/test.sh build "${{ steps.simulator.outputs.udid }}"
-      # The tests that attach the screens. NotificationPermissionTests first (XCTest runs classes
-      # by name), as in the UI plan, so notifications are allowed before NotificationsTests. A test
-      # written for the 6.3-inch screen may fail here after attaching its screen, so this step
-      # doesn't decide the job: the next one does, on the screens themselves.
+      # The tests that attach the screens. NotificationsTests.testStoreScreens takes the picker
+      # and Settings without the tests' link recorder, whose lines the other NotificationsTests
+      # screens show. A test written for the 6.3-inch screen may fail here after attaching its
+      # screen, so this step doesn't decide the job: the next one does, on the screens themselves.
       - name: Take the screens
         continue-on-error: true
         env:
@@ -79,9 +79,7 @@ jobs:
             WillItSnowUITests/FixtureLaunchTests/testAberdeenSnow,
             WillItSnowUITests/FixtureLaunchTests/testSwitcherAndSwipe,
             WillItSnowUITests/FixtureLaunchTests/testDurhamTomorrow,
-            WillItSnowUITests/NotificationPermissionTests,
-            WillItSnowUITests/NotificationsTests/testSavedPlacesPaid,
-            WillItSnowUITests/NotificationsTests/testTurningOnRegistersAndYourPrivacyShowsIt,
+            WillItSnowUITests/NotificationsTests/testStoreScreens,
             WillItSnowUITests/UpgradeTests/testTheRowThePageAndBuying
         run: apps/ios/ci/test.sh UI "${{ steps.simulator.outputs.udid }}"
       - name: Pick the screenshots

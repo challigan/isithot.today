@@ -861,9 +861,9 @@ Each month, per site (about 15 minutes):
 - **The App Store screenshots** (6.9-inch iPhone, 1320 × 2868): GitHub → **Actions** → **App
   Store screenshots** → **Run workflow** on `main`. In about 30 minutes the run's
   **app-store-screenshots** artefact holds seven, numbered in order: Today with snow, This week,
-  Now, Tomorrow after 6pm, the picker with a saved place's bell, Notifications and the purchase.
-  Upload them under the version's **iPhone 6.9" Display** screenshots. The run's summary says if
-  one is missing or the wrong size.
+  Now, Tomorrow after 6pm, the picker with saved places and a bell on, Notifications and the
+  purchase. Upload them under the version's **iPhone 6.9" Display** screenshots. The run's
+  summary says if one is missing or the wrong size.
 - Review the Privacy, Cookies and Terms drafts (the contact email is in) and the Support page.
   Take "Draft for review" off them before the app is submitted: its listing links Privacy and
   Support.

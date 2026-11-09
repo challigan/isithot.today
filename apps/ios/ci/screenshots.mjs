@@ -19,8 +19,8 @@ export const SCREENS = [
   'app-aberdeen-snow-week', // This week (FixtureLaunchTests.testSwitcherAndSwipe)
   'app-aberdeen-snow-now', // Now (the same test)
   'app-durham-tomorrow', // Tomorrow, after 6pm (FixtureLaunchTests)
-  'app-picker-bell-on', // Saved places with a bell on (NotificationsTests.testSavedPlacesPaid)
-  'app-notifications-on', // Notifications in Settings (NotificationsTests)
+  'store-picker', // Saved places, one with its bell on (NotificationsTests.testStoreScreens)
+  'store-settings', // Notifications in Settings (the same test), with no recorder lines
   'app-upgrade', // The one-off purchase (UpgradeTests)
 ];
 

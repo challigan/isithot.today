@@ -273,6 +273,40 @@ final class NotificationsTests: XCTestCase {
     try page(titled: "Settings", in: app)
   }
 
+  /// The App Store's screens of the picker and Settings (ios-screenshots.yml):
+  /// testSavedPlacesPaid's first steps, with three more places saved and no recorder, so Settings
+  /// has no recorder lines under it. Durham's bell is turned on from Settings' "Saved places", as there; the picker,
+  /// four saved places with Durham's bell on, is attached as `store-picker`; then Settings, with
+  /// "Evening before" on and "Saved places" at "1 on", as `store-settings`. Only Durham's bell is
+  /// on, so the registration sent is the one `put-here-ip-durham` answers.
+  @MainActor
+  func testStoreScreens() throws {
+    let saved =
+      "place=durham-gb,place=york-gb&name=York,place=edinburgh-gb&name=Edinburgh,"
+      + "place=aberdeen-gb"
+    let app = launch(
+      Self.leeds + ["-unlocked", "1", "-saved", saved, "-devices", "sent2"], recorder: false)
+    try openSettings(app)
+    try waitFor("notify-saved", in: app, value: Copy.savedOff)
+    let shown = app.pickersShown ?? 0
+    try tap("notify-saved", in: app) {
+      app.lacksPage(titled: "Settings") || self.pickerOpen(in: app, after: shown) == true
+    }
+    try expectThePicker(in: app, after: shown, "after tapping Saved places")
+    let bell = "bell-saved-city:durham-gb"
+    try waitFor(bell, .button, in: app, label: Copy.bellOn)
+    let durham = app.buttons[bell]
+    watchedTap(bell, in: app, until: { says(bell, Copy.bellOff, in: app) }, { durham.tap() })
+    try waitFor(bell, .button, in: app, label: Copy.bellOff)
+    attach(app, as: "store-picker")
+    try closeThePicker(in: app, after: shown)
+
+    try openSettings(app)
+    try expectSwitch(app.find("notify-evening"), on: true)
+    try waitFor("notify-saved", in: app, value: Copy.savedOne)
+    attach(app, as: "store-settings")
+  }
+
   /// Saved places with the one-off purchase (phase 8.4b; design 2.2 to 2.4 and 2.8, decisions 11,
   /// 13, 16 and 25): Durham saved (`-saved place=durham-gb`), the purchase owned (`-unlocked 1`),
   /// every switch off. "Saved places" says "Off" and opens the search screen, Settings closing
@@ -479,15 +513,18 @@ final class NotificationsTests: XCTestCase {
   }
 
   /// Launches the app with `-uitest`, `-noads 1`, the clock fixed (`-clock fixed`, at the
-  /// fixture's moment), the recorder (`-openURLs record`) and location never asked (`notAsked`),
-  /// from a clean store unless not `reset` (a relaunch, which keeps what the first launch kept,
-  /// so `-place` is left out), and `extra`; waits for the answer's verdict.
+  /// fixture's moment), the recorder (`-openURLs record`) unless not `recorder` (the App Store's
+  /// screens, which mustn't show its lines) and location never asked (`notAsked`), from a clean
+  /// store unless not `reset` (a relaunch, which keeps what the first launch kept, so `-place` is
+  /// left out), and `extra`; waits for the answer's verdict.
   @MainActor
-  private func launch(_ extra: [String], reset: Bool = true) -> XCUIApplication {
+  private func launch(_ extra: [String], reset: Bool = true, recorder: Bool = true)
+    -> XCUIApplication
+  {
     let app = XCUIApplication()
     app.launchArguments =
-      ["-uitest", "-noads", "1", "-clock", "fixed", "-openURLs", "record"] + Self.notAsked
-      + (reset ? ["-resetStore"] : []) + extra
+      ["-uitest", "-noads", "1", "-clock", "fixed"] + (recorder ? ["-openURLs", "record"] : [])
+      + Self.notAsked + (reset ? ["-resetStore"] : []) + extra
     app.launch()
     launched = app
     XCTAssertTrue(app.staticTexts["verdict"].waitForExistence(timeout: 15), "No answer on screen")
