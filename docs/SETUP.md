@@ -322,6 +322,11 @@ preview's store is new with every deploy, so the settings go in before the previ
    likely, otherwise "Test notification". The log line says `sent 1` and `1 forced` for those
    runs. Everyone else (TestFlight testers) gets only real notifications, when snow is likely.
 
+   **Done on Sun 8 Nov.** All three are set in **Production** and the site was redeployed; a test
+   arrives within seconds. Netlify refused the **Functions** scope when they were set through its
+   API (403), so they apply to all scopes. They are switches and an id prefix, not secrets, so
+   nothing else changes.
+
    **Then, once that test has arrived (Wed 4 Nov): the server for several places, 10 minutes.**
    Merge the pull request "Notifications for several places on one phone (server)". Netlify
    deploys it by itself: there is nothing to set and no redeploy to start. At the next quarter
@@ -391,10 +396,10 @@ keys), a profile made by hand, or anything in GitHub.
    notification**: it says "Our server isn't sending notifications yet, so nothing was sent."
    Then Settings → **Your privacy**: the first line under "What we keep for notifications" is
    **ID** and 8 characters. Send me those 8 characters.
-5. **C18 (Wed 4 Nov, 10 minutes):** rollout step 2 above, in Netlify's **Production** context only
-   (`ALERTS_DRY_RUN` = `false`, and `ALERTS_FORCE_IDS` = your 8 characters), then redeploy. Send a
-   test again, between 7am and 9pm at your notifications' place: it arrives within seconds, and the
-   `devices-test` log says `test sent`.
+5. **C18 (Wed 4 Nov, 10 minutes; done on Sun 8 Nov):** rollout step 2 above, in Netlify's
+   **Production** context only (`ALERTS_DRY_RUN` = `false`, and `ALERTS_FORCE_IDS` = your 8
+   characters), then redeploy. Send a test again, between 7am and 9pm at your notifications'
+   place: it arrives within seconds, and the `devices-test` log says `test sent`.
 6. **The checks on your phone (C19)**, each with that TestFlight build. If one shows something
    else, tell me what it said, with a screenshot.
    - **The prompt** appears once, at the first switch you turn on, never when the app opens. On a
@@ -405,7 +410,7 @@ keys), a profile made by hand, or anything in GitHub.
    - **The cold start:** press **Send a test notification**, at once swipe the app away in the app
      switcher, wait for the banner and tap it. The app should open on the place. If it opens on
      the home screen only, tell me: it is the open question in apps/ios/README.md's "Settled"
-     (8.1), and its fix is ready to write.
+     (8.1), and its fix is ready to write. **Done on Sun 8 Nov:** it opened on the place.
    - **The app in front:** with the app open on another place, a test shows a banner over the app,
      and the page refreshes.
    - **iOS Settings' link:** iOS Settings → will it snow? → Notifications → **Notification
