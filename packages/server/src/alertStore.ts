@@ -583,19 +583,31 @@ async function forgetIfUnchanged(
 }
 
 /**
- * `forgetIfUnchanged` at a key and at its form from before `zoneSegment` (`oldRegKey`), where a
- * record not yet moved is kept: gone only when both are.
+ * `forgetIfUnchanged` for a record that may still have a copy from before `zoneSegment`
+ * (`oldRegKey`). With nothing at its new key, the old copy is the record (no PUT since), judged by
+ * its stamp. Beside a record at its new key, an old copy is the older (only a PUT writes, at the
+ * new key, then deletes the old): it goes, and the new key decides.
  */
 async function forgetBoth(
   store: AlertStore,
   key: string,
   stamp: SlotStamp,
 ): Promise<'gone' | 'changed' | 'failed'> {
-  const outcomes = await Promise.all(
-    withOldForms([key]).map((form) => forgetIfUnchanged(store, form, stamp)),
-  );
-  if (outcomes.includes('failed')) return 'failed';
-  return outcomes.includes('changed') ? 'changed' : 'gone';
+  const old = oldRegKey(key);
+  if (!old) return forgetIfUnchanged(store, key, stamp);
+  let held: unknown;
+  try {
+    held = await store.get<unknown>(key);
+  } catch {
+    return 'failed';
+  }
+  if (held === null) return forgetIfUnchanged(store, old, stamp);
+  try {
+    await store.delete(old);
+  } catch {
+    return 'failed';
+  }
+  return forgetIfUnchanged(store, key, stamp);
 }
 
 /**

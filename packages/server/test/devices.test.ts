@@ -2357,6 +2357,34 @@ describe('the devices endpoints with a phone registered before zone keys changed
     expect(k).toBe(11);
   });
 
+  it("forgets a phone Apple refuses after a PUT that couldn't delete its old copies", async () => {
+    const inner = new MemoryAlertStore();
+    let armed = false;
+    const t = token('c1', 7);
+    const { w, fake } = await withApple(
+      { c1: { status: 410, body: { reason: 'Unregistered', timestamp: SNOWY + HOUR } } },
+      {
+        geo: LEEDS_GEO,
+        store: failing(inner, (op, key) => armed && op === 'delete' && key.includes('%2F')),
+      },
+    );
+    w.store = inner;
+    await put2(w, body2({ token: t, saved: [DURHAM, HELSINKI] }));
+    await asBefore(w, t);
+    // Every record written at its new key, but no old copy deleted: each place held twice.
+    w.at(SNOWY + 2 * MINUTE);
+    armed = true;
+    expect((await put2(w, body2({ token: t, saved: [DURHAM, HELSINKI] }))).status).toBe(503);
+    armed = false;
+    expect(oldKeys(w)).toHaveLength(3);
+    // The older copies are no sign it registered again: one push, and it is forgotten.
+    const r = await sendTest(w, { app: 'snow', token: t });
+    expect(r.status).toBe(404);
+    expect((await errorOf(r)).code).toBe('not_registered');
+    expect(fake.seen).toHaveLength(1);
+    expect(keysFor(w, t)).toEqual([]);
+  });
+
   it('deletes every record, under either key, when the phone turns notifications off', async () => {
     const w = world({ geo: LEEDS_GEO });
     const t = token('c1', 3);

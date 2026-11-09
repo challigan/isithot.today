@@ -1131,6 +1131,17 @@ describe('the keys from before zoneSegment', () => {
     expect(moved.keys()).toEqual([idsKey('snow', ID), NEW]);
   });
 
+  it('forgets a record read at its new key though an older copy is still beside it', async () => {
+    const read = { tz: 'Europe/London', ...record('2026-08-01T08:00:00.000Z') };
+    const store = new MemoryAlertStore();
+    // A PUT wrote it at its new key, and failed to delete the old copy.
+    await store.set(OLD, { ...read, ...record('2026-07-01T08:00:00.000Z') });
+    await store.set(NEW, read);
+    await store.set(idsKey('snow', ID), { tz: 'Europe/London' });
+    expect(await forgetDevice(store, 'snow', ID, read)).toBe('deleted');
+    expect(store.keys()).toEqual([]);
+  });
+
   it('keeps an ids entry naming a record still under its old key', async () => {
     const store = new MemoryAlertStore();
     await store.set(OLD, record('2026-11-01T08:00:00.000Z'));

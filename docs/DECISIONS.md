@@ -9418,8 +9418,15 @@ sent 0, deleted 0, errors 0`.
     one (`Stored.old`), before the ids entry names what is there (step 5). A phone registered
     after this change has no old copy, so its PUT makes no extra call.
   - A DELETE deletes both forms of every key the ids entry names. A stale phone, or one Apple
-    refuses, is forgotten in both forms (`forgetDevice` through `forgetBoth`). The cleanup's sweep
-    of ids entries looks for a record in both forms (`forgetIdsLeft`).
+    refuses, is forgotten in both forms (`forgetDevice` through `forgetBoth`). With nothing at a
+    record's new key, its old copy is judged by its stamp. Beside a record at its new key, an old
+    copy is the older (left by a PUT that failed before deleting it), so it goes and the new key
+    decides: an older copy is no sign the phone registered again. The cleanup's sweep of ids
+    entries looks for a record in both forms (`forgetIdsLeft`).
+- **Why the new key decides.** A third review found that `forgetBoth` judged both copies by the
+  stamp. After a PUT that wrote a record's new key but failed to delete its old copy, a refusal
+  from Apple saw the older copy's stamp as "registered again since". It kept the phone, pushed to
+  the dead token again, and answered a test with 502 rather than 404.
 - **Why nothing else moves a record.** Two reviews of earlier versions of this change found that
   a write outside a PUT can bring back a record a phone is deleting at the same moment.
   - The phone's handlers read the ids entry, delete the records, and delete or rewrite the entry
@@ -9460,8 +9467,9 @@ change counts only from the phone's next PUT.
 - the old forms are read, and their directories are no zone;
 - the memory store decodes a key but not a listing's prefix;
 - `keysOf` names old keys in the new form, and `oldRegKey` and `withOldForms` give them back;
-- `forgetDevice` forgets both forms, and keeps a phone written again since; `forgetIdsLeft` keeps
-  an entry whose record is under its old key.
+- `forgetDevice` forgets both forms, keeps a phone written again since, and forgets a record read
+  at its new key though an older copy is beside it; `forgetIdsLeft` keeps an entry whose record
+  is under its old key.
 
 `alerts.test.ts`:
 
@@ -9483,7 +9491,9 @@ change counts only from the phone's next PUT.
 - a test send overlapping a DELETE leaves nothing behind (it fails too on a read that moves a
   record, as the second version's did);
 - whichever write of a PUT fails, a DELETE afterwards removes every copy in either form, as the
-  same test has long shown for today's keys.
+  same test has long shown for today's keys;
+- after a PUT that couldn't delete its old copies, a phone Apple refuses is forgotten at once:
+  one push, and a 404.
 
 ## Credits and licences
 
