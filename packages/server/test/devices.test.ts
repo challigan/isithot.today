@@ -61,11 +61,14 @@ import {
   handleDevices,
   handleRateLimited,
   idsKey,
+  isOldRegKey,
   jwtKey,
+  oldRegKey,
   placeId,
   regKey,
   registrationId,
   resolveServerConfig,
+  takeRegistration,
   type AlertListing,
   type AlertStore,
   type ApnsEnv,
@@ -2249,6 +2252,95 @@ describe('DELETE /api/v1/devices: a set', () => {
       expect(placeId(id, query)).not.toBe(durham);
       expect(placeId('', query)).not.toBe(durham);
     }
+  });
+});
+
+// ---- The keys from before "Zone keys Netlify can't split" ----
+
+describe('the devices endpoints with a phone registered before zone keys changed', () => {
+  /**
+   * A phone's records as the handlers wrote them before: each under its zone percent-escaped,
+   * which Netlify's service (and MemoryAlertStore) keeps decoded, and an ids entry naming them so.
+   */
+  async function asBefore(w: World, t: string): Promise<void> {
+    for (const key of w.store.keys().filter((k) => k.startsWith('reg/') && k.includes(idOf(t)))) {
+      const value = await w.store.get(key);
+      await w.store.delete(key);
+      await w.store.set(oldRegKey(key) ?? key, value);
+    }
+    const entry = await w.store.get<Record<string, unknown>>(idsKey('snow', idOf(t)));
+    const escape = (keys: unknown) =>
+      Array.isArray(keys) ? keys.map((k: string) => oldRegKey(k) ?? k) : keys;
+    if (entry?.v === 2) {
+      await w.store.set(idsKey('snow', idOf(t)), {
+        ...entry,
+        saved: escape(entry.saved),
+        ...(entry.leaving ? { leaving: escape(entry.leaving) } : {}),
+      });
+    }
+  }
+  const oldKeys = (w: World) => w.store.keys().filter((k) => isOldRegKey(k));
+
+  it('moves the places a PUT keeps to their new keys, and deletes the one it drops', async () => {
+    const w = world({ geo: LEEDS_GEO });
+    const t = token('c1', 1);
+    const id = idOf(t);
+    const first = await reply2(await put2(w, body2({ token: t, saved: [DURHAM, HELSINKI] })));
+    const durham = first.saved[0]!.pid;
+    await asBefore(w, t);
+    expect(oldKeys(w)).toHaveLength(3);
+    w.at(SNOWY + 2 * MINUTE);
+    const r = await put2(w, body2({ token: t, saved: [DURHAM] }));
+    expect(r.status).toBe(200);
+    expect(oldKeys(w)).toEqual([]);
+    expect(keysFor(w, t)).toEqual(
+      [
+        idsKey('snow', id),
+        regKey('Europe/London', 'snow', id),
+        regKey('Europe/London', 'snow', id, durham),
+      ].sort(),
+    );
+    expect((await idsOf(w, t))!.saved).toEqual([regKey('Europe/London', 'snow', id, durham)]);
+  });
+
+  it("moves a v1 phone's one record to its new key when it registers again", async () => {
+    const w = world();
+    const t = token('c1', 2);
+    expect((await put(w, body({ token: t }))).status).toBe(200);
+    await asBefore(w, t);
+    expect(oldKeys(w)).toHaveLength(1);
+    w.at(SNOWY + 2 * MINUTE);
+    expect((await put(w, body({ token: t, place: DURHAM }))).status).toBe(200);
+    expect(oldKeys(w)).toEqual([]);
+    expect(keysFor(w, t)).toEqual([
+      idsKey('snow', idOf(t)),
+      regKey('Europe/London', 'snow', idOf(t)),
+    ]);
+    expect(await record(w, 'Europe/London', t)).toMatchObject({ name: 'Durham' });
+  });
+
+  it('deletes every record, under either key, when the phone turns notifications off', async () => {
+    const w = world({ geo: LEEDS_GEO });
+    const t = token('c1', 3);
+    await put2(w, body2({ token: t, saved: [DURHAM, HELSINKI] }));
+    await asBefore(w, t);
+    // The free place moved already, by an earlier request; the saved ones not yet.
+    await takeRegistration(w.store, regKey('Europe/London', 'snow', idOf(t)));
+    expect(oldKeys(w)).toHaveLength(2);
+    expect((await del(w, { app: 'snow', token: t })).status).toBe(204);
+    expect(keysFor(w, t)).toEqual([]);
+  });
+
+  it('sends the test to a phone registered before, at once', async () => {
+    const { w, fake } = await withApple({}, { geo: LEEDS_GEO });
+    const t = token('c1', 4);
+    await put2(w, body2({ token: t, saved: [DURHAM] }));
+    await asBefore(w, t);
+    const r = await sendTest(w, { app: 'snow', token: t });
+    expect(r.status).toBe(202);
+    expect(await r.text()).toBe('{"sent":true,"count":2}');
+    expect(fake.seen).toHaveLength(2);
+    expect(oldKeys(w)).toEqual([]);
   });
 });
 

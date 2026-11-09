@@ -66,8 +66,10 @@ import {
   idPrefix,
   idsShards,
   judgedKey,
+  isOldRegKey,
+  isZone,
   judgedPrefix,
-  moveOldRegistrations,
+  oldRegKey,
   parseIdsKey,
   parseRegKey,
   redact,
@@ -448,27 +450,36 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
   const unclaimed: Entry[] = [];
 
   /**
-   * Every zone with a registration, once the registrations still under keys from before
-   * `zoneSegment` are moved (`moveOldRegistrations`), and whether all of them were; null when
-   * a listing failed. A directory that is no zone (`zoneOfDirectory`) is never read as one.
+   * Every zone with a registration, and the registrations still under keys from before
+   * `zoneSegment` (DECISIONS, "Zone keys Netlify can't split"): each key under a directory that is
+   * no zone (`zoneOfDirectory`), by its zone, as `regKey` names it now (`key`) and where it is kept
+   * (`at`, `oldRegKey`'s form, the string it was written by). The run reads those where they are
+   * and never moves one: only a phone's own requests do (`takeRegistration`), from what its ids
+   * entry names. Keys of a zone the server doesn't know are left alone. Null when a listing failed.
    */
-  const listZones = async (
-    more: () => boolean,
-  ): Promise<{ zones: string[]; complete: boolean } | null> => {
+  const listZones = async (): Promise<{
+    zones: string[];
+    old: Map<string, { key: string; at: string }[]>;
+  } | null> => {
     try {
-      let { directories } = await store.list(REG_PREFIX, { directories: true });
-      const old = directories.filter((directory) => zoneOfDirectory(directory) === null);
-      let complete = true;
-      if (old.length) {
-        const { moved, dropped, left } = await moveOldRegistrations(store, old, more);
-        if (moved + dropped + left) {
-          say(`alerts-run: old keys: ${moved} moved, ${dropped} dropped, ${left} left`);
+      const { directories } = await store.list(REG_PREFIX, { directories: true });
+      const zones = new Set<string>();
+      const old = new Map<string, { key: string; at: string }[]>();
+      for (const directory of directories) {
+        const tz = zoneOfDirectory(directory);
+        if (tz !== null) {
+          zones.add(tz);
+          continue;
         }
-        complete = left === 0;
-        if (moved) ({ directories } = await store.list(REG_PREFIX, { directories: true }));
+        for (const listed of (await store.list(`${directory}/`)).keys) {
+          const reg = parseRegKey(listed);
+          if (!reg || !isZone(reg.tz) || !isOldRegKey(listed)) continue;
+          const key = regKey(reg.tz, reg.app, reg.id, reg.pid);
+          zones.add(reg.tz);
+          old.set(reg.tz, [...(old.get(reg.tz) ?? []), { key, at: oldRegKey(key) ?? key }]);
+        }
       }
-      const zones = directories.map(zoneOfDirectory).filter((tz): tz is string => tz !== null);
-      return { zones, complete };
+      return { zones: [...zones], old };
     } catch {
       return null;
     }
@@ -477,7 +488,7 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
   /** Steps 2 to 4: the due zones, and their due registrations. */
   const gather = async (): Promise<void> => {
     // 2. Every zone with a registration.
-    const withRegistrations = await listZones(budgetLeft);
+    const withRegistrations = await listZones();
     if (!withRegistrations) return;
     // 3. Those in a window, with no done marker for it today (one listing per local date).
     const open: Zone[] = [];
@@ -539,7 +550,7 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
     );
 
     // Each zone's registrations, then a strong read of each one due.
-    const reads: { zone: Zone; key: string; reg: Registration }[] = [];
+    const reads: { zone: Zone; key: string; at: string; reg: Registration }[] = [];
     await pool(
       zones.filter((z) => !z.unfinished),
       READ_CONCURRENCY,
@@ -556,9 +567,12 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
           zone.unfinished = true;
           return;
         }
-        zone.count = keys.length;
-        zone.listed = new Set(keys);
-        for (const key of keys) {
+        // With those still under old keys; one moved meanwhile is read at its new key.
+        const old = (withRegistrations.old.get(zone.tz) ?? []).filter((o) => !keys.includes(o.key));
+        const all = [...keys.map((key) => ({ key, at: key })), ...old];
+        zone.count = all.length;
+        zone.listed = new Set(all.map((k) => k.key));
+        for (const { key, at } of all) {
           const reg = registrationAt(key);
           // Only the zone's own: a key further down is no registration of it.
           if (!reg || reg.tz !== zone.tz) continue;
@@ -568,19 +582,21 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
             zone.relied.add(name);
             continue;
           }
-          reads.push({ zone, key, reg });
+          reads.push({ zone, key, at, reg });
         }
       },
     );
     // A failed read leaves its zone unfinished, but the zone's other registrations still go.
-    await pool(reads, READ_CONCURRENCY, async ({ zone, key, reg }) => {
+    await pool(reads, READ_CONCURRENCY, async ({ zone, key, at, reg }) => {
       if (!budgetLeft()) {
         zone.unfinished = true;
         return;
       }
       let value: unknown;
       try {
-        value = await store.get(key);
+        value = await store.get(at);
+        // Under an old key, and gone: moved by the phone since the listing, perhaps.
+        if (value === null && at !== key) value = await store.get(key);
       } catch {
         zone.unfinished = true;
         return;
@@ -919,11 +935,16 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
       const zones = await walkZones();
       if (zones) result.cleaned = deleted + (await sweepIds(zones.devices));
       const count = zones?.saved.size ?? null;
+      // Until every phone has called in once, or gone stale (DECISIONS, "Zone keys Netlify can't
+      // split").
+      const old = zones?.old
+        ? `; ${zones.old} ${zones.old === 1 ? 'registration' : 'registrations'} under old keys`
+        : '';
       say(
         `alerts-run: cleanup: ${
           count === null
             ? 'count unavailable'
-            : `${count} ${count === 1 ? 'device' : 'devices'} with saved places`
+            : `${count} ${count === 1 ? 'device' : 'devices'} with saved places${old}`
         }`,
       );
       return;
@@ -942,14 +963,27 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
    * once the pushes' grace is over. Null when a listing failed or time ran out; the cleanup stays
    * finished all the same, its deletes done.
    */
-  const walkZones = async (): Promise<{ devices: Set<string>; saved: Set<string> } | null> => {
-    const listed = await listZones(() => clock() < pushDeadline);
-    // A record still under an old key would leave its ids entry looking empty.
-    if (!listed?.complete) return null;
+  const walkZones = async (): Promise<{
+    devices: Set<string>;
+    saved: Set<string>;
+    old: number;
+  } | null> => {
+    const listed = await listZones();
+    if (!listed) return null;
     const zoneList = listed.zones;
     const devices = new Set<string>();
     const saved = new Set<string>();
     let counted = true;
+    // Those still under old keys count as they are, and are counted.
+    let old = 0;
+    for (const keys of listed.old.values()) {
+      for (const { key } of keys) {
+        const reg = parseRegKey(key)!;
+        devices.add(`${reg.app}.${reg.id}`);
+        if (reg.pid) saved.add(`${reg.app}.${reg.id}`);
+        old++;
+      }
+    }
     await pool(zoneList, READ_CONCURRENCY, async (tz) => {
       if (!counted) return;
       if (clock() >= pushDeadline) {
@@ -966,7 +1000,7 @@ export async function runAlerts(options: RunAlertsOptions): Promise<RunAlertsRes
         counted = false;
       }
     });
-    return counted ? { devices, saved } : null;
+    return counted ? { devices, saved, old } : null;
   };
 
   /**

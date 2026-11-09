@@ -23,8 +23,8 @@ import {
   idsKey,
   jwtKey,
   keysOf,
-  moveOldRegistrations,
   newSalt,
+  oldRegKey,
   parseRegKey,
   placeId,
   redact,
@@ -33,7 +33,9 @@ import {
   registrationId,
   sentKey,
   sentPrefix,
+  takeRegistration,
   testKey,
+  withOldForms,
   zoneOfDirectory,
   zoneSegment,
   type AlertStore,
@@ -1084,182 +1086,103 @@ describe('forgetIdsLeft', () => {
   });
 });
 
-describe('moveOldRegistrations', () => {
-  const OTHER = registrationId('snow', 'cd'.repeat(32));
-  /** How a key from before was kept by Netlify's service: its zone decoded. */
-  const before = (tz: string, id: string, pid?: string): string =>
-    `reg/v1/${tz}/snow.${id}${pid ? `.${pid}` : ''}`;
-  const oldDirectories = async (store: AlertStore) =>
-    (await store.list(REG_PREFIX, { directories: true })).directories.filter(
-      (directory) => zoneOfDirectory(directory) === null,
+describe('the keys from before zoneSegment', () => {
+  const OLD = `reg/v1/Europe%2FLondon/snow.${ID}`;
+  const NEW = regKey('Europe/London', 'snow', ID);
+  const record = (stamp: string, name = 'Leeds') => ({ name, updatedAt: stamp, seenAt: stamp });
+
+  it('names the key a record was written by before, where it differs', () => {
+    expect(oldRegKey(NEW)).toBe(OLD);
+    expect(oldRegKey(regKey('Etc/GMT+5', 'snow', ID, PID))).toBe(
+      `reg/v1/Etc%2FGMT%2B5/snow.${ID}.${PID}`,
     );
+    // As Netlify lists it: the same record, by the string it was written by.
+    expect(oldRegKey(`reg/v1/Europe/London/snow.${ID}`)).toBe(OLD);
+    expect(oldRegKey(regKey('UTC', 'snow', ID))).toBeNull();
+    expect(oldRegKey(idsKey('snow', ID))).toBeNull();
+    expect(withOldForms([NEW, regKey('UTC', 'snow', ID)])).toEqual([
+      NEW,
+      OLD,
+      regKey('UTC', 'snow', ID),
+    ]);
+  });
 
-  it("moves each record its device's ids entry names, and deletes the rest", async () => {
+  it("moves a phone's record to its new key, and only once", async () => {
     const store = new MemoryAlertStore();
-    // A phone as the devices handler wrote it before: its entry holding escaped keys.
-    await store.set(before('Europe/London', ID), { name: 'Leeds' });
-    await store.set(before('America/Argentina/Buenos_Aires', ID, PID), { name: 'Salta' });
-    await store.set(idsKey('snow', ID), {
-      v: 2,
-      tz: 'Europe/London',
-      saved: [`reg/v1/America%2FArgentina%2FBuenos_Aires/snow.${ID}.${PID}`],
-      salt: newSalt(),
-    } satisfies DeviceIdsEntry);
-    // A phone that has gone (no ids entry), and a saved place its phone has since removed.
-    await store.set(before('Europe/London', OTHER), { name: 'Gone' });
-    await store.set(before('Europe/London', ID, '6f5e4d3c2b1a'), { name: 'Removed' });
-    // Today's keys, and keys that are no registration of a zone the server knows: left alone.
-    await store.set(regKey('Asia/Kolkata', 'snow', OTHER), { name: 'Pune' });
-    await store.set(before('Nowhere/Special', ID), { name: 'Nowhere' });
-    await store.set('reg/v1/Europe/stray', {});
-
-    const directories = await oldDirectories(store);
-    expect(directories.sort()).toEqual(['reg/v1/America', 'reg/v1/Europe', 'reg/v1/Nowhere']);
-    expect(await moveOldRegistrations(store, directories)).toEqual({
-      moved: 2,
-      dropped: 2,
-      left: 0,
-    });
-    expect(store.keys().filter((key) => key.startsWith(REG_PREFIX))).toEqual(
-      [
-        regKey('America/Argentina/Buenos_Aires', 'snow', ID, PID),
-        regKey('Asia/Kolkata', 'snow', OTHER),
-        regKey('Europe/London', 'snow', ID),
-        before('Nowhere/Special', ID),
-        'reg/v1/Europe/stray',
-      ].sort(),
+    await store.set(OLD, record('2026-11-01T08:00:00.000Z'));
+    expect(store.keys()).toEqual([`reg/v1/Europe/London/snow.${ID}`]);
+    expect(await takeRegistration(store, NEW)).toEqual(record('2026-11-01T08:00:00.000Z'));
+    expect(store.keys()).toEqual([NEW]);
+    expect(await takeRegistration(store, NEW)).toEqual(record('2026-11-01T08:00:00.000Z'));
+    expect(store.keys()).toEqual([NEW]);
+    // Nothing in either form: nothing written.
+    expect(await takeRegistration(store, regKey('Asia/Tokyo', 'snow', ID))).toBeNull();
+    expect(store.keys()).toEqual([NEW]);
+    // No old form at all.
+    await store.set(regKey('UTC', 'snow', ID), record('2026-11-02T08:00:00.000Z'));
+    expect(await takeRegistration(store, regKey('UTC', 'snow', ID))).toEqual(
+      record('2026-11-02T08:00:00.000Z'),
     );
-    expect(await store.get(regKey('Europe/London', 'snow', ID))).toEqual({ name: 'Leeds' });
-    expect(await store.get(regKey('America/Argentina/Buenos_Aires', 'snow', ID, PID))).toEqual({
-      name: 'Salta',
-    });
-    // Nothing left to move.
-    expect(await moveOldRegistrations(store, await oldDirectories(store))).toEqual({
-      moved: 0,
-      dropped: 0,
-      left: 0,
-    });
   });
 
-  it('keeps a record written at the new key since, and deletes the old one', async () => {
+  it('keeps the newer of the two when both are there, and deletes the old', async () => {
     const store = new MemoryAlertStore();
-    await store.set(before('Europe/London', ID), { name: 'Old' });
-    await store.set(regKey('Europe/London', 'snow', ID), { name: 'New' });
-    await store.set(idsKey('snow', ID), { tz: 'Europe/London' });
-    expect(await moveOldRegistrations(store, ['reg/v1/Europe'])).toEqual({
-      moved: 0,
-      dropped: 1,
-      left: 0,
-    });
-    expect(store.keys()).toEqual([idsKey('snow', ID), regKey('Europe/London', 'snow', ID)]);
-    expect(await store.get(regKey('Europe/London', 'snow', ID))).toEqual({ name: 'New' });
+    await store.set(OLD, record('2026-11-01T08:00:00.000Z', 'old'));
+    await store.set(NEW, record('2026-11-02T08:00:00.000Z', 'new'));
+    expect(await takeRegistration(store, NEW)).toMatchObject({ name: 'new' });
+    expect(store.keys()).toEqual([NEW]);
+    // Written by a rolled-back deploy after the move: the old is newer.
+    await store.set(OLD, record('2026-11-03T08:00:00.000Z', 'rolled back'));
+    expect(await takeRegistration(store, NEW)).toMatchObject({ name: 'rolled back' });
+    expect(store.keys()).toEqual([NEW]);
   });
 
-  it('deletes the new key again when the device deleted its entry while it was written', async () => {
-    const inner = new MemoryAlertStore();
-    await inner.set(before('Europe/London', ID), { name: 'Leeds' });
-    await inner.set(idsKey('snow', ID), { tz: 'Europe/London' });
-    const store: AlertStore = {
-      get: (key) => inner.get(key),
-      list: (prefix, options) => inner.list(prefix, options),
-      delete: (key) => inner.delete(key),
-      // A DELETE from the phone lands just as the record is written.
-      set: async (key, value, options) => {
-        const wrote = await inner.set(key, value, options);
-        if (key === regKey('Europe/London', 'snow', ID)) await inner.delete(idsKey('snow', ID));
-        return wrote;
-      },
-    };
-    expect(await moveOldRegistrations(store, ['reg/v1/Europe'])).toEqual({
-      moved: 0,
-      dropped: 1,
-      left: 0,
-    });
-    expect(inner.keys()).toEqual([]);
-  });
-
-  it('leaves a key whose call fails, or once told to stop, for the next run', async () => {
-    /** Two phones' old keys, and a view of them whose `fails` calls reject. */
-    const phones = async (fails: (op: string, key: string) => boolean = () => false) => {
+  it('rejects when a call fails, and leaves the old record where it is', async () => {
+    for (const failing of ['get', 'set', 'delete']) {
       const inner = new MemoryAlertStore();
-      await inner.set(before('Europe/London', ID), { name: 'Leeds' });
-      await inner.set(idsKey('snow', ID), { tz: 'Europe/London' });
-      await inner.set(before('Europe/Paris', OTHER), { name: 'Paris' });
-      await inner.set(idsKey('snow', OTHER), { tz: 'Europe/Paris' });
+      await inner.set(OLD, record('2026-11-01T08:00:00.000Z'));
       const down = () => Promise.reject(new Error('down'));
       const store: AlertStore = {
-        get: (key) => (fails('get', key) ? down() : inner.get(key)),
-        set: (key, value, options) => (fails('set', key) ? down() : inner.set(key, value, options)),
-        list: (prefix, options) => (fails('list', prefix) ? down() : inner.list(prefix, options)),
-        delete: (key) => (fails('delete', key) ? down() : inner.delete(key)),
+        get: (key) => (failing === 'get' && key === NEW ? down() : inner.get(key)),
+        set: (key, value, options) => (failing === 'set' ? down() : inner.set(key, value, options)),
+        list: (prefix, options) => inner.list(prefix, options),
+        delete: (key) => (failing === 'delete' ? down() : inner.delete(key)),
       };
-      return { inner, store, kept: inner.keys() };
-    };
-
-    // Told to stop: nothing read or written.
-    const stopped = await phones();
-    expect(await moveOldRegistrations(stopped.store, ['reg/v1/Europe'], () => false)).toEqual({
-      moved: 0,
-      dropped: 0,
-      left: 2,
-    });
-    expect(stopped.inner.keys()).toEqual(stopped.kept);
-    // The directory's listing failing.
-    const unlisted = await phones((op) => op === 'list');
-    expect(await moveOldRegistrations(unlisted.store, ['reg/v1/Europe'])).toEqual({
-      moved: 0,
-      dropped: 0,
-      left: 1,
-    });
-    expect(unlisted.inner.keys()).toEqual(unlisted.kept);
-
-    // The ids entry, the old record or the new key failing: that key stays, the other phone moves.
-    const london = regKey('Europe/London', 'snow', ID);
-    for (const [op, key] of [
-      ['get', idsKey('snow', ID)],
-      ['get', before('Europe/London', ID)],
-      ['set', london],
-    ] as const) {
-      const one = await phones((o, k) => o === op && k === key);
-      expect(await moveOldRegistrations(one.store, ['reg/v1/Europe']), `${op} ${key}`).toEqual({
-        moved: 1,
-        dropped: 0,
-        left: 1,
-      });
-      expect(one.inner.keys(), `${op} ${key}`).toEqual(
-        [
-          before('Europe/London', ID),
-          idsKey('snow', ID),
-          idsKey('snow', OTHER),
-          regKey('Europe/Paris', 'snow', OTHER),
-        ].sort(),
-      );
-      // The next run moves it.
-      expect(await moveOldRegistrations(one.inner, ['reg/v1/Europe'])).toEqual({
-        moved: 1,
-        dropped: 0,
-        left: 0,
-      });
-      expect(await one.inner.get(london)).toEqual({ name: 'Leeds' });
+      await expect(takeRegistration(store, NEW), failing).rejects.toThrow('down');
+      expect(await inner.get(OLD), failing).not.toBeNull();
     }
+  });
 
-    // The old key's delete failing: written, but left; the next run deletes the old key.
-    const undeleted = await phones(
-      (op, key) => op === 'delete' && key === before('Europe/London', ID),
-    );
-    expect(await moveOldRegistrations(undeleted.store, ['reg/v1/Europe'])).toEqual({
-      moved: 1,
-      dropped: 0,
-      left: 1,
-    });
-    expect(await undeleted.inner.get(london)).toEqual({ name: 'Leeds' });
-    expect(await moveOldRegistrations(undeleted.inner, ['reg/v1/Europe'])).toEqual({
-      moved: 0,
-      dropped: 1,
-      left: 0,
-    });
-    expect(undeleted.inner.keys().filter((key) => key.startsWith(REG_PREFIX))).toEqual(
-      [london, regKey('Europe/Paris', 'snow', OTHER)].sort(),
-    );
+  it('forgets a stale phone in either form, and keeps one rewritten since at its new key', async () => {
+    const stale = { tz: 'Europe/London', ...record('2026-08-01T08:00:00.000Z') };
+    const kathmandu = regKey('Asia/Kathmandu', 'snow', ID, PID);
+    const entry = {
+      v: 2,
+      tz: 'Europe/London',
+      saved: [`reg/v1/Asia%2FKathmandu/snow.${ID}.${PID}`],
+      salt: newSalt(),
+    };
+    // Both places still under old keys: all of it goes, the entry last.
+    const store = new MemoryAlertStore();
+    await store.set(OLD, stale);
+    await store.set(oldRegKey(kathmandu)!, { ...stale, tz: 'Asia/Kathmandu' });
+    await store.set(idsKey('snow', ID), entry);
+    expect(await forgetDevice(store, 'snow', ID, stale)).toBe('deleted');
+    expect(store.keys()).toEqual([]);
+    // Rewritten at its new key since (the phone called in): the old copy goes, the phone stays.
+    const moved = new MemoryAlertStore();
+    await moved.set(OLD, stale);
+    await moved.set(NEW, { ...stale, ...record('2026-11-09T08:00:00.000Z') });
+    await moved.set(idsKey('snow', ID), { tz: 'Europe/London' });
+    expect(await forgetDevice(moved, 'snow', ID, stale)).toBe('changed');
+    expect(moved.keys()).toEqual([idsKey('snow', ID), NEW]);
+  });
+
+  it('keeps an ids entry naming a record still under its old key', async () => {
+    const store = new MemoryAlertStore();
+    await store.set(OLD, record('2026-11-01T08:00:00.000Z'));
+    await store.set(idsKey('snow', ID), { tz: 'Europe/London' });
+    expect(await forgetIdsLeft(store, 'snow', ID)).toBe(false);
+    expect(store.keys()).toEqual([idsKey('snow', ID), `reg/v1/Europe/London/snow.${ID}`]);
   });
 });

@@ -65,6 +65,8 @@ import {
   placeId,
   regKey,
   registrationId,
+  takeRegistration,
+  withOldForms,
   type AlertStore,
   type DeviceApp,
 } from './alertStore';
@@ -683,11 +685,15 @@ interface Stored {
   held: string[];
 }
 
-/** The ids key, then every record it names, at once. */
+/**
+ * The ids key, then every record it names, at once, each moved first from its key's form before
+ * `zoneSegment` if it is still there (`takeRegistration`), so what follows sees every record at
+ * the key `regKey` writes now.
+ */
 async function readStored(store: AlertStore, app: DeviceApp, id: string): Promise<Stored> {
   const entry = await store.get<unknown>(idsKey(app, id));
   const keys = keysOf(entry, app, id);
-  const values = await Promise.all(keys.map((key) => store.get<unknown>(key)));
+  const values = await Promise.all(keys.map((key) => takeRegistration(store, key)));
   const stored: Stored = { entry, free: null, saved: new Map(), held: [] };
   keys.forEach((key, i) => {
     const value = values[i];
@@ -867,7 +873,10 @@ async function forget(r: Job, app: DeviceApp, id: string): Promise<void> {
     r.log(`devices: nothing to delete for ${who(app, id)}`);
     return;
   }
-  await eachAtOnce(keysOf(entry, app, id), DEVICE_LIMITS.writesAtOnce, (key) => store.delete(key));
+  // Each with its form from before `zoneSegment`, where a record not yet moved is kept.
+  await eachAtOnce(withOldForms(keysOf(entry, app, id)), DEVICE_LIMITS.writesAtOnce, (key) =>
+    store.delete(key),
+  );
   await store.delete(idsKey(app, id));
   r.log(`devices: deleted ${who(app, id)}`);
 }

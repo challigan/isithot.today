@@ -331,12 +331,11 @@ preview's store is new with every deploy, so the settings go in before the previ
    `zones 1, records 0`. Netlify had split each registration's key at the zone's `/`, so the run
    found no registrations (DECISIONS, "Zone keys Netlify can't split"). Merge the pull request
    "Notifications: zone keys Netlify can't split". Netlify deploys it by itself; there is nothing
-   to set and no redeploy to start. Within 15 minutes, **Logs → Functions → alerts-run** shows a
-   line like `alerts-run: old keys: 2 moved, 0 dropped, 0 left` once, then the usual line with
-   `errors 0`. "Moved" counts each place of each phone registered so far; "dropped" counts those
-   of phones or places that had gone. Until that run, **Send a test notification** may say the
-   phone isn't registered. From then on, your phone gets a notification at about 6pm and about
-   7am for each place with notifications on, as above, and those runs' lines say `forced`.
+   to set and no redeploy to start. From the next run (within 15 minutes), your phone gets a
+   notification at about 6pm and about 7am for each place with notifications on, as above, and
+   those runs' lines say `forced`. **Send a test notification** keeps working throughout. Once a
+   day, at 03:00 UTC, the cleanup's line adds `; N registrations under old keys` until every phone
+   has opened the app once since.
 
    **Then, once that test has arrived (Wed 4 Nov): the server for several places, 10 minutes.**
    Merge the pull request "Notifications for several places on one phone (server)". Netlify

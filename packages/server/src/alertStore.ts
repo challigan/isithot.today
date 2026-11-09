@@ -363,12 +363,63 @@ export function parseRegKey(
 
 /**
  * Whether a key is a registration's in the form before `zoneSegment`: one `parseRegKey` reads
- * whose zone is not written as `regKey` writes it now. Each run moves those
- * (`moveOldRegistrations`; DECISIONS, "Zone keys Netlify can't split").
+ * whose zone is not written as `regKey` writes it now (DECISIONS, "Zone keys Netlify can't
+ * split").
  */
 export function isOldRegKey(key: string): boolean {
   const reg = parseRegKey(key);
   return reg !== null && regKey(reg.tz, reg.app, reg.id, reg.pid) !== key;
+}
+
+/**
+ * A registration's key as it was written before `zoneSegment`, its zone percent-escaped
+ * (`reg/v1/Europe%2FLondon/…`), or null where that is the key itself (`UTC`). A get or a delete
+ * by it reaches a record kept then, whatever Netlify's service made of the escape: it is the
+ * string the record was written by.
+ */
+export function oldRegKey(key: string): string | null {
+  const reg = parseRegKey(key);
+  if (!reg) return null;
+  const pid = reg.pid ? `.${reg.pid}` : '';
+  const old = `${REG_PREFIX}${encodeURIComponent(reg.tz)}/${reg.app}.${reg.id}${pid}`;
+  return old === key ? null : old;
+}
+
+/** Each key, then its form from before `zoneSegment` (`oldRegKey`) where that differs. */
+export function withOldForms(keys: readonly string[]): string[] {
+  return keys.flatMap((key) => {
+    const old = oldRegKey(key);
+    return old ? [key, old] : [key];
+  });
+}
+
+/** When a record was last written or seen, ms; 0 for anything else. */
+const stampOf = (value: unknown): number => {
+  if (!value || typeof value !== 'object') return 0;
+  const { seenAt, updatedAt } = value as Partial<RegistrationStamp>;
+  return Date.parse(seenAt ?? '') || Date.parse(updatedAt ?? '') || 0;
+};
+
+/**
+ * The record at `key` (as `regKey` writes it now), once moved there from its form before
+ * `zoneSegment` (`oldRegKey`) if one is still kept there: written with `onlyIfNew`, or over the
+ * new one when the old is newer (written by a rolled-back deploy), then the old deleted. Null when
+ * neither holds anything. Only a device's own requests move its records (the devices handlers'
+ * `readStored`), each from what its ids entry names, so nothing the run does can bring back a
+ * record a phone has deleted: the run reads an old record where it is.
+ */
+export async function takeRegistration(store: AlertStore, key: string): Promise<unknown> {
+  const old = oldRegKey(key);
+  if (old) {
+    const before = await store.get<unknown>(old);
+    if (before !== null) {
+      const now = await store.get<unknown>(key);
+      if (now === null) await store.set(key, before, { onlyIfNew: true });
+      else if (stampOf(before) > stampOf(now)) await store.set(key, before);
+      await store.delete(old);
+    }
+  }
+  return store.get<unknown>(key);
 }
 
 /**
@@ -561,6 +612,22 @@ async function forgetIfUnchanged(
 }
 
 /**
+ * `forgetIfUnchanged` at a key and at its form from before `zoneSegment` (`oldRegKey`), where a
+ * record not yet moved is kept: gone only when both are.
+ */
+async function forgetBoth(
+  store: AlertStore,
+  key: string,
+  stamp: SlotStamp,
+): Promise<'gone' | 'changed' | 'failed'> {
+  const outcomes = await Promise.all(
+    withOldForms([key]).map((form) => forgetIfUnchanged(store, form, stamp)),
+  );
+  if (outcomes.includes('failed')) return 'failed';
+  return outcomes.includes('changed') ? 'changed' : 'gone';
+}
+
+/**
  * Forgets a device's every place, starting from the record that set it off (`trigger`: one the
  * run found stale, or whose push Apple refused). A record goes only if its `updatedAt` and
  * `seenAt` are the trigger's, so whatever the app wrote since stays (a registration writes every
@@ -569,6 +636,7 @@ async function forgetIfUnchanged(
  * 2. the trigger's own record, by that rule; written since, or a store failure, and nothing else
  *    is touched;
  * 3. every other key the ids entry names, at once, by the same rule;
+ *    (each key in steps 2 and 3 with its form from before `zoneSegment`, `forgetBoth`)
  * 4. the ids key last (and the salt in it), re-read, only if unchanged and all it names has gone,
  *    still, when read again after it (a registration may have written them back meanwhile).
  * A record the ids entry doesn't name (an orphan: a rollback, two registrations overlapping) is
@@ -596,12 +664,12 @@ export async function forgetDevice(
     entryRead = false;
   }
   const own = regKey(trigger.tz, app, id, trigger.slot);
-  const first = await forgetIfUnchanged(store, own, trigger);
+  const first = await forgetBoth(store, own, trigger);
   if (first !== 'gone') return first;
   if (!entryRead || entry === null) return 'deleted';
   const named = keysOf(entry, app, id);
   const outcomes = await Promise.all(
-    named.map((key) => (key === own ? first : forgetIfUnchanged(store, key, trigger))),
+    named.map((key) => (key === own ? first : forgetBoth(store, key, trigger))),
   );
   if (outcomes.every((outcome) => outcome === 'gone')) {
     try {
@@ -628,7 +696,9 @@ async function dropIdsEntry(
   const ids = idsKey(app, id);
   const again = await store.get<unknown>(ids);
   if (JSON.stringify(again) !== JSON.stringify(entry)) return false;
-  const back = await Promise.all(keysOf(entry, app, id).map((key) => store.get<unknown>(key)));
+  const back = await Promise.all(
+    withOldForms(keysOf(entry, app, id)).map((key) => store.get<unknown>(key)),
+  );
   if (!back.every((value) => value === null)) return false;
   await store.delete(ids);
   return true;
@@ -646,83 +716,9 @@ async function dropIdsEntry(
 export async function forgetIdsLeft(store: AlertStore, app: string, id: string): Promise<boolean> {
   const entry = await store.get<unknown>(idsKey(app, id));
   if (entry === null) return false;
-  const held = await Promise.all(keysOf(entry, app, id).map((key) => store.get<unknown>(key)));
+  const held = await Promise.all(
+    withOldForms(keysOf(entry, app, id)).map((key) => store.get<unknown>(key)),
+  );
   if (held.some((value) => value !== null)) return false;
   return dropIdsEntry(store, app, id, entry);
-}
-
-/** What `moveOldRegistrations` did, in keys. */
-export interface OldKeysMoved {
-  /** Records written at their key as `regKey` writes it now, and kept there. */
-  moved: number;
-  /** Old keys deleted with no record kept from them: named by no ids entry, or already moved. */
-  dropped: number;
-  /** Old keys left for the next run: a call failed, or `more` said stop. */
-  left: number;
-}
-
-/**
- * Moves each registration under `directories` (those of `reg/v1/` that `zoneOfDirectory` reads as
- * no zone) from its key in the form before `zoneSegment` (`isOldRegKey`) to `regKey`'s. The
- * record is written at its new key, with `onlyIfNew` so a newer one stays, only while its
- * device's ids entry names that key (`keysOf`), and the entry is read again after: a device that
- * deleted it meanwhile has the new key deleted too. The old key is deleted either way, so nothing
- * a device has deleted comes back. Keys of no zone the server knows, and anything not a
- * registration's, are left as they are. Never rejects; `more` is asked before each key.
- */
-export async function moveOldRegistrations(
-  store: AlertStore,
-  directories: readonly string[],
-  more: () => boolean = () => true,
-): Promise<OldKeysMoved> {
-  const result: OldKeysMoved = { moved: 0, dropped: 0, left: 0 };
-  // Each device's old keys, so its ids entry is read once.
-  const byDevice = new Map<string, { app: string; id: string; keys: string[] }>();
-  for (const directory of directories) {
-    let keys: string[];
-    try {
-      ({ keys } = await store.list(`${directory}/`));
-    } catch {
-      result.left++;
-      continue;
-    }
-    for (const key of keys) {
-      const reg = parseRegKey(key);
-      if (!reg || !isZone(reg.tz) || !isOldRegKey(key)) continue;
-      const device = `${reg.app}.${reg.id}`;
-      const found = byDevice.get(device) ?? { app: reg.app, id: reg.id, keys: [] };
-      found.keys.push(key);
-      byDevice.set(device, found);
-    }
-  }
-  for (const { app, id, keys } of byDevice.values()) {
-    let entry: unknown = undefined;
-    for (const key of keys) {
-      if (!more()) {
-        result.left++;
-        continue;
-      }
-      const reg = parseRegKey(key)!;
-      const target = regKey(reg.tz, app, id, reg.pid);
-      try {
-        entry = entry === undefined ? await store.get<unknown>(idsKey(app, id)) : entry;
-        let kept = false;
-        if (keysOf(entry, app, id).includes(target)) {
-          const value = await store.get<unknown>(key);
-          if (value !== null && (await store.set(target, value, { onlyIfNew: true }))) {
-            entry = await store.get<unknown>(idsKey(app, id));
-            kept = keysOf(entry, app, id).includes(target);
-            if (!kept) await store.delete(target);
-          }
-        }
-        await store.delete(key);
-        if (kept) result.moved++;
-        else result.dropped++;
-      } catch {
-        entry = undefined;
-        result.left++;
-      }
-    }
-  }
-  return result;
 }
