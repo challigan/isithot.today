@@ -2,17 +2,23 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import pngjs from 'pngjs';
 import { afterAll, describe, expect, it } from 'vitest';
 import { SCREENS, SIZE, collect, pngSize } from '../../apps/ios/ci/screenshots.mjs';
 
-const { PNG } = pngjs;
 const SCRIPT = new URL('../../apps/ios/ci/screenshots.mjs', import.meta.url).pathname;
 const root = mkdtempSync(join(tmpdir(), 'screenshots-'));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
+// A PNG's signature and IHDR, which is all pngSize reads, without pixels: encoding a whole
+// 1320 × 2868 image takes seconds, seven of them more than a test's 5 on a busy runner.
 function png(width, height) {
-  return PNG.sync.write(new PNG({ width, height }));
+  const header = Buffer.alloc(33);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(header, 0);
+  header.writeUInt32BE(13, 8);
+  header.write('IHDR', 12, 'latin1');
+  header.writeUInt32BE(width, 16);
+  header.writeUInt32BE(height, 20);
+  return header;
 }
 
 // A folder as `xcresulttool export attachments` writes it: files named by UUID, their names in
