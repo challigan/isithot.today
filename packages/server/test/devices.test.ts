@@ -61,7 +61,9 @@ import {
   handleDevices,
   handleRateLimited,
   idsKey,
+  isOldRegKey,
   jwtKey,
+  oldRegKey,
   placeId,
   regKey,
   registrationId,
@@ -583,7 +585,7 @@ describe('PUT /api/v1/devices: handling', () => {
       alerts: { snow: EVENING },
       seenAt: at,
     });
-    expect(w.store.keys()).toEqual([idsKey('snow', id), `reg/v1/Europe%2FLondon/snow.${id}`]);
+    expect(w.store.keys()).toEqual([idsKey('snow', id), `reg/v1/Europe~London/snow.${id}`]);
     expect(await w.store.get(idsKey('snow', id))).toEqual({ tz: 'Europe/London' });
     const stored = await record(w, 'Europe/London', t);
     expect(stored).toEqual({
@@ -2249,6 +2251,196 @@ describe('DELETE /api/v1/devices: a set', () => {
       expect(placeId(id, query)).not.toBe(durham);
       expect(placeId('', query)).not.toBe(durham);
     }
+  });
+});
+
+// ---- The keys from before "Zone keys Netlify can't split" ----
+
+describe('the devices endpoints with a phone registered before zone keys changed', () => {
+  /**
+   * A phone's records as the handlers wrote them before: each under its zone percent-escaped,
+   * which Netlify's service (and MemoryAlertStore) keeps decoded, and an ids entry naming them so.
+   */
+  async function asBefore(w: World, t: string): Promise<void> {
+    for (const key of w.store.keys().filter((k) => k.startsWith('reg/') && k.includes(idOf(t)))) {
+      const value = await w.store.get(key);
+      await w.store.delete(key);
+      await w.store.set(oldRegKey(key) ?? key, value);
+    }
+    const entry = await w.store.get<Record<string, unknown>>(idsKey('snow', idOf(t)));
+    const escape = (keys: unknown) =>
+      Array.isArray(keys) ? keys.map((k: string) => oldRegKey(k) ?? k) : keys;
+    if (entry?.v === 2) {
+      await w.store.set(idsKey('snow', idOf(t)), {
+        ...entry,
+        saved: escape(entry.saved),
+        ...(entry.leaving ? { leaving: escape(entry.leaving) } : {}),
+      });
+    }
+  }
+  const oldKeys = (w: World) => w.store.keys().filter((k) => isOldRegKey(k));
+
+  it('moves the places a PUT keeps to their new keys, and deletes the one it drops', async () => {
+    const w = world({ geo: LEEDS_GEO });
+    const t = token('c1', 1);
+    const id = idOf(t);
+    const first = await reply2(await put2(w, body2({ token: t, saved: [DURHAM, HELSINKI] })));
+    const durham = first.saved[0]!.pid;
+    await asBefore(w, t);
+    expect(oldKeys(w)).toHaveLength(3);
+    w.at(SNOWY + 2 * MINUTE);
+    const r = await put2(w, body2({ token: t, saved: [DURHAM] }));
+    expect(r.status).toBe(200);
+    expect(oldKeys(w)).toEqual([]);
+    expect(keysFor(w, t)).toEqual(
+      [
+        idsKey('snow', id),
+        regKey('Europe/London', 'snow', id),
+        regKey('Europe/London', 'snow', id, durham),
+      ].sort(),
+    );
+    expect((await idsOf(w, t))!.saved).toEqual([regKey('Europe/London', 'snow', id, durham)]);
+  });
+
+  it("moves a v1 phone's one record to its new key when it registers again", async () => {
+    const w = world();
+    const t = token('c1', 2);
+    expect((await put(w, body({ token: t }))).status).toBe(200);
+    await asBefore(w, t);
+    expect(oldKeys(w)).toHaveLength(1);
+    w.at(SNOWY + 2 * MINUTE);
+    expect((await put(w, body({ token: t, place: DURHAM }))).status).toBe(200);
+    expect(oldKeys(w)).toEqual([]);
+    expect(keysFor(w, t)).toEqual([
+      idsKey('snow', idOf(t)),
+      regKey('Europe/London', 'snow', idOf(t)),
+    ]);
+    expect(await record(w, 'Europe/London', t)).toMatchObject({ name: 'Durham' });
+  });
+
+  it('leaves every copy named, in either form, whichever write of a PUT fails', async () => {
+    const t = token('c1', 6);
+    const id = idOf(t);
+    let k = 0;
+    let calls = 0;
+    for (k = 1; k < 30; k++) {
+      const inner = new MemoryAlertStore();
+      let armed = false;
+      calls = 0;
+      const w = world({
+        geo: LEEDS_GEO,
+        store: failing(
+          inner,
+          (op, key) => armed && op !== 'get' && op !== 'list' && key.includes(id) && ++calls === k,
+        ),
+      });
+      w.store = inner;
+      expect((await put2(w, body2({ token: t, saved: [DURHAM, HELSINKI] }))).status).toBe(200);
+      await asBefore(w, t);
+      // A move to another zone, a removal and an addition, from a phone registered before.
+      w.at(SNOWY + 2 * MINUTE);
+      w.platform.geo = NEW_YORK_GEO;
+      armed = true;
+      const r = await put2(w, body2({ token: t, saved: [HELSINKI, TOKYO] }));
+      armed = false;
+      if (r.status === 200) break;
+      expect(r.status, `write ${k}`).toBe(503);
+      expect((await del(w, { app: 'snow', token: t })).status, `write ${k}`).toBe(204);
+      expect(
+        inner.keys().filter((key) => key.includes(id)),
+        `write ${k}`,
+      ).toEqual([]);
+    }
+    // Durham deleted in both forms; the ids entry naming the new places; three records; London
+    // deleted in both forms and Helsinki's old copy; the ids entry naming what is left.
+    expect(calls).toBe(10);
+    expect(k).toBe(11);
+  });
+
+  it("forgets a phone Apple refuses after a PUT that couldn't delete its old copies", async () => {
+    const inner = new MemoryAlertStore();
+    let armed = false;
+    const t = token('c1', 7);
+    const { w, fake } = await withApple(
+      { c1: { status: 410, body: { reason: 'Unregistered', timestamp: SNOWY + HOUR } } },
+      {
+        geo: LEEDS_GEO,
+        store: failing(inner, (op, key) => armed && op === 'delete' && key.includes('%2F')),
+      },
+    );
+    w.store = inner;
+    await put2(w, body2({ token: t, saved: [DURHAM, HELSINKI] }));
+    await asBefore(w, t);
+    // Every record written at its new key, but no old copy deleted: each place held twice.
+    w.at(SNOWY + 2 * MINUTE);
+    armed = true;
+    expect((await put2(w, body2({ token: t, saved: [DURHAM, HELSINKI] }))).status).toBe(503);
+    armed = false;
+    expect(oldKeys(w)).toHaveLength(3);
+    // The older copies are no sign it registered again: one push, and it is forgotten.
+    const r = await sendTest(w, { app: 'snow', token: t });
+    expect(r.status).toBe(404);
+    expect((await errorOf(r)).code).toBe('not_registered');
+    expect(fake.seen).toHaveLength(1);
+    expect(keysFor(w, t)).toEqual([]);
+  });
+
+  it('deletes every record, under either key, when the phone turns notifications off', async () => {
+    const w = world({ geo: LEEDS_GEO });
+    const t = token('c1', 3);
+    await put2(w, body2({ token: t, saved: [DURHAM, HELSINKI] }));
+    await asBefore(w, t);
+    // The free place written again already, at its new key; the saved ones not yet.
+    const london = regKey('Europe/London', 'snow', idOf(t));
+    await w.store.set(london, await w.store.get(oldRegKey(london)!));
+    await w.store.delete(oldRegKey(london)!);
+    expect(oldKeys(w)).toHaveLength(2);
+    expect((await del(w, { app: 'snow', token: t })).status).toBe(204);
+    expect(keysFor(w, t)).toEqual([]);
+  });
+
+  it('sends the test to a phone registered before, at once, and writes no record', async () => {
+    const { w, fake } = await withApple({}, { geo: LEEDS_GEO });
+    const t = token('c1', 4);
+    await put2(w, body2({ token: t, saved: [DURHAM] }));
+    await asBefore(w, t);
+    const before = keysFor(w, t);
+    const r = await sendTest(w, { app: 'snow', token: t });
+    expect(r.status).toBe(202);
+    expect(await r.text()).toBe('{"sent":true,"count":2}');
+    expect(fake.seen).toHaveLength(2);
+    expect(keysFor(w, t)).toEqual(before);
+  });
+
+  it('leaves nothing behind when a test send overlaps the phone turning notifications off', async () => {
+    const inner = new MemoryAlertStore();
+    let during: (() => Promise<unknown>) | null = null;
+    const hooked: AlertStore = {
+      get: async (key) => {
+        const run = during;
+        // The DELETE lands between the test's two reads of a record.
+        if (run && key.includes('~')) {
+          during = null;
+          await run();
+        }
+        return inner.get(key);
+      },
+      set: (key, value, options) => inner.set(key, value, options),
+      list: (prefix, options) => inner.list(prefix, options),
+      delete: (key) => inner.delete(key),
+    };
+    const w = world({ store: hooked, geo: LEEDS_GEO });
+    const t = token('c1', 5);
+    w.store = inner;
+    await put2(w, body2({ token: t, saved: [DURHAM] }));
+    await asBefore(w, t);
+    during = () => del(w, { app: 'snow', token: t });
+    await sendTest(w, { app: 'snow', token: t });
+    expect(during).toBeNull();
+    expect(keysFor(w, t)).toEqual([]);
+    // A second DELETE has nothing to find, and needs nothing.
+    expect((await del(w, { app: 'snow', token: t })).status).toBe(204);
+    expect(inner.keys().filter((k) => k.startsWith('reg/'))).toEqual([]);
   });
 });
 

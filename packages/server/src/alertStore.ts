@@ -150,23 +150,39 @@ function validateKey(key: string): void {
 }
 
 /**
+ * A key as Netlify's service keeps it. The Blobs client puts a key in the request's path as it
+ * is, and the service decodes the path, so `reg/v1/Europe%2FLondon/x` is kept as
+ * `reg/v1/Europe/London/x`: three segments, not two. A listing's prefix goes in the query, so it
+ * is matched as it is. (Netlify's local server keeps the `%2F`, so it can't show this.)
+ */
+function keptAs(key: string): string {
+  try {
+    return decodeURIComponent(key);
+  } catch {
+    throw new Error('Blob key must be a valid path.');
+  }
+}
+
+/**
  * The Blobs semantics in memory, for tests and the dry run: JSON values (each read is a fresh
- * copy), atomic `onlyIfNew`, prefix matching, sorted listings, and directories at any depth.
+ * copy), atomic `onlyIfNew`, prefix matching, sorted listings, directories at any depth, and keys
+ * percent-decoded as Netlify's service decodes them (`keptAs`).
  */
 export class MemoryAlertStore implements AlertStore {
   private readonly entries = new Map<string, string>();
 
   async get<T>(key: string): Promise<T | null> {
-    const json = this.entries.get(key);
+    const json = this.entries.get(keptAs(key));
     return json === undefined ? null : (JSON.parse(json) as T);
   }
 
   async set(key: string, value: unknown, options: { onlyIfNew?: boolean } = {}): Promise<boolean> {
     validateKey(key);
+    const kept = keptAs(key);
     const json = JSON.stringify(value);
     if (json === undefined) throw new TypeError(`${key}: the value is not JSON`);
-    if (options.onlyIfNew && this.entries.has(key)) return false;
-    this.entries.set(key, json);
+    if (options.onlyIfNew && this.entries.has(kept)) return false;
+    this.entries.set(kept, json);
     return true;
   }
 
@@ -183,7 +199,7 @@ export class MemoryAlertStore implements AlertStore {
   }
 
   async delete(key: string): Promise<void> {
-    this.entries.delete(key);
+    this.entries.delete(keptAs(key));
   }
 
   /** Every key, sorted. */
@@ -241,9 +257,46 @@ export function createBlobsAlertStore(
   return new SafeAlertStore(blobsAlertStore(store), options.onError, options.timeoutMs);
 }
 
-// ---- Keys (section 8.3). Zones are encodeURIComponent'd, so each is one path segment. ----
+// ---- Keys (section 8.3). Each zone is one path segment (`zoneSegment`). ----
 
-const zone = (tz: string): string => encodeURIComponent(tz);
+/**
+ * A zone as one key segment, in characters that no URL changes: `/` as `~`, and any other
+ * character but a letter, a digit, `_` or `-` as `.` and two hex digits a byte, so
+ * `Europe/London` is `Europe~London` and `Etc/GMT+5` is `Etc~GMT.2B5`. Never a percent escape:
+ * Netlify's service decodes one (`keptAs`), which made `Europe%2FLondon`, the form before this,
+ * two segments.
+ */
+export function zoneSegment(tz: string): string {
+  return tz.replace(/[^A-Za-z0-9_-]/gu, (c) =>
+    c === '/'
+      ? '~'
+      : [...Buffer.from(c)]
+          .map((b) => `.${b.toString(16).toUpperCase().padStart(2, '0')}`)
+          .join(''),
+  );
+}
+
+/** The zone a `zoneSegment` stands for, or null for text that is not one. */
+function zoneOfSegment(segment: string): string | null {
+  if (!/^(?:[A-Za-z0-9_~-]|\.[0-9A-F]{2})+$/.test(segment)) return null;
+  try {
+    return decodeURIComponent(segment.replaceAll('~', '%2F').replace(/\.([0-9A-F]{2})/g, '%$1'));
+  } catch {
+    return null;
+  }
+}
+
+/** Whether the server's ICU knows the zone. */
+export function isZone(tz: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const zone = zoneSegment;
 
 /**
  * The apps a registration may name. One registration per install per app. Here rather than in
@@ -269,7 +322,7 @@ export const JUDGED_PREFIX = 'judged/v1/';
 export const DONE_PREFIX = 'done/v1/';
 export const TEST_PREFIX = 'test/v1/';
 
-/** One zone's registrations: `reg/v1/Europe%2FLondon/`. */
+/** One zone's registrations: `reg/v1/Europe~London/`. */
 export function regZonePrefix(tz: string): string {
   return `${REG_PREFIX}${zone(tz)}/`;
 }
@@ -283,18 +336,61 @@ export function regKey(tz: string, app: string, id: string, pid?: string): strin
   return `${regZonePrefix(tz)}${app}.${id}${pid ? `.${pid}` : ''}`;
 }
 
-/** A registration key's parts, `pid` only for a saved place's, or null for any other key. */
+/**
+ * A registration key's parts, `pid` only for a saved place's, or null for any other key. Reads
+ * `regKey`'s form and the one before it (`isOldRegKey`): its zone percent-escaped, as an ids
+ * entry's `saved` and `leaving` hold it, or decoded, as Netlify's service keeps and lists it.
+ */
 export function parseRegKey(
   key: string,
 ): { tz: string; app: string; id: string; pid?: string } | null {
-  const match = /^reg\/v1\/([^/]+)\/([a-z]+)\.([0-9a-f]{32})(?:\.([0-9a-f]{12}))?$/.exec(key);
+  const match = /^reg\/v1\/(.+)\/([a-z]+)\.([0-9a-f]{32})(?:\.([0-9a-f]{12}))?$/.exec(key);
   if (!match) return null;
-  try {
-    const parts = { tz: decodeURIComponent(match[1]!), app: match[2]!, id: match[3]! };
-    return match[4] ? { ...parts, pid: match[4] } : parts;
-  } catch {
-    return null;
+  const text = match[1]!;
+  let tz = zoneOfSegment(text);
+  if (tz === null && text.includes('%') && !text.includes('/')) {
+    try {
+      tz = decodeURIComponent(text);
+    } catch {
+      return null;
+    }
   }
+  tz ??= text;
+  if (tz.split('/').includes('')) return null;
+  const parts = { tz, app: match[2]!, id: match[3]! };
+  return match[4] ? { ...parts, pid: match[4] } : parts;
+}
+
+/**
+ * Whether a key is a registration's in the form before `zoneSegment`: one `parseRegKey` reads
+ * whose zone is not written as `regKey` writes it now (DECISIONS, "Zone keys Netlify can't
+ * split").
+ */
+export function isOldRegKey(key: string): boolean {
+  const reg = parseRegKey(key);
+  return reg !== null && regKey(reg.tz, reg.app, reg.id, reg.pid) !== key;
+}
+
+/**
+ * A registration's key as it was written before `zoneSegment`, its zone percent-escaped
+ * (`reg/v1/Europe%2FLondon/…`), or null where that is the key itself (`UTC`). A get or a delete
+ * by it reaches a record kept then, whatever Netlify's service made of the escape: it is the
+ * string the record was written by.
+ */
+export function oldRegKey(key: string): string | null {
+  const reg = parseRegKey(key);
+  if (!reg) return null;
+  const pid = reg.pid ? `.${reg.pid}` : '';
+  const old = `${REG_PREFIX}${encodeURIComponent(reg.tz)}/${reg.app}.${reg.id}${pid}`;
+  return old === key ? null : old;
+}
+
+/** Each key, then its form from before `zoneSegment` (`oldRegKey`) where that differs. */
+export function withOldForms(keys: readonly string[]): string[] {
+  return keys.flatMap((key) => {
+    const old = oldRegKey(key);
+    return old ? [key, old] : [key];
+  });
 }
 
 /**
@@ -312,15 +408,16 @@ export function newSalt(): string {
   return randomBytes(16).toString('hex');
 }
 
-/** The zone a directory of `list(REG_PREFIX, { directories: true })` stands for, or null. */
+/**
+ * The zone a directory of `list(REG_PREFIX, { directories: true })` stands for, or null: null for
+ * any directory that is not a zone the server knows, such as `reg/v1/Europe`, which the keys
+ * before `zoneSegment` made (`isOldRegKey`). Never read as some zone: an unknown zone's windows
+ * would be UTC's.
+ */
 export function zoneOfDirectory(directory: string): string | null {
   const match = /^reg\/v1\/([^/]+)\/?$/.exec(directory);
-  if (!match) return null;
-  try {
-    return decodeURIComponent(match[1]!);
-  } catch {
-    return null;
-  }
+  const tz = match ? zoneOfSegment(match[1]!) : null;
+  return tz !== null && isZone(tz) ? tz : null;
 }
 
 /**
@@ -354,20 +451,21 @@ const strings = (value: unknown): string[] =>
 /**
  * Every registration key an ids entry names, version 1 or 2, each once: the free record's zone
  * (`tz`) and the zones it is leaving (`from`) as keys, then the `saved` and `leaving` keys that are
- * this device's. None for anything malformed.
+ * this device's, each as `regKey` writes it now (an entry written before `zoneSegment` holds them
+ * percent-escaped). None for anything malformed.
  */
 export function keysOf(entry: unknown, app: string, id: string): string[] {
   if (!entry || typeof entry !== 'object') return [];
   const e = entry as Record<string, unknown>;
   const zones = [...(typeof e.tz === 'string' ? [e.tz] : []), ...strings(e.from)];
-  const mine = (key: string): boolean => {
+  const mine = (key: string): string[] => {
     const reg = parseRegKey(key);
-    return reg?.app === app && reg.id === id;
+    return reg?.app === app && reg.id === id ? [regKey(reg.tz, app, id, reg.pid)] : [];
   };
   return [
     ...new Set([
       ...zones.map((tz) => regKey(tz, app, id)),
-      ...[...strings(e.saved), ...strings(e.leaving)].filter(mine),
+      ...[...strings(e.saved), ...strings(e.leaving)].flatMap(mine),
     ]),
   ];
 }
@@ -485,6 +583,34 @@ async function forgetIfUnchanged(
 }
 
 /**
+ * `forgetIfUnchanged` for a record that may still have a copy from before `zoneSegment`
+ * (`oldRegKey`). With nothing at its new key, the old copy is the record (no PUT since), judged by
+ * its stamp. Beside a record at its new key, an old copy is the older (only a PUT writes, at the
+ * new key, then deletes the old): it goes, and the new key decides.
+ */
+async function forgetBoth(
+  store: AlertStore,
+  key: string,
+  stamp: SlotStamp,
+): Promise<'gone' | 'changed' | 'failed'> {
+  const old = oldRegKey(key);
+  if (!old) return forgetIfUnchanged(store, key, stamp);
+  let held: unknown;
+  try {
+    held = await store.get<unknown>(key);
+  } catch {
+    return 'failed';
+  }
+  if (held === null) return forgetIfUnchanged(store, old, stamp);
+  try {
+    await store.delete(old);
+  } catch {
+    return 'failed';
+  }
+  return forgetIfUnchanged(store, key, stamp);
+}
+
+/**
  * Forgets a device's every place, starting from the record that set it off (`trigger`: one the
  * run found stale, or whose push Apple refused). A record goes only if its `updatedAt` and
  * `seenAt` are the trigger's, so whatever the app wrote since stays (a registration writes every
@@ -493,6 +619,7 @@ async function forgetIfUnchanged(
  * 2. the trigger's own record, by that rule; written since, or a store failure, and nothing else
  *    is touched;
  * 3. every other key the ids entry names, at once, by the same rule;
+ *    (each key in steps 2 and 3 with its form from before `zoneSegment`, `forgetBoth`)
  * 4. the ids key last (and the salt in it), re-read, only if unchanged and all it names has gone,
  *    still, when read again after it (a registration may have written them back meanwhile).
  * A record the ids entry doesn't name (an orphan: a rollback, two registrations overlapping) is
@@ -520,12 +647,12 @@ export async function forgetDevice(
     entryRead = false;
   }
   const own = regKey(trigger.tz, app, id, trigger.slot);
-  const first = await forgetIfUnchanged(store, own, trigger);
+  const first = await forgetBoth(store, own, trigger);
   if (first !== 'gone') return first;
   if (!entryRead || entry === null) return 'deleted';
   const named = keysOf(entry, app, id);
   const outcomes = await Promise.all(
-    named.map((key) => (key === own ? first : forgetIfUnchanged(store, key, trigger))),
+    named.map((key) => (key === own ? first : forgetBoth(store, key, trigger))),
   );
   if (outcomes.every((outcome) => outcome === 'gone')) {
     try {
@@ -552,7 +679,9 @@ async function dropIdsEntry(
   const ids = idsKey(app, id);
   const again = await store.get<unknown>(ids);
   if (JSON.stringify(again) !== JSON.stringify(entry)) return false;
-  const back = await Promise.all(keysOf(entry, app, id).map((key) => store.get<unknown>(key)));
+  const back = await Promise.all(
+    withOldForms(keysOf(entry, app, id)).map((key) => store.get<unknown>(key)),
+  );
   if (!back.every((value) => value === null)) return false;
   await store.delete(ids);
   return true;
@@ -570,7 +699,9 @@ async function dropIdsEntry(
 export async function forgetIdsLeft(store: AlertStore, app: string, id: string): Promise<boolean> {
   const entry = await store.get<unknown>(idsKey(app, id));
   if (entry === null) return false;
-  const held = await Promise.all(keysOf(entry, app, id).map((key) => store.get<unknown>(key)));
+  const held = await Promise.all(
+    withOldForms(keysOf(entry, app, id)).map((key) => store.get<unknown>(key)),
+  );
   if (held.some((value) => value !== null)) return false;
   return dropIdsEntry(store, app, id, entry);
 }

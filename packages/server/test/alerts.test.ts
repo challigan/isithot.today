@@ -26,6 +26,7 @@ import {
   resolveServerConfig,
   runAlerts,
   runSummary,
+  scrub,
   sentKey,
   type AlertRecord,
   type AlertStore,
@@ -1359,7 +1360,7 @@ describe('runAlerts: the cleanup', () => {
     // Finished: each zone listed once, no listing of every registration at once.
     expect((await runAt('2026-12-01T03:15:00Z', { store, origin, lines })).cleaned).toBe(14);
     expect(counted()).toEqual(['alerts-run: cleanup: 1 device with saved places']);
-    expect(store.zones.sort()).toEqual(['reg/v1/America%2FNew_York/', 'reg/v1/Europe%2FLondon/']);
+    expect(store.zones.sort()).toEqual(['reg/v1/America~New_York/', 'reg/v1/Europe~London/']);
     await runAt('2026-12-01T03:30:00Z', { store, origin, lines });
     expect(counted()).toHaveLength(1);
     expect([store.zones.length, store.whole]).toEqual([2, 0]);
@@ -1378,7 +1379,7 @@ describe('runAlerts: the cleanup', () => {
     // A zone's listing fails (Blobs' 1.5 s, say): the count is unknown, the old keys are gone, and
     // the marker stays, so the hour's next runs don't clean again.
     await oldKeys(store);
-    store.failing = 'reg/v1/America%2FNew_York/';
+    store.failing = 'reg/v1/America~New_York/';
     expect((await runAt('2026-12-01T03:00:00Z', { store, origin, lines })).cleaned).toBe(14);
     expect(lines).toEqual([
       'alerts-run: error: list failed',
@@ -1497,7 +1498,7 @@ describe('runAlerts: the cleanup', () => {
     );
     const left = registrationId('snow', token('41'));
     await store.set(idsKey('snow', left), { tz: 'Europe/London' });
-    store.failing = 'reg/v1/America%2FNew_York/';
+    store.failing = 'reg/v1/America~New_York/';
     const lines: string[] = [];
     await runAt('2026-12-01T03:00:00Z', { store, origin, lines });
     expect(await store.get(idsKey('snow', left))).not.toBeNull();
@@ -1943,6 +1944,182 @@ describe('alertsRun: the switches', () => {
     expect(smoke.line).toMatch(/^alerts-run: smoke failed: 200: Apple answered/);
     expect(smoke.seen).toHaveLength(1);
     expect(sentKeys(smoke.store)).toEqual([]);
+  });
+});
+
+describe('runAlerts: the keys from before "Zone keys Netlify can\'t split"', () => {
+  /** A key as the devices handler wrote it before: its zone percent-escaped. */
+  const escaped = (r: AlertRecord): string =>
+    `reg/v1/${encodeURIComponent(r.tz)}/snow.${r.id}${r.slot ? `.${r.slot}` : ''}`;
+  const regKeys = (store: MemoryAlertStore) => store.keys().filter((k) => k.startsWith('reg/'));
+  /** Records as Netlify's service kept them before (MemoryAlertStore decodes as it does). */
+  async function before(store: AlertStore, ...records: AlertRecord[]): Promise<void> {
+    for (const r of records) {
+      const { slot: _slot, ...record } = r;
+      await store.set(escaped(r), record);
+    }
+  }
+
+  it('sends that evening to phones registered before, reading their records where they are', async () => {
+    const { origin, seen } = await fakeApns(apple());
+    const store = new MemoryAlertStore();
+    const leeds = registration(token('a0'), place('leeds-gb'));
+    const durham = registration(token('a0', 1));
+    const newYork = registration(token('a0', 1), {
+      ...place('new-york-city-us'),
+      tz: 'America/New_York',
+      slot: PIDS[0],
+    });
+    await before(store, leeds, durham, newYork);
+    // Kept as three segments: a run before this fix listed a zone "Europe" and read none.
+    expect(regKeys(store)).toContain(`reg/v1/Europe/London/snow.${leeds.id}`);
+    await store.set(idsKey('snow', leeds.id), { tz: 'Europe/London' });
+    await store.set(idsKey('snow', durham.id), {
+      v: 2,
+      tz: 'Europe/London',
+      saved: [escaped(newYork)],
+      salt: 'f'.repeat(32),
+    });
+    const records = () => store.keys().filter((k) => /^(reg|ids)\//.test(k));
+    const keptBefore = records();
+    const lines: string[] = [];
+    // Carl's phone: a forced id, in a dry place, at 18:05 in London; Durham's is snowy.
+    const forceIds = [leeds.id, durham.id].map((id) => id.slice(0, 8));
+    const first = await runAt(EVENING, { store, origin, lines, forceIds });
+    expect(first).toMatchObject({ zones: 1, records: 2, sent: 2, forced: 2, errors: 0, done: 1 });
+    expect(lines).toEqual([]);
+    expect(devices(seen)).toEqual([leeds.token, durham.token].sort());
+    // The run moves nothing: only a phone's own requests do.
+    expect(records()).toEqual(keptBefore);
+    expect(await store.get(doneKey('2026-10-18', 'evening', 'Europe/London'))).not.toBeNull();
+    expect(await runAt(LATER, { store, origin, lines, forceIds })).toMatchObject({ sent: 0 });
+    // New York's evening, at its 18:05: the saved place under its old key is sent as a saved
+    // place, in its own thread.
+    seen.length = 0;
+    const evening = await runAt('2026-10-18T22:05:00Z', { store, origin, lines, forceIds });
+    expect(evening).toMatchObject({ zones: 1, records: 1, sent: 1, errors: 0 });
+    expect(devices(seen)).toEqual([newYork.token]);
+    expect(JSON.parse(seen[0]!.body)).toMatchObject({
+      aps: { 'thread-id': `snow-${PIDS[0]}` },
+      name: 'New York',
+    });
+    expect(records()).toEqual(keptBefore);
+  });
+
+  it('reads one moved by its phone since the listing at its new key', async () => {
+    const { origin, seen } = await fakeApns(apple());
+    const inner = new MemoryAlertStore();
+    const durham = registration(token('a0'));
+    await before(inner, durham);
+    await inner.set(idsKey('snow', durham.id), { tz: 'Europe/London' });
+    // The phone's PUT writes it at its new key, and deletes the old, just as the run reads it.
+    const move = async () => {
+      await inner.set(regKey('Europe/London', 'snow', durham.id), await inner.get(escaped(durham)));
+      await inner.delete(escaped(durham));
+    };
+    const store = view(inner, {
+      before: (op, key) => (op === 'get' && key === escaped(durham) ? move() : undefined),
+    });
+    const run = await runAt(EVENING, { store, origin });
+    expect(run).toMatchObject({ records: 1, sent: 1, errors: 0 });
+    expect(devices(seen)).toEqual([durham.token]);
+    expect(regKeys(inner)).toEqual([regKey('Europe/London', 'snow', durham.id)]);
+  });
+
+  it('forgets a stale phone under its old keys', async () => {
+    const { origin } = await fakeApns(apple());
+    const store = new MemoryAlertStore();
+    const leeds = registration(token('a0'), place('leeds-gb'));
+    const newYork = registration(token('a0'), {
+      ...place('new-york-city-us'),
+      tz: 'America/New_York',
+      slot: PIDS[0],
+    });
+    await before(store, leeds, newYork);
+    await store.set(idsKey('snow', leeds.id), {
+      v: 2,
+      tz: 'Europe/London',
+      saved: [escaped(newYork)],
+      salt: 'f'.repeat(32),
+    });
+    const lines: string[] = [];
+    // 90 days after the phone was last seen.
+    const stale = await runAt('2027-01-16T18:05:00Z', { store, origin, lines });
+    expect(stale).toMatchObject({ deleted: 1, errors: 0 });
+    expect(lines).toEqual([`alerts-run: deleted ${who(leeds)} (not seen for 90 days)`]);
+    expect(store.keys().filter((k) => /^(reg|ids)\//.test(k))).toEqual([]);
+  });
+
+  it('never reads a directory that is no zone as UTC', async () => {
+    const { origin, seen } = await fakeApns(apple());
+    const store = new MemoryAlertStore();
+    const lost = registration(token('a0'), { tz: 'Nowhere/Special' });
+    await store.set(escaped(lost), lost);
+    await store.set(idsKey('snow', lost.id), { tz: lost.tz });
+    const lines: string[] = [];
+    // 18:05 in UTC: a run before this fix found zone "Nowhere", in UTC's evening.
+    const run = await runAt('2026-12-01T18:05:00Z', { store, origin, lines });
+    expect(run).toMatchObject({ zones: 0, records: 0, sent: 0, errors: 0 });
+    expect(lines).toEqual([]);
+    expect(seen).toHaveLength(0);
+    // Left as it is: no zone the server knows.
+    expect(regKeys(store)).toEqual([`reg/v1/Nowhere/Special/snow.${lost.id}`]);
+  });
+
+  it('stops at once when an old directory cannot be listed, as for the zones', async () => {
+    const { origin, seen } = await fakeApns(apple());
+    const store = flaky((op, key) => op === 'list' && key === 'reg/v1/Europe/');
+    const durham = registration(token('a0'));
+    await before(store, durham);
+    await store.set(idsKey('snow', durham.id), { tz: 'Europe/London' });
+    const lines: string[] = [];
+    const result = await runAt(EVENING, { store, origin, lines });
+    expect(result).toMatchObject({ zones: 0, errors: 1 });
+    expect(lines).toEqual(['alerts-run: error: list failed']);
+    expect(seen).toHaveLength(0);
+  });
+
+  it('counts the phones under old keys in the cleanup, and the records left there', async () => {
+    const { origin } = await fakeApns(apple());
+    const store = new MemoryAlertStore();
+    const leeds = registration(token('a0'), place('leeds-gb'));
+    const newYork = registration(token('a0'), {
+      ...place('new-york-city-us'),
+      tz: 'America/New_York',
+      slot: PIDS[0],
+    });
+    await before(store, leeds, newYork);
+    await store.set(idsKey('snow', leeds.id), {
+      v: 2,
+      tz: 'Europe/London',
+      saved: [escaped(newYork)],
+      salt: 'f'.repeat(32),
+    });
+    // A phone with today's keys, and an ids entry naming no record in either form.
+    await seedPhone(store, registration(token('a0', 1)));
+    const left = registrationId('snow', token('41'));
+    await store.set(idsKey('snow', left), { tz: 'Europe/London' });
+    const lines: string[] = [];
+    await runAt('2026-12-01T03:00:00Z', { store, origin, lines });
+    expect(lines).toEqual([
+      `alerts-run: cleanup: deleted the ids entry of snow.${left.slice(0, 8)}… (no record left)`,
+      'alerts-run: cleanup: 1 device with saved places; 2 registrations under old keys',
+    ]);
+    expect(await store.get(idsKey('snow', leeds.id))).not.toBeNull();
+  });
+
+  it("keeps a saved place's zone out of the log, in a key of either form", () => {
+    const id = registrationId('snow', token('a0'));
+    for (const zone of [
+      'Europe~London',
+      'Europe%2FLondon',
+      'Europe/London',
+      'America/Argentina/Buenos_Aires',
+    ]) {
+      expect(scrub(`alert store: get reg/v1/${zone}/snow.${id}.${PIDS[0]}: down`)).toBe(
+        `alert store: get reg/v1/…/snow.${id.slice(0, 8)}….${PIDS[0]}: down`,
+      );
+    }
   });
 });
 
