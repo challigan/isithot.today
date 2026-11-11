@@ -374,6 +374,40 @@ test("the apps' app-ads.txt is the same file on every domain", async ({ browser,
   await context.close();
 });
 
+test("AdSense's ads.txt and meta tag are on every domain, and no ad until it is switched on", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await allSites(browser, baseURL!);
+  const page = await context.newPage();
+  for (const site of [HOT, WET, SNOW, WIND]) {
+    const res = await page.goto(`${site}/ads.txt`);
+    expect(res!.status()).toBe(200);
+    expect(res!.headers()['content-type']).toBe('text/plain; charset=utf-8');
+    // From PUBLIC_ADSENSE_CLIENT, which the e2e server sets (playwright.config.ts).
+    expect(await res!.text()).toBe('google.com, pub-3940256099942544, DIRECT, f08c47fec0942fa0\n');
+    await page.goto(`${site}/`);
+    // How AdSense verifies each domain it reviews.
+    await expect(page.locator('meta[name="google-adsense-account"]')).toHaveAttribute(
+      'content',
+      'ca-pub-3940256099942544',
+    );
+    // PUBLIC_ADS_ENABLED is unset: no slot, and no ad code.
+    await expect(page.locator('.ad-slot')).toHaveCount(0);
+    await expect(page.locator('script[src*="googlesyndication"]')).toHaveCount(0);
+    // The privacy notice's disclosures AdSense requires, and its opt-outs.
+    await page.goto(`${site}/privacy`);
+    await expect(
+      page.getByText('Third-party vendors, including Google, use cookies'),
+    ).toBeVisible();
+    await expect(page.locator('a[href="https://www.google.com/settings/ads"]')).toHaveText(
+      'Ads Settings',
+    );
+    await expect(page.locator('a[href="https://www.aboutads.info/choices/"]')).toHaveCount(1);
+  }
+  await context.close();
+});
+
 test("the app's listing addresses: willitsnow.today/support and /privacy", async ({
   browser,
   baseURL,

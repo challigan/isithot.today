@@ -56,6 +56,8 @@ const { prefix } = SITES[topic];
 const { fallback } = LOOKS[topic];
 const vars = `--g1:${palette.g1};--g2:${palette.g2};--g3:${palette.g3};--ink:${palette.ink};--pill:${palette.pill};--glow:${palette.glow}${fallback ? `;--page-fallback:${fallback}` : ''}`;
 const beacon = import.meta.env.PUBLIC_CF_BEACON_TOKEN;
+/** AdSense's publisher ID ("ca-pub-…"): its meta tag lets AdSense verify each domain. */
+const adsenseClient = import.meta.env.PUBLIC_ADSENSE_CLIENT?.trim();
 /**
  * Links are written for the site's own domain (isitwet.today, willitsnow.today, isitwindy.today),
  * where its pages are at the root. Where they are served from under the prefix instead (deploy
@@ -77,6 +79,7 @@ const prefixLinks = `(()=>{const p=location.pathname;if(p!=='${prefix}'&&!p.star
     <meta name="description" content={description} />
     {canonical && <link rel="canonical" href={canonical} />}
     {noindex && <meta name="robots" content="noindex" />}
+    {adsenseClient && <meta name="google-adsense-account" content={adsenseClient} />}
     <meta name="theme-color" content={palette.g1} />
     <link rel="preload" href={fontLatin} as="font" type="font/woff2" crossorigin />
     <style
