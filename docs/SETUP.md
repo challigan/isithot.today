@@ -877,7 +877,8 @@ Each month, per site (about 15 minutes):
   summary says if one is missing or the wrong size.
 - Review the Privacy, Cookies and Terms drafts (the contact email is in) and the Support page.
   Take "Draft for review" off them before the app is submitted: its listing links Privacy and
-  Support.
+  Support. **Done on Wed 11 Nov,** the day the app went to App Review: the three pages keep their
+  "Last updated" dates.
 - Decide on the items marked **Needs a decision** in [DECISIONS.md](DECISIONS.md).
 - Try the place picker on a real iPhone and Android phone (open it, type, hide the keyboard,
   pick a result), and look at the Tomorrow tab with text at 200% (the word should break with a
