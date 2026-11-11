@@ -161,18 +161,39 @@ Works on any host, not only Cloudflare.
 
 ## 5. Google AdSense and consent
 
-1. Apply at https://adsense.google.com with `isithot.today` once the site is live on the
-   domain with the legal pages published.
-2. **Privacy & messaging → European regulations**: create a GDPR message for the UK and EEA
-   using Google's certified CMP. Optionally add the US state regulations message for "Do Not
-   Sell".
-3. Create one **display ad unit** (responsive). Keep **Auto ads off**: the layout reserves one
-   slot below the outbound links.
-4. In Netlify set `PUBLIC_ADSENSE_CLIENT` (`ca-pub-…`), `PUBLIC_ADSENSE_SLOT` (the unit's ID)
-   and `PUBLIC_ADS_ENABLED=true`, then redeploy. `/ads.txt` is generated from the client ID.
+The website's ad is built and off: one responsive display ad below the outbound links on the home
+and city pages, loaded after the page is interactive and, in the UK and EEA, only once Google's
+consent banner has an answer. Three variables in Netlify (**Site configuration → Environment
+variables**, all scopes, Production) switch it on; they are read when the site is built, so each
+change needs a redeploy (**Deploys → Trigger deploy → Deploy site**). Never put them in
+`netlify.toml`: a value there overrides Netlify's.
 
-Ads load after the page is interactive. They wait for the CMP's consent signal where GDPR
-applies, and the slot's height is reserved so the page does not jump.
+- `PUBLIC_ADSENSE_CLIENT`: your publisher ID, `ca-pub-` and 16 digits (AdSense → **Account →
+  Settings → Account information**). It puts AdSense's line in `/ads.txt` and its
+  `google-adsense-account` meta tag on every page of all four domains. It shows no ad.
+- `PUBLIC_ADSENSE_SLOT`: the display ad unit's ID (step 4).
+- `PUBLIC_ADS_ENABLED`: `true` shows the ad. Anything else, or unset, shows none.
+
+The ads make the sites commercial, so the Open-Meteo Standard plan (section 2) must be live first.
+
+1. **Publisher ID first.** Sign up or sign in at https://adsense.google.com, with the Google
+   account AdMob uses (its publisher ID is then usually AdMob's). Set `PUBLIC_ADSENSE_CLIENT` and
+   redeploy. https://isithot.today/ads.txt then shows a `google.com, pub-…` line.
+2. **Add the four sites.** In AdSense, **Sites → New site**: `isithot.today`, `isitwet.today`,
+   `willitsnow.today` and `isitwindy.today`, each on its own. For each, choose **Meta tag** to
+   verify (it is already on every page), tick that you've placed it, **Verify**, then **Request
+   review**. Each site is reviewed on its own, usually in a few days, sometimes 2 to 4 weeks. The
+   Privacy page's "Adverts on the websites" has the disclosures AdSense requires.
+3. **The consent banner.** **Privacy & messaging → European regulations → Create message**,
+   for all four sites, in English, with **Consent** and **Manage options** (Google's certified
+   consent platform: AdSense requires it for the UK, EEA and Switzerland). Publish it. Optionally
+   also the **US state regulations** message.
+4. **One ad unit.** **Ads → By ad unit → Display ads**, responsive, named "Below the links".
+   Copy its `data-ad-slot` number into `PUBLIC_ADSENSE_SLOT`. Keep **Auto ads** off for every
+   site: the pages reserve one slot of their own.
+5. **Switch on,** once a site shows **Ready** under **Sites**: set `PUBLIC_ADS_ENABLED` to `true`
+   and redeploy. The variable covers all four domains, so a site still in review shows an empty
+   space until it is approved. To switch ads off again, set it to `false` and redeploy.
 
 The apps' ads (C15, once the AdMob account is approved). The iPhone app's free version has three
 ad units, and only the release candidate's build needs their IDs: every other build uses

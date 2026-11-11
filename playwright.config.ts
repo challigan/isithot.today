@@ -50,8 +50,10 @@ export default defineConfig({
       E2E_PORT: String(port),
       E2E: '1',
       E2E_CLOCK_SHIFT_MS: shift,
-      // Google's sample publisher ID (its demo apps'), so /app-ads.txt has its line to check.
+      // Google's sample publisher ID (its demo apps'), so /app-ads.txt has its line to check,
+      // and /ads.txt and AdSense's meta tag theirs. PUBLIC_ADS_ENABLED stays unset: no ad.
       PUBLIC_ADMOB_PUBLISHER_ID: 'pub-3940256099942544',
+      PUBLIC_ADSENSE_CLIENT: 'ca-pub-3940256099942544',
     },
   },
 });
