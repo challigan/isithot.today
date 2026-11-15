@@ -94,11 +94,13 @@ test.describe('the legal pages', () => {
         `mailto:${CONTACT_EMAIL}`,
       );
       await expect(main).not.toContainText('to be added');
-      // The app's part of the notice, after the website's and before the rights that cover both.
+      // The app's part of the notice, after the website's (its adverts last: the disclosures
+      // AdSense requires) and before the rights that cover both.
       await expect(main.locator('h2')).toHaveText([
         'Location',
         'What stays on your device',
         'Who else processes data',
+        'Adverts on the websites',
         'Our apps',
         'Your rights',
       ]);

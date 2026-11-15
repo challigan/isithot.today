@@ -6,8 +6,9 @@
 
 [build.environment]
   NODE_VERSION = "22"
-  # Start without ads; flip to "true" once AdSense and the paid Open-Meteo plan are live.
-  PUBLIC_ADS_ENABLED = "false"
+  # The ads' switches (PUBLIC_ADS_ENABLED, PUBLIC_ADSENSE_CLIENT, PUBLIC_ADSENSE_SLOT) are set in
+  # Netlify's UI (docs/SETUP.md section 5), never here: a value in this file overrides the UI's.
+  # No ad renders unless PUBLIC_ADS_ENABLED is "true".
 
 [functions]
   directory = "functions/api"
