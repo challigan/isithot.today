@@ -234,8 +234,9 @@ final class SettingsTests: XCTestCase {
         + "each notification and each test, and after some forecast checks that found nothing to "
         + "send, we also keep a note of it, even once the rest is deleted. It holds no token or "
         + "place.",
-      "In the free version, Google shows the ads and may collect device and usage data. The app "
-        + "keeps when it last showed a full-screen ad, so it shows one at most every 5 minutes.",
+      "In the free version, Google shows the ads and may collect device and usage data. It tracks "
+        + "you only if you allow it when the app asks. The app keeps when it last showed a "
+        + "full-screen ad, so it shows one at most every 5 minutes.",
       "Apple handles purchases. We never see your payment details. The app keeps a note on your "
         + "iPhone of whether you've made the one-off purchase.",
       "There are no accounts.",

@@ -144,6 +144,8 @@ public enum AppCopy {
   public static let locationUnavailable = "Couldn't find your location. Search for a place instead."
   public static let locationPurpose =
     "Your location shows whether it will snow where you are. It is rounded to about 5 km before it leaves your phone. If notifications are on, that rounded location is kept, and updated when you open the app, so we can tell you when snow is likely where you are."
+  public static let trackingPurpose =
+    "Google uses this to choose ads that suit you. The app works the same whatever you choose."
   public static let upgradeTitle = "No ads, widgets and more"
 
   public static func upgradeSettings(price: String) -> String {
@@ -232,7 +234,7 @@ public enum AppCopy {
   public static let privacyNotifications =
     "Only while notifications are on, we keep your device's notification token, an ID made from it, the places you get notifications for and their time zones, your units and which notifications you chose, with a few details such as the app's version and when it last checked in. The places are where you are (your location rounded to about 5 km or, if you haven't shared it, a rough place our server estimates from your internet connection, updated when you open the app, at most once an hour) and any saved places you turned notifications on for; while you have those, we also keep your iPhone's time zone. We delete them when you turn notifications off in the app, when Apple tells us the app is no longer installed, or about 90 days after you last open it. If you turn notifications off in your iPhone's Settings instead, we delete them the next time you open the app. For a few days after each notification and each test, and after some forecast checks that found nothing to send, we also keep a note of it, even once the rest is deleted. It holds no token or place."
   public static let privacyAds =
-    "In the free version, Google shows the ads and may collect device and usage data. The app keeps when it last showed a full-screen ad, so it shows one at most every 5 minutes."
+    "In the free version, Google shows the ads and may collect device and usage data. It tracks you only if you allow it when the app asks. The app keeps when it last showed a full-screen ad, so it shows one at most every 5 minutes."
   public static let seePrivacyChoices = "See Privacy choices."
   public static let privacyPurchases =
     "Apple handles purchases. We never see your payment details. The app keeps a note on your iPhone of whether you've made the one-off purchase."

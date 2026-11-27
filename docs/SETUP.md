@@ -841,6 +841,68 @@ already exist, and the release job's cloud signing makes the widget's profile as
    failing spell (429s or errors) shows up as more invocations, not fewer. If they climb while the
    server answers, changing `WIDGET.refreshHours` from 4 to 6 in packages/core cuts them by a third.
 
+### Resubmitting after App Review's answer of 26 Nov
+
+App Review rejected 1.0 (111) for two things: 5.1.2(i), Google's consent form says the app tracks
+but the app never asked with Apple's App Tracking Transparency prompt; and 2.1(b), the purchase
+wasn't submitted with the version. The pull request "iOS: Apple's tracking prompt before any ad"
+fixes the first in the app (DECISIONS, "App Tracking Transparency"); the rest is App Store
+Connect's.
+
+1. **A new build.** Merge that pull request, then run **iOS release** with **ads** `real`, as for
+   the release candidate. When it reaches TestFlight, check it on an iPhone whose Apple Account
+   hasn't bought **No ads, widgets and more**: yours owns it from earlier builds, so the app shows
+   it no ads, and so no prompt. Delete the app and install it again: on its first launch, once the
+   forecast shows, Apple's prompt asks "Allow 'will it snow?' to track your activity across other
+   companies' apps and websites?", with the words "Google uses this to choose ads that suit you.
+   The app works the same whatever you choose." Either answer, the ads then come. It shows only
+   while **Settings → Privacy & Security → Tracking → Allow Apps to Request to Track** is on,
+   where the answer can be changed too.
+2. **App Privacy** (**Apps**, **willitsnow.today**, **App Privacy**, **Edit**). Google's SDK, in
+   the version the app ships, declares what it collects in its privacy manifest, and Apple counts
+   it as the app's. Make the answers these, keeping the push token's App Functionality on Device
+   ID and the forecast's on Coarse Location:
+
+   | Data type             | Purposes                                                                                    | Linked | Tracking |
+   | --------------------- | ------------------------------------------------------------------------------------------- | ------ | -------- |
+   | Device ID             | Third-Party Advertising, Analytics, Developer's Advertising or Marketing, App Functionality | Yes    | **Yes**  |
+   | Coarse Location       | Third-Party Advertising, Analytics, Developer's Advertising or Marketing, App Functionality | Yes    | No       |
+   | Advertising Data      | Third-Party Advertising, Analytics, Developer's Advertising or Marketing                    | Yes    | No       |
+   | Product Interaction   | Third-Party Advertising, Analytics, Developer's Advertising or Marketing, App Functionality | Yes    | No       |
+   | Performance Data      | Third-Party Advertising, Analytics, Developer's Advertising or Marketing, App Functionality | Yes    | No       |
+   | Crash Data            | Analytics                                                                                   | No     | No       |
+   | Other Diagnostic Data | Third-Party Advertising, Analytics, Developer's Advertising or Marketing                    | No     | No       |
+
+   Performance Data is marked linked though Google's manifest says not: its own guide calls it
+   "user-associated", and declaring more is the safe side. **Publish** the answers. The product
+   page then lists Device ID under "Data Used to Track You".
+
+3. **The purchase (2.1(b)).** Open **Monetization → In-App Purchases → Snow unlock**. Under
+   **Review Information**, upload the screenshot if it isn't there: `07-app-upgrade.png` from
+   the App Store screenshots will do (the purchase's page, in the app). Paste the review note
+   (step 5) into its **Review Notes**, and **Save**: its status should read **Ready to Submit**.
+   Then, on the version's page (**1.0** under **iOS App**), in **In-App Purchases and
+   Subscriptions**, press **+** and choose **Snow unlock**. It then goes to App Review with the
+   version.
+4. **The build.** On the same page, under **Build**, remove 111 and choose the new build.
+5. **The review note,** in the version's **App Review Information → Notes** and the purchase's
+   **Review Notes**: the note of "Saved places' notifications (phase 8.4b)", step 6, with this
+   paragraph first, which says where the prompt is, as App Review asked:
+
+   > Ads and tracking: the free version shows Google ads. Before any ad loads, the app asks for
+   > permission to track with Apple's App Tracking Transparency prompt. It appears on the first
+   > launch, a few seconds after the forecast shows: in the UK and the EEA straight after Google's
+   > consent form, and elsewhere on its own. If you choose "Ask App Not to Track", the app works
+   > exactly the same, and Google doesn't receive the advertising identifier. The prompt appears
+   > only while Settings → Privacy & Security → Tracking → "Allow Apps to Request to Track" is on;
+   > to see it again, delete the app and install it again. After the purchase there are no ads,
+   > and the prompt isn't shown.
+
+6. **Submit for Review.** Optionally, reply to App Review's message first: "We've added App
+   Tracking Transparency: the prompt appears on first launch, before any ad (details in the
+   review notes), updated App Privacy to declare tracking, and submitted the In-App Purchase
+   with this version."
+
 ## 6. Uptime monitor
 
 Any free monitor (UptimeRobot, Better Stack) on:

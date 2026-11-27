@@ -3,8 +3,9 @@ import IsItModel
 import XCTest
 
 /// The app's Info.plist and bundle as built (iOS build spec, sections 9.7, 13, 15.1 and 15.2):
-/// the location permission's purpose string is the one appCopy.ts words, which Info.plist reads
-/// as a build setting from the generated Configs/Generated/Copy.xcconfig; no StoreKit
+/// the location permission's and the tracking prompt's purpose strings are the ones appCopy.ts
+/// words, which Info.plist reads as build settings from the generated
+/// Configs/Generated/Copy.xcconfig; no StoreKit
 /// configuration ships; there are no background modes; and the privacy manifest declares the
 /// coarse location and the device ID.
 final class InfoPlistTests: XCTestCase {
@@ -14,6 +15,17 @@ final class InfoPlistTests: XCTestCase {
       "No NSLocationWhenInUseUsageDescription: the system would never ask for the location"
     )
     XCTAssertEqual(purpose, AppCopy.locationPurpose)
+    XCTAssertFalse(purpose.contains("$("), "A build setting Xcode didn't fill in: \(purpose)")
+  }
+
+  /// Apple's tracking prompt (App Review 5.1.2(i)), asked before any ad: without its purpose
+  /// string, the app would crash the moment it asked.
+  func testTheTrackingPurposeStringIsTheAppsCopy() throws {
+    let purpose = try XCTUnwrap(
+      Bundle.main.object(forInfoDictionaryKey: "NSUserTrackingUsageDescription") as? String,
+      "No NSUserTrackingUsageDescription: asking for tracking would crash the app"
+    )
+    XCTAssertEqual(purpose, AppCopy.trackingPurpose)
     XCTAssertFalse(purpose.contains("$("), "A build setting Xcode didn't fill in: \(purpose)")
   }
 

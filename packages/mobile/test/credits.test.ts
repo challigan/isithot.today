@@ -227,6 +227,12 @@ describe("Your privacy and the website's privacy notice", () => {
       ],
       ['It holds no token or place.', 'it holds no token or place.'],
       ['In the free version, Google shows the ads', 'The free version shows ads from Google AdMob'],
+      // Apple's tracking prompt, before any ad (App Review 5.1.2(i)). The app's line names no
+      // websites, as the 1.0 app names none.
+      [
+        'It tracks you only if you allow it when the app asks.',
+        "Before any ad, Apple's prompt asks whether the app may track you: Google tracks your activity across other companies' apps and websites only if you allow it",
+      ],
       // What the phone keeps for the full-screen ads' spacing (`Keys.App.lastInterstitial`).
       ['when it last showed a full-screen ad', 'when it last showed a full-screen ad'],
       [

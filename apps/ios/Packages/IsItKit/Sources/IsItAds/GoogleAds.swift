@@ -1,3 +1,4 @@
+import AppTrackingTransparency
 import Foundation
 import GoogleMobileAds
 import IsItState
@@ -36,8 +37,8 @@ public enum ConsentGeography: Sendable {
 }
 
 /// Google's two SDKs behind `AdsPlatform` (IsItState), which `AdsModel` drives: UMP's consent and
-/// its forms, Mobile Ads' start, a banner for each slot and the full-screen ad. On the main actor,
-/// as both SDKs ask. Nothing touches either SDK until the model asks, so the unit tests' host,
+/// its forms, Apple's tracking prompt, Mobile Ads' start, a banner for each slot and the
+/// full-screen ad. On the main actor, as both SDKs ask. Nothing touches either SDK until the model asks, so the unit tests' host,
 /// which builds the app and never launches it, never starts them.
 ///
 /// UMP's update is its completion-handler form, so `canRequestAds` can be read the moment it is
@@ -53,6 +54,9 @@ public final class GoogleAds: NSObject, AdsPlatform, BannerViewDelegate,
 
   private let units: AdUnits
   private let geography: ConsentGeography?
+  /// Whether Apple's tracking prompt is asked: always, but in a Debug build's UI tests, where
+  /// the simulator would keep its answer for every later test (`DebugHooks.asksTracking`).
+  private let asksTracking: Bool
   /// Each slot's banner, made the first time it is asked for, and kept.
   private var bannerViews: [AdSlot: BannerView] = [:]
   /// The width each slot's banner was last sized for.
@@ -64,12 +68,19 @@ public final class GoogleAds: NSObject, AdsPlatform, BannerViewDelegate,
   /// What `presentInterstitial()` waits on: resumed when the ad on screen closes, or fails to
   /// show.
   private var closing: CheckedContinuation<Bool, Never>?
+  /// Whether the purchase stopped the ads (`stop()`): Apple's tracking prompt, still waiting for
+  /// the app to be active (as under StoreKit's payment sheet), is then never shown.
+  private var stopped = false
 
   /// Google's SDKs with the app's ad units; under a Debug build's `-umpGeography`, UMP in that
-  /// `geography`, and nil for where the phone is.
-  public init(units: AdUnits = .fromInfoPlist, geography: ConsentGeography? = nil) {
+  /// `geography`, and nil for where the phone is; Apple's tracking prompt asked unless
+  /// `asksTracking` is false, as in a Debug build's UI tests.
+  public init(
+    units: AdUnits = .fromInfoPlist, geography: ConsentGeography? = nil, asksTracking: Bool = true
+  ) {
     self.units = units
     self.geography = geography
+    self.asksTracking = asksTracking
     super.init()
   }
 
@@ -132,6 +143,39 @@ public final class GoogleAds: NSObject, AdsPlatform, BannerViewDelegate,
   public func presentPrivacyOptions() async -> AdsConsent {
     try? await ConsentForm.presentPrivacyOptionsForm(from: TopViewController.find())
     return consent
+  }
+
+  // MARK: - App Tracking Transparency
+
+  /// Whether Apple's tracking prompt needs no asking: answered at an earlier launch, or restricted
+  /// (Screen Time or a profile, so the system never shows it); or not asked at all
+  /// (`asksTracking`).
+  public var trackingAnswered: Bool {
+    !asksTracking || ATTrackingManager.trackingAuthorizationStatus != .notDetermined
+  }
+
+  /// Apple's tracking prompt (App Review 5.1.2(i)), its words `NSUserTrackingUsageDescription`
+  /// (appCopy.ts' `trackingPurpose`). The system shows it only while the app is active, so this
+  /// waits for that first; a purchase made meanwhile (`stop()`) means it isn't shown. Mobile Ads,
+  /// started after it, reads the answer itself: the advertising identifier goes in its requests
+  /// only if the person allowed it. Asked once a launch: one the system dismissed, or didn't
+  /// show, leaves the answer undetermined, so no identifier, and is asked again at the next
+  /// launch.
+  public func requestTracking() async {
+    guard !trackingAnswered else { return }
+    await becameActive()
+    guard !stopped else { return }
+    _ = await ATTrackingManager.requestTrackingAuthorization()
+  }
+
+  /// Returns once the app is active: at once when it is, or at its next activation.
+  private func becameActive() async {
+    guard UIApplication.shared.applicationState != .active else { return }
+    for await _ in NotificationCenter.default.notifications(
+      named: UIApplication.didBecomeActiveNotification)
+    {
+      return
+    }
   }
 
   // MARK: - Mobile Ads
@@ -260,6 +304,7 @@ public final class GoogleAds: NSObject, AdsPlatform, BannerViewDelegate,
   /// delegates let go, and none is kept. A full-screen ad being shown (`showing`) is left to
   /// close, and `presentInterstitial()` returns when it does.
   public func stop() {
+    stopped = true
     for banner in bannerViews.values {
       banner.delegate = nil
       banner.adSizeDelegate = nil

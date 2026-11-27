@@ -32,6 +32,8 @@ final class FakeAdsPlatform: AdsPlatform {
     case startAds
     /// The privacy options form, on screen until the test releases it.
     case privacyOptions
+    /// Apple's tracking prompt, on screen until the test releases it.
+    case tracking
     case loadInterstitial
     case presentInterstitial
   }
@@ -42,6 +44,9 @@ final class FakeAdsPlatform: AdsPlatform {
   var afterUpdate: AdsConsent?
   var afterForm: AdsConsent?
   var afterPrivacyOptions: AdsConsent?
+  /// Whether Apple's tracking prompt was answered at an earlier launch (most tests' phone);
+  /// answering the prompt sets it.
+  var trackingAnswered: Bool
   /// Whether a full-screen ad loads, and whether one loaded shows.
   var interstitialLoads = true
   var interstitialPresents = true
@@ -52,8 +57,9 @@ final class FakeAdsPlatform: AdsPlatform {
   private(set) var calls: [String] = []
   private let gates: [Held: Gate]
 
-  init(consent: AdsConsent, holding: Set<Held> = []) {
+  init(consent: AdsConsent, trackingAnswered: Bool = true, holding: Set<Held> = []) {
     self.consent = consent
+    self.trackingAnswered = trackingAnswered
     gates = Dictionary(uniqueKeysWithValues: holding.map { ($0, Gate()) })
   }
 
@@ -93,6 +99,12 @@ final class FakeAdsPlatform: AdsPlatform {
     await gates[.privacyOptions]?.wait()
     if let afterPrivacyOptions { consent = afterPrivacyOptions }
     return consent
+  }
+
+  func requestTracking() async {
+    calls.append("requestTracking")
+    await gates[.tracking]?.wait()
+    trackingAnswered = true
   }
 
   func startAds() async {
@@ -148,10 +160,12 @@ struct AdsHarness {
 
   init(
     consent: AdsConsent = .outside,
+    trackingAnswered: Bool = true,
     holding: Set<FakeAdsPlatform.Held> = [],
     lastShown: Date? = nil
   ) {
-    platform = FakeAdsPlatform(consent: consent, holding: holding)
+    platform = FakeAdsPlatform(
+      consent: consent, trackingAnswered: trackingAnswered, holding: holding)
     store = MemoryAdsStore(lastShown)
     clock = TestClock(Self.moment)
     model = AdsModel(platform: platform, store: store, clock: clock)

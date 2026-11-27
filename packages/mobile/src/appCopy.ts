@@ -111,6 +111,13 @@ export const APP_COPY = {
     'Your location shows whether it will snow where you are. It is rounded to about 5 km before ' +
     'it leaves your phone. If notifications are on, that rounded location is kept, and updated ' +
     'when you open the app, so we can tell you when snow is likely where you are.',
+  // Apple's tracking prompt's purpose string (App Tracking Transparency), `NSUserTrackingUsage
+  // Description`, from the same generated file. The system's alert names the app and asks to
+  // track its user's activity across other companies' apps and websites; this says why, and that
+  // nothing is withheld either way, as App Review 5.1.2(i) requires. Asked before any ad, in the
+  // free version only (`AdsModel`).
+  trackingPurpose:
+    'Google uses this to choose ads that suit you. The app works the same whatever you choose.',
 
   // Upgrade (10.4, 10.5). The title is also the Settings row until StoreKit gives a price, and
   // the purchase's display name in App Store Connect and Snow.storekit: 30 characters at most
@@ -274,8 +281,9 @@ export const APP_COPY = {
     'after each notification and each test, and after some forecast checks that found nothing to ' +
     'send, we also keep a note of it, even once the rest is deleted. It holds no token or place.',
   privacyAds:
-    'In the free version, Google shows the ads and may collect device and usage data. The app ' +
-    'keeps when it last showed a full-screen ad, so it shows one at most every 5 minutes.',
+    'In the free version, Google shows the ads and may collect device and usage data. It tracks ' +
+    'you only if you allow it when the app asks. The app keeps when it last showed a full-screen ' +
+    'ad, so it shows one at most every 5 minutes.',
   seePrivacyChoices: 'See Privacy choices.',
   privacyPurchases:
     'Apple handles purchases. We never see your payment details. The app keeps a note on your ' +
@@ -421,11 +429,13 @@ export type AppCopyKey = keyof typeof APP_COPY;
 
 /**
  * The strings the app's Info.plist carries, by the build setting it reads each from: Info.plist
- * names `$(LOCATION_PURPOSE)`, which `Configs/Generated/Copy.xcconfig` sets (`exportConfigCopy.ts`).
+ * names `$(LOCATION_PURPOSE)` and `$(TRACKING_PURPOSE)`, which `Configs/Generated/Copy.xcconfig`
+ * sets (`exportConfigCopy.ts`).
  * They are in `AppCopy.swift` too, so a test of the built app can hold its Info.plist to them.
  */
 export const INFO_PLIST_SETTINGS: Readonly<Record<string, AppCopyKey>> = {
   LOCATION_PURPOSE: 'locationPurpose',
+  TRACKING_PURPOSE: 'trackingPurpose',
 };
 
 /**

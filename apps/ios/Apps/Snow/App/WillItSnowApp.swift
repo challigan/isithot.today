@@ -54,7 +54,8 @@ struct WillItSnowApp: App {
   /// notification centre: only the launch does, which the unit tests' host never runs.
   @MainActor
   init() {
-    let google = GoogleAds(geography: DebugHooks.umpGeography())
+    let google = GoogleAds(
+      geography: DebugHooks.umpGeography(), asksTracking: DebugHooks.asksTracking())
     let ads = AdsModel(platform: google, store: AdDefaults(), clock: SystemClock())
     let (services, unlock) = Self.environment()
     var environment = services

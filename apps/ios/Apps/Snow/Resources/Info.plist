@@ -51,6 +51,8 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>$(LOCATION_PURPOSE)</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>$(TRACKING_PURPOSE)</string>
 	<!-- Google's SKAdNetwork identifiers for AdMob, in Google's order, from
 	     developers.google.com/admob/ios/3p-skadnetworks (last updated 2026-02-10). -->
 	<key>SKAdNetworkItems</key>
