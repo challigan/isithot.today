@@ -9545,6 +9545,16 @@ personalised ads for those who allow them, and it is what Apple and Google both 
   asked (`DebugHooks.asksTracking`), but for AdsTests' `testTheTrackingPromptComesBeforeAnyAd`,
   which resets the answer (`resetAuthorizationStatus(for: .userTracking)`), launches with
   `-tracking system`, finds Apple's alert before any ad is on, declines, and sees the ads come.
+- **Google's demo publisher's explainer.** The first macOS run after the merge (45986459271)
+  found every ads test outside the EEA stuck "asking", under a web dialog, "Our app wants to stay
+  free for you", with Continue. Google's demo publisher, whose ads every Debug build shows, has an
+  IDFA message published, and UMP shows it, then raises Apple's prompt itself, once the Info.plist
+  has a tracking purpose string and the answer is undetermined. Nothing in a test answered it.
+  AdsTests now answer both wherever they wait for the ads (`waitForTheAds`): Continue, then "Ask
+  App Not to Track"; the simulator keeps the answer, so only a run's first ads launch meets them.
+  The tracking test taps Continue too, and still holds that Apple's prompt comes before any ad,
+  whichever raised it. The release publisher must have no IDFA message published (SETUP), so the
+  app's own request is the one that asks there.
 - **App Store Connect** (docs/SETUP.md, "Resubmitting after App Review's answer of 26 Nov"): App
   Privacy declares Device ID as used for tracking, with the other types Google's manifest lists;
   the purchase goes with the version (2.1(b)); and the review note says where the prompt is, and

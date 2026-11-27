@@ -858,6 +858,10 @@ Connect's.
    The app works the same whatever you choose." Either answer, the ads then come. It shows only
    while **Settings → Privacy & Security → Tracking → Allow Apps to Request to Track** is on,
    where the answer can be changed too.
+   In AdMob, **Privacy & messaging → IDFA**: no message should be published for the app. If
+   one is, Google shows its own explainer ("Our app wants to stay free for you") before Apple's
+   prompt and asks itself; unpublish it, so the app's own prompt is the one, as the review note
+   says.
 2. **App Privacy** (**Apps**, **willitsnow.today**, **App Privacy**, **Edit**). Google's SDK, in
    the version the app ships, declares what it collects in its privacy manifest, and Apple counts
    it as the app's. Make the answers these, keeping the push token's App Functionality on Device

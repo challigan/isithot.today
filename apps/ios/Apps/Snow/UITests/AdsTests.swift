@@ -12,6 +12,14 @@ import XCTest
 /// prompt before any ad (`-tracking system`; every other test here never asks it, as the
 /// simulator would keep the answer: `DebugHooks.asksTracking`).
 ///
+/// Google's demo publisher, whose ads every Debug build shows, has an "IDFA message" published:
+/// while the simulator's answer to Apple's tracking prompt is undetermined, UMP shows its own
+/// explainer ("Our app wants to stay free for you", a web dialog with Continue) and then raises
+/// Apple's prompt itself, before Mobile Ads starts. The simulator keeps the answer for the
+/// install, so the first launch of a run with the ads meets them, whichever test it is: each wait
+/// for the ads answers both, asking not to track (`waitForTheAds`). The release publisher has no
+/// such message (docs/SETUP.md), so there the app asks Apple's prompt itself.
+///
 /// Google's consent tool, its form and its demo ads aren't the app's to guarantee: a test whose
 /// answer from Google doesn't come in time skips, saying which, rather than fails. Which it is, a
 /// Debug build's readout of the ads model says (`DebugHooks.adsReadout`, over the home screen):
@@ -74,7 +82,10 @@ final class AdsTests: XCTestCase {
   /// Apple's tracking prompt (App Tracking Transparency; App Review 5.1.2(i)), the system's own
   /// (`-tracking system`), its answer reset first, as the simulator keeps one for the install:
   /// asked once Google's consent tool has answered (outside the EEA, so no form) and before any
-  /// ad, so while it is on screen the ads aren't on. Asked not to track, the ads still come on:
+  /// ad, so while it is on screen the ads aren't on. With Google's demo publisher, UMP's own
+  /// explainer comes first and raises the prompt itself (the class's note); its Continue is
+  /// tapped, as a person would. Either way the prompt must come before any ad, which is what
+  /// this holds; the app's own request is AdsModelTests'. Asked not to track, the ads still come on:
   /// nothing may be withheld for the answer. Its button is the system's own English. Google's
   /// tool not answering within 30 seconds skips, as elsewhere (`notOn`); the ads on with no
   /// prompt, or not asking while it is up, fail. A simulator whose Settings → Privacy & Security
@@ -89,9 +100,19 @@ final class AdsTests: XCTestCase {
       "0", "-tracking", "system",
     ]
     app.launch()
-    let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
     let decline = springboard.buttons["Ask App Not to Track"]
-    guard decline.waitForExistence(timeout: 30) else {
+    // Up to 30 seconds for Apple's prompt, past Google's explainer should it come first.
+    let deadline = Date().addingTimeInterval(30)
+    var explained = false
+    while !decline.exists, Date() < deadline {
+      if !explained, let explainer = explainersContinue(in: app) {
+        XCTAssertNotEqual(adsPhase(in: app), "on", "The ads came on before Google's explainer")
+        explainer.tap()
+        explained = true
+      }
+      RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+    }
+    guard decline.exists else {
       let phase = adsPhase(in: app)
       if phase == "on" {
         throw HomeScreenError(
@@ -169,7 +190,7 @@ final class AdsTests: XCTestCase {
       "-resetStore", "-fixture", "leeds-dry", "-umpGeography", "other", "-purchase", "bought",
     ])
     try awaitHeading(page.heading, in: app)
-    let phase = waitForAdsPhase(["on", "withheld"], in: app, timeout: 30)
+    let phase = waitForTheAds(in: app, timeout: 30)
     let band = app.find("ad-home")
     let came = phase == "on" && band.waitForExistence(timeout: 5)
     // What is the app's fails, as everywhere here: the ads never started, no readout, or on with
@@ -454,12 +475,48 @@ final class AdsTests: XCTestCase {
     return phase
   }
 
+  /// The Continue of Google's demo explainer (the class's note) that a touch reaches, or nil while
+  /// there is none. The dialog is in the tree twice, once in a 1-point frame Google keeps it in
+  /// before it shows (PR #62's first run: "Multiple matching elements"), so the button is the one
+  /// that is hittable.
+  @MainActor
+  private func explainersContinue(in app: XCUIApplication) -> XCUIElement? {
+    let buttons = app.webViews.buttons.matching(NSPredicate(format: "label == %@", "Continue"))
+    for index in 0..<buttons.count {
+      let button = buttons.element(boundBy: index)
+      if button.isHittable { return button }
+    }
+    return nil
+  }
+
+  /// SpringBoard, where Apple's tracking prompt is shown.
+  @MainActor
+  private var springboard: XCUIApplication {
+    XCUIApplication(bundleIdentifier: "com.apple.springboard")
+  }
+
+  /// Reads the ads' phase until it is on or withheld, for up to `timeout` seconds, as
+  /// `waitForAdsPhase`; should Google's demo explainer come meanwhile (the class's note), taps its
+  /// Continue, then Apple's "Ask App Not to Track" (up to 10 seconds for it), and waits again, up
+  /// to `timeout`. The last reading.
+  @MainActor
+  private func waitForTheAds(in app: XCUIApplication, timeout: TimeInterval) -> String? {
+    let phase = waitForAdsPhase(["on", "withheld"], in: app, timeout: timeout) {
+      explainersContinue(in: app) != nil
+    }
+    guard let explainer = explainersContinue(in: app) else { return phase }
+    explainer.tap()
+    let decline = springboard.buttons["Ask App Not to Track"]
+    if decline.waitForExistence(timeout: 10) { decline.tap() }
+    return waitForAdsPhase(["on", "withheld"], in: app, timeout: timeout)
+  }
+
   /// Waits up to 30 seconds after `what`, a free launch's, for the ads to be on, then up to 5 for
   /// the band (`ad-home`), which is there once they are on and the home screen's width is known.
   /// Ads that aren't on by then skip or fail as `notOn` says; on with no band fails.
   @MainActor
   private func awaitTheAds(in app: XCUIApplication, after what: String) throws {
-    let phase = waitForAdsPhase(["on", "withheld"], in: app, timeout: 30)
+    let phase = waitForTheAds(in: app, timeout: 30)
     guard phase == "on" else {
       throw notOn(phase, "30 seconds after \(what)", in: app)
     }
