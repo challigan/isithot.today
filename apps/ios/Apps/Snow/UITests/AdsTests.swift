@@ -101,12 +101,11 @@ final class AdsTests: XCTestCase {
     ]
     app.launch()
     let decline = springboard.buttons["Ask App Not to Track"]
-    let explainer = app.webViews.buttons["Continue"]
     // Up to 30 seconds for Apple's prompt, past Google's explainer should it come first.
     let deadline = Date().addingTimeInterval(30)
     var explained = false
     while !decline.exists, Date() < deadline {
-      if !explained, explainer.exists {
+      if !explained, let explainer = explainersContinue(in: app) {
         XCTAssertNotEqual(adsPhase(in: app), "on", "The ads came on before Google's explainer")
         explainer.tap()
         explained = true
@@ -476,6 +475,20 @@ final class AdsTests: XCTestCase {
     return phase
   }
 
+  /// The Continue of Google's demo explainer (the class's note) that a touch reaches, or nil while
+  /// there is none. The dialog is in the tree twice, once in a 1-point frame Google keeps it in
+  /// before it shows (PR #62's first run: "Multiple matching elements"), so the button is the one
+  /// that is hittable.
+  @MainActor
+  private func explainersContinue(in app: XCUIApplication) -> XCUIElement? {
+    let buttons = app.webViews.buttons.matching(NSPredicate(format: "label == %@", "Continue"))
+    for index in 0..<buttons.count {
+      let button = buttons.element(boundBy: index)
+      if button.isHittable { return button }
+    }
+    return nil
+  }
+
   /// SpringBoard, where Apple's tracking prompt is shown.
   @MainActor
   private var springboard: XCUIApplication {
@@ -488,11 +501,10 @@ final class AdsTests: XCTestCase {
   /// to `timeout`. The last reading.
   @MainActor
   private func waitForTheAds(in app: XCUIApplication, timeout: TimeInterval) -> String? {
-    let explainer = app.webViews.buttons["Continue"]
     let phase = waitForAdsPhase(["on", "withheld"], in: app, timeout: timeout) {
-      explainer.exists
+      explainersContinue(in: app) != nil
     }
-    guard explainer.exists else { return phase }
+    guard let explainer = explainersContinue(in: app) else { return phase }
     explainer.tap()
     let decline = springboard.buttons["Ask App Not to Track"]
     if decline.waitForExistence(timeout: 10) { decline.tap() }
