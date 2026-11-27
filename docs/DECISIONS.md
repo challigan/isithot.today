@@ -9518,15 +9518,18 @@ personalised ads for those who allow them, and it is what Apple and Google both 
 - **The order: Google's consent form, then Apple's prompt, then Mobile Ads** (`AdsModel`). It is
   Google's own order, and Apple allows either. The prompt is asked just before Mobile Ads starts,
   only while unanswered (`trackingAnswered`), so:
-  - nothing is asked of Mobile Ads, and no ad loads, before it is answered;
+  - nothing is asked of Mobile Ads, and no ad loads, before it is answered, or passed by (below);
   - where UMP says no ads may be requested, there is no prompt, as there are no ads;
   - Settings' Privacy choices turning the ads on asks it first;
   - a purchase made while it is on screen means Mobile Ads never starts;
   - consent kept from an earlier launch no longer starts Mobile Ads alongside UMP's update while
     the prompt is unanswered: it waits for the update and the prompt, as a first launch does.
 - **Asked only while the app is active** (`GoogleAds.requestTracking`): Apple shows the prompt
-  only then, so it waits for the app to become active first. One the system dismissed unanswered
-  is asked again at the next launch.
+  only then, so it waits for the app to become active first, and a purchase made meanwhile (as
+  under StoreKit's payment sheet) means it isn't shown. It is asked once a launch: one the system
+  dismissed unanswered, or didn't show, leaves the answer undetermined, so Mobile Ads gets no
+  advertising identifier that launch and the next launch asks again. Asking again at once could
+  spin where the system answers undetermined without a prompt.
 - **The words** (`trackingPurpose`, Info.plist's `NSUserTrackingUsageDescription` from the
   generated Copy.xcconfig): "Google uses this to choose ads that suit you. The app works the same
   whatever you choose." Apple asks for a short, specific sentence without the app's name, and
@@ -9544,7 +9547,10 @@ personalised ads for those who allow them, and it is what Apple and Google both 
   `-tracking system`, finds Apple's alert before any ad is on, declines, and sees the ads come.
 - **App Store Connect** (docs/SETUP.md, "Resubmitting after App Review's answer of 26 Nov"): App
   Privacy declares Device ID as used for tracking, with the other types Google's manifest lists;
-  the purchase goes with the version (2.1(b)); and the review note says where the prompt is.
+  the purchase goes with the version (2.1(b)); and the review note says where the prompt is, and
+  that it shows only while the phone lets apps ask (Settings → Privacy & Security → Tracking).
+  Carl's own Apple Account owns the purchase, so his install shows no ads and no prompt: the check
+  is on another tester's iPhone.
 
 **Checked.** `AdsModelTests`' "The ads' tracking prompt", on Linux: the order in the EEA and
 elsewhere; consent kept but the prompt unanswered; nothing of Mobile Ads and no banner before the

@@ -44,9 +44,11 @@ public protocol AdsPlatform: AnyObject {
   /// Whether Apple's tracking prompt (App Tracking Transparency) needs no asking: answered at an
   /// earlier launch, or one the system never shows (restricted).
   var trackingAnswered: Bool { get }
-  /// Apple's tracking prompt, once the app is active; returns once it is answered. Asked only
-  /// while it isn't (`trackingAnswered`), and only just before Mobile Ads' start (App Review
-  /// 5.1.2(i): permission before any data used to track is collected).
+  /// Apple's tracking prompt, once the app is active; returns once it is answered, or at once
+  /// when the system doesn't show it (the answer then stays undetermined, so no advertising
+  /// identifier, and the next launch asks again). Asked only while unanswered
+  /// (`trackingAnswered`), and only just before Mobile Ads' start (App Review 5.1.2(i):
+  /// permission before any data used to track is collected).
   func requestTracking() async
   /// Mobile Ads' start, with the maximum ad content rating G. Called once.
   func startAds() async

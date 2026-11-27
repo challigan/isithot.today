@@ -184,9 +184,11 @@ struct AdsTrackingTests {
     #expect(ads.model.phase == .asking)
     #expect(ads.model.homeBannerHeight == nil)
     #expect(ads.platform.calls == ["updateConsent", "presentConsentForm", "requestTracking"])
-    // A place chosen meanwhile goes on at once, with no full-screen ad.
+    // A place chosen meanwhile goes on at once, with no full-screen ad, and asks Google nothing.
     let done = ads.choose()
     #expect(done.read { $0 } == 1)
+    await settle()
+    #expect(ads.platform.calls == ["updateConsent", "presentConsentForm", "requestTracking"])
     ads.platform.release(.tracking)
     #expect(await yieldUntil { ads.model.phase == .on })
     await settle()

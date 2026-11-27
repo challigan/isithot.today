@@ -850,12 +850,14 @@ fixes the first in the app (DECISIONS, "App Tracking Transparency"); the rest is
 Connect's.
 
 1. **A new build.** Merge that pull request, then run **iOS release** with **ads** `real`, as for
-   the release candidate. When it reaches TestFlight, delete the app from your iPhone and install
-   it again: on its first launch, once the forecast shows, Apple's prompt asks "Allow 'will it
-   snow?' to track your activity across other companies' apps and websites?", with the words
-   "Google uses this to choose ads that suit you. The app works the same whatever you choose."
-   Either answer, the ads then come. You can change it in **Settings → Privacy & Security →
-   Tracking**.
+   the release candidate. When it reaches TestFlight, check it on an iPhone whose Apple Account
+   hasn't bought **No ads, widgets and more**: yours owns it from earlier builds, so the app shows
+   it no ads, and so no prompt. Delete the app and install it again: on its first launch, once the
+   forecast shows, Apple's prompt asks "Allow 'will it snow?' to track your activity across other
+   companies' apps and websites?", with the words "Google uses this to choose ads that suit you.
+   The app works the same whatever you choose." Either answer, the ads then come. It shows only
+   while **Settings → Privacy & Security → Tracking → Allow Apps to Request to Track** is on,
+   where the answer can be changed too.
 2. **App Privacy** (**Apps**, **willitsnow.today**, **App Privacy**, **Edit**). Google's SDK, in
    the version the app ships, declares what it collects in its privacy manifest, and Apple counts
    it as the app's. Make the answers these, keeping the push token's App Functionality on Device
@@ -891,9 +893,10 @@ Connect's.
    > permission to track with Apple's App Tracking Transparency prompt. It appears on the first
    > launch, a few seconds after the forecast shows: in the UK and the EEA straight after Google's
    > consent form, and elsewhere on its own. If you choose "Ask App Not to Track", the app works
-   > exactly the same, and Google doesn't receive the advertising identifier. To see the prompt
-   > again, delete the app and install it again. After the purchase there are no ads, and the
-   > prompt isn't shown.
+   > exactly the same, and Google doesn't receive the advertising identifier. The prompt appears
+   > only while Settings → Privacy & Security → Tracking → "Allow Apps to Request to Track" is on;
+   > to see it again, delete the app and install it again. After the purchase there are no ads,
+   > and the prompt isn't shown.
 
 6. **Submit for Review.** Optionally, reply to App Review's message first: "We've added App
    Tracking Transparency: the prompt appears on first launch, before any ad (details in the

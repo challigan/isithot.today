@@ -77,7 +77,8 @@ final class AdsTests: XCTestCase {
   /// ad, so while it is on screen the ads aren't on. Asked not to track, the ads still come on:
   /// nothing may be withheld for the answer. Its button is the system's own English. Google's
   /// tool not answering within 30 seconds skips, as elsewhere (`notOn`); the ads on with no
-  /// prompt, or on while it is up, fail.
+  /// prompt, or not asking while it is up, fail. A simulator whose Settings → Privacy & Security
+  /// → Tracking doesn't let apps ask shows no prompt, and fails here too.
   @MainActor
   func testTheTrackingPromptComesBeforeAnyAd() throws {
     let app = XCUIApplication()
@@ -94,12 +95,14 @@ final class AdsTests: XCTestCase {
       let phase = adsPhase(in: app)
       if phase == "on" {
         throw HomeScreenError(
-          "The ads are on, and Apple's tracking prompt never came: no permission was asked")
+          "The ads are on, and Apple's tracking prompt never came: no permission was asked (or "
+            + "the simulator's Settings → Privacy & Security → Tracking doesn't let apps ask)")
       }
       throw notOn(phase, "30 seconds after the launch, with no tracking prompt", in: app)
     }
-    XCTAssertNotEqual(
-      adsPhase(in: app), "on", "The ads came on while Apple's tracking prompt was still up")
+    XCTAssertEqual(
+      adsPhase(in: app), "asking",
+      "While Apple's tracking prompt is up, the ads should still be asking, not on")
     decline.tap()
     try awaitTheAds(in: app, after: "the tracking prompt was answered")
   }

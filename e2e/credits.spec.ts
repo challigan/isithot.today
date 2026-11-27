@@ -125,7 +125,7 @@ test.describe('the legal pages', () => {
         'Ads in the app. The free version shows ads from Google AdMob. ' +
           `In the UK and the EEA, Google's consent message asks for your choice first, and ${settings} → ${privacyChoices} lets you change it. ` +
           // Apple's tracking prompt, before any ad (App Review 5.1.2(i)).
-          "Before any ad, Apple's prompt asks whether Google may track you: it tracks your activity across other companies' apps and websites only if you allow it, and you can change your answer in your iPhone's Settings → Privacy & Security → Tracking. " +
+          "Before any ad, Apple's prompt asks whether the app may track you: Google tracks your activity across other companies' apps and websites only if you allow it, and you can change your answer in your iPhone's Settings → Privacy & Security → Tracking. " +
           'Google may collect device identifiers, advertising data, usage and diagnostics, and an approximate location from your IP address. ' +
           "See Google's privacy policy. The app keeps on your iPhone when it last showed a full-screen ad, so it shows one at most every 5 minutes. " +
           'The one-off purchase turns the ads off.',

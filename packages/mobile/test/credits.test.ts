@@ -231,7 +231,7 @@ describe("Your privacy and the website's privacy notice", () => {
       // websites, as the 1.0 app names none.
       [
         'It tracks you only if you allow it when the app asks.',
-        "Before any ad, Apple's prompt asks whether Google may track you: it tracks your activity across other companies' apps and websites only if you allow it",
+        "Before any ad, Apple's prompt asks whether the app may track you: Google tracks your activity across other companies' apps and websites only if you allow it",
       ],
       // What the phone keeps for the full-screen ads' spacing (`Keys.App.lastInterstitial`).
       ['when it last showed a full-screen ad', 'when it last showed a full-screen ad'],

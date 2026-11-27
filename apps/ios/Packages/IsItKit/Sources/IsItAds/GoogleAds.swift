@@ -68,6 +68,9 @@ public final class GoogleAds: NSObject, AdsPlatform, BannerViewDelegate,
   /// What `presentInterstitial()` waits on: resumed when the ad on screen closes, or fails to
   /// show.
   private var closing: CheckedContinuation<Bool, Never>?
+  /// Whether the purchase stopped the ads (`stop()`): Apple's tracking prompt, still waiting for
+  /// the app to be active (as under StoreKit's payment sheet), is then never shown.
+  private var stopped = false
 
   /// Google's SDKs with the app's ad units; under a Debug build's `-umpGeography`, UMP in that
   /// `geography`, and nil for where the phone is; Apple's tracking prompt asked unless
@@ -153,12 +156,15 @@ public final class GoogleAds: NSObject, AdsPlatform, BannerViewDelegate,
 
   /// Apple's tracking prompt (App Review 5.1.2(i)), its words `NSUserTrackingUsageDescription`
   /// (appCopy.ts' `trackingPurpose`). The system shows it only while the app is active, so this
-  /// waits for that first. Mobile Ads, started after it, reads the answer itself: the advertising
-  /// identifier goes in its requests only if the person allowed it. A prompt the system dismissed
-  /// unanswered is asked again at the next launch.
+  /// waits for that first; a purchase made meanwhile (`stop()`) means it isn't shown. Mobile Ads,
+  /// started after it, reads the answer itself: the advertising identifier goes in its requests
+  /// only if the person allowed it. Asked once a launch: one the system dismissed, or didn't
+  /// show, leaves the answer undetermined, so no identifier, and is asked again at the next
+  /// launch.
   public func requestTracking() async {
     guard !trackingAnswered else { return }
     await becameActive()
+    guard !stopped else { return }
     _ = await ATTrackingManager.requestTrackingAuthorization()
   }
 
@@ -298,6 +304,7 @@ public final class GoogleAds: NSObject, AdsPlatform, BannerViewDelegate,
   /// delegates let go, and none is kept. A full-screen ad being shown (`showing`) is left to
   /// close, and `presentInterstitial()` returns when it does.
   public func stop() {
+    stopped = true
     for banner in bannerViews.values {
       banner.delegate = nil
       banner.adSizeDelegate = nil
