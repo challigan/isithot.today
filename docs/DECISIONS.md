@@ -9495,6 +9495,63 @@ change counts only from the phone's next PUT.
 - after a PUT that couldn't delete its old copies, a phone Apple refuses is forgotten at once:
   one push, and a 404.
 
+## App Tracking Transparency
+
+`AdsModel` and `GoogleAds` (IsItState, IsItAds), the app's copy and Info.plist, and the privacy
+notice.
+
+**Why.** App Review rejected 1.0 (111) on Thu 26 Nov under Guideline 5.1.2(i): "The app includes
+a GDPR prompt, informing the user that the app tracks. However, you do not use App Tracking
+Transparency to request the user's permission before collecting data used to track." Google's SDK
+declares, in its own privacy manifest, that the device ID it collects is linked to the user and
+used for tracking, so the app tracks as Apple defines it, whatever the app itself does. Apple's two
+ways out were to ask with App Tracking Transparency, or to remove tracking. Asking is what keeps
+personalised ads for those who allow them, and it is what Apple and Google both describe.
+
+**How.**
+
+- **The app asks, not Google's "IDFA message".** UMP can show Apple's prompt itself, after an
+  "IDFA explainer" set up in AdMob. But then whether and when the prompt comes is decided by
+  AdMob's console, its targeting and the network, and Google documents neither the consent status
+  nor `canRequestAds` while the prompt is unanswered. The app's own call is a few lines, works
+  offline, and the tests can hold it. No IDFA message may be published in AdMob alongside it.
+- **The order: Google's consent form, then Apple's prompt, then Mobile Ads** (`AdsModel`). It is
+  Google's own order, and Apple allows either. The prompt is asked just before Mobile Ads starts,
+  only while unanswered (`trackingAnswered`), so:
+  - nothing is asked of Mobile Ads, and no ad loads, before it is answered;
+  - where UMP says no ads may be requested, there is no prompt, as there are no ads;
+  - Settings' Privacy choices turning the ads on asks it first;
+  - a purchase made while it is on screen means Mobile Ads never starts;
+  - consent kept from an earlier launch no longer starts Mobile Ads alongside UMP's update while
+    the prompt is unanswered: it waits for the update and the prompt, as a first launch does.
+- **Asked only while the app is active** (`GoogleAds.requestTracking`): Apple shows the prompt
+  only then, so it waits for the app to become active first. One the system dismissed unanswered
+  is asked again at the next launch.
+- **The words** (`trackingPurpose`, Info.plist's `NSUserTrackingUsageDescription` from the
+  generated Copy.xcconfig): "Google uses this to choose ads that suit you. The app works the same
+  whatever you choose." Apple asks for a short, specific sentence without the app's name, and
+  forbids incentives; nothing is withheld for either answer. No screen comes before the prompt.
+- **What a "no" means.** Google's SDK then sends no advertising identifier; the ads still show.
+- **The privacy lines.** Your privacy's ads line says Google "tracks you only if you allow it when
+  the app asks" (no "websites": the 1.0 app names none, and `otherTopic` holds it to that). The
+  notice's "Ads in the app" says it tracks activity across other companies' apps and websites only
+  if allowed, and where to change the answer (Settings → Privacy & Security → Tracking); its date
+  moves to 27 November 2026. credits.test.ts pairs the two.
+- **UI tests.** The simulator keeps the prompt's answer for the install, whatever `-resetStore`
+  does, so a test that met it would decide every later one. Under `-uitest` the prompt is never
+  asked (`DebugHooks.asksTracking`), but for AdsTests' `testTheTrackingPromptComesBeforeAnyAd`,
+  which resets the answer (`resetAuthorizationStatus(for: .userTracking)`), launches with
+  `-tracking system`, finds Apple's alert before any ad is on, declines, and sees the ads come.
+- **App Store Connect** (docs/SETUP.md, "Resubmitting after App Review's answer of 26 Nov"): App
+  Privacy declares Device ID as used for tracking, with the other types Google's manifest lists;
+  the purchase goes with the version (2.1(b)); and the review note says where the prompt is.
+
+**Checked.** `AdsModelTests`' "The ads' tracking prompt", on Linux: the order in the EEA and
+elsewhere; consent kept but the prompt unanswered; nothing of Mobile Ads and no banner before the
+answer; no prompt once answered, or when UMP says no; Privacy choices; and a purchase while the
+prompt is up. `InfoPlistTests` holds the purpose string to the copy. The macOS run is the first
+check of `GoogleAds`' call and of the UI test.
+
 ## Credits and licences
 
 - **Credits follow each source's licence.** Open-Meteo's licence asks for a "Weather data by

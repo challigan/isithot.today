@@ -7,8 +7,10 @@ import XCTest
 /// links; the paid version (`-unlocked 1`) with no ad, no Report an ad and no Privacy choices; in
 /// the EEA (`-umpGeography eea`), Google's consent form first, then Privacy choices in Settings
 /// and its line in Your privacy; the full-screen ad as a place is chosen in the picker, which
-/// closes once the ad does, with no second one within 5 minutes; and a purchase mid-session
-/// (`-purchase bought`, StoreKit's stand-in) taking every ad away at once.
+/// closes once the ad does, with no second one within 5 minutes; a purchase mid-session
+/// (`-purchase bought`, StoreKit's stand-in) taking every ad away at once; and Apple's tracking
+/// prompt before any ad (`-tracking system`; every other test here never asks it, as the
+/// simulator would keep the answer: `DebugHooks.asksTracking`).
 ///
 /// Google's consent tool, its form and its demo ads aren't the app's to guarantee: a test whose
 /// answer from Google doesn't come in time skips, saying which, rather than fails. Which it is, a
@@ -67,6 +69,39 @@ final class AdsTests: XCTestCase {
     try scroll(page, toShow: "ad-page-\(page.view)", in: app)
     expectBox(in: app, on: page)
     attach(app, as: "ads-page-end")
+  }
+
+  /// Apple's tracking prompt (App Tracking Transparency; App Review 5.1.2(i)), the system's own
+  /// (`-tracking system`), its answer reset first, as the simulator keeps one for the install:
+  /// asked once Google's consent tool has answered (outside the EEA, so no form) and before any
+  /// ad, so while it is on screen the ads aren't on. Asked not to track, the ads still come on:
+  /// nothing may be withheld for the answer. Its button is the system's own English. Google's
+  /// tool not answering within 30 seconds skips, as elsewhere (`notOn`); the ads on with no
+  /// prompt, or on while it is up, fail.
+  @MainActor
+  func testTheTrackingPromptComesBeforeAnyAd() throws {
+    let app = XCUIApplication()
+    // Before the launch, as resetting a permission may end the app's process.
+    app.resetAuthorizationStatus(for: .userTracking)
+    app.launchArguments = [
+      "-uitest", "-resetStore", "-fixture", "leeds-dry", "-umpGeography", "other", "-unlocked",
+      "0", "-tracking", "system",
+    ]
+    app.launch()
+    let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+    let decline = springboard.buttons["Ask App Not to Track"]
+    guard decline.waitForExistence(timeout: 30) else {
+      let phase = adsPhase(in: app)
+      if phase == "on" {
+        throw HomeScreenError(
+          "The ads are on, and Apple's tracking prompt never came: no permission was asked")
+      }
+      throw notOn(phase, "30 seconds after the launch, with no tracking prompt", in: app)
+    }
+    XCTAssertNotEqual(
+      adsPhase(in: app), "on", "The ads came on while Apple's tracking prompt was still up")
+    decline.tap()
+    try awaitTheAds(in: app, after: "the tracking prompt was answered")
   }
 
   /// The paid version (`-unlocked 1`): neither Google's consent tool nor Mobile Ads starts (spec

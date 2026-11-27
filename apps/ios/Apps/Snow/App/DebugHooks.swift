@@ -471,6 +471,18 @@ enum DebugHooks {
       }
     }
 
+    /// Whether the ads ask Apple's tracking prompt (`GoogleAds`): not in a UI test (`-uitest`),
+    /// as the simulator keeps the answer for every later test of the run, unless `-tracking
+    /// system` asks for it, for the AdsTests test that resets it and answers the real prompt.
+    /// Any other `-tracking` value stops the app.
+    static func asksTracking(arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+      if let value = value(after: "-tracking", in: arguments) {
+        guard value == "system" else { fatalError("-tracking: \(value) isn't system") }
+        return true
+      }
+      return !arguments.contains("-uitest")
+    }
+
     /// What `-notifications` stands in for: the permission not yet asked, with the prompt
     /// allowing (`allow`, the default) or refusing (`deny`); that state from the start
     /// (`authorized`, `denied`, `provisional`); or the real centre's (`system`).
@@ -778,6 +790,8 @@ enum DebugHooks {
     static func apiOrigin() -> URL? { nil }
 
     static func noAds() -> Bool { false }
+
+    static func asksTracking() -> Bool { true }
 
     static func adsReadout(_ ads: AdsModel) -> some View { EmptyView() }
 

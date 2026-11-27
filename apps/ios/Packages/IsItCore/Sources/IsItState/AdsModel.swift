@@ -41,6 +41,13 @@ public protocol AdsPlatform: AnyObject {
   func presentConsentFormIfRequired() async -> AdsConsent
   /// presentPrivacyOptionsForm, over whatever is on top; the answer after it.
   func presentPrivacyOptions() async -> AdsConsent
+  /// Whether Apple's tracking prompt (App Tracking Transparency) needs no asking: answered at an
+  /// earlier launch, or one the system never shows (restricted).
+  var trackingAnswered: Bool { get }
+  /// Apple's tracking prompt, once the app is active; returns once it is answered. Asked only
+  /// while it isn't (`trackingAnswered`), and only just before Mobile Ads' start (App Review
+  /// 5.1.2(i): permission before any data used to track is collected).
+  func requestTracking() async
   /// Mobile Ads' start, with the maximum ad content rating G. Called once.
   func startAds() async
   /// The home banner's height at `width` (largePortraitAnchoredAdaptiveBanner), known before it
@@ -166,14 +173,17 @@ public final class AdsModel {
   /// Launch step 5's work (spec 14.2), started and left running: returns at once, so alert sync
   /// and a pending route never wait on the consent form. Only the first call does anything, and
   /// none after `stop()`.
-  ///  1. If UMP's kept answer already lets ads be requested, Mobile Ads starts now, alongside the
-  ///     update (Google's own order).
+  ///  1. If UMP's kept answer already lets ads be requested and Apple's tracking prompt was
+  ///     answered at an earlier launch, Mobile Ads starts now, alongside the update (Google's own
+  ///     order).
   ///  2. updateConsent, then presentConsentFormIfRequired.
   ///  3. privacyChoices from the answer; if ads may be requested and Mobile Ads hasn't started,
   ///     it starts; if not, `withheld`.
-  /// Starting Mobile Ads sets `on`, reserves and loads the home banner if the width is known,
-  /// loads the page-end banner of every page already shown whose width is known, and, unless
-  /// `firstRun`, loads a full-screen ad.
+  /// Starting Mobile Ads first asks Apple's tracking prompt while it is unanswered: after
+  /// Google's consent form, where there is one, and before anything is asked of Mobile Ads
+  /// (App Review 5.1.2(i)). It then sets `on`, reserves and loads the home banner if the width
+  /// is known, loads the page-end banner of every page already shown whose width is known, and,
+  /// unless `firstRun`, loads a full-screen ad.
   public func start(firstRun: Bool) {
     guard asking == nil, !stopped else { return }
     self.firstRun = firstRun
@@ -214,8 +224,9 @@ public final class AdsModel {
   /// The start flow (`start(firstRun:)`).
   private func ask() async {
     _ = await platform.updateConsent { kept in
-      // Consent kept from an earlier launch: Mobile Ads starts while the update is out.
-      if kept.canRequestAds { Task { await self.startMobileAds() } }
+      // Consent kept from an earlier launch: Mobile Ads starts while the update is out, unless
+      // Apple's tracking prompt is still to ask, which waits for Google's form.
+      if kept.canRequestAds, platform.trackingAnswered { Task { await self.startMobileAds() } }
     }
     // Stopped meanwhile: no form is asked for, and one on screen starts nothing once answered.
     guard !stopped else { return }
@@ -229,11 +240,16 @@ public final class AdsModel {
     }
   }
 
-  /// Starts Mobile Ads, once; then the ads are on, and what may load now loads. Stopped before
-  /// or while it starts, the ads stay off and nothing loads.
+  /// Starts Mobile Ads, once, after Apple's tracking prompt while it is unanswered; then the ads
+  /// are on, and what may load now loads. Stopped before or while either, the ads stay off and
+  /// nothing loads.
   private func startMobileAds() async {
     guard !started, !stopped else { return }
     started = true
+    if !platform.trackingAnswered {
+      await platform.requestTracking()
+      guard !stopped else { return }
+    }
     await platform.startAds()
     guard !stopped else { return }
     phase = .on

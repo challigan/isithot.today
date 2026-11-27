@@ -2420,7 +2420,11 @@ Google's consent. DECISIONS has the why ("Ads in the iPhone app: three placement
   VoiceOver reads each as "Advertisement".
 - **The start** is launch step 5, which AppModel takes only when the purchase isn't owned:
   `LiveHooks.startAds()` calls `AdsModel.start(firstRun:)`, which returns at once and runs UMP's
-  update, its consent form where one is required, then Mobile Ads, every ad rated G at most. A
+  update, its consent form where one is required, then Apple's tracking prompt while it is
+  unanswered (App Tracking Transparency, App Review 5.1.2(i); its words are appCopy.ts'
+  `trackingPurpose`), then Mobile Ads, every ad rated G at most. UI tests never ask the prompt,
+  as the simulator keeps its answer for the install, but for AdsTests'
+  `testTheTrackingPromptComesBeforeAnyAd` (`-tracking system`), which resets it first. A
   purchase made while the app runs stops them for good that launch (`AdsModel.stop()`; above,
   "Phase 7.1: the purchase").
   Settings shows "Privacy choices" while UMP says its privacy options form is required (above, "6.2

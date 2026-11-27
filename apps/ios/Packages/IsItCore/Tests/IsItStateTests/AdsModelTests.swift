@@ -124,6 +124,129 @@ struct AdsStartTests {
   }
 }
 
+/// Apple's tracking prompt (App Tracking Transparency; App Review 5.1.2(i)): asked while it is
+/// unanswered, after Google's consent form and before anything is asked of Mobile Ads, so no ad
+/// loads before it is answered; never while UMP says no ads may be requested.
+@MainActor
+@Suite("The ads' tracking prompt")
+struct AdsTrackingTests {
+  @Test("in the EEA: the update, Google's consent form, Apple's prompt, then Mobile Ads")
+  func afterTheForm() async {
+    let ads = AdsHarness(consent: .unknown, trackingAnswered: false)
+    ads.platform.afterUpdate = .required
+    ads.platform.afterForm = .consented
+    ads.model.start(firstRun: true)
+    #expect(await yieldUntil { ads.model.phase == .on })
+    #expect(
+      ads.platform.calls == [
+        "updateConsent", "presentConsentForm", "requestTracking", "startAds",
+      ])
+  }
+
+  @Test("elsewhere, no form: Apple's prompt once the update has answered, then Mobile Ads")
+  func noForm() async {
+    let ads = AdsHarness(consent: .unknown, trackingAnswered: false)
+    ads.platform.afterUpdate = .outside
+    ads.model.start(firstRun: true)
+    #expect(await yieldUntil { ads.model.phase == .on })
+    #expect(
+      ads.platform.calls == [
+        "updateConsent", "presentConsentForm", "requestTracking", "startAds",
+      ])
+  }
+
+  @Test("consent kept but the prompt not answered: Mobile Ads waits for the update and the prompt")
+  func keptConsent() async {
+    let ads = AdsHarness(consent: .consented, trackingAnswered: false, holding: [.update])
+    ads.model.start(firstRun: true)
+    #expect(await yieldUntil { ads.platform.calls == ["updateConsent"] })
+    await settle()
+    // No early start: the prompt comes after Google's form, as on a first launch.
+    #expect(ads.platform.calls == ["updateConsent"])
+    #expect(ads.model.phase == .asking)
+    ads.platform.release(.update)
+    #expect(await yieldUntil { ads.model.phase == .on })
+    #expect(
+      ads.platform.calls == [
+        "updateConsent", "presentConsentForm", "requestTracking", "startAds",
+      ])
+  }
+
+  @Test("nothing is asked of Mobile Ads, and no banner loads, until the prompt is answered")
+  func waitsForTheAnswer() async {
+    let ads = AdsHarness(trackingAnswered: false, holding: [.tracking])
+    ads.model.homeWidth(390)
+    ads.model.shown(.today)
+    ads.model.pageEndWidth(.today, 358)
+    ads.model.start(firstRun: false)
+    #expect(await yieldUntil { ads.platform.calls.contains("requestTracking") })
+    await settle()
+    #expect(ads.model.phase == .asking)
+    #expect(ads.model.homeBannerHeight == nil)
+    #expect(ads.platform.calls == ["updateConsent", "presentConsentForm", "requestTracking"])
+    // A place chosen meanwhile goes on at once, with no full-screen ad.
+    let done = ads.choose()
+    #expect(done.read { $0 } == 1)
+    ads.platform.release(.tracking)
+    #expect(await yieldUntil { ads.model.phase == .on })
+    await settle()
+    #expect(ads.model.homeBannerHeight == 61)
+    #expect(
+      ads.platform.bannerCalls == ["bannerHeight 390", "banner home 390", "banner today 358"])
+  }
+
+  @Test("answered at an earlier launch: no prompt, and Mobile Ads starts alongside the update")
+  func answeredBefore() async {
+    let ads = AdsHarness(consent: .consented, trackingAnswered: true, holding: [.update])
+    ads.model.start(firstRun: true)
+    #expect(await yieldUntil { ads.model.phase == .on })
+    #expect(ads.platform.calls == ["updateConsent", "startAds"])
+    ads.platform.release(.update)
+    await settle()
+    #expect(!ads.platform.calls.contains("requestTracking"))
+  }
+
+  @Test("UMP says no: no prompt, as no ad will be asked for")
+  func withheld() async {
+    let ads = AdsHarness(consent: .unknown, trackingAnswered: false)
+    ads.model.start(firstRun: true)
+    #expect(await yieldUntil { ads.model.phase == .withheld })
+    await settle()
+    #expect(ads.platform.calls == ["updateConsent", "presentConsentForm"])
+  }
+
+  @Test("Privacy choices turning the ads on asks Apple's prompt first")
+  func privacyChoices() async {
+    let ads = AdsHarness(consent: .unknown, trackingAnswered: false)
+    ads.platform.afterUpdate = .required
+    ads.model.start(firstRun: true)
+    #expect(await yieldUntil { ads.model.phase == .withheld })
+    ads.platform.afterPrivacyOptions = .consented
+    await ads.model.openPrivacyChoices()
+    #expect(ads.model.phase == .on)
+    #expect(
+      ads.platform.calls == [
+        "updateConsent", "presentConsentForm", "presentPrivacyOptions", "requestTracking",
+        "startAds",
+      ])
+  }
+
+  @Test("the purchase made while the prompt is up: Mobile Ads never starts")
+  func stoppedDuringThePrompt() async {
+    let ads = AdsHarness(trackingAnswered: false, holding: [.tracking])
+    ads.model.homeWidth(390)
+    ads.model.start(firstRun: false)
+    #expect(await yieldUntil { ads.platform.calls.contains("requestTracking") })
+    ads.model.stop()
+    ads.platform.release(.tracking)
+    await settle()
+    #expect(ads.model.phase == .off)
+    #expect(!ads.platform.calls.contains("startAds"))
+    #expect(ads.platform.bannerCalls.isEmpty)
+    #expect(ads.platform.interstitialCalls.isEmpty)
+  }
+}
+
 /// The banners (spec 14.1, as phase 8.3 widened it): the home band, its space kept from the
 /// moment the ads come on, and a banner at the end of each page shown; each asked for once a
 /// width, and asked for again after a failure.
